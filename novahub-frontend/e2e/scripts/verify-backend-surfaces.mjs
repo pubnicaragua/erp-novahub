@@ -38,6 +38,7 @@ const SURFACE_CLASSIFICATION = {
   'src/inventory/inventory.controller.ts': { category: 'ui', uiModule: 'inventario' },
   'src/inventory/sucursal.controller.ts': { category: 'backend-only', reason: 'alcance operativo de sucursal' },
   'src/inventory/warehouse-supply.controller.ts': { category: 'backend-only', reason: 'abastecimiento de bodega' },
+  'src/intl-imports/intl-imports.controller.ts': { category: 'ui', uiModule: 'intl-imports' },
   'src/leads/leads.controller.ts': { category: 'backend-only', reason: 'compatibilidad de leads' },
   'src/legal/legal.controller.ts': { category: 'ui', uiModule: 'asesoria-legal' },
   'src/logistics/logistics.controller.ts': { category: 'backend-only', reason: 'logística auxiliar' },

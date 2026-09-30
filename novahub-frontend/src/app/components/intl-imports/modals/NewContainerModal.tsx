@@ -121,7 +121,7 @@ export function NewContainerModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">
                 Origen
@@ -156,7 +156,7 @@ export function NewContainerModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">
                 Capacidad CBM Máx *
@@ -186,7 +186,7 @@ export function NewContainerModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">
                 ETD Salida Estimada

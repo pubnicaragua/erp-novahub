@@ -13,7 +13,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '../../ui/dialog';
-import { intlImportsService, type IntlImportPackage } from '../../../services/intl-imports.service';
+import { intlImportsService, type IntlImportPackage, type ChargeablePreviewResult, type IntlVolumetricFactor } from '../../../services/intl-imports.service';
 import { customersService } from '@/app/services/ventas.service';
 import { suppliersService } from '@/app/services/compras.service';
 
@@ -22,6 +22,11 @@ export interface IntlPackageModalProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: (pkg: IntlImportPackage) => void;
   packageToEdit?: IntlImportPackage | null;
+  /**
+   * @deprecated El factor ya no se aplica en el cliente: lo resuelve el backend
+   * con las reglas vigentes del tenant. Se conserva la prop para no romper los
+   * llamadores que aún la pasan.
+   */
   volumetricFactor?: number;
 }
 
@@ -30,7 +35,6 @@ export function IntlPackageModal({
   onOpenChange,
   onSuccess,
   packageToEdit = null,
-  volumetricFactor = 167,
 }: IntlPackageModalProps) {
   const isEditing = Boolean(packageToEdit);
   const [loading, setLoading] = useState(false);
@@ -39,6 +43,14 @@ export function IntlPackageModal({
   const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string; code?: string }>>([]);
 
   const [volumeMethod, setVolumeMethod] = useState<'dimensions' | 'direct'>('dimensions');
+  const [volumetricRules, setVolumetricRules] = useState<IntlVolumetricFactor[]>([]);
+
+  /**
+   * 'auto'  -> el backend resuelve por pais + modalidad + transportista.
+   * 'rule'  -> el operador asigna una de las reglas configuradas.
+   * 'manual'-> factor escrito a mano, que exige un motivo.
+   */
+  const [ruleMode, setRuleMode] = useState<'auto' | 'rule' | 'manual'>('auto');
 
   const [form, setForm] = useState({
     trackingCode: '',
@@ -55,7 +67,22 @@ export function IntlPackageModal({
     heightCm: '',
     directVolumeCbm: '',
     declaredValueUsd: '',
+    originCountry: '',
+    transportMode: '',
+    carrier: '',
+    volumetricRuleId: '',
+    manualFactor: '',
+    factorOverrideReason: '',
   });
+
+  const loadVolumetricRules = useCallback(async () => {
+    try {
+      const list = await intlImportsService.listVolumetricFactors();
+      setVolumetricRules(Array.isArray(list) ? list : []);
+    } catch {
+      setVolumetricRules([]);
+    }
+  }, []);
 
   const loadCustomers = useCallback(async () => {
     try {
@@ -144,9 +171,16 @@ export function IntlPackageModal({
           heightCm: packageToEdit.heightCm != null ? String(packageToEdit.heightCm) : '',
           directVolumeCbm: packageToEdit.volumeCbm != null ? String(packageToEdit.volumeCbm) : '',
           declaredValueUsd: packageToEdit.declaredValueUsd != null ? String(packageToEdit.declaredValueUsd) : '',
+          originCountry: packageToEdit.originCountry || '',
+          transportMode: packageToEdit.transportMode || '',
+          carrier: packageToEdit.carrier || '',
+          volumetricRuleId: packageToEdit.volumetricRuleId || '',
+          manualFactor: '',
+          factorOverrideReason: packageToEdit.factorOverrideReason || '',
         });
       } else {
         setVolumeMethod('dimensions');
+        setRuleMode('auto');
         setForm({
           trackingCode: '',
           originalTrackingNumber: '',
@@ -162,11 +196,20 @@ export function IntlPackageModal({
           heightCm: '',
           directVolumeCbm: '',
           declaredValueUsd: '',
+          originCountry: '',
+          transportMode: '',
+          carrier: '',
+          volumetricRuleId: '',
+          manualFactor: '',
+          factorOverrideReason: '',
         });
       }
+      // El catalogo de reglas se recarga al abrir: si el operador creo o edito
+      // una regla en Configuracion, el selector la ve sin recargar la pagina.
+      void loadVolumetricRules();
       /* eslint-enable react-hooks/set-state-in-effect */
     }
-  }, [open, packageToEdit]);
+  }, [open, packageToEdit, loadVolumetricRules]);
 
   const isUnregisteredCustomer = Boolean(form.customerName.trim()) && !form.customerId;
 
@@ -176,6 +219,7 @@ export function IntlPackageModal({
   const numericHeight = parseFloat(form.heightCm) || 0;
   const numericDirectVolume = parseFloat(form.directVolumeCbm) || 0;
   const numericDeclaredValue = parseFloat(form.declaredValueUsd) || 0;
+  const numericManualFactor = parseFloat(form.manualFactor) || 0;
 
   const computedVolumeCbm = useMemo(() => {
     if (volumeMethod === 'dimensions') {
@@ -187,10 +231,68 @@ export function IntlPackageModal({
     return numericDirectVolume > 0 ? numericDirectVolume : 0;
   }, [volumeMethod, numericLength, numericWidth, numericHeight, numericDirectVolume]);
 
-  const chargeableWeightKg = useMemo(() => {
-    const volumetricWeight = computedVolumeCbm * volumetricFactor;
-    return Number(Math.max(numericWeightKg, volumetricWeight).toFixed(2));
-  }, [numericWeightKg, computedVolumeCbm, volumetricFactor]);
+  /**
+   * El peso facturable lo decide el backend con la regla vigente del tenant.
+   * Antes se replicaba la formula aqui con el factor global, lo que producia
+   * pantallas que no coincidian con lo persistido. Ahora solo se muestra lo
+   * que devuelve el servidor.
+   */
+  const [chargeablePreview, setChargeablePreview] = useState<ChargeablePreviewResult | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    // Todo el setState ocurre dentro del temporizador: llamarlo de forma
+    // sincrona en el efecto provoke renders en cascada.
+    const timer = setTimeout(async () => {
+      if (numericWeightKg <= 0 || computedVolumeCbm <= 0) {
+        setChargeablePreview(null);
+        setPreviewLoading(false);
+        return;
+      }
+      setPreviewLoading(true);
+      try {
+        const result = await intlImportsService.previewChargeable({
+          actualWeightKg: numericWeightKg,
+          volumeCbm: computedVolumeCbm,
+          originCountry: form.originCountry.trim().toUpperCase() || undefined,
+          transportMode: form.transportMode || undefined,
+          carrier: form.carrier.trim().toUpperCase() || undefined,
+          // Solo viaja un factor escrito a mano; la regla viaja por ID para que
+          // el backend lea el factor de la regla almacenada y lo congele.
+          volumetricRuleId: ruleMode === 'rule' && form.volumetricRuleId ? form.volumetricRuleId : undefined,
+          volumetricFactorKgPerCbm: ruleMode === 'manual' ? numericManualFactor || undefined : undefined,
+        });
+        if (!cancelled) setChargeablePreview(result);
+      } catch {
+        // Un fallo del preview no debe bloquear el formulario: el backend
+        // vuelve a calcular y validar al guardar.
+        if (!cancelled) setChargeablePreview(null);
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    open,
+    numericWeightKg,
+    computedVolumeCbm,
+    form.originCountry,
+    form.transportMode,
+    form.carrier,
+    form.volumetricRuleId,
+    form.manualFactor,
+    numericManualFactor,
+    ruleMode,
+  ]);
+
+  const chargeableWeightKg = chargeablePreview?.chargeableWeight ?? null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,12 +300,35 @@ export function IntlPackageModal({
       toast.error('El peso real debe ser mayor a 0 kg');
       return;
     }
+    if (computedVolumeCbm <= 0) {
+      // Antes se enviaba 0.001 CBM inventado cuando faltaban dimensiones,
+      // lo que persistia un volumen falso irreconocible.
+      toast.error(
+        volumeMethod === 'dimensions'
+          ? 'Complete largo, ancho y alto para calcular el volumen'
+          : 'Indique el volumen en CBM',
+      );
+      return;
+    }
+    if (ruleMode === 'rule' && !form.volumetricRuleId) {
+      toast.error('Seleccione la regla de factor volumetrico a aplicar');
+      return;
+    }
+    if (ruleMode === 'manual') {
+      if (numericManualFactor <= 0) {
+        toast.error('Indique el factor volumetrico a aplicar');
+        return;
+      }
+      if (!form.factorOverrideReason.trim()) {
+        toast.error('El factor manual exige un motivo: queda registrado en la auditoria');
+        return;
+      }
+    }
 
     try {
       setLoading(true);
       const finalCustomerId = form.customerId.trim() || undefined;
       const finalSupplierId = form.supplierId.trim() || undefined;
-      const finalVolume = computedVolumeCbm > 0 ? computedVolumeCbm : 0.001;
       const finalLength = volumeMethod === 'dimensions' ? (numericLength || undefined) : undefined;
       const finalWidth = volumeMethod === 'dimensions' ? (numericWidth || undefined) : undefined;
       const finalHeight = volumeMethod === 'dimensions' ? (numericHeight || undefined) : undefined;
@@ -222,8 +347,13 @@ export function IntlPackageModal({
           lengthCm: finalLength,
           widthCm: finalWidth,
           heightCm: finalHeight,
-          volumeCbm: finalVolume,
-          chargeableWeightKg,
+          volumeCbm: computedVolumeCbm,
+          originCountry: form.originCountry.trim().toUpperCase() || undefined,
+          transportMode: form.transportMode || undefined,
+          carrier: form.carrier.trim().toUpperCase() || undefined,
+          volumetricRuleId: ruleMode === 'rule' ? form.volumetricRuleId : undefined,
+          volumetricFactorKgPerCbm: ruleMode === 'manual' ? numericManualFactor : undefined,
+          factorOverrideReason: ruleMode === 'manual' ? form.factorOverrideReason.trim() : undefined,
           declaredValueUsd: numericDeclaredValue || 0,
         });
 
@@ -243,8 +373,13 @@ export function IntlPackageModal({
           lengthCm: finalLength,
           widthCm: finalWidth,
           heightCm: finalHeight,
-          volumeCbm: finalVolume,
-          chargeableWeightKg,
+          volumeCbm: computedVolumeCbm,
+          originCountry: form.originCountry.trim().toUpperCase() || undefined,
+          transportMode: form.transportMode || undefined,
+          carrier: form.carrier.trim().toUpperCase() || undefined,
+          volumetricRuleId: ruleMode === 'rule' ? form.volumetricRuleId : undefined,
+          volumetricFactorKgPerCbm: ruleMode === 'manual' ? numericManualFactor : undefined,
+          factorOverrideReason: ruleMode === 'manual' ? form.factorOverrideReason.trim() : undefined,
           declaredValueUsd: numericDeclaredValue || undefined,
           status: 'RECEIVED_AT_WAREHOUSE',
         });
@@ -281,11 +416,11 @@ export function IntlPackageModal({
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
           {/* Bloque 1: Contenedor del Cliente */}
           <div className="border border-border/70 rounded-lg p-3 bg-muted/20 space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="text-xs font-semibold text-foreground block">
                 Cliente / Destinatario
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <Button
                   type="button"
                   variant="ghost"
@@ -332,10 +467,10 @@ export function IntlPackageModal({
             />
 
             {isUnregisteredCustomer && (
-              <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-md p-2 text-[11px] text-amber-800 dark:text-amber-300">
-                <span className="flex items-center gap-1.5 min-w-0 truncate">
-                  <UserPlus className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <span className="truncate">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-amber-500/10 border border-amber-500/30 rounded-md p-2.5 text-[11px] text-amber-800 dark:text-amber-300">
+                <span className="flex items-start sm:items-center gap-1.5 min-w-0">
+                  <UserPlus className="size-3.5 shrink-0 mt-0.5 sm:mt-0 text-amber-600 dark:text-amber-400" />
+                  <span className="break-words">
                     El cliente <strong className="font-semibold text-foreground">{form.customerName}</strong> no está en el catálogo. ¿Deseas registrarlo?
                   </span>
                 </span>
@@ -343,7 +478,7 @@ export function IntlPackageModal({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-6 text-[11px] bg-background hover:bg-muted shrink-0 ml-2 border-amber-500/40 text-amber-900 dark:text-amber-200"
+                  className="h-7 w-full sm:w-auto text-[11px] bg-background hover:bg-muted shrink-0 border-amber-500/40 text-amber-900 dark:text-amber-200"
                   onClick={() => window.open('/clientes', '_blank')}
                   title="Abrir portal de clientes en una pestaña nueva"
                 >
@@ -423,11 +558,150 @@ export function IntlPackageModal({
           </div>
 
           {/* Bloque 4: Cubicaje y Peso Cobrable */}
-          <div className="border border-border/70 rounded-lg p-3.5 bg-muted/30 space-y-3.5">
-            <div className="flex items-center justify-between">
+          <div className="border border-border/70 rounded-lg p-3 sm:p-3.5 bg-muted/30 space-y-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
               <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                <Calculator className="size-4 text-primary" />
-                Cubicaje y Peso Cobrable (Regla IATA: {volumetricFactor} kg/CBM)
+                <Calculator className="size-4 text-primary shrink-0" />
+                <span>Cubicaje y Peso Cobrable</span>
+              </div>
+              {chargeablePreview && (
+                <span className="text-[11px] font-medium text-muted-foreground font-mono">
+                  {chargeablePreview.appliedRule.label} · {chargeablePreview.volumetricFactorKgPerCbm} kg/CBM
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-3">
+                <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                  Regla de factor volumétrico
+                </label>
+                <select
+                  value={ruleMode}
+                  onChange={(e) => {
+                    const mode = e.target.value as 'auto' | 'rule' | 'manual';
+                    setRuleMode(mode);
+                    // El factor solo viaja en un sentido: al salir de 'manual'
+                    // se descarta el override para no mandarlo con una regla.
+                    setForm((prev) => ({
+                      ...prev,
+                      volumetricRuleId: mode === 'rule' ? prev.volumetricRuleId : '',
+                      manualFactor: mode === 'manual' ? prev.manualFactor : '',
+                      factorOverrideReason: mode === 'manual' ? prev.factorOverrideReason : '',
+                    }));
+                  }}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-xs"
+                >
+                  <option value="auto">Automática — según país, transporte y transportista</option>
+                  <option value="rule">Regla específica — asignar una del catálogo</option>
+                  <option value="manual">Otro factor — manual, exige motivo</option>
+                </select>
+              </div>
+            </div>
+
+            {ruleMode === 'rule' && (
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                    Regla a aplicar
+                  </label>
+                  <select
+                    value={form.volumetricRuleId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const rule = volumetricRules.find((r) => r.id === id);
+                      setForm((prev) => ({
+                        ...prev,
+                        volumetricRuleId: id,
+                        // Solo se completa lo que el operador dejo en blanco.
+                        // Si ya declaro un origen distinto al de la regla, ese
+                        // valor manda: es justamente el caso que motiva poder
+                        // asignar una regla que no coincide con el ambito.
+                        originCountry: prev.originCountry.trim() || rule?.originCountry || '',
+                        transportMode: prev.transportMode || rule?.transportMode || '',
+                        carrier: prev.carrier.trim() || rule?.carrier || '',
+                      }));
+                    }}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-xs"
+                  >
+                    <option value="">Seleccione una regla…</option>
+                    {volumetricRules.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.label} — {r.factorKgPerCbm} kg/CBM
+                        {r.originCountry ? ` [${r.originCountry}${r.transportMode ? ` / ${r.transportMode}` : ''}${r.carrier ? ` / ${r.carrier}` : ''}]` : ' [global]'}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    El factor y su configuración quedan congelados en el paquete: si la regla cambia después, este paquete no se recalcula.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {ruleMode === 'manual' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                    Factor (kg/CBM) *
+                  </label>
+                  <Input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={form.manualFactor}
+                    onChange={(e) => setForm((prev) => ({ ...prev, manualFactor: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                    Motivo del ajuste *
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="Ej. Ajuste acordado con el transportista"
+                    value={form.factorOverrideReason}
+                    onChange={(e) => setForm((prev) => ({ ...prev, factorOverrideReason: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground block mb-1" title="Determina qué regla volumétrica aplica">
+                  País de origen
+                </label>
+                <Input
+                  type="text"
+                  placeholder="PAN"
+                  value={form.originCountry}
+                  onChange={(e) => setForm((prev) => ({ ...prev, originCountry: e.target.value }))}
+                  className="font-mono uppercase"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground block mb-1">Medio de transporte</label>
+                <select
+                  value={form.transportMode}
+                  onChange={(e) => setForm((prev) => ({ ...prev, transportMode: e.target.value }))}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-xs"
+                >
+                  <option value="">Sin especificar</option>
+                  <option value="MARITIMO">Marítimo</option>
+                  <option value="AEREO">Aéreo</option>
+                  <option value="TERRESTRE">Terrestre</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground block mb-1">Transportista</label>
+                <Input
+                  type="text"
+                  placeholder="MAERSK"
+                  value={form.carrier}
+                  onChange={(e) => setForm((prev) => ({ ...prev, carrier: e.target.value }))}
+                  className="font-mono uppercase"
+                />
               </div>
             </div>
 
@@ -533,7 +807,20 @@ export function IntlPackageModal({
               </div>
               <div className="flex justify-between items-center bg-background px-3 py-2 rounded border border-border/50">
                 <span className="text-muted-foreground font-medium">Peso Cobrable:</span>
-                <span className="font-mono font-bold text-foreground">{chargeableWeightKg} kg</span>
+                <span className="font-mono font-bold text-foreground">
+                  {previewLoading ? 'Calculando...' : chargeableWeightKg != null ? `${chargeableWeightKg} kg` : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center bg-background px-3 py-2 rounded border border-border/50 sm:col-span-2">
+                <span className="text-muted-foreground font-medium">CBM Facturable:</span>
+                <span className="font-mono font-bold text-foreground">
+                  {chargeablePreview ? `${chargeablePreview.billableCbm} CBM` : '—'}
+                  {chargeablePreview && (
+                    <span className="ml-2 font-sans text-[10px] font-semibold text-muted-foreground">
+                      (base {chargeablePreview.chargeableBasis === 'WEIGHT_BASED' ? 'por peso' : 'por volumen'})
+                    </span>
+                  )}
+                </span>
               </div>
             </div>
           </div>

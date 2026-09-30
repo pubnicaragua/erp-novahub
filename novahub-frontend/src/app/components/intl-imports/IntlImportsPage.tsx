@@ -40,19 +40,24 @@ export function IntlImportsPage({ activeSubModule, onSubModuleChange }: IntlImpo
   const canCreate = canPerform('IMPORT_INTL', 'create');
   const canEdit = canPerform('IMPORT_INTL', 'edit');
   const canApprove = canPerform('IMPORT_INTL', 'approve');
+  // Permisos dedicados: no se heredan de `approve` ni de `edit`.
+  const canCloseByException = canPerform('IMPORT_INTL', 'closeByException');
+  const canReopen = canPerform('IMPORT_INTL', 'reopenContainer');
 
   return (
-    <div className="space-y-6">
+    <div className="intl-imports-module space-y-4 sm:space-y-6 min-w-0 max-w-full">
       {/* Header del Módulo */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Globe className="size-6" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3 sm:pb-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+              <Globe className="size-5 sm:size-6" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-foreground">Importaciones Internacionales</h1>
-              <p className="text-xs text-muted-foreground">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground break-words leading-tight">
+                Importaciones Internacionales
+              </h1>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-normal">
                 Consolidación, trazabilidad por cubicaje CBM y prorrateo de gastos de nacionalización.
               </p>
             </div>
@@ -60,34 +65,51 @@ export function IntlImportsPage({ activeSubModule, onSubModuleChange }: IntlImpo
         </div>
       </div>
 
-      {/* Navegación por Pestañas Superior */}
-      <div className="flex items-center gap-1 border-b border-border/80 overflow-x-auto scrollbar-none pb-px">
-        {INTL_SUBMODULE_TABS.map((tab) => {
-          const isActive = currentTab === tab.id || (tab.id === 'bodega-origen' && currentTab === 'bodega-panama');
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => handleTabChange(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors border-b-2 whitespace-nowrap ${
-                isActive
-                  ? 'border-primary text-primary bg-background shadow-xs'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40'
-              }`}
-            >
-              {tab.icon}
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+      {/* Navegación por Pestañas Superior (Estilo Navbar Segmentada como Imagen 2) */}
+      <div className="min-w-0 max-w-full overflow-x-auto scrollbar-none py-0.5">
+        <div
+          data-intl-tabs="true"
+          className="inline-flex h-11 w-full sm:w-auto items-center justify-start rounded-2xl border border-border/60 bg-muted/40 dark:bg-muted/20 p-1 text-muted-foreground gap-1"
+        >
+          {INTL_SUBMODULE_TABS.map((tab) => {
+            const isActive = currentTab === tab.id || (tab.id === 'bodega-origen' && currentTab === 'bodega-panama');
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                data-active={isActive ? 'true' : undefined}
+                onClick={() => handleTabChange(tab.id)}
+                className={`relative inline-flex h-full flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all whitespace-nowrap select-none ${
+                  isActive
+                    ? 'bg-background text-primary shadow-xs dark:bg-card border border-border/40'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <span className={`shrink-0 ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>{tab.icon}</span>
+                <span className="truncate">{tab.label}</span>
+                {isActive && (
+                  <span className="absolute bottom-0.5 left-3 right-3 h-0.5 rounded-full bg-primary" />
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Contenido Dinámico de la Pestaña Activa */}
-      <div>
+      <div className="min-w-0 max-w-full">
         {(currentTab === 'bodega-origen' || currentTab === 'bodega-panama') && <OriginWarehouseTab canCreate={canCreate} />}
-        {currentTab === 'contenedores' && <ContainersTab canCreate={canCreate} />}
-        {currentTab === 'aduana-prorrateo' && <CustomsProrationTab canApprove={canApprove} />}
-        {currentTab === 'configuracion' && <IntlConfigTab canEdit={canEdit} />}
+        {currentTab === 'contenedores' && <ContainersTab canCreate={canCreate} canEdit={canEdit} />}
+        {currentTab === 'aduana-prorrateo' && (
+          <CustomsProrationTab
+            canApprove={canApprove}
+            canCloseByException={canCloseByException}
+            canReopen={canReopen}
+          />
+        )}
+        {currentTab === 'configuracion' && (
+          <IntlConfigTab canEdit={canEdit} canCreate={canCreate} canDelete={canEdit} />
+        )}
       </div>
     </div>
   );

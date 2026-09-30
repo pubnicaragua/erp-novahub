@@ -172,11 +172,11 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
   }, [packages]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-w-0 max-w-full">
       {/* Consultar / Buscador Rápido de Tracking */}
-      <Card className="p-4 border-border/70 bg-card">
-        <form onSubmit={handleQuickLookup} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="flex-1 relative">
+      <Card className="p-3.5 sm:p-4 border-border/70 bg-card">
+        <form onSubmit={handleQuickLookup} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
+          <div className="flex-1 relative min-w-0">
             <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
             <Input
               placeholder="Ingresa código CC o tracking original (ej. CC-2026-0001)..."
@@ -185,66 +185,81 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
               onChange={(e) => setQuickLookupCode(e.target.value)}
             />
           </div>
-          <Button type="submit" disabled={lookupBusy || !quickLookupCode.trim()} className="shrink-0">
-            {lookupBusy ? <RefreshCw className="size-4 animate-spin mr-1.5" /> : <Search className="size-4 mr-1.5" />}
-            Consultar Paquete
-          </Button>
-          {canCreate && (
-            <Button type="button" variant="default" onClick={() => setNewModalOpen(true)} className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white">
-              <PackagePlus className="size-4 mr-1.5" />
-              Nuevo Paquete
+          <div className="grid grid-cols-1 sm:flex items-stretch sm:items-center gap-2 shrink-0">
+            <Button type="submit" disabled={lookupBusy || !quickLookupCode.trim()} className="w-full sm:w-auto shrink-0">
+              {lookupBusy ? <RefreshCw className="size-4 animate-spin mr-1.5" /> : <Search className="size-4 mr-1.5" />}
+              Consultar Paquete
             </Button>
-          )}
+            {canCreate && (
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => setNewModalOpen(true)}
+                className="w-full sm:w-auto shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                <PackagePlus className="size-4 mr-1.5" />
+                Nuevo Paquete
+              </Button>
+            )}
+          </div>
         </form>
       </Card>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <Card className="p-3.5 border-border/70 flex items-center gap-3">
+      <div className="intl-imports-kpis grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+        <Card className="p-3 sm:p-3.5 border-border/70 flex flex-row items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
             <Boxes className="size-4" />
           </div>
-          <div className="min-w-0">
-            <span className="text-xs font-medium text-muted-foreground block truncate">En Bodega Origen</span>
-            <span className="text-lg font-bold font-mono text-foreground tabular-nums">{kpis.inWarehouse}</span>
+          <div className="min-w-0 flex-1 text-left">
+            <span className="text-[11px] sm:text-xs font-medium text-muted-foreground block truncate">En Bodega Origen</span>
+            <span className="text-base sm:text-lg font-bold font-mono text-foreground tabular-nums block truncate">
+              {kpis.inWarehouse}
+            </span>
           </div>
         </Card>
 
-        <Card className="p-3.5 border-border/70 flex items-center gap-3">
+        <Card className="p-3 sm:p-3.5 border-border/70 flex flex-row items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
             <Scale className="size-4" />
           </div>
-          <div className="min-w-0">
-            <span className="text-xs font-medium text-muted-foreground block truncate">Sin Contenedor</span>
-            <span className="text-lg font-bold font-mono text-foreground tabular-nums">{kpis.unassigned}</span>
+          <div className="min-w-0 flex-1 text-left">
+            <span className="text-[11px] sm:text-xs font-medium text-muted-foreground block truncate">Sin Contenedor</span>
+            <span className="text-base sm:text-lg font-bold font-mono text-foreground tabular-nums block truncate">
+              {kpis.unassigned}
+            </span>
           </div>
         </Card>
 
-        <Card className="p-3.5 border-border/70 flex items-center gap-3">
+        <Card className="p-3 sm:p-3.5 border-border/70 flex flex-row items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
             <FileSpreadsheet className="size-4" />
           </div>
-          <div className="min-w-0">
-            <span className="text-xs font-medium text-muted-foreground block truncate">Volumen Acumulado</span>
-            <span className="text-lg font-bold font-mono text-foreground tabular-nums">{kpis.totalCbm} CBM</span>
+          <div className="min-w-0 flex-1 text-left">
+            <span className="text-[11px] sm:text-xs font-medium text-muted-foreground block truncate">Volumen Acumulado</span>
+            <span className="text-base sm:text-lg font-bold font-mono text-foreground tabular-nums block truncate">
+              {kpis.totalCbm} CBM
+            </span>
           </div>
         </Card>
 
-        <Card className="p-3.5 border-border/70 flex items-center gap-3">
+        <Card className="p-3 sm:p-3.5 border-border/70 flex flex-row items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
             <PackageCheck className="size-4" />
           </div>
-          <div className="min-w-0">
-            <span className="text-xs font-medium text-muted-foreground block truncate">Disponibles para Retiro</span>
-            <span className="text-lg font-bold font-mono text-foreground tabular-nums">{kpis.available}</span>
+          <div className="min-w-0 flex-1 text-left">
+            <span className="text-[11px] sm:text-xs font-medium text-muted-foreground block truncate">Disponibles Retiro</span>
+            <span className="text-base sm:text-lg font-bold font-mono text-foreground tabular-nums block truncate">
+              {kpis.available}
+            </span>
           </div>
         </Card>
       </div>
 
       {/* Controles de Filtrado de la Tabla */}
-      <Card className="p-4 border-border/70 space-y-4">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex flex-1 items-center gap-3 w-full">
-            <div className="relative flex-1 max-w-sm">
+      <Card className="p-3.5 sm:p-4 border-border/70 space-y-4 min-w-0">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          <div className="flex flex-col sm:flex-row flex-1 items-stretch sm:items-center gap-2.5 w-full min-w-0">
+            <div className="relative flex-1 sm:max-w-sm min-w-0">
               <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
               <Input
                 placeholder="Filtrar por código CC, cliente o remitente..."
@@ -254,19 +269,38 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
               />
             </div>
 
-            <select
-              className="text-xs rounded-md border border-border bg-background p-2"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">Todos los Estados</option>
-              {Object.entries(INTL_PACKAGE_STATUS_LABELS).map(([k, label]) => (
-                <option key={k} value={k}>{label}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2 w-full sm:w-auto min-w-0">
+              <select
+                className="flex-1 sm:flex-initial text-xs rounded-md border border-border bg-background p-2 min-w-0"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="">Todos los Estados</option>
+                {Object.entries(INTL_PACKAGE_STATUS_LABELS).map(([k, label]) => (
+                  <option key={k} value={k}>{label}</option>
+                ))}
+              </select>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchPackages}
+                disabled={loading}
+                className="shrink-0 sm:hidden"
+              >
+                <RefreshCw className={`size-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+                Actualizar
+              </Button>
+            </div>
           </div>
 
-          <Button variant="outline" size="sm" onClick={fetchPackages} disabled={loading} className="shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchPackages}
+            disabled={loading}
+            className="hidden sm:inline-flex shrink-0"
+          >
             <RefreshCw className={`size-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
@@ -280,7 +314,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
               <TableHead>Cliente / Destinatario</TableHead>
               <TableHead>Remitente / Proveedor</TableHead>
               <TableHead className="text-right">Peso Real</TableHead>
-              <TableHead className="text-right">Volumen CBM</TableHead>
+              <TableHead className="text-right">Volumen / CBM fact.</TableHead>
               <TableHead className="text-right">Peso Cobrable</TableHead>
               <TableHead className="text-right">Val. Declarado</TableHead>
               <TableHead>Contenedor</TableHead>
@@ -323,8 +357,13 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
                     {getSupplierDisplayName(pkg)}
                   </TableCell>
                   <TableCell className="text-right font-mono">{pkg.actualWeightKg} kg</TableCell>
-                  <TableCell className="text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                    {pkg.volumeCbm} CBM
+                  <TableCell className="text-right font-mono font-semibold text-foreground">
+                    <div>
+                      <div>{pkg.volumeCbm} CBM</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {pkg.billableCbm != null ? `${Number(pkg.billableCbm).toFixed(4)} fact.` : '— fact.'}
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right font-mono">{pkg.chargeableWeight || pkg.chargeableWeightKg} kg</TableCell>
                   <TableCell className="text-right font-mono text-xs font-semibold">
@@ -348,13 +387,14 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
                       {INTL_PACKAGE_STATUS_LABELS[pkg.status] || pkg.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell data-actions-column="true" className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-8 text-xs"
                         title="Ver detalle"
+                        aria-label={`Ver detalle de ${pkg.trackingCode}`}
                         onClick={() => {
                           setSelectedPackage(pkg);
                           setDetailSheetOpen(true);
@@ -369,6 +409,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
                           size="sm"
                           className="h-8 text-xs"
                           title="Editar paquete"
+                          aria-label={`Editar ${pkg.trackingCode}`}
                           onClick={() => {
                             setPackageToEdit(pkg);
                             setEditModalOpen(true);
@@ -383,6 +424,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
                           size="sm"
                           className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive px-2"
                           title="Eliminar paquete"
+                          aria-label={`Eliminar ${pkg.trackingCode}`}
                           onClick={() => setPackageToDelete(pkg)}
                         >
                           <Trash2 className="size-3.5" />
@@ -398,8 +440,8 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
 
         {/* Paginación */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-3 text-xs border-t border-border">
-            <span className="text-muted-foreground">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 text-xs border-t border-border">
+            <span className="text-muted-foreground text-center sm:text-left">
               Mostrando página {page} de {totalPages} ({totalItems} paquetes en total)
             </span>
             <div className="flex items-center gap-1.5">

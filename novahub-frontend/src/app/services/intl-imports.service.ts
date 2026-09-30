@@ -43,6 +43,200 @@ export const canEditPackage = (pkg?: IntlImportPackage | null): boolean => {
   return true;
 };
 
+/** Base sobre la que el backend resuelve el factor volumetrico. */
+export type IntlChargeableBasis = 'PHYSICAL' | 'WEIGHT_BASED';
+
+export type IntlClosureRule = 'ANY' | 'BOTH';
+
+export type IntlClosureType = 'STANDARD' | 'EXCEPTION' | 'REOPEN';
+
+/**
+ * Campos que SOLO calcula el backend. La UI nunca debe recalcularlos: si lo
+ * hace, la cifra mostrada puede diferir de la persistida y del prorrateo.
+ */
+export interface IntlChargeableFields {
+  billableCbm?: number;
+  chargeableEquivalentCbm?: number;
+  volumetricFactorKgPerCbm?: number;
+  chargeableBasis?: IntlChargeableBasis;
+  volumetricRuleId?: string | null;
+  factorOverrideReason?: string | null;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  heightCm?: number | null;
+  originCountry?: string | null;
+  transportMode?: string | null;
+  carrier?: string | null;
+}
+
+/** Regla que el backend efectivamente aplico al calcular el preview. */
+export interface AppliedVolumetricRule {
+  id: string | null;
+  label: string;
+  source: 'rule' | 'tenantSetting';
+}
+
+/**
+ * Snapshot de la regla persistida. El backend lo devuelve como `null` cuando
+ * ninguna regla encaja y cae al parametro del tenant, y con la forma
+ * `{ manual: true, ... }` cuando el factor viene forzado por el cliente.
+ */
+export type VolumetricRuleSnapshot =
+  | {
+      id: string;
+      label: string;
+      originCountry?: string | null;
+      transportMode?: string | null;
+      carrier?: string | null;
+      factorKgPerCbm: number;
+      priority?: number;
+    }
+  | { manual: true; baseRuleId?: string | null; baseFactorKgPerCbm?: number }
+  | null;
+
+/**
+ * Respuesta de `POST /intl-imports/chargeable/preview`. Refleja exactamente lo
+ * que devuelve `buildChargeable()` en el backend: no existe un objeto `rule`.
+ */
+export interface ChargeablePreviewResult extends IntlChargeableFields {
+  actualWeightKg: number;
+  volumeCbm: number;
+  chargeableWeight: number;
+  chargeableEquivalentCbm: number;
+  billableCbm: number;
+  volumetricFactorKgPerCbm: number;
+  chargeableBasis: IntlChargeableBasis;
+  volumetricRuleId: string | null;
+  volumetricRuleSnapshot: VolumetricRuleSnapshot;
+  physicalCbmDerivedFromDimensions: number;
+  appliedRule: AppliedVolumetricRule;
+}
+
+export interface IntlVolumetricFactor {
+  id: string;
+  label: string;
+  originCountry?: string | null;
+  transportMode?: string | null;
+  carrier?: string | null;
+  factorKgPerCbm: number;
+  priority: number;
+  isActive: boolean;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ContainerBalanceCheck {
+  code: string;
+  label: string;
+  ok: boolean;
+  detail: string;
+}
+
+/**
+ * Contrato de `GET /intl-imports/containers/:id/balance`.
+ *
+ * Refleja la forma anidada real del backend (`totals` / `limits` / `usage` /
+ * `checks`). `canClose`, `violations` y `warnings` los calcula el servidor con
+ * la MISMA funcion que valida el cierre: el frontend no re-deriva las reglas
+ * ANY/BOTH, solo las muestra.
+ */
+export interface ContainerBalance {
+  containerId: string;
+  containerNumber: string;
+  status: string;
+  isClosed: boolean;
+  closedAt: string | null;
+  closedById: string | null;
+  closeReason: string | null;
+  closedByException: boolean;
+  reopenCount: number;
+  version: number;
+  packagesCount: number;
+  canClose: boolean;
+  violations: string[];
+  warnings: string[];
+  totals: {
+    physicalCbm: number;
+    billableCbm: number;
+    actualWeightKg: number;
+    chargeableWeight: number;
+    expenses: number;
+  };
+  limits: {
+    capacityCbm: number | null;
+    maxWeightKg: number | null;
+    minCloseCbm: number | null;
+    minCloseWeightKg: number | null;
+    closureRule: IntlClosureRule;
+  };
+  usage: {
+    capacityPct: number | null;
+    maxWeightPct: number | null;
+    minCbmPct: number | null;
+    minWeightPct: number | null;
+  };
+  checks: ContainerBalanceCheck[];
+}
+
+export interface ContainerClosure {
+  id: string;
+  type: IntlClosureType;
+  reason: string;
+  snapshotCbm: number;
+  snapshotWeightKg: number;
+  packagesCount: number;
+  actorId?: string | null;
+  occurredAt: string;
+}
+
+export interface PackageMovement {
+  id: string;
+  packageId: string;
+  fromContainerId?: string | null;
+  fromContainerNumber?: string | null;
+  toContainerId?: string | null;
+  toContainerNumber?: string | null;
+  reason?: string | null;
+  actorId?: string | null;
+  billableCbmBefore?: number | null;
+  billableCbmAfter?: number | null;
+  occurredAt: string;
+}
+
+/**
+ * Contrato de `POST /intl-imports/move-packages/simulate`.
+ * Los motivos llegan como texto ya redactado por el servidor, no como codigos:
+ * la UI los muestra tal cual para no duplicar las reglas de validacion.
+ */
+export interface MoveSimulationResult {
+  allowed: boolean;
+  simulationOnly: true;
+  violations: string[];
+  target: {
+    id: string;
+    containerNumber: string;
+    isClosed: boolean;
+    currentBillableCbm: number;
+    currentWeightKg: number;
+    projectedBillableCbm: number;
+    projectedWeightKg: number;
+    capacityCbm: number | null;
+    maxWeightKg: number | null;
+    packagesMovingIn: number;
+    packagesMovingOut: number;
+  };
+  packages: Array<{
+    id: string;
+    trackingCode: string;
+    status: string;
+    fromContainerId: string | null;
+    volumeCbm: number;
+    actualWeightKg: number;
+    billableCbm: number;
+  }>;
+}
+
 export interface IntlImportPackageEvent {
   id: string;
   packageId: string;
@@ -53,7 +247,7 @@ export interface IntlImportPackageEvent {
   occurredAt: string;
 }
 
-export interface IntlImportPackage {
+export interface IntlImportPackage extends IntlChargeableFields {
   id: string;
   trackingCode: string;
   originalTrackingNumber?: string;
@@ -100,15 +294,27 @@ export interface IntlImportContainer {
   capacityCbm?: number;
   maxCapacityCbm: number;
   maxWeightKg: number;
+  minCloseCbm?: number | null;
+  minCloseWeightKg?: number | null;
+  closureRule?: IntlClosureRule | null;
+  isClosed: boolean;
+  closedAt?: string | null;
+  closeReason?: string | null;
+  closedByException?: boolean | null;
+  reopenedAt?: string | null;
+  reopenCount?: number;
+  version?: number;
   status: IntlImportContainerStatus;
   estimatedDeparture?: string;
   estimatedArrival?: string;
   actualArrival?: string;
-  isClosed: boolean;
   packagesCount?: number;
   totalVolumeCbm?: number;
+  /** CBM facturable: es la base de capacidad, minimos y prorrateo. */
+  totalBillableCbm?: number;
   totalActualWeightKg?: number;
   totalExpensesUsd?: number;
+  capacityUsagePct?: number | null;
   expenses?: IntlImportExpense[];
   packages?: IntlImportPackage[];
   createdAt: string;
@@ -119,6 +325,9 @@ export interface IntlImportConfig {
   volumetricFactorKgPerCbm: number;
   defaultContainerCbm: number;
   defaultContainerMaxKg: number;
+  minCloseCbm?: number;
+  minCloseWeightKg?: number;
+  closureRule?: IntlClosureRule;
   trackingPrefix: string;
 }
 
@@ -137,6 +346,8 @@ export interface ProrationPackageItem {
   trackingCode: string;
   description?: string;
   volumeCbm: number;
+  /** CBM facturable del paquete: la magnitud que reparte los gastos. */
+  billableCbm: number;
   percentage: number;
   proratedCost: number;
   volumeRatioPercentage?: string;
@@ -146,6 +357,8 @@ export interface ProrationPreviewResult {
   containerId: string;
   containerNumber: string;
   totalVolumeCbm: number;
+  /** Total facturable del contenedor; base del prorrateo. */
+  totalBillableCbm: number;
   totalExpensesUsd: number;
   totalExpenses?: number;
   costPerCbm: number;
@@ -201,6 +414,7 @@ function normalizeProrationPreview(raw: RawProrationPreview): ProrationPreviewRe
       containerId: '',
       containerNumber: '',
       totalVolumeCbm: 0,
+      totalBillableCbm: 0,
       totalExpensesUsd: 0,
       costPerCbm: 0,
       packages: [],
@@ -209,18 +423,25 @@ function normalizeProrationPreview(raw: RawProrationPreview): ProrationPreviewRe
   const rawList = Array.isArray(raw.packages) ? raw.packages : Array.isArray(raw.proratedPackages) ? raw.proratedPackages : [];
   const totalExpensesUsd = raw.totalExpensesUsd ?? raw.totalExpenses ?? 0;
   const totalVolumeCbm = raw.totalVolumeCbm ?? 0;
-  const costPerCbm = raw.costPerCbm ?? (totalVolumeCbm > 0 ? Number((totalExpensesUsd / totalVolumeCbm).toFixed(2)) : 0);
+  // El prorrateo se reparte por CBM FACTURABLE, no por volumen fisico. Si se
+  // pierde este campo, la tabla muestra el fisico junto a un porcentaje que en
+  // realidad viene del facturable (p. ej. 0.004 CBM fisicos con 0.41% porque su
+  // facturable es 0.08).
+  const totalBillableCbm = raw.totalBillableCbm ?? totalVolumeCbm;
+  const costPerCbm = raw.costPerCbm ?? (totalBillableCbm > 0 ? Number((totalExpensesUsd / totalBillableCbm).toFixed(2)) : 0);
 
-  const packages: ProrationPackageItem[] = rawList.map((p) => {
+  const packages: ProrationPackageItem[] = rawList.map((p: RawProrationItem) => {
     let percentage = p.percentage;
     if (percentage === undefined && p.volumeRatioPercentage) {
       percentage = parseFloat(p.volumeRatioPercentage) || 0;
     }
+    const volumeCbm = Number(p.volumeCbm) || 0;
     return {
-      packageId: p.packageId || (p as any).id || '',
+      packageId: p.packageId || p.id || '',
       trackingCode: p.trackingCode || '',
       description: p.description,
-      volumeCbm: Number(p.volumeCbm) || 0,
+      volumeCbm,
+      billableCbm: p.billableCbm != null ? Number(p.billableCbm) : volumeCbm,
       percentage: Number(percentage) || 0,
       proratedCost: Number(p.proratedCost) || 0,
     };
@@ -230,13 +451,16 @@ function normalizeProrationPreview(raw: RawProrationPreview): ProrationPreviewRe
     containerId: raw.containerId || '',
     containerNumber: raw.containerNumber || '',
     totalVolumeCbm,
+    totalBillableCbm,
     totalExpensesUsd,
     costPerCbm,
     packages,
   };
 }
 
-function normalizePackage(raw: any): IntlImportPackage {
+type RawPackage = IntlImportPackage & { invoiceNumber?: string };
+
+function normalizePackage(raw: RawPackage): IntlImportPackage {
   if (!raw) return raw;
   return {
     ...raw,
@@ -253,7 +477,7 @@ export const intlImportsService = {
     try {
       const res = await api.get<unknown>('/intl-imports/packages', { params: params as Record<string, string | number | boolean | undefined> });
       if (Array.isArray(res)) {
-        return { data: (res as any[]).map(normalizePackage), total: res.length, page: 1, totalPages: 1 };
+        return { data: (res as RawPackage[]).map(normalizePackage), total: res.length, page: 1, totalPages: 1 };
       }
       const raw = res as {
         items?: IntlImportPackage[];
@@ -284,15 +508,35 @@ export const intlImportsService = {
   },
 
   async createPackage(payload: Partial<IntlImportPackage>): Promise<IntlImportPackage> {
+    // Solo se envian entradas crudas. Los campos derivados (chargeableWeight,
+    // billableCbm, volumetricFactorKgPerCbm, chargeableBasis) los calcula y
+    // persiste el backend; mandarlos aqui permitiria Acceptar un valor ajeno
+    // al factor vigente del tenant.
     const body: Record<string, unknown> = {
       actualWeightKg: Number(payload.actualWeightKg),
-      volumeCbm: Number(payload.volumeCbm),
       trackingCode: payload.trackingCode?.trim() || undefined,
       invoiceNumber: payload.originalTrackingNumber?.trim() || undefined,
       description: payload.description || undefined,
       declaredValueUsd: payload.declaredValueUsd ? Number(payload.declaredValueUsd) : undefined,
       currency: 'USD',
     };
+    if (payload.volumeCbm !== undefined && payload.volumeCbm !== null) {
+      body.volumeCbm = Number(payload.volumeCbm);
+    }
+    if (payload.lengthCm) body.lengthCm = Number(payload.lengthCm);
+    if (payload.widthCm) body.widthCm = Number(payload.widthCm);
+    if (payload.heightCm) body.heightCm = Number(payload.heightCm);
+    if (payload.originCountry?.trim()) body.originCountry = payload.originCountry.trim();
+    if (payload.transportMode?.trim()) body.transportMode = payload.transportMode.trim();
+    if (payload.carrier?.trim()) body.carrier = payload.carrier.trim();
+    // Regla asignada explicitamente. Viaja el ID, nunca el factor: el backend
+    // lo lee de la regla almacenada y congela su snapshot en el paquete.
+    if (payload.volumetricRuleId?.trim()) body.volumetricRuleId = payload.volumetricRuleId.trim();
+    // El factor manual solo viaja si hay motivo: el backend lo rechaza sin el.
+    if (payload.volumetricFactorKgPerCbm && payload.factorOverrideReason?.trim()) {
+      body.volumetricFactorKgPerCbm = Number(payload.volumetricFactorKgPerCbm);
+      body.factorOverrideReason = payload.factorOverrideReason.trim();
+    }
     if (payload.customerId && payload.customerId.trim()) {
       body.customerId = payload.customerId.trim();
     }
@@ -307,7 +551,27 @@ export const intlImportsService = {
   },
 
   async updatePackage(id: string, payload: Partial<IntlImportPackage>): Promise<IntlImportPackage> {
-    const updated = await api.patch<IntlImportPackage>(`/intl-imports/packages/${id}`, payload);
+    // Se reenvian solo campos editables; los derivados se omiten a proposito.
+    const {
+      actualWeightKg, volumeCbm, lengthCm, widthCm, heightCm,
+      originCountry, transportMode, carrier,
+      volumetricFactorKgPerCbm, factorOverrideReason,
+      ...rest
+    } = payload;
+    const body: Record<string, unknown> = { ...rest };
+    if (actualWeightKg !== undefined) body.actualWeightKg = Number(actualWeightKg);
+    if (volumeCbm !== undefined) body.volumeCbm = Number(volumeCbm);
+    if (lengthCm !== undefined) body.lengthCm = Number(lengthCm);
+    if (widthCm !== undefined) body.widthCm = Number(widthCm);
+    if (heightCm !== undefined) body.heightCm = Number(heightCm);
+    if (originCountry !== undefined) body.originCountry = originCountry;
+    if (transportMode !== undefined) body.transportMode = transportMode;
+    if (carrier !== undefined) body.carrier = carrier;
+    if (volumetricFactorKgPerCbm !== undefined) {
+      body.volumetricFactorKgPerCbm = Number(volumetricFactorKgPerCbm);
+      body.factorOverrideReason = factorOverrideReason?.trim() || undefined;
+    }
+    const updated = await api.patch<IntlImportPackage>(`/intl-imports/packages/${id}`, body);
     return normalizePackage(updated);
   },
 
@@ -373,6 +637,17 @@ export const intlImportsService = {
     return api.post<{ count: number }>(`/intl-imports/containers/${containerId}/assign-packages`, { packageIds });
   },
 
+  /**
+   * Devuelve paquetes a bodega de origen sin borrarlos. Es la operación
+   * correcta dentro de la vista de contenedor: el paquete, su trazabilidad y
+   * su volumetría congelada sobreviven, y puede volver a asignarse.
+   */
+  /** Devuelve el contenedor recalculado, no solo el conteo: los totales
+   *  facturables se releen del servidor tras sacar los paquetes. */
+  async unassignPackages(containerId: string, packageIds: string[]): Promise<IntlImportContainer> {
+    return api.post<IntlImportContainer>(`/intl-imports/containers/${containerId}/unassign-packages`, { packageIds });
+  },
+
   // --- Customs & Expenses ---
   async addExpense(containerId: string, payload: { expenseType: string; amount: number; description?: string }): Promise<IntlImportExpense> {
     return api.post<IntlImportExpense>(`/intl-imports/containers/${containerId}/expenses`, payload);
@@ -403,5 +678,83 @@ export const intlImportsService = {
 
   async updateConfig(payload: Partial<IntlImportConfig>): Promise<IntlImportConfig> {
     return api.patch<IntlImportConfig>('/intl-imports/config', payload);
+  },
+
+  // --- Volumetria: el backend es la unica fuente de la formula ---
+
+  /**
+   * Preview del calculo facturable. La UI lo usa para mostrar el resultado y
+   * NUNCA para calcularlo por su cuenta: replicar la formula aqui fue
+   * precisamente la fuente de divergencias que esta preview elimina.
+   */
+  async previewChargeable(payload: {
+    actualWeightKg: number;
+    volumeCbm?: number;
+    lengthCm?: number;
+    widthCm?: number;
+    heightCm?: number;
+    originCountry?: string;
+    transportMode?: string;
+    carrier?: string;
+    /** Regla del tenant asignada explicitamente a este paquete. */
+    volumetricRuleId?: string;
+    volumetricFactorKgPerCbm?: number;
+  }): Promise<ChargeablePreviewResult> {
+    return api.post<ChargeablePreviewResult>('/intl-imports/chargeable/preview', payload);
+  },
+
+  async listVolumetricFactors(includeInactive = false): Promise<IntlVolumetricFactor[]> {
+    return api.get<IntlVolumetricFactor[]>('/intl-imports/volumetric-factors', {
+      params: { includeInactive },
+    });
+  },
+
+  async createVolumetricFactor(payload: Partial<IntlVolumetricFactor>): Promise<IntlVolumetricFactor> {
+    return api.post<IntlVolumetricFactor>('/intl-imports/volumetric-factors', payload);
+  },
+
+  async updateVolumetricFactor(id: string, payload: Partial<IntlVolumetricFactor>): Promise<IntlVolumetricFactor> {
+    return api.patch<IntlVolumetricFactor>(`/intl-imports/volumetric-factors/${id}`, payload);
+  },
+
+  async deleteVolumetricFactor(id: string): Promise<{ success: boolean; id: string; deactivated?: boolean }> {
+    return api.delete<{ success: boolean; id: string; deactivated?: boolean }>(`/intl-imports/volumetric-factors/${id}`);
+  },
+
+  // --- Cierre y movimientos ---
+
+  async getContainerBalance(containerId: string): Promise<ContainerBalance> {
+    return api.get<ContainerBalance>(`/intl-imports/containers/${containerId}/balance`);
+  },
+
+  async getContainerClosures(containerId: string): Promise<ContainerClosure[]> {
+    return api.get<ContainerClosure[]>(`/intl-imports/containers/${containerId}/closures`);
+  },
+
+  async getPackageMovements(packageId: string): Promise<PackageMovement[]> {
+    return api.get<PackageMovement[]>(`/intl-imports/packages/${packageId}/movements`);
+  },
+
+  /** Simula el movimiento sin escribir nada. Usar antes de confirmar. */
+  async simulateMove(payload: { targetContainerId: string; packageIds: string[]; reason?: string }): Promise<MoveSimulationResult> {
+    return api.post<MoveSimulationResult>('/intl-imports/move-packages/simulate', payload);
+  },
+
+  async movePackages(payload: { targetContainerId: string; packageIds: string[]; reason?: string }): Promise<{ moved: number; simulation: MoveSimulationResult }> {
+    return api.post<{ moved: number; simulation: MoveSimulationResult }>('/intl-imports/move-packages', payload);
+  },
+
+  async closeContainerByException(containerId: string, closeReason: string): Promise<{ success: boolean; closedAt: string; closedByException: true }> {
+    return api.post<{ success: boolean; closedAt: string; closedByException: true }>(
+      `/intl-imports/containers/${containerId}/close-by-exception`,
+      { closeReason },
+    );
+  },
+
+  async reopenContainer(containerId: string, reason: string): Promise<{ success: boolean; reopenCount: number; reopenedAt: string }> {
+    return api.post<{ success: boolean; reopenCount: number; reopenedAt: string }>(
+      `/intl-imports/containers/${containerId}/reopen`,
+      { reason },
+    );
   },
 };

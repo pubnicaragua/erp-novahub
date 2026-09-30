@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Package,
   FileText,
@@ -13,6 +13,7 @@ import {
   Trash2,
   ChevronRight,
   Pencil,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { EditIntlPackageModal } from './EditIntlPackageModal';
 import { format } from 'date-fns';
@@ -43,6 +44,7 @@ import {
   INTL_PACKAGE_STATUS_LABELS,
   type IntlImportPackage,
   type IntlImportPackageStatus,
+  type PackageMovement,
 } from '../../../services/intl-imports.service';
 
 interface IntlPackageDetailSheetProps {
@@ -83,7 +85,7 @@ const getSupplierName = (pkg: IntlImportPackage) => {
   return pkg.senderName || 'No especificado';
 };
 
-export function translateEventText(text?: string | null): string {
+function translateEventText(text?: string | null): string {
   if (!text) return '';
   return text
     .replace(/Customs Clearance & Proration Completed/gi, 'Desaduanaje y prorrateo completado')
@@ -117,6 +119,26 @@ export function IntlPackageDetailSheet({
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+
+  // Historial de movimientos entre contenedores
+  const [movements, setMovements] = useState<PackageMovement[]>([]);
+
+  useEffect(() => {
+    if (!open || !packageData?.id) return;
+    let active = true;
+    intlImportsService
+      .getPackageMovements(packageData.id)
+      .then((list) => {
+        if (active) setMovements(list || []);
+      })
+      .catch(() => {
+        // El historial de movimientos es informativo: no debe bloquear el detalle.
+        if (active) setMovements([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, packageData?.id]);
 
   if (!packageData) return null;
 
@@ -174,21 +196,26 @@ export function IntlPackageDetailSheet({
     (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
   );
 
+  const sortedMovements = [...movements].sort(
+    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+  );
+
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
+          data-intl-sheet="true"
           className="erp-detail-panel erp-detail-panel--compact flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-xl"
         >
           {/* Header Standard NovaHub */}
-          <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6">
+          <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-4 py-4 pr-12 backdrop-blur-md sm:px-6 sm:py-5">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <div className="flex size-10 sm:size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                 <Package className="size-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <SheetTitle className="flex min-w-0 flex-wrap items-center gap-2 text-lg font-black uppercase tracking-tight">
+                <SheetTitle className="flex min-w-0 flex-wrap items-center gap-2 text-base sm:text-lg font-black uppercase tracking-tight">
                   <span className="break-words font-mono">PAQUETE {packageData.trackingCode}</span>
                   <Badge className={`border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${statusColorClass}`}>
                     {statusLabel}
@@ -202,13 +229,13 @@ export function IntlPackageDetailSheet({
           </SheetHeader>
 
           {/* Body with Sub-Tabs */}
-          <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-5 sm:p-6">
+          <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
               <TabsList className="h-10 w-full justify-start overflow-x-auto rounded-xl border border-border/40 bg-muted/40 p-1 font-bold text-xs">
-                <TabsTrigger value="general" className="shrink-0 gap-1.5 rounded-lg px-3 py-1 text-xs font-bold">
+                <TabsTrigger value="general" className="flex-1 sm:flex-initial shrink-0 gap-1.5 rounded-lg px-3 py-1 text-xs font-bold">
                   <FileText className="size-3.5" /> General
                 </TabsTrigger>
-                <TabsTrigger value="historial" className="shrink-0 gap-1.5 rounded-lg px-3 py-1 text-xs font-bold">
+                <TabsTrigger value="historial" className="flex-1 sm:flex-initial shrink-0 gap-1.5 rounded-lg px-3 py-1 text-xs font-bold">
                   <History className="size-3.5" /> Historial
                 </TabsTrigger>
               </TabsList>
@@ -216,19 +243,19 @@ export function IntlPackageDetailSheet({
               {/* TAB GENERAL */}
               <TabsContent value="general" className="mt-0 space-y-4 outline-none">
                 {/* Hero Summary Card */}
-                <section className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4">
+                <section className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-3.5 sm:p-4">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     {packageData.proratedCost && packageData.proratedCost > 0
                       ? 'Costo Aduanal Prorrateado'
                       : 'Peso Cobrable Total'}
                   </p>
-                  <p className="mt-1 text-3xl font-black tabular-nums text-primary font-mono">
+                  <p className="mt-1 text-2xl sm:text-3xl font-black tabular-nums text-primary font-mono">
                     {packageData.proratedCost && packageData.proratedCost > 0
                       ? `$${packageData.proratedCost.toFixed(2)} USD`
                       : `${packageData.chargeableWeightKg || packageData.chargeableWeight || packageData.actualWeightKg} kg`}
                   </p>
 
-                  <div className="mt-3 border-t border-primary/15 pt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                  <div className="mt-3 border-t border-primary/15 pt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>
                       Peso Real: <strong className="text-foreground font-mono">{packageData.actualWeightKg} kg</strong>
                     </span>
@@ -243,7 +270,7 @@ export function IntlPackageDetailSheet({
                     {packageData.originalTrackingNumber && (
                       <span>
                         Tracking Courier:{' '}
-                        <strong className="text-foreground font-mono">{packageData.originalTrackingNumber}</strong>
+                        <strong className="text-foreground font-mono break-all">{packageData.originalTrackingNumber}</strong>
                       </span>
                     )}
                   </div>
@@ -255,7 +282,7 @@ export function IntlPackageDetailSheet({
                     <Button
                       type="button"
                       variant="outline"
-                      className="gap-2 rounded-xl text-xs"
+                      className="flex-1 sm:flex-initial gap-2 rounded-xl text-xs"
                       onClick={() => setEditModalOpen(true)}
                     >
                       <Pencil className="size-4 shrink-0 text-primary" /> Editar paquete
@@ -265,20 +292,20 @@ export function IntlPackageDetailSheet({
                   <Button
                     type="button"
                     variant="outline"
-                    className="gap-2 rounded-xl text-xs"
+                    className="flex-1 sm:flex-initial gap-2 rounded-xl text-xs"
                     onClick={() => {
                       setActiveTab('historial');
                       setAddingEvent(true);
                     }}
                   >
-                    <Plus className="size-4 shrink-0 text-primary" /> Registrar evento de trazabilidad
+                    <Plus className="size-4 shrink-0 text-primary" /> Registrar evento
                   </Button>
 
                   {canDelete && (
                     <Button
                       type="button"
                       variant="outline"
-                      className="gap-2 rounded-xl text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      className="flex-1 sm:flex-initial gap-2 rounded-xl text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => setConfirmDeleteOpen(true)}
                     >
                       <Trash2 className="size-4 shrink-0" /> Eliminar paquete
@@ -287,7 +314,7 @@ export function IntlPackageDetailSheet({
                 </section>
 
                 {/* Card Información General */}
-                <section className="rounded-2xl border border-border/50 p-4">
+                <section className="rounded-2xl border border-border/50 p-3.5 sm:p-4">
                   <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     Información general
                   </p>
@@ -343,7 +370,7 @@ export function IntlPackageDetailSheet({
                 </section>
 
                 {/* Card Especificaciones Físicas */}
-                <section className="rounded-2xl border border-border/50 p-4">
+                <section className="rounded-2xl border border-border/50 p-3.5 sm:p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                       Especificaciones físicas
@@ -351,7 +378,7 @@ export function IntlPackageDetailSheet({
                     <span className="text-xs font-bold text-muted-foreground">Cálculo IATA</span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
                     <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5">
                       <span className="text-[10px] text-muted-foreground block font-bold uppercase">Peso Real</span>
                       <span className="mt-1 font-mono font-black text-sm text-foreground">
@@ -361,9 +388,21 @@ export function IntlPackageDetailSheet({
 
                     <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5">
                       <span className="text-[10px] text-muted-foreground block font-bold uppercase">Volumen</span>
-                      <span className="mt-1 font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
+                      <span className="mt-1 font-mono font-black text-sm text-foreground">
                         {packageData.volumeCbm} CBM
                       </span>
+                    </div>
+
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5">
+                      <span className="text-[10px] text-muted-foreground block font-bold uppercase">CBM Facturable</span>
+                      <span className="mt-1 font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
+                        {packageData.billableCbm != null ? `${Number(packageData.billableCbm).toFixed(4)} CBM` : '—'}
+                      </span>
+                      {packageData.volumetricFactorKgPerCbm != null && (
+                        <span className="text-[10px] text-muted-foreground block font-mono">
+                          factor {packageData.volumetricFactorKgPerCbm} kg/CBM
+                        </span>
+                      )}
                     </div>
 
                     <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5">
@@ -373,7 +412,7 @@ export function IntlPackageDetailSheet({
                       </span>
                     </div>
 
-                    <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5">
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5 col-span-2 sm:col-span-1">
                       <span className="text-[10px] text-muted-foreground block font-bold uppercase">Val. Declarado</span>
                       <span className="mt-1 font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
                         {packageData.declaredValueUsd && Number(packageData.declaredValueUsd) > 0
@@ -545,6 +584,38 @@ export function IntlPackageDetailSheet({
                     </div>
                   )}
                 </div>
+
+                {/* Movimientos entre contenedores (append-only en el backend) */}
+                {sortedMovements.length > 0 && (
+                  <div className="space-y-2 border-t border-border/50 pt-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      Movimientos de Contenedor
+                    </p>
+                    {sortedMovements.map((m) => (
+                      <div key={m.id} className="rounded-xl border border-border/50 bg-muted/20 p-3 text-xs space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-muted-foreground">
+                            {m.fromContainerNumber || 'Bodega'}
+                          </span>
+                          <ArrowRightLeft className="size-3 text-muted-foreground" />
+                          <span className="font-mono font-bold text-foreground">
+                            {m.toContainerNumber || 'Sin contenedor'}
+                          </span>
+                          <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+                            {format(new Date(m.occurredAt), 'dd MMM yyyy, HH:mm', { locale: es })}
+                          </span>
+                        </div>
+                        {(m.billableCbmBefore != null || m.billableCbmAfter != null) && (
+                          <div className="font-mono text-[11px] text-muted-foreground">
+                            CBM facturable {Number(m.billableCbmBefore ?? 0).toFixed(4)} →{' '}
+                            {Number(m.billableCbmAfter ?? 0).toFixed(4)}
+                          </div>
+                        )}
+                        {m.reason && <p className="text-[11px] text-muted-foreground">{m.reason}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </div>

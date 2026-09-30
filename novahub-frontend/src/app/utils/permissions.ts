@@ -4,6 +4,8 @@ export const PERMISSION_ACTION_DEFINITIONS = [
   { key: 'edit', label: 'Editar', description: 'Permite modificar los datos de un registro existente.' },
   { key: 'delete', label: 'Eliminar', description: 'Permite eliminar, inhabilitar, cancelar, rechazar o revertir según la vista.' },
   { key: 'approve', label: 'Aprobar', description: 'Permite aprobar o avanzar el flujo: enviar a otra vista, confirmar/procesar, convertir, aplicar o registrar pagos.' },
+  { key: 'closeByException', label: 'Cerrar por excepci\u00f3n', description: 'Permite cerrar un contenedor que no cumple los m\u00ednimos, con motivo obligatorio. No se hereda de Aprobar ni de Editar.' },
+  { key: 'reopenContainer', label: 'Reabrir contenedor', description: 'Permite reabrir un contenedor cerrado, con motivo obligatorio y registro de auditor\u00eda. No se hereda de Aprobar ni de Editar.' },
   { key: 'send', label: 'Enviar', description: 'Permite iniciar envíos manuales o pruebas desde la vista.' },
   { key: 'import', label: 'Importar', description: 'Permite cargar registros desde archivos o cargas masivas.' },
   { key: 'export', label: 'Exportar', description: 'Permite descargar o exportar información de la vista.' },
@@ -148,11 +150,12 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   TRACKING_BILLING: ['read', 'delete', 'approve', 'export'],
   TRACKING_CONFIG: ['read', 'edit', 'delete'],
 
-  IMPORT_INTL: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
-  IMPORT_INTL_ORIGIN: ['read', 'create', 'edit', 'export'],
-  IMPORT_INTL_CONTAINERS: ['read', 'create', 'edit', 'approve', 'export'],
-  IMPORT_INTL_CUSTOMS: ['read', 'create', 'edit', 'approve', 'export'],
-  IMPORT_INTL_CONFIG: ['read', 'edit'],
+  IMPORT_INTL: ['read', 'create', 'edit', 'delete', 'approve', 'export', 'closeByException', 'reopenContainer'],
+  IMPORT_INTL_ORIGIN: ['read', 'create', 'edit', 'export', 'closeByException', 'reopenContainer'],
+  IMPORT_INTL_CONTAINERS: ['read', 'create', 'edit', 'approve', 'export', 'closeByException', 'reopenContainer'],
+  IMPORT_INTL_CUSTOMS: ['read', 'create', 'edit', 'approve', 'export', 'closeByException', 'reopenContainer'],
+  // Las reglas de factor se administran aqui, por eso create/delete.
+  IMPORT_INTL_CONFIG: ['read', 'create', 'edit', 'delete'],
 
   INVENTORY_PRODUCTS: ['read', 'create', 'edit', 'delete', 'import', 'export', 'viewCost'],
   INVENTORY_SERVICES: ['read', 'create', 'edit', 'delete', 'import', 'export', 'viewCost'],

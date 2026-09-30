@@ -43,7 +43,10 @@ export function AssignPackagesModal({
       const fetchAvailable = async () => {
         setLoading(true);
         try {
-          const res = await intlImportsService.listPackages({ unassignedOnly: true, status: 'RECEIVED_AT_WAREHOUSE', limit: 100 });
+          // `unassignedOnly` es explicito: solo mercancia sin contenedor. El
+        // status acota ademas a lo que sigue en bodega, de modo que un paquete
+        // devuelto desde un contenedor vuelva a aparecer aqui.
+        const res = await intlImportsService.listPackages({ unassignedOnly: true, status: 'RECEIVED_AT_WAREHOUSE', limit: 100 });
           if (active) {
             setPackages(res.data || []);
             setSelectedIds(new Set());
@@ -93,18 +96,18 @@ export function AssignPackagesModal({
   const selectedCbm = useMemo(() => {
     return packages
       .filter((p) => selectedIds.has(p.id))
-      .reduce((sum, p) => sum + (p.volumeCbm || 0), 0);
+      .reduce((sum, p) => sum + (Number(p.billableCbm ?? p.volumeCbm) || 0), 0);
   }, [packages, selectedIds]);
 
   const selectedWeight = useMemo(() => {
     return packages
       .filter((p) => selectedIds.has(p.id))
-      .reduce((sum, p) => sum + (p.actualWeightKg || 0), 0);
+      .reduce((sum, p) => sum + (Number(p.actualWeightKg) || 0), 0);
   }, [packages, selectedIds]);
 
   const containerMaxCbm = container?.capacityCbm || container?.maxCapacityCbm || 0;
   const containerMaxWeight = container?.maxWeightKg || 0;
-  const currentCbm = container?.totalVolumeCbm || 0;
+  const currentCbm = container?.totalBillableCbm ?? container?.totalVolumeCbm ?? 0;
   const currentWeight = container?.totalActualWeightKg || 0;
   const projectedCbm = currentCbm + selectedCbm;
   const projectedWeight = currentWeight + selectedWeight;
@@ -130,42 +133,64 @@ export function AssignPackagesModal({
 
   if (!container) return null;
 
+  const allSelected = selectedIds.size === filteredPackages.length && filteredPackages.length > 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-2 text-primary font-semibold">
-            <PackageCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
-            <DialogTitle>Asignar Paquetes a {container.containerNumber}</DialogTitle>
+            <PackageCheck className="size-5 text-primary shrink-0" />
+            <DialogTitle className="break-words">Asignar Paquetes a {container.containerNumber}</DialogTitle>
           </div>
           <DialogDescription>
             Selecciona los paquetes en Bodega Origen para consolidarlos en este contenedor.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 py-2">
+        <div className="space-y-3 py-1 min-w-0">
           {/* Barra de búsqueda y resumen de capacidad */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por CC o cliente..."
-                className="pl-8 h-9 text-xs"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-64">
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por CC o cliente..."
+                  className="pl-8 h-9 text-xs"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              {filteredPackages.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleSelectAll}
+                  className="sm:hidden h-9 px-2.5 text-[11px] shrink-0 gap-1.5"
+                >
+                  {allSelected ? (
+                    <CheckSquare className="size-3.5 text-primary" />
+                  ) : (
+                    <Square className="size-3.5 text-muted-foreground" />
+                  )}
+                  Todos
+                </Button>
+              )}
             </div>
 
-            <div className="text-xs bg-muted/40 px-3 py-1.5 rounded border border-border/60 flex items-center gap-2 flex-wrap">
+            <div className="text-xs bg-muted/40 px-3 py-1.5 rounded-md border border-border/60 flex items-center justify-between sm:justify-start gap-2 flex-wrap">
               <span className="font-bold text-foreground">{selectedIds.size} seleccionados</span>
-              <span className="text-muted-foreground">|</span>
-              <span className={`font-mono font-semibold ${exceedsCbm ? 'text-destructive font-bold' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {projectedCbm.toFixed(2)} / {containerMaxCbm || '∞'} CBM
-              </span>
-              <span className="text-muted-foreground">|</span>
-              <span className={`font-mono font-semibold ${exceedsWeight ? 'text-destructive font-bold' : 'text-foreground'}`}>
-                {projectedWeight.toFixed(1)} / {containerMaxWeight || '∞'} kg
-              </span>
+              <span className="text-muted-foreground hidden sm:inline">|</span>
+              <div className="flex items-center gap-2">
+                <span className={`font-mono font-semibold ${exceedsCbm ? 'text-destructive font-bold' : 'text-primary'}`}>
+                  {projectedCbm.toFixed(2)} / {containerMaxCbm || '∞'} CBM
+                </span>
+                <span className="text-muted-foreground">|</span>
+                <span className={`font-mono font-semibold ${exceedsWeight ? 'text-destructive font-bold' : 'text-foreground'}`}>
+                  {projectedWeight.toFixed(1)} / {containerMaxWeight || '∞'} kg
+                </span>
+              </div>
             </div>
           </div>
 
@@ -184,8 +209,12 @@ export function AssignPackagesModal({
             </div>
           )}
 
-          {/* Tabla de Selección */}
-          <div className="border border-border rounded-lg max-h-72 overflow-y-auto">
+          {/* Lista / Tabla de Selección con scroll contenido */}
+          <div
+            data-intl-scroll-list="true"
+            data-keep-scroll="true"
+            className="border border-border rounded-lg max-h-[42dvh] sm:max-h-72 overflow-y-auto overscroll-contain"
+          >
             {loading ? (
               <div className="p-8 text-center text-xs text-muted-foreground">Cargando paquetes en bodega...</div>
             ) : filteredPackages.length === 0 ? (
@@ -193,53 +222,114 @@ export function AssignPackagesModal({
                 No hay paquetes pendientes de consolidación en bodega.
               </div>
             ) : (
-              <table className="w-full text-xs text-left">
-                <thead className="bg-muted/60 border-b border-border text-muted-foreground font-semibold sticky top-0 bg-background z-10">
-                  <tr>
-                    <th className="p-2 w-10 text-center">
-                      <button type="button" onClick={toggleSelectAll}>
-                        {selectedIds.size === filteredPackages.length && filteredPackages.length > 0 ? (
-                          <CheckSquare className="size-4 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <Square className="size-4 text-muted-foreground" />
-                        )}
-                      </button>
-                    </th>
-                    <th className="p-2">Código CC</th>
-                    <th className="p-2">Cliente</th>
-                    <th className="p-2 text-right">Peso Real</th>
-                    <th className="p-2 text-right">Volumen</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
+              <>
+                {/* Vista móvil compacta (< 640px) */}
+                <div className="divide-y divide-border/50 sm:hidden">
                   {filteredPackages.map((pkg) => {
                     const isSelected = selectedIds.has(pkg.id);
+                    const pkgCbm = Number(pkg.billableCbm ?? pkg.volumeCbm) || 0;
                     return (
-                      <tr
+                      <div
                         key={pkg.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => toggleSelect(pkg.id)}
-                        className={`cursor-pointer hover:bg-muted/40 transition-colors ${
-                          isSelected ? 'bg-emerald-500/10' : ''
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleSelect(pkg.id);
+                          }
+                        }}
+                        className={`p-3 flex items-start gap-2.5 cursor-pointer transition-colors ${
+                          isSelected ? 'bg-primary/10' : 'hover:bg-muted/40'
                         }`}
                       >
-                        <td className="p-2 text-center">
+                        <div className="pt-0.5 shrink-0">
                           {isSelected ? (
-                            <CheckSquare className="size-4 text-emerald-600 dark:text-emerald-400 inline" />
+                            <CheckSquare className="size-4 text-primary" />
                           ) : (
-                            <Square className="size-4 text-muted-foreground inline" />
+                            <Square className="size-4 text-muted-foreground" />
                           )}
-                        </td>
-                        <td className="p-2 font-mono font-medium text-emerald-600 dark:text-emerald-400">
-                          {pkg.trackingCode}
-                        </td>
-                        <td className="p-2 text-foreground font-medium">{pkg.customerName || 'Cliente Genérico'}</td>
-                        <td className="p-2 text-right font-mono">{pkg.actualWeightKg} kg</td>
-                        <td className="p-2 text-right font-mono font-semibold">{pkg.volumeCbm} CBM</td>
-                      </tr>
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono font-bold text-xs text-primary truncate">
+                              {pkg.trackingCode}
+                            </span>
+                            <span className="font-mono font-semibold text-xs text-foreground shrink-0">
+                              {pkgCbm.toFixed(4)} CBM
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 text-[11px]">
+                            <span className="text-foreground font-medium truncate">
+                              {pkg.customer?.name || pkg.customerName || 'Cliente Genérico'}
+                            </span>
+                            <span className="font-mono text-muted-foreground shrink-0">
+                              {pkg.actualWeightKg} kg
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
+                </div>
+
+                {/* Vista tabla (>= 640px) */}
+                <table data-responsive-cards="false" className="hidden sm:table w-full text-xs text-left">
+                  <thead className="bg-muted/60 border-b border-border text-muted-foreground font-semibold sticky top-0 bg-background z-10">
+                    <tr>
+                      <th className="p-2 w-10 text-center">
+                        <button
+                          type="button"
+                          onClick={toggleSelectAll}
+                          aria-label="Seleccionar todos los paquetes"
+                        >
+                          {allSelected ? (
+                            <CheckSquare className="size-4 text-primary" />
+                          ) : (
+                            <Square className="size-4 text-muted-foreground" />
+                          )}
+                        </button>
+                      </th>
+                      <th className="p-2">Código CC</th>
+                      <th className="p-2">Cliente</th>
+                      <th className="p-2 text-right">Peso Real</th>
+                      <th className="p-2 text-right">Volumen / CBM</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {filteredPackages.map((pkg) => {
+                      const isSelected = selectedIds.has(pkg.id);
+                      const pkgCbm = Number(pkg.billableCbm ?? pkg.volumeCbm) || 0;
+                      return (
+                        <tr
+                          key={pkg.id}
+                          onClick={() => toggleSelect(pkg.id)}
+                          className={`cursor-pointer hover:bg-muted/40 transition-colors ${
+                            isSelected ? 'bg-primary/10' : ''
+                          }`}
+                        >
+                          <td className="p-2 text-center">
+                            {isSelected ? (
+                              <CheckSquare className="size-4 text-primary inline" />
+                            ) : (
+                              <Square className="size-4 text-muted-foreground inline" />
+                            )}
+                          </td>
+                          <td className="p-2 font-mono font-bold text-primary">
+                            {pkg.trackingCode}
+                          </td>
+                          <td className="p-2 text-foreground font-medium">
+                            {pkg.customer?.name || pkg.customerName || 'Cliente Genérico'}
+                          </td>
+                          <td className="p-2 text-right font-mono">{pkg.actualWeightKg} kg</td>
+                          <td className="p-2 text-right font-mono font-semibold">{pkgCbm.toFixed(4)} CBM</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
             )}
           </div>
         </div>

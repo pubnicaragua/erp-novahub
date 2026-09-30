@@ -26,6 +26,7 @@ import { IntlContainerDetailSheet } from './modals/IntlContainerDetailSheet';
 
 interface ContainersTabProps {
   canCreate?: boolean;
+  canEdit?: boolean;
 }
 
 const containerBadgeVariant = (status: IntlImportContainerStatus) => {
@@ -47,7 +48,7 @@ const containerBadgeVariant = (status: IntlImportContainerStatus) => {
   }
 };
 
-export function ContainersTab({ canCreate = true }: ContainersTabProps) {
+export function ContainersTab({ canCreate = true, canEdit = false }: ContainersTabProps) {
   const [containers, setContainers] = useState<IntlImportContainer[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -121,17 +122,17 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Barra de Acciones y Filtros */}
-      <Card className="p-4 border-border/70 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+      <Card className="p-3.5 sm:p-4 border-border/70 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
           <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-            <Ship className="size-5 text-primary" />
-            Contenedores Marítimos
+            <Ship className="size-5 text-primary shrink-0" />
+            <span>Contenedores Marítimos</span>
           </div>
 
           <select
-            className="text-xs rounded-md border border-border bg-background p-2"
+            className="text-xs rounded-md border border-border bg-background px-2.5 py-2 h-9 w-full sm:w-auto"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -142,14 +143,14 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
           </select>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <Button variant="outline" size="sm" onClick={fetchContainers} disabled={loading}>
+        <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto sm:justify-end">
+          <Button variant="outline" size="sm" onClick={fetchContainers} disabled={loading} className="w-full sm:w-auto">
             <RefreshCw className={`size-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
 
           {canCreate && (
-            <Button size="sm" onClick={() => setNewModalOpen(true)} className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button size="sm" onClick={() => setNewModalOpen(true)} className="w-full sm:w-auto shrink-0">
               <Plus className="size-4 mr-1.5" />
               Nuevo Contenedor
             </Button>
@@ -165,11 +166,16 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
           No hay contenedores registrados. Haz clic en "Nuevo Contenedor" para iniciar la consolidación.
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
           {containers.map((c) => {
-            const usedCbm = c.totalVolumeCbm ?? (c.packages || []).reduce((sum, p) => sum + (Number(p.volumeCbm) || 0), 0);
+            // La capacidad se mide en CBM facturables: el backend ya devuelve el
+            // total calculado, el fallback solo cubre respuestas sin el campo.
+            const usedCbm =
+              c.totalBillableCbm ??
+              (c.packages || []).reduce((sum, p) => sum + (Number(p.billableCbm) || 0), 0);
             const maxCbm = c.capacityCbm || c.maxCapacityCbm || 20;
             const cbmPercent = maxCbm > 0 ? Math.min(100, Math.round((usedCbm / maxCbm) * 100)) : 0;
+            const isCbmBillable = c.totalBillableCbm != null && c.totalBillableCbm !== c.totalVolumeCbm;
 
             const usedWeight = c.totalActualWeightKg ?? (c.packages || []).reduce((sum, p) => sum + (Number(p.actualWeightKg) || 0), 0);
             const maxWeight = c.maxWeightKg || 5000;
@@ -181,33 +187,33 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
             const isWeightFull = weightPercent >= 85;
 
             return (
-              <Card key={c.id} className="p-5 border-border/80 flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow">
+              <Card key={c.id} className="p-4 sm:p-5 border-border/80 flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow min-w-0">
                 <div>
                   {/* Card Header */}
                   <div
-                    className="flex items-start justify-between gap-2 mb-2 cursor-pointer group/header"
+                    className="flex flex-wrap items-start justify-between gap-2 mb-2 cursor-pointer group/header"
                     onClick={() => {
                       setDetailContainer(c);
                       setDetailSheetOpen(true);
                     }}
                     title="Ver detalle del contenedor"
                   >
-                    <div>
-                      <h3 className="font-mono font-bold text-base text-foreground flex items-center gap-2 group-hover/header:text-primary transition-colors">
+                    <div className="min-w-0">
+                      <h3 className="font-mono font-bold text-base text-foreground flex items-center gap-2 group-hover/header:text-primary transition-colors break-all">
                         {c.containerNumber}
                       </h3>
                       {c.sealNumber && (
-                        <span className="text-[11px] text-muted-foreground block font-mono">Sello: {c.sealNumber}</span>
+                        <span className="text-[11px] text-muted-foreground block font-mono truncate">Sello: {c.sealNumber}</span>
                       )}
                     </div>
-                    <Badge variant={containerBadgeVariant(c.status)}>
+                    <Badge variant={containerBadgeVariant(c.status)} className="shrink-0">
                       {INTL_CONTAINER_STATUS_LABELS[c.status] || c.status}
                     </Badge>
                   </div>
 
                   {/* Indicador de Factor Límite de Llenado y Progreso Dual (CBM + kg) */}
                   <div className="space-y-2.5 my-3 bg-muted/30 p-2.5 rounded-lg border border-border/40">
-                    <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
                       <span className="text-muted-foreground font-medium">Factor Límite de Carga:</span>
                       <Badge variant="outline" className="font-mono text-[10px] py-0.5 px-2 bg-background font-medium border-border/70 text-foreground">
                         {weightPercent > cbmPercent
@@ -220,12 +226,17 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
 
                     {/* Capacidad CBM Progress Bar */}
                     <div className="space-y-1">
-                      <div className="flex justify-between text-xs font-semibold">
+                      <div className="flex justify-between gap-2 text-xs font-semibold">
                         <span className="text-muted-foreground">Ocupación Volumétrica:</span>
-                        <span className={`font-mono ${isCbmFull ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-foreground'}`}>
+                        <span className={`font-mono text-right ${isCbmFull ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-foreground'}`}>
                           {usedCbm.toFixed(2)} / {maxCbm} CBM ({cbmPercent}%)
                         </span>
                       </div>
+                      {isCbmBillable && (
+                        <div className="text-[10px] text-muted-foreground">
+                          CBM facturables · volumen físico {c.totalVolumeCbm?.toFixed(2) ?? 0}
+                        </div>
+                      )}
                       <div className="w-full bg-border/60 rounded-full h-2 overflow-hidden">
                         <div
                           className={`h-full transition-all duration-300 ${
@@ -238,9 +249,9 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
 
                     {/* Capacidad Peso (kg) Progress Bar */}
                     <div className="space-y-1">
-                      <div className="flex justify-between text-xs font-semibold">
+                      <div className="flex justify-between gap-2 text-xs font-semibold">
                         <span className="text-muted-foreground">Ocupación por Peso:</span>
-                        <span className={`font-mono ${isWeightFull ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-foreground'}`}>
+                        <span className={`font-mono text-right ${isWeightFull ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-foreground'}`}>
                           {usedWeight.toFixed(2)} / {maxWeight} kg ({weightPercent}%)
                         </span>
                       </div>
@@ -257,17 +268,17 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
 
                   {/* Detalles y Métricas */}
                   <div className="grid grid-cols-2 gap-2 text-xs py-1">
-                    <div className="bg-background p-2 rounded border border-border/50">
+                    <div className="bg-background p-2 rounded border border-border/50 min-w-0">
                       <span className="text-muted-foreground text-[11px] block">Paquetes:</span>
                       <span className="font-bold text-foreground font-mono">{c.packagesCount || c.packages?.length || 0} unid.</span>
                     </div>
 
-                    <div className="bg-background p-2 rounded border border-border/50">
+                    <div className="bg-background p-2 rounded border border-border/50 min-w-0">
                       <span className="text-muted-foreground text-[11px] block">Peso Real:</span>
-                      <span className="font-bold text-foreground font-mono">{usedWeight.toFixed(1)} / {maxWeight} kg</span>
+                      <span className="font-bold text-foreground font-mono truncate block">{usedWeight.toFixed(1)} / {maxWeight} kg</span>
                     </div>
 
-                    <div className="bg-background p-2 rounded border border-border/50 col-span-2 flex justify-between items-center">
+                    <div className="bg-background p-2 rounded border border-border/50 col-span-2 flex justify-between items-center gap-2">
                       <span className="text-muted-foreground text-[11px]">Gastos Acumulados:</span>
                       <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                         ${totalExpenses.toFixed(2)} USD
@@ -277,11 +288,11 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
 
                   {/* Fechas Marítimas */}
                   {(c.estimatedDeparture || c.estimatedArrival) && (
-                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground pt-2 border-t border-border/40">
+                    <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground pt-2 border-t border-border/40">
                       <Calendar className="size-3.5 text-muted-foreground shrink-0" />
-                      <div>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         {c.estimatedDeparture && <span>ETD: {new Date(c.estimatedDeparture).toLocaleDateString('es-NI')}</span>}
-                        {c.estimatedDeparture && c.estimatedArrival && <span className="mx-1.5">•</span>}
+                        {c.estimatedDeparture && c.estimatedArrival && <span>•</span>}
                         {c.estimatedArrival && <span>ETA: {new Date(c.estimatedArrival).toLocaleDateString('es-NI')}</span>}
                       </div>
                     </div>
@@ -289,20 +300,21 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
                 </div>
 
                 {/* Acciones */}
-                <div className="pt-2 border-t border-border flex items-center justify-between gap-2">
+                <div className="pt-2 border-t border-border flex flex-wrap items-center justify-between gap-2">
                   {!c.isClosed ? (
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive px-2"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive px-2 shrink-0"
                       title="Eliminar contenedor"
+                      aria-label={`Eliminar contenedor ${c.containerNumber}`}
                       onClick={() => setContainerToDelete(c)}
                     >
                       <Trash2 className="size-4" />
                     </Button>
                   ) : <div />}
 
-                  <div className="flex items-center gap-1.5 flex-1 justify-end">
+                  <div className="flex flex-wrap items-center gap-1.5 flex-1 justify-end">
                     <Button
                       size="sm"
                       variant="outline"
@@ -323,7 +335,7 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
                           setAssignModalOpen(true);
                         }}
                       >
-                        <PackageCheck className="size-4 mr-1.5 text-emerald-600 dark:text-emerald-400" />
+                        <PackageCheck className="size-4 mr-1.5 text-primary" />
                         Asignar Paquetes
                       </Button>
                     )}
@@ -367,6 +379,7 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
         open={detailSheetOpen}
         onOpenChange={setDetailSheetOpen}
         onRefresh={fetchContainers}
+        canEdit={canEdit}
       />
     </div>
   );

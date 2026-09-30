@@ -134,7 +134,8 @@ export interface Permission {
 export type PermissionAction =
   | 'view' | 'create' | 'edit' | 'delete' | 'deactivate' | 'cancel'
   | 'import' | 'export' | 'approve' | 'reject' | 'authorize' | 'reopen'
-  | 'close' | 'confirm' | 'process' | 'pay' | 'apply' | 'reconcile'
+  | 'close' | 'closeByException' | 'reopenContainer'
+  | 'confirm' | 'process' | 'pay' | 'apply' | 'reconcile'
   | 'reverse' | 'duplicate' | 'convert' | 'assign' | 'download'
   | 'generate' | 'send' | 'print' | 'manage' | 'viewCost' | 'viewOtherLocations';
 
@@ -527,6 +528,8 @@ const createUserObject = (apiPayload: any): User => {
     'approve', 'reject', 'authorize', 'reopen', 'close', 'confirm', 'process', 'pay',
     'apply', 'reconcile', 'reverse', 'duplicate', 'convert', 'assign', 'download',
     'generate', 'send', 'print', 'manage',
+    // Acciones dedicadas: no se derivan de `approve` ni de `edit`.
+    'closeByException', 'reopenContainer',
   ] as const;
   const mapSpecialPermissionFlags = (permission: any) => Object.fromEntries(
     specialPermissionActions.map(action => [
@@ -1141,6 +1144,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       case 'delete': return permission.canDelete || permission.canDeactivate || permission.canCancel || legacyActionAllowed;
       case 'import': return permission.canImport;
       case 'export': return permission.canExport;
+      case 'closeByException':
+      case 'reopenContainer':
+        // Cierre excepcional y reapertura exigen un permiso explicito:
+        // caer en el `default` los haria heredables desde `edit`.
+        return legacyActionAllowed;
       default:
         if (DELETE_COMPATIBLE_ACTIONS.includes(action)) return permission.canDelete || permission.canDeactivate || permission.canCancel || legacyActionAllowed;
         if (EXPORT_COMPATIBLE_ACTIONS.includes(action)) return permission.canExport;
