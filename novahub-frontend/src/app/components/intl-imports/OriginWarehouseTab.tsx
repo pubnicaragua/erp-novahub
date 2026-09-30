@@ -200,7 +200,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <Card className="p-3.5 border-border/70 flex items-center gap-3">
-          <div className="p-2 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+          <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
             <Boxes className="size-4" />
           </div>
           <div className="min-w-0">
@@ -210,7 +210,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
         </Card>
 
         <Card className="p-3.5 border-border/70 flex items-center gap-3">
-          <div className="p-2 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
+          <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
             <Scale className="size-4" />
           </div>
           <div className="min-w-0">
@@ -220,7 +220,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
         </Card>
 
         <Card className="p-3.5 border-border/70 flex items-center gap-3">
-          <div className="p-2 rounded-md bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0">
+          <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
             <FileSpreadsheet className="size-4" />
           </div>
           <div className="min-w-0">
@@ -230,7 +230,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
         </Card>
 
         <Card className="p-3.5 border-border/70 flex items-center gap-3">
-          <div className="p-2 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+          <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
             <PackageCheck className="size-4" />
           </div>
           <div className="min-w-0">

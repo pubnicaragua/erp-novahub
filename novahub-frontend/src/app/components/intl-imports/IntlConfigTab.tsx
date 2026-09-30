@@ -127,7 +127,7 @@ export function IntlConfigTab({ canEdit = true }: IntlConfigTabProps) {
           {/* Capacidades Estándar de Contenedor */}
           <div className="space-y-3 border-t border-border/50 pt-4">
             <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Ship className="size-4 text-sky-600 dark:text-sky-400" />
+              <Ship className="size-4 text-primary" />
               Límites Estándar por Contenedor
             </h4>
 

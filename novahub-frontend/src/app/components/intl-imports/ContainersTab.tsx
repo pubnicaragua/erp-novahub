@@ -126,7 +126,7 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
       <Card className="p-4 border-border/70 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-            <Ship className="size-5 text-sky-600 dark:text-sky-400" />
+            <Ship className="size-5 text-primary" />
             Contenedores Marítimos
           </div>
 
@@ -173,9 +173,12 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
 
             const usedWeight = c.totalActualWeightKg ?? (c.packages || []).reduce((sum, p) => sum + (Number(p.actualWeightKg) || 0), 0);
             const maxWeight = c.maxWeightKg || 5000;
+            const weightPercent = maxWeight > 0 ? Math.min(100, Math.round((usedWeight / maxWeight) * 100)) : 0;
+
             const totalExpenses = c.totalExpensesUsd ?? (c.expenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-            const isFull = cbmPercent >= 85;
+            const isCbmFull = cbmPercent >= 85;
+            const isWeightFull = weightPercent >= 85;
 
             return (
               <Card key={c.id} className="p-5 border-border/80 flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow">
@@ -202,21 +205,53 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
                     </Badge>
                   </div>
 
-                  {/* Capacidad CBM Progress Bar */}
-                  <div className="space-y-1 my-3 bg-muted/30 p-2.5 rounded-lg border border-border/40">
-                    <div className="flex justify-between text-xs font-semibold">
-                      <span className="text-muted-foreground">Ocupación Volumétrica:</span>
-                      <span className={`font-mono ${isFull ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-foreground'}`}>
-                        {usedCbm.toFixed(2)} / {maxCbm} CBM ({cbmPercent}%)
-                      </span>
+                  {/* Indicador de Factor Límite de Llenado y Progreso Dual (CBM + kg) */}
+                  <div className="space-y-2.5 my-3 bg-muted/30 p-2.5 rounded-lg border border-border/40">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-muted-foreground font-medium">Factor Límite de Carga:</span>
+                      <Badge variant="outline" className="font-mono text-[10px] py-0.5 px-2 bg-background font-medium border-border/70 text-foreground">
+                        {weightPercent > cbmPercent
+                          ? 'Llenado por Peso (kg)'
+                          : cbmPercent > weightPercent
+                          ? 'Llenado por Volumen (CBM)'
+                          : 'Carga Equilibrada'}
+                      </Badge>
                     </div>
-                    <div className="w-full bg-border/60 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-full transition-all duration-300 ${
-                          isFull ? 'bg-amber-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${cbmPercent}%` }}
-                      />
+
+                    {/* Capacidad CBM Progress Bar */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-semibold">
+                        <span className="text-muted-foreground">Ocupación Volumétrica:</span>
+                        <span className={`font-mono ${isCbmFull ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-foreground'}`}>
+                          {usedCbm.toFixed(2)} / {maxCbm} CBM ({cbmPercent}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-border/60 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${
+                            isCbmFull ? 'bg-amber-500' : 'bg-primary'
+                          }`}
+                          style={{ width: `${cbmPercent}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Capacidad Peso (kg) Progress Bar */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-semibold">
+                        <span className="text-muted-foreground">Ocupación por Peso:</span>
+                        <span className={`font-mono ${isWeightFull ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-foreground'}`}>
+                          {usedWeight.toFixed(2)} / {maxWeight} kg ({weightPercent}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-border/60 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${
+                            isWeightFull ? 'bg-amber-500' : 'bg-primary/80'
+                          }`}
+                          style={{ width: `${weightPercent}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -229,7 +264,7 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
 
                     <div className="bg-background p-2 rounded border border-border/50">
                       <span className="text-muted-foreground text-[11px] block">Peso Real:</span>
-                      <span className="font-bold text-foreground font-mono">{usedWeight} / {maxWeight} kg</span>
+                      <span className="font-bold text-foreground font-mono">{usedWeight.toFixed(1)} / {maxWeight} kg</span>
                     </div>
 
                     <div className="bg-background p-2 rounded border border-border/50 col-span-2 flex justify-between items-center">

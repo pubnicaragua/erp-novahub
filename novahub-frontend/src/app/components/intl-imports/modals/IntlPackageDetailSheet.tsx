@@ -54,17 +54,17 @@ interface IntlPackageDetailSheetProps {
 }
 
 const statusBadgeColors: Record<IntlImportPackageStatus, string> = {
-  RECEIVED_AT_WAREHOUSE: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-  CONSOLIDATED: 'bg-sky-500/10 text-sky-600 border-sky-500/20',
-  IN_TRANSIT: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
-  CUSTOMS_CLEARANCE: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
-  AVAILABLE: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-  DELIVERED: 'bg-emerald-600/10 text-emerald-700 border-emerald-600/20',
-  CANCELLED: 'bg-rose-500/10 text-rose-600 border-rose-500/20',
+  RECEIVED_AT_WAREHOUSE: 'bg-secondary text-secondary-foreground border-border/50',
+  CONSOLIDATED: 'bg-secondary text-secondary-foreground border-border/50',
+  IN_TRANSIT: 'bg-primary/10 text-primary border-primary/20',
+  CUSTOMS_CLEARANCE: 'bg-secondary text-secondary-foreground border-border/50',
+  AVAILABLE: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
+  DELIVERED: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
+  CANCELLED: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
 const getEventBadgeColor = (status: IntlImportPackageStatus) => {
-  return statusBadgeColors[status] || 'bg-muted/30 text-muted-foreground border-border/50';
+  return statusBadgeColors[status] || 'bg-secondary text-secondary-foreground border-border/50';
 };
 
 const getCustomerName = (pkg: IntlImportPackage) => {
@@ -91,7 +91,7 @@ export function translateEventText(text?: string | null): string {
     .replace(/Received in origin warehouse with weight ([\d.]+) ?kg and volume ([\d.]+) ?CBM/gi, 'Recibido en bodega de origen con peso $1 kg y volumen $2 CBM')
     .replace(/Assigned to container (.+)/gi, 'Asignado al contenedor $1')
     .replace(/Package consolidated into container (.+)/gi, 'Paquete consolidado en el contenedor $1')
-    .replace(/Container (.+) closed\. Prorated cost: \$?([\d.]+)/gi, 'Contenedor $1 cerrado. Costo prorrateado: \$$2')
+    .replace(/Container (.+) closed\. Prorated cost: \$?([\d.]+)/gi, 'Contenedor $1 cerrado. Costo prorrateado: $$2')
     .replace(/Container status updated to (.+)/gi, 'Estado del contenedor actualizado a $1')
     .replace(/Container event triggered package status change to (.+)/gi, 'Evento de contenedor actualizó el estado a $1')
     .replace(/Status updated to (.+)/gi, 'Estado actualizado a $1')
@@ -326,7 +326,7 @@ export function IntlPackageDetailSheet({
                       <Ship className="mt-0.5 size-4 shrink-0 text-primary" />
                       <div className="min-w-0">
                         <p className="text-[10px] text-muted-foreground">Contenedor Asignado</p>
-                        <p className="mt-0.5 break-words font-mono font-semibold text-sky-600 dark:text-sky-400">
+                        <p className="mt-0.5 break-words font-mono font-semibold text-primary">
                           {packageData.containerNumber || packageData.container?.containerNumber || 'Sin consolidar'}
                         </p>
                       </div>
@@ -401,7 +401,7 @@ export function IntlPackageDetailSheet({
                     </p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Ship className="size-4 text-sky-600 dark:text-sky-400" />
+                        <Ship className="size-4 text-primary" />
                         <span className="font-mono font-bold text-sm">
                           {packageData.containerNumber || packageData.container?.containerNumber}
                         </span>

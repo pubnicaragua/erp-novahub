@@ -44,11 +44,13 @@ export function NewContainerModal({
 
   useEffect(() => {
     if (open) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setForm((prev) => ({
         ...prev,
         maxCapacityCbm: prev.maxCapacityCbm || defaultCbm,
         maxWeightKg: prev.maxWeightKg || defaultMaxKg,
       }));
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [open, defaultCbm, defaultMaxKg]);
 
@@ -98,7 +100,7 @@ export function NewContainerModal({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2 text-primary font-semibold">
-            <Boxes className="size-5 text-sky-600 dark:text-sky-400" />
+            <Boxes className="size-5 text-primary" />
             <DialogTitle>Nuevo Contenedor / Consolidado</DialogTitle>
           </div>
           <DialogDescription>

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { PackagePlus, Pencil, Calculator } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { PackagePlus, Pencil, Calculator, UserPlus, ExternalLink, RefreshCw } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { getApiErrorMessage } from '@/app/services/api';
 import { Button } from '../../ui/button';
@@ -34,6 +34,7 @@ export function IntlPackageModal({
 }: IntlPackageModalProps) {
   const isEditing = Boolean(packageToEdit);
   const [loading, setLoading] = useState(false);
+  const [fetchingCustomers, setFetchingCustomers] = useState(false);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string; code?: string }>>([]);
   const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string; code?: string }>>([]);
 
@@ -56,9 +57,26 @@ export function IntlPackageModal({
     declaredValueUsd: '',
   });
 
+  const loadCustomers = useCallback(async () => {
+    try {
+      setFetchingCustomers(true);
+      const res = await (customersService.getLookup as (params?: { limit?: number }) => Promise<unknown>)({ limit: 100 });
+      const list = Array.isArray(res)
+        ? res
+        : Array.isArray((res as { data?: unknown })?.data)
+          ? (res as { data: unknown[] }).data
+          : [];
+      setCustomers(list as Array<{ id: string; name: string; code?: string }>);
+    } catch {
+      // silent catch
+    } finally {
+      setFetchingCustomers(false);
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
-    (customersService.getLookup as any)({ limit: 100 })
+    (customersService.getLookup as (params?: { limit?: number }) => Promise<unknown>)({ limit: 100 })
       .then((res: unknown) => {
         if (!mounted) return;
         const list = Array.isArray(res)
@@ -70,7 +88,7 @@ export function IntlPackageModal({
       })
       .catch(() => undefined);
 
-    (suppliersService.getLookup as any)({ limit: 100 })
+    (suppliersService.getLookup as (params?: { limit?: number }) => Promise<unknown>)({ limit: 100 })
       .then((res: unknown) => {
         if (!mounted) return;
         const list = Array.isArray(res)
@@ -103,6 +121,7 @@ export function IntlPackageModal({
 
   useEffect(() => {
     if (open) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       if (packageToEdit) {
         const custName = packageToEdit.customer?.name || packageToEdit.customerName || '';
         const suppId = packageToEdit.supplierId || packageToEdit.supplier?.id || '';
@@ -145,8 +164,11 @@ export function IntlPackageModal({
           declaredValueUsd: '',
         });
       }
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [open, packageToEdit]);
+
+  const isUnregisteredCustomer = Boolean(form.customerName.trim()) && !form.customerId;
 
   const numericWeightKg = parseFloat(form.actualWeightKg) || 0;
   const numericLength = parseFloat(form.lengthCm) || 0;
@@ -257,82 +279,138 @@ export function IntlPackageModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                N.° Factura / Referencia / Courier Original
-              </label>
-              <Input
-                placeholder="Ej. INV-998822 / 1Z9999999999999999"
-                value={form.originalTrackingNumber}
-                onChange={(e) => setForm((prev) => ({ ...prev, originalTrackingNumber: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
+          {/* Bloque 1: Contenedor del Cliente */}
+          <div className="border border-border/70 rounded-lg p-3 bg-muted/20 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-foreground block">
                 Cliente / Destinatario
               </label>
-              <Combobox
-                options={customerOptions}
-                value={form.customerName}
-                onChange={(val) => {
-                  const matched = customers.find(
-                    (c) => c.name.toLowerCase() === val.toLowerCase() || c.code?.toLowerCase() === val.toLowerCase()
-                  );
-                  setForm((prev) => ({
-                    ...prev,
-                    customerName: val,
-                    customerId: matched ? matched.id : '',
-                  }));
-                }}
-                placeholder="Ej. Comercializadora Nova S.A."
-                searchPlaceholder="Buscar cliente por nombre o código..."
-                emptyMessage="No se encontraron clientes coincidentes."
-                allowCustomValue={true}
-              />
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground gap-1"
+                  onClick={loadCustomers}
+                  disabled={fetchingCustomers}
+                  title="Refrescar lista de clientes"
+                >
+                  <RefreshCw className={`size-3 ${fetchingCustomers ? 'animate-spin' : ''}`} />
+                  Refrescar
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-[11px] text-primary hover:text-primary/80 gap-1"
+                  onClick={() => window.open('/clientes', '_blank')}
+                  title="Registrar cliente en el portal de clientes"
+                >
+                  <UserPlus className="size-3" />
+                  Registrar cliente
+                </Button>
+              </div>
+            </div>
+
+            <Combobox
+              options={customerOptions}
+              value={form.customerName}
+              onChange={(val) => {
+                const matched = customers.find(
+                  (c) => c.name.toLowerCase() === val.toLowerCase() || c.code?.toLowerCase() === val.toLowerCase()
+                );
+                setForm((prev) => ({
+                  ...prev,
+                  customerName: val,
+                  customerId: matched ? matched.id : '',
+                }));
+              }}
+              placeholder="Ej. Comercializadora Nova S.A."
+              searchPlaceholder="Buscar cliente por nombre o código..."
+              emptyMessage="No se encontraron clientes coincidentes."
+              allowCustomValue={true}
+            />
+
+            {isUnregisteredCustomer && (
+              <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-md p-2 text-[11px] text-amber-800 dark:text-amber-300">
+                <span className="flex items-center gap-1.5 min-w-0 truncate">
+                  <UserPlus className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span className="truncate">
+                    El cliente <strong className="font-semibold text-foreground">{form.customerName}</strong> no está en el catálogo. ¿Deseas registrarlo?
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[11px] bg-background hover:bg-muted shrink-0 ml-2 border-amber-500/40 text-amber-900 dark:text-amber-200"
+                  onClick={() => window.open('/clientes', '_blank')}
+                  title="Abrir portal de clientes en una pestaña nueva"
+                >
+                  Ir a Clientes
+                  <ExternalLink className="size-3 ml-1" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Bloque 2: Contenedor dedicado al Proveedor (Proveedor Origen, Factura, Valor Declarado) */}
+          <div className="border border-border/70 rounded-lg p-3 bg-muted/20 space-y-3">
+            <div className="text-xs font-bold text-foreground">
+              Proveedor, Origen y Referencia
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">
+                  Proveedor Origen / Remitente
+                </label>
+                <Combobox
+                  options={supplierOptions}
+                  value={form.supplierName}
+                  onChange={(val) => {
+                    const matched = suppliers.find(
+                      (s) => s.name.toLowerCase() === val.toLowerCase() || s.code?.toLowerCase() === val.toLowerCase()
+                    );
+                    setForm((prev) => ({
+                      ...prev,
+                      supplierName: val,
+                      supplierId: matched ? matched.id : '',
+                    }));
+                  }}
+                  placeholder="Ej. Shenzhen Trade Co."
+                  searchPlaceholder="Buscar proveedor por nombre o código..."
+                  emptyMessage="No se encontraron proveedores coincidentes."
+                  allowCustomValue={true}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">
+                  N.° Factura / Referencia / Courier
+                </label>
+                <Input
+                  placeholder="Ej. INV-998822 / 1Z999..."
+                  value={form.originalTrackingNumber}
+                  onChange={(e) => setForm((prev) => ({ ...prev, originalTrackingNumber: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">
+                  Valor Declarado (USD)
+                </label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={form.declaredValueUsd}
+                  onChange={(e) => setForm((prev) => ({ ...prev, declaredValueUsd: e.target.value }))}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                Remitente / Proveedor Origen
-              </label>
-              <Combobox
-                options={supplierOptions}
-                value={form.supplierName}
-                onChange={(val) => {
-                  const matched = suppliers.find(
-                    (s) => s.name.toLowerCase() === val.toLowerCase() || s.code?.toLowerCase() === val.toLowerCase()
-                  );
-                  setForm((prev) => ({
-                    ...prev,
-                    supplierName: val,
-                    supplierId: matched ? matched.id : '',
-                  }));
-                }}
-                placeholder="Ej. Shenzhen Trade Co."
-                searchPlaceholder="Buscar proveedor por nombre o código..."
-                emptyMessage="No se encontraron proveedores coincidentes."
-                allowCustomValue={true}
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                Valor Declarado USD (Opcional)
-              </label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={form.declaredValueUsd}
-                onChange={(e) => setForm((prev) => ({ ...prev, declaredValueUsd: e.target.value }))}
-              />
-            </div>
-          </div>
-
+          {/* Bloque 3: Descripción del Contenido */}
           <div>
             <label className="text-xs font-semibold text-muted-foreground block mb-1">
               Descripción del Contenido
@@ -344,11 +422,11 @@ export function IntlPackageModal({
             />
           </div>
 
-          {/* Peso y Cubicaje */}
+          {/* Bloque 4: Cubicaje y Peso Cobrable */}
           <div className="border border-border/70 rounded-lg p-3.5 bg-muted/30 space-y-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                <Calculator className="size-4 text-emerald-600 dark:text-emerald-400" />
+                <Calculator className="size-4 text-primary" />
                 Cubicaje y Peso Cobrable (Regla IATA: {volumetricFactor} kg/CBM)
               </div>
             </div>
@@ -451,7 +529,7 @@ export function IntlPackageModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-border/40 text-xs">
               <div className="flex justify-between items-center bg-background px-3 py-2 rounded border border-border/50">
                 <span className="text-muted-foreground font-medium">Volumen Final:</span>
-                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{computedVolumeCbm} CBM</span>
+                <span className="font-mono font-bold text-primary">{computedVolumeCbm} CBM</span>
               </div>
               <div className="flex justify-between items-center bg-background px-3 py-2 rounded border border-border/50">
                 <span className="text-muted-foreground font-medium">Peso Cobrable:</span>
@@ -476,7 +554,17 @@ export function IntlPackageModal({
 
 // Aliases for backwards compatibility
 export const NewIntlPackageModal = IntlPackageModal;
-export function EditIntlPackageModal({ packageData, open, onOpenChange, onSuccess }: any) {
+export function EditIntlPackageModal({
+  packageData,
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  packageData?: IntlImportPackage | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: (pkg: IntlImportPackage) => void;
+}) {
   return (
     <IntlPackageModal
       open={open}
