@@ -39,6 +39,18 @@ export function useNotifications() {
     const notifications = notificationsQuery.data ?? [];
     const unreadCount = notifications.filter(notification => !notification.read).length;
 
+    useEffect(() => {
+        if (typeof navigator === 'undefined') return;
+        const appBadgeNavigator = navigator as Navigator & {
+            setAppBadge?: (count?: number) => Promise<void> | void;
+            clearAppBadge?: () => Promise<void> | void;
+        };
+        const result = unreadCount > 0
+            ? appBadgeNavigator.setAppBadge?.(unreadCount)
+            : appBadgeNavigator.clearAppBadge?.();
+        void Promise.resolve(result).catch(() => undefined);
+    }, [unreadCount]);
+
     const markAsRead = async (id: string) => {
         try {
             await notificationsService.markAsRead(id);

@@ -23,6 +23,7 @@ import { PublicRsvpPage } from './components/public/PublicRsvpPage';
 import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
 import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
 import { PublicTrackingPage } from './components/public/PublicTrackingPage';
+import { PoketPaymentCallbackPage } from './components/public/PoketPaymentCallbackPage';
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { BrowserNotificationPrompt } from './components/notificaciones/BrowserNotificationPrompt';
@@ -573,6 +574,7 @@ function AppContent() {
     document.documentElement.classList.toggle('dark', readPersistedDarkMode());
   }, []);
 
+  if (location.pathname === '/integrations/poket/callback') return <PoketPaymentCallbackPage />;
   if (location.pathname === '/public/tracking' || location.pathname.startsWith('/public/tracking/')) return <PublicTrackingPage />;
   if (location.pathname.startsWith('/rsvp/') || location.pathname.startsWith('/public/rsvp/')) return <PublicRsvpPage />;
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;

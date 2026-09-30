@@ -1,8 +1,10 @@
 export interface VoiceSaleCatalogProduct {
   id: string;
   name: string;
+  code?: string;
+  aliases?: string[];
   isActive?: boolean;
-  variants?: Array<{ id: string; name: string; isActive?: boolean }>;
+  variants?: Array<{ id: string; name: string; isActive?: boolean; aliases?: string[] }>;
 }
 
 export interface VoiceSaleLine<TProduct extends VoiceSaleCatalogProduct = VoiceSaleCatalogProduct> {
@@ -21,6 +23,8 @@ export interface VoiceSaleParseResult<TProduct extends VoiceSaleCatalogProduct =
 export interface VoiceSaleMetadata {
   customerText: string;
   total: number | null;
+  unitPrice: number | null;
+  unitPriceCurrency: 'NIO' | 'USD' | null;
   paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'CREDIT' | null;
   notes: string;
   unmatchedText: string;
@@ -45,14 +49,31 @@ const NUMBER_WORDS: Record<string, number> = {
   trece: 13,
   catorce: 14,
   quince: 15,
+  dieciseis: 16,
+  diecisiete: 17,
+  dieciocho: 18,
+  diecinueve: 19,
   veinte: 20,
+  veintiuno: 21,
+  veintidos: 22,
+  veintitres: 23,
+  veinticuatro: 24,
+  veinticinco: 25,
+  veintiseis: 26,
+  veintisiete: 27,
+  veintiocho: 28,
+  veintinueve: 29,
   treinta: 30,
   cuarenta: 40,
   cincuenta: 50,
   cien: 100,
 };
+const DIGIT_WORDS: Record<string, string> = Object.fromEntries(
+  Object.entries(NUMBER_WORDS).map(([word, value]) => [String(value), word]),
+);
 
 const STOP_WORDS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'uno', 'por', 'favor', 'también', 'tambien']);
+const PRODUCT_NUMBER_PREFIXES = new Set(['iphone', 'galaxy', 'pixel', 'modelo', 'serie', 'version', 'versión', 'talla', 'sku']);
 
 function normalize(value: string) {
   return value
@@ -72,8 +93,17 @@ function parseQuantity(prefix: string) {
   // "30 platos de asado" o "dos órdenes de tira de res".
   for (let index = candidateTokens.length - 1; index >= 0; index -= 1) {
     const candidate = candidateTokens[index];
+    if (PRODUCT_NUMBER_PREFIXES.has(candidateTokens[index - 1] || '')) continue;
     const numeric = Number(candidate);
-    if (Number.isFinite(numeric) && numeric > 0) return Math.min(999, Math.floor(numeric));
+    // Los precios dictados suelen quedar en el prefijo de una coincidencia
+    // posterior ("dos iPhone 15 a 8000 córdobas ..."). Nunca deben
+    // convertirse en una cantidad. La venta rápida limita cada línea a 999
+    // unidades, por lo que un número mayor es mucho más probablemente un
+    // precio que una cantidad válida.
+    if (Number.isFinite(numeric) && numeric > 0) {
+      if (numeric > 999) continue;
+      return Math.floor(numeric);
+    }
 
     const written = NUMBER_WORDS[candidate];
     if (written && written > 0) return written;
@@ -96,6 +126,16 @@ function buildNameVariants(value: string) {
     pluralTokens[firstLexicalIndex] = token.endsWith('s') ? token.slice(0, -1) : `${token}s`;
     variants.add(pluralTokens.join(' '));
   }
+
+  // Permite dictar el nombre comercial sin la marca o prefijo del catálogo:
+  // “iPhone 15” también encuentra “Apple iPhone 15”.
+  if (tokens.length >= 3) variants.add(tokens.slice(1).join(' '));
+
+  // El reconocimiento suele devolver “quince” aunque el catálogo tenga “15”
+  // (o al revés). Conservamos ambas formas para no depender de IA.
+  const spokenNumberTokens = tokens.map((token) => DIGIT_WORDS[token] || token);
+  if (spokenNumberTokens.join(' ') !== normalized) variants.add(spokenNumberTokens.join(' '));
+  if (spokenNumberTokens.length >= 3) variants.add(spokenNumberTokens.slice(1).join(' '));
 
   return [...variants].filter(Boolean);
 }
@@ -129,6 +169,13 @@ function parseVoiceSaleMetadata(transcript: string): VoiceSaleMetadata {
     .trim();
   const customerMatch = metadataText.match(/(?:cliente|para|a nombre de)\s+([^,.;]+?)(?=\s+(?:total|monto|paga|pago|forma de pago|nota|observacion)\b|[,.;]|$)/);
   const totalMatch = metadataText.match(/(?:total|por un total de|monto)\s*(?:de\s*)?(?:c\$|\$|cordobas?|dolares?)?\s*([0-9][0-9.,]*)/);
+  const unitPriceMatch = metadataText.match(/\b(?:a|cada|precio(?:\s+unitario)?|valor)\s+(?:(c\$|\$|cordobas?|dolares?)\s*)?([0-9][0-9.,]*)\s*(cordobas?|dolares?)?\b/);
+  const unitPriceCurrencyToken = String(unitPriceMatch?.[1] || unitPriceMatch?.[3] || '').toLowerCase();
+  const unitPriceCurrency = unitPriceCurrencyToken.includes('dolar') || unitPriceCurrencyToken === '$'
+    ? 'USD'
+    : unitPriceCurrencyToken
+      ? 'NIO'
+      : null;
   const paymentMatch = metadataText.match(/(?:paga(?:r)?|pago|forma de pago|con)\s+(efectivo|tarjeta|transferencia|credito)/);
   const paymentValue = paymentMatch?.[1] || '';
   const paymentMethod = paymentValue === 'efectivo'
@@ -142,6 +189,8 @@ function parseVoiceSaleMetadata(transcript: string): VoiceSaleMetadata {
   return {
     customerText: customerMatch?.[1]?.trim() || '',
     total: totalMatch ? parseMoney(totalMatch[1]) : null,
+    unitPrice: unitPriceMatch ? parseMoney(unitPriceMatch[2]) : null,
+    unitPriceCurrency,
     paymentMethod,
     notes: notesMatch?.[1]?.trim() || '',
     unmatchedText: '',
@@ -161,6 +210,9 @@ function removeMetadataFromUnmatchedText(value: string, metadata: VoiceSaleMetad
   if (metadata.total !== null) {
     result = result.replace(/(?:por un total de|total|monto)\s*(?:de\s*)?(?:c\$|c|\$|cordobas?|dolares?)?\s*[0-9][0-9.,]*/g, ' ');
   }
+  if (metadata.unitPrice !== null) {
+    result = result.replace(/\b(?:a|cada|precio(?:\s+unitario)?|valor)\s+(?:(?:c\$|\$|cordobas?|dolares?)\s*)?[0-9][0-9.,]*\s*(?:cordobas?|dolares?)?\b/g, ' ');
+  }
   if (metadata.paymentMethod) {
     result = result.replace(/(?:paga(?:r)?|pago|forma de pago|con)\s+(?:efectivo|tarjeta|transferencia|credito)/g, ' ');
     result = result.replace(/\bpago\b/g, ' ');
@@ -173,14 +225,18 @@ function removeMetadataFromUnmatchedText(value: string, metadata: VoiceSaleMetad
 
 export function parseSpanishSalesDictation<TProduct extends VoiceSaleCatalogProduct>(transcript: string, products: TProduct[]): VoiceSaleParseResult<TProduct> {
   const normalizedTranscript = normalize(transcript);
-  if (!normalizedTranscript) return { lines: [], unmatchedText: '', metadata: { customerText: '', total: null, paymentMethod: null, notes: '', unmatchedText: '' } };
+  if (!normalizedTranscript) return { lines: [], unmatchedText: '', metadata: { customerText: '', total: null, unitPrice: null, unitPriceCurrency: null, paymentMethod: null, notes: '', unmatchedText: '' } };
   const metadata = parseVoiceSaleMetadata(transcript);
 
   const candidates = products
     .filter((product) => product.isActive !== false)
     .flatMap((product) => [
       { product, name: product.name, variantName: undefined },
-      ...(product.variants || []).map((variant) => ({ product, name: variant.name, variantName: variant.name })),
+      ...(product.aliases || []).map((alias) => ({ product, name: alias, variantName: undefined })),
+      ...(product.variants || []).flatMap((variant) => [
+        { product, name: variant.name, variantName: variant.name },
+        ...(variant.aliases || []).map((alias) => ({ product, name: alias, variantName: variant.name })),
+      ]),
     ])
     .flatMap((candidate) => buildNameVariants(candidate.name || '').map((normalizedName) => ({ ...candidate, normalizedName })))
     .filter((candidate) => candidate.normalizedName.length >= 2)
@@ -213,7 +269,10 @@ export function parseSpanishSalesDictation<TProduct extends VoiceSaleCatalogProd
     const current = merged.get(key);
     merged.set(key, {
       product: match.candidate.product,
-      quantity: Math.min(999, (current?.quantity || 0) + quantity),
+      // SpeechRecognition puede repetir una misma frase cuando concatena
+      // resultados finales. Para no facturar duplicado por ruido, conserva
+      // la mayor cantidad detectada para el mismo producto/variante.
+      quantity: Math.min(999, Math.max(current?.quantity || 0, quantity)),
       phrase: match.candidate.name,
       variantName: match.candidate.variantName,
     });
@@ -223,7 +282,7 @@ export function parseSpanishSalesDictation<TProduct extends VoiceSaleCatalogProd
   let unmatchedText = removeMetadataFromUnmatchedText(normalizedTranscript, metadata);
   covered.forEach((fragment) => { unmatchedText = unmatchedText.replace(fragment, ' '); });
   unmatchedText = unmatchedText
-    .replace(/\b(?:quiero|factura|facturar|vende|vendi|venta|ventas|agrega|agregar|por favor|tambien|también|y|de|del|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|cien|\d+|plato|platos|orden|ordenes|unidad|unidades|pieza|piezas|tira|tiras)\b/g, ' ')
+    .replace(/\b(?:quiero|vender|factura|facturar|vende|vendi|venta|ventas|agrega|agregar|por favor|tambien|también|y|de|del|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciseis|diecisiete|dieciocho|diecinueve|veinte|veintiuno|veintidos|veintitres|veinticuatro|veinticinco|veintiseis|veintisiete|veintiocho|veintinueve|treinta|cuarenta|cincuenta|cien|\d+|plato|platos|orden|ordenes|unidad|unidades|pieza|piezas|tira|tiras)\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
