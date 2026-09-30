@@ -3,6 +3,7 @@ import {
   Loader2, MessageSquare, Send, Search, Phone, Mail,
   Globe, Facebook, Instagram, Hash, User,
   Paperclip, Smile, ArrowLeft, FileText,
+  RefreshCw, Clock3, ExternalLink,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { NovaChatIcon } from '../ui/NovaIcons';
@@ -70,26 +71,32 @@ export function NovaChatView() {
   const inboxQuery = useTenantQuery<{ channels: ChatChannel[]; conversations: ChatConversation[] }>(
     ['novachat', 'inbox'],
     async signal => {
+      const sync = await novachatService.sync().catch(() => ({ configured: false }));
       let channels = asList(await novachatService.getChannels(signal)) as ChatChannel[];
       let conversations = asList(await novachatService.getConversations(undefined, signal)) as ChatConversation[];
-      if (channels.length === 0) {
+      if (channels.length === 0 && !sync.configured) {
         await novachatService.seedDemo();
         channels = asList(await novachatService.getChannels(signal)) as ChatChannel[];
         conversations = asList(await novachatService.getConversations(undefined, signal)) as ChatConversation[];
       }
       return { channels, conversations };
     },
-    { refetchInterval: 10000, refetchIntervalInBackground: false },
+    { refetchInterval: 45000, refetchIntervalInBackground: false },
   );
   const channels = inboxQuery.data?.channels || [];
   const conversations = inboxQuery.data?.conversations || [];
   const messagesQuery = useTenantQuery<ChatMessage[]>(
     ['novachat', 'messages', selectedConversation?.id],
     signal => novachatService.getMessages(selectedConversation!.id, signal),
-    { enabled: Boolean(selectedConversation?.id), refetchInterval: 5000, refetchIntervalInBackground: false },
+    { enabled: Boolean(selectedConversation?.id), refetchInterval: 15000, refetchIntervalInBackground: false },
   );
   const messages = asList(messagesQuery.data) as ChatMessage[];
-  const loading = inboxQuery.isLoading || inboxQuery.isFetching;
+  const loading = inboxQuery.isLoading;
+  const selectedRequiresTemplate = Boolean(
+    selectedConversation
+    && selectedConversation.channel.type === 'WHATSAPP'
+    && !messages.some((message) => message.direction === 'INCOMING' && Date.now() - new Date(message.sentAt).getTime() < 24 * 60 * 60 * 1000),
+  );
 
   useNotificationDomainRefresh({
     module: 'novachat',
@@ -118,7 +125,7 @@ export function NovaChatView() {
     if (!newMessage.trim() || !selectedConversation) return;
     setSending(true);
     try {
-      const msg = await novachatService.sendMessage({
+      await novachatService.sendMessage({
         conversationId: selectedConversation.id,
         content: newMessage.trim(),
       });
@@ -153,10 +160,24 @@ export function NovaChatView() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] rounded-2xl border border-border/50 overflow-hidden bg-card">
+    <div className="flex min-h-[min(760px,calc(100dvh-8rem))] h-[calc(100dvh-8rem)] max-h-[calc(100dvh-5rem)] flex-col overflow-hidden rounded-2xl border border-border/50 bg-card lg:flex-row">
       <div className="w-64 border-r border-border/30 flex flex-col bg-muted/10 shrink-0">
-        <div className="p-4 border-b border-border/30">
-          <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-3">Bandejas de Entrada</h3>
+        <div className="flex items-center justify-between gap-2 border-b border-border/30 p-4">
+          <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Bandejas de Entrada</h3>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 rounded-lg"
+            onClick={() => void inboxQuery.refetch()}
+            disabled={inboxQuery.isFetching}
+            title="Sincronizar conversaciones"
+            aria-label="Sincronizar conversaciones"
+          >
+            <RefreshCw className={`size-3.5 ${inboxQuery.isFetching ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+        <div className="border-b border-border/30 p-4 pt-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
             <Input
@@ -201,7 +222,7 @@ export function NovaChatView() {
         </div>
       </div>
 
-      <div className={`w-80 border-r border-border/30 flex flex-col shrink-0 ${showMobileChat ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`w-full border-r border-border/30 flex min-h-0 flex-col shrink-0 lg:w-80 ${showMobileChat ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-3 border-b border-border/30 flex items-center gap-2">
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger className="h-9 rounded-lg text-xs flex-1">
@@ -270,7 +291,7 @@ export function NovaChatView() {
         </div>
       </div>
 
-      <div className={`flex-1 flex flex-col ${showMobileChat ? 'flex' : 'hidden md:flex'}`}>
+      <div className={`min-w-0 flex-1 flex-col ${showMobileChat ? 'flex' : 'hidden md:flex'}`}>
         {!selectedConversation ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             <div className="text-center">
@@ -281,7 +302,7 @@ export function NovaChatView() {
           </div>
         ) : (
           <>
-            <div className="px-4 py-3 border-b border-border/30 flex items-center gap-3 bg-muted/10">
+            <div className="flex flex-wrap items-center gap-3 border-b border-border/30 bg-muted/10 px-4 py-3">
               <Button
                 variant="ghost"
                 size="sm"
@@ -299,6 +320,12 @@ export function NovaChatView() {
                   {selectedConversation.channel?.name} &middot; En línea
                 </p>
               </div>
+              {selectedRequiresTemplate && (
+                <div className="order-last flex w-full items-start gap-2 rounded-xl border border-amber-300/40 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 sm:order-none sm:w-auto sm:max-w-[280px]">
+                  <Clock3 className="mt-0.5 size-3.5 shrink-0" />
+                  <span>La ventana de 24 horas está cerrada. Para WhatsApp debes enviar una plantilla aprobada desde Chatwoot.</span>
+                </div>
+              )}
               <Select
                 value={selectedConversation.status}
                 onValueChange={(val) => handleStatusChange(selectedConversation.id, val)}
@@ -354,7 +381,10 @@ export function NovaChatView() {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-3 border-t border-border/30 bg-muted/10">
+            <div className="border-t border-border/30 bg-muted/10 p-3">
+              {selectedRequiresTemplate && (
+                <p className="mb-2 flex items-center gap-1.5 text-[10px] text-muted-foreground"><ExternalLink className="size-3" /> Abre Chatwoot para escoger una plantilla aprobada y reabrir la conversación.</p>
+              )}
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" className="shrink-0">
                   <Paperclip className="size-4" />
@@ -369,12 +399,12 @@ export function NovaChatView() {
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend(); } }}
                   placeholder="Escribí tu respuesta aquí... (Presioná Enter para enviar)"
                   className="flex-1 h-10 rounded-xl text-sm"
-                  disabled={sending}
+                  disabled={sending || selectedRequiresTemplate}
                 />
                 <Button
                   data-testid="novachat-send-message"
                   onClick={() => void handleSend()}
-                  disabled={!newMessage.trim() || sending}
+                  disabled={!newMessage.trim() || sending || selectedRequiresTemplate}
                   className="shrink-0 bg-orange-700 hover:bg-orange-800 text-white font-bold gap-2 rounded-xl px-5"
                 >
                   {sending ? <Loader2 className="size-4 animate-spin" /> : <>Enviar <Send className="size-3.5" /></>}

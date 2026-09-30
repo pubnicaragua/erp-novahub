@@ -478,6 +478,7 @@ export interface PlatformQuote {
   prospectEmail?: string | null;
   prospectPhone?: string | null;
   country?: string | null;
+  companyCount: number;
   currency: "USD" | "NIO";
   validUntil?: string | null;
   notes?: string | null;

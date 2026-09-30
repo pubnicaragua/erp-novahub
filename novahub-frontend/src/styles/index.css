@@ -232,7 +232,7 @@ select.erp-filter-select,
   }
 
   [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(2)::before { content: "Concepto"; }
-  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(3)::before { content: "Cantidad"; }
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(3)::before { content: "Empresas / unidades"; }
   [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(4)::before { content: "Precio unitario"; }
   [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):has(select[aria-label="Tipo de descuento"]) > td:nth-child(5)::before { content: "Descuento"; }
   [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):not(:has(select[aria-label="Tipo de descuento"])) > td:nth-child(5)::before { content: "Cobro"; }
@@ -361,6 +361,105 @@ select.erp-filter-select,
   [data-platform-quote-editor] table tbody > tr:not(:has(td[colspan])) > td > div {
     width: 100%;
     min-width: 0;
+  }
+}
+
+/* El catálogo empresarial se añadió antes del documento; este selector estable
+   mantiene la tabla editable responsive sin depender del orden de los bloques. */
+@media (max-width: 1279px) {
+  [data-quote-table] {
+    min-width: 0;
+  }
+
+  [data-quote-table] > div {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+@media (max-width: 639px) {
+  [data-quote-table] > div > div:nth-child(3) {
+    padding: 1rem;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table {
+    display: block;
+    width: 100%;
+    min-width: 0 !important;
+    border-collapse: separate;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > thead {
+    display: none;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody {
+    display: grid;
+    gap: .75rem;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:has(td[colspan]) {
+    display: block;
+    border: 1px solid rgb(16 94 65 / 0.14);
+    border-radius: 1rem;
+    background: rgb(225 245 233 / 0.72);
+    overflow: hidden;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:has(td[colspan]) > td {
+    display: block;
+    width: 100%;
+    padding: .75rem;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    padding: .875rem;
+    border: 1px solid rgb(15 23 42 / 0.12);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 20px rgb(15 23 42 / 0.06);
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: .25rem;
+    padding: 0;
+    text-align: left;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td::before {
+    color: rgb(100 116 139);
+    font-size: .58rem;
+    font-weight: 900;
+    line-height: 1rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:first-child {
+    display: none;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(2),
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(n + 5) {
+    grid-column: 1 / -1;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(2)::before { content: "Concepto"; }
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(3)::before { content: "Empresas / unidades"; }
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(4)::before { content: "Precio unitario"; }
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(n + 5)::before { content: "Cobro / alcance"; }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) input,
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) select {
+    width: 100%;
+    max-width: 100%;
   }
 }
 

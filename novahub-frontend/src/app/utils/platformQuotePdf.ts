@@ -79,7 +79,12 @@ function discountLabelOf(item: PlatformQuote['items'][number], currency: Platfor
   return item.discountType === 'PERCENT' ? `-${value}%` : `-${money(discountAmountOf(item), currency)}`;
 }
 
+function isPriceToDefine(item: PlatformQuote['items'][number]) {
+  return Number(item.unitPrice || 0) <= 0 && /precio por propuesta|ajusta el importe|por definir/i.test(String(item.detail || ''));
+}
+
 function isIncludedItem(item: PlatformQuote['items'][number]) {
+  if (isPriceToDefine(item)) return false;
   const detail = String(item.detail || '').toLowerCase();
   return Number(item.unitPrice || 0) <= 0 && (!item.isOptional || /incluido|valor agregado|sin costo/.test(detail));
 }
@@ -104,6 +109,7 @@ export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
 }
 
 function itemPriceLabel(item: PlatformQuote['items'][number], currency: PlatformQuote['currency']) {
+  if (isPriceToDefine(item)) return 'Precio por propuesta';
   if (isIncludedItem(item)) return 'Incluido';
   return billingOptionsOf(item).map((option) => `${option.periodicity}: ${money(option.unitPrice, currency)}`).join('\n');
 }
@@ -222,6 +228,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
     quote.prospectEmail,
     quote.prospectPhone,
     quote.country,
+    `Empresas cubiertas: ${quantity(quote.companyCount || 1)}`,
   ]
     .filter(Boolean)
     .join('  -  ');
@@ -291,7 +298,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   autoTable(doc, {
     startY: y,
     margin: { top: 39, left: margin, right: margin, bottom: 22 },
-    head: [showDiscount ? ['#', 'Concepto', 'Cantidad', 'Precio / modalidades', 'Descuento', 'Cobro', 'Descripción / alcance'] : ['#', 'Concepto', 'Cantidad', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
+    head: [showDiscount ? ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Descuento', 'Cobro', 'Descripción / alcance'] : ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
     body: rows,
     theme: 'grid',
     styles: {
@@ -587,8 +594,8 @@ export async function downloadPlatformQuoteCommercialReport(
     startY: y,
     margin: { top: 38, left: margin, right: margin, bottom: 22 },
     head: [hasCondition
-      ? ['#', 'Concepto', 'Cant.', 'Precio / modalidades', 'Cobro', 'Descripción / alcance', 'Condición comercial']
-      : ['#', 'Concepto', 'Cant.', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
+      ? ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance', 'Condición comercial']
+      : ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
     body: rows,
     theme: 'grid',
     styles: { font: 'helvetica', fontSize: 6.8, textColor: ink, lineColor: line, lineWidth: 0.15, cellPadding: 1.9, overflow: 'linebreak', valign: 'middle' },

@@ -31,6 +31,10 @@ export interface ChatConversation {
   channel: { id: string; name: string; type: string };
   contact: { id: string; name: string; phone?: string; email?: string; avatarUrl?: string };
   messages: ChatMessage[];
+  chatwootConvId?: number | null;
+  replyWindowOpen?: boolean;
+  replyWindowExpiresAt?: string | null;
+  requiresTemplate?: boolean;
 }
 
 export interface ChatMessage {
@@ -72,7 +76,18 @@ export interface SeedDemoResponse {
   conversations: number;
 }
 
+export interface ChatwootSyncResult {
+  configured: boolean;
+  skipped?: boolean;
+  inboxes?: number;
+  conversations?: number;
+  error?: string;
+}
+
 export const novachatService = {
+  sync: (force = false) =>
+    api.post<ChatwootSyncResult>('/novachat/sync', { force }),
+
   getChannels: (signal?: AbortSignal) =>
     api.get<ChatChannel[]>('/novachat/channels', { signal }),
 
