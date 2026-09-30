@@ -79,9 +79,19 @@ function discountLabelOf(item: PlatformQuote['items'][number], currency: Platfor
   return item.discountType === 'PERCENT' ? `-${value}%` : `-${money(discountAmountOf(item), currency)}`;
 }
 
+function isPriceToDefine(item: PlatformQuote['items'][number]) {
+  return Number(item.unitPrice || 0) <= 0 && /precio por propuesta|ajusta el importe|por definir/i.test(String(item.detail || ''));
+}
+
 function isIncludedItem(item: PlatformQuote['items'][number]) {
+  if (isPriceToDefine(item)) return false;
   const detail = String(item.detail || '').toLowerCase();
   return Number(item.unitPrice || 0) <= 0 && (!item.isOptional || /incluido|valor agregado|sin costo/.test(detail));
+}
+
+function detailListLabel(value: unknown, fallback: string) {
+  const lines = String(value || '').split(/\r?\n/).map((line) => line.replace(/^\s*[•·▪◦*-]\s*/, '').trim()).filter(Boolean);
+  return lines.length ? lines.map((line) => `• ${line}`).join('\n') : fallback;
 }
 
 export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
@@ -104,6 +114,7 @@ export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
 }
 
 function itemPriceLabel(item: PlatformQuote['items'][number], currency: PlatformQuote['currency']) {
+  if (isPriceToDefine(item)) return 'Precio por propuesta';
   if (isIncludedItem(item)) return 'Incluido';
   return billingOptionsOf(item).map((option) => `${option.periodicity}: ${money(option.unitPrice, currency)}`).join('\n');
 }
@@ -222,6 +233,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
     quote.prospectEmail,
     quote.prospectPhone,
     quote.country,
+    `Empresas cubiertas: ${quantity(quote.companyCount || 1)}`,
   ]
     .filter(Boolean)
     .join('  -  ');
@@ -282,7 +294,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
       quantity(item.quantity),
       itemPriceLabel(item, quote.currency),
       itemBillingLabel(item),
-      item.detail?.trim() || (isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
+      detailListLabel(item.detail, isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
     ];
     if (showDiscount) row.splice(4, 0, lineDiscount > 0 ? discountLabelOf(item, quote.currency) : lineNumber - 1 === discountRowIndex && totals.discount > 0 ? `-${money(totals.discount, quote.currency)}` : '-');
     rows.push(row);
@@ -291,7 +303,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   autoTable(doc, {
     startY: y,
     margin: { top: 39, left: margin, right: margin, bottom: 22 },
-    head: [showDiscount ? ['#', 'Concepto', 'Cantidad', 'Precio / modalidades', 'Descuento', 'Cobro', 'Descripción / alcance'] : ['#', 'Concepto', 'Cantidad', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
+    head: [showDiscount ? ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Descuento', 'Cobro', 'Descripción / alcance'] : ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
     body: rows,
     theme: 'grid',
     styles: {
@@ -402,7 +414,8 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   };
   if (totals.visibility.showInitialTotal) drawTotalLine('Total inicial', totals.displayInitialTotal);
   if (totals.visibility.showSubtotal) drawTotalLine('Subtotal', totals.displaySubtotal);
-  if (totals.visibility.showDiscount && totals.discount > 0) drawTotalLine('Descuento aplicado', -totals.discount, [220, 38, 38]);
+  const savingPercent = totals.displaySubtotal > 0 ? (totals.discount / totals.displaySubtotal) * 100 : 0;
+  if (totals.visibility.showDiscount && totals.discount > 0) drawTotalLine(`Ahorro para el cliente (${savingPercent.toFixed(1)}%)`, -totals.discount, darkGreen);
   if (totals.visibility.showMonthlyTotal) drawTotalLine('Total mensual', totals.displayMonthlyTotal);
   if (totals.visibility.showTax && totals.taxAmount > 0) drawTotalLine(`IVA / impuestos (${quote.taxRate}%)`, totals.taxAmount);
   if (totals.visibility.showTotal) {
@@ -577,7 +590,7 @@ export async function downloadPlatformQuoteCommercialReport(
       quantity(item.quantity),
       itemPriceLabel(item, quote.currency),
       itemBillingLabel(item),
-      item.detail?.trim() || (isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
+      detailListLabel(item.detail, isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
     ];
     if (hasCondition) row.push(condition || '-');
     rows.push(row);
@@ -587,8 +600,8 @@ export async function downloadPlatformQuoteCommercialReport(
     startY: y,
     margin: { top: 38, left: margin, right: margin, bottom: 22 },
     head: [hasCondition
-      ? ['#', 'Concepto', 'Cant.', 'Precio / modalidades', 'Cobro', 'Descripción / alcance', 'Condición comercial']
-      : ['#', 'Concepto', 'Cant.', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
+      ? ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance', 'Condición comercial']
+      : ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
     body: rows,
     theme: 'grid',
     styles: { font: 'helvetica', fontSize: 6.8, textColor: ink, lineColor: line, lineWidth: 0.15, cellPadding: 1.9, overflow: 'linebreak', valign: 'middle' },

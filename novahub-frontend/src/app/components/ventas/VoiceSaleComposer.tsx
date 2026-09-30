@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Mic, MicOff, Sparkles, X } from 'lucide-react';
+import { Check, Mic, MicOff, X } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Textarea } from '../ui/textarea';
 import { toast } from '@/app/services/toast';
 import { parseSpanishSalesDictation, type VoiceSaleCatalogProduct, type VoiceSaleLine, type VoiceSaleMetadata } from '../../utils/voice-sale-parser';
+import { NovaHubLogo } from '../NovaHubLogo';
 
 interface RecognitionResultLike {
   0?: { transcript?: string };
@@ -49,8 +50,10 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
   const [unmatchedText, setUnmatchedText] = useState('');
   const [metadata, setMetadata] = useState<VoiceSaleMetadata>({ customerText: '', total: null, paymentMethod: null, notes: '', unmatchedText: '' });
   const [listening, setListening] = useState(false);
+  const [wakeMode, setWakeMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<RecognitionLike | null>(null);
+  const wakeModeRef = useRef(false);
 
   const hasCatalog = products.length > 0;
   const recognitionConstructor = useMemo(() => {
@@ -82,6 +85,54 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setListening(false);
+    wakeModeRef.current = false;
+    setWakeMode(false);
+  };
+
+  const startWakeWord = () => {
+    if (!recognitionConstructor) {
+      setError('Este navegador no ofrece activación por voz. Usá el botón Dictar o el micrófono del teclado.');
+      setOpen(true);
+      return;
+    }
+    stopRecognition();
+    setError(null);
+    setOpen(false);
+    wakeModeRef.current = true;
+    setWakeMode(true);
+    const recognition = new recognitionConstructor();
+    recognition.lang = 'es-NI';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      const text = Array.from(event.results).map((result) => result[0]?.transcript || '').join(' ').trim();
+      if (/\bhola\s+nova\b/i.test(text)) {
+        wakeModeRef.current = false;
+        setWakeMode(false);
+        recognition.stop();
+        recognitionRef.current = null;
+        window.setTimeout(() => startRecognition(), 120);
+      }
+    };
+    recognition.onerror = () => {
+      wakeModeRef.current = false;
+      setWakeMode(false);
+      setListening(false);
+      setError('No se pudo mantener la activación por voz. Podés usar Dictar directamente.');
+    };
+    recognition.onend = () => {
+      setListening(false);
+      if (wakeModeRef.current) setWakeMode(false);
+    };
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setListening(true);
+    } catch {
+      wakeModeRef.current = false;
+      setWakeMode(false);
+      setError('No se pudo activar el micrófono. Revisá el permiso del sitio.');
+    }
   };
 
   const startRecognition = () => {
@@ -142,8 +193,8 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                <Sparkles className="size-4" />
+              <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-primary/20">
+                <NovaHubLogo size={25} />
               </span>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-tight">{title}</h3>
@@ -152,13 +203,17 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
             </div>
           </div>
           <div className="flex flex-wrap gap-2 sm:justify-end">
-            <Button type="button" size="sm" variant={listening ? 'destructive' : 'default'} className="h-10 rounded-xl px-3 font-black" onClick={listening ? stopRecognition : startRecognition} disabled={disabled || !hasCatalog}>
+            {recognitionConstructor && <Button type="button" size="sm" variant={wakeMode ? 'secondary' : 'outline'} className="h-10 rounded-xl px-3 font-black" onClick={wakeMode ? stopRecognition : startWakeWord} disabled={disabled || !hasCatalog}>
+              <NovaHubLogo size={18} className="mr-2 rounded-full" />
+              {wakeMode ? 'Escuchando “Hola Nova”' : 'Decir “Hola Nova”'}
+            </Button>}
+            <Button type="button" size="sm" variant={listening && !wakeMode ? 'destructive' : 'default'} className="h-10 rounded-xl px-3 font-black" onClick={listening && !wakeMode ? stopRecognition : startRecognition} disabled={disabled || !hasCatalog || wakeMode}>
               {listening ? <MicOff className="mr-2 size-4" /> : <Mic className="mr-2 size-4" />}
-              {listening ? 'Detener dictado' : 'Dictar'}
+              {listening && !wakeMode ? 'Detener dictado' : 'Dictar'}
             </Button>
           </div>
         </div>
-        <p className="mt-2 text-[10px] text-muted-foreground">Parser local: no usa IA, API de transcripción ni tokens. El dictado depende del reconocimiento nativo disponible en tu navegador.</p>
+        <p className="mt-2 text-[10px] text-muted-foreground">Parser local: no usa IA, API de transcripción ni tokens. “Hola Nova” funciona mientras esta pantalla está abierta y el navegador mantiene el micrófono autorizado.</p>
 
         {!hasCatalog && <p className="mt-3 rounded-xl border border-amber-300/40 bg-amber-50 px-3 py-2 text-xs text-amber-800">Cargá el catálogo para poder validar productos antes de agregarlos.</p>}
 

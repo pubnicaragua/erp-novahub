@@ -19,7 +19,7 @@ export function getBrowserNotificationStatus(): BrowserNotificationStatus {
   return Notification.permission;
 }
 
-/** Permission is requested only from the explicit button in the Push view. */
+/** Permission is requested only after an explicit user action. */
 export async function enableBrowserNotifications(): Promise<BrowserNotificationStatus> {
   if (!canUseBrowserNotifications()) return 'unsupported';
 

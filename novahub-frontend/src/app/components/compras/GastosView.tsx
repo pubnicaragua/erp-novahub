@@ -45,6 +45,8 @@ import { isBankPaymentMethod } from '../../utils/paymentMethods';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { VoiceExpenseComposer } from './VoiceExpenseComposer';
+import type { VoiceExpenseDraft } from '../../utils/voice-expense-parser';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -624,6 +626,18 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     }
   };
 
+  const applyVoiceExpense = (draft: VoiceExpenseDraft) => {
+    setLocalDoc((current) => current ? {
+      ...current,
+      description: draft.description,
+      amount: draft.amount || 0,
+      paymentSource: draft.paymentSource || current.paymentSource || 'CASH',
+      paidTo: draft.paidTo || current.paidTo || '',
+      category: draft.category,
+      categoryCustom: draft.categoryCustom || current.categoryCustom || '',
+    } : current);
+  };
+
   const handleDownloadExpensePdf = async (expense: Expense, format: PdfDownloadFormat = 'configured') => {
     const exportToastId = toast.loading('Generando PDF del gasto...');
     try {
@@ -710,6 +724,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           </div>
         </div>
 
+        {canMutate && <div className="mb-4"><VoiceExpenseComposer disabled={isPaidLocked} onApply={applyVoiceExpense} /></div>}
 
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1" data-tour="purchases-form-data">
