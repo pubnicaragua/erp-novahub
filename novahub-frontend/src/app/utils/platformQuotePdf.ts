@@ -89,6 +89,11 @@ function isIncludedItem(item: PlatformQuote['items'][number]) {
   return Number(item.unitPrice || 0) <= 0 && (!item.isOptional || /incluido|valor agregado|sin costo/.test(detail));
 }
 
+function detailListLabel(value: unknown, fallback: string) {
+  const lines = String(value || '').split(/\r?\n/).map((line) => line.replace(/^\s*[•·▪◦*-]\s*/, '').trim()).filter(Boolean);
+  return lines.length ? lines.map((line) => `• ${line}`).join('\n') : fallback;
+}
+
 export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
   const items = quote.items || [];
   const charged = items.filter((item) => !isIncludedItem(item));
@@ -289,7 +294,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
       quantity(item.quantity),
       itemPriceLabel(item, quote.currency),
       itemBillingLabel(item),
-      item.detail?.trim() || (isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
+      detailListLabel(item.detail, isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
     ];
     if (showDiscount) row.splice(4, 0, lineDiscount > 0 ? discountLabelOf(item, quote.currency) : lineNumber - 1 === discountRowIndex && totals.discount > 0 ? `-${money(totals.discount, quote.currency)}` : '-');
     rows.push(row);
@@ -409,7 +414,8 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   };
   if (totals.visibility.showInitialTotal) drawTotalLine('Total inicial', totals.displayInitialTotal);
   if (totals.visibility.showSubtotal) drawTotalLine('Subtotal', totals.displaySubtotal);
-  if (totals.visibility.showDiscount && totals.discount > 0) drawTotalLine('Descuento aplicado', -totals.discount, [220, 38, 38]);
+  const savingPercent = totals.displaySubtotal > 0 ? (totals.discount / totals.displaySubtotal) * 100 : 0;
+  if (totals.visibility.showDiscount && totals.discount > 0) drawTotalLine(`Ahorro para el cliente (${savingPercent.toFixed(1)}%)`, -totals.discount, darkGreen);
   if (totals.visibility.showMonthlyTotal) drawTotalLine('Total mensual', totals.displayMonthlyTotal);
   if (totals.visibility.showTax && totals.taxAmount > 0) drawTotalLine(`IVA / impuestos (${quote.taxRate}%)`, totals.taxAmount);
   if (totals.visibility.showTotal) {
@@ -584,7 +590,7 @@ export async function downloadPlatformQuoteCommercialReport(
       quantity(item.quantity),
       itemPriceLabel(item, quote.currency),
       itemBillingLabel(item),
-      item.detail?.trim() || (isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
+      detailListLabel(item.detail, isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
     ];
     if (hasCondition) row.push(condition || '-');
     rows.push(row);
