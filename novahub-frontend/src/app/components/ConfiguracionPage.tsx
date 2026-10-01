@@ -9,7 +9,7 @@ import {
   Trash2, Edit2, Shield,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MapPinned, ChevronDown,
-  BookOpen, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe, MessageCircle
+  BookOpen, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe, MessageCircle, CreditCard
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -49,6 +49,7 @@ import { FastColorInput } from './ui/FastColorInput';
 import { AuditoriaPage } from './AuditoriaPage';
 import { THEME_PRESETS, type ThemePreset } from '../constants/themePresets';
 import { NovaPulseView } from './configuracion/NovaPulseView';
+import { PoketPayLinkSettings } from './configuracion/PoketPayLinkSettings';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -555,6 +556,7 @@ const ALL_TABS: TabDef[] = [
   { id: 'auditoria', label: 'Logs y auditoría', icon: Activity, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'currency', label: 'Moneda & Cambio', icon: Coins, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'nova-pulse', label: 'Nova Pulse', icon: MessageCircle, scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'poket', label: 'Poket PayLink', icon: CreditCard, scenario: ['superadmin', 'partner', 'client'] },
 ];
 
 const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
@@ -564,6 +566,7 @@ const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
   auditoria: 'AUDIT_LOGS',
   currency: 'CONFIG_CURRENCY',
   'nova-pulse': 'CONFIG_NOVA_PULSE',
+  poket: 'CONFIG_COMPANY',
 };
 
 export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { initialTab?: string; onTabChange?: (tab: string) => void }) {
@@ -1529,6 +1532,10 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
 
         <TabsContent value="nova-pulse" className="space-y-6 mt-0">
           <NovaPulseView canEdit={canEditNovaPulse} canSend={canSendNovaPulse} />
+        </TabsContent>
+
+        <TabsContent value="poket" className="space-y-6 mt-0">
+          <PoketPayLinkSettings canEdit={canEditCompany} />
         </TabsContent>
 
         {/* ══════════ TAB: PERSONALIZACIÓN PDF ══════════ */}

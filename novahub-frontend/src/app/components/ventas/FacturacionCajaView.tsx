@@ -435,6 +435,7 @@ interface FacturacionCajaViewProps {
 export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employees = [] }: FacturacionCajaViewProps) {
   const { formatConvertedAmount: formatCurrency, formatExplicitAmount, displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
+  const quickVoiceEnabled = Boolean(user?.isPlatformAdmin || user?.enabledModules?.includes('SALES_VOICE_QUICK'));
   const loggedInSellerId = getLoggedInSellerEmployeeId(user);
   const canCreatePosInvoice = canPerform('RETAIL_POS', 'create');
   const canViewPosOtherLocations = canPerform('RETAIL_POS', 'viewOtherLocations');
@@ -1438,17 +1439,20 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     addItem(product);
   };
 
-  const handleVariantSelected = (product: PosProduct, variant: PosProductVariant) => {
+  const handleVariantSelected = (product: PosProduct, variant: PosProductVariant, requestedQuantity = 1, overrideUnitPrice?: number) => {
+    const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
     const isService = product.itemType === 'SERVICE';
     const warehouseId = isService ? undefined : (selectedWarehouseId || undefined);
     const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id, variant.id);
-    const priceMissing = !isService && (configuredPrice === undefined || configuredPrice === 0);
+    const hasOverridePrice = Number.isFinite(overrideUnitPrice);
+    const effectivePrice = hasOverridePrice ? Number(overrideUnitPrice) : (configuredPrice ?? 0);
+    const priceMissing = !isService && !hasOverridePrice && (configuredPrice === undefined || configuredPrice === 0);
     const variantDescription = variant.attributes?.length
       ? `${product.name} - ${variant.attributes.map((a) => a.value).join(' / ')}`
       : product.name;
     const globalQty = getGlobalCartQuantity(product.id, variant.id, warehouseId);
     const existing = cart.find((i) => i.productId === product.id && i.variantId === variant.id && i.warehouseId === warehouseId);
-    const requestedQty = (existing?.quantity || 0) + 1;
+    const requestedQty = (existing?.quantity || 0) + quantity;
 
     if (!isService && hasSalesProductPriceListConflict(cart, product.id, selectedPriceListId, existing ? cart.indexOf(existing) : -1, selectedPriceListId, variant.id)) {
       toast.error('Este producto ya está agregado con la misma lista de precios.');
@@ -1471,7 +1475,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       if (current) {
         return prev.map((i) =>
           i.productId === product.id && i.variantId === variant.id && i.warehouseId === warehouseId
-            ? { ...i, quantity: i.quantity + 1, lineTotal: calculateLineTotal(i.quantity + 1, i.unitPrice) }
+            ? { ...i, ...(hasOverridePrice ? { unitPrice: effectivePrice, priceMissing: false } : {}), quantity: i.quantity + quantity, lineTotal: calculateLineTotal(i.quantity + quantity, hasOverridePrice ? effectivePrice : i.unitPrice) }
             : i,
         );
       }
@@ -1486,19 +1490,19 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           warehouseId,
           description: variantDescription,
           commercialNoteSnapshot: product.commercialNote || null,
-          quantity: 1,
-          unitPrice: configuredPrice ?? 0,
+          quantity,
+          unitPrice: effectivePrice,
           priceListId: isService ? undefined : selectedPriceListId,
           priceMissing,
           discount: 0,
           taxRate: isService ? 0 : NICARAGUA_IVA_RATE,
-          lineTotal: calculateLineTotal(1, configuredPrice ?? 0),
+          lineTotal: calculateLineTotal(quantity, effectivePrice),
         },
       ];
     });
   };
 
-  const addItem = (product: PosProduct, requestedQuantity = 1) => {
+  const addItem = (product: PosProduct, requestedQuantity = 1, overrideUnitPrice?: number) => {
     const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
     const isService = product.itemType === 'SERVICE';
     const warehouseId = isService ? undefined : (selectedWarehouseId || undefined);
@@ -1507,7 +1511,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       return;
     }
     const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id);
-    const priceMissing = !isService && configuredPrice === undefined;
+    const hasOverridePrice = Number.isFinite(overrideUnitPrice);
+    const effectivePrice = hasOverridePrice ? Number(overrideUnitPrice) : (configuredPrice ?? 0);
+    const priceMissing = !isService && !hasOverridePrice && configuredPrice === undefined;
     if (priceMissing) {
       toast.warning(`El producto "${product.name}" no tiene precio en esta lista. Puedes agregarlo, pero selecciona otra lista antes de emitir.`);
     }
@@ -1533,8 +1539,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           i.productId === product.id && i.warehouseId === warehouseId
             ? {
               ...i,
+              ...(hasOverridePrice ? { unitPrice: effectivePrice, priceMissing: false } : {}),
               quantity: i.quantity + quantity,
-              lineTotal: calculateLineTotal(i.quantity + quantity, i.unitPrice),
+              lineTotal: calculateLineTotal(i.quantity + quantity, hasOverridePrice ? effectivePrice : i.unitPrice),
             }
             : i,
         );
@@ -1550,13 +1557,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           description: product.name,
           commercialNoteSnapshot: product.commercialNote || null,
           quantity,
-          unitPrice: configuredPrice ?? 0,
+          unitPrice: effectivePrice,
           priceListId: isService ? undefined : selectedPriceListId,
           priceMissing,
           discount: 0,
           // En modo global este valor se ignora; en modo por producto solo los productos parten con IVA.
           taxRate: isService ? 0 : NICARAGUA_IVA_RATE,
-          lineTotal: calculateLineTotal(quantity, configuredPrice ?? 0),
+          lineTotal: calculateLineTotal(quantity, effectivePrice),
         },
       ];
     });
@@ -2376,6 +2383,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
             <VoiceSaleComposer
               products={products}
               disabled={isRegisterDisabled}
+              featureEnabled={quickVoiceEnabled}
               onApply={(lines, metadata) => {
                 if (metadata.customerText) {
                   const normalizeCustomer = (value: string) => value.toLocaleLowerCase('es-NI').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
@@ -2387,12 +2395,29 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                 if (metadata.paymentMethod && metadata.total !== null) {
                   setPayments([paymentLine(metadata.paymentMethod as PosPaymentLine['method'], metadata.total)]);
                 }
-                lines.forEach((line) => {
-                if (line.variantName || line.product.variants?.length) {
-                  toast.error(`Revisá manualmente la variante de ${line.product.name} antes de cobrar.`);
-                  return;
+                const dictatedPrice = metadata.unitPrice !== null && lines.length === 1
+                  ? (metadata.unitPriceCurrency && metadata.unitPriceCurrency !== paymentCurrency
+                    ? convertBetweenCurrencies(metadata.unitPrice, metadata.unitPriceCurrency, paymentCurrency, 1, Number(globalRate || activeSession?.exchangeRateUSD || 1))
+                    : metadata.unitPrice)
+                  : undefined;
+                if (metadata.unitPrice !== null && lines.length !== 1) {
+                  toast.warning('Detecté un precio dictado, pero hay varias líneas. Revisá el precio de cada producto en el detalle.');
                 }
-                addItem(line.product, line.quantity);
+                lines.forEach((line) => {
+                  const activeVariants = (line.product.variants || []).filter((variant) => variant.isActive !== false);
+                  const selectedVariant = line.variantName
+                    ? activeVariants.find((variant) => String(variant.name || '').trim().toLocaleLowerCase('es-NI') === String(line.variantName || '').trim().toLocaleLowerCase('es-NI'))
+                    : activeVariants.length === 1 ? activeVariants[0] : undefined;
+                  if (line.variantName && !selectedVariant) {
+                    toast.error(`No encontré la variante “${line.variantName}” de ${line.product.name}. Revisala en el detalle.`);
+                    return;
+                  }
+                  if (activeVariants.length > 1 && !selectedVariant) {
+                    toast.warning(`Seleccioná la variante de ${line.product.name} antes de cobrar.`);
+                    return;
+                  }
+                  if (selectedVariant) handleVariantSelected(line.product, selectedVariant, line.quantity, dictatedPrice);
+                  else addItem(line.product, line.quantity, dictatedPrice);
                 });
               }}
             />

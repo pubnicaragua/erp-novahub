@@ -66,7 +66,7 @@ self.addEventListener('push', (event) => {
     icon: data.icon || '/novahub-isotipo.png',
     badge: data.badge || '/novahub-isotipo.png',
     tag: data.tag || 'novahub-notification',
-    data: { url: data.url || '/' },
+    data: { url: data.url || '/', notificationId: data.notificationId || null },
     vibrate: [180, 80, 180],
   };
   event.waitUntil(self.registration.showNotification(title, options));
@@ -79,6 +79,11 @@ self.addEventListener('notificationclick', (event) => {
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const existing = clients.find((client) => client.url.startsWith(self.location.origin));
     if (existing && 'focus' in existing) {
+      existing.postMessage({
+        type: 'novahub-notification-click',
+        notificationId: event.notification.data?.notificationId || null,
+        url: targetUrl,
+      });
       await existing.focus();
       if ('navigate' in existing && existing.url !== targetUrl) await existing.navigate(targetUrl);
       return;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Link2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -47,6 +47,7 @@ import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { PoketPayLinkDialog } from './PoketPayLinkDialog';
 import { getAvailableSalesStock, getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
 import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
@@ -136,6 +137,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     toBaseAmount,
   } = useCurrency();
   const { user, canPerform } = useAuth();
+  const quickVoiceEnabled = Boolean(user?.isPlatformAdmin || user?.enabledModules?.includes('SALES_VOICE_QUICK'));
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('invoice', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState(() => {
@@ -215,6 +217,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [creditDueDate, setCreditDueDate] = useState('');
   const [creditLoading, setCreditLoading] = useState(false);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
+  const [paylinkInvoice, setPaylinkInvoice] = useState<Invoice | null>(null);
   const localDocRef = useRef<any>(null);
   const hydratedDraftKeyRef = useRef<string | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -1245,6 +1248,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
     const nextCustomerId = matchedCustomer?.id || localDoc.customerId;
     const priceListId = localDoc.priceListId || getCustomerPriceListId(nextCustomerId);
+    const dictatedPrice = metadata.unitPrice !== null && lines.length === 1
+      ? (metadata.unitPriceCurrency && metadata.unitPriceCurrency !== localDoc.currency
+        ? convertBetweenCurrencies(metadata.unitPrice, metadata.unitPriceCurrency, localDoc.currency, 1, Number(localDoc.exchangeRate || globalRate || 1))
+        : metadata.unitPrice)
+      : undefined;
+    if (metadata.unitPrice !== null && lines.length !== 1) {
+      toast.warning('Detecté un precio dictado, pero hay varias líneas. Revisá el precio de cada producto antes de guardar.');
+    }
     const addedItems = lines.map((line, index) => {
       const product = line.product;
       const variant = line.variantName
@@ -1252,9 +1263,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         : undefined;
       const itemType = getCatalogItemType(product);
       const baseSalePrice = Number((product as any).salePrice ?? (product as any).price ?? 0);
-      const unitPrice = localDoc.currency === 'USD'
+      const unitPrice = dictatedPrice ?? (localDoc.currency === 'USD'
         ? baseSalePrice / Number(localDoc.exchangeRate || globalRate || 1)
-        : baseSalePrice;
+        : baseSalePrice);
       const quantity = Math.max(1, Number(line.quantity || 1));
       return {
         id: `voice-${Date.now()}-${index}`,
@@ -1278,13 +1289,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     });
     const nextItems = [...(localDoc.items || []), ...addedItems];
     const calc = recalcTotals(nextItems, localRates.dRate, localRates.tRate);
-    const voiceAuditNote = metadata.unmatchedText ? `[DICTADO_NO_CATALOGADO] ${metadata.unmatchedText}` : '';
+    const voiceNotes = [
+      metadata.notes ? `[DICTADO] ${metadata.notes}` : '',
+      metadata.unmatchedText ? `[DICTADO_NO_CATALOGADO] ${metadata.unmatchedText}` : '',
+    ].filter(Boolean).join('\n');
     const nextDoc = {
       ...localDoc,
       customerId: nextCustomerId,
       priceListId,
-      notes: voiceAuditNote
-        ? `${String(localDoc.notes || '').trim()}${localDoc.notes ? '\n' : ''}${voiceAuditNote}`
+      notes: voiceNotes
+        ? `${String(localDoc.notes || '').trim()}${localDoc.notes ? '\n' : ''}${voiceNotes}`
         : localDoc.notes,
       ...calc,
     };
@@ -1650,6 +1664,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
          <VoiceSaleComposer
            products={products}
            disabled={isInvoiceLocked || productsLoading}
+           featureEnabled={quickVoiceEnabled}
            title="Agregar productos por voz"
            description="Dictá varias líneas y revisá el borrador. La factura nunca se guarda automáticamente."
            onApply={applyVoiceLinesToInvoice}
@@ -2357,8 +2372,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           />
           {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_CREDIT_NOTES', 'approve') && !['PAID', 'CANCELLED', 'CREDIT'].includes(String(detailInvoice.status).toUpperCase()) && !detailInvoice.creditNotes?.some((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className={cn('rounded-xl border-primary/30 text-primary hover:bg-primary/10', !invoiceFitsAvailableCredit(detailInvoice) && 'cursor-not-allowed text-muted-foreground opacity-60')} disabled={!invoiceFitsAvailableCredit(detailInvoice)} onClick={() => openInvoiceCredit(detailInvoice)}><Send className="mr-2 size-4" />Enviar a crédito</Button>}
           {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" disabled={paymentLoading && paymentInvoice?.id === detailInvoice.id} onClick={() => openInvoicePayment(detailInvoice)}><CreditCard className="mr-2 size-4" />Registrar pago</Button>}
+          {canPerform('SALES_INVOICES', 'approve') && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPaylinkInvoice(detailInvoice)}><Link2 className="mr-2 size-4" />Generar link de pago</Button>}
           {canPerform('SALES_INVOICES', 'delete') && isInvoiceCancellableFromList(detailInvoice) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailInvoice(null); setPendingCancelId(detailInvoice.id); setCancelReason(''); }}><Ban className="mr-2 size-4" />Solicitar anulación</Button>}
         </> : undefined}
+      />
+
+      <PoketPayLinkDialog
+        invoice={paylinkInvoice}
+        open={Boolean(paylinkInvoice)}
+        onOpenChange={(open) => { if (!open) setPaylinkInvoice(null); }}
+        onRefresh={() => { void onRefresh?.(); if (paylinkInvoice) void openInvoiceDetail(paylinkInvoice); }}
       />
 
       <ConfirmDialog

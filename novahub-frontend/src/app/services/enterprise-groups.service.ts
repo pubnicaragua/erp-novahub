@@ -626,6 +626,11 @@ export const enterpriseGroupsService = {
       `/enterprise-groups/platform/${groupId}/managers/${userId}/password`,
       { password },
     ),
+  updatePlatformManager: (groupId: string, userId: string, body: { name?: string; email?: string }) =>
+    api.idempotentPatch(
+      `/enterprise-groups/platform/${groupId}/managers/${userId}`,
+      body,
+    ),
   updatePlatformBusinessUnit: (groupId: string, unitId: string, body: any) =>
     api.idempotentPatch(
       `/enterprise-groups/platform/${groupId}/business-units/${unitId}`,

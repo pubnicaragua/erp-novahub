@@ -10,7 +10,7 @@ import {
   subscribeToNotificationEvents,
 } from '../services/notifications.service';
 import { waitForNotificationActionBarrier } from '../services/notification-action-coordinator';
-import { isBrowserNotificationsEnabled } from '../utils/browserNotifications';
+import { showPersistentBrowserNotification } from '../utils/browserNotifications';
 import { toast } from '@/app/services/toast';
 import { getNotificationNavigation, navigateToNotification } from '../utils/notificationNavigation';
 import { refreshNotificationDomain } from '../services/notification-domain-refresh';
@@ -65,6 +65,19 @@ export function useIncomingNotificationAlert() {
       });
     });
   }, [authUser?.clientTenantId, authUser?.id, authUser?.tenantId]);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined;
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'novahub-notification-click') return;
+      const notificationId = String(event.data.notificationId || '').trim();
+      if (notificationId) void markAsRead(notificationId);
+      const notification = notifications.find(item => item.id === notificationId);
+      if (notification) navigateToNotification(notification);
+    };
+    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+  }, [markAsRead, notifications]);
 
   useEffect(() => {
     if (!isFetched) return;
@@ -176,22 +189,18 @@ function presentNotification(
     },
   });
 
-  if (typeof document !== 'undefined' && document.hidden && typeof Notification !== 'undefined' && isBrowserNotificationsEnabled()) {
-    try {
-      const browserNotification = new Notification(notification.title || 'Nueva notificación', {
-        body: notification.message || '',
-        tag: notificationEventKey(notification),
-        icon: '/novahub-isotipo.png',
-      });
-      browserNotification.onclick = () => {
-        window.focus();
+  if (typeof document !== 'undefined' && document.hidden) {
+    void showPersistentBrowserNotification({
+      title: notification.title || 'Nueva notificación',
+      body: notification.message || 'Tienes una novedad pendiente de revisar.',
+      tag: notificationEventKey(notification),
+      url: notification.link || '/',
+      notificationId: notification.id,
+      onClick: () => {
         void markAsRead(notification.id);
         navigateToNotification(notification);
-        browserNotification.close();
-      };
-    } catch {
-      // The in-app toast and bell remain available when browser notifications fail.
-    }
+      },
+    });
   }
 
 }
