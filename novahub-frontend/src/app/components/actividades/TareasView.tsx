@@ -21,11 +21,13 @@ import {
   Send,
   XCircle,
   Loader2,
+  Filter,
+  RotateCcw,
 } from 'lucide-react';
 import { tasksService } from '../../services/actividades.service';
 import { usersService } from '../../services/users.service';
 import { useAuth } from '../../contexts/AuthContext';
-import { toast } from '@/app/services/toast';
+import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
@@ -38,6 +40,10 @@ import { playNotificationSound } from '../../utils/notificationSound';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
 import { ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { TareasKanban } from './TareasKanban';
+import { TareasCardsView } from './TareasCardsView';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { DateField } from '../ui/DateField';
+import { DateTimePickerField } from '../ui/DateTimePickerField';
 
 interface TareasViewProps {
   data: Task[];
@@ -56,6 +62,12 @@ const getTaskDisplayStatus = (task: any) => {
 export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewLayout, setViewLayout] = useState<ViewLayoutMode>('table');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
+  const [assignedFilter, setAssignedFilter] = useState<string>('ALL');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCompleteOpen, setIsCompleteOpen] = useState(false);
   const [isApprovalOpen, setIsApprovalOpen] = useState(false);
@@ -92,24 +104,33 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     ['activities', 'task-users'],
     (signal) => usersService.getLookup(undefined, signal),
     {
-      enabled: isAddOpen,
+      enabled: isAddOpen || true,
     }
   );
   const employees = asList(usersQuery.data);
 
+  const resetFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('ALL');
+    setPriorityFilter('ALL');
+    setAssignedFilter('ALL');
+    setDateFrom('');
+    setDateTo('');
+  };
+
   const statusOpts = [
-    { value: 'PENDING', label: 'Pendiente', color: 'bg-amber-500/10 text-amber-500' },
-    { value: 'IN_PROGRESS', label: 'En Progreso', color: 'bg-blue-500/10 text-blue-500' },
-    { value: 'WAITING_APPROVAL', label: 'Por Aprobar', color: 'bg-purple-500/10 text-purple-500' },
-    { value: 'COMPLETED', label: 'Completada', color: 'bg-emerald-500/10 text-emerald-500' },
-    { value: 'CANCELLED', label: 'Cancelada', color: 'bg-rose-500/10 text-rose-500' },
+    { value: 'PENDING', label: 'Pendiente', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+    { value: 'IN_PROGRESS', label: 'En Progreso', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+    { value: 'WAITING_APPROVAL', label: 'Por Aprobar', color: 'bg-primary/10 text-primary border-primary/20' },
+    { value: 'COMPLETED', label: 'Completada', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+    { value: 'CANCELLED', label: 'Cancelada', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
   ];
 
   const priorityOpts = [
-    { value: 'LOW', label: 'Baja', color: 'text-slate-500' },
-    { value: 'MEDIUM', label: 'Media', color: 'text-blue-500' },
-    { value: 'HIGH', label: 'Alta', color: 'text-amber-500' },
-    { value: 'URGENT', label: 'Urgente', color: 'text-rose-500' },
+    { value: 'LOW', label: 'Baja', color: 'text-muted-foreground' },
+    { value: 'MEDIUM', label: 'Media', color: 'text-primary font-medium' },
+    { value: 'HIGH', label: 'Alta', color: 'text-primary font-bold' },
+    { value: 'URGENT', label: 'Urgente', color: 'text-primary font-black' },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Task>) => {
@@ -319,22 +340,25 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   ];
 
   const kpis = [
-    { title: 'Total Tareas', value: data.length, icon: ListTodo, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { id: 'ALL', title: 'Total Tareas', value: data.length, icon: ListTodo, color: 'text-primary', bg: 'bg-primary/10' },
     {
+      id: 'PENDING',
       title: 'Pendientes',
       value: data.filter((t) => getTaskDisplayStatus(t) === 'PENDING').length,
       icon: Clock,
-      color: 'text-amber-500',
-      bg: 'bg-amber-500/10',
+      color: 'text-blue-500',
+      bg: 'bg-blue-500/10',
     },
     {
+      id: 'WAITING_APPROVAL',
       title: 'Por Aprobar',
       value: data.filter((t) => String(t.status || '').toUpperCase() === 'WAITING_APPROVAL').length,
       icon: Send,
-      color: 'text-purple-500',
-      bg: 'bg-purple-500/10',
+      color: 'text-primary',
+      bg: 'bg-primary/10',
     },
     {
+      id: 'OVERDUE',
       title: 'Vencidas',
       value: data.filter((t) => getTaskDisplayStatus(t) === 'OVERDUE').length,
       icon: AlertTriangle,
@@ -342,6 +366,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       bg: 'bg-rose-500/10',
     },
     {
+      id: 'COMPLETED',
       title: 'Completadas',
       value: data.filter((t) => (t.status || '').toUpperCase() === 'COMPLETED').length,
       icon: CheckCircle2,
@@ -350,33 +375,185 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     },
   ];
 
-  const filtered = data.filter(
-    (t) =>
+  const filtered = data.filter((t) => {
+    // Search filter
+    const matchesSearch =
+      !searchTerm ||
       t.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      t.description?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Status filter
+    const displayStatus = getTaskDisplayStatus(t);
+    const matchesStatus =
+      statusFilter === 'ALL' ||
+      (statusFilter === 'OVERDUE' ? displayStatus === 'OVERDUE' : (t.status || '').toUpperCase() === statusFilter);
+
+    // Priority filter
+    const matchesPriority = priorityFilter === 'ALL' || (t.priority || '').toUpperCase() === priorityFilter;
+
+    // Assigned filter
+    const matchesAssigned =
+      assignedFilter === 'ALL' ||
+      (t.assignments || []).some((a: any) => a.userId === assignedFilter || a.employeeId === assignedFilter);
+
+    // Date range filter
+    const dueDate = t.dueDate ? new Date(t.dueDate).toISOString().slice(0, 10) : null;
+    const matchesDateFrom = !dateFrom || (dueDate && dueDate >= dateFrom);
+    const matchesDateTo = !dateTo || (dueDate && dueDate <= dateTo);
+
+    return matchesSearch && matchesStatus && matchesPriority && matchesAssigned && matchesDateFrom && matchesDateTo;
+  });
+
+  const activeFiltersCount =
+    (statusFilter !== 'ALL' ? 1 : 0) +
+    (priorityFilter !== 'ALL' ? 1 : 0) +
+    (assignedFilter !== 'ALL' ? 1 : 0) +
+    (dateFrom ? 1 : 0) +
+    (dateTo ? 1 : 0);
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
+      {/* Interactive KPI Cards for Quick Filtering */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {kpis.map((kpi, i) => (
-          <Card
-            key={i}
-            className="min-w-0 rounded-2xl border-border/50 bg-card/80 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md"
-          >
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn('p-3 rounded-2xl flex items-center justify-center', kpi.bg)}>
-                <kpi.icon className={cn('size-6', kpi.color)} />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
-                  {kpi.title}
-                </p>
-                <p className="text-2xl font-black tracking-tight">{kpi.value}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {kpis.map((kpi) => {
+          const isSelected = statusFilter === kpi.id;
+          return (
+            <Card
+              key={kpi.id}
+              onClick={() => setStatusFilter((current) => (current === kpi.id ? 'ALL' : kpi.id))}
+              className={cn(
+                'min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/80 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md',
+                isSelected && 'border-primary ring-2 ring-primary/20 bg-primary/[0.03]'
+              )}
+            >
+              <CardContent className="p-5 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className={cn('p-3 rounded-2xl flex items-center justify-center', kpi.bg)}>
+                    <kpi.icon className={cn('size-6', kpi.color)} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+                      {kpi.title}
+                    </p>
+                    <p className="text-2xl font-black tracking-tight">{kpi.value}</p>
+                  </div>
+                </div>
+                {isSelected && (
+                  <Badge variant="default" className="text-[9px] font-bold px-1.5 py-0.5">
+                    Filtrado
+                  </Badge>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Structured Collapsible Filter Panel (Style of Image 3) */}
+      <div className="space-y-4 rounded-2xl border border-border/50 bg-muted/30 p-4 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/80 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-foreground hover:bg-background"
+            >
+              <Filter className="size-3.5 text-primary" /> Filtros
+              {activeFiltersCount > 0 && (
+                <Badge variant="secondary" className="ml-1 px-1.5 py-0.2 text-[9px] font-black bg-primary/20 text-primary">
+                  {activeFiltersCount}
+                </Badge>
+              )}
+            </Button>
+            <span className="hidden text-[10px] font-medium normal-case tracking-normal text-muted-foreground/70 sm:inline">
+              Filtra y personaliza el listado de tareas por responsable, prioridad y rango de fechas
+            </span>
+          </div>
+
+          {activeFiltersCount > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={resetFilters}
+              className="h-8 text-xs font-bold text-muted-foreground hover:text-destructive gap-1.5"
+            >
+              <RotateCcw className="size-3.5" /> Limpiar filtros
+            </Button>
+          )}
+        </div>
+
+        {/* Collapsible / Always Visible Filters Grid */}
+        <div className={cn('grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12', !showFilterPanel && 'hidden sm:grid')}>
+          {/* Priority Filter */}
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+              Prioridad
+            </label>
+            <Select value={priorityFilter} onValueChange={(val) => setPriorityFilter(val)}>
+              <SelectTrigger className="h-9 w-full text-xs">
+                <SelectValue placeholder="Todas las prioridades" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todas las prioridades</SelectItem>
+                <SelectItem value="LOW">Baja</SelectItem>
+                <SelectItem value="MEDIUM">Media</SelectItem>
+                <SelectItem value="HIGH">Alta</SelectItem>
+                <SelectItem value="URGENT">Urgente</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Assigned To Filter */}
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+              Responsable
+            </label>
+            <Select value={assignedFilter} onValueChange={(val) => setAssignedFilter(val)}>
+              <SelectTrigger className="h-9 w-full text-xs">
+                <SelectValue placeholder="Todos los responsables" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos los responsables</SelectItem>
+                {employees.map((emp) => (
+                  <SelectItem key={emp.id} value={emp.id}>
+                    {emp.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Date From */}
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+              Vencimiento Desde
+            </label>
+            <DateField
+              value={dateFrom}
+              onChange={(val) => setDateFrom(val)}
+              maxDate={dateTo || undefined}
+              placeholder="Fecha inicial"
+              className="w-full"
+            />
+          </div>
+
+          {/* Date To */}
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+              Vencimiento Hasta
+            </label>
+            <DateField
+              value={dateTo}
+              onChange={(val) => setDateTo(val)}
+              minDate={dateFrom || undefined}
+              placeholder="Fecha final"
+              className="w-full"
+            />
+          </div>
+        </div>
       </div>
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
@@ -418,7 +595,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
             <div className="relative w-full sm:w-56">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input
-                placeholder="Buscar..."
+                placeholder="Buscar por título..."
                 className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -454,6 +631,28 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
             canEdit={canPerform('ACTIVITIES_TASKS', 'edit')}
             canApprove={canPerform('ACTIVITIES_TASKS', 'approve')}
           />
+        ) : viewLayout === 'cards' ? (
+          <TareasCardsView
+            data={filtered}
+            onViewDetail={(task) => setDetailTask(task)}
+            onSubmitApproval={(task) => {
+              setSelectedTask(task);
+              setIsApprovalOpen(true);
+            }}
+            onApprove={(task) => handleApproveTask(task)}
+            onReject={(task) => {
+              setSelectedTask(task);
+              setIsRejectOpen(true);
+            }}
+            onComplete={(task) => {
+              setDetailTask(null);
+              setSelectedTask(task);
+              setIsCompleteOpen(true);
+            }}
+            canEdit={canPerform('ACTIVITIES_TASKS', 'edit')}
+            canApprove={canPerform('ACTIVITIES_TASKS', 'approve')}
+            getTaskDisplayStatus={getTaskDisplayStatus}
+          />
         ) : (
           <EditableDataTable
             data={filtered}
@@ -461,6 +660,61 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
             onRowUpdate={canPerform('ACTIVITIES_TASKS', 'edit') ? handleUpdate : undefined}
             onRowClick={(row) => setDetailTask(row)}
             isLoading={loading}
+            onBulkDelete={
+              canPerform('ACTIVITIES_TASKS', 'delete')
+                ? async (selectedIds) => {
+                    try {
+                      await Promise.all(selectedIds.map((id) => tasksService.delete(id)));
+                      toast.success(`${selectedIds.length} tareas eliminadas`);
+                      onRefresh();
+                    } catch (e: any) {
+                      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar tareas seleccionadas');
+                    }
+                  }
+                : undefined
+            }
+            bulkActions={(selectedIds) => (
+              <div className="flex flex-wrap items-center gap-2">
+                {canPerform('ACTIVITIES_TASKS', 'edit') && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-[10px] font-black uppercase tracking-wider text-primary border-primary/30 hover:bg-primary/10"
+                    onClick={async () => {
+                      try {
+                        await Promise.all(selectedIds.map((id) => tasksService.submitApproval(id)));
+                        toast.success(`${selectedIds.length} tareas enviadas a aprobación`);
+                        onRefresh();
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || e?.message || 'Error al enviar tareas a aprobación');
+                      }
+                    }}
+                  >
+                    <Send className="mr-1.5 size-3" /> Enviar a Aprobación ({selectedIds.length})
+                  </Button>
+                )}
+                {canPerform('ACTIVITIES_TASKS', 'approve') && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-[10px] font-black uppercase tracking-wider text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
+                    onClick={async () => {
+                      try {
+                        await Promise.all(selectedIds.map((id) => tasksService.complete(id)));
+                        toast.success(`${selectedIds.length} tareas completadas`);
+                        onRefresh();
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || e?.message || 'Error al completar tareas seleccionadas');
+                      }
+                    }}
+                  >
+                    <CheckCircle2 className="mr-1.5 size-3" /> Completar ({selectedIds.length})
+                  </Button>
+                )}
+              </div>
+            )}
             onRowDelete={
               canPerform('ACTIVITIES_TASKS', 'delete')
                 ? async (id) => {
@@ -502,7 +756,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                       size="icon"
                       title="Enviar a aprobación"
                       aria-label="Enviar a aprobación"
-                      className="size-8 rounded-lg text-purple-600 hover:bg-purple-500/10"
+                      className="size-8 rounded-lg text-primary hover:bg-primary/10"
                       onClick={() => {
                         setSelectedTask(row);
                         setIsApprovalOpen(true);
@@ -595,7 +849,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                   <Button
                     type="button"
                     variant="outline"
-                    className="rounded-xl border-purple-500/30 text-purple-600 hover:bg-purple-500/10"
+                    className="rounded-xl border-primary/30 text-primary hover:bg-primary/10 bg-primary/5"
                     onClick={() => {
                       setSelectedTask(detailTask);
                       setIsApprovalOpen(true);
@@ -714,11 +968,11 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                   <CalendarClock className="size-3.5 text-primary" />
                   Vencimiento
                 </Label>
-                <Input
-                  type="datetime-local"
+                <DateTimePickerField
                   value={newTask.dueDate}
-                  onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
-                  className="h-11 rounded-xl bg-background"
+                  onChange={(val) => setNewTask({ ...newTask, dueDate: val })}
+                  placeholder="Seleccionar fecha y hora"
+                  className="w-full"
                 />
                 <p className="text-[11px] text-muted-foreground">Si lo dejas vacío, se registra ahora.</p>
               </div>
@@ -727,17 +981,17 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                   <Flag className="size-3.5 text-primary" />
                   Prioridad
                 </Label>
-                <select
-                  data-testid="activities-task-priority"
-                  className="flex h-11 w-full items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm"
-                  value={newTask.priority}
-                  onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
-                >
-                  <option value="LOW">Baja</option>
-                  <option value="MEDIUM">Media</option>
-                  <option value="HIGH">Alta</option>
-                  <option value="URGENT">Urgente</option>
-                </select>
+                <Select value={newTask.priority} onValueChange={(val) => setNewTask({ ...newTask, priority: val })}>
+                  <SelectTrigger className="h-11 w-full text-sm rounded-xl">
+                    <SelectValue placeholder="Selecciona prioridad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LOW">Baja</SelectItem>
+                    <SelectItem value="MEDIUM">Media</SelectItem>
+                    <SelectItem value="HIGH">Alta</SelectItem>
+                    <SelectItem value="URGENT">Urgente</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">
@@ -866,9 +1120,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       {/* Dialog: Submit Task for Approval */}
       <Dialog open={isApprovalOpen} onOpenChange={setIsApprovalOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl sm:max-w-[480px]">
-          <DialogHeader className="border-b border-border/50 bg-gradient-to-br from-purple-500/10 via-background to-background px-6 py-5 sm:px-8">
+          <DialogHeader className="border-b border-border/50 bg-gradient-to-br from-primary/10 via-background to-background px-6 py-5 sm:px-8">
             <div className="flex items-start gap-3 pr-6">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-purple-500/10 text-purple-600">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                 <Send className="size-5" />
               </div>
               <div>
@@ -880,7 +1134,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
             </div>
           </DialogHeader>
           <div className="grid gap-4 px-6 py-6 sm:px-8">
-            <div className="rounded-2xl border border-purple-500/15 bg-purple-500/5 p-3.5">
+            <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3.5">
               <p className="text-xs leading-5 text-muted-foreground">
                 La tarea pasará al estado <strong className="text-foreground">Por Aprobar</strong>. El supervisor o aprobador será notificado para validarla.
               </p>
@@ -916,7 +1170,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
             <Button
               onClick={handleSubmitApproval}
               disabled={actionLoading}
-              className="rounded-xl px-5 bg-purple-600 hover:bg-purple-700 text-white"
+              className="rounded-xl px-5"
             >
               {actionLoading ? <Loader2 className="size-4 animate-spin mr-2" /> : <Send className="mr-1.5 size-4" />}
               Enviar entregable

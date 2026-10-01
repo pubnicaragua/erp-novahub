@@ -33,7 +33,7 @@ interface ActivityDetailSheetProps {
 }
 
 const labels: Record<ActivityDetailKind, { title: string; singular: string; accent: string }> = {
-  task: { title: 'Detalle de la tarea', singular: 'Tarea', accent: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+  task: { title: 'Detalle de la tarea', singular: 'Tarea', accent: 'bg-primary/10 text-primary border-primary/20' },
   event: { title: 'Detalle del evento', singular: 'Evento', accent: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
   meeting: { title: 'Detalle de la reunión', singular: 'Reunión', accent: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
   reminder: { title: 'Detalle del recordatorio', singular: 'Recordatorio', accent: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
@@ -109,13 +109,11 @@ function StatusBadge({ value, kind }: { value: any; kind: ActivityDetailKind }) 
     ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
     : normalized === 'CANCELLED' || normalized === 'OVERDUE' || normalized === 'DELETE'
       ? 'border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400'
-      : normalized === 'PENDING' || normalized === 'SNOOZED'
-        ? 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+      : normalized === 'PENDING' || normalized === 'IN_PROGRESS' || normalized === 'SNOOZED' || normalized === 'UPDATE'
+        ? 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400'
         : normalized === 'WAITING_APPROVAL'
           ? 'border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-400'
-          : normalized === 'IN_PROGRESS' || normalized === 'UPDATE'
-            ? 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400'
-      : (kind === 'event' || kind === 'meeting') ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-primary/20 bg-primary/10 text-primary';
+          : (kind === 'event' || kind === 'meeting') ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-primary/20 bg-primary/10 text-primary';
   return <Badge variant="outline" className={cn('border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest', tone)}>{formatLabel(value)}</Badge>;
 }
 
