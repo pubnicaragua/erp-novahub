@@ -26,13 +26,13 @@ function themeStyles(theme: MenuTheme, primary: string, accent: string) {
     case 'classic':
       return {
         page: 'bg-[#faf7f0]',
-        header: `bg-gradient-to-b from-[${accent}] to-[#00000055]`,
+        header: 'bg-[#3a3a3a]',
         card: 'bg-white border-2 border-[#e7ddc9]',
         category: 'font-serif text-2xl font-bold',
         itemName: 'font-serif font-bold',
-        price: `font-serif font-black text-[${primary}]`,
+        price: 'font-serif font-black',
         addButton: 'bg-[#2b2b2b] hover:bg-[#3d3d3d] text-white rounded-md',
-        badge: `bg-[${primary}]`,
+        badge: 'rounded-full',
       };
     case 'elegant':
       return {
@@ -41,9 +41,9 @@ function themeStyles(theme: MenuTheme, primary: string, accent: string) {
         card: 'bg-[#18181f] border border-white/10',
         category: 'text-2xl font-light tracking-[0.3em] uppercase',
         itemName: 'font-light',
-        price: `font-light text-[${primary}]`,
+        price: 'font-light',
         addButton: 'bg-white/10 hover:bg-white/20 text-white rounded-full',
-        badge: `bg-[${primary}] text-slate-900`,
+        badge: 'rounded-full text-slate-900',
       };
     case 'rustic':
       return {
@@ -52,20 +52,64 @@ function themeStyles(theme: MenuTheme, primary: string, accent: string) {
         card: 'bg-[#fffcf5] border border-[#d8c7a8]',
         category: 'text-xl font-black uppercase tracking-wide',
         itemName: 'font-bold',
-        price: `font-black text-[#8a5a2b]`,
+        price: 'font-black text-[#8a5a2b]',
         addButton: 'bg-[#6b4a2a] hover:bg-[#5a3d22] text-white rounded-md',
-        badge: 'bg-[#6b4a2a]',
+        badge: 'rounded-full bg-[#6b4a2a]',
+      };
+    case 'neon':
+      return {
+        page: 'bg-[#0b1020] text-slate-100',
+        header: 'bg-[#111827]',
+        card: 'border border-cyan-300/15 bg-[#131b2f] shadow-2xl shadow-cyan-950/20',
+        category: 'text-2xl font-black tracking-tight uppercase',
+        itemName: 'font-semibold',
+        price: 'font-black text-cyan-300',
+        addButton: 'rounded-xl bg-cyan-300 text-slate-950 hover:bg-cyan-200',
+        badge: 'rounded-full',
+      };
+    case 'tropical':
+      return {
+        page: 'bg-[#fff8e7]',
+        header: 'bg-[#0f766e]',
+        card: 'border border-amber-200 bg-white/90 shadow-md',
+        category: 'text-2xl font-black text-teal-900',
+        itemName: 'font-bold',
+        price: 'font-black text-orange-600',
+        addButton: 'rounded-full bg-orange-500 text-white hover:bg-orange-600',
+        badge: 'rounded-full',
+      };
+    case 'editorial':
+      return {
+        page: 'bg-[#f5f2eb]',
+        header: 'bg-[#7c2d12]',
+        card: 'border border-stone-200 bg-[#fffdf8]',
+        category: 'font-serif text-3xl font-black tracking-tight',
+        itemName: 'font-serif font-bold',
+        price: 'font-serif font-black text-orange-900',
+        addButton: 'rounded-none border border-orange-900 bg-transparent text-orange-900 hover:bg-orange-50',
+        badge: 'rounded-full',
+      };
+    case 'retro':
+      return {
+        page: 'bg-[#f9edcf]',
+        header: 'bg-[#9f1239]',
+        card: 'border-2 border-amber-900/20 bg-[#fffaf0] shadow-[6px_6px_0_rgba(159,18,57,.15)]',
+        category: 'text-2xl font-black uppercase tracking-wide text-rose-900',
+        itemName: 'font-black',
+        price: 'font-black text-rose-700',
+        addButton: 'rounded-none bg-amber-400 text-rose-950 hover:bg-amber-300',
+        badge: 'rounded-full',
       };
     default:
       return {
         page: 'bg-[#f2faf5]',
-        header: `bg-gradient-to-br from-[${accent}] to-[${primary}]`,
+        header: 'bg-gradient-to-br from-[#064e3b] to-[#10b981]',
         card: 'bg-white/80 backdrop-blur-sm border border-white/60',
         category: 'text-xl font-black',
         itemName: 'font-bold',
-        price: `font-black text-[${primary}]`,
+        price: 'font-black',
         addButton: 'bg-[#0d1f1a] hover:bg-[#174a3a] text-white rounded-xl',
-        badge: `bg-[${primary}]`,
+        badge: 'rounded-full',
       };
   }
 }
@@ -182,10 +226,10 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
                           {branding.showImages && item.imageUrl ? (
                             <img src={item.imageUrl} alt={item.name} className="size-16 shrink-0 rounded-xl object-cover" />
                           ) : (
-                            <span className={`shrink-0 ${t.price}`}>{money(item.price)}</span>
+                            <span className={`shrink-0 ${t.price}`} style={{ color: branding.primaryColor }}>{money(item.price)}</span>
                           )}
                         </div>
-                        {branding.showImages && item.imageUrl && <p className={`mt-2 text-right ${t.price}`}>{money(item.price)}</p>}
+                        {branding.showImages && item.imageUrl && <p className={`mt-2 text-right ${t.price}`} style={{ color: branding.primaryColor }}>{money(item.price)}</p>}
                         <div className="mt-3 flex items-center justify-end gap-2">
                           {qty > 0 ? (
                             <div className="flex items-center gap-2">
@@ -194,7 +238,7 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
                               <button type="button" aria-label="Agregar uno" onClick={() => change(item.id, 1)} className="flex size-8 items-center justify-center active:scale-90" style={{ background: branding.primaryColor, color: primaryForeground }}><Plus className="size-3.5" /></button>
                             </div>
                           ) : (
-                            <button type="button" onClick={() => change(item.id, 1)} className={`flex h-9 items-center gap-1.5 px-4 text-xs font-black uppercase tracking-wide active:scale-95 ${t.addButton}`} style={{ background: t.addButton.includes('bg-[') ? undefined : branding.primaryColor, color: t.addButton.includes('bg-[') ? undefined : primaryForeground }}>
+                            <button type="button" onClick={() => change(item.id, 1)} className={`flex h-9 items-center gap-1.5 px-4 text-xs font-black uppercase tracking-wide active:scale-95 ${t.addButton}`}>
                               <Plus className="size-3.5" /> Agregar
                             </button>
                           )}

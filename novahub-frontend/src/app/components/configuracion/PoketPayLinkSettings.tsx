@@ -16,6 +16,7 @@ export function PoketPayLinkSettings({ canEdit }: { canEdit: boolean }) {
   const [merchantId, setMerchantId] = useState('');
   const [terminalId, setTerminalId] = useState('');
   const [pat, setPat] = useState('');
+  const [signaturePat, setSignaturePat] = useState('');
   const [currency, setCurrency] = useState<'NIO' | 'USD'>('NIO');
   const [bankAccountId, setBankAccountId] = useState('');
   const [active, setActive] = useState(false);
@@ -54,9 +55,10 @@ export function PoketPayLinkSettings({ canEdit }: { canEdit: boolean }) {
     }
     try {
       setSaving(true);
-      const saved = await poketPayLinkService.saveConfig({ merchantId: merchantId.trim(), terminalId: terminalId.trim(), pat: pat.trim() || undefined, active, currency, bankAccountId: bankAccountId || null });
+      const saved = await poketPayLinkService.saveConfig({ merchantId: merchantId.trim(), terminalId: terminalId.trim(), pat: pat.trim() || undefined, signaturePat: signaturePat.trim() || undefined, active, currency, bankAccountId: bankAccountId || null });
       setConfig(saved);
       setPat('');
+      setSignaturePat('');
       toast.success('Configuración de Poket guardada.');
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo guardar la configuración de Poket.'));
@@ -91,10 +93,12 @@ export function PoketPayLinkSettings({ canEdit }: { canEdit: boolean }) {
               <div className="space-y-2"><Label htmlFor="poket-merchant">Merchant ID</Label><Input id="poket-merchant" value={merchantId} onChange={(event) => setMerchantId(event.target.value)} disabled={!canEdit} placeholder="Merchant ID de Poket" /></div>
               <div className="space-y-2"><Label htmlFor="poket-terminal">Terminal ID Ecommerce</Label><Input id="poket-terminal" value={terminalId} onChange={(event) => setTerminalId(event.target.value)} disabled={!canEdit} placeholder="Terminal ID" /></div>
               <div className="space-y-2"><Label htmlFor="poket-pat">PAT</Label><div className="relative"><KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input id="poket-pat" type="password" value={pat} onChange={(event) => setPat(event.target.value)} disabled={!canEdit} className="pl-9" placeholder={config?.patMasked || 'PAT de Poket (se guarda cifrado)'} autoComplete="new-password" /></div><p className="text-[11px] text-muted-foreground">Nunca se envía al navegador después de guardar ni aparece completo en logs.</p></div>
+              <div className="space-y-2"><Label htmlFor="poket-signature-pat">PAT API Signature</Label><div className="relative"><KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input id="poket-signature-pat" type="password" value={signaturePat} onChange={(event) => setSignaturePat(event.target.value)} disabled={!canEdit} className="pl-9" placeholder={config?.signaturePatMasked || 'PAT con permiso API Signature'} autoComplete="new-password" /></div><p className="text-[11px] text-muted-foreground">Necesario para Cobrar con Poket/NFC. Créalo en Poket activando el permiso API Signature.</p></div>
               <div className="space-y-2"><Label>Moneda predeterminada</Label><Select value={currency} onValueChange={(value) => setCurrency(value as 'NIO' | 'USD')} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO · Córdobas</SelectItem><SelectItem value="USD">USD · Dólares</SelectItem></SelectContent></Select></div>
             </div>
             <BankAccountSelect currency={currency} endpoint="/bank-accounts/payment-options" value={bankAccountId} onChange={setBankAccountId} disabled={!canEdit} label="Cuenta bancaria receptora" />
             <div className="flex items-center justify-between rounded-2xl border border-border/50 bg-muted/20 p-4"><div><p className="font-bold">Activar PayLink</p><p className="text-xs text-muted-foreground">Permite generar enlaces para las facturas de esta empresa.</p></div><Switch checked={active} onCheckedChange={setActive} disabled={!canEdit} /></div>
+            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 text-sm"><p className="font-bold text-foreground">Cobro presencial con Poket</p><p className="mt-1 text-muted-foreground">El botón NFC abre la aplicación Poket en el dispositivo. El pago se confirma por webhook o por verificación de estado; el navegador nunca recibe el PAT ni datos de tarjeta.</p></div>
             <div className="flex flex-wrap gap-3 border-t border-border/40 pt-5"><Button type="button" onClick={() => void save()} disabled={!canEdit || saving} className="gap-2"><Save className="size-4" />{saving ? 'Guardando...' : 'Guardar configuración'}</Button><Button type="button" variant="outline" onClick={() => void test()} disabled={testing || !config?.hasPat} className="gap-2"><Link2 className="size-4" />{testing ? 'Probando...' : 'Probar conexión'}</Button></div>
             <div className="flex gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm"><ShieldCheck className="mt-0.5 size-5 shrink-0 text-emerald-600" /><p className="text-muted-foreground">El cobro confirmado por Poket entra por el mismo servicio de pagos de NovaHub, conserva la trazabilidad de la factura y evita duplicados.</p><CheckCircle2 className="ml-auto mt-0.5 size-5 shrink-0 text-emerald-600" /></div>
           </>}
