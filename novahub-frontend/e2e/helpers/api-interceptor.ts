@@ -95,10 +95,12 @@ export class ApiInterceptor {
     }
 
     if (options.requireJsonContentType) {
-      const nonJson = records.filter((record) => (
-        record.status !== 204
-        && !(record.contentType || '').toLowerCase().includes('application/json')
-      ));
+      const nonJson = records.filter((record) => {
+        const contentType = (record.contentType || '').toLowerCase();
+        return record.status !== 204
+          && !contentType.includes('application/json')
+          && !contentType.includes('text/event-stream');
+      });
       if (nonJson.length > 0) {
         throw new Error(`La API crítica no devolvió JSON: ${JSON.stringify(nonJson)}`);
       }

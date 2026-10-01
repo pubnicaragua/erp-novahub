@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, FolderKanban, History, LayoutDashboard, ListTodo, Wallet, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, FolderKanban, History, LayoutDashboard, ListTodo, Wallet, ShoppingCart, Sliders, Calculator, Coins, Activity, FileDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
@@ -16,6 +16,11 @@ import { ProyectoPresupuestoPanel, ProyectoCostosPanel, ProyectoReportePanel } f
 import { ProyectoDocumentosPanel, ProyectoActividadesPanel } from './ProyectoColaboracionPanels';
 import { ProyectoAvancePanel } from './ProyectoAvancePanel';
 import { ProyectoCotizacionesPanel } from './ProyectoCotizacionesPanel';
+import { ProyectoParametrosPanel } from './ProyectoParametrosPanel';
+import { ProyectoMemoriasCalculoPanel } from './ProyectoMemoriasCalculoPanel';
+import { ProyectoCosteo6DPanel } from './ProyectoCosteo6DPanel';
+import { ProyectoEVMControlPanel } from './ProyectoEVMControlPanel';
+import { ProyectoCotizacionExportView } from './ProyectoCotizacionExportView';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 
 interface ProyectoDetalleViewProps {
@@ -30,6 +35,11 @@ const TAB_DEFS = [
   { id: 'cotizaciones', label: 'Cotizaciones Materiales', icon: ShoppingCart, module: 'PROJECTS_EXPENSES' },
   { id: 'planificacion', label: 'Planificación y Tareas', icon: ListTodo, module: 'PROJECTS_TASKS' },
   { id: 'costos', label: 'Presupuesto y Costos', icon: Wallet, module: 'PROJECTS_EXPENSES' },
+  { id: 'costeo6d', label: 'Costeo 6D', icon: Coins, module: 'PROJECTS' },
+  { id: 'evm', label: 'Control EVM', icon: Activity, module: 'PROJECTS' },
+  { id: 'memorias', label: 'Memorias de Cálculo', icon: Calculator, module: 'PROJECTS' },
+  { id: 'exportar', label: 'Cotización Ejecutiva', icon: FileDown, module: 'PROJECTS' },
+  { id: 'parametros', label: 'Parámetros', icon: Sliders, module: 'PROJECTS' },
   { id: 'actividades', label: 'Actividades e Historial', icon: History, module: 'PROJECTS' },
 ];
 
@@ -43,6 +53,13 @@ export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange
   }
   const detailQuery = useTenantQuery<ProjectDetail>(['projects', 'detail', projectId], (signal) => projectsService.get(projectId, signal), { enabled: true });
   const project = detailQuery.data;
+
+  const pricingQuery = useTenantQuery<Record<string, unknown>>(
+    ['projects', projectId, 'pricing-engine'],
+    (signal) => projectsService.getProjectPricingEngine(projectId, signal),
+    { enabled: !!projectId },
+  );
+  const pricingEngine = pricingQuery.data;
 
   const handleTabChange = (val: string) => {
     setActiveTab(val);
@@ -142,6 +159,25 @@ export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange
             <ProyectoReportePanel projectId={projectId} />
           </div>
         )}
+        {activeTab === 'costeo6d' && project ? (
+          <ProyectoCosteo6DPanel project={project} pricingEngine={pricingEngine} />
+        ) : null}
+        {activeTab === 'evm' && project ? (
+          <ProyectoEVMControlPanel project={project} pricingEngine={pricingEngine} />
+        ) : null}
+        {activeTab === 'memorias' && project ? (
+          <ProyectoMemoriasCalculoPanel project={project} pricingEngine={pricingEngine} />
+        ) : null}
+        {activeTab === 'exportar' && project ? (
+          <ProyectoCotizacionExportView
+            project={project}
+            pricingEngine={pricingEngine}
+            costsSummary={detailQuery.data?.budgetSummary}
+          />
+        ) : null}
+        {activeTab === 'parametros' && project ? (
+          <ProyectoParametrosPanel projectId={projectId} project={project} />
+        ) : null}
         {activeTab === 'actividades' && (
           <div className="space-y-6">
             <ProyectoActividadesPanel projectId={projectId} />

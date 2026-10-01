@@ -20,7 +20,10 @@ import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
 import { Skeleton } from '../ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { DateField } from '../ui/DateField';
 import { cn } from '../ui/utils';
+import { toast } from '@/app/services/toast';
 import { invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
 import {
   projectsService,
@@ -65,6 +68,8 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [captureToDelete, setCaptureToDelete] = useState<string | null>(null);
+  const [isDeletingCapture, setIsDeletingCapture] = useState(false);
 
   const MAX_CAPTURE_BYTES = 10 * 1024 * 1024;
 
@@ -110,6 +115,8 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
   const [revokeExisting, setRevokeExisting] = useState(true);
   const [isCreatingLink, setIsCreatingLink] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [linkToRevoke, setLinkToRevoke] = useState<string | null>(null);
+  const [isRevokingLink, setIsRevokingLink] = useState(false);
 
   const captures = capturesQuery.data || [];
   const publicLinks = linksQuery.data || [];
@@ -143,9 +150,10 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
       }
       await invalidateTenantQueries(queryClient);
       setIsEditingWeights(false);
+      toast.success('Ponderaciones guardadas correctamente.');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al guardar ponderaciones.');
+      toast.error(msg || 'Error al guardar ponderaciones.');
     } finally {
       setIsSavingWeights(false);
     }
@@ -187,6 +195,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
       await invalidateTenantQueries(queryClient);
       closeCaptureModal();
       setCaptureForm({ imageUrl: '', caption: '', milestoneId: '', isPublic: true });
+      toast.success('Evidencia fotográfica agregada correctamente.');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setCaptureError(msg || 'Error al guardar captura.');
@@ -196,14 +205,23 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
   };
 
   // Delete capture
-  const handleDeleteCapture = async (captureId: string) => {
-    if (!confirm('¿Desea eliminar esta evidencia visual?')) return;
+  const handleDeleteCapture = (captureId: string) => {
+    setCaptureToDelete(captureId);
+  };
+
+  const handleConfirmDeleteCapture = async () => {
+    if (!captureToDelete) return;
     try {
-      await projectsService.deleteCapture(projectId, captureId);
+      setIsDeletingCapture(true);
+      await projectsService.deleteCapture(projectId, captureToDelete);
       await invalidateTenantQueries(queryClient);
+      toast.success('Evidencia eliminada correctamente.');
+      setCaptureToDelete(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al eliminar captura.');
+      toast.error(msg || 'Error al eliminar captura.');
+    } finally {
+      setIsDeletingCapture(false);
     }
   };
 
@@ -218,23 +236,33 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
       await invalidateTenantQueries(queryClient);
       setShowLinkModal(false);
       setLinkExpiresAt('');
+      toast.success('Enlace público generado correctamente.');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al generar enlace público.');
+      toast.error(msg || 'Error al generar enlace público.');
     } finally {
       setIsCreatingLink(false);
     }
   };
 
   // Revoke public link
-  const handleRevokePublicLink = async (linkId: string) => {
-    if (!confirm('¿Está seguro de revocar este enlace? El cliente ya no podrá consultar el avance.')) return;
+  const handleRevokePublicLink = (linkId: string) => {
+    setLinkToRevoke(linkId);
+  };
+
+  const handleConfirmRevokePublicLink = async () => {
+    if (!linkToRevoke) return;
     try {
-      await projectsService.revokePublicLink(projectId, linkId);
+      setIsRevokingLink(true);
+      await projectsService.revokePublicLink(projectId, linkToRevoke);
       await invalidateTenantQueries(queryClient);
+      toast.success('Enlace público revocado correctamente.');
+      setLinkToRevoke(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al revocar enlace.');
+      toast.error(msg || 'Error al revocar enlace.');
+    } finally {
+      setIsRevokingLink(false);
     }
   };
 
@@ -655,12 +683,11 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
               </p>
 
               <div className="space-y-1">
-                <label className="font-semibold">Fecha de Expiración (Opcional)</label>
-                <Input
-                  type="date"
+                <label className="font-semibold text-xs">Fecha de Expiración (Opcional)</label>
+                <DateField
                   value={linkExpiresAt}
-                  onChange={(e) => setLinkExpiresAt(e.target.value)}
-                  className="h-8 text-xs"
+                  onChange={setLinkExpiresAt}
+                  placeholder="Seleccionar fecha"
                 />
               </div>
 
@@ -689,6 +716,36 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmación: Eliminar Evidencia */}
+      <ConfirmDialog
+        open={Boolean(captureToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingCapture) setCaptureToDelete(null);
+        }}
+        title="Eliminar evidencia visual"
+        description="¿Desea eliminar esta evidencia visual? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={isDeletingCapture}
+        onConfirm={handleConfirmDeleteCapture}
+      />
+
+      {/* Confirmación: Revocar Enlace Público */}
+      <ConfirmDialog
+        open={Boolean(linkToRevoke)}
+        onOpenChange={(open) => {
+          if (!open && !isRevokingLink) setLinkToRevoke(null);
+        }}
+        title="Revocar enlace público"
+        description="¿Está seguro de revocar este enlace? El cliente ya no podrá consultar el avance."
+        confirmLabel="Revocar"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={isRevokingLink}
+        onConfirm={handleConfirmRevokePublicLink}
+      />
     </div>
   );
 }

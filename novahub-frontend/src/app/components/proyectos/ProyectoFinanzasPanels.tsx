@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, Download, BookOpenCheck, Wallet, Receipt } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -9,9 +9,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { DateField } from '../ui/DateField';
-import {useTenantQuery, asList, invalidateTenantQueries } from '../../hooks/useTenantQuery';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Combobox } from '../ui/Combobox';
+import { useTenantQuery, asList, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { suppliersService } from '../../services/compras.service';
-import { projectsService, type ProjectBudgetLine, type ProjectCost, type ProjectCostSource, type ProjectReport } from '../../services/projects.service';
+import {
+  projectsService,
+  type ProjectBudgetLine,
+  type ProjectCost,
+  type ProjectCostSource,
+  type ProjectReport,
+  type ProjectMaterialQuotation,
+} from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/app/services/toast';
@@ -27,6 +36,7 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
   const { canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<{ open: boolean; editing?: ProjectBudgetLine | null }>({ open: false, editing: null });
+  const [lineToDelete, setLineToDelete] = useState<ProjectBudgetLine | null>(null);
   const budgetQuery = useTenantQuery<any>(['projects', 'budget', projectId], (s) => projectsService.budget(projectId, s), { enabled: true });
   const data = budgetQuery.data;
   const lines = asList(data?.lines) as ProjectBudgetLine[];
@@ -35,7 +45,11 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
   const baseCurrency = data?.baseCurrency || 'NIO';
   const canEdit = canPerform('PROJECTS', 'edit');
 
-  const invalidate = () => invalidateTenantQueries(queryClient);
+  const invalidate = () => {
+    invalidateTenantQueries(queryClient);
+    queryClient.invalidateQueries({ queryKey: ['projects'] });
+    queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
+  };
   const mutation = useMutation({
     mutationFn: (args: { type: 'create' | 'update' | 'delete'; id?: string; payload?: any }) => {
       if (args.type === 'create') return projectsService.createBudgetLine(projectId, args.payload);
@@ -46,18 +60,28 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
     onError: (e: any) => toast.error(e?.message || 'Error en el presupuesto'),
   });
 
+  const plannedIncome = Number(summary.plannedIncome ?? totals.basePlannedIncome ?? 0);
+  const plannedBudget = Number(summary.plannedBudget ?? totals.basePlannedBudget ?? 0);
+  const executedCost = Number(summary.executedCost ?? totals.baseExecutedCost ?? 0);
+  const committedCost = Number(summary.committedCost ?? totals.baseCommittedCost ?? 0);
+  const available = Number(summary.available ?? totals.available ?? (plannedBudget - executedCost));
+  const _varianceAbs = Number(summary.varianceAbs ?? totals.varianceAbs ?? 0);
+  const expectedMargin = Number(summary.expectedMargin ?? (plannedIncome - plannedBudget));
+  const realMargin = Number(summary.realMargin ?? totals.realMargin ?? (plannedIncome - executedCost));
+
   const kpis = [
-    { label: 'Presupuesto (base)', value: money(summary.plannedBudget ?? totals.basePlannedBudget, baseCurrency), tone: '' },
-    { label: 'Comprometido', value: money(summary.committedCost ?? totals.baseCommittedCost, baseCurrency), tone: '' },
-    { label: 'Ejecutado', value: money(summary.executedCost ?? totals.baseExecutedCost, baseCurrency), tone: summary.overBudget ? 'text-rose-600' : '' },
-    { label: 'Saldo disponible', value: money(summary.available ?? totals.available, baseCurrency), tone: (summary.available ?? totals.available) < 0 ? 'text-rose-600' : 'text-emerald-600' },
-    { label: 'Variación', value: `${(summary.varianceAbs ?? totals.varianceAbs) >= 0 ? '+' : ''}${money(summary.varianceAbs ?? totals.varianceAbs, baseCurrency)}`, tone: summary.overBudget ? 'text-rose-600' : 'text-emerald-600' },
-    { label: 'Margen real', value: money(summary.realMargin ?? totals.realMargin, baseCurrency), tone: (summary.realMargin ?? totals.realMargin) < 0 ? 'text-rose-600' : 'text-emerald-600' },
+    { label: 'Ingreso proyectado', value: money(plannedIncome, baseCurrency), tone: 'text-emerald-600' },
+    { label: 'Presupuesto (base)', value: money(plannedBudget, baseCurrency), tone: '' },
+    { label: 'Comprometido', value: money(committedCost, baseCurrency), tone: '' },
+    { label: 'Ejecutado', value: money(executedCost, baseCurrency), tone: summary.overBudget ? 'text-rose-600' : '' },
+    { label: 'Saldo disponible', value: money(available, baseCurrency), tone: available < 0 ? 'text-rose-600' : 'text-emerald-600' },
+    { label: 'Margen esperado', value: money(expectedMargin, baseCurrency), tone: expectedMargin < 0 ? 'text-rose-600' : 'text-emerald-600' },
+    { label: 'Margen real', value: money(realMargin, baseCurrency), tone: realMargin < 0 ? 'text-rose-600' : 'text-emerald-600' },
   ];
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         {kpis.map((k) => (
           <Card key={k.label} className="rounded-2xl border-border/60 shadow-sm">
             <CardContent className="p-4">
@@ -77,7 +101,7 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
       <Card className="rounded-2xl border-border/60 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="flex items-center gap-2 text-sm"><Wallet className="size-4 text-primary" /> Líneas de presupuesto</CardTitle>
-          {canEdit && <Button size="sm" onClick={() => setDialog({ open: true })} className="gap-1.5"><Plus className="size-4" /> Línea</Button>}
+          {canEdit && <Button variant="default" size="sm" onClick={() => setDialog({ open: true })} className="gap-1.5"><Plus className="size-4" /> Línea</Button>}
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -112,7 +136,7 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
                       <TableCell>
                         <div className="flex justify-end gap-1">
                           <Button size="icon" variant="ghost" className="size-8" onClick={() => setDialog({ open: true, editing: line })}><Pencil className="size-4" /></Button>
-                          <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => { if (window.confirm(`¿Eliminar la línea ${line.concept}?`)) mutation.mutate({ type: 'delete', id: line.id }); }}><Trash2 className="size-4" /></Button>
+                          <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setLineToDelete(line)}><Trash2 className="size-4" /></Button>
                         </div>
                       </TableCell>
                     )}
@@ -128,6 +152,23 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
         <BudgetLineDialog editing={dialog.editing} baseCurrency={baseCurrency} onClose={() => setDialog({ open: false, editing: null })}
           onSubmit={(payload) => mutation.mutate(dialog.editing ? { type: 'update', id: dialog.editing.id, payload } : { type: 'create', payload })} />
       )}
+
+      <ConfirmDialog
+        open={Boolean(lineToDelete)}
+        onOpenChange={(open) => { if (!open) setLineToDelete(null); }}
+        title="Eliminar línea de presupuesto"
+        description={`¿Estás seguro de que deseas eliminar la línea "${lineToDelete?.concept}"? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={mutation.isPending}
+        onConfirm={async () => {
+          if (lineToDelete) {
+            await mutation.mutateAsync({ type: 'delete', id: lineToDelete.id });
+            setLineToDelete(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -168,7 +209,7 @@ function BudgetLineDialog({ editing, baseCurrency, onClose, onSubmit }: { editin
           <div className="sm:col-span-2"><Label>Tasa de cambio (si no es NIO)</Label><Input type="number" min={0} step="0.01" value={form.exchangeRate} onChange={(e) => setForm((f: any) => ({ ...f, exchangeRate: e.target.value }))} placeholder="36.50" /></div>
           <div className="sm:col-span-2"><Label>Notas</Label><Input value={form.notes} onChange={(e) => setForm((f: any) => ({ ...f, notes: e.target.value }))} /></div>
         </div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={submit} disabled={!form.concept?.trim()}>{editing ? 'Guardar' : 'Agregar'}</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button variant="default" onClick={submit} disabled={!form.concept?.trim()}>{editing ? 'Guardar' : 'Agregar'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -181,6 +222,7 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
   const [source, setSource] = useState('ALL');
   const [page, setPage] = useState(1);
   const [dialog, setDialog] = useState<{ open: boolean; editing?: ProjectCost | null }>({ open: false, editing: null });
+  const [costToDelete, setCostToDelete] = useState<ProjectCost | null>(null);
 
   const costsQuery = useTenantQuery<any>(['projects', 'costs', projectId, status, source, page], (s) => projectsService.costs(projectId, { status: status === 'ALL' ? undefined : status, source: source === 'ALL' ? undefined : source, page, pageSize: 20 }, s), { enabled: true });
   const suppliersQuery = useTenantQuery<any[]>(['projects', 'suppliers'], (s) => suppliersService.getLookup({ page: 1, pageSize: 200 }, s).then((res: any) => asList(res)), { enabled: dialog.open });
@@ -192,7 +234,11 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
 
   const canCreate = canPerform('PROJECTS_EXPENSES', 'create');
   const canEdit = canPerform('PROJECTS_EXPENSES', 'edit');
-  const invalidate = () => invalidateTenantQueries(queryClient);
+  const invalidate = () => {
+    invalidateTenantQueries(queryClient);
+    queryClient.invalidateQueries({ queryKey: ['projects'] });
+    queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
+  };
 
   const mutation = useMutation({
     mutationFn: (args: { type: 'create' | 'update' | 'delete' | 'journal'; id?: string; payload?: any }) => {
@@ -226,12 +272,20 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
                 <SelectContent><SelectItem value="ALL">Todas las fuentes</SelectItem>{COST_SOURCE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            {canCreate && <Button onClick={() => setDialog({ open: true })} className="gap-1.5"><Plus className="size-4" /> Registrar costo</Button>}
+            {canCreate && <Button variant="default" onClick={() => setDialog({ open: true })} className="gap-1.5"><Plus className="size-4" /> Registrar costo</Button>}
           </div>
         </CardContent>
       </Card>
 
       <Card className="rounded-2xl border-border/60 shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Receipt className="size-4 text-primary" /> Registro y Control de Costos Reales
+          </CardTitle>
+          <CardDescription className="text-xs text-muted-foreground">
+            Gastos directos e indirectos ejecutados vs. la línea base del presupuesto.
+          </CardDescription>
+        </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
@@ -267,7 +321,7 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
                       <div className="flex justify-end gap-1">
                         {c.status === 'EXECUTED' && canEdit && <Button size="icon" variant="ghost" className="size-8 text-emerald-600" title="Generar asiento contable" onClick={() => mutation.mutate({ type: 'journal', id: c.id })}><BookOpenCheck className="size-4" /></Button>}
                         {canEdit && <Button size="icon" variant="ghost" className="size-8" onClick={() => setDialog({ open: true, editing: c })}><Pencil className="size-4" /></Button>}
-                        {canEdit && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => { if (window.confirm(`¿Eliminar el costo ${c.concept}?`)) mutation.mutate({ type: 'delete', id: c.id }); }}><Trash2 className="size-4" /></Button>}
+                        {canEdit && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setCostToDelete(c)}><Trash2 className="size-4" /></Button>}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -290,14 +344,38 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
       )}
 
       {dialog.open && (
-        <CostDialog editing={dialog.editing} suppliers={suppliers} onClose={() => setDialog({ open: false, editing: null })}
+        <CostDialog projectId={projectId} editing={dialog.editing} suppliers={suppliers} onClose={() => setDialog({ open: false, editing: null })}
           onSubmit={(payload) => mutation.mutate(dialog.editing ? { type: 'update', id: dialog.editing.id, payload } : { type: 'create', payload })} />
       )}
+
+      <ConfirmDialog
+        open={Boolean(costToDelete)}
+        onOpenChange={(open) => { if (!open) setCostToDelete(null); }}
+        title="Eliminar costo"
+        description={`¿Estás seguro de que deseas eliminar el costo "${costToDelete?.concept}"? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={mutation.isPending}
+        onConfirm={async () => {
+          if (costToDelete) {
+            await mutation.mutateAsync({ type: 'delete', id: costToDelete.id });
+            setCostToDelete(null);
+          }
+        }}
+      />
     </div>
   );
 }
 
-function CostDialog({ editing, suppliers, onClose, onSubmit }: { editing?: ProjectCost | null; suppliers: any[]; onClose: () => void; onSubmit: (payload: any) => void }) {
+function CostDialog({ projectId, editing, suppliers, onClose, onSubmit }: { projectId: string; editing?: ProjectCost | null; suppliers: any[]; onClose: () => void; onSubmit: (payload: any) => void }) {
+  const quotationsQuery = useTenantQuery<ProjectMaterialQuotation[]>(
+    ['projects', 'material-quotations', projectId],
+    (s) => projectsService.materialQuotations(projectId, undefined, s).then((res: any) => asList(res)),
+    { enabled: Boolean(projectId) }
+  );
+  const quotations = asList(quotationsQuery.data) as ProjectMaterialQuotation[];
+
   const [form, setForm] = useState<any>({
     concept: editing?.concept || '',
     category: editing?.category || 'OPERATIVO',
@@ -311,7 +389,17 @@ function CostDialog({ editing, suppliers, onClose, onSubmit }: { editing?: Proje
     sourceId: editing?.sourceId || '',
     status: editing?.status || 'EXECUTED',
     observation: editing?.observation || '',
+    quotationId: '',
   });
+
+  const supplierOptions = [
+    { label: 'Sin proveedor', value: '' },
+    ...suppliers.map((s: any) => ({
+      label: `${s.name} (${s.code || s.id.slice(0, 8)})`,
+      value: s.id,
+    })),
+  ];
+
   const submit = () => {
     if (!form.concept?.trim()) return;
     onSubmit({
@@ -336,12 +424,56 @@ function CostDialog({ editing, suppliers, onClose, onSubmit }: { editing?: Proje
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader><DialogTitle>{editing ? 'Editar costo' : 'Registrar costo'}</DialogTitle></DialogHeader>
         <div className="grid gap-4 py-2 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Label>Vincular Cotización de Materiales (Opcional)</Label>
+            <Select
+              value={form.quotationId || 'NONE'}
+              onValueChange={(qId) => {
+                if (qId === 'NONE') {
+                  setForm((f: any) => ({ ...f, quotationId: '' }));
+                  return;
+                }
+                const q = quotations.find((item) => item.id === qId);
+                if (q) {
+                  setForm((f: any) => ({
+                    ...f,
+                    quotationId: q.id,
+                    concept: `Cotización ${q.code}: ${q.name}`,
+                    category: 'MATERIALES',
+                    amount: String(q.selectedTotalAmount || q.quotedTotalAmount || ''),
+                    currency: q.currency || 'NIO',
+                    documentReference: q.code,
+                  }));
+                }
+              }}
+            >
+              <SelectTrigger><SelectValue placeholder="Seleccionar cotización..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Sin vincular</SelectItem>
+                {quotations.map((q) => (
+                  <SelectItem key={q.id} value={q.id}>
+                    {q.code} — {q.name} ({money(q.selectedTotalAmount || q.quotedTotalAmount || 0, q.currency || 'NIO')})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="sm:col-span-2"><Label>Concepto *</Label><Input value={form.concept} onChange={(e) => setForm((f: any) => ({ ...f, concept: e.target.value }))} placeholder="Ej. Materiales de construcción" /></div>
           <div><Label>Categoría</Label><Input value={form.category} onChange={(e) => setForm((f: any) => ({ ...f, category: e.target.value }))} placeholder="OPERATIVO" /></div>
           <div><Label>Monto</Label><Input type="number" min={0} value={form.amount} onChange={(e) => setForm((f: any) => ({ ...f, amount: e.target.value }))} placeholder="0.00" /></div>
           <div><Label>Moneda</Label><Select value={form.currency} onValueChange={(v) => setForm((f: any) => ({ ...f, currency: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div>
           <div><Label>Fecha</Label><DateField value={form.costDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, costDate: v }))} /></div>
-          <div><Label>Proveedor</Label><Select value={form.supplierId || 'NONE'} onValueChange={(v) => setForm((f: any) => ({ ...f, supplierId: v === 'NONE' ? '' : v }))}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value="NONE">Sin proveedor</SelectItem>{suppliers.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+          <div>
+            <Label>Proveedor</Label>
+            <Combobox
+              options={supplierOptions}
+              value={form.supplierId || ''}
+              onChange={(val) => setForm((f: any) => ({ ...f, supplierId: val }))}
+              placeholder="Seleccionar proveedor"
+              searchPlaceholder="Buscar proveedor..."
+              emptyMessage="No se encontraron proveedores."
+            />
+          </div>
           <div><Label>Referencia de documento</Label><Input value={form.documentReference} onChange={(e) => setForm((f: any) => ({ ...f, documentReference: e.target.value }))} placeholder="OC-0001 / factura..." /></div>
           <div><Label>Fuente</Label><Select value={form.source} onValueChange={(v) => setForm((f: any) => ({ ...f, source: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{COST_SOURCE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Estado</Label><Select value={form.status} onValueChange={(v) => setForm((f: any) => ({ ...f, status: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{COST_STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
@@ -354,7 +486,7 @@ function CostDialog({ editing, suppliers, onClose, onSubmit }: { editing?: Proje
           )}
           <div className="sm:col-span-2"><Label>Observación</Label><Input value={form.observation} onChange={(e) => setForm((f: any) => ({ ...f, observation: e.target.value }))} /></div>
         </div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={submit} disabled={!form.concept?.trim()}>{editing ? 'Guardar' : 'Registrar'}</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button variant="default" onClick={submit} disabled={!form.concept?.trim()}>{editing ? 'Guardar' : 'Registrar'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -6,6 +6,7 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import {useTenantQuery, asList, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { usersService } from '../../services/users.service';
 import { storageService } from '../../services/storage.service';
@@ -13,7 +14,7 @@ import { projectsService, type ProjectActivity, type ProjectDocument, type Proje
 import { useAuth } from '../../contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/app/services/toast';
-import { ACTIVITY_TYPE_LABEL, MEMBER_ROLE_LABEL, formatDate, formatActivityType } from './shared';
+import { MEMBER_ROLE_LABEL, formatDate, formatActivityType } from './shared';
 
 interface PanelsProps { projectId: string; }
 
@@ -22,6 +23,7 @@ export function ProyectoRecursosPanel({ projectId }: PanelsProps) {
   const queryClient = useQueryClient();
   const [addUserId, setAddUserId] = useState('');
   const [addRole, setAddRole] = useState('MEMBER');
+  const [memberToDelete, setMemberToDelete] = useState<ProjectMember | null>(null);
   const membersQuery = useTenantQuery<ProjectMember[]>(['projects', 'members', projectId], (s) => projectsService.members(projectId, s), { enabled: true });
   const usersQuery = useTenantQuery<any[]>(['projects', 'users'], (s) => usersService.getLookup(undefined, s), { enabled: true });
   const members = asList(membersQuery.data) as ProjectMember[];
@@ -99,7 +101,7 @@ export function ProyectoRecursosPanel({ projectId }: PanelsProps) {
                   </td>
                   <td><Badge variant="outline" className="border-border/60">{MEMBER_ROLE_LABEL[m.role] || m.role}</Badge>{m.isPrimary && <span className="ml-1 text-[10px] font-black text-primary">PRINCIPAL</span>}</td>
                   <td className="text-right">
-                    {canEdit && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => { if (window.confirm(`¿Quitar a ${m.user.name} del proyecto?`)) mutation.mutate({ type: 'remove', memberId: m.id }); }}><Trash2 className="size-4" /></Button>}
+                    {canEdit && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setMemberToDelete(m)}><Trash2 className="size-4" /></Button>}
                   </td>
                 </tr>
               ))}
@@ -107,6 +109,25 @@ export function ProyectoRecursosPanel({ projectId }: PanelsProps) {
           </table>
         </div>
       </CardContent>
+      <ConfirmDialog
+        open={Boolean(memberToDelete)}
+        onOpenChange={(open) => !open && setMemberToDelete(null)}
+        title="Quitar miembro del proyecto"
+        description={memberToDelete ? `¿Estás seguro de que deseas quitar a ${memberToDelete.user.name} del proyecto?` : ''}
+        confirmLabel="Quitar"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={mutation.isPending}
+        onConfirm={async () => {
+          if (!memberToDelete) return;
+          try {
+            await mutation.mutateAsync({ type: 'remove', memberId: memberToDelete.id });
+            setMemberToDelete(null);
+          } catch {
+            // onError handled by mutation
+          }
+        }}
+      />
     </Card>
   );
 }
@@ -116,6 +137,7 @@ export function ProyectoDocumentosPanel({ projectId }: PanelsProps) {
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [docToDelete, setDocToDelete] = useState<ProjectDocument | null>(null);
   const docsQuery = useTenantQuery<ProjectDocument[]>(['projects', 'documents', projectId], (s) => projectsService.documents(projectId, s), { enabled: true });
   const docs = asList(docsQuery.data) as ProjectDocument[];
   const canCreate = canPerform('PROJECTS_DOCUMENTS', 'create');
@@ -175,11 +197,30 @@ export function ProyectoDocumentosPanel({ projectId }: PanelsProps) {
                   <p className="text-xs text-muted-foreground">{d.mimeType} · {(d.size / 1024).toFixed(1)} KB</p>
                 </div>
               </div>
-              {canDelete && <Button size="icon" variant="ghost" className="size-8 shrink-0 text-rose-500" onClick={() => { if (window.confirm(`¿Eliminar ${d.name}?`)) removeMutation.mutate(d.id); }}><Trash2 className="size-4" /></Button>}
+              {canDelete && <Button size="icon" variant="ghost" className="size-8 shrink-0 text-rose-500" onClick={() => setDocToDelete(d)}><Trash2 className="size-4" /></Button>}
             </div>
           ))}
         </div>
       </CardContent>
+      <ConfirmDialog
+        open={Boolean(docToDelete)}
+        onOpenChange={(open) => !open && setDocToDelete(null)}
+        title="Eliminar documento"
+        description={docToDelete ? `¿Estás seguro de que deseas eliminar "${docToDelete.name}"?` : ''}
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={removeMutation.isPending}
+        onConfirm={async () => {
+          if (!docToDelete) return;
+          try {
+            await removeMutation.mutateAsync(docToDelete.id);
+            setDocToDelete(null);
+          } catch {
+            // onError handled by removeMutation
+          }
+        }}
+      />
     </Card>
   );
 }

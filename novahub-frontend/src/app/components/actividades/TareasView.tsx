@@ -785,6 +785,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
             <div className="relative w-full sm:w-56">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input
+                data-testid="activities-task-search"
                 placeholder="Buscar por título..."
                 className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs"
                 value={searchTerm}
@@ -939,6 +940,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                     type="button"
                     variant="ghost"
                     size="icon"
+                    data-testid={`activities-open-detail-${row.id}`}
                     title="Ver detalle de la tarea"
                     aria-label="Ver detalle de la tarea"
                     className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
@@ -1246,7 +1248,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                   Prioridad
                 </Label>
                 <Select value={newTask.priority} onValueChange={(val) => setNewTask({ ...newTask, priority: val })}>
-                  <SelectTrigger className="h-11 w-full text-sm rounded-xl">
+                  <SelectTrigger data-testid="activities-task-priority" className="h-11 w-full text-sm rounded-xl">
                     <SelectValue placeholder="Selecciona prioridad" />
                   </SelectTrigger>
                   <SelectContent>

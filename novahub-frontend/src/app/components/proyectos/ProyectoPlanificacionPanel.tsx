@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { DateField } from '../ui/DateField';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import {useTenantQuery, asList, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { usersService } from '../../services/users.service';
 import { projectsService, type ProjectMilestone, type ProjectTask } from '../../services/projects.service';
@@ -31,6 +32,7 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
   const queryClient = useQueryClient();
   const [taskDialog, setTaskDialog] = useState<{ open: boolean; editing?: ProjectTask | null }>({ open: false, editing: null });
   const [milestoneDialog, setMilestoneDialog] = useState<{ open: boolean; editing?: ProjectMilestone | null }>({ open: false, editing: null });
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'milestone' | 'task'; id: string; title: string } | null>(null);
 
   const tasksQuery = useTenantQuery<ProjectTask[]>(['projects', 'tasks', projectId], (s) => projectsService.tasks(projectId, s), { enabled: true });
   const milestonesQuery = useTenantQuery<ProjectMilestone[]>(['projects', 'milestones', projectId], (s) => projectsService.milestones(projectId, s), { enabled: true });
@@ -93,7 +95,7 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
                     <div className="mt-3 flex gap-1">
                       {m.status !== 'COMPLETED' && <Button size="sm" variant="outline" onClick={() => milestoneMutations.mutate({ type: 'update', id: m.id, payload: { status: 'COMPLETED' } })}><CheckCircle2 className="size-3.5" /> Completar</Button>}
                       <Button size="icon" variant="ghost" className="size-8" onClick={() => setMilestoneDialog({ open: true, editing: m })}><Pencil className="size-4" /></Button>
-                      {canDeleteTasks && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => { if (window.confirm(`¿Eliminar el hito ${m.name}?`)) milestoneMutations.mutate({ type: 'delete', id: m.id }); }}><Trash2 className="size-4" /></Button>}
+                      {canDeleteTasks && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setConfirmDelete({ type: 'milestone', id: m.id, title: m.name })}><Trash2 className="size-4" /></Button>}
                     </div>
                   )}
                 </div>
@@ -151,7 +153,7 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
                       <div className="flex justify-end gap-1">
                         {t.status !== 'COMPLETED' && canEditTasks && <Button size="icon" variant="ghost" className="size-8 text-emerald-600" title="Completar" onClick={() => taskMutations.mutate({ type: 'complete', id: t.id })}><CheckCircle2 className="size-4" /></Button>}
                         {canEditTasks && <Button size="icon" variant="ghost" className="size-8" onClick={() => setTaskDialog({ open: true, editing: t })}><Pencil className="size-4" /></Button>}
-                        {canDeleteTasks && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => { if (window.confirm(`¿Eliminar la tarea ${t.title}?`)) taskMutations.mutate({ type: 'delete', id: t.id }); }}><Trash2 className="size-4" /></Button>}
+                        {canDeleteTasks && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setConfirmDelete({ type: 'task', id: t.id, title: t.title })}><Trash2 className="size-4" /></Button>}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -172,6 +174,26 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
         <MilestoneFormDialog editing={milestoneDialog.editing} onClose={() => setMilestoneDialog({ open: false, editing: null })}
           onSubmit={(payload) => milestoneMutations.mutate(milestoneDialog.editing ? { type: 'update', id: milestoneDialog.editing.id, payload } : { type: 'create', payload })} />
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        onOpenChange={(open) => { if (!open) setConfirmDelete(null); }}
+        title={confirmDelete?.type === 'milestone' ? 'Eliminar hito' : 'Eliminar tarea'}
+        description={`¿Estás seguro de que deseas eliminar ${confirmDelete?.type === 'milestone' ? 'el hito' : 'la tarea'} "${confirmDelete?.title}"? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={confirmDelete?.type === 'milestone' ? milestoneMutations.isPending : taskMutations.isPending}
+        onConfirm={async () => {
+          if (!confirmDelete) return;
+          if (confirmDelete.type === 'milestone') {
+            await milestoneMutations.mutateAsync({ type: 'delete', id: confirmDelete.id });
+          } else {
+            await taskMutations.mutateAsync({ type: 'delete', id: confirmDelete.id });
+          }
+          setConfirmDelete(null);
+        }}
+      />
     </div>
   );
 }

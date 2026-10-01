@@ -23,6 +23,9 @@ import { Badge } from '../ui/badge';
 import { Skeleton } from '../ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { DateField } from '../ui/DateField';
+import { Combobox } from '../ui/Combobox';
+import { toast } from '@/app/services/toast';
 import { asList, invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
 import {
   projectsService,
@@ -156,9 +159,10 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
         currency: 'NIO',
         materials: [{ description: '', quantity: 1, unit: 'UND', specifications: '' }],
       });
+      toast.success('Cotización de materiales creada con éxito');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al crear la cotización.');
+      toast.error(msg || 'Error al crear la cotización.');
     } finally {
       setIsCreatingQuotation(false);
     }
@@ -180,9 +184,10 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
       await invalidateTenantQueries(queryClient);
       setNewSubLink({ url: `${window.location.origin}${res.publicPath}`, token: res.token });
+      toast.success('Proveedor asignado exitosamente');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al asignar proveedor.');
+      toast.error(msg || 'Error al asignar proveedor.');
     } finally {
       setIsCreatingSub(false);
     }
@@ -221,9 +226,10 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
       await invalidateTenantQueries(queryClient);
       await invalidateTenantQueries(queryClient);
       setManualSub(null);
+      toast.success('Datos manuales guardados exitosamente');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al guardar llenado manual.');
+      toast.error(msg || 'Error al guardar llenado manual.');
     } finally {
       setIsSavingManual(false);
     }
@@ -235,9 +241,10 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
     try {
       await projectsService.dismissOverwrite(projectId, selectedQuotationId, subId);
       await invalidateTenantQueries(queryClient);
+      toast.success('Aviso descartado');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al descartar aviso.');
+      toast.error(msg || 'Error al descartar aviso.');
     }
   };
 
@@ -251,7 +258,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
       setHistorySnapshots(history);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al cargar historial.');
+      toast.error(msg || 'Error al cargar historial.');
     } finally {
       setLoadingHistory(false);
     }
@@ -264,9 +271,10 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
       await projectsService.selectOffers(projectId, selectedQuotationId, { autoSelectLowest: true });
       await invalidateTenantQueries(queryClient);
       await invalidateTenantQueries(queryClient);
+      toast.success('Mejores precios seleccionados automáticamente');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al auto-seleccionar mejores precios.');
+      toast.error(msg || 'Error al auto-seleccionar mejores precios.');
     }
   };
 
@@ -289,9 +297,10 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
       await projectsService.selectOffers(projectId, selectedQuotationId, { selectedOfferIds: currentSelectedIds });
       await invalidateTenantQueries(queryClient);
       await invalidateTenantQueries(queryClient);
+      toast.success('Oferta actualizada');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(msg || 'Error al seleccionar oferta.');
+      toast.error(msg || 'Error al seleccionar oferta.');
     }
   };
 
@@ -299,6 +308,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
     navigator.clipboard.writeText(text);
     setCopiedToken(id);
     setTimeout(() => setCopiedToken(null), 2500);
+    toast.success('Enlace copiado al portapapeles');
   };
 
   // If no quotation selected: Show List
@@ -875,17 +885,17 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
               <div className="space-y-3 text-xs">
                 <div className="space-y-1">
                   <label className="font-semibold">Proveedor *</label>
-                  <select
-                    required
+                  <Combobox
+                    options={suppliers.map((s) => ({
+                      label: `${s.name} (${s.code || s.id.slice(0, 8)})`,
+                      value: s.id,
+                    }))}
                     value={subForm.supplierId}
-                    onChange={(e) => setSubForm({ ...subForm, supplierId: e.target.value })}
-                    className="w-full h-8 px-2 rounded-md border border-border bg-background text-xs"
-                  >
-                    <option value="">Seleccione un proveedor...</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSubForm({ ...subForm, supplierId: val })}
+                    placeholder="Seleccione un proveedor..."
+                    searchPlaceholder="Buscar por nombre o código..."
+                    emptyMessage="No se encontraron proveedores"
+                  />
                 </div>
 
                 <div className="space-y-1">
@@ -904,11 +914,10 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
                 <div className="space-y-1">
                   <label className="font-semibold">Fecha Límite para Responder (Opcional)</label>
-                  <Input
-                    type="date"
+                  <DateField
                     value={subForm.expiresAt}
-                    onChange={(e) => setSubForm({ ...subForm, expiresAt: e.target.value })}
-                    className="h-8 text-xs"
+                    onChange={(val) => setSubForm({ ...subForm, expiresAt: val })}
+                    placeholder="Seleccionar fecha límite"
                   />
                 </div>
               </div>

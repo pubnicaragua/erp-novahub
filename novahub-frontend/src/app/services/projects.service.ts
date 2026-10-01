@@ -9,6 +9,44 @@ export type ProjectCostSource = 'MANUAL' | 'PURCHASE' | 'INVENTORY' | 'PAYROLL' 
 export type ProjectCostStatus = 'PENDING' | 'COMMITTED' | 'EXECUTED' | 'CANCELLED';
 export type ProjectActivityType = 'COMMENT' | 'ACTIVITY' | 'STATUS_CHANGE' | 'BUDGET_CHANGE' | 'COST_CHANGE' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'TASK_COMPLETED' | 'MILESTONE_COMPLETED';
 
+export interface ProjectCostTemplateLineInput {
+  name: string;
+  code?: string;
+  description?: string;
+  unit?: string;
+  quantity?: number;
+  materiales?: number;
+  consumibles?: number;
+  manoObra?: number;
+  andamiosEquipos?: number;
+  fletes?: number;
+  viaticos?: number;
+  gmMaterial?: number;
+  gmInstalacion?: number;
+  includeInExposure?: boolean;
+  position?: number;
+}
+
+export interface ProjectCostTemplateInput {
+  name: string;
+  description?: string;
+  lines: ProjectCostTemplateLineInput[];
+}
+
+export interface ProjectCostTemplate {
+  id: string;
+  name: string;
+  description?: string | null;
+  isArchived: boolean;
+  lines: (Omit<ProjectCostTemplateLineInput, 'code' | 'description' | 'gmMaterial' | 'gmInstalacion'> & {
+    id: string;
+    code?: string | null;
+    description?: string | null;
+    gmMaterial?: number | null;
+    gmInstalacion?: number | null;
+  })[];
+}
+
 export interface ProjectDeleteImpact {
   storedImages: number;
   externalLinks: number;
@@ -78,6 +116,7 @@ export interface ProjectDetail extends ProjectListItem {
   members: ProjectMember[];
   milestones: ProjectMilestone[];
   budgetLines: ProjectBudgetLine[];
+  budgetSummary?: Record<string, unknown>;
   costs: ProjectCost[];
   tasks: ProjectTask[];
   documents: ProjectDocument[];
@@ -545,5 +584,51 @@ export const projectsService = {
     api.post(`/public-access/subquotation/${encodeURIComponent(token)}/accept-terms`, payload || {}),
   submitSupplierOffer: async (token: string, payload: { offers: Array<{ materialId: string; unitPrice: number; deliveryDays?: number; deliveryTime?: string; observations?: string }>; taxAmount?: number; supplierNotes?: string }) =>
     api.post(`/public-access/subquotation/${encodeURIComponent(token)}/submit`, payload),
+
+  // ==================== CONFIGURACIÓN DE PROYECTOS ====================
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  getTenantConfig: async (signal?: AbortSignal): Promise<any> =>
+    api.get('/projects/config', { signal }),
+  updateTenantConfig: async (data: any): Promise<any> =>
+    api.patch('/projects/config', data),
+
+  // ==================== MOTOR DE PRECIOS POR PROYECTO ====================
+  getCalculationMemory: async <T>(id: string, signal?: AbortSignal): Promise<{ data: T | null; updatedAt: string | null }> =>
+    api.get(`/projects/${id}/calculation-memory`, { signal }) as Promise<{ data: T | null; updatedAt: string | null }>,
+  saveCalculationMemory: async <T>(id: string, data: T): Promise<{ data: T; updatedAt: string }> =>
+    api.patch(`/projects/${id}/calculation-memory`, data) as Promise<{ data: T; updatedAt: string }>,
+
+  getProjectPricingEngine: async (id: string, signal?: AbortSignal): Promise<any> =>
+    api.get(`/projects/${id}/pricing-engine`, { signal }),
+  updateProjectPricingEngine: async (id: string, data: any): Promise<any> =>
+    api.patch(`/projects/${id}/pricing-engine`, data),
+  syncProjectPricingEngine: async (id: string): Promise<any> =>
+    api.post(`/projects/${id}/pricing-engine/sync`, {}),
+
+  // ==================== COSTEO 6D PERSISTENTE ====================
+  getCostLines: async (id: string, signal?: AbortSignal): Promise<any[]> =>
+    api.get(`/projects/${id}/costing/lines`, { signal }) as Promise<any[]>,
+  createCostLine: async (id: string, data: any): Promise<any> =>
+    api.post(`/projects/${id}/costing/lines`, data),
+  updateCostLine: async (id: string, lineId: string, data: any): Promise<any> =>
+    api.patch(`/projects/${id}/costing/lines/${lineId}`, data),
+  deleteCostLine: async (id: string, lineId: string): Promise<void> =>
+    api.delete(`/projects/${id}/costing/lines/${lineId}`) as Promise<void>,
+  reorderCostLines: async (id: string, lineIds: string[]): Promise<any[]> =>
+    api.post(`/projects/${id}/costing/lines/reorder`, { lineIds }) as Promise<any[]>,
+  getCostTemplates: async (signal?: AbortSignal): Promise<ProjectCostTemplate[]> =>
+    api.get('/projects/cost-templates', { signal }) as Promise<ProjectCostTemplate[]>,
+  createCostTemplate: async (data: ProjectCostTemplateInput): Promise<ProjectCostTemplate> =>
+    api.post('/projects/cost-templates', data) as Promise<ProjectCostTemplate>,
+  updateCostTemplate: async (templateId: string, data: Partial<ProjectCostTemplateInput> & { isArchived?: boolean }): Promise<ProjectCostTemplate> =>
+    api.patch(`/projects/cost-templates/${templateId}`, data) as Promise<ProjectCostTemplate>,
+  applyCostTemplate: async (id: string, templateId: string, overwrite = false): Promise<any[]> =>
+    api.post(`/projects/${id}/costing/apply-template`, { templateId, overwrite }) as Promise<any[]>,
+  getCostBaselines: async (id: string, signal?: AbortSignal): Promise<any[]> =>
+    api.get(`/projects/${id}/costing/baselines`, { signal }) as Promise<any[]>,
+  approveCostBaseline: async (id: string, pricingSnapshot: any): Promise<any> =>
+    api.post(`/projects/${id}/costing/baselines`, { pricingSnapshot }),
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 };
+
 
