@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { Task } from '../../types';
+import type { ActivityCategory, ActivityCustomField } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -23,6 +25,9 @@ import {
   Loader2,
   Filter,
   RotateCcw,
+  HandHelping,
+  UserCog,
+  Tag,
 } from 'lucide-react';
 import { tasksService } from '../../services/actividades.service';
 import { usersService } from '../../services/users.service';
@@ -35,12 +40,22 @@ import { InventoryViewTutorial } from '../inventory/InventoryViewTutorial';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { storageService } from '../../services/storage.service';
-import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
+import { asList, invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
 import { playNotificationSound } from '../../utils/notificationSound';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
 import { ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { TareasKanban } from './TareasKanban';
 import { TareasCardsView } from './TareasCardsView';
+import { SlaBadge } from './SlaBadge';
+import { ReassignTaskModal } from './ReassignTaskModal';
+import {
+  ACTIVITY_CATEGORIES,
+  CUSTOM_FIELD_PRESETS,
+  MAX_CUSTOM_FIELD_LENGTH,
+  MAX_CUSTOM_FIELDS,
+  getActivityCategoryLabel,
+  toCustomFieldsRecord,
+} from './actividades.constants';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { DateField } from '../ui/DateField';
 import { DateTimePickerField } from '../ui/DateTimePickerField';
@@ -51,6 +66,14 @@ interface TareasViewProps {
   onRefresh: () => void;
 }
 
+/** Valor centinela del selector de categoría del formulario (Radix no admite ''). */
+const CATEGORY_NONE = 'NONE';
+
+/** Subconjunto de `Task` que necesitan los filtros de identidad, responsable y estado. */
+type TaskLike = Pick<Task, 'id' | 'status' | 'assignedToId' | 'categoryId'> & {
+  assignments?: Array<{ userId?: string | null }>;
+};
+
 const getTaskDisplayStatus = (task: any) => {
   const status = String(task?.status || 'PENDING').toUpperCase();
   const dueTime = task?.dueDate ? new Date(task.dueDate).getTime() : Number.NaN;
@@ -59,12 +82,28 @@ const getTaskDisplayStatus = (task: any) => {
     : status;
 };
 
+/** Estados finales: el SLA se apaga (§5) y no tiene sentido reasignar ni tomar. */
+const isClosedTaskStatus = (task?: TaskLike | null) => {
+  const status = String(task?.status || '').toUpperCase();
+  return status === 'COMPLETED' || status === 'CANCELLED';
+};
+
+/** Responsable efectivo: `assignedToId` y, por compatibilidad, la asignación más reciente. */
+const getTaskAssigneeId = (task?: TaskLike | null): string => {
+  const direct = String(task?.assignedToId || '').trim();
+  if (direct) return direct;
+  const assignments = Array.isArray(task?.assignments) ? task.assignments : [];
+  const fromAssignments = assignments.find((assignment) => String(assignment?.userId || '').trim());
+  return String(fromAssignments?.userId || '').trim();
+};
+
 export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewLayout, setViewLayout] = useState<ViewLayoutMode>('table');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [assignedFilter, setAssignedFilter] = useState<string>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
@@ -72,10 +111,13 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   const [isCompleteOpen, setIsCompleteOpen] = useState(false);
   const [isApprovalOpen, setIsApprovalOpen] = useState(false);
   const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [isReassignOpen, setIsReassignOpen] = useState(false);
+  const [reassignTask, setReassignTask] = useState<Task | null>(null);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [detailTask, setDetailTask] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
 
   // Add Task form state
   const [newTask, setNewTask] = useState({
@@ -83,6 +125,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     description: '',
     dueDate: '',
     priority: 'MEDIUM',
+    categoryId: CATEGORY_NONE,
+    customFields: {} as Record<string, string>,
     assignedTo: [] as string[],
   });
 
@@ -92,8 +136,11 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   const [approvalNotes, setApprovalNotes] = useState('');
   const [rejectReason, setRejectReason] = useState('');
 
-  const [, setCurrentTime] = useState(() => Date.now());
-  const { canPerform } = useAuth();
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const { user, canPerform } = useAuth();
+  const queryClient = useQueryClient();
+  const currentUserId = user?.id ? String(user.id) : null;
+  const slaNow = useMemo(() => new Date(currentTime), [currentTime]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setCurrentTime(Date.now()), 30_000);
@@ -109,11 +156,79 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   );
   const employees = asList(usersQuery.data);
 
+  /** Refresca la lista con TanStack Query: la clave viva es `['tenant-module', tenant, ...]`. */
+  const refreshTasks = () => {
+    invalidateTenantQueries(queryClient);
+    onRefresh();
+  };
+
+  /** Solo una tarea libre o de otro usuario se puede tomar (§2.2). */
+  const canClaimTask = (task?: TaskLike | null): boolean => {
+    if (!currentUserId || isClosedTaskStatus(task)) return false;
+    const assigneeId = getTaskAssigneeId(task);
+    return !assigneeId || assigneeId !== currentUserId;
+  };
+
+  const isTaskMine = (task?: TaskLike | null): boolean => {
+    if (!currentUserId) return false;
+    const assigneeId = getTaskAssigneeId(task);
+    return Boolean(assigneeId) && assigneeId === currentUserId;
+  };
+
+  const handleClaimTask = async (task: Task) => {
+    if (!task?.id || !canPerform('ACTIVITIES_TASKS', 'edit')) return;
+    try {
+      setClaimingId(task.id);
+      await tasksService.claim(task.id);
+      toast.success('Tarea tomada. Ahora es tuya.');
+      refreshTasks();
+    } catch (e: unknown) {
+      const failure = e as { response?: { data?: { message?: ReactNode } }; message?: ReactNode } | null;
+      toast.error(failure?.response?.data?.message || failure?.message || 'No se pudo tomar la tarea');
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
+  const handleOpenReassign = (task: Task) => {
+    if (!task?.id || !canPerform('ACTIVITIES_TASKS', 'edit')) return;
+    setReassignTask(task);
+    setIsReassignOpen(true);
+  };
+
+  const handleReassigned = () => {
+    setReassignTask(null);
+    refreshTasks();
+  };
+
+  const setCustomFieldValue = (key: string, value: string) => {
+    setNewTask((prev) => {
+      const next = { ...prev.customFields };
+      const trimmed = value.trim();
+      if (trimmed) next[key] = value;
+      else delete next[key];
+      return { ...prev, customFields: next };
+    });
+  };
+
+  const resetNewTaskForm = () => {
+    setNewTask({
+      title: '',
+      description: '',
+      dueDate: '',
+      priority: 'MEDIUM',
+      categoryId: CATEGORY_NONE,
+      customFields: {},
+      assignedTo: [],
+    });
+  };
+
   const resetFilters = () => {
     setSearchTerm('');
     setStatusFilter('ALL');
     setPriorityFilter('ALL');
     setAssignedFilter('ALL');
+    setCategoryFilter('ALL');
     setDateFrom('');
     setDateTo('');
   };
@@ -133,6 +248,11 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     { value: 'URGENT', label: 'Urgente', color: 'text-primary font-black' },
   ];
 
+  const categoryOpts = [
+    ...ACTIVITY_CATEGORIES.map((category) => ({ value: category.value as string, label: category.label, color: '' })),
+    { value: '', label: 'Sin categoría', color: '' },
+  ];
+
   const handleUpdate = async (id: string | number, updates: Partial<Task>) => {
     try {
       await tasksService.update(id as string, updates);
@@ -142,6 +262,14 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar tarea');
     }
   };
+
+  /** Serializa los campos personalizados del formulario al objeto plano de §7. */
+  const buildCustomFieldsPayload = (values: Record<string, string>): Record<string, string> =>
+    toCustomFieldsRecord(
+      CUSTOM_FIELD_PRESETS
+        .map((preset) => ({ key: preset.key, value: String(values[preset.key] ?? '') }))
+        .filter((field) => Boolean(field.value.trim())) as ActivityCustomField[]
+    );
 
   const handleCreateTask = async () => {
     if (!newTask.title) {
@@ -156,11 +284,13 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
         dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : new Date().toISOString(),
         priority: newTask.priority as any,
         assignedTo: newTask.assignedTo as any,
+        categoryId: (newTask.categoryId === CATEGORY_NONE ? null : newTask.categoryId) as ActivityCategory | null,
+        customFields: buildCustomFieldsPayload(newTask.customFields),
       });
       toast.success('Tarea creada exitosamente');
       playNotificationSound();
       setIsAddOpen(false);
-      setNewTask({ title: '', description: '', dueDate: '', priority: 'MEDIUM', assignedTo: [] });
+      resetNewTaskForm();
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear tarea');
@@ -304,6 +434,33 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       },
     },
     {
+      key: 'categoryId',
+      header: 'Categoría',
+      width: '130px',
+      editable: canPerform('ACTIVITIES_TASKS', 'edit'),
+      type: 'select' as const,
+      options: categoryOpts,
+      render: (val: string | null | undefined) => {
+        if (!val) return <span className="text-muted-foreground text-xs">—</span>;
+        return (
+          <Badge variant="outline" className="min-w-0 max-w-full truncate bg-secondary/40 text-[9px] font-bold uppercase">
+            {getActivityCategoryLabel(val)}
+          </Badge>
+        );
+      },
+    },
+    {
+      key: 'slaDueAt',
+      header: 'SLA',
+      width: '130px',
+      editable: false,
+      render: (val: string | null | undefined, row: Task) => (
+        <div className="flex min-w-0 flex-wrap gap-1">
+          <SlaBadge slaDueAt={val ?? row?.dueDate ?? null} status={row?.status} showRemaining now={slaNow} />
+        </div>
+      ),
+    },
+    {
       key: 'dueDate',
       header: 'Vencimiento',
       width: '100px',
@@ -396,18 +553,31 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       assignedFilter === 'ALL' ||
       (t.assignments || []).some((a: any) => a.userId === assignedFilter || a.employeeId === assignedFilter);
 
+    // Categoría / Departamento: catálogo cerrado (§4), filtrado en cliente.
+    const taskCategory = String(t.categoryId || '').trim().toUpperCase();
+    const matchesCategory = categoryFilter === 'ALL' || taskCategory === categoryFilter;
+
     // Date range filter
     const dueDate = t.dueDate ? new Date(t.dueDate).toISOString().slice(0, 10) : null;
     const matchesDateFrom = !dateFrom || (dueDate && dueDate >= dateFrom);
     const matchesDateTo = !dateTo || (dueDate && dueDate <= dateTo);
 
-    return matchesSearch && matchesStatus && matchesPriority && matchesAssigned && matchesDateFrom && matchesDateTo;
+    return (
+      matchesSearch &&
+      matchesStatus &&
+      matchesPriority &&
+      matchesAssigned &&
+      matchesCategory &&
+      matchesDateFrom &&
+      matchesDateTo
+    );
   });
 
   const activeFiltersCount =
     (statusFilter !== 'ALL' ? 1 : 0) +
     (priorityFilter !== 'ALL' ? 1 : 0) +
     (assignedFilter !== 'ALL' ? 1 : 0) +
+    (categoryFilter !== 'ALL' ? 1 : 0) +
     (dateFrom ? 1 : 0) +
     (dateTo ? 1 : 0);
 
@@ -520,6 +690,26 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                 {employees.map((emp) => (
                   <SelectItem key={emp.id} value={emp.id}>
                     {emp.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Category / Department Filter */}
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+              Categoría / Departamento
+            </label>
+            <Select value={categoryFilter} onValueChange={(val) => setCategoryFilter(val)}>
+              <SelectTrigger className="h-9 w-full text-xs" data-testid="activities-task-category-filter">
+                <SelectValue placeholder="Todas las categorías" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todas las categorías</SelectItem>
+                {ACTIVITY_CATEGORIES.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>
+                    {category.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -652,6 +842,15 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
             canEdit={canPerform('ACTIVITIES_TASKS', 'edit')}
             canApprove={canPerform('ACTIVITIES_TASKS', 'approve')}
             getTaskDisplayStatus={getTaskDisplayStatus}
+            categoryFilter={categoryFilter}
+            onCategoryFilterChange={setCategoryFilter}
+            now={slaNow}
+            currentUserId={currentUserId}
+            isTaskMine={isTaskMine}
+            canClaimTask={canClaimTask}
+            isClaiming={claimingId}
+            onClaimTask={handleClaimTask}
+            onReassignTask={handleOpenReassign}
           />
         ) : (
           <EditableDataTable
@@ -664,7 +863,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
               canPerform('ACTIVITIES_TASKS', 'delete')
                 ? async (selectedIds) => {
                     try {
-                      await Promise.all(selectedIds.map((id) => tasksService.delete(id)));
+                      await Promise.all(selectedIds.map((id) => tasksService.delete(String(id))));
                       toast.success(`${selectedIds.length} tareas eliminadas`);
                       onRefresh();
                     } catch (e: any) {
@@ -683,7 +882,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                     className="h-8 text-[10px] font-black uppercase tracking-wider text-primary border-primary/30 hover:bg-primary/10"
                     onClick={async () => {
                       try {
-                        await Promise.all(selectedIds.map((id) => tasksService.submitApproval(id)));
+                        await Promise.all(selectedIds.map((id) => tasksService.submitApproval(String(id))));
                         toast.success(`${selectedIds.length} tareas enviadas a aprobación`);
                         onRefresh();
                       } catch (e: any) {
@@ -702,7 +901,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                     className="h-8 text-[10px] font-black uppercase tracking-wider text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
                     onClick={async () => {
                       try {
-                        await Promise.all(selectedIds.map((id) => tasksService.complete(id)));
+                        await Promise.all(selectedIds.map((id) => tasksService.complete(String(id))));
                         toast.success(`${selectedIds.length} tareas completadas`);
                         onRefresh();
                       } catch (e: any) {
@@ -747,6 +946,43 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                   >
                     <Eye className="size-4" />
                   </Button>
+
+                  {/* Tomar Tarea: solo si la tarea no es del usuario actual (§2.2) */}
+                  {canClaimTask(row) && canPerform('ACTIVITIES_TASKS', 'edit') && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      data-testid={`activities-claim-${row.id}`}
+                      title="Tomar tarea"
+                      aria-label="Tomar tarea"
+                      disabled={claimingId === row.id}
+                      className="size-8 rounded-lg text-primary hover:bg-primary/10"
+                      onClick={() => void handleClaimTask(row as Task)}
+                    >
+                      {claimingId === row.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <HandHelping className="size-4" />
+                      )}
+                    </Button>
+                  )}
+
+                  {/* Reasignar responsable */}
+                  {!isClosedTaskStatus(row) && canPerform('ACTIVITIES_TASKS', 'edit') && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      data-testid={`activities-reassign-${row.id}`}
+                      title="Reasignar tarea"
+                      aria-label="Reasignar tarea"
+                      className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                      onClick={() => handleOpenReassign(row as Task)}
+                    >
+                      <UserCog className="size-4" />
+                    </Button>
+                  )}
 
                   {/* Send to approval button */}
                   {['PENDING', 'IN_PROGRESS'].includes(status) && canPerform('ACTIVITIES_TASKS', 'edit') && (
@@ -832,7 +1068,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                 </div>
               );
             }}
-            actionsWidth="w-44"
+            actionsWidth="w-72"
           />
         )}
       </Card>
@@ -844,6 +1080,34 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
         extraActions={
           detailTask && (
             <div className="flex flex-wrap gap-2">
+              {canClaimTask(detailTask) && canPerform('ACTIVITIES_TASKS', 'edit') && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+                  disabled={claimingId === detailTask.id}
+                  onClick={() => void handleClaimTask(detailTask as Task)}
+                >
+                  {claimingId === detailTask.id ? (
+                    <Loader2 className="mr-1.5 size-4 animate-spin" />
+                  ) : (
+                    <HandHelping className="mr-1.5 size-4" />
+                  )}
+                  Tomar Tarea
+                </Button>
+              )}
+
+              {!isClosedTaskStatus(detailTask) && canPerform('ACTIVITIES_TASKS', 'edit') && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl border-border/60 bg-background text-foreground hover:bg-muted"
+                  onClick={() => handleOpenReassign(detailTask as Task)}
+                >
+                  <UserCog className="mr-1.5 size-4" /> Reasignar
+                </Button>
+              )}
+
               {['PENDING', 'IN_PROGRESS'].includes(String(detailTask.status || '').toUpperCase()) &&
                 canPerform('ACTIVITIES_TASKS', 'edit') && (
                   <Button
@@ -992,6 +1256,58 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                     <SelectItem value="URGENT">Urgente</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="min-w-0 space-y-2">
+                <Label className="flex items-center gap-2 text-xs font-bold text-foreground">
+                  <Tag className="size-3.5 text-primary" />
+                  Categoría / Departamento
+                </Label>
+                <Select value={newTask.categoryId} onValueChange={(val) => setNewTask({ ...newTask, categoryId: val })}>
+                  <SelectTrigger
+                    data-testid="activities-task-category"
+                    className="h-11 w-full min-w-0 text-sm rounded-xl"
+                  >
+                    <SelectValue placeholder="Selecciona categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={CATEGORY_NONE}>Sin categoría</SelectItem>
+                    {ACTIVITY_CATEGORIES.map((category) => (
+                      <SelectItem key={category.value} value={category.value}>
+                        {category.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">Agrupa la tarea para filtrar y reportar.</p>
+              </div>
+              <div className="min-w-0 space-y-2">
+                <Label className="flex items-center gap-2 text-xs font-bold text-foreground">
+                  <ListTodo className="size-3.5 text-primary" />
+                  Campos personalizados <span className="font-normal text-muted-foreground">(opcional)</span>
+                </Label>
+                <div className="grid min-w-0 gap-2 rounded-xl border border-input bg-muted/[0.12] p-3">
+                  {CUSTOM_FIELD_PRESETS.slice(0, MAX_CUSTOM_FIELDS).map((preset) => (
+                    <div key={preset.key} className="min-w-0 space-y-1">
+                      <Label className="text-[10px] font-bold text-muted-foreground" htmlFor={`custom-${preset.key}`}>
+                        {preset.label}
+                      </Label>
+                      <Input
+                        id={`custom-${preset.key}`}
+                        data-testid={`activities-task-custom-${preset.key}`}
+                        placeholder={preset.placeholder}
+                        maxLength={MAX_CUSTOM_FIELD_LENGTH}
+                        value={newTask.customFields[preset.key] || ''}
+                        onChange={(e) => setCustomFieldValue(preset.key, e.target.value)}
+                        className="h-9 min-w-0 rounded-lg bg-background text-xs"
+                      />
+                    </div>
+                  ))}
+                  <p className="text-[10px] text-muted-foreground">
+                    Hasta {MAX_CUSTOM_FIELDS} campos, {MAX_CUSTOM_FIELD_LENGTH} caracteres por clave y valor.
+                  </p>
+                </div>
               </div>
             </div>
             <div className="space-y-2">
@@ -1228,6 +1544,17 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog: Reassign Task (historial en ActivityLog, §2.1) */}
+      <ReassignTaskModal
+        open={isReassignOpen}
+        task={reassignTask}
+        onOpenChange={(open) => {
+          setIsReassignOpen(open);
+          if (!open) setReassignTask(null);
+        }}
+        onReassigned={handleReassigned}
+      />
     </div>
   );
 };

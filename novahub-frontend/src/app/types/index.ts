@@ -1728,6 +1728,35 @@ export interface ActivityTimeEntry {
   updatedAt: string;
 }
 
+/** Catálogo cerrado de categorías de tarea (§4 del contrato Aranda ITSM). */
+export type ActivityCategory =
+  | 'INFRAESTRUCTURA'
+  | 'SISTEMAS'
+  | 'OPERACIONES'
+  | 'MANTENIMIENTO'
+  | 'RECURSOS_HUMANOS';
+
+/** Entrada del historial de reasignaciones / auto-asignaciones (§3). */
+export interface ActivityReassignmentEntry {
+  id: string;
+  date: string;
+  fromUserId: string | null;
+  fromUserName: string | null;
+  toUserId: string;
+  toUserName: string;
+  reason: string;
+  actorId: string | null;
+  actorName: string | null;
+  message: string;
+}
+
+export interface ActivityCustomField {
+  key: string;
+  value: string;
+}
+
+export type SlaStatus = 'NONE' | 'ON_TIME' | 'AT_RISK' | 'BREACHED';
+
 export interface Task {
   id: string;
   title: string;
@@ -1746,6 +1775,11 @@ export interface Task {
   rejectedAt?: string | null;
   rejectedById?: string | null;
   rejectedBy?: { id: string; name: string } | null;
+  categoryId?: ActivityCategory | null;
+  customFields?: Record<string, string> | null;
+  slaDueAt?: string | null;
+  slaBreachedAt?: string | null;
+  reassignmentHistory?: ActivityReassignmentEntry[];
   subtasks?: ActivitySubtask[];
   timeEntries?: ActivityTimeEntry[];
   evidences?: Array<{ id: string; fileName: string; fileUrl: string; fileSize?: number; uploadedAt: string; uploadedBy?: string }>;
