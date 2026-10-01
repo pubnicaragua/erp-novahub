@@ -10,14 +10,20 @@ export function PoketPaymentCallbackPage() {
     if (!paymentLinkId) return;
     let stopped = false;
     let attempts = 0;
+    const maxAttempts = 48;
     const check = async () => {
       try {
+        if (attempts === 0 || attempts % 4 === 0) {
+          await poketPayLinkService.publicReconcile(paymentLinkId).catch(() => undefined);
+        }
         const result = await poketPayLinkService.publicStatus(paymentLinkId);
         if (stopped) return;
         setStatus(result.status);
-        if (!['RESOLVED', 'FAILED', 'EXPIRED', 'CANCELLED'].includes(result.status) && attempts < 48) {
+        if (!['RESOLVED', 'FAILED', 'EXPIRED', 'CANCELLED'].includes(result.status) && attempts < maxAttempts) {
           attempts += 1;
           window.setTimeout(() => void check(), 2500);
+        } else if (!['RESOLVED', 'FAILED', 'EXPIRED', 'CANCELLED'].includes(result.status)) {
+          setStatus('ERROR');
         }
       } catch {
         if (!stopped) setStatus('ERROR');

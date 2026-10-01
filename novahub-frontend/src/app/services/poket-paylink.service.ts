@@ -49,5 +49,6 @@ export const poketPayLinkService = {
     api.post<{ existing: boolean; link: PoketPayLink }>(`/integrations/poket/invoices/${invoiceId}/payment-links`, data),
   reconcile: (id: string) => api.post<{ link: PoketPayLink; provider: unknown }>(`/integrations/poket/payment-links/${id}/reconcile`, {}),
   cancel: (id: string) => api.delete<PoketPayLink>(`/integrations/poket/payment-links/${id}`),
+  publicReconcile: (id: string) => api.post<PoketPayLink>(`/integrations/poket/public/payment-links/${id}/reconcile`, {}),
   publicStatus: (id: string) => api.get<Pick<PoketPayLink, 'id' | 'status' | 'amount' | 'currency' | 'expirationDate' | 'paidAt' | 'errorReason'>>(`/integrations/poket/public/payment-links/${id}`),
 };

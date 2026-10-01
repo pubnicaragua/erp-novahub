@@ -17,7 +17,14 @@ export interface VoiceSaleLine<TProduct extends VoiceSaleCatalogProduct = VoiceS
 export interface VoiceSaleParseResult<TProduct extends VoiceSaleCatalogProduct = VoiceSaleCatalogProduct> {
   lines: VoiceSaleLine<TProduct>[];
   unmatchedText: string;
+  suggestions: VoiceSaleSuggestion<TProduct>[];
   metadata: VoiceSaleMetadata;
+}
+
+export interface VoiceSaleSuggestion<TProduct extends VoiceSaleCatalogProduct = VoiceSaleCatalogProduct> {
+  product: TProduct;
+  matchedText: string;
+  score: number;
 }
 
 export interface VoiceSaleMetadata {
@@ -72,7 +79,7 @@ const DIGIT_WORDS: Record<string, string> = Object.fromEntries(
   Object.entries(NUMBER_WORDS).map(([word, value]) => [String(value), word]),
 );
 
-const STOP_WORDS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'uno', 'por', 'favor', 'también', 'tambien']);
+const STOP_WORDS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'uno', 'por', 'favor', 'también', 'tambien', 'y', 'con', 'para', 'a']);
 const PRODUCT_NUMBER_PREFIXES = new Set(['iphone', 'galaxy', 'pixel', 'modelo', 'serie', 'version', 'versión', 'talla', 'sku']);
 
 function normalize(value: string) {
@@ -223,9 +230,37 @@ function removeMetadataFromUnmatchedText(value: string, metadata: VoiceSaleMetad
   return result;
 }
 
+function buildUnmatchedSuggestions<TProduct extends VoiceSaleCatalogProduct>(unmatchedText: string, products: TProduct[]): VoiceSaleSuggestion<TProduct>[] {
+  const queryTokens = new Set(
+    normalize(unmatchedText)
+      .split(' ')
+      .filter((token) => token.length >= 3 && !STOP_WORDS.has(token) && !/^\d+$/.test(token)),
+  );
+  if (!queryTokens.size) return [];
+
+  return products
+    .filter((product) => product.isActive !== false)
+    .map((product) => {
+      const names = [product.name, ...(product.aliases || [])]
+        .flatMap((name) => buildNameVariants(name || ''))
+        .map((name) => new Set(normalize(name).split(' ').filter((token) => token.length >= 3 && !STOP_WORDS.has(token) && !/^\d+$/.test(token))))
+        .filter((tokens) => tokens.size > 0);
+      const best = names.reduce<{ overlap: number; score: number }>((current, tokens) => {
+        const overlap = [...queryTokens].filter((token) => tokens.has(token)).length;
+        const score = overlap / Math.max(tokens.size, queryTokens.size);
+        return score > current.score ? { overlap, score } : current;
+      }, { overlap: 0, score: 0 });
+      return { product, matchedText: product.name, score: best.score, overlap: best.overlap };
+    })
+    .filter((candidate) => candidate.overlap > 0 && (candidate.score >= 0.45 || candidate.overlap >= 2))
+    .sort((left, right) => right.score - left.score || right.overlap - left.overlap || left.product.name.localeCompare(right.product.name, 'es'))
+    .slice(0, 6)
+    .map(({ product, matchedText, score }) => ({ product, matchedText, score }));
+}
+
 export function parseSpanishSalesDictation<TProduct extends VoiceSaleCatalogProduct>(transcript: string, products: TProduct[]): VoiceSaleParseResult<TProduct> {
   const normalizedTranscript = normalize(transcript);
-  if (!normalizedTranscript) return { lines: [], unmatchedText: '', metadata: { customerText: '', total: null, unitPrice: null, unitPriceCurrency: null, paymentMethod: null, notes: '', unmatchedText: '' } };
+  if (!normalizedTranscript) return { lines: [], unmatchedText: '', suggestions: [], metadata: { customerText: '', total: null, unitPrice: null, unitPriceCurrency: null, paymentMethod: null, notes: '', unmatchedText: '' } };
   const metadata = parseVoiceSaleMetadata(transcript);
 
   const candidates = products
@@ -286,5 +321,5 @@ export function parseSpanishSalesDictation<TProduct extends VoiceSaleCatalogProd
     .replace(/\s+/g, ' ')
     .trim();
 
-  return { lines: [...merged.values()], unmatchedText, metadata: { ...metadata, unmatchedText } };
+  return { lines: [...merged.values()], unmatchedText, suggestions: buildUnmatchedSuggestions(unmatchedText, products), metadata: { ...metadata, unmatchedText } };
 }

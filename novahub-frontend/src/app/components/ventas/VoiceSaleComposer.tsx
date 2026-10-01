@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Mic, MicOff, X } from 'lucide-react';
+import { Check, ChevronDown, Mic, MicOff, X } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Textarea } from '../ui/textarea';
 import { toast } from '@/app/services/toast';
-import { parseSpanishSalesDictation, type VoiceSaleCatalogProduct, type VoiceSaleLine, type VoiceSaleMetadata } from '../../utils/voice-sale-parser';
+import { parseSpanishSalesDictation, type VoiceSaleCatalogProduct, type VoiceSaleLine, type VoiceSaleMetadata, type VoiceSaleSuggestion } from '../../utils/voice-sale-parser';
 import { NovaHubLogo } from '../NovaHubLogo';
 
 interface RecognitionResultLike {
@@ -52,6 +52,7 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
   const [transcript, setTranscript] = useState('');
   const [lines, setLines] = useState<VoiceSaleLine<TProduct>[]>([]);
   const [unmatchedText, setUnmatchedText] = useState('');
+  const [suggestions, setSuggestions] = useState<VoiceSaleSuggestion<TProduct>[]>([]);
   const [metadata, setMetadata] = useState<VoiceSaleMetadata>({ customerText: '', total: null, unitPrice: null, unitPriceCurrency: null, paymentMethod: null, notes: '', unmatchedText: '' });
   const [listening, setListening] = useState(false);
   const [wakeMode, setWakeMode] = useState(false);
@@ -77,6 +78,7 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
     const parsed = parseSpanishSalesDictation(value, products);
     setLines(parsed.lines);
     setUnmatchedText(parsed.unmatchedText);
+    setSuggestions(parsed.suggestions);
     setMetadata(parsed.metadata);
   };
 
@@ -84,6 +86,7 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
     setTranscript('');
     setLines([]);
     setUnmatchedText('');
+    setSuggestions([]);
     setMetadata({ customerText: '', total: null, unitPrice: null, unitPriceCurrency: null, paymentMethod: null, notes: '', unmatchedText: '' });
     setError(null);
   };
@@ -209,9 +212,24 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
       toast.error('No encontré productos activos del catálogo en el dictado. Revisá el texto antes de continuar.');
       return;
     }
+    const missingVariant = lines.find((line) => (line.product.variants || []).filter((variant) => variant.isActive !== false).length > 1 && !line.variantName);
+    if (missingVariant) {
+      toast.error(`Seleccioná la variante de ${missingVariant.product.name} antes de continuar.`);
+      return;
+    }
     onApply(lines, metadata);
     close();
     toast.success(`${lines.length} línea(s) agregada(s) al borrador`);
+  };
+
+  const selectSuggestion = (suggestion: VoiceSaleSuggestion<TProduct>) => {
+    updateTranscript(`${transcript} ${suggestion.product.name}`.trim());
+  };
+
+  const selectVariant = (lineIndex: number, variantName: string) => {
+    setLines((current) => current.map((line, index) => index === lineIndex
+      ? { ...line, variantName: variantName || undefined }
+      : line));
   };
 
   useEffect(() => () => {
@@ -273,7 +291,17 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
           <Textarea value={transcript} onChange={(event) => updateTranscript(event.target.value)} placeholder="Dictá o escribí la venta…" className="min-h-24 max-h-56 resize-y rounded-xl border-primary/20 bg-background text-base leading-6 sm:text-sm" aria-label="Texto de la venta dictada" />
           {error && <p className="rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</p>}
           {lines.length > 0 && <div className="grid gap-2 sm:grid-cols-2">
-            {lines.map((line) => <div key={`${line.product.id}-${line.variantName || 'base'}`} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card px-3 py-2"><div className="min-w-0"><p className="truncate text-xs font-bold text-foreground">{line.product.name}</p>{line.variantName && <p className="truncate text-[10px] text-amber-700">Variante: {line.variantName}</p>}</div><Badge className="shrink-0 bg-primary/10 text-primary">× {line.quantity}</Badge></div>)}
+            {lines.map((line, lineIndex) => {
+              const variants = (line.product.variants || []).filter((variant) => variant.isActive !== false);
+              const needsVariant = variants.length > 1 && !line.variantName;
+              return <div key={`${line.product.id}-${line.variantName || 'base'}-${lineIndex}`} className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${needsVariant ? 'border-amber-300/70 bg-amber-50/60' : 'border-border/60 bg-card'}`}>
+                <div className="min-w-0"><p className="truncate text-xs font-bold text-foreground">{line.product.name}</p>{line.variantName && <p className="truncate text-[10px] text-amber-700">Variante: {line.variantName}</p>}{needsVariant && <p className="mt-1 text-[10px] font-semibold text-amber-800">Elegí una variante para continuar</p>}</div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {variants.length > 1 && <label className="relative"><span className="sr-only">Variante de {line.product.name}</span><select value={line.variantName || ''} onChange={(event) => selectVariant(lineIndex, event.target.value)} className="h-8 max-w-36 appearance-none rounded-lg border border-amber-300 bg-background px-2 pr-7 text-[11px] font-semibold text-foreground outline-none focus:border-primary"><option value="">Variante…</option>{variants.map((variant) => <option key={variant.id} value={variant.name}>{variant.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-2 top-2 size-3.5 text-muted-foreground" /></label>}
+                  <Badge className="bg-primary/10 text-primary">× {line.quantity}</Badge>
+                </div>
+              </div>;
+            })}
           </div>}
           {(metadata.customerText || metadata.total !== null || metadata.unitPrice !== null || metadata.paymentMethod || metadata.notes) && <div className="grid gap-2 rounded-xl border border-sky-200/50 bg-sky-50/60 p-3 text-xs text-sky-950 sm:grid-cols-2">
             <p><span className="font-bold">Cliente:</span> {metadata.customerText || 'No detectado'}</p>
@@ -282,7 +310,7 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
             <p><span className="font-bold">Pago:</span> {metadata.paymentMethod === 'CASH' ? 'Efectivo' : metadata.paymentMethod === 'CARD' ? 'Tarjeta' : metadata.paymentMethod === 'TRANSFER' ? 'Transferencia' : metadata.paymentMethod === 'CREDIT' ? 'Crédito' : 'No detectado'}</p>
             {metadata.notes && <p className="sm:col-span-2"><span className="font-bold">Nota:</span> {metadata.notes}</p>}
           </div>}
-          {unmatchedText && <p className="rounded-xl border border-amber-300/40 bg-amber-50 px-3 py-2 text-xs text-amber-800">No encontré en el catálogo: <span className="font-bold">{unmatchedText}</span>. No se agregará silenciosamente.</p>}
+          {unmatchedText && <div className="space-y-2 rounded-xl border border-amber-300/40 bg-amber-50 px-3 py-2 text-xs text-amber-800"><p>No encontré en el catálogo: <span className="font-bold">{unmatchedText}</span>. No se agregará silenciosamente.</p>{suggestions.length > 0 && <div><p className="font-bold">¿Quisiste decir?</p><div className="mt-2 flex flex-wrap gap-2">{suggestions.map((suggestion) => <Button key={suggestion.product.id} type="button" variant="outline" size="sm" className="h-8 rounded-lg border-amber-300 bg-background text-[11px] text-foreground hover:bg-amber-100" onClick={() => selectSuggestion(suggestion)}>{suggestion.product.name}{(suggestion.product.variants || []).filter((variant) => variant.isActive !== false).length > 1 ? ' · elegir variante' : ''}</Button>)}</div></div>}</div>}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="ghost" className="rounded-xl" onClick={close}>Cancelar</Button><Button type="button" className="rounded-xl font-black" onClick={apply} disabled={!lines.length}><Check className="mr-2 size-4" /> Agregar al borrador</Button></div>
         </div>}
       </CardContent>

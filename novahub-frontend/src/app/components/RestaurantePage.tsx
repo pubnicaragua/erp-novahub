@@ -9,6 +9,8 @@ import {
   Eye,
   EyeOff,
   LayoutGrid,
+  Maximize2,
+  Minimize2,
   Pencil,
   Plus,
   QrCode,
@@ -643,7 +645,23 @@ function OrderBoard({ orders, targetOrderId, onTargetHandled, onSend, onStatus, 
 
 function KitchenBoard({ tickets, onStatus, canApprove }: { tickets: RestaurantKitchenTicket[]; onStatus: (ticket: RestaurantKitchenTicket, status: string) => void; canApprove: boolean }) {
   const columns = ['PENDING', 'IN_PREPARATION', 'READY'];
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5"><p className="text-xs font-black uppercase tracking-widest text-primary">Kitchen display</p><h2 className="mt-1 text-2xl font-black">Centro de preparación</h2></div><div className="grid gap-4 lg:grid-cols-3">{columns.map((column) => <div key={column} className="min-h-64 rounded-2xl border border-border/50 bg-muted/20 p-3"><div className="mb-3 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-widest text-muted-foreground">{kitchenStatus[column].label}</span><Badge variant="outline">{tickets.filter((ticket) => ticket.status === column).length}</Badge></div><div className="space-y-3">{tickets.filter((ticket) => ticket.status === column).map((ticket) => <div key={ticket.id} className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm"><div className="flex justify-between"><span className="font-black">{ticket.order.number}</span><span className="text-xs text-muted-foreground">{ticket.station}</span></div><p className="mt-1 text-xs text-muted-foreground">Mesa {ticket.order.table?.code || '—'}</p><div className="mt-3 space-y-1 text-sm">{ticket.items.map(({ item }) => <p key={item.description}>{Number(item.quantity)} × {item.description}</p>)}</div>{canApprove && column === 'PENDING' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'IN_PREPARATION')}><Clock3 className="size-3" />Iniciar</Button>}{canApprove && column === 'IN_PREPARATION' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'READY')}>Marcar listo</Button>}{canApprove && column === 'READY' && <Button className="mt-4 w-full" size="sm" variant="secondary" onClick={() => onStatus(ticket, 'SERVED')}>Entregar</Button>}</div>)}</div></div>)}</div></section>;
+  const boardRef = useRef<HTMLElement | null>(null);
+  const [tvMode, setTvMode] = useState(false);
+  const orderedTickets = useMemo(() => [...tickets].sort((left, right) => new Date(left.sentAt || 0).getTime() - new Date(right.sentAt || 0).getTime()), [tickets]);
+  useEffect(() => {
+    const onFullscreenChange = () => setTvMode(document.fullscreenElement === boardRef.current);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+  const toggleTvMode = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await boardRef.current?.requestFullscreen();
+    } catch {
+      setTvMode((current) => !current);
+    }
+  };
+  return <section ref={boardRef} className={`rounded-2xl border border-border/60 bg-card p-5 shadow-sm ${tvMode ? 'overflow-y-auto bg-slate-950 p-8 text-white' : ''}`}><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Kitchen display</p><h2 className="mt-1 text-2xl font-black">Centro de preparación</h2><p className={`mt-1 text-sm ${tvMode ? 'text-slate-300' : 'text-muted-foreground'}`}>Las comandas se ordenan por hora de llegada para que cocina atienda primero lo más antiguo.</p></div><Button type="button" variant={tvMode ? 'secondary' : 'outline'} size="sm" className="gap-2 rounded-xl" onClick={() => void toggleTvMode}>{tvMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}{tvMode ? 'Salir de pantalla TV' : 'Modo TV'}</Button></div><div className="grid gap-4 lg:grid-cols-3">{columns.map((column) => { const columnTickets = orderedTickets.filter((ticket) => ticket.status === column); return <div key={column} className={`min-h-64 rounded-2xl border p-3 ${tvMode ? 'border-white/15 bg-white/5' : 'border-border/50 bg-muted/20'}`}><div className="mb-3 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-widest opacity-80">{kitchenStatus[column].label}</span><Badge variant="outline" className={tvMode ? 'border-white/30 text-white' : ''}>{columnTickets.length}</Badge></div><div className="space-y-3">{columnTickets.map((ticket, index) => <div key={ticket.id} className={`rounded-2xl border p-4 shadow-sm ${tvMode ? 'border-white/15 bg-slate-900' : 'border-border/60 bg-card'}`}><div className="flex items-start justify-between gap-3"><div><span className="text-lg font-black">{ticket.order.number}</span><p className="mt-1 text-xs opacity-70">#{index + 1} en cola · {ticket.station}</p></div><span className="text-xs opacity-70">{ticket.order.table?.code || '—'}</span></div><div className="mt-3 space-y-1 text-sm">{ticket.items.map(({ item }) => <p key={item.description}>{Number(item.quantity)} × {item.description}</p>)}</div>{canApprove && column === 'PENDING' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'IN_PREPARATION')}><Clock3 className="size-3" />Iniciar</Button>}{canApprove && column === 'IN_PREPARATION' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'READY')}>Marcar listo</Button>}{canApprove && column === 'READY' && <Button className="mt-4 w-full" size="sm" variant="secondary" onClick={() => onStatus(ticket, 'SERVED')}>Entregar</Button>}</div>)}</div></div>; })}</div></section>;
 }
 
 function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenuCategory[]; onSaved: () => Promise<void>; canCreate: boolean; canEdit: boolean }) {
