@@ -27,6 +27,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import QRCode from 'qrcode';
 import { toast } from '@/app/services/toast';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button } from './ui/button';
@@ -100,6 +101,23 @@ const kitchenStatus: Record<string, { label: string; className: string }> = {
 
 const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+const restaurantSubmoduleToTab: Record<string, RestaurantTab> = {
+  salon: 'salon',
+  comandas: 'comandas',
+  cocina: 'cocina',
+  carta: 'carta',
+  reportes: 'reportes',
+  'reportes-restaurante': 'reportes',
+};
+
+const restaurantTabToSubmodule: Record<RestaurantTab, string> = {
+  salon: 'salon',
+  comandas: 'comandas',
+  cocina: 'cocina',
+  carta: 'carta',
+  reportes: 'reportes-restaurante',
+};
+
 export function RestaurantePage({ activeSubModule, onSubModuleChange }: RestaurantePageProps) {
   const { user, canPerform } = useAuth();
   const { accessibleBranches, selectedBranchId, setSelectedBranchId } = useBranchScope();
@@ -142,23 +160,26 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   const [registers, setRegisters] = useState<Array<{ id: string; name: string }>>([]);
   const [checkoutRegisterId, setCheckoutRegisterId] = useState('');
   const [publicLink, setPublicLink] = useState('');
+  const [qrTable, setQrTable] = useState<RestaurantTable | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [qrLoading, setQrLoading] = useState(false);
   const [newOrdersCount, setNewOrdersCount] = useState(0);
   const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
   const knownOrderIds = useRef<Set<string> | null>(null);
   const sessionCreatedOrderIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const nextTab = activeSubModule as RestaurantTab | undefined;
-    if (nextTab && visibleTabs.some(({ id }) => id === nextTab)) {
+    const nextTab = activeSubModule ? restaurantSubmoduleToTab[activeSubModule] : undefined;
+    if (nextTab && visibleTabs.some(({ id }) => id === nextTab) && nextTab !== tab) {
       setTab(nextTab);
     }
-  }, [activeSubModule, visibleTabs]);
+  }, [activeSubModule, tab, visibleTabs]);
 
   useEffect(() => {
     if (visibleTabs.length > 0 && !visibleTabs.some(({ id }) => id === tab)) {
       const fallback = visibleTabs[0].id;
       setTab(fallback);
-      onSubModuleChange?.(fallback);
+      onSubModuleChange?.(restaurantTabToSubmodule[fallback]);
     }
   }, [onSubModuleChange, tab, visibleTabs]);
 
@@ -166,10 +187,10 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     const handler = (event: Event) => {
       const detail = (event as CustomEvent).detail as { module?: string; subModule?: string; orderId?: string; targetId?: string } | undefined;
       if (detail?.module !== 'restaurante') return;
-      const nextTab = detail.subModule as RestaurantTab | undefined;
+      const nextTab = detail.subModule ? restaurantSubmoduleToTab[detail.subModule] : undefined;
       if (!nextTab || !visibleTabs.some(({ id }) => id === nextTab)) return;
       setTab(nextTab);
-      onSubModuleChange?.(nextTab);
+      onSubModuleChange?.(restaurantTabToSubmodule[nextTab]);
       const orderId = String(detail.orderId || detail.targetId || '').trim();
       setTargetOrderId(orderId || null);
     };
@@ -373,6 +394,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
             { id: 'restaurant-top-items', title: 'Platillos destacados', headers: ['Platillo', 'Total'], rows: topItems.map((row) => [row.Platillo, money(row.Total)]) },
           ],
           fileName: buildDatedDownloadFileName(['reporte_restaurante'], 'pdf'),
+          forceNative: true,
         });
       }
       toast.success(`Reporte de restaurante exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
@@ -517,15 +539,58 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     }
   };
 
-  const copyQrLink = async (table: RestaurantTable) => {
+  const showTableQr = async (table: RestaurantTable) => {
     const url = `${window.location.origin}/restaurant/menu/${table.publicToken}`;
     setPublicLink(url);
+    setQrTable(table);
+    setQrDataUrl('');
+    setQrLoading(true);
     try {
-      await navigator.clipboard.writeText(url);
-      toast.success('Enlace QR copiado. Puedes convertirlo en QR desde tu herramienta de impresión.');
-    } catch {
-      toast.info(url);
+      const dataUrl = await QRCode.toDataURL(url, {
+        width: 720,
+        margin: 2,
+        errorCorrectionLevel: 'M',
+        color: { dark: '#0b2e26', light: '#ffffff' },
+      });
+      setQrDataUrl(dataUrl);
+    } catch (error: unknown) {
+      setQrTable(null);
+      toast.error(getApiErrorMessage(error, 'No se pudo generar el código QR.'));
+    } finally {
+      setQrLoading(false);
     }
+  };
+
+  const copyQrLink = async () => {
+    if (!publicLink) return;
+    try {
+      await navigator.clipboard.writeText(publicLink);
+      toast.success('Enlace de la mesa copiado.');
+    } catch {
+      toast.info(publicLink);
+    }
+  };
+
+  const downloadQr = () => {
+    if (!qrDataUrl || !qrTable) return;
+    const anchor = document.createElement('a');
+    anchor.href = qrDataUrl;
+    anchor.download = `qr-mesa-${qrTable.code}.png`;
+    anchor.click();
+  };
+
+  const printQr = () => {
+    if (!qrDataUrl || !qrTable) return;
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=720,height=860');
+    if (!printWindow) {
+      toast.error('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para NovaHub.');
+      return;
+    }
+    const tenant = String(user?.tenantName || 'NovaHub').replace(/[<>]/g, '');
+    const code = String(qrTable.code).replace(/[<>]/g, '');
+    const name = String(qrTable.name).replace(/[<>]/g, '');
+    printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>QR ${code}</title><style>body{font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;color:#0b2e26}.card{text-align:center;width:90%;max-width:440px;border:2px solid #d8eee5;border-radius:24px;padding:32px;box-sizing:border-box}.brand{font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#10b981;font-size:14px}.table{font-size:32px;font-weight:800;margin:12px 0 4px}.name{color:#475569;margin-bottom:20px}.qr{width:320px;height:320px;max-width:100%;object-fit:contain}.hint{font-size:13px;color:#64748b;margin-top:20px}@media print{.card{border:0}}</style></head><body><main class="card"><div class="brand">${tenant}</div><div class="table">Mesa ${code}</div><div class="name">${name}</div><img class="qr" src="${qrDataUrl}" alt="Código QR de la mesa"><div class="hint">Escanea para ver la carta y enviar tu pedido</div></main><script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script></body></html>`);
+    printWindow.document.close();
   };
 
   if (!canViewRestaurant) return <NoAccessState />;
@@ -568,6 +633,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
             if (!visibleTabs.some(({ id }) => id === value)) return;
             setTab(value as RestaurantTab);
             if (value === 'comandas') setNewOrdersCount(0);
+            onSubModuleChange?.(restaurantTabToSubmodule[value as RestaurantTab]);
           }}>
             <div className="mb-4 w-full overflow-x-auto custom-scrollbar" data-tour="restaurant-tabs">
               <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
@@ -588,8 +654,8 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
                   <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm" data-tour="restaurant-salon">
                     <div className="mb-5 flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Vista de salón</p><h2 className="mt-1 text-2xl font-black">Mesas y zonas</h2></div>{canCreateTables && <Button size="sm" onClick={() => setShowTableForm((value) => !value)}><Plus className="size-4" />Nueva mesa</Button>}</div>
                     {showTableForm && <div className="mb-5 grid gap-2 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4 sm:grid-cols-4"><Input placeholder="Código" value={newTable.code} onChange={(e) => setNewTable({ ...newTable, code: e.target.value })} /><Input placeholder="Nombre" value={newTable.name} onChange={(e) => setNewTable({ ...newTable, name: e.target.value })} /><Input placeholder="Zona" value={newTable.zone} onChange={(e) => setNewTable({ ...newTable, zone: e.target.value })} /><div className="flex gap-2"><Input type="number" min="1" placeholder="Sillas" value={newTable.seats} onChange={(e) => setNewTable({ ...newTable, seats: e.target.value })} /><Button onClick={createTable}>Guardar</Button></div></div>}
-                    {tables.length === 0 ? <EmptyState icon={<LayoutGrid className="size-8" />} title="Aún no hay mesas configuradas" description="Crea la primera mesa para comenzar a operar el salón." action={canCreateTables ? <Button size="sm" onClick={() => setShowTableForm(true)}><Plus className="size-4" />Crear mesa</Button> : undefined} /> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{tables.map((table) => { const status = tableStatus[table.status] || tableStatus.AVAILABLE; return <div key={table.id} role="button" tabIndex={0} onClick={() => setSelectedTableId(table.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedTableId(table.id); }} className={`group relative min-h-32 cursor-pointer rounded-2xl border-2 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selectedTableId === table.id ? 'border-primary ring-4 ring-primary/10' : 'border-border/60'}`}><div className="flex items-start justify-between"><span className="text-2xl font-black">{table.code}</span><Badge className={status.className}>{status.label}</Badge></div><p className="mt-2 text-sm font-semibold text-foreground">{table.name}</p><p className="mt-1 text-xs text-muted-foreground">{table.zone || 'Salón principal'} · {table.seats} puestos</p><button type="button" onClick={(event) => { event.stopPropagation(); void copyQrLink(table); }} className="absolute bottom-3 right-3 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground" title="Ver enlace QR" aria-label={`Ver enlace QR de ${table.name}`}><QrCode className="size-4" /></button></div>; })}</div>}
-                    {publicLink && <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4"><p className="text-xs font-black uppercase tracking-widest text-primary">Enlace público para clientes</p><div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input readOnly value={publicLink} aria-label="Enlace público del menú" /><Button variant="outline" onClick={() => void navigator.clipboard.writeText(publicLink)}>Copiar</Button><a className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90" href={publicLink} target="_blank" rel="noreferrer">Abrir menú</a></div><p className="mt-2 text-xs text-muted-foreground">Este enlace abre la carta de la mesa y permite enviar pedidos sin iniciar sesión.</p></div>}
+                    {tables.length === 0 ? <EmptyState icon={<LayoutGrid className="size-8" />} title="Aún no hay mesas configuradas" description="Crea la primera mesa para comenzar a operar el salón." action={canCreateTables ? <Button size="sm" onClick={() => setShowTableForm(true)}><Plus className="size-4" />Crear mesa</Button> : undefined} /> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{tables.map((table) => { const status = tableStatus[table.status] || tableStatus.AVAILABLE; return <div key={table.id} role="button" tabIndex={0} onClick={() => setSelectedTableId(table.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedTableId(table.id); }} className={`group relative min-h-32 cursor-pointer rounded-2xl border-2 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selectedTableId === table.id ? 'border-primary ring-4 ring-primary/10' : 'border-border/60'}`}><div className="flex items-start justify-between"><span className="text-2xl font-black">{table.code}</span><Badge className={status.className}>{status.label}</Badge></div><p className="mt-2 text-sm font-semibold text-foreground">{table.name}</p><p className="mt-1 text-xs text-muted-foreground">{table.zone || 'Salón principal'} · {table.seats} puestos</p><button type="button" onClick={(event) => { event.stopPropagation(); void showTableQr(table); }} className="absolute bottom-3 right-3 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground" title="Generar QR de la mesa" aria-label={`Generar QR de ${table.name}`}><QrCode className="size-4" /></button></div>; })}</div>}
+                    {publicLink && <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4"><p className="text-xs font-black uppercase tracking-widest text-primary">Enlace público para clientes</p><div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input readOnly value={publicLink} aria-label="Enlace público del menú" /><Button variant="outline" onClick={() => void copyQrLink()}>Copiar</Button><a className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90" href={publicLink} target="_blank" rel="noreferrer">Abrir menú</a></div><p className="mt-2 text-xs text-muted-foreground">El QR de la mesa ya se puede descargar o imprimir directamente desde NovaHub.</p></div>}
                   </section>
                   <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva comanda</p><h2 className="mt-1 text-2xl font-black">{selectedTable ? `Mesa ${selectedTable.code}` : 'Selecciona una mesa'}</h2></div><ShoppingBag className="size-5 text-muted-foreground/40" /></div>{selectedTable && <div className="mb-4 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{selectedTable.name} · {selectedTable.zone || 'Salón principal'} <span className="float-right font-bold text-foreground">{money(cartTotal)}</span></div>}<div className="max-h-[430px] space-y-4 overflow-y-auto pr-1">{menu.map((category) => <div key={category.id}><p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground/70">{category.name}</p><div className="space-y-2">{category.items.filter((item) => item.isAvailable).map((item) => <button type="button" key={item.id} onClick={() => addToCart(item.id)} className="flex w-full items-center justify-between rounded-xl border border-border/60 p-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]"><span><span className="block text-sm font-bold">{item.name}</span><span className="block text-xs text-muted-foreground">{item.prepStation}</span></span><span className="font-black text-primary">{money(item.price, item.currency)}</span></button>)}</div></div>)}{menu.length === 0 && <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea las categorías y platillos en Carta para operar." />}</div><div className="mt-5 border-t border-border/60 pt-4">{cartLines.length > 0 && <div className="mb-3 space-y-2">{cartLines.map(({ item, quantity }) => <div key={item.id} className="flex items-center justify-between text-sm"><span>{quantity} × {item.name}</span><div className="flex items-center gap-2"><button type="button" onClick={() => removeFromCart(item.id)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" onClick={() => addToCart(item.id)} className="rounded bg-muted px-2 py-0.5">+</button></div></div>)}</div>}<Button className="w-full" disabled={!selectedTable || cartLines.length === 0 || !canCreateOrders} onClick={createOrder}><Send className="size-4" />Enviar comanda a cocina</Button></div></section>
                 </div>}
@@ -602,6 +668,8 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
           </Tabs>
         </div>
       </main>
+
+      {qrTable && <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-foreground/60 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-qr-title"><div className="nh-modal-surface w-full max-w-md rounded-3xl border border-border/60 bg-card p-5 shadow-2xl sm:p-6"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Carta digital por mesa</p><h2 id="restaurant-qr-title" className="mt-1 text-2xl font-black">QR · Mesa {qrTable.code}</h2><p className="mt-1 text-sm text-muted-foreground">{qrTable.name} · escanea para abrir la carta.</p></div><button type="button" onClick={() => setQrTable(null)} className="size-9 rounded-xl p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Cerrar código QR"><X className="size-5" /></button></div><div className="mt-5 flex min-h-64 items-center justify-center rounded-3xl border border-primary/15 bg-white p-5">{qrLoading ? <RefreshCw className="size-8 animate-spin text-primary" /> : qrDataUrl ? <img src={qrDataUrl} alt={`Código QR de la mesa ${qrTable.code}`} className="size-64 max-w-full object-contain" /> : <p className="text-sm text-muted-foreground">No se pudo generar el QR.</p>}</div><div className="mt-4 rounded-xl bg-muted/40 p-3"><p className="break-all text-xs leading-5 text-muted-foreground">{publicLink}</p></div><div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4"><Button variant="outline" onClick={() => void copyQrLink()} disabled={!qrDataUrl}>Copiar enlace</Button><Button variant="outline" onClick={downloadQr} disabled={!qrDataUrl}><Download className="size-4" />PNG</Button><Button className="sm:col-span-2" onClick={printQr} disabled={!qrDataUrl}><FileText className="size-4" />Imprimir QR</Button></div></div></div>}
 
       {checkoutOrder && <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-checkout-title"><div className="nh-modal-surface my-auto max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6"><div className="nh-modal-header flex min-w-0 items-start justify-between gap-3 pb-4"><div className="min-w-0"><p className="text-xs font-black uppercase tracking-widest text-primary">Cobro POS</p><h2 id="restaurant-checkout-title" className="mt-1 break-words text-2xl font-black">Pedido {checkoutOrder.number}</h2></div><button type="button" onClick={() => setCheckoutOrder(null)} className="size-9 shrink-0 rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Cerrar cobro" title="Cerrar"><X className="size-5" /></button></div><div className="my-5 rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Total a cobrar</p><p className="mt-1 text-3xl font-black">{money(checkoutOrder.total, checkoutOrder.currency)}</p></div><label className="text-sm font-bold">Caja registradora<select value={checkoutRegisterId} onChange={(event) => setCheckoutRegisterId(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">{registers.length === 0 && <option value="">No hay cajas disponibles</option>}{registers.map((register) => <option key={register.id} value={register.id}>{register.name}</option>)}</select></label><p className="mt-3 text-xs leading-5 text-muted-foreground">El cobro valida la sesión activa, emite la factura POS, descuenta inventario y genera el asiento contable existente.</p><div className="nh-modal-footer mt-5 pt-4"><Button className="w-full" disabled={!checkoutRegisterId} onClick={checkout}><CreditCard className="size-4" />Cobrar en efectivo</Button></div></div></div>}
     </div>
@@ -629,6 +697,12 @@ function EmptyState({ icon, title, description, action }: { icon: React.ReactNod
 }
 
 function OrderBoard({ orders, targetOrderId, onTargetHandled, onSend, onStatus, onCheckout, canApproveKitchen, canApproveOrders }: { orders: RestaurantOrder[]; targetOrderId?: string | null; onTargetHandled?: () => void; onSend: (order: RestaurantOrder) => void; onStatus: (order: RestaurantOrder, status: string) => void; onCheckout: (order: RestaurantOrder) => void; canApproveKitchen: boolean; canApproveOrders: boolean }) {
+  const orderedOrders = useMemo(() => [...orders].sort((left, right) => {
+    const leftTime = new Date(left.createdAt || left.sentAt || 0).getTime();
+    const rightTime = new Date(right.createdAt || right.sentAt || 0).getTime();
+    if (leftTime !== rightTime) return leftTime - rightTime;
+    return left.number.localeCompare(right.number, undefined, { numeric: true });
+  }), [orders]);
   useEffect(() => {
     if (!targetOrderId) return;
     const frame = requestAnimationFrame(() => {
@@ -640,7 +714,7 @@ function OrderBoard({ orders, targetOrderId, onTargetHandled, onSend, onStatus, 
     return () => cancelAnimationFrame(frame);
   }, [targetOrderId, onTargetHandled, orders]);
 
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Flujo de servicio</p><h2 className="mt-1 text-2xl font-black">Comandas recientes</h2><p className="mt-1 text-sm text-muted-foreground">La comanda relacionada con el aviso queda resaltada aquí.</p></div><ClipboardList className="size-6 text-muted-foreground/40" /></div>{orders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : <div className="grid gap-3 lg:grid-cols-2">{orders.map((order) => <div id={`restaurant-order-${order.id}`} key={order.id} tabIndex={-1} className={`rounded-2xl border p-4 transition-all duration-500 ${targetOrderId === order.id ? 'border-primary bg-primary/[0.06] ring-4 ring-primary/15 shadow-lg' : 'border-border/60'}`}><div className="flex items-start justify-between gap-3"><div><p className="text-lg font-black">{order.number}</p><p className="text-xs text-muted-foreground">{order.table ? `Mesa ${order.table.code} · ${order.table.name}` : order.type}</p></div><Badge variant="outline">{orderStatus[order.status] || order.status}</Badge></div><div className="mt-4 space-y-1 text-sm">{order.items.map((item) => <div key={item.id} className="flex justify-between"><span>{Number(item.quantity)} × {item.description}</span><span className="font-semibold">{money(item.total, order.currency)}</span></div>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3"><span className="font-black">{money(order.total, order.currency)}</span><div className="flex gap-2">{canApproveKitchen && ['CONFIRMED', 'PENDING_CONFIRMATION'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onSend(order)}><Send className="size-3" />Cocina</Button>}{canApproveOrders && ['READY', 'SERVED'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onCheckout(order)}><CreditCard className="size-3" />Cobrar</Button>}{canApproveOrders && order.status === 'READY' && <Button size="sm" onClick={() => onStatus(order, 'SERVED')}>Servido</Button>}</div></div></div>)}</div>}</section>;
+  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Flujo de servicio</p><h2 className="mt-1 text-2xl font-black">Cola de comandas</h2><p className="mt-1 text-sm text-muted-foreground">Ordenadas desde la más antigua para respetar la llegada de cada mesa.</p></div><ClipboardList className="size-6 text-muted-foreground/40" /></div>{orderedOrders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : <div className="grid gap-3 lg:grid-cols-2">{orderedOrders.map((order, index) => <div id={`restaurant-order-${order.id}`} key={order.id} tabIndex={-1} className={`rounded-2xl border p-4 transition-all duration-500 ${targetOrderId === order.id ? 'border-primary bg-primary/[0.06] ring-4 ring-primary/15 shadow-lg' : 'border-border/60'}`}><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">{index + 1}</span><p className="text-lg font-black">{order.number}</p></div><p className="text-xs text-muted-foreground">{order.table ? `Mesa ${order.table.code} · ${order.table.name}` : order.type}</p></div><Badge variant="outline">{orderStatus[order.status] || order.status}</Badge></div><div className="mt-4 space-y-1 text-sm">{order.items.map((item) => <div key={item.id} className="flex justify-between"><span>{Number(item.quantity)} × {item.description}</span><span className="font-semibold">{money(item.total, order.currency)}</span></div>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3"><span className="font-black">{money(order.total, order.currency)}</span><div className="flex gap-2">{canApproveKitchen && ['CONFIRMED', 'PENDING_CONFIRMATION'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onSend(order)}><Send className="size-3" />Cocina</Button>}{canApproveOrders && ['READY', 'SERVED'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onCheckout(order)}><CreditCard className="size-3" />Cobrar</Button>}{canApproveOrders && order.status === 'READY' && <Button size="sm" onClick={() => onStatus(order, 'SERVED')}>Servido</Button>}</div></div></div>)}</div>}</section>;
 }
 
 function KitchenBoard({ tickets, onStatus, canApprove }: { tickets: RestaurantKitchenTicket[]; onStatus: (ticket: RestaurantKitchenTicket, status: string) => void; canApprove: boolean }) {
@@ -671,7 +745,7 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
   const [itemForm, setItemForm] = useState(emptyForm);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [theme, setTheme] = useState<'modern' | 'classic' | 'elegant' | 'rustic'>('modern');
+  const [theme, setTheme] = useState<'modern' | 'classic' | 'elegant' | 'rustic' | 'neon' | 'tropical' | 'editorial' | 'retro'>('modern');
   const [showImages, setShowImages] = useState(true);
   const [savingTheme, setSavingTheme] = useState(false);
 
@@ -688,7 +762,7 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
     return () => controller.abort();
   }, []);
 
-  const saveSettings = async (nextTheme?: 'modern' | 'classic' | 'elegant' | 'rustic', nextShowImages?: boolean) => {
+  const saveSettings = async (nextTheme?: 'modern' | 'classic' | 'elegant' | 'rustic' | 'neon' | 'tropical' | 'editorial' | 'retro', nextShowImages?: boolean) => {
     setSavingTheme(true);
     const actionToken = beginNotificationAction();
     try {
@@ -704,11 +778,15 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
     }
   };
 
-  const themeCards: Array<{ id: 'modern' | 'classic' | 'elegant' | 'rustic'; label: string; description: string; preview: string; header: string }> = [
+  const themeCards: Array<{ id: 'modern' | 'classic' | 'elegant' | 'rustic' | 'neon' | 'tropical' | 'editorial' | 'retro'; label: string; description: string; preview: string; header: string }> = [
     { id: 'modern', label: 'Moderno', description: 'Fresco, verde y con degradados suaves.', preview: 'bg-[#f2faf5]', header: 'bg-gradient-to-br from-[#064e3b] to-[#10b981]' },
     { id: 'classic', label: 'Clásico', description: 'Blanco y crema, elegancia de bistró.', preview: 'bg-[#faf7f0]', header: 'bg-[#3a3a3a]' },
     { id: 'elegant', label: 'Elegante', description: 'Oscuro y sofisticado, estilo gourmet.', preview: 'bg-[#0f0f13]', header: 'bg-[#16161d]' },
     { id: 'rustic', label: 'Rústico', description: 'Madera y papel, sabor casero.', preview: 'bg-[#f5efe4]', header: 'bg-[#3e2f1f]' },
+    { id: 'neon', label: 'Neón urbano', description: 'Contraste nocturno para bares y conceptos modernos.', preview: 'bg-[#0b1020]', header: 'bg-[#111827]' },
+    { id: 'tropical', label: 'Tropical', description: 'Color, frescura y energía para cafeterías y playa.', preview: 'bg-[#fff8e7]', header: 'bg-[#0f766e]' },
+    { id: 'editorial', label: 'Editorial', description: 'Composición tipo revista para una carta premium.', preview: 'bg-[#f5f2eb]', header: 'bg-[#7c2d12]' },
+    { id: 'retro', label: 'Retro diner', description: 'Inspiración fast food clásica con alto impacto visual.', preview: 'bg-[#f9edcf]', header: 'bg-[#9f1239]' },
   ];
 
   const saveCategory = async () => {
@@ -810,5 +888,7 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
 }
 
 function ReportsBoard({ summary, canExport, onExport }: { summary: RestaurantSummary | null; canExport: boolean; onExport: (format: 'pdf' | 'xlsx') => void }) {
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Rendimiento de restaurante</p><h2 className="mt-1 text-2xl font-black">Ventas y productos destacados</h2></div>{canExport && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="gap-2"><Download className="size-4" />Exportar<ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="rounded-xl"><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('pdf')}><FileText className="size-3.5 text-rose-600" />Exportar PDF</DropdownMenuItem><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" />Exportar Excel</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}</div>{!summary ? <EmptyState icon={<BarChart3 className="size-8" />} title="Sin datos todavía" description="El resumen aparecerá cuando se registren comandas." /> : <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><div className="rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Ventas operativas</p><p className="mt-2 text-4xl font-black">{money(summary.total)}</p><p className="mt-2 text-sm text-primary-foreground/70">{summary.orders} comandas no canceladas</p><div className="mt-6 space-y-3 text-sm"><div className="flex justify-between"><span>Subtotal</span><span>{money(summary.subtotal)}</span></div><div className="flex justify-between"><span>Impuestos</span><span>{money(summary.tax)}</span></div></div></div><div><h3 className="font-black">Top de platillos</h3><div className="mt-3 space-y-2">{summary.topItems?.map((item) => <div key={item.description} className="flex items-center justify-between rounded-xl border border-border/60 p-3"><span className="text-sm font-semibold">{item.description}</span><span className="text-sm font-black">{money(item._sum.total)}</span></div>)}</div></div></div>}</section>;
+  const averageTicket = summary && summary.orders > 0 ? summary.total / summary.orders : 0;
+  const bestSeller = summary?.topItems?.[0]?.description || 'Sin datos';
+  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Rendimiento de restaurante</p><h2 className="mt-1 text-2xl font-black">Ventas y productos destacados</h2><p className="mt-1 text-sm text-muted-foreground">Lectura rápida del período operativo actual.</p></div>{canExport && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="gap-2"><Download className="size-4" />Exportar<ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="rounded-xl"><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('pdf')}><FileText className="size-3.5 text-rose-600" />Exportar PDF</DropdownMenuItem><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" />Exportar Excel</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}</div>{!summary ? <EmptyState icon={<BarChart3 className="size-8" />} title="Sin datos todavía" description="El resumen aparecerá cuando se registren comandas." /> : <><div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ticket promedio</p><p className="mt-2 text-2xl font-black">{money(averageTicket)}</p><p className="mt-1 text-xs text-muted-foreground">Por comanda operativa</p></div><div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Impuestos</p><p className="mt-2 text-2xl font-black">{money(summary.tax)}</p><p className="mt-1 text-xs text-muted-foreground">Incluidos en el período</p></div><div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Más vendido</p><p className="mt-2 truncate text-lg font-black">{bestSeller}</p><p className="mt-1 text-xs text-muted-foreground">Según total acumulado</p></div></div><div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><div className="rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Ventas operativas</p><p className="mt-2 text-4xl font-black">{money(summary.total)}</p><p className="mt-2 text-sm text-primary-foreground/70">{summary.orders} comandas no canceladas</p><div className="mt-6 space-y-3 text-sm"><div className="flex justify-between"><span>Subtotal</span><span>{money(summary.subtotal)}</span></div><div className="flex justify-between"><span>Impuestos</span><span>{money(summary.tax)}</span></div></div></div><div><h3 className="font-black">Top de platillos</h3><div className="mt-3 space-y-2">{summary.topItems?.map((item) => <div key={item.description} className="flex items-center justify-between rounded-xl border border-border/60 p-3"><span className="text-sm font-semibold">{item.description}</span><span className="text-sm font-black">{money(item._sum.total)}</span></div>)}</div></div></div></>}</section>;
 }

@@ -21,6 +21,8 @@ import {
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
+const NOVACHAT_ENABLED = import.meta.env.VITE_NOVACHAT_ENABLED === 'true';
+
 const CHANNEL_ICONS: Record<string, LucideIcon> = {
   WHATSAPP: Phone,
   FACEBOOK: Facebook,
@@ -81,17 +83,17 @@ export function NovaChatView() {
       }
       return { channels, conversations };
     },
-    { refetchInterval: 45000, refetchIntervalInBackground: false },
+    { enabled: NOVACHAT_ENABLED, refetchInterval: 45000, refetchIntervalInBackground: false },
   );
   const channels = inboxQuery.data?.channels || [];
   const conversations = inboxQuery.data?.conversations || [];
   const messagesQuery = useTenantQuery<ChatMessage[]>(
     ['novachat', 'messages', selectedConversation?.id],
     signal => novachatService.getMessages(selectedConversation!.id, signal),
-    { enabled: Boolean(selectedConversation?.id), refetchInterval: 15000, refetchIntervalInBackground: false },
+    { enabled: NOVACHAT_ENABLED && Boolean(selectedConversation?.id), refetchInterval: 15000, refetchIntervalInBackground: false },
   );
   const messages = asList(messagesQuery.data) as ChatMessage[];
-  const loading = inboxQuery.isLoading;
+  const loading = NOVACHAT_ENABLED && inboxQuery.isLoading;
   const selectedRequiresTemplate = Boolean(
     selectedConversation
     && selectedConversation.channel.type === 'WHATSAPP'
@@ -107,6 +109,20 @@ export function NovaChatView() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  if (!NOVACHAT_ENABLED) {
+    return (
+      <div className="flex min-h-[min(760px,calc(100dvh-8rem))] items-center justify-center rounded-2xl border border-border/50 bg-card p-6">
+        <div className="max-w-lg rounded-2xl border border-amber-200 bg-amber-50/70 p-8 text-center shadow-sm dark:border-amber-900/50 dark:bg-amber-950/20">
+          <NovaChatIcon className="mx-auto mb-4 size-12 text-amber-600" />
+          <h2 className="text-xl font-black text-foreground">Nova Suite desactivada temporalmente</h2>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Las conversaciones no se cargarán ni se sincronizarán mientras el módulo esté deshabilitado.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const filteredConversations = conversations.filter((c) => {
     if (filterChannel !== 'all' && c.channel.id !== filterChannel) return false;

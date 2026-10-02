@@ -2780,7 +2780,7 @@ const reportTemplateColumnAlign = (header: string): 'left' | 'center' | 'right' 
  * El contenido sigue llegando como secciones separadas para no convertir el
  * reporte en un listado plano ni perder las variantes de los gráficos.
  */
-export async function generateConfiguredReportSectionsPDF({ targetKey, title, tenantName, tenantLogo, sections, kpis, charts, dashboardPreferences, fileName, periodLabel, branchName, designOverride, save = true, onProgress }: {
+export async function generateConfiguredReportSectionsPDF({ targetKey, title, tenantName, tenantLogo, sections, kpis, charts, dashboardPreferences, fileName, periodLabel, branchName, designOverride, forceNative = false, save = true, onProgress }: {
   targetKey: string;
   title: string;
   tenantName: string;
@@ -2793,6 +2793,8 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   periodLabel?: string;
   branchName?: string;
   designOverride?: any;
+  /** Fuerza el layout nativo cuando una salida operativa no debe heredar posiciones de una plantilla personalizada. */
+  forceNative?: boolean;
   save?: boolean;
   onProgress?: (progress: PdfTemplateRenderProgress) => void;
 }) {
@@ -2913,7 +2915,7 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
     });
   }
 
-  if (!configuredDefinition && !kpis?.length && !charts?.length) {
+  if (forceNative || (!configuredDefinition && !kpis?.length && !charts?.length)) {
     if (save) doc.save(/\.pdf$/i.test(String(fileName)) ? String(fileName) : buildPdfFileName([fileName], 'configured'));
     return doc;
   }
