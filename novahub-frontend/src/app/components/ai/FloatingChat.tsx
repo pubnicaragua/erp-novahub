@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Route, Send, X } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -281,7 +282,7 @@ export function FloatingChat() {
   }, []);
   useEffect(() => { if (open) window.setTimeout(() => inputRef.current?.focus(), 120); }, [open]);
 
-  return <>
+  const chatLayer = <>
     <motion.button type="button" onClick={() => setOpen((value) => !value)} className="group fixed bottom-4 right-3 z-[9000] flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary to-emerald-600 text-primary-foreground shadow-2xl shadow-primary/40 ring-4 ring-primary/15 transition-[transform,box-shadow] hover:scale-110 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 active:scale-95 sm:bottom-6 sm:right-4 sm:size-12" initial={{ scale: 0 }} animate={{ scale: 1 }} whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.92 }} aria-label={open ? 'Cerrar Nova AI' : 'Abrir Nova AI'} title="Preguntar a Nova">
       <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-background bg-emerald-300" />
       <AnimatePresence mode="wait" initial={false}>{open ? <motion.span key="close" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }}><X className="size-4.5 sm:size-5" /></motion.span> : <motion.span key="chat" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }}><NovaHubLogo size={25} className="rounded-full bg-white p-1" /></motion.span>}</AnimatePresence>
@@ -293,4 +294,10 @@ export function FloatingChat() {
       <div className="flex shrink-0 items-center gap-2 border-t border-border/40 bg-background p-3"><Input ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void sendMessage(input); } }} placeholder="Pregunta por tus datos…" className="h-11 rounded-2xl border-border/50 bg-muted/30 focus:bg-background" disabled={typing} /><Button type="button" onClick={() => void sendMessage(input)} disabled={!input.trim() || typing} className="size-11 shrink-0 rounded-2xl bg-gradient-to-br from-primary to-emerald-600 text-primary-foreground shadow-lg shadow-primary/30" aria-label="Enviar pregunta"><Send className="size-4" /></Button></div>
     </motion.div>}</AnimatePresence>
   </>;
+
+  // The dashboard shell is a fixed stacking context while Radix dialogs are
+  // portaled to document.body. Portaling Nova AI to the same root guarantees
+  // it remains above full-screen product forms without relying on a child
+  // z-index that cannot escape the dashboard stacking context.
+  return typeof document === 'undefined' ? null : createPortal(chatLayer, document.body);
 }
