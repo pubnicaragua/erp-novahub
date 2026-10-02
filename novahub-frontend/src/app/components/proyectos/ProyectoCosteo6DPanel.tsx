@@ -54,6 +54,7 @@ import {
 import { projectsService } from '../../services/projects.service';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface ProyectoCosteo6DPanelProps {
@@ -102,6 +103,12 @@ export function ProyectoCosteo6DPanel({
     }));
   }, [costLinesQuery.data]);
   const [draftLines, setDraftLines] = useState<Record<string, Cost6DRow>>({});
+  const [rawInputMap, setRawInputMap] = useState<Record<string, string>>({});
+  const [pendingTemplate, setPendingTemplate] = useState<PersistedCostTemplate | null>(null);
+  const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(null);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [isDeletingLine, setIsDeletingLine] = useState(false);
+
   const matrix = useMemo(
     () => apiMatrix.map((line) => draftLines[String(line.lineId)] || line),
     [apiMatrix, draftLines],
@@ -122,11 +129,14 @@ export function ProyectoCosteo6DPanel({
     field: keyof Omit<Cost6DRow, 'lineId' | 'lineName'>,
     value: string,
   ) => {
+    const current = matrix[lineIndex];
+    if (!current) return;
+    const key = `${current.lineId}_${field}`;
+    setRawInputMap((prev) => ({ ...prev, [key]: value }));
+
     const num = parseFloat(value);
     const validNum = isNaN(num) || num < 0 ? 0 : num;
 
-    const current = matrix[lineIndex];
-    if (!current) return;
     setDraftLines((prev) => ({ ...prev, [String(current.lineId)]: { ...current, [field]: validNum } }));
   };
 
@@ -134,6 +144,9 @@ export function ProyectoCosteo6DPanel({
   const handleLineNameChange = (lineIndex: number, newName: string) => {
     const current = matrix[lineIndex];
     if (!current) return;
+    const key = `${current.lineId}_lineName`;
+    setRawInputMap((prev) => ({ ...prev, [key]: newName }));
+
     setDraftLines((prev) => ({ ...prev, [String(current.lineId)]: { ...current, lineName: newName } }));
   };
 
@@ -144,22 +157,57 @@ export function ProyectoCosteo6DPanel({
     toast.success('Nueva partida guardada en el proyecto.');
   };
 
-  // Eliminar partida con confirmación / protección de mínimo 1
-  const handleDeleteRow = async (lineIndex: number) => {
-    const target = matrix[lineIndex];
-    const name = target?.lineName || 'Partida';
-    await projectsService.deleteCostLine(projectId, String(target.lineId));
-    await costLinesQuery.refetch();
-    toast.info(`Partida "${name}" eliminada.`);
+  // Eliminar partida con confirmación modal
+  const handleDeleteRow = (lineIndex: number) => {
+    setPendingDeleteIndex(lineIndex);
+  };
+
+  const confirmDeleteRow = async () => {
+    if (pendingDeleteIndex === null) return;
+    const target = matrix[pendingDeleteIndex];
+    if (!target) return;
+    const name = target.lineName || 'Partida';
+    setIsDeletingLine(true);
+    try {
+      await projectsService.deleteCostLine(projectId, String(target.lineId));
+      setDraftLines({});
+      setRawInputMap({});
+      await costLinesQuery.refetch();
+      toast.info(`Partida "${name}" eliminada.`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      toast.error(msg || 'Error al eliminar la partida.');
+    } finally {
+      setIsDeletingLine(false);
+      setPendingDeleteIndex(null);
+    }
   };
 
   // Cargar plantilla por rubro de industria
-  const handleSelectTemplate = async (template: PersistedCostTemplate) => {
-    const overwrite = matrix.length > 0;
-    if (overwrite && !window.confirm('Esta acción reemplazará las partidas activas del proyecto. ¿Continuar?')) return;
-    await projectsService.applyCostTemplate(projectId, template.id, overwrite);
-    await costLinesQuery.refetch();
-    toast.success(`Plantilla "${template.name}" aplicada al proyecto.`);
+  const handleSelectTemplate = (template: PersistedCostTemplate) => {
+    if (matrix.length > 0) {
+      setPendingTemplate(template);
+    } else {
+      void confirmApplyTemplate(template);
+    }
+  };
+
+  const confirmApplyTemplate = async (template: PersistedCostTemplate) => {
+    setIsApplyingTemplate(true);
+    try {
+      const overwrite = matrix.length > 0;
+      await projectsService.applyCostTemplate(projectId, template.id, overwrite);
+      setDraftLines({});
+      setRawInputMap({});
+      await costLinesQuery.refetch();
+      toast.success(`Plantilla "${template.name}" aplicada al proyecto.`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      toast.error(msg || 'Error al aplicar la plantilla.');
+    } finally {
+      setIsApplyingTemplate(false);
+      setPendingTemplate(null);
+    }
   };
 
   // Limpiar / reiniciar matriz a ceros
@@ -175,13 +223,21 @@ export function ProyectoCosteo6DPanel({
     }));
     await Promise.all(blank.map((line) => projectsService.updateCostLine(projectId, String(line.lineId), { ...line, name: line.lineName })));
     setDraftLines(Object.fromEntries(blank.map((line) => [String(line.lineId), line])));
+    setRawInputMap({});
     toast.info('Matriz 6D reseteada a ceros.');
   };
 
   const saveLine = async (line: Cost6DRow) => {
+    const keyPrefix = `${line.lineId}_`;
     await projectsService.updateCostLine(projectId, String(line.lineId), { ...line, name: line.lineName });
+    setRawInputMap((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (k.startsWith(keyPrefix)) delete next[k];
+      });
+      return next;
+    });
     await costLinesQuery.refetch();
-    setDraftLines({});
   };
 
   // Sincronizar presupuesto con Costeo 6D
@@ -480,7 +536,7 @@ export function ProyectoCosteo6DPanel({
                         <span className="size-2 rounded-full bg-primary/70 shrink-0" />
                         <Input
                           type="text"
-                          value={line.lineName}
+                          value={rawInputMap[`${line.lineId}_lineName`] ?? line.lineName}
                           onChange={(e) => handleLineNameChange(idx, e.target.value)}
                           onBlur={() => void saveLine(matrix[idx])}
                           placeholder="Nombre de la partida..."
@@ -495,7 +551,7 @@ export function ProyectoCosteo6DPanel({
                         type="number"
                         step="10"
                         min="0"
-                        value={line.materiales || ''}
+                        value={rawInputMap[`${line.lineId}_materiales`] ?? (line.materiales != null ? String(line.materiales) : '0')}
                         onChange={(e) => handleCellChange(idx, 'materiales', e.target.value)}
                         onBlur={() => void saveLine(matrix[idx])}
                         className="h-8 text-right font-mono text-xs rounded-lg"
@@ -508,7 +564,7 @@ export function ProyectoCosteo6DPanel({
                         type="number"
                         step="5"
                         min="0"
-                        value={line.consumibles || ''}
+                        value={rawInputMap[`${line.lineId}_consumibles`] ?? (line.consumibles != null ? String(line.consumibles) : '0')}
                         onChange={(e) => handleCellChange(idx, 'consumibles', e.target.value)}
                         onBlur={() => void saveLine(matrix[idx])}
                         className="h-8 text-right font-mono text-xs rounded-lg"
@@ -521,7 +577,7 @@ export function ProyectoCosteo6DPanel({
                         type="number"
                         step="10"
                         min="0"
-                        value={line.manoObra || ''}
+                        value={rawInputMap[`${line.lineId}_manoObra`] ?? (line.manoObra != null ? String(line.manoObra) : '0')}
                         onChange={(e) => handleCellChange(idx, 'manoObra', e.target.value)}
                         onBlur={() => void saveLine(matrix[idx])}
                         className="h-8 text-right font-mono text-xs rounded-lg"
@@ -534,7 +590,7 @@ export function ProyectoCosteo6DPanel({
                         type="number"
                         step="5"
                         min="0"
-                        value={line.andamiosEquipos || ''}
+                        value={rawInputMap[`${line.lineId}_andamiosEquipos`] ?? (line.andamiosEquipos != null ? String(line.andamiosEquipos) : '0')}
                         onChange={(e) => handleCellChange(idx, 'andamiosEquipos', e.target.value)}
                         onBlur={() => void saveLine(matrix[idx])}
                         className="h-8 text-right font-mono text-xs rounded-lg"
@@ -547,7 +603,7 @@ export function ProyectoCosteo6DPanel({
                         type="number"
                         step="5"
                         min="0"
-                        value={line.fletes || ''}
+                        value={rawInputMap[`${line.lineId}_fletes`] ?? (line.fletes != null ? String(line.fletes) : '0')}
                         onChange={(e) => handleCellChange(idx, 'fletes', e.target.value)}
                         onBlur={() => void saveLine(matrix[idx])}
                         className="h-8 text-right font-mono text-xs rounded-lg"
@@ -560,7 +616,7 @@ export function ProyectoCosteo6DPanel({
                         type="number"
                         step="5"
                         min="0"
-                        value={line.viaticos || ''}
+                        value={rawInputMap[`${line.lineId}_viaticos`] ?? (line.viaticos != null ? String(line.viaticos) : '0')}
                         onChange={(e) => handleCellChange(idx, 'viaticos', e.target.value)}
                         onBlur={() => void saveLine(matrix[idx])}
                         className="h-8 text-right font-mono text-xs rounded-lg"
@@ -918,6 +974,30 @@ export function ProyectoCosteo6DPanel({
           </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={Boolean(pendingTemplate)}
+        onOpenChange={(open) => { if (!open) setPendingTemplate(null); }}
+        title="Reemplazar partidas activas"
+        description={`Esta acción reemplazará las partidas activas del proyecto por la plantilla "${pendingTemplate?.name || ''}". ¿Desea continuar?`}
+        confirmLabel="Aplicar plantilla"
+        cancelLabel="Cancelar"
+        variant="warning"
+        loading={isApplyingTemplate}
+        onConfirm={() => { if (pendingTemplate) void confirmApplyTemplate(pendingTemplate); }}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteIndex !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteIndex(null); }}
+        title="Eliminar partida"
+        description={`¿Está seguro de eliminar la partida "${pendingDeleteIndex !== null ? (matrix[pendingDeleteIndex]?.lineName || '') : ''}" del proyecto?`}
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={isDeletingLine}
+        onConfirm={() => void confirmDeleteRow()}
+      />
     </div>
   );
 }

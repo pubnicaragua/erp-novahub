@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import * as Sentry from '@sentry/react';
 import { Toaster } from './components/ui/sonner';
-import { AuthProvider, useAuth, type Module } from './contexts/AuthContext';
+import { useAuth, type Module } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { ImpersonationProvider, useImpersonation } from './contexts/ImpersonationContext';
@@ -678,16 +678,14 @@ export default function App() {
     <>
       <Toaster position="top-right" />
       <Sentry.ErrorBoundary fallback={<ErrorBoundaryFallback />}>
-        <AuthProvider>
-          <ThemeProvider>
-            <CurrencyProvider>
-              <ImpersonationProvider>
-                <ActionClickGuard />
-                <AppContent />
-              </ImpersonationProvider>
-            </CurrencyProvider>
-          </ThemeProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <CurrencyProvider>
+            <ImpersonationProvider>
+              <ActionClickGuard />
+              <AppContent />
+            </ImpersonationProvider>
+          </CurrencyProvider>
+        </ThemeProvider>
       </Sentry.ErrorBoundary>
     </>
   );

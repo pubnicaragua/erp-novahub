@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Search, FolderKanban, Pencil, Trash2, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -10,10 +10,10 @@ import { Progress } from '../ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import {useTenantQuery, asList, invalidateTenantQueries } from '../../hooks/useTenantQuery';
+import { useTenantQuery, asList, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { usersService } from '../../services/users.service';
 import { customersService } from '../../services/ventas.service';
-import { projectsService, type ProjectListItem, type ProjectDeleteImpact } from '../../services/projects.service';
+import { projectsService, type ProjectListItem, type ProjectDetail, type ProjectDeleteImpact } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
@@ -310,6 +310,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
       )}
 
       <ProjectFormDialog
+        key={editing?.id || 'new'}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editing={editing}
@@ -442,23 +443,43 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
   saving: boolean;
   onSubmit: (payload: any) => void;
 }) {
-  const [form, setForm] = useState<any>({
-    name: editing?.name || '',
-    description: editing?.description || '',
-    customerId: editing?.customer?.id || editing?.customerId || '',
-    branchId: editing?.branch?.id || editing?.branchId || '',
-    managerId: editing?.manager?.id || editing?.managerId || '',
-    status: editing?.status || 'DRAFT',
-    priority: editing?.priority || 'MEDIUM',
-    startDate: toLocalDate(editing?.startDate) || '',
-    endDate: toLocalDate(editing?.endDate) || '',
-    plannedBudget: editing?.plannedBudget != null ? String(editing.plannedBudget) : '',
-    plannedIncome: editing?.plannedIncome != null ? String(editing.plannedIncome) : '',
-    currency: editing?.currency || 'NIO',
-    exchangeRate: editing?.exchangeRate && editing.exchangeRate !== 1 ? String(editing.exchangeRate) : '',
-    notes: editing?.notes || '',
-    memberUserIds: [],
+  const detailQuery = useTenantQuery<ProjectDetail | null>(
+    ['projects', 'form-detail', editing?.id || 'none'],
+    (signal) => (editing?.id ? projectsService.get(editing.id, signal) : Promise.resolve(null)),
+    { enabled: Boolean(open && editing?.id) },
+  );
+
+  const buildInitialState = (item: ProjectListItem | null, detail?: ProjectDetail | null) => ({
+    name: detail?.name || item?.name || '',
+    description: detail?.description || item?.description || '',
+    customerId: detail?.customer?.id || detail?.customerId || item?.customer?.id || item?.customerId || '',
+    branchId: detail?.branch?.id || detail?.branchId || item?.branch?.id || item?.branchId || '',
+    managerId: detail?.manager?.id || detail?.managerId || item?.manager?.id || item?.managerId || '',
+    status: detail?.status || item?.status || 'DRAFT',
+    priority: detail?.priority || item?.priority || 'MEDIUM',
+    startDate: toLocalDate(detail?.startDate || item?.startDate) || '',
+    endDate: toLocalDate(detail?.endDate || item?.endDate) || '',
+    plannedBudget: (detail?.plannedBudget ?? item?.plannedBudget) != null ? String(detail?.plannedBudget ?? item?.plannedBudget) : '',
+    plannedIncome: (detail?.plannedIncome ?? item?.plannedIncome) != null ? String(detail?.plannedIncome ?? item?.plannedIncome) : '',
+    currency: detail?.currency || item?.currency || 'NIO',
+    exchangeRate: (detail?.exchangeRate ?? item?.exchangeRate) && (detail?.exchangeRate ?? item?.exchangeRate) !== 1 ? String(detail?.exchangeRate ?? item?.exchangeRate) : '',
+    notes: detail?.notes || item?.notes || '',
+    memberUserIds: detail?.members ? detail.members.map((m: any) => m.user?.id || m.userId).filter(Boolean) : [],
   });
+
+  const [form, setForm] = useState<any>(() => buildInitialState(editing));
+  const [syncedDetail, setSyncedDetail] = useState<ProjectDetail | null>(null);
+
+  if (detailQuery.data && detailQuery.data !== syncedDetail) {
+    setSyncedDetail(detailQuery.data);
+    const d = detailQuery.data;
+    setForm((prev: any) => ({
+      ...prev,
+      description: d.description || prev.description,
+      notes: d.notes || prev.notes,
+      memberUserIds: d.members ? d.members.map((m: any) => m.user?.id || m.userId).filter(Boolean) : prev.memberUserIds,
+    }));
+  }
 
   const valid = form.name?.trim() && form.startDate;
 

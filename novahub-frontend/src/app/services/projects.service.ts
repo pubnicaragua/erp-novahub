@@ -9,6 +9,53 @@ export type ProjectCostSource = 'MANUAL' | 'PURCHASE' | 'INVENTORY' | 'PAYROLL' 
 export type ProjectCostStatus = 'PENDING' | 'COMMITTED' | 'EXECUTED' | 'CANCELLED';
 export type ProjectActivityType = 'COMMENT' | 'ACTIVITY' | 'STATUS_CHANGE' | 'BUDGET_CHANGE' | 'COST_CHANGE' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'TASK_COMPLETED' | 'MILESTONE_COMPLETED';
 
+export interface PlannedCurvePoint {
+  weekIndex: number;
+  periodStart: string;
+  plannedPct: number;
+}
+
+export interface SeriesPoint {
+  weekIndex: number;
+  periodLabel: `Semana ${number}`;
+  plannedPct: number;
+  plannedValue: number;
+  earnedPct: number | null;
+  earnedValue: number | null;
+  actualPct: number | null;
+  actualValue: number | null;
+}
+
+export interface EvmIndicators {
+  bac: number;
+  pv: number;
+  ev: number | null;
+  ac: number;
+  cv: number | null;
+  sv: number | null;
+  cpi: number | null;
+  spi: number | null;
+  eac: number | null;
+  vac: number | null;
+  tcpi: number | null;
+  consumedPct: number;
+  projectedMarginPct: number | null;
+}
+
+export interface BudgetByLine {
+  costLineId: string | null;
+  label: string;
+  budget: number;
+  committed: number;
+  executed: number;
+  consumedPct: number;
+}
+
+export type EvmResponse =
+  | { status: 'NO_BASELINE'; baselineVersion?: number; message?: string }
+  | { status: 'NO_EVIDENCE'; baselineVersion: number; curve: SeriesPoint[] }
+  | { status: 'OK'; baselineVersion: number; curve: SeriesPoint[]; indicators: EvmIndicators; budgetByLine: BudgetByLine[] };
+
 export interface ProjectCostTemplateLineInput {
   name: string;
   code?: string;
@@ -629,6 +676,16 @@ export const projectsService = {
   approveCostBaseline: async (id: string, pricingSnapshot: any): Promise<any> =>
     api.post(`/projects/${id}/costing/baselines`, { pricingSnapshot }),
   /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  // ==================== CONTROL EVM ====================
+  getEvm: async (id: string, granularity: 'daily' | 'weekly' | 'monthly' = 'weekly', signal?: AbortSignal): Promise<EvmResponse> =>
+    api.get<EvmResponse>(`/projects/${id}/evm?granularity=${granularity}`, { signal }),
+  getEvmCurve: async (id: string, signal?: AbortSignal): Promise<{ baselineVersion: number; points: PlannedCurvePoint[] }> =>
+    api.get<{ baselineVersion: number; points: PlannedCurvePoint[] }>(`/projects/${id}/evm/curve`, { signal }),
+  updateEvmCurve: async (id: string, points: PlannedCurvePoint[]): Promise<unknown> =>
+    api.patch<unknown>(`/projects/${id}/evm/curve`, { points }),
+  recordProgress: async (id: string, payload: { physicalProgressPct: number; note?: string }): Promise<unknown> =>
+    api.post<unknown>(`/projects/${id}/evm/progress`, payload),
 };
 
 

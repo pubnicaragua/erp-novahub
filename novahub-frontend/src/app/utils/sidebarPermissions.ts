@@ -328,6 +328,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   proyectos: ['PROJECTS_LIST', 'PROJECTS'],
   'proyectos-resumen': ['PROJECTS_LIST', 'PROJECTS'],
   'proyectos-cotizaciones': ['PROJECTS_QUOTATIONS', 'PROJECTS'],
+  'proyectos-evm': ['PROJECTS', 'PROJECTS'],
   'proyectos-planificacion': ['PROJECTS_TASKS', 'PROJECTS'],
   'proyectos-costos': ['PROJECTS_EXPENSES', 'PROJECTS'],
   'proyectos-actividades': ['PROJECTS_LIST', 'PROJECTS'],
