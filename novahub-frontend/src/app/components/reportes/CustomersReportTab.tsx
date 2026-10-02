@@ -12,7 +12,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Users, TrendingUp, DollarSign, Package, ArrowUpRight, Activity, Wallet, ShoppingCart } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
@@ -256,7 +256,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 4, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5 });
 
         const renderSection = (title: string, headers: string[], rows: (string | number)[][], colorRGB: number[]) => {
-          reportSections.push({ title, headers, rows });
+          reportSections.push({ title, headers, rows, color: colorRGB });
           currentY = drawReportTable({ doc, title, headers, rows, color: colorRGB, marginX, contentWidth, currentY });
         };
         const money = (value: unknown) => formatConvertedAmount(Number(value || 0), 'NIO');
@@ -303,7 +303,6 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.customers');
         const primaryHex = (themeConfig.colors.primary || '#10b981').replace('#', '');
         const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
-        const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
 
         const ws = wb.addWorksheet('Reporte de Clientes');
         ws.getColumn(1).width = 8; ws.getColumn(2).width = 35; ws.getColumn(3).width = 25; ws.getColumn(4).width = 15;
@@ -378,22 +377,18 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         while (ws.rowCount < currentRow) ws.addRow([]); ws.addRow([]);
 
-        const renderTopTable = (title: string, data: any[], colorHex: string, includeQty: boolean) => {
-          const titleRow = ws.addRow([title, '', '', '']); ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
-          titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: colorHex } }; titleRow.getCell(1).alignment = { horizontal: 'center' }; ws.addRow([]);
-          const header = ws.addRow(['#', 'Nombre', 'Monto', includeQty ? 'Cantidad' : '']);
-          header.eachCell(c => { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colorHex } }; c.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder }; });
-          data.forEach((item, idx) => {
-            const r = ws.addRow([idx + 1, item.name || 'Sin nombre', Number(item.value || 0), includeQty ? Number(item.qty || 0) : '']);
-            r.getCell(1).font = { bold: true }; r.getCell(1).alignment = { horizontal: 'center' };
-            r.getCell(3).numFmt = `"${currencySymbol}" #,##0.00`; r.getCell(3).font = { bold: true }; r.getCell(3).alignment = { horizontal: 'right' };
-            r.eachCell(c => { c.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder }; });
-          });
-          ws.addRow([]); ws.addRow([]);
+        const renderTopTable = (title: string, data: any[], includeQty: boolean) => {
+          const headers = ['#', 'Nombre', 'Monto', ...(includeQty ? ['Cantidad'] : [])];
+          appendDashboardExcelTable(ws, title, headers, data.map((item, idx) => [
+            idx + 1,
+            item.name || 'Sin nombre',
+            Number(item.value || 0),
+            ...(includeQty ? [Number(item.qty || 0)] : []),
+          ]));
         };
 
-        renderTopTable('Líderes de Facturación', topCustomers, 'FF3B82F6', false);
-        renderTopTable('Productos Estrella', topProducts, 'FFF59E0B', true);
+        renderTopTable('Líderes de Facturación', topCustomers, false);
+        renderTopTable('Productos Estrella', topProducts, true);
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_clientes'], 'xlsx', dateRange));
         toast.success("Excel generado exitosamente");

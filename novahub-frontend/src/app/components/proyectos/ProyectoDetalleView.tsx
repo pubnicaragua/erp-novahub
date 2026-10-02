@@ -1,75 +1,84 @@
 import { useState } from 'react';
-import { ArrowLeft, FolderKanban, History, LayoutDashboard, ListTodo, Wallet, Receipt, Users, FileText, MessageSquare, BarChart3, CalendarClock } from 'lucide-react';
-import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
-import { Progress } from '../ui/progress';
+import { ArrowLeft, FolderKanban, History, LayoutDashboard, ListTodo, Wallet, ShoppingCart, Sliders, Calculator, Coins, Activity, FileDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Progress } from '../ui/progress';
+import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { projectsService, type ProjectDetail } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../ui/utils';
-import { PROJECT_STATUS_META, PRIORITY_META, money, formatDate } from './shared';
+import { PROJECT_STATUS_META, PRIORITY_META, formatDate, money } from './shared';
 import { ProyectoPlanificacionPanel } from './ProyectoPlanificacionPanel';
 import { ProyectoPresupuestoPanel, ProyectoCostosPanel, ProyectoReportePanel } from './ProyectoFinanzasPanels';
-import { ProyectoRecursosPanel, ProyectoDocumentosPanel, ProyectoActividadesPanel } from './ProyectoColaboracionPanels';
+import { ProyectoDocumentosPanel, ProyectoActividadesPanel } from './ProyectoColaboracionPanels';
+import { ProyectoAvancePanel } from './ProyectoAvancePanel';
+import { ProyectoCotizacionesPanel } from './ProyectoCotizacionesPanel';
+import { ProyectoParametrosPanel } from './ProyectoParametrosPanel';
+import { ProyectoMemoriasCalculoPanel } from './ProyectoMemoriasCalculoPanel';
+import { ProyectoCosteo6DPanel } from './ProyectoCosteo6DPanel';
+import { ProyectoEVMControlPanel } from './ProyectoEVMControlPanel';
+import { ProyectoCotizacionExportView } from './ProyectoCotizacionExportView';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 
 interface ProyectoDetalleViewProps {
   projectId: string;
   onBack: () => void;
-  defaultTab?: string;
-  onTabChange?: (tab: string) => void;
+  initialTab?: string;
+  onTabChange?: (tabId: string) => void;
 }
 
 const TAB_DEFS = [
-  { id: 'resumen', label: 'Resumen', icon: LayoutDashboard, module: 'PROJECTS_LIST' },
-  { id: 'planificacion', label: 'Planificación', icon: ListTodo, module: 'PROJECTS_TASKS' },
-  { id: 'hitos', label: 'Hitos', icon: History, module: 'PROJECTS_MILESTONES' },
-  { id: 'cronograma', label: 'Cronograma', icon: CalendarClock, module: 'PROJECTS_TIME' },
-  { id: 'presupuesto', label: 'Presupuesto', icon: Wallet, module: 'PROJECTS_EXPENSES' },
-  { id: 'costos', label: 'Costos', icon: Receipt, module: 'PROJECTS_EXPENSES' },
-  { id: 'recursos', label: 'Recursos', icon: Users, module: 'PROJECTS_LIST' },
-  { id: 'documentos', label: 'Documentos', icon: FileText, module: 'PROJECTS_DOCUMENTS' },
-  { id: 'actividades', label: 'Actividades', icon: MessageSquare, module: 'PROJECTS_LIST' },
-  { id: 'reporte', label: 'Reporte', icon: BarChart3, module: 'PROJECTS_EXPENSES' },
-  { id: 'historial', label: 'Historial', icon: History, module: 'PROJECTS_LIST' },
+  { id: 'resumen', label: 'Resumen, Avance y Documentos', icon: LayoutDashboard, module: 'PROJECTS' },
+  { id: 'cotizaciones', label: 'Cotizaciones Materiales', icon: ShoppingCart, module: 'PROJECTS_EXPENSES' },
+  { id: 'planificacion', label: 'Planificación y Tareas', icon: ListTodo, module: 'PROJECTS_TASKS' },
+  { id: 'costos', label: 'Presupuesto y Costos', icon: Wallet, module: 'PROJECTS_EXPENSES' },
+  { id: 'costeo6d', label: 'Costeo 6D', icon: Coins, module: 'PROJECTS' },
+  { id: 'evm', label: 'Control EVM', icon: Activity, module: 'PROJECTS' },
+  { id: 'memorias', label: 'Memorias de Cálculo', icon: Calculator, module: 'PROJECTS' },
+  { id: 'exportar', label: 'Cotización Ejecutiva', icon: FileDown, module: 'PROJECTS' },
+  { id: 'parametros', label: 'Parámetros', icon: Sliders, module: 'PROJECTS' },
+  { id: 'actividades', label: 'Actividades e Historial', icon: History, module: 'PROJECTS' },
 ];
 
-const TAB_SUBMODULE: Record<string, string> = {
-  resumen: 'proyectos', planificacion: 'proyectos-tareas', hitos: 'proyectos-hitos',
-  cronograma: 'proyectos-tiempo', presupuesto: 'proyectos-costos', costos: 'proyectos-costos',
-  recursos: 'proyectos', documentos: 'proyectos-documentos', actividades: 'proyectos',
-  reporte: 'proyectos-costos', historial: 'proyectos',
-};
-
-const SUBMODULE_TAB: Record<string, string> = {
-  proyectos: 'resumen', 'proyectos-tareas': 'planificacion', 'proyectos-hitos': 'hitos',
-  'proyectos-tiempo': 'cronograma', 'proyectos-costos': 'costos', 'proyectos-documentos': 'documentos',
-};
-
-export function ProyectoDetalleView({ projectId, onBack, defaultTab = 'resumen', onTabChange }: ProyectoDetalleViewProps) {
+export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange }: ProyectoDetalleViewProps) {
   const { user, canPerform } = useAuth();
-  const [tabSelection, setTabSelection] = useState({ sourceTab: defaultTab, value: SUBMODULE_TAB[defaultTab] || defaultTab });
+  const [activeTab, setActiveTab] = useState(initialTab || 'resumen');
+  const [lastInitialTab, setLastInitialTab] = useState(initialTab);
+  if (initialTab !== lastInitialTab) {
+    setLastInitialTab(initialTab);
+    if (initialTab) setActiveTab(initialTab);
+  }
   const detailQuery = useTenantQuery<ProjectDetail>(['projects', 'detail', projectId], (signal) => projectsService.get(projectId, signal), { enabled: true });
   const project = detailQuery.data;
-  const visibleTabs = TAB_DEFS.filter((tab) => canPerform(tab.module, 'view'));
-  const requestedTab = SUBMODULE_TAB[defaultTab] || defaultTab;
-  const selectedTab = tabSelection.sourceTab === defaultTab ? tabSelection.value : requestedTab;
-  const activeTab = visibleTabs.some((tab) => tab.id === selectedTab)
-    ? selectedTab
-    : visibleTabs[0]?.id || 'resumen';
 
-  const changeTab = (tabId: string) => {
-    setTabSelection({ sourceTab: defaultTab, value: tabId });
-    onTabChange?.(TAB_SUBMODULE[tabId] || 'proyectos');
+  const pricingQuery = useTenantQuery<Record<string, unknown>>(
+    ['projects', projectId, 'pricing-engine'],
+    (signal) => projectsService.getProjectPricingEngine(projectId, signal),
+    { enabled: !!projectId },
+  );
+  const pricingEngine = pricingQuery.data;
+
+  const handleTabChange = (val: string) => {
+    setActiveTab(val);
+    onTabChange?.(val);
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" size="sm" onClick={onBack} className="gap-2"><ArrowLeft className="size-4" /> Portafolio</Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onBack}
+          className="group size-9 shrink-0 rounded-xl border border-border/50 bg-background/50 transition-all hover:bg-muted"
+          title="Volver al portafolio de proyectos"
+          aria-label="Volver al portafolio de proyectos"
+        >
+          <ArrowLeft className="size-4 text-muted-foreground transition-transform group-hover:-translate-x-0.5 group-hover:text-foreground" />
+        </Button>
         {project ? (
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10"><FolderKanban className="size-6 text-primary" /></div>
@@ -82,11 +91,20 @@ export function ProyectoDetalleView({ projectId, onBack, defaultTab = 'resumen',
                 {formatDate(project.startDate)} — {formatDate(project.endDate)} · {project.customer?.name || 'Sin cliente'}
               </p>
             </div>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className={cn('border', PROJECT_STATUS_META[project.status].badge)}>{PROJECT_STATUS_META[project.status].label}</Badge>
-              <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold', PRIORITY_META[project.priority].badge)}>
-                <span className={cn('size-2 rounded-full', PRIORITY_META[project.priority].dot)} />{PRIORITY_META[project.priority].label}
-              </span>
+            <div className="ml-auto flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-1.5 rounded-xl border border-border/50 bg-muted/30 px-2.5 py-1 text-xs backdrop-blur-xs">
+                <span className="text-[11px] font-semibold text-muted-foreground">Estado:</span>
+                <Badge variant="outline" className={cn('border font-bold py-0.5 text-xs shadow-2xs', PROJECT_STATUS_META[project.status].badge)}>
+                  {PROJECT_STATUS_META[project.status].label}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-xl border border-border/50 bg-muted/30 px-2.5 py-1 text-xs backdrop-blur-xs">
+                <span className="text-[11px] font-semibold text-muted-foreground">Prioridad:</span>
+                <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold shadow-2xs', PRIORITY_META[project.priority].badge)}>
+                  <span className={cn('size-2 rounded-full', PRIORITY_META[project.priority].dot)} />
+                  {PRIORITY_META[project.priority].label}
+                </span>
+              </div>
             </div>
           </div>
         ) : (
@@ -105,14 +123,17 @@ export function ProyectoDetalleView({ projectId, onBack, defaultTab = 'resumen',
         </div>
       ) : null}
 
-      <Tabs value={activeTab} onValueChange={changeTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <div className="mb-4 w-full overflow-x-auto custom-scrollbar">
-          <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
-            {visibleTabs.map((tab) => {
+          <TabsList className="inline-flex h-auto w-fit max-w-full flex-wrap gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
+            {TAB_DEFS.map((tab) => {
               const hasEnabled = user?.enabledModules?.includes(tab.module) || user?.enabledModules?.includes('PROJECTS');
               if (user?.enabledModules && !hasEnabled) return null;
+              if (!canPerform(tab.module, 'view')) return null;
               return (
                 <TabsTrigger key={tab.id} value={tab.id}
+                  aria-label={tab.label}
+                  title={tab.label}
                   className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest transition-all data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg">
                   <tab.icon className="size-4" />
                   <span className="hidden sm:inline">{tab.label}</span>
@@ -122,17 +143,56 @@ export function ProyectoDetalleView({ projectId, onBack, defaultTab = 'resumen',
           </TabsList>
         </div>
 
-        {activeTab === 'resumen' && project ? <ProyectoResumenPanel project={project} canViewExpenses={canPerform('PROJECTS_EXPENSES', 'view')} canViewTasks={canPerform('PROJECTS_TASKS', 'view')} canViewMilestones={canPerform('PROJECTS_MILESTONES', 'view')} canViewTime={canPerform('PROJECTS_TIME', 'view')} /> : null}
-        {activeTab === 'planificacion' && <ProyectoPlanificacionPanel projectId={projectId} showTasks />}
-        {activeTab === 'hitos' && <ProyectoPlanificacionPanel projectId={projectId} showTasks={false} showMilestones />}
-        {activeTab === 'cronograma' && <ProyectoPlanificacionPanel projectId={projectId} showTasks={false} showMilestones={false} showTimeline />}
-        {activeTab === 'presupuesto' && <ProyectoPresupuestoPanel projectId={projectId} />}
-        {activeTab === 'costos' && <ProyectoCostosPanel projectId={projectId} />}
-        {activeTab === 'recursos' && <ProyectoRecursosPanel projectId={projectId} />}
-        {activeTab === 'documentos' && <ProyectoDocumentosPanel projectId={projectId} />}
-        {activeTab === 'actividades' && <ProyectoActividadesPanel projectId={projectId} />}
-        {activeTab === 'reporte' && <ProyectoReportePanel projectId={projectId} />}
-        {activeTab === 'historial' && project ? <AuditHistoryModal isOpen={activeTab === 'historial'} onClose={() => changeTab('resumen')} entity="PROJECT" entityId={project.id} title="Historial del proyecto" presentation="inline" /> : null}
+        {activeTab === 'resumen' && project ? (
+          <div className="space-y-6">
+            <ProyectoResumenPanel project={project} />
+            <ProyectoAvancePanel projectId={projectId} project={project} />
+            <ProyectoDocumentosPanel projectId={projectId} />
+          </div>
+        ) : null}
+        {activeTab === 'cotizaciones' && project ? <ProyectoCotizacionesPanel projectId={projectId} project={project} /> : null}
+        {activeTab === 'planificacion' && <ProyectoPlanificacionPanel projectId={projectId} />}
+        {activeTab === 'costos' && (
+          <div className="space-y-6">
+            <ProyectoPresupuestoPanel projectId={projectId} />
+            <ProyectoCostosPanel projectId={projectId} />
+            <ProyectoReportePanel projectId={projectId} />
+          </div>
+        )}
+        {activeTab === 'costeo6d' && project ? (
+          <ProyectoCosteo6DPanel project={project} pricingEngine={pricingEngine} />
+        ) : null}
+        {activeTab === 'evm' && project ? (
+          <ProyectoEVMControlPanel project={project} pricingEngine={pricingEngine} />
+        ) : null}
+        {activeTab === 'memorias' && project ? (
+          <ProyectoMemoriasCalculoPanel project={project} pricingEngine={pricingEngine} />
+        ) : null}
+        {activeTab === 'exportar' && project ? (
+          <ProyectoCotizacionExportView
+            project={project}
+            pricingEngine={pricingEngine}
+            costsSummary={detailQuery.data?.budgetSummary}
+          />
+        ) : null}
+        {activeTab === 'parametros' && project ? (
+          <ProyectoParametrosPanel projectId={projectId} project={project} />
+        ) : null}
+        {activeTab === 'actividades' && (
+          <div className="space-y-6">
+            <ProyectoActividadesPanel projectId={projectId} />
+            {project ? (
+              <AuditHistoryModal
+                isOpen={true}
+                onClose={() => undefined}
+                entity="PROJECT"
+                entityId={project.id}
+                title="Historial de Auditoría del Proyecto"
+                presentation="inline"
+              />
+            ) : null}
+          </div>
+        )}
       </Tabs>
     </div>
   );
@@ -150,23 +210,25 @@ function KpiCard({ label, value, hint, tone = 'default' }: { label: string; valu
   );
 }
 
-export function ProyectoResumenPanel({ project, canViewExpenses, canViewTasks, canViewMilestones, canViewTime }: { project: ProjectDetail; canViewExpenses: boolean; canViewTasks: boolean; canViewMilestones: boolean; canViewTime: boolean }) {
+export function ProyectoResumenPanel({ project }: { project: ProjectDetail }) {
   const s = project.summary;
-  const overdue = project.tasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate) < new Date());
-  const upcoming = project.tasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate) >= new Date() && new Date(t.dueDate) <= new Date(Date.now() + 7 * 86400000));
+  const now = new Date();
+  const nextWeek = new Date(now.getTime() + 7 * 86400000);
+  const overdue = project.tasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate) < now);
+  const upcoming = project.tasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate) >= now && new Date(t.dueDate) <= nextWeek);
   const totalTasks = project.tasks.length;
   const completedTasks = project.tasks.filter((t) => t.status === 'COMPLETED').length;
 
   return (
     <div className="space-y-4">
-      {canViewExpenses && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard label="Presupuesto" value={money(s.plannedBudget, project.currency)} hint="Proyectado (base)" />
         <KpiCard label="Ejecutado" value={money(s.executedCost, project.currency)} hint="Costos ejecutados" />
         <KpiCard label="Saldo disponible" value={money(s.available, project.currency)} tone={s.available < 0 ? 'bad' : 'default'} hint="Presupuesto − ejecutado" />
         <KpiCard label="Variación" value={`${s.varianceAbs >= 0 ? '+' : ''}${money(s.varianceAbs, project.currency)}`} tone={s.overBudget ? 'bad' : 'good'} hint={`${s.variancePct >= 0 ? '+' : ''}${s.variancePct.toFixed(1)}%`} />
         <KpiCard label="Margen esperado" value={money(s.expectedMargin, project.currency)} tone={s.expectedMargin < 0 ? 'bad' : 'good'} hint="Ingresos − presupuesto" />
         <KpiCard label="Margen real" value={money(s.realMargin, project.currency)} tone={s.realMargin < 0 ? 'bad' : 'good'} hint={`Δ ${money(s.marginDelta, project.currency)}`} />
-      </div>}
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="rounded-2xl border-border/60 shadow-sm lg:col-span-2">
@@ -175,19 +237,19 @@ export function ProyectoResumenPanel({ project, canViewExpenses, canViewTasks, c
             <div>
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold">Avance</span>
-                <span className="font-black text-primary">{canViewTime ? `${Number(project.progress) || 0}%` : '—'}</span>
+                <span className="font-black text-primary">{Number(project.progress) || 0}%</span>
               </div>
-              {canViewTime && <Progress value={Number(project.progress) || 0} className="mt-1.5 h-2" />}
+              <Progress value={Number(project.progress) || 0} className="mt-1.5 h-2" />
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              {canViewTasks && <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tareas</p>
                 <p className="mt-1 text-lg font-black">{completedTasks}/{totalTasks} <span className="text-xs font-normal text-muted-foreground">completadas</span></p>
-              </div>}
-              {canViewMilestones && <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+              </div>
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Hitos</p>
                 <p className="mt-1 text-lg font-black">{project.milestones.filter((m) => m.status === 'COMPLETED').length}/{project.milestones.length} <span className="text-xs font-normal text-muted-foreground">completados</span></p>
-              </div>}
+              </div>
               <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Miembros</p>
                 <p className="mt-1 text-lg font-black">{project.members.length}</p>
@@ -201,16 +263,16 @@ export function ProyectoResumenPanel({ project, canViewExpenses, canViewTasks, c
         <Card className="rounded-2xl border-border/60 shadow-sm">
           <CardHeader className="pb-2"><CardTitle className="text-sm">Alertas</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {canViewExpenses && s.overBudget ? <AlertRow tone="rose" text={`El proyecto superó el presupuesto por ${money(Math.abs(s.varianceAbs), project.currency)}.`} /> : null}
-            {canViewTasks && overdue.length > 0 ? <AlertRow tone="rose" text={`${overdue.length} tarea(s) vencida(s).`} /> : null}
-            {canViewTasks && upcoming.length > 0 ? <AlertRow tone="amber" text={`${upcoming.length} tarea(s) vencen esta semana.`} /> : null}
-            {canViewTasks && project.tasks.some((t) => t.status === 'PENDING' && t.priority === 'URGENT') ? <AlertRow tone="amber" text="Hay tareas urgentes sin iniciar." /> : null}
+            {s.overBudget ? <AlertRow tone="rose" text={`El proyecto superó el presupuesto por ${money(Math.abs(s.varianceAbs), project.currency)}.`} /> : null}
+            {overdue.length > 0 ? <AlertRow tone="rose" text={`${overdue.length} tarea(s) vencida(s).`} /> : null}
+            {upcoming.length > 0 ? <AlertRow tone="amber" text={`${upcoming.length} tarea(s) vencen esta semana.`} /> : null}
+            {project.tasks.some((t) => t.status === 'PENDING' && t.priority === 'URGENT') ? <AlertRow tone="amber" text="Hay tareas urgentes sin iniciar." /> : null}
             {!s.overBudget && overdue.length === 0 && upcoming.length === 0 && <p className="text-sm text-muted-foreground">Sin alertas pendientes.</p>}
           </CardContent>
         </Card>
       </div>
 
-      {canViewTasks && overdue.length > 0 && (
+      {overdue.length > 0 && (
         <Card className="rounded-2xl border-rose-200 bg-rose-50/40 shadow-sm dark:border-rose-800/40 dark:bg-rose-950/20">
           <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm text-rose-700 dark:text-rose-300">Fechas críticas vencidas</CardTitle></CardHeader>
           <CardContent>

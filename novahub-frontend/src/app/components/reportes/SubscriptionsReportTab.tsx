@@ -6,6 +6,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
 import { toast } from '@/app/services/toast';
+import { applyDashboardExcelTableStyle } from '../../utils/reportExportUtils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, Scale, RefreshCw, UserMinus } from 'lucide-react';
@@ -186,22 +187,16 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
       try {
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Suscripciones');
-        const primaryColor = themeConfig.colors.primary || '#10b981';
-        const rgbPrimary = hexToRgb(primaryColor);
-        const primaryHex = rgbPrimary.map(x => x.toString(16).padStart(2, '0')).join('');
-        
         ws.columns = [
           { header: 'Métrica', key: 'metric', width: 30 },
           { header: 'Valor', key: 'value', width: 25 },
         ];
 
-        ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF'} };
-        ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + primaryHex } };
-
         ws.addRow({ metric: 'MRR', value: mrr });
         ws.addRow({ metric: 'Activas', value: activeSubs.length });
         ws.addRow({ metric: 'Retención', value: retentionRate });
         ws.addRow({ metric: 'Churn', value: churnedThisPeriod });
+        applyDashboardExcelTableStyle(ws, 1, ['Métrica', 'Valor'], 2, ws.rowCount);
 
         const buffer = await wb.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -410,6 +405,5 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
   );
 });
 SubscriptionsReportTab.displayName = 'SubscriptionsReportTab';
-
 
 

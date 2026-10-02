@@ -966,7 +966,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                     {detailFinancialRows.map((row) => (
                       <div key={row.label} className="flex items-center justify-between gap-4">
                         <span className="text-muted-foreground">{row.label}</span>
-                        <span className="font-semibold tabular-nums">{row.negative ? '- ' : ''}{formatConvertedAmount(row.amount, detailCurrency, detailRate)}</span>
+                        <span className="font-semibold tabular-nums">{(row as any).negative ? '- ' : ''}{formatConvertedAmount(row.amount, detailCurrency, detailRate)}</span>
                       </div>
                     ))}
                     <div className="border-t border-border/50 pt-2">

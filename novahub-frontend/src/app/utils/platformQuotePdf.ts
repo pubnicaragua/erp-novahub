@@ -1,8 +1,8 @@
 import { jsPDF } from 'jspdf';
 import autoTable, { type RowInput } from 'jspdf-autotable';
 import type { PlatformQuote } from '../services/enterprise-groups.service';
-import { getNovaHubLogoPng } from './novahubBrand';
-import { buildPdfFileName } from './exportFileNames';
+import { getNovaHubLogotipoPng } from './novahubBrand';
+import { buildLabeledPdfFileName } from './exportFileNames';
 
 type Rgb = [number, number, number];
 
@@ -53,6 +53,20 @@ function amountOf(item: PlatformQuote['items'][number]) {
   return Math.max(0, Number(item.quantity || 0)) * Math.max(0, Number(item.unitPrice || 0));
 }
 
+function billingOptionsOf(item: PlatformQuote['items'][number]) {
+  const options = Array.isArray(item.billingOptions)
+    ? item.billingOptions
+      .map((option) => ({ periodicity: periodicityLabel(option?.periodicity), unitPrice: Math.max(0, Number(option?.unitPrice || 0)) }))
+      .filter((option) => option.periodicity !== '-')
+    : [];
+  return options.length ? options : [{ periodicity: periodicityLabel(item.periodicity), unitPrice: Math.max(0, Number(item.unitPrice || 0)) }];
+}
+
+function monthlyAmountOf(item: PlatformQuote['items'][number]) {
+  const monthly = billingOptionsOf(item).find((option) => option.periodicity.toLowerCase().includes('mens'));
+  return monthly ? Math.max(0, Number(item.quantity || 0)) * monthly.unitPrice : 0;
+}
+
 function discountAmountOf(item: PlatformQuote['items'][number]) {
   const amount = amountOf(item);
   const value = Math.max(0, Number(item.discountValue || 0));
@@ -65,9 +79,19 @@ function discountLabelOf(item: PlatformQuote['items'][number], currency: Platfor
   return item.discountType === 'PERCENT' ? `-${value}%` : `-${money(discountAmountOf(item), currency)}`;
 }
 
+function isPriceToDefine(item: PlatformQuote['items'][number]) {
+  return Number(item.unitPrice || 0) <= 0 && /precio por propuesta|ajusta el importe|por definir/i.test(String(item.detail || ''));
+}
+
 function isIncludedItem(item: PlatformQuote['items'][number]) {
+  if (isPriceToDefine(item)) return false;
   const detail = String(item.detail || '').toLowerCase();
   return Number(item.unitPrice || 0) <= 0 && (!item.isOptional || /incluido|valor agregado|sin costo/.test(detail));
+}
+
+function detailListLabel(value: unknown, fallback: string) {
+  const lines = String(value || '').split(/\r?\n/).map((line) => line.replace(/^\s*[•·▪◦*-]\s*/, '').trim()).filter(Boolean);
+  return lines.length ? lines.map((line) => `• ${line}`).join('\n') : fallback;
 }
 
 export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
@@ -78,7 +102,7 @@ export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
   const optionalSubtotal = charged.filter((item) => !isBase(item) || item.isOptional).reduce((sum, item) => sum + amountOf(item), 0);
   const gross = subtotal + optionalSubtotal;
   const initialTotal = charged.filter((item) => !String(item.periodicity || '').toLowerCase().includes('mens')).reduce((sum, item) => sum + amountOf(item), 0);
-  const monthlyTotal = charged.filter((item) => String(item.periodicity || '').toLowerCase().includes('mens')).reduce((sum, item) => sum + amountOf(item), 0);
+  const monthlyTotal = charged.reduce((sum, item) => sum + monthlyAmountOf(item), 0);
   const displaySubtotal = Math.max(0, Number(quote.displaySubtotal ?? gross));
   const displayInitialTotal = Math.max(0, Number(quote.displayInitialTotal ?? initialTotal));
   const displayMonthlyTotal = Math.max(0, Number(quote.displayMonthlyTotal ?? monthlyTotal));
@@ -90,11 +114,15 @@ export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
 }
 
 function itemPriceLabel(item: PlatformQuote['items'][number], currency: PlatformQuote['currency']) {
-  return isIncludedItem(item) ? 'Incluido' : money(item.unitPrice, currency);
+  if (isPriceToDefine(item)) return 'Precio por propuesta';
+  if (isIncludedItem(item)) return 'Incluido';
+  return billingOptionsOf(item).map((option) => `${option.periodicity}: ${money(option.unitPrice, currency)}`).join('\n');
 }
 
 function itemBillingLabel(item: PlatformQuote['items'][number]) {
-  return isIncludedItem(item) ? 'Valor agregado' : periodicityLabel(item.periodicity);
+  if (isIncludedItem(item)) return 'Valor agregado';
+  const primary = periodicityLabel(item.periodicity);
+  return billingOptionsOf(item).map((option) => `${option.periodicity}${option.periodicity === primary ? ' · principal' : ''}`).join('\n');
 }
 
 export interface PdfOptions {
@@ -134,9 +162,9 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
     doc.text(`Página ${doc.getNumberOfPages()}`, width - margin, height - 10, { align: 'right' });
   };
 
-  const logo = await getNovaHubLogoPng();
+  const logo = await getNovaHubLogotipoPng();
   const drawHeader = (compact = false) => {
-    const headerHeight = compact ? 31 : 38;
+    const headerHeight = compact ? 32 : 40;
     doc.setFillColor(255, 255, 255);
     doc.rect(0, 0, width, headerHeight, 'F');
 
@@ -145,9 +173,9 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
         logo,
         'PNG',
         margin,
-        compact ? 7 : 9,
-        compact ? 45 : 52,
-        compact ? 12.5 : 14.5,
+        compact ? 8 : 10,
+        compact ? 43 : 52,
+        compact ? 12.3 : 14.9,
         undefined,
         'FAST',
       );
@@ -155,16 +183,14 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
       // El titulo conserva la legibilidad aunque el logo no pueda decodificarse.
     }
 
-    if (isInvoice) {
-      doc.setTextColor(...forest);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(compact ? 14 : 18);
-      doc.text('FACTURA', compact ? 68 : 74, compact ? 15 : 17);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(compact ? 7 : 8);
-      doc.setTextColor(...slate);
-      doc.text('Documento de venta', compact ? 68 : 74, compact ? 21 : 24);
-    }
+    doc.setTextColor(...forest);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(compact ? 12.5 : 15);
+    doc.text(isInvoice ? 'FACTURA' : 'COTIZACIÓN', compact ? 62 : 68, compact ? 15 : 17);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(compact ? 6.5 : 7.2);
+    doc.setTextColor(...slate);
+    doc.text(isInvoice ? 'Documento de venta' : 'Propuesta comercial', compact ? 62 : 68, compact ? 21 : 24);
 
     doc.setTextColor(...muted);
     doc.setFont('helvetica', 'normal');
@@ -188,8 +214,10 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   drawHeader();
 
   let y = 47;
-  doc.setFillColor(...mint);
+  doc.setFillColor(247, 252, 249);
   doc.roundedRect(margin, y, contentWidth, 27, 3, 3, 'F');
+  doc.setFillColor(...forest);
+  doc.roundedRect(margin, y, 3, 27, 1.5, 1.5, 'F');
   doc.setTextColor(...muted);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
@@ -205,6 +233,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
     quote.prospectEmail,
     quote.prospectPhone,
     quote.country,
+    `Empresas cubiertas: ${quantity(quote.companyCount || 1)}`,
   ]
     .filter(Boolean)
     .join('  -  ');
@@ -241,7 +270,6 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
 
   const items = quote.items || [];
   const totals = calculatePlatformQuoteTotals(quote);
-  const includedCount = items.filter(isIncludedItem).length;
   const rows: RowInput[] = [];
   const discountRowIndex = items.findIndex((item) => !isIncludedItem(item) && amountOf(item) > 0);
   const showDiscount = totals.visibility.showDiscount;
@@ -266,7 +294,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
       quantity(item.quantity),
       itemPriceLabel(item, quote.currency),
       itemBillingLabel(item),
-      item.detail?.trim() || (isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
+      detailListLabel(item.detail, isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
     ];
     if (showDiscount) row.splice(4, 0, lineDiscount > 0 ? discountLabelOf(item, quote.currency) : lineNumber - 1 === discountRowIndex && totals.discount > 0 ? `-${money(totals.discount, quote.currency)}` : '-');
     rows.push(row);
@@ -275,7 +303,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   autoTable(doc, {
     startY: y,
     margin: { top: 39, left: margin, right: margin, bottom: 22 },
-    head: [showDiscount ? ['#', 'Concepto', 'Cantidad', 'Precio unit.', 'Descuento', 'Cobro', 'Descripción / alcance'] : ['#', 'Concepto', 'Cantidad', 'Precio unit.', 'Cobro', 'Descripción / alcance']],
+    head: [showDiscount ? ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Descuento', 'Cobro', 'Descripción / alcance'] : ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
     body: rows,
     theme: 'grid',
     styles: {
@@ -302,6 +330,9 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
     didParseCell: (data) => {
       const sectionRow = Array.isArray(data.row.raw) && data.row.raw.length === 1;
       if (sectionRow) return;
+      if (data.section === 'body' && data.row.index % 2 === 0) {
+        data.cell.styles.fillColor = [252, 254, 253];
+      }
       const billingColumn = showDiscount ? 5 : 4;
       const discountColumn = showDiscount ? 4 : -1;
       if (data.section === 'body' && data.column.index === billingColumn) {
@@ -338,12 +369,17 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   });
 
   y = ((doc as any).lastAutoTable?.finalY || y + 30) + 10;
-  const noteLines = quote.notes ? doc.splitTextToSize(quote.notes, 91).slice(0, 3) : [];
+  const noteLines = quote.notes ? doc.splitTextToSize(quote.notes, 88).slice(0, 3) : [];
+  const includedLabels = items.filter(isIncludedItem).map((item) => item.description?.trim()).filter(Boolean).slice(0, 6) as string[];
+  const scopeText = includedLabels.length
+    ? includedLabels.map((label) => `- ${label}`).join('\n')
+    : `- Modalidad y alcance detallados por concepto\n- Moneda: ${currencyLabel(quote.currency)}`;
+  const scopeLines = doc.splitTextToSize(scopeText, 88).slice(0, 8);
   const summaryRows = (totals.visibility.showInitialTotal ? 1 : 0) + (totals.visibility.showSubtotal ? 1 : 0) + (totals.visibility.showDiscount && totals.discount > 0 ? 1 : 0) + (totals.visibility.showMonthlyTotal ? 1 : 0) + (totals.visibility.showTax && totals.taxAmount > 0 ? 1 : 0) + (totals.visibility.showTotal ? 1 : 0);
   const summaryHeight = Math.max(
-    isInvoice ? 60 : 45,
+    isInvoice ? 66 : 60,
     24 + summaryRows * 5,
-    noteLines.length ? Math.min(3, noteLines.length) * 3.8 + 27 : 0,
+    31 + scopeLines.length * 3.8 + (noteLines.length ? Math.min(3, noteLines.length) * 3.8 + 7 : 0),
   );
   const signatureSpace = 22;
 
@@ -378,7 +414,8 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   };
   if (totals.visibility.showInitialTotal) drawTotalLine('Total inicial', totals.displayInitialTotal);
   if (totals.visibility.showSubtotal) drawTotalLine('Subtotal', totals.displaySubtotal);
-  if (totals.visibility.showDiscount && totals.discount > 0) drawTotalLine('Descuento aplicado', -totals.discount, [220, 38, 38]);
+  const savingPercent = totals.displaySubtotal > 0 ? (totals.discount / totals.displaySubtotal) * 100 : 0;
+  if (totals.visibility.showDiscount && totals.discount > 0) drawTotalLine(`Ahorro para el cliente (${savingPercent.toFixed(1)}%)`, -totals.discount, darkGreen);
   if (totals.visibility.showMonthlyTotal) drawTotalLine('Total mensual', totals.displayMonthlyTotal);
   if (totals.visibility.showTax && totals.taxAmount > 0) drawTotalLine(`IVA / impuestos (${quote.taxRate}%)`, totals.taxAmount);
   if (totals.visibility.showTotal) {
@@ -397,24 +434,21 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   doc.setTextColor(...forest);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
-  doc.text('ALCANCE Y CONDICIONES', margin + 6, y + 19);
+  doc.text('ALCANCE INCLUIDO', margin + 6, y + 19);
   doc.setTextColor(...slate);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.2);
-  let detailY = y + 25;
-  if (includedCount > 0) {
-    doc.setTextColor(...darkGreen);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${includedCount} valor(es) agregado(s) incluido(s) sin costo adicional.`, margin + 6, detailY);
-    detailY += 5;
-  }
-  doc.setTextColor(...slate);
-  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.1);
+  doc.text(scopeLines, margin + 6, y + 25);
   if (noteLines.length) {
-    doc.text(noteLines, margin + 6, detailY);
-  } else {
-    doc.text(`Moneda: ${currencyLabel(quote.currency)}`, margin + 6, detailY);
-    doc.text('La modalidad y el alcance se detallan por concepto.', margin + 6, detailY + 5);
+    const noteY = y + 25 + scopeLines.length * 3.8 + 5;
+    doc.setTextColor(...forest);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.2);
+    doc.text('CONDICIONES', margin + 6, noteY);
+    doc.setTextColor(...slate);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text(noteLines, margin + 6, noteY + 4);
   }
   if (isInvoice) {
     doc.setFillColor(240, 253, 244);
@@ -442,7 +476,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   doc.text(isInvoice ? 'EL CLIENTE' : 'EL CLIENTE / PROSPECTO', width - margin - 38, y, { align: 'center' });
 
   drawFooter();
-  doc.save(buildPdfFileName([isInvoice ? 'factura' : 'cotizacion', quote.number || 'sin_numero']));
+  doc.save(buildLabeledPdfFileName(isInvoice ? 'Factura' : 'Cotización', quote.number));
 }
 
 export async function downloadPlatformQuoteCommercialReport(
@@ -459,7 +493,7 @@ export async function downloadPlatformQuoteCommercialReport(
   const condition = [report.pricePreferential && 'Precio preferencial', report.specialPrice && 'Condición especial']
     .filter(Boolean)
     .join(' - ');
-  const logo = await getNovaHubLogoPng();
+  const logo = await getNovaHubLogotipoPng();
 
   const drawFooter = () => {
     doc.setDrawColor(...line);
@@ -556,7 +590,7 @@ export async function downloadPlatformQuoteCommercialReport(
       quantity(item.quantity),
       itemPriceLabel(item, quote.currency),
       itemBillingLabel(item),
-      item.detail?.trim() || (isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
+      detailListLabel(item.detail, isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
     ];
     if (hasCondition) row.push(condition || '-');
     rows.push(row);
@@ -566,8 +600,8 @@ export async function downloadPlatformQuoteCommercialReport(
     startY: y,
     margin: { top: 38, left: margin, right: margin, bottom: 22 },
     head: [hasCondition
-      ? ['#', 'Concepto', 'Cant.', 'Precio unit.', 'Cobro', 'Descripción / alcance', 'Condición comercial']
-      : ['#', 'Concepto', 'Cant.', 'Precio unit.', 'Cobro', 'Descripción / alcance']],
+      ? ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance', 'Condición comercial']
+      : ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
     body: rows,
     theme: 'grid',
     styles: { font: 'helvetica', fontSize: 6.8, textColor: ink, lineColor: line, lineWidth: 0.15, cellPadding: 1.9, overflow: 'linebreak', valign: 'middle' },

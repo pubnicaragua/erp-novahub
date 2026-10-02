@@ -54,6 +54,44 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Allows a future Web Push provider to show a notification even when the PWA
+// is backgrounded. In-app notifications continue to use the authenticated SSE
+// channel and do not depend on this listener.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text?.() || '' }; }
+  const title = data.title || 'NovaHub ERP';
+  const options = {
+    body: data.body || data.message || 'Tienes una actualización pendiente.',
+    icon: data.icon || '/novahub-isotipo.png',
+    badge: data.badge || '/novahub-isotipo.png',
+    tag: data.tag || 'novahub-notification',
+    data: { url: data.url || '/', notificationId: data.notificationId || null },
+    vibrate: [180, 80, 180],
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || '/', self.location.origin).href;
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const existing = clients.find((client) => client.url.startsWith(self.location.origin));
+    if (existing && 'focus' in existing) {
+      existing.postMessage({
+        type: 'novahub-notification-click',
+        notificationId: event.notification.data?.notificationId || null,
+        url: targetUrl,
+      });
+      await existing.focus();
+      if ('navigate' in existing && existing.url !== targetUrl) await existing.navigate(targetUrl);
+      return;
+    }
+    await self.clients.openWindow(targetUrl);
+  })());
+});
+
 async function cacheStatic(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);

@@ -5,11 +5,13 @@ import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
-import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import { PdfDownloadButton, type PdfDownloadExtraOptions } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getSalesStatusColor } from '../../utils/salesStatus';
 import { CurrencyRateDetails } from '../ui/CurrencyValuation';
 import { managerStatusLabel } from '../../utils/managerLabels';
+import { normalizeEstimateImages } from '../../types';
+import { EstimateImageGallery } from './EstimateImageGallery';
 
 export interface SalesDocumentPanelLine {
   id: string;
@@ -51,6 +53,7 @@ export interface SalesDocumentPanelData {
   notes?: string;
   reason?: string;
   history?: any[];
+  images?: Array<{ id?: string; url: string; name?: string; caption?: string }>;
 }
 
 export function getSalesLineIdentifiers(item: any, products: any[] = []): { productCode: string | null; variantSku: string | null } {
@@ -71,7 +74,7 @@ interface SalesDocumentDetailSheetProps {
   onGoToBranch?: () => void;
   onWhatsApp?: () => void;
   hasWhatsApp?: boolean;
-  onDownloadPdf?: (format: PdfDownloadFormat) => void;
+  onDownloadPdf?: (format: PdfDownloadFormat, scope?: any, filter?: any, options?: PdfDownloadExtraOptions) => void;
   extraActions?: ReactNode;
 }
 
@@ -191,7 +194,15 @@ export function SalesDocumentDetailSheet({
                   <MessageCircle className="size-4 shrink-0" /> WhatsApp
                 </Button>}
                 {extraActions}
-                {onDownloadPdf && <PdfDownloadButton onDownload={onDownloadPdf} includePageSizes includeRoll />}
+                {onDownloadPdf && (
+                  <PdfDownloadButton
+                    onDownload={onDownloadPdf}
+                    includePageSizes
+                    includeRoll
+                    hasImages={Boolean(normalizeEstimateImages(document.images).items.length)}
+                    imagesCount={normalizeEstimateImages(document.images).items.length}
+                  />
+                )}
               </section>
 
               <section className="rounded-2xl border border-border/50 p-4">
@@ -203,6 +214,27 @@ export function SalesDocumentDetailSheet({
                   ))}
                 </div>
               </section>
+
+              {normalizeEstimateImages(document.images).items.length > 0 && (
+                <EstimateImageGallery
+                  images={document.images}
+                  readOnly
+                />
+              )}
+
+              {normalizeEstimateImages(document.images).customFields?.length > 0 && (
+                <section className="rounded-2xl border border-border/50 p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Campos adicionales</p>
+                  <div className="grid gap-2 text-sm sm:grid-cols-2">
+                    {normalizeEstimateImages(document.images).customFields.map((field, idx) => (
+                      <div key={idx} className="rounded-lg border border-border/40 bg-muted/10 p-2.5">
+                        <p className="text-[10px] font-bold uppercase text-primary">{field.title}</p>
+                        <p className="mt-0.5 text-xs text-foreground font-medium">{field.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               <section className="rounded-2xl border border-border/50 p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">

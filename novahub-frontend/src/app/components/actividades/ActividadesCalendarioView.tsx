@@ -38,6 +38,12 @@ import {
 import { es } from 'date-fns/locale';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 
 interface ActividadesCalendarioViewProps {
   eventos: any[];
@@ -45,6 +51,7 @@ interface ActividadesCalendarioViewProps {
   loading?: boolean;
   onRefresh?: () => void;
   onNewEventClick?: () => void;
+  onNewMeetingClick?: () => void;
 }
 
 type ViewMode = 'month' | 'agenda';
@@ -55,12 +62,13 @@ export const ActividadesCalendarioView: React.FC<ActividadesCalendarioViewProps>
   loading = false,
   onRefresh,
   onNewEventClick,
+  onNewMeetingClick,
 }) => {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDay, setSelectedDay] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
-  const [selectedKind, setSelectedKind] = useState<'event' | 'task'>('event');
+  const [selectedKind, setSelectedKind] = useState<'event' | 'task' | 'meeting'>('event');
 
   // Filtros activos
   const [showEvents, setShowEvents] = useState(true);
@@ -96,7 +104,7 @@ export const ActividadesCalendarioView: React.FC<ActividadesCalendarioViewProps>
           if (isValid(p)) endParsed = p;
         }
 
-        const isMeeting = Boolean(e.meetingUrl || e.meetingPlatform || e.type === 'MEETING');
+        const isMeeting = e.type === 'MEETING' || (!e.type && Boolean(e.meetingUrl || e.meetingPlatform));
         const guestEmails = Array.isArray(e.guestEmails) ? e.guestEmails : [];
 
         list.push({
@@ -108,7 +116,7 @@ export const ActividadesCalendarioView: React.FC<ActividadesCalendarioViewProps>
           raw: e,
           location: e.location || (isMeeting ? e.meetingPlatform || 'Videollamada' : undefined),
           status: e.status,
-          isVirtual: isMeeting,
+          isVirtual: Boolean(e.meetingUrl || e.meetingPlatform),
           guestCount: guestEmails.length,
         });
       });
@@ -163,7 +171,7 @@ export const ActividadesCalendarioView: React.FC<ActividadesCalendarioViewProps>
 
   const handleOpenItem = (activity: any) => {
     setSelectedItem(activity.raw);
-    setSelectedKind(activity.type === 'task' ? 'task' : 'event');
+    setSelectedKind(activity.type === 'task' ? 'task' : activity.type === 'meeting' ? 'meeting' : 'event');
   };
 
   return (
@@ -271,16 +279,41 @@ export const ActividadesCalendarioView: React.FC<ActividadesCalendarioViewProps>
             </Button>
           </div>
 
-          {onNewEventClick && (
-            <Button
-              type="button"
-              onClick={onNewEventClick}
-              size="sm"
-              className="h-8 gap-1.5 rounded-xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider px-3"
-            >
-              <Plus className="size-3.5" />
-              Nuevo
-            </Button>
+          {(onNewEventClick || onNewMeetingClick) && (
+            onNewEventClick && onNewMeetingClick ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider px-3"
+                  >
+                    <Plus className="size-3.5" />
+                    Nuevo
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44 rounded-xl">
+                  <DropdownMenuItem onClick={onNewEventClick} className="gap-2 text-xs font-bold cursor-pointer">
+                    <CalendarDays className="size-4 text-emerald-600" />
+                    Nuevo Evento
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onNewMeetingClick} className="gap-2 text-xs font-bold cursor-pointer">
+                    <Video className="size-4 text-violet-600" />
+                    Nueva Reunión
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                type="button"
+                onClick={onNewEventClick || onNewMeetingClick}
+                size="sm"
+                className="h-8 gap-1.5 rounded-xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider px-3"
+              >
+                <Plus className="size-3.5" />
+                Nuevo
+              </Button>
+            )
           )}
         </div>
       </div>

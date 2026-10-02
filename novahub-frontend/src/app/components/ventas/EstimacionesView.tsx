@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft
+  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft, Upload, Image as ImageIcon, Loader2, X
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -14,14 +14,16 @@ import { estimatesService } from '../../services/ventas.service';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { Estimate, EstimateItem, Customer, Product, SalesPaginationControls } from '../../types';
+import type { Estimate, EstimateItem, EstimateImage, Customer, Product, SalesPaginationControls, EstimateImagesPayload, EstimateCustomField } from '../../types';
+import { normalizeEstimateImages, isEstimateCustomFieldExpired } from '../../types';
+import { EstimateImageGallery } from './EstimateImageGallery';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF, previewSalesTransactionPDF } from '../../utils/pdfGenerator';
-import { buildPdfFileName } from '../../utils/exportFileNames';
+import { buildSalesPdfFileName } from '../../utils/exportFileNames';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
@@ -36,6 +38,7 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { PdfDownloadButton, type PdfDownloadExtraOptions } from '../ui/PdfDownloadButton';
 import { EstimacionesKanban } from './EstimacionesKanban';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
@@ -110,6 +113,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [detailEstimate, setDetailEstimate] = useState<Estimate | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+  const customerDetailsCacheRef = useRef(new Map<string, Customer>());
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const localDraftRef = useRef<Estimate | null>(null);
@@ -117,6 +121,125 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const localDocRef = useRef<Estimate | null>(null);
   const hydratedDraftKeyRef = useRef<string | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadImages = async (files: FileList | File[]) => {
+    if (!localDoc || !files || files.length === 0) return;
+    const fileArray = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (fileArray.length === 0) {
+      toast.error('Selecciona archivos de imagen válidos (PNG, JPG, WEBP, etc.)');
+      return;
+    }
+    setUploadingImage(true);
+    const uploadToastId = toast.loading(`Subiendo ${fileArray.length} imagen${fileArray.length > 1 ? 'es' : ''}...`);
+    try {
+      const current = normalizeEstimateImages(localDoc.images);
+      const uploadedList: EstimateImage[] = [];
+      for (const file of fileArray) {
+        const uploaded = await storageService.uploadFile('documents', file, { folder: 'cotizaciones' });
+        uploadedList.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          url: uploaded.url,
+          name: file.name,
+          title: '',
+          description: '',
+          caption: '',
+          showFileName: current.showFileName,
+          byteSize: file.size,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      const nextPayload: EstimateImagesPayload = {
+        items: [...current.items, ...uploadedList],
+        columns: current.columns,
+        size: current.size,
+        showFileName: current.showFileName,
+      };
+      const nextDoc = { ...localDoc, images: nextPayload };
+      commitLocalDoc(nextDoc);
+      void handleUpdate(localDoc.id, { images: nextPayload } as any);
+      toast.success(`${fileArray.length} imagen${fileArray.length > 1 ? 'es añadidas' : ' añadida'} con éxito`, { id: uploadToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al subir las imágenes', { id: uploadToastId });
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleChangeImagesPayload = (nextPayload: EstimateImagesPayload) => {
+    const currentDoc = localDocRef.current || localDoc;
+    if (!currentDoc) return;
+    const nextDoc = { ...currentDoc, images: nextPayload };
+    commitLocalDoc(nextDoc);
+  };
+
+  const handlePersistImages = (customPayload?: unknown) => {
+    const currentDoc = localDocRef.current || localDoc;
+    if (!currentDoc) return;
+    const isPayload = customPayload && typeof customPayload === 'object' && 'items' in customPayload;
+    const targetPayload = isPayload ? (customPayload as EstimateImagesPayload) : currentDoc.images;
+    void handleUpdate(currentDoc.id, { images: targetPayload } as any);
+  };
+
+  const [customFieldTitle, setCustomFieldTitle] = useState('');
+  const [customFieldDescription, setCustomFieldDescription] = useState('');
+
+  const getEstimateCustomFields = (doc: Estimate | null): EstimateCustomField[] => {
+    if (!doc) return [];
+    if (Array.isArray(doc.customFields)) {
+      return doc.customFields.filter((f) => !isEstimateCustomFieldExpired(f));
+    }
+    const normalized = normalizeEstimateImages(doc.images);
+    return (normalized.customFields || []).filter((f) => !isEstimateCustomFieldExpired(f));
+  };
+
+  const updateCustomFields = (nextFields: EstimateCustomField[]) => {
+    const currentDoc = localDocRef.current || localDoc;
+    if (!currentDoc) return;
+    const currentImagesPayload = normalizeEstimateImages(currentDoc.images);
+    const nextImagesPayload: EstimateImagesPayload = {
+      ...currentImagesPayload,
+      customFields: nextFields,
+    };
+    const nextDoc: Estimate = {
+      ...currentDoc,
+      customFields: nextFields,
+      images: nextImagesPayload,
+    };
+    commitLocalDoc(nextDoc);
+    void handleUpdate(currentDoc.id, {
+      images: nextImagesPayload,
+    } as any);
+  };
+
+  const handleAddCustomField = () => {
+    if (!customFieldTitle.trim() || !customFieldDescription.trim()) {
+      toast.error('Ingresa un título y una descripción para el campo adicional');
+      return;
+    }
+    const currentFields = getEstimateCustomFields(localDocRef.current || localDoc);
+    const updated = [
+      ...currentFields,
+      {
+        id: crypto.randomUUID ? crypto.randomUUID() : `cf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title: customFieldTitle.trim(),
+        description: customFieldDescription.trim(),
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    updateCustomFields(updated);
+    setCustomFieldTitle('');
+    setCustomFieldDescription('');
+    toast.success('Campo adicional agregado');
+  };
+
+  const handleRemoveCustomField = (indexToRemove: number) => {
+    const currentFields = getEstimateCustomFields(localDocRef.current || localDoc);
+    const updated = currentFields.filter((_, idx) => idx !== indexToRemove);
+    updateCustomFields(updated);
+  };
 
   const commitLocalDoc = (nextDoc: Estimate | null) => {
     localDocRef.current = nextDoc;
@@ -262,36 +385,40 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     }
   };
 
-  const buildEstimateStatusPayload = (status: 'DRAFT' | 'IN_PROCESS') => ({
-    number: localDoc?.number,
-    customerId: localDoc?.customerId || null,
-    date: localDoc?.date,
-    expiryDate: localDoc?.expiryDate,
-    subtotal: localDoc?.subtotal,
-    taxAmount: localDoc?.taxAmount,
-    discountAmount: localDoc?.discountAmount,
-    irRate: 0,
-    irTaxId: null,
-    irAmount: 0,
-    priceListId: localDoc?.priceListId || null,
-    total: localDoc?.total,
-    extraCostDescription: localDoc?.extraCostDescription || null,
-    extraCostAmount: localDoc?.extraCostAmount || 0,
-    extraCharges: getSalesExtraChargesPayload(localDoc),
-    deliveryDescription: localDoc?.deliveryDescription || null,
-    deliveryAmount: localDoc?.deliveryAmount || 0,
-    currency: localDoc?.currency,
-    exchangeRate: localDoc?.exchangeRate,
-    baseTotal: (localDoc as any)?.baseTotal,
-    warehouseId: localDoc?.warehouseId || null,
-    notes: localDoc?.notes,
-    items: (localDoc?.items || []).map((item: any) => ({
-      ...item,
-      productCode: item.productCode || item.code || products.find((product) => product.id === item.productId)?.code,
-    })),
-    pricingMode,
-    status,
-  } as Partial<Estimate>);
+  const buildEstimateStatusPayload = (status: 'DRAFT' | 'IN_PROCESS') => {
+    const docToUse = localDocRef.current || localDoc;
+    return {
+      number: docToUse?.number,
+      customerId: docToUse?.customerId || null,
+      date: docToUse?.date,
+      expiryDate: docToUse?.expiryDate,
+      subtotal: docToUse?.subtotal,
+      taxAmount: docToUse?.taxAmount,
+      discountAmount: docToUse?.discountAmount,
+      irRate: 0,
+      irTaxId: null,
+      irAmount: 0,
+      priceListId: docToUse?.priceListId || null,
+      total: docToUse?.total,
+      extraCostDescription: docToUse?.extraCostDescription || null,
+      extraCostAmount: docToUse?.extraCostAmount || 0,
+      extraCharges: getSalesExtraChargesPayload(docToUse),
+      deliveryDescription: docToUse?.deliveryDescription || null,
+      deliveryAmount: docToUse?.deliveryAmount || 0,
+      currency: docToUse?.currency,
+      exchangeRate: docToUse?.exchangeRate,
+      baseTotal: (docToUse as any)?.baseTotal,
+      warehouseId: docToUse?.warehouseId || null,
+      notes: docToUse?.notes,
+      images: docToUse?.images || [],
+      items: (docToUse?.items || []).map((item: any) => ({
+        ...item,
+        productCode: item.productCode || item.code || products.find((product) => product.id === item.productId)?.code,
+      })),
+      pricingMode,
+      status,
+    } as Partial<Estimate>;
+  };
 
   const handleSaveEstimate = async (status: 'DRAFT' | 'IN_PROCESS') => {
     if (!localDoc) return;
@@ -333,11 +460,32 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
   const getCustomerPhone = (estimate: Estimate | null = localDoc): string | null => {
     if (!estimate) return null;
-    return resolveCustomerPhone(estimate.customerId, estimate.customer, customers);
+    return resolveCustomerPhone(estimate.customerId, estimate.customer, customers, estimate.customCustomerPhone);
+  };
+
+  const resolveEstimateCustomer = async (estimate: Estimate): Promise<Customer | undefined> => {
+    const snapshot = customers.find((customer) => customer.id === estimate.customerId) || estimate.customer;
+    const cached = estimate.customerId ? customerDetailsCacheRef.current.get(estimate.customerId) : undefined;
+    const base = { ...(estimate.customer || {}), ...(snapshot || {}), ...(cached || {}) };
+    if (base.phone || base.contactPhone) return base as Customer;
+    if (!estimate.customerId) return base as Customer;
+    try {
+      const detail = await customersService.getById(estimate.customerId);
+      if (detail?.id) {
+        customerDetailsCacheRef.current.set(estimate.customerId, detail as Customer);
+        return { ...(base || {}), ...detail } as Customer;
+      }
+    } catch (error) {
+      console.warn('No se pudo cargar el detalle completo del cliente para la cotización:', error);
+    }
+    return base as Customer;
   };
 
   const handleWhatsApp = async (estimateOverride?: Estimate) => {
-    const estimate = estimateOverride || localDoc;
+    const baseEstimate = estimateOverride || localDoc;
+    if (!baseEstimate) return;
+    const currentCustomer = await resolveEstimateCustomer(baseEstimate);
+    const estimate = currentCustomer ? { ...baseEstimate, customer: currentCustomer } : baseEstimate;
     const phone = getCustomerPhone(estimate);
     if (!phone) {
       toast.error('El cliente no tiene un número asociado para enviar la cotización por WhatsApp');
@@ -350,7 +498,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
     const preparingToastId = estimate ? toast.loading('Generando PDF y preparando enlaces seguros...') : undefined;
     if (estimate) {
-      const currentCustomer = customers.find((c) => c.id === estimate.customerId) || estimate.customer;
       try {
         if (estimate.customerId) {
           const [documentLink, portalLink] = await Promise.all([
@@ -361,15 +508,16 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           securePortalUrl = publicLinkUrl(portalLink.path);
         }
         if (!secureDocumentUrl) {
+          const activeCustomFields = getEstimateCustomFields(estimate);
           const { blob } = await generateEstimatePDF({
-            estimate: { ...estimate, customer: currentCustomer },
+            estimate: { ...estimate, customer: currentCustomer, customFields: activeCustomFields },
             tenantName: user?.sessionBranding?.name || themeConfig?.tenantName || user?.tenantName || 'Empresa',
             tenantLogo: themeConfig?.logo,
             formatAmount: formatConvertedAmount,
             save: true,
           });
           // Compatibilidad: solo usa el enlace legado si el servicio seguro no está disponible.
-          const fileName = buildPdfFileName(['cotizacion', estimate.number || 'sin_numero']);
+          const fileName = buildSalesPdfFileName('estimate', estimate.number);
           const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
           const uploaded = await storageService.uploadFile('documents', pdfFile, { folder: 'cotizaciones' });
           if (uploaded?.url) publicPdfUrl = uploaded.url;
@@ -403,16 +551,22 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     }
   };
 
-  const handleExportPDF = async (estimate: Estimate, format: PdfDownloadFormat = 'configured') => {
+  const handleExportPDF = async (estimate: Estimate, format: PdfDownloadFormat = 'configured', options?: PdfDownloadExtraOptions) => {
     const previewToastId = toast.loading('Preparando la previsualización de la cotización...');
     try {
+      const activeCustomFields = getEstimateCustomFields(estimate);
+      const estimateWithFields = {
+        ...estimate,
+        customFields: activeCustomFields,
+      };
       await previewSalesTransactionPDF({
-        document: { ...estimate, customer: customers.find((customer) => customer.id === estimate.customerId) || estimate.customer },
+        document: resolveEstimateCustomer(estimateWithFields).then((currentCustomer) => ({ ...estimateWithFields, customer: currentCustomer })),
         tenantName: user?.sessionBranding?.name || themeConfig?.tenantName || user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,
         formatAmount: formatConvertedAmount as any,
         documentType: 'estimate',
         format,
+        withImages: options?.withImages ?? true,
       });
       toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
     } catch (error: any) {
@@ -451,6 +605,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       totalLabel: formatConvertedAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate),
     })),
     notes: estimate.notes,
+    images: estimate.images || [],
   });
 
   const handleAddEstimate = () => {
@@ -694,6 +849,16 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               <Button variant="outline" onClick={() => void handleWhatsApp()} className="w-full rounded-xl border-emerald-200 px-4 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-400/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 sm:w-auto">
                 <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
               </Button>
+            )}
+            {canPerform('SALES_QUOTES', 'export') && localDoc && (
+              <PdfDownloadButton
+                onDownload={(format, _scope, _filter, options) => void handleExportPDF(localDoc, format, options)}
+                includePageSizes
+                includeRoll
+                hasImages={Boolean(normalizeEstimateImages(localDoc.images).items.length)}
+                imagesCount={normalizeEstimateImages(localDoc.images).items.length}
+                className="w-full sm:w-auto"
+              />
             )}
             {canPerform('SALES_QUOTES', 'edit') && !['APPROVED', 'CANCELLED'].includes(normalizeEstimateStatus(localDoc?.status)) && (
               <>
@@ -1178,6 +1343,115 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           </CardContent>
         </Card>
 
+        {/* Campos Adicionales para Exportación PDF */}
+        <Card className="rounded-2xl border-border/50">
+          <CardContent className="p-4 sm:p-6 space-y-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <FileSpreadsheet className="size-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-foreground">
+                    Campos Adicionales para PDF
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Agrega condiciones, garantías o especificaciones que se agruparán en una tabla en la exportación PDF.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Formulario para agregar campo adicional con texto libre */}
+            <div className="flex flex-col gap-2.5 rounded-xl border border-border/60 bg-muted/15 p-3 sm:flex-row sm:items-end">
+              <div className="w-full sm:w-1/3 space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  Título del campo
+                </label>
+                <Input
+                  value={customFieldTitle}
+                  onChange={(e) => setCustomFieldTitle(e.target.value)}
+                  placeholder="Ej: Garantía, Entrega, Color, etc."
+                  className="h-8 text-xs bg-background w-full"
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  Descripción / Detalle
+                </label>
+                <Input
+                  value={customFieldDescription}
+                  onChange={(e) => setCustomFieldDescription(e.target.value)}
+                  placeholder="Ej: 12 meses de garantía, 5 días hábiles..."
+                  className="h-8 text-xs bg-background"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCustomField();
+                    }
+                  }}
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleAddCustomField}
+                className="h-8 gap-1 rounded-lg text-xs font-bold shrink-0"
+              >
+                <Plus className="size-3.5" /> Agregar
+              </Button>
+            </div>
+
+            {/* Lista / Vista previa de la tabla de campos adicionales */}
+            {getEstimateCustomFields(localDocRef.current || localDoc).length > 0 && (
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-background">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40 text-[10px] font-black uppercase tracking-wider text-muted-foreground border-b border-border/40">
+                    <tr>
+                      <th className="py-2 px-3 text-left w-1/3">Campo / Título</th>
+                      <th className="py-2 px-3 text-left">Descripción / Detalle</th>
+                      <th className="py-2 px-3 text-center whitespace-nowrap w-24">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/30">
+                    {getEstimateCustomFields(localDocRef.current || localDoc).map((field, idx) => (
+                      <tr key={idx} className="hover:bg-muted/10 transition-colors">
+                        <td className="py-2 px-3 font-semibold text-foreground align-top">
+                          {field.title}
+                        </td>
+                        <td className="py-2 px-3 text-muted-foreground align-top">
+                          {field.description}
+                        </td>
+                        <td className="py-2 px-3 text-center align-middle w-24">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveCustomField(idx)}
+                            className="size-7 inline-flex items-center justify-center text-muted-foreground hover:bg-rose-500/10 hover:text-rose-600"
+                            title="Eliminar campo"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Galería de Imágenes y Renders adjuntos */}
+        <EstimateImageGallery
+          images={localDoc?.images}
+          onChange={handleChangeImagesPayload}
+          onBlur={handlePersistImages}
+          onUpload={handleUploadImages}
+          uploading={uploadingImage}
+        />
+
         {localDoc?.notes && (
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Notas</p><p className="text-sm">{localDoc.notes}</p></CardContent>
@@ -1247,7 +1521,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           actions={(row) => (
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 pr-1 xl:min-w-max xl:flex-nowrap" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
               <WhatsAppActionButton
-                phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
+                phone={resolveCustomerPhone(row.customerId, row.customer, customers, row.customCustomerPhone)}
                 documentLabel="cotización"
                 onSend={() => handleWhatsApp(row)}
               />
@@ -1292,14 +1566,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         }}
         extraActions={detailEstimate ? <>
           <WhatsAppActionButton
-            phone={resolveCustomerPhone(detailEstimate.customerId, detailEstimate.customer, customers)}
+            phone={resolveCustomerPhone(detailEstimate.customerId, detailEstimate.customer, customers, detailEstimate.customCustomerPhone)}
             documentLabel="cotización"
             onSend={() => handleWhatsApp(detailEstimate)}
           />
           {canPerform('SALES_QUOTES', 'approve') && normalizeEstimateStatus(detailEstimate.status) === 'IN_PROCESS' && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertToOrder(estimate); }}><ArrowRightCircle className="mr-2 size-4" />Enviar a orden</Button>}
           {canPerform('SALES_QUOTES', 'delete') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(detailEstimate.status)) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailEstimate(null); setPendingCancelId(detailEstimate.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
-        onDownloadPdf={canPerform('SALES_QUOTES', 'export') ? (format) => { if (detailEstimate) void handleExportPDF(detailEstimate, format); } : undefined}
+        onDownloadPdf={canPerform('SALES_QUOTES', 'export') ? (format, _scope, _filter, options) => { if (detailEstimate) void handleExportPDF(detailEstimate, format, options); } : undefined}
       />
 
       <ConfirmDialog

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Link2, Smartphone
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -47,6 +47,8 @@ import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { PoketPayLinkDialog } from './PoketPayLinkDialog';
+import { PoketAppToAppDialog } from './PoketAppToAppDialog';
 import { getAvailableSalesStock, getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
 import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
@@ -54,6 +56,8 @@ import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorT
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentChangeBase } from '../../utils/paymentSettlement';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
+import { VoiceSaleComposer } from './VoiceSaleComposer';
+import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-parser';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -134,6 +138,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     toBaseAmount,
   } = useCurrency();
   const { user, canPerform } = useAuth();
+  const quickVoiceEnabled = Boolean(user?.isPlatformAdmin || user?.enabledModules?.includes('SALES_VOICE_QUICK'));
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('invoice', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState(() => {
@@ -213,6 +218,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [creditDueDate, setCreditDueDate] = useState('');
   const [creditLoading, setCreditLoading] = useState(false);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
+  const [paylinkInvoice, setPaylinkInvoice] = useState<Invoice | null>(null);
+  const [poketAppInvoice, setPoketAppInvoice] = useState<Invoice | null>(null);
   const localDocRef = useRef<any>(null);
   const hydratedDraftKeyRef = useRef<string | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -332,7 +339,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   const getCustomerPhone = (invoice: Invoice | null = localDoc): string | null => {
     if (!invoice) return null;
-    return resolveCustomerPhone(invoice.customerId, invoice.customer, customers);
+    return resolveCustomerPhone(invoice.customerId, invoice.customer, customers, invoice.customCustomerPhone);
   };
 
   const handleWhatsApp = async (invoiceOverride?: Invoice) => {
@@ -1222,6 +1229,88 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
   };
 
+  const applyVoiceLinesToInvoice = (lines: VoiceSaleLine<Product>[], metadata: VoiceSaleMetadata) => {
+    if (!localDoc || !lines.length) return;
+    const normalizeCustomer = (value: string) => value
+      .toLocaleLowerCase('es-NI')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const customerQuery = normalizeCustomer(metadata.customerText || '');
+    const matchedCustomer = customerQuery
+      ? customers.find((customer) => {
+        const customerName = normalizeCustomer(customer.name || '');
+        return customerName && (customerName.includes(customerQuery) || customerQuery.includes(customerName));
+      })
+      : undefined;
+    if (metadata.customerText && !matchedCustomer) {
+      toast.warning(`No encontré el cliente “${metadata.customerText}”. Revisalo antes de guardar.`);
+    }
+    const nextCustomerId = matchedCustomer?.id || localDoc.customerId;
+    const priceListId = localDoc.priceListId || getCustomerPriceListId(nextCustomerId);
+    const dictatedPrice = metadata.unitPrice !== null && lines.length === 1
+      ? (metadata.unitPriceCurrency && metadata.unitPriceCurrency !== localDoc.currency
+        ? convertBetweenCurrencies(metadata.unitPrice, metadata.unitPriceCurrency, localDoc.currency, 1, Number(localDoc.exchangeRate || globalRate || 1))
+        : metadata.unitPrice)
+      : undefined;
+    if (metadata.unitPrice !== null && lines.length !== 1) {
+      toast.warning('Detecté un precio dictado, pero hay varias líneas. Revisá el precio de cada producto antes de guardar.');
+    }
+    const addedItems = lines.map((line, index) => {
+      const product = line.product;
+      const variant = line.variantName
+        ? product.variants?.find((candidate: any) => String(candidate.name || '').trim().toLowerCase() === String(line.variantName || '').trim().toLowerCase())
+        : undefined;
+      const itemType = getCatalogItemType(product);
+      const baseSalePrice = Number((product as any).salePrice ?? (product as any).price ?? 0);
+      const unitPrice = dictatedPrice ?? (localDoc.currency === 'USD'
+        ? baseSalePrice / Number(localDoc.exchangeRate || globalRate || 1)
+        : baseSalePrice);
+      const quantity = Math.max(1, Number(line.quantity || 1));
+      return {
+        id: `voice-${Date.now()}-${index}`,
+        productId: product.id,
+        productCode: (product as any).code || null,
+        itemType,
+        variantId: itemType === 'SERVICE' ? null : variant?.id || null,
+        variantName: itemType === 'SERVICE' ? null : variant?.name || null,
+        variantSku: itemType === 'SERVICE' ? null : variant?.sku || null,
+        variantAttributes: itemType === 'SERVICE' ? null : variant?.attributes || null,
+        warehouseId: itemType === 'SERVICE' ? undefined : localDoc.warehouseId || getDefaultWarehouseId(),
+        description: product.name,
+        commercialNoteSnapshot: (product as any).commercialNote || null,
+        quantity,
+        unitPrice,
+        priceListId: itemType === 'SERVICE' ? null : priceListId || null,
+        discount: 0,
+        taxRate: itemType === 'SERVICE' ? 0 : Number((product as any).taxRate || 0),
+        total: quantity * unitPrice,
+      };
+    });
+    const nextItems = [...(localDoc.items || []), ...addedItems];
+    const calc = recalcTotals(nextItems, localRates.dRate, localRates.tRate);
+    const voiceNotes = [
+      metadata.notes ? `[DICTADO] ${metadata.notes}` : '',
+      metadata.unmatchedText ? `[DICTADO_NO_CATALOGADO] ${metadata.unmatchedText}` : '',
+    ].filter(Boolean).join('\n');
+    const nextDoc = {
+      ...localDoc,
+      customerId: nextCustomerId,
+      priceListId,
+      notes: voiceNotes
+        ? `${String(localDoc.notes || '').trim()}${localDoc.notes ? '\n' : ''}${voiceNotes}`
+        : localDoc.notes,
+      ...calc,
+    };
+    commitLocalDoc(nextDoc);
+    if (!isCreating) void handleUpdate(localDoc.id, { customerId: nextCustomerId, priceListId, items: nextItems, notes: nextDoc.notes, ...calc } as any);
+    if (metadata.total !== null && Math.abs(Number(calc.total || 0) - metadata.total) > 0.01) {
+      toast.warning(`El total dictado (${metadata.total.toLocaleString('es-NI', { minimumFractionDigits: 2 })}) no coincide con el cálculo (${Number(calc.total || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}). Revisá impuestos, descuentos o cargos.`);
+    }
+  };
+
   function getInvoiceBalance(invoice: Partial<Invoice>) {
     const status = String(invoice.status || '').toUpperCase();
     if (status === 'DRAFT' || status === 'CANCELLED') return 0;
@@ -1573,6 +1662,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             )}
           </div>
         </div>
+
+         <VoiceSaleComposer
+           products={products}
+           disabled={isInvoiceLocked || productsLoading}
+           featureEnabled={quickVoiceEnabled}
+           title="Agregar productos por voz"
+           description="Dictá varias líneas y revisá el borrador. La factura nunca se guarda automáticamente."
+           onApply={applyVoiceLinesToInvoice}
+         />
 
         <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">
@@ -2190,7 +2288,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           actions={(row) => (
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 pr-1 xl:min-w-max xl:flex-nowrap">
               <WhatsAppActionButton
-                phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
+                phone={resolveCustomerPhone(row.customerId, row.customer, customers, row.customCustomerPhone)}
                 documentLabel="factura"
                 onSend={() => handleWhatsApp(row)}
               />
@@ -2270,14 +2368,30 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         formatDate={formatDateSafe}
         extraActions={detailInvoice ? <>
           <WhatsAppActionButton
-            phone={resolveCustomerPhone(detailInvoice.customerId, detailInvoice.customer, customers)}
+            phone={resolveCustomerPhone(detailInvoice.customerId, detailInvoice.customer, customers, detailInvoice.customCustomerPhone)}
             documentLabel="factura"
             onSend={() => handleWhatsApp(detailInvoice)}
           />
           {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_CREDIT_NOTES', 'approve') && !['PAID', 'CANCELLED', 'CREDIT'].includes(String(detailInvoice.status).toUpperCase()) && !detailInvoice.creditNotes?.some((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className={cn('rounded-xl border-primary/30 text-primary hover:bg-primary/10', !invoiceFitsAvailableCredit(detailInvoice) && 'cursor-not-allowed text-muted-foreground opacity-60')} disabled={!invoiceFitsAvailableCredit(detailInvoice)} onClick={() => openInvoiceCredit(detailInvoice)}><Send className="mr-2 size-4" />Enviar a crédito</Button>}
           {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" disabled={paymentLoading && paymentInvoice?.id === detailInvoice.id} onClick={() => openInvoicePayment(detailInvoice)}><CreditCard className="mr-2 size-4" />Registrar pago</Button>}
+          {canPerform('SALES_INVOICES', 'approve') && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPaylinkInvoice(detailInvoice)}><Link2 className="mr-2 size-4" />Generar link de pago</Button>}
+          {canPerform('SALES_INVOICES', 'approve') && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPoketAppInvoice(detailInvoice)}><Smartphone className="mr-2 size-4" />Cobrar con Poket</Button>}
           {canPerform('SALES_INVOICES', 'delete') && isInvoiceCancellableFromList(detailInvoice) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailInvoice(null); setPendingCancelId(detailInvoice.id); setCancelReason(''); }}><Ban className="mr-2 size-4" />Solicitar anulación</Button>}
         </> : undefined}
+      />
+
+      <PoketPayLinkDialog
+        invoice={paylinkInvoice}
+        open={Boolean(paylinkInvoice)}
+        onOpenChange={(open) => { if (!open) setPaylinkInvoice(null); }}
+        onRefresh={() => { void onRefresh?.(); if (paylinkInvoice) void openInvoiceDetail(paylinkInvoice); }}
+      />
+
+      <PoketAppToAppDialog
+        invoice={poketAppInvoice}
+        open={Boolean(poketAppInvoice)}
+        onOpenChange={(open) => { if (!open) setPoketAppInvoice(null); }}
+        onRefresh={() => { void onRefresh?.(); if (poketAppInvoice) void openInvoiceDetail(poketAppInvoice); }}
       />
 
       <ConfirmDialog

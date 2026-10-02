@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useQuery, type QueryKey, type UseQueryOptions } from '@tanstack/react-query';
+import { useQuery, type QueryClient, type QueryKey, type UseQueryOptions } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { runWithReportRequestLimit } from '../utils/report-request-limiter';
 
@@ -33,6 +33,16 @@ export function useTenantQuery<TData>(
 
 export const asList = (response: any): any[] =>
   Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
+
+/**
+ * Invalida las consultas creadas con `useTenantQuery`.
+ *
+ * Esas consultas usan la clave `['tenant-module', tenantKey, ...key]`, así que
+ * invalidar con la clave cruda (`['projects', projectId, ...]`) nunca coincide y la
+ * vista queda con datos viejos. Las mutaciones deben usar este helper.
+ */
+export const invalidateTenantQueries = (client: QueryClient) =>
+  client.invalidateQueries({ queryKey: ['tenant-module'] });
 
 /**
  * Carga todas las páginas de un listado usado por un reporte.

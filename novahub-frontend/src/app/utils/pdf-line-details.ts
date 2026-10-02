@@ -65,7 +65,7 @@ export function hasPdfVariantDetails(item: any): boolean {
  * Mantiene la descripción histórica y agrega los identificadores de variante
  * cuando la línea realmente está vinculada a una.
  */
-export function formatPdfItemDescription(item: any, fallback = 'Producto', includeCommercialNote = true): string {
+export function formatPdfItemDescription(item: any, fallback = 'Producto', includeCommercialNote = true, options?: { includeSku?: boolean }): string {
   const description = textValue(item?.description || item?.name || item?.product?.name || fallback);
   const variant = getVariantData(item);
   const variantId = textValue(item?.variantId || item?.variantIdSnapshot || variant.id);
@@ -83,10 +83,12 @@ export function formatPdfItemDescription(item: any, fallback = 'Producto', inclu
   const resolvedVariantSku = variantSku || (hasVariant && !productCode ? legacyCode : '');
   const note = textValue(item?.commercialNoteSnapshot || item?.commercialNote || item?.product?.commercialNoteSnapshot || item?.product?.commercialNote);
 
+  const includeSku = options?.includeSku ?? false;
+
   return [
     description,
     resolvedProductCode ? `Código: ${resolvedProductCode}` : '',
-    hasVariant ? `SKU variante: ${resolvedVariantSku || variantId}` : '',
+    hasVariant && includeSku ? `SKU variante: ${resolvedVariantSku || variantId}` : '',
     hasVariant && variantName ? `Nombre variante: ${variantName}` : '',
     hasVariant && variantAttributes ? `Atributos: ${variantAttributes}` : '',
     includeCommercialNote && note ? `Nota: ${note}` : '',

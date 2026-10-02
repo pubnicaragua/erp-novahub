@@ -12,7 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Users, TrendingUp, Package, Activity, CreditCard, DollarSign } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
@@ -254,7 +254,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 4, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5 });
 
         const renderSection = (title: string, headers: string[], rows: (string | number)[][], colorRGB: number[]) => {
-          reportSections.push({ title, headers, rows });
+          reportSections.push({ title, headers, rows, color: colorRGB });
           currentY = drawReportTable({ doc, title, headers, rows, color: colorRGB, marginX, contentWidth, currentY });
         };
         const money = (value: unknown) => formatConvertedAmount(Number(value || 0), 'NIO');
@@ -408,75 +408,18 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         while (ws.rowCount < imgRow) ws.addRow([]);
         currentRow = ws.rowCount + 2;
 
-        const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
-
-        // ── Principales Proveedores (native table) ──
-        const topSupTitleRow = ws.addRow(['Socios Estratégicos (Volumen)', '', '', '']);
-        ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
-        topSupTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FFF59E0B' } };
-        topSupTitleRow.getCell(1).alignment = { horizontal: 'center' };
-        ws.addRow([]);
-
-        const topSupHeader = ws.addRow(['#', 'Socio', 'Detalle', 'Suma Total']);
-        topSupHeader.eachCell((cell) => {
-          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF59E0B' } };
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-        });
-
-        topSuppliers.forEach((item: any, idx) => {
-          const r = ws.addRow([
-            idx + 1,
-            item.name,
-            'Clasificación Tier 1',
-            Number(item.value),
-          ]);
-          r.getCell(1).alignment = { horizontal: 'center' };
-          r.getCell(1).font = { bold: true, color: { argb: 'FFF59E0B' } };
-          r.getCell(4).numFmt = `"${currencySymbol}" #,##0.00`;
-          r.getCell(4).font = { bold: true, color: { argb: 'FFF59E0B' } };
-          r.getCell(4).alignment = { horizontal: 'right' };
-          r.eachCell((cell) => {
-            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-            if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
-          });
-        });
-
-        ws.addRow([]); ws.addRow([]);
-
-        // ── Items Críticos ──
-        const topProdTitleRow = ws.addRow(['Insumos con Mayor Gasto', '', '', '']);
-        ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
-        topProdTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF3B82F6' } };
-        topProdTitleRow.getCell(1).alignment = { horizontal: 'center' };
-        ws.addRow([]);
-
-        const topProdHeader = ws.addRow(['#', 'Insumo', 'Detalle', 'Suma Total']);
-        topProdHeader.eachCell((cell) => {
-          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-        });
-
-        topProducts.forEach((item: any, idx) => {
-          const r = ws.addRow([
-            idx + 1,
-            item.name,
-            `${item.qty} unidades recibidas`,
-            Number(item.value),
-          ]);
-          r.getCell(1).alignment = { horizontal: 'center' };
-          r.getCell(1).font = { bold: true, color: { argb: 'FF3B82F6' } };
-          r.getCell(4).numFmt = `"${currencySymbol}" #,##0.00`;
-          r.getCell(4).font = { bold: true, color: { argb: 'FF3B82F6' } };
-          r.getCell(4).alignment = { horizontal: 'right' };
-          r.eachCell((cell) => {
-            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-            if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
-          });
-        });
+        appendDashboardExcelTable(ws, 'Socios Estratégicos (Volumen)', ['#', 'Socio', 'Detalle', 'Suma Total'], topSuppliers.map((item: any, idx) => [
+          idx + 1,
+          item.name,
+          'Clasificación Tier 1',
+          Number(item.value),
+        ]));
+        appendDashboardExcelTable(ws, 'Insumos con Mayor Gasto', ['#', 'Insumo', 'Detalle', 'Suma Total'], topProducts.map((item: any, idx) => [
+          idx + 1,
+          item.name,
+          `${item.qty} unidades recibidas`,
+          Number(item.value),
+        ]));
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_proveedores'], 'xlsx', dateRange));
         toast.success('Excel exportado exitosamente');

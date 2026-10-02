@@ -2,7 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const frontendRoot = process.cwd();
-const backendRegistryPath = path.resolve(frontendRoot, '..', '..', 'Backend', 'src', 'common', 'authorization', 'workflow-dependencies.ts');
+const backendDir = process.env.E2E_BACKEND_DIR?.trim()
+  || (fs.existsSync(path.resolve(frontendRoot, '..', '..', 'BackendERPNH', 'src'))
+    ? path.resolve(frontendRoot, '..', '..', 'BackendERPNH')
+    : path.resolve(frontendRoot, '..', '..', 'Backend'));
+const backendRegistryPath = path.resolve(backendDir, 'src', 'common', 'authorization', 'workflow-dependencies.ts');
 const frontendRegistryPath = path.join(frontendRoot, 'src', 'app', 'types', 'workflow-dependencies.ts');
 
 if (!fs.existsSync(backendRegistryPath)) {

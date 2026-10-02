@@ -157,6 +157,130 @@ export interface Customer {
   updatedAt: string;
 }
 
+export type ImageGalleryColumns = 1 | 2 | 3;
+export type ImageGallerySize = 'small' | 'medium' | 'large';
+
+export const ESTIMATE_IMAGE_TTL_MS = 5 * 60 * 1000; // 5 minutos de vigencia temporal
+
+export function isEstimateImageExpired(img?: { createdAt?: string; url?: string } | null): boolean {
+  if (!img) return true;
+  if (!img.url || typeof img.url !== 'string' || !img.url.trim()) return true;
+  if (!img.createdAt) return false;
+  const createdTime = new Date(img.createdAt).getTime();
+  if (isNaN(createdTime)) return false;
+  return Date.now() - createdTime > ESTIMATE_IMAGE_TTL_MS;
+}
+
+export interface EstimateCustomField {
+  id?: string;
+  title: string;
+  description: string;
+  createdAt?: string;
+}
+
+export function isEstimateCustomFieldExpired(field?: { createdAt?: string } | null, ttlMs: number = ESTIMATE_IMAGE_TTL_MS): boolean {
+  if (!field) return true;
+  if (!field.createdAt) return false;
+  const createdTime = new Date(field.createdAt).getTime();
+  if (isNaN(createdTime)) return false;
+  return Date.now() - createdTime > ttlMs;
+}
+
+export interface EstimateImageGalleryConfig {
+  columns: ImageGalleryColumns;
+  size: ImageGallerySize;
+  showFileName?: boolean;
+}
+
+export interface EstimateImage {
+  id: string;
+  url: string;
+  name: string;
+  title?: string;
+  caption?: string;
+  description?: string;
+  showFileName?: boolean;
+  byteSize?: number;
+  createdAt?: string;
+}
+
+export interface EstimateImagesPayload {
+  items: EstimateImage[];
+  columns?: ImageGalleryColumns;
+  size?: ImageGallerySize;
+  showFileName?: boolean;
+  customFields?: EstimateCustomField[];
+}
+
+export function normalizeEstimateImages(rawImages: unknown): {
+  items: EstimateImage[];
+  columns: ImageGalleryColumns;
+  size: ImageGallerySize;
+  showFileName: boolean;
+  customFields: EstimateCustomField[];
+} {
+  if (!rawImages) {
+    return { items: [], columns: 2, size: 'medium', showFileName: true, customFields: [] };
+  }
+  let parsedImages = rawImages;
+  if (typeof rawImages === 'string') {
+    try {
+      parsedImages = JSON.parse(rawImages);
+    } catch {
+      return { items: [], columns: 2, size: 'medium', showFileName: true, customFields: [] };
+    }
+  }
+  if (Array.isArray(parsedImages)) {
+    const validItems = parsedImages
+      .filter(Boolean)
+      .filter((img) => !isEstimateImageExpired(img))
+      .map((img) => ({
+        ...img,
+        title: img.title || img.caption || '',
+        description: img.description || (img.title && img.title !== img.caption ? img.caption : '') || '',
+        showFileName: img.showFileName !== false,
+      }));
+    return {
+      items: validItems,
+      columns: 2,
+      size: 'medium',
+      showFileName: true,
+      customFields: [],
+    };
+  }
+  if (typeof parsedImages === 'object' && parsedImages !== null) {
+    const obj = parsedImages as any;
+    const rawList = Array.isArray(obj.items) ? obj.items : [];
+    const validItems = rawList
+      .filter(Boolean)
+      .filter((img: any) => !isEstimateImageExpired(img))
+      .map((img: any) => ({
+        ...img,
+        title: img.title || img.caption || '',
+        description: img.description || (img.title && img.title !== img.caption ? img.caption : '') || '',
+        showFileName: img.showFileName !== false,
+      }));
+    const rawCustomFields = Array.isArray(obj.customFields) ? obj.customFields : [];
+    const customFields = rawCustomFields
+      .filter((cf: any) => cf && typeof cf.title === 'string' && cf.title.trim())
+      .filter((cf: any) => !isEstimateCustomFieldExpired(cf))
+      .map((cf: any) => ({
+        id: cf.id,
+        title: cf.title.trim(),
+        description: String(cf.description || '').trim(),
+        createdAt: cf.createdAt,
+      }));
+    return {
+      items: validItems,
+      columns: obj.columns === 1 ? 1 : obj.columns === 3 ? 3 : 2,
+      size: obj.size === 'small' || obj.size === 'large' ? obj.size : 'medium',
+      showFileName: obj.showFileName !== false,
+      customFields,
+    };
+  }
+  return { items: [], columns: 2, size: 'medium', showFileName: true, customFields: [] };
+}
+
 // ---- Estimates ----
 export interface Estimate {
   id: string;
@@ -190,6 +314,8 @@ export interface Estimate {
   customCustomerEmail?: string;
   customCustomerPhone?: string;
   items: EstimateItem[];
+  images?: EstimateImage[] | EstimateImagesPayload;
+  customFields?: EstimateCustomField[];
   createdAt: string;
   updatedAt: string;
 }
@@ -1602,6 +1728,35 @@ export interface ActivityTimeEntry {
   updatedAt: string;
 }
 
+/** Catálogo cerrado de categorías de tarea (§4 del contrato Aranda ITSM). */
+export type ActivityCategory =
+  | 'INFRAESTRUCTURA'
+  | 'SISTEMAS'
+  | 'OPERACIONES'
+  | 'MANTENIMIENTO'
+  | 'RECURSOS_HUMANOS';
+
+/** Entrada del historial de reasignaciones / auto-asignaciones (§3). */
+export interface ActivityReassignmentEntry {
+  id: string;
+  date: string;
+  fromUserId: string | null;
+  fromUserName: string | null;
+  toUserId: string;
+  toUserName: string;
+  reason: string;
+  actorId: string | null;
+  actorName: string | null;
+  message: string;
+}
+
+export interface ActivityCustomField {
+  key: string;
+  value: string;
+}
+
+export type SlaStatus = 'NONE' | 'ON_TIME' | 'AT_RISK' | 'BREACHED';
+
 export interface Task {
   id: string;
   title: string;
@@ -1620,6 +1775,11 @@ export interface Task {
   rejectedAt?: string | null;
   rejectedById?: string | null;
   rejectedBy?: { id: string; name: string } | null;
+  categoryId?: ActivityCategory | null;
+  customFields?: Record<string, string> | null;
+  slaDueAt?: string | null;
+  slaBreachedAt?: string | null;
+  reassignmentHistory?: ActivityReassignmentEntry[];
   subtasks?: ActivitySubtask[];
   timeEntries?: ActivityTimeEntry[];
   evidences?: Array<{ id: string; fileName: string; fileUrl: string; fileSize?: number; uploadedAt: string; uploadedBy?: string }>;
@@ -1630,6 +1790,7 @@ export interface Task {
 export interface Event {
   id: string;
   title: string;
+  type?: 'EVENT' | 'MEETING' | string;
   description?: string;
   startDate: string;
   endDate: string;

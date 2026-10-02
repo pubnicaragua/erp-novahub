@@ -9,7 +9,8 @@ import {
   Trash2, Edit2, Shield,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MapPinned, ChevronDown,
-  BookOpen, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe, MessageCircle
+  BookOpen, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe, MessageCircle, CreditCard,
+  FolderKanban
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -50,6 +51,8 @@ import { AuditoriaPage } from './AuditoriaPage';
 import { THEME_PRESETS, type ThemePreset } from '../constants/themePresets';
 import { NovaPulseView } from './configuracion/NovaPulseView';
 import { canAccessModuleView } from '../utils/moduleViewAccess';
+import { PoketPayLinkSettings } from './configuracion/PoketPayLinkSettings';
+import { ConfiguracionProyectosView } from './configuracion/ConfiguracionProyectosView';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -556,6 +559,8 @@ const ALL_TABS: TabDef[] = [
   { id: 'auditoria', label: 'Logs y auditoría', icon: Activity, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'currency', label: 'Moneda & Cambio', icon: Coins, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'nova-pulse', label: 'Nova Pulse', icon: MessageCircle, scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'poket', label: 'Poket PayLink', icon: CreditCard, scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'proyectos', label: 'Proyectos', icon: FolderKanban, scenario: ['superadmin', 'partner', 'client'] },
 ];
 
 const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
@@ -565,6 +570,8 @@ const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
   auditoria: 'AUDIT_LOGS',
   currency: 'CONFIG_CURRENCY',
   'nova-pulse': 'CONFIG_NOVA_PULSE',
+  poket: 'CONFIG_COMPANY',
+  proyectos: 'PROJECTS',
 };
 
 export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { initialTab?: string; onTabChange?: (tab: string) => void }) {
@@ -575,6 +582,9 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
   const visibleTabs = ALL_TABS.filter(t => {
     if (!t.scenario.includes(scenario)) return false;
     if (t.id === 'branding' && user?.isPlatformAdmin) return false;
+    if (t.id === 'proyectos') {
+      return canPerform('PROJECTS', 'view') || canPerform('CONFIG_COMPANY', 'view') || Boolean(user?.isTenantAdmin);
+    }
     const permissionModule = CONFIG_TAB_PERMISSIONS[t.id];
     return !permissionModule || canPerform(permissionModule, 'view');
   });
@@ -596,6 +606,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
   const canDeletePdf = canPerform('CONFIG_PDF', 'delete');
   const canEditNovaPulse = canPerform('CONFIG_NOVA_PULSE', 'edit');
   const canSendNovaPulse = canPerform('CONFIG_NOVA_PULSE', 'send');
+  const canEditProjects = canPerform('PROJECTS', 'edit') || canPerform('CONFIG_COMPANY', 'edit') || Boolean(user?.isTenantAdmin);
 
   // La API de suscripciones devuelve el alcance efectivo de la sucursal
   // (grupo + unidad). Mientras carga, usamos el alcance de la sesión para no
@@ -1531,6 +1542,14 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
 
         <TabsContent value="nova-pulse" className="space-y-6 mt-0">
           <NovaPulseView canEdit={canEditNovaPulse} canSend={canSendNovaPulse} />
+        </TabsContent>
+
+        <TabsContent value="poket" className="space-y-6 mt-0">
+          <PoketPayLinkSettings canEdit={canEditCompany} />
+        </TabsContent>
+
+        <TabsContent value="proyectos" className="space-y-6 mt-0">
+          <ConfiguracionProyectosView canEdit={canEditProjects} />
         </TabsContent>
 
         {/* ══════════ TAB: PERSONALIZACIÓN PDF ══════════ */}

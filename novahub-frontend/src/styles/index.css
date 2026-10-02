@@ -232,7 +232,7 @@ select.erp-filter-select,
   }
 
   [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(2)::before { content: "Concepto"; }
-  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(3)::before { content: "Cantidad"; }
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(3)::before { content: "Empresas / unidades"; }
   [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(4)::before { content: "Precio unitario"; }
   [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):has(select[aria-label="Tipo de descuento"]) > td:nth-child(5)::before { content: "Descuento"; }
   [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):not(:has(select[aria-label="Tipo de descuento"])) > td:nth-child(5)::before { content: "Cobro"; }
@@ -361,6 +361,105 @@ select.erp-filter-select,
   [data-platform-quote-editor] table tbody > tr:not(:has(td[colspan])) > td > div {
     width: 100%;
     min-width: 0;
+  }
+}
+
+/* El catálogo empresarial se añadió antes del documento; este selector estable
+   mantiene la tabla editable responsive sin depender del orden de los bloques. */
+@media (max-width: 1279px) {
+  [data-quote-table] {
+    min-width: 0;
+  }
+
+  [data-quote-table] > div {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+@media (max-width: 639px) {
+  [data-quote-table] > div > div:nth-child(3) {
+    padding: 1rem;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table {
+    display: block;
+    width: 100%;
+    min-width: 0 !important;
+    border-collapse: separate;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > thead {
+    display: none;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody {
+    display: grid;
+    gap: .75rem;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:has(td[colspan]) {
+    display: block;
+    border: 1px solid rgb(16 94 65 / 0.14);
+    border-radius: 1rem;
+    background: rgb(225 245 233 / 0.72);
+    overflow: hidden;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:has(td[colspan]) > td {
+    display: block;
+    width: 100%;
+    padding: .75rem;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    padding: .875rem;
+    border: 1px solid rgb(15 23 42 / 0.12);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 20px rgb(15 23 42 / 0.06);
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: .25rem;
+    padding: 0;
+    text-align: left;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td::before {
+    color: rgb(100 116 139);
+    font-size: .58rem;
+    font-weight: 900;
+    line-height: 1rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:first-child {
+    display: none;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(2),
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(n + 5) {
+    grid-column: 1 / -1;
+  }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(2)::before { content: "Concepto"; }
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(3)::before { content: "Empresas / unidades"; }
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(4)::before { content: "Precio unitario"; }
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(n + 5)::before { content: "Cobro / alcance"; }
+
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) input,
+  [data-quote-table] > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) select {
+    width: 100%;
+    max-width: 100%;
   }
 }
 
@@ -2606,8 +2705,10 @@ th .column-filter-menu .column-filter-icon,
    same view remains a real table on wide screens and a scannable card list on
    laptops, tablets and phones without duplicating every renderer. */
 @media (max-width: 1279px) {
-  [data-responsive-cards-container="true"] {
+  [data-responsive-cards-container="true"]:not([data-keep-scroll="true"]) {
     overflow: visible !important;
+    min-height: 0 !important;
+    max-height: none !important;
   }
 
   table[data-responsive-cards="true"] {
@@ -2666,6 +2767,7 @@ th .column-filter-menu .column-filter-icon,
   table[data-responsive-cards="true"] > tbody > tr > td::before {
     content: attr(data-label);
     min-width: 0;
+    text-align: left !important;
     color: hsl(var(--muted-foreground) / 0.75);
     font-size: 0.625rem;
     font-weight: 900;
@@ -2709,9 +2811,15 @@ th .column-filter-menu .column-filter-icon,
   }
 
   table[data-responsive-cards="true"] td > * {
+    grid-column: 2;
     min-width: 0;
     max-width: 100%;
     overflow-wrap: anywhere;
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr > td[data-label=""] > *,
+  table[data-responsive-cards="true"] > tbody > tr > td[colspan] > * {
+    grid-column: 1 / -1;
   }
 
   table[data-responsive-cards="true"] > tfoot,
@@ -3006,3 +3114,111 @@ th .column-filter-menu .column-filter-icon,
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   International Imports Module (.intl-imports-module) — Responsive @media
+   ========================================================================== */
+.intl-imports-module,
+.intl-imports-module * {
+  box-sizing: border-box;
+}
+
+.intl-imports-module {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.intl-imports-module .grid > *,
+.intl-imports-module .flex > * {
+  min-width: 0;
+}
+
+/* KPI cards must always render icon + metric horizontally (overriding Card's base flex-col) */
+.intl-imports-kpis > [data-slot="card"] {
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0.75rem !important;
+  text-align: left !important;
+}
+
+/* Scrollable package selection lists inside modals must never be turned into overflow:visible */
+[data-intl-scroll-list="true"] {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 1279px) {
+  /* Ensure multi-line cells inside International Imports tables stay right-aligned in column 2 */
+  .intl-imports-module table[data-responsive-cards="true"] > tbody > tr > td.text-right > *,
+  [data-intl-sheet="true"] table[data-responsive-cards="true"] > tbody > tr > td.text-right > * {
+    text-align: right;
+    justify-self: end;
+  }
+
+  [data-intl-sheet="true"] table[data-responsive-cards="true"] > tbody > tr {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .intl-imports-module h1 {
+    font-size: clamp(1.25rem, 4.2vw, 1.65rem) !important;
+    line-height: 1.2 !important;
+  }
+
+  .intl-imports-module [data-table-viewport-scroll="true"] {
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Module tabs: horizontal navbar pill container matching Image 2 */
+  .intl-imports-module [data-intl-tabs="true"] {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    gap: 0.25rem !important;
+    padding: 0.25rem !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .intl-imports-module [data-intl-tabs="true"] > button {
+    flex: 1 0 auto !important;
+    min-width: 0 !important;
+    padding: 0.45rem 0.65rem !important;
+    font-size: 12px !important;
+    justify-content: center !important;
+  }
+
+  .intl-imports-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.625rem !important;
+  }
+
+  .intl-imports-kpis > [data-slot="card"] {
+    padding: 0.75rem !important;
+    gap: 0.625rem !important;
+  }
+}
+
+@media (max-width: 639px) {
+  [data-intl-scroll-list="true"] {
+    max-height: min(42dvh, 16rem) !important;
+  }
+
+  .intl-imports-module [data-slot="card"] {
+    padding: 0.875rem;
+  }
+}
+

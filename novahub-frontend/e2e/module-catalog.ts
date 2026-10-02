@@ -18,6 +18,7 @@ export const E2E_MODULE_CATALOG: readonly E2eModuleDefinition[] = [
   { id: 'ventas', label: 'Ventas', subModule: 'clientes' },
   { id: 'restaurante', label: 'Restaurante POS', subModule: 'salon' },
   { id: 'tracking', label: 'Tracking de Importaciones', subModule: 'tracking' },
+  { id: 'intl-imports', label: 'Importaciones Internacionales', subModule: 'aduana-prorrateo' },
   { id: 'compras', label: 'Compras', subModule: 'proveedores' },
   { id: 'finanzas', label: 'Finanzas', subModule: 'resumen-financiero' },
   { id: 'rh', label: 'Recursos Humanos', subModule: 'empleados' },

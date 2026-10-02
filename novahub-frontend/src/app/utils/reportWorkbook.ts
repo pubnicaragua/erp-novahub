@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
-import { downloadExcelWorkbook } from './reportExportUtils';
+import { applyDashboardExcelTableStyle, downloadExcelWorkbook } from './reportExportUtils';
 
 export interface ReportWorkbookSheet {
   name: string;
@@ -13,6 +13,13 @@ export interface ReportWorkbookOptions {
   sheets: ReportWorkbookSheet[];
   filters?: Record<string, unknown>;
   emptyMessage?: string;
+  branding?: {
+    companyName: string;
+    reportTitle: string;
+    metadata: string;
+    primaryColor?: string;
+    logoBase64?: string | null;
+  };
   /** Mantiene el formato heredado de varias hojas para exportaciones fuera de sucursal. */
   singleSheet?: boolean;
 }
@@ -21,7 +28,6 @@ const EMPTY_MESSAGE = 'Sin registros para el alcance seleccionado';
 const BRAND_GREEN = '39AD85';
 const NAVY = '173B63';
 const LIGHT_GREEN = 'EAF5F1';
-const STRIPE = 'F4F7FA';
 
 function toLegacyWorksheet(rows: ReportWorkbookSheet['rows'], emptyMessage: string) {
   if (!rows || rows.length === 0) return XLSX.utils.json_to_sheet([{ Mensaje: emptyMessage }]);
@@ -32,17 +38,6 @@ function toLegacyWorksheet(rows: ReportWorkbookSheet['rows'], emptyMessage: stri
 
 function formatFilters(filters: Record<string, unknown>) {
   return Object.entries(filters).map(([filter, value]) => [filter, value == null || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value) : value]);
-}
-
-function getColumnFormat(header: string) {
-  const normalized = header.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  if (/\b(cantidad|unidades|operaciones|facturas|conteo|registros|pagina|dias|edad|stock|existencia|cantidad|items)\b/.test(normalized)) {
-    return '#,##0;[Red]-#,##0;0';
-  }
-  if (/\b(monto|total|ticket|venta|ventas|ingreso|gasto|costo|precio|saldo|utilidad|margen|pago|pagado|subtotal|impuesto|descuento|balance|debe|haber|deuda|capital|efectivo)\b/.test(normalized)) {
-    return '#,##0.00;[Red]-#,##0.00;0.00';
-  }
-  return undefined;
 }
 
 function getSectionRows(section: ReportWorkbookSheet, emptyMessage: string) {
@@ -67,65 +62,75 @@ function safeSheetTitle(fileName: string) {
 }
 
 function applyTableFormatting(worksheet: ExcelJS.Worksheet, headerRow: number, headers: string[], startRow: number, endRow: number) {
-  const header = worksheet.getRow(headerRow);
-  header.height = 24;
-  header.eachCell(cell => {
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BRAND_GREEN } };
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-    cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-    cell.border = { bottom: { style: 'medium', color: { argb: NAVY } } };
-  });
-
-  for (let rowIndex = startRow; rowIndex <= endRow; rowIndex += 1) {
-    const row = worksheet.getRow(rowIndex);
-    row.height = 20;
-    row.eachCell((cell, columnIndex) => {
-      if (rowIndex % 2 === startRow % 2) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: STRIPE } };
-      cell.alignment = { vertical: 'top', horizontal: typeof cell.value === 'number' ? 'right' : 'left', wrapText: true };
-      if (typeof cell.value === 'number') {
-        const headerName = headers[columnIndex - 1] || '';
-        const directFormat = getColumnFormat(headerName);
-        const normalizedHeader = headerName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-        const descriptorIndex = headers.findIndex(header => /^(indicador|metrica|concepto|kpi)$/.test(header.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()));
-        const descriptorFormat = !directFormat && descriptorIndex >= 0 && /^(valor|resultado)$/.test(normalizedHeader)
-          ? getColumnFormat(String(row.getCell(descriptorIndex + 1).value ?? ''))
-          : undefined;
-        cell.numFmt = directFormat || descriptorFormat || '#,##0.##';
-      }
-      cell.border = { bottom: { style: 'hair', color: { argb: 'DCE4EA' } } };
-    });
-  }
+  applyDashboardExcelTableStyle(worksheet, headerRow, headers, startRow, endRow);
 }
 
-export async function buildReportWorkbook({ fileName, sheets, filters, emptyMessage = EMPTY_MESSAGE }: ReportWorkbookOptions) {
+export async function buildReportWorkbook({ fileName, sheets, filters, emptyMessage = EMPTY_MESSAGE, branding }: ReportWorkbookOptions) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'NovaHub ERP';
   workbook.created = new Date();
   workbook.modified = new Date();
   const worksheet = workbook.addWorksheet('Reporte', {
-    views: [{ state: 'frozen', ySplit: 1 }],
+    views: [{ state: 'frozen', ySplit: branding ? 6 : 1 }],
     pageSetup: { fitToPage: true, fitToWidth: 1, fitToHeight: 0, orientation: 'landscape', paperSize: 9 },
   });
   worksheet.properties.defaultRowHeight = 20;
   worksheet.getColumn(1).width = 28;
   worksheet.getColumn(2).width = 22;
 
-  const title = safeSheetTitle(fileName);
   const safeSections = sheets.length ? sheets : [{ name: 'Reporte', rows: [] }];
   const sectionColumnCount = Math.max(6, ...safeSections.map(section => getSectionRows(section, emptyMessage).headers.length));
-  worksheet.mergeCells(1, 1, 1, sectionColumnCount);
-  const titleCell = worksheet.getCell(1, 1);
-  titleCell.value = title;
-  titleCell.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
-  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
-  titleCell.alignment = { vertical: 'middle', horizontal: 'left' };
-  worksheet.getRow(1).height = 32;
-  worksheet.getCell(2, 1).value = 'Generado';
-  worksheet.getCell(2, 2).value = new Date();
-  worksheet.getCell(2, 2).numFmt = 'dd/mm/yyyy hh:mm';
-  worksheet.getRow(2).font = { italic: true, color: { argb: '64748B' }, size: 9 };
+  let rowIndex: number;
+  if (branding) {
+    if (branding.logoBase64) {
+      const logoId = workbook.addImage({ base64: branding.logoBase64, extension: 'png' });
+      const columnWidths = Array.from({ length: sectionColumnCount }, (_, index) => (worksheet.getColumn(index + 1).width || 9) * 7);
+      const imageWidth = 56;
+      const imageLeft = Math.max(0, (columnWidths.reduce((sum, width) => sum + width, 0) - imageWidth) / 2);
+      let imageColumn = 0;
+      let remainingImageLeft = imageLeft;
+      while (imageColumn < columnWidths.length - 1 && remainingImageLeft > columnWidths[imageColumn]) {
+        remainingImageLeft -= columnWidths[imageColumn];
+        imageColumn += 1;
+      }
+      worksheet.addImage(logoId, {
+        tl: { col: imageColumn + remainingImageLeft / columnWidths[imageColumn], row: 0 },
+        ext: { width: imageWidth, height: 40 },
+      });
+    }
 
-  let rowIndex = 4;
+    [1, 2].forEach(row => { worksheet.getRow(row).height = 22; });
+    const setCenteredHeader = (row: number, value: string, style: Partial<ExcelJS.Font>, height: number) => {
+      worksheet.mergeCells(row, 1, row, sectionColumnCount);
+      const cell = worksheet.getCell(row, 1);
+      cell.value = value;
+      cell.font = style;
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      worksheet.getRow(row).height = height;
+    };
+    const configuredCompanyColor = branding.primaryColor?.replace(/^#/, '');
+    const companyColor = configuredCompanyColor && /^[\da-f]{6}(?:[\da-f]{2})?$/i.test(configuredCompanyColor)
+      ? configuredCompanyColor
+      : BRAND_GREEN;
+    setCenteredHeader(3, branding.companyName, { bold: true, size: 18, color: { argb: companyColor } }, 26);
+    setCenteredHeader(4, branding.reportTitle, { bold: true, size: 14, color: { argb: '172033' } }, 22);
+    setCenteredHeader(5, branding.metadata, { italic: true, size: 10, color: { argb: '64748B' } }, 20);
+    rowIndex = 7;
+  } else {
+    const title = safeSheetTitle(fileName);
+    worksheet.mergeCells(1, 1, 1, sectionColumnCount);
+    const titleCell = worksheet.getCell(1, 1);
+    titleCell.value = title;
+    titleCell.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    worksheet.getRow(1).height = 32;
+    worksheet.getCell(2, 1).value = 'Generado';
+    worksheet.getCell(2, 2).value = new Date();
+    worksheet.getCell(2, 2).numFmt = 'dd/mm/yyyy hh:mm';
+    worksheet.getRow(2).font = { italic: true, color: { argb: '64748B' }, size: 9 };
+    rowIndex = 4;
+  }
   if (filters && Object.keys(filters).length) {
     worksheet.mergeCells(rowIndex, 1, rowIndex, 2);
     const filterTitle = worksheet.getCell(rowIndex, 1);

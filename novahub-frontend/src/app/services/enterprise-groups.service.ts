@@ -455,6 +455,7 @@ export interface PlatformQuoteItem {
   description: string;
   detail?: string | null;
   periodicity?: string | null;
+  billingOptions?: PlatformQuoteBillingOption[] | null;
   quantity: number;
   unitPrice: number;
   amount?: number;
@@ -462,6 +463,11 @@ export interface PlatformQuoteItem {
   discountValue?: number;
   isOptional: boolean;
   sortOrder?: number;
+}
+
+export interface PlatformQuoteBillingOption {
+  periodicity: string;
+  unitPrice: number;
 }
 
 export interface PlatformQuote {
@@ -472,6 +478,7 @@ export interface PlatformQuote {
   prospectEmail?: string | null;
   prospectPhone?: string | null;
   country?: string | null;
+  companyCount: number;
   currency: "USD" | "NIO";
   validUntil?: string | null;
   notes?: string | null;
@@ -618,6 +625,11 @@ export const enterpriseGroupsService = {
     api.idempotentPatch(
       `/enterprise-groups/platform/${groupId}/managers/${userId}/password`,
       { password },
+    ),
+  updatePlatformManager: (groupId: string, userId: string, body: { name?: string; email?: string }) =>
+    api.idempotentPatch(
+      `/enterprise-groups/platform/${groupId}/managers/${userId}`,
+      body,
     ),
   updatePlatformBusinessUnit: (groupId: string, unitId: string, body: any) =>
     api.idempotentPatch(

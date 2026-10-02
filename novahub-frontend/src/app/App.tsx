@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import * as Sentry from '@sentry/react';
 import { Toaster } from './components/ui/sonner';
-import { AuthProvider, useAuth, type Module } from './contexts/AuthContext';
+import { useAuth, type Module } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { ImpersonationProvider, useImpersonation } from './contexts/ImpersonationContext';
@@ -19,16 +19,22 @@ import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
 import { ActionClickGuard } from './components/ui/ActionClickGuard';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
+import { PublicRsvpPage } from './components/public/PublicRsvpPage';
 import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
 import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
 import { PublicTrackingPage } from './components/public/PublicTrackingPage';
+import { PoketPaymentCallbackPage } from './components/public/PoketPaymentCallbackPage';
+import { PublicProjectProgressPage } from './components/public/PublicProjectProgressPage';
+import { PublicSupplierQuotationPage } from './components/public/PublicSupplierQuotationPage';
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
+import { BrowserNotificationPrompt } from './components/notificaciones/BrowserNotificationPrompt';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
 import { loadModuleWithChunkRecovery } from './utils/chunk-recovery';
 import { readPersistedDarkMode } from './utils/theme-mode';
 import { useResponsiveNativeTables } from './hooks/useResponsiveNativeTables';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from './utils/sidebarPermissions';
+import { GUIDED_TOUR_REQUEST_EVENT, type GuidedTourRequestResult } from './services/guided-tour.service';
 
 function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(loader: () => Promise<T>, moduleName: string) {
   return lazy(() => loadModuleWithChunkRecovery(loader, moduleName));
@@ -45,6 +51,7 @@ const InventarioPage = lazyWithChunkRecovery(async () => {
 const VentasPage = lazyWithChunkRecovery(() => import('./components/VentasPage').then(m => ({ default: m.VentasPage })), 'ventas');
 const RestaurantePage = lazyWithChunkRecovery(() => import('./components/RestaurantePage').then(m => ({ default: m.RestaurantePage })), 'restaurante');
 const TrackingPage = lazyWithChunkRecovery(() => import('./components/TrackingPage').then(m => ({ default: m.TrackingPage })), 'tracking');
+const IntlImportsPage = lazyWithChunkRecovery(() => import('./components/intl-imports/IntlImportsPage').then(m => ({ default: m.IntlImportsPage })), 'intl-imports');
 const ComprasPage = lazyWithChunkRecovery(() => import('./components/ComprasPage').then(m => ({ default: m.ComprasPage })), 'compras');
 const FinanzasPage = lazyWithChunkRecovery(() => import('./components/FinanzasPage').then(m => ({ default: m.FinanzasPage })), 'finanzas');
 const RecursosHumanosPage = lazyWithChunkRecovery(() => import('./components/RecursosHumanosPage').then(m => ({ default: m.RecursosHumanosPage })), 'rh');
@@ -194,12 +201,16 @@ function DashboardLayout() {
   }, [searchParams, canPerform]);
 
   useEffect(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams);
     if (activeModule && activeModule !== 'overview') {
       params.set('m', activeModule);
+    } else {
+      params.delete('m');
     }
     if (activeSubModule) {
       params.set('sm', activeSubModule);
+    } else {
+      params.delete('sm');
     }
     const next = params.toString();
     const current = searchParams.toString();
@@ -215,6 +226,49 @@ function DashboardLayout() {
 
   const mainRef = useRef<HTMLElement | null>(null);
   const mainScrollStorageKey = `erp-scroll-position:${user?.id || 'anonymous'}:${activeModule}:${activeSubModule || ''}`;
+
+  useEffect(() => {
+    const isVisibleGuideTrigger = (element: HTMLElement) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && rect.width > 0
+        && rect.height > 0
+        && !element.closest('[aria-hidden="true"]')
+        && !element.closest('[data-state="closed"]')
+        && !element.closest('[data-nova-ai-chat]');
+    };
+
+    const handleGuidedTourRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ respond?: (result: GuidedTourRequestResult) => void }>).detail;
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>([
+        '[data-tutorial-trigger="true"]',
+        'button[aria-label*="Cómo"]',
+        'button[title*="Cómo"]',
+        'button[aria-label*="tutorial"]',
+        'button[title*="tutorial"]',
+      ].join(','))).filter(isVisibleGuideTrigger);
+      // Prefer the guide inside the active dialog. This matters for full-page
+      // forms such as product creation, where the underlying list is still
+      // mounted and can also contain a help trigger.
+      const trigger = candidates.filter((element) => element.closest('[role="dialog"]')).at(-1) || candidates[0];
+      if (!trigger) {
+        detail?.respond?.({ started: false });
+        return;
+      }
+
+      trigger.focus({ preventScroll: true });
+      trigger.click();
+      detail?.respond?.({
+        started: true,
+        label: trigger.getAttribute('aria-label') || trigger.getAttribute('title') || undefined,
+      });
+    };
+
+    window.addEventListener(GUIDED_TOUR_REQUEST_EVENT, handleGuidedTourRequest);
+    return () => window.removeEventListener(GUIDED_TOUR_REQUEST_EVENT, handleGuidedTourRequest);
+  }, []);
 
   useEffect(() => {
     const main = mainRef.current;
@@ -398,6 +452,7 @@ function DashboardLayout() {
       case 'ventas': return <ModuleErrorBoundary moduleName="Ventas"><VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'restaurante': return <ModuleErrorBoundary moduleName="Restaurante"><RestaurantePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'tracking': return <ModuleErrorBoundary moduleName="Tracking"><TrackingPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
+      case 'intl-imports': return <ModuleErrorBoundary moduleName="Importaciones Internacionales"><IntlImportsPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'compras': return <ModuleErrorBoundary moduleName="Compras"><ComprasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'finanzas': return <ModuleErrorBoundary moduleName="Finanzas"><FinanzasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
@@ -571,9 +626,13 @@ function AppContent() {
     document.documentElement.classList.toggle('dark', readPersistedDarkMode());
   }, []);
 
+  if (location.pathname === '/integrations/poket/callback') return <PoketPaymentCallbackPage />;
   if (location.pathname === '/public/tracking' || location.pathname.startsWith('/public/tracking/')) return <PublicTrackingPage />;
+  if (location.pathname.startsWith('/rsvp/') || location.pathname.startsWith('/public/rsvp/')) return <PublicRsvpPage />;
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
   if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
+  if (location.pathname.startsWith('/public/project/')) return <PublicProjectProgressPage />;
+  if (location.pathname.startsWith('/public/subquotation/')) return <PublicSupplierQuotationPage />;
   if (location.pathname.startsWith('/restaurant/menu/')) {
     const tableToken = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
     return <PublicRestaurantMenuPage tableToken={tableToken} />;
@@ -649,6 +708,7 @@ function AppContent() {
   return (
     <>
       <GlobalNotificationAlert />
+      <BrowserNotificationPrompt />
       {(user?.userType === 'manager' || user?.role === 'manager') && !user.isPlatformAdmin && !isImpersonating ? (
         <Suspense fallback={<PageLoader />}><ManagerPage key={`manager-${sessionStartVersion}-${user.id}-${user.clientTenantId || user.tenantId}`} /></Suspense>
       ) : <DashboardLayout key={`dashboard-${sessionStartVersion}-${user?.id || 'anonymous'}-${user?.clientTenantId || user?.tenantId || ''}`} />}
@@ -662,16 +722,14 @@ export default function App() {
     <>
       <Toaster position="top-right" />
       <Sentry.ErrorBoundary fallback={<ErrorBoundaryFallback />}>
-        <AuthProvider>
-          <ThemeProvider>
-            <CurrencyProvider>
-              <ImpersonationProvider>
-                <ActionClickGuard />
-                <AppContent />
-              </ImpersonationProvider>
-            </CurrencyProvider>
-          </ThemeProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <CurrencyProvider>
+            <ImpersonationProvider>
+              <ActionClickGuard />
+              <AppContent />
+            </ImpersonationProvider>
+          </CurrencyProvider>
+        </ThemeProvider>
       </Sentry.ErrorBoundary>
     </>
   );

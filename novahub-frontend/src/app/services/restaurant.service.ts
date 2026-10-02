@@ -40,6 +40,8 @@ export interface RestaurantOrder {
   table?: { id: string; code: string; name: string } | null;
   total: number;
   currency: string;
+  createdAt?: string;
+  sentAt?: string | null;
   items: Array<{ id: string; description: string; quantity: number; total: number; status: string; productId?: string | null }>;
 }
 
@@ -66,13 +68,13 @@ export interface RestaurantPublicBranding {
   logo: string | null;
   primaryColor: string;
   accentColor: string;
-  theme: 'modern' | 'classic' | 'elegant' | 'rustic';
+  theme: 'modern' | 'classic' | 'elegant' | 'rustic' | 'neon' | 'tropical' | 'editorial' | 'retro';
   showImages: boolean;
   whiteLabel: boolean;
 }
 
 export interface RestaurantMenuSettings {
-  theme: 'modern' | 'classic' | 'elegant' | 'rustic';
+  theme: 'modern' | 'classic' | 'elegant' | 'rustic' | 'neon' | 'tropical' | 'editorial' | 'retro';
   showImages: boolean;
 }
 

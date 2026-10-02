@@ -41,6 +41,7 @@ import {
 } from 'recharts';
 import { type Module, useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { useTenantQuery } from '../hooks/useTenantQuery';
 import { cajaService } from '../services/caja.service';
 import { inventoryService } from '../services/inventario.service';
@@ -61,6 +62,7 @@ import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import { capturePdfChartSnapshot, yieldToBrowser } from '../utils/pdf-template-renderer';
 import { createReportWorkbook } from '../utils/reportWorkbook';
+import { getBase64Image } from '../utils/reportExportUtils';
 import './dashboard/executive-dashboard.css';
 
 const ProductDetailDrawer = lazy(() =>
@@ -235,6 +237,7 @@ function KpiIcon({ id }: { id: string }) {
 export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewProps) {
   const { user, canPerform } = useAuth();
   const { baseCurrency, valuationMode, formatConvertedAmount } = useCurrency();
+  const { themeConfig } = useTheme();
   const canViewPos = canPerform('RETAIL_POS', 'view') || canPerform('SALES', 'view');
   const canViewInventory = canPerform('INVENTORY_PRODUCTS', 'view') || canPerform('INVENTORY', 'view');
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
@@ -417,8 +420,15 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
     }
   };
 
-  const exportDashboardExcel = () => {
+  const exportDashboardExcel = async () => {
     try {
+      const companyName = user?.sessionBranding?.kind === 'branch'
+        ? (user.sessionBranding.name || user.tenantName || user.clientTenant?.name || 'Nova Hub ERP')
+        : (themeConfig.tenantName || user?.tenantName || user?.clientTenant?.name || 'Nova Hub ERP');
+      const logoUrl = user?.sessionBranding?.logo || themeConfig.logo || user?.clientTenant?.logo || '';
+      const logoBase64 = logoUrl ? await getBase64Image(logoUrl) : null;
+      const reportCurrency = data?.baseCurrency || baseCurrency;
+      const currencyLabel = reportCurrency === 'USD' ? 'Dólares (USD) ($)' : 'Córdobas (NIO) (C$)';
       const selectedKpis = preferences.indicators.map((id) => {
         const definition = INDICATORS.find((item) => item.id === id);
         const value = indicatorValue(id, kpis, performance, data);
@@ -436,6 +446,13 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       const productRows = [...productsById.values()];
       createReportWorkbook({
         fileName: buildDatedDownloadFileName(['resumen_gestion'], 'xlsx'),
+        branding: {
+          companyName,
+          reportTitle: 'Resumen de gestión',
+          metadata: `Moneda: ${currencyLabel}  |  Período: ${rangeLabel}  |  ${new Date().toLocaleDateString('es-NI')}`,
+          primaryColor: themeConfig.colors.primary,
+          logoBase64,
+        },
         sheets: [
           { name: 'Indicadores', rows: selectedKpis },
           { name: 'Tendencia', rows: trend.map((item) => ({ Fecha: item.date, Ventas: safeNumber(item.revenue), Gastos: safeNumber(item.expenses) })) },

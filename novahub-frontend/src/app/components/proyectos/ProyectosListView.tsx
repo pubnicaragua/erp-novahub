@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Search, FolderKanban, Pencil, Trash2, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -10,10 +10,10 @@ import { Progress } from '../ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
+import { useTenantQuery, asList, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { usersService } from '../../services/users.service';
 import { customersService } from '../../services/ventas.service';
-import { projectsService, type ProjectListItem } from '../../services/projects.service';
+import { projectsService, type ProjectListItem, type ProjectDetail, type ProjectDeleteImpact } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
@@ -96,7 +96,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
         report: true,
         export: true,
       });
-      const exportRows = (asList(response) as ProjectListItem[]).map((project) => ({
+      const exportRows: Array<Record<string, string | number>> = (asList(response) as ProjectListItem[]).map((project) => ({
         Código: project.code,
         Proyecto: project.name,
         Estado: project.status,
@@ -129,17 +129,46 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
       toast.success(editing ? 'Proyecto actualizado' : 'Proyecto creado');
       setDialogOpen(false);
       setEditing(null);
-      queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
+      invalidateTenantQueries(queryClient);
       onChanged();
     },
     onError: (err: any) => toast.error(err?.message || 'No se pudo guardar el proyecto'),
   });
 
+  const [deleting, setDeleting] = useState<ProjectListItem | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<ProjectDeleteImpact | null>(null);
+
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => projectsService.remove(id),
-    onSuccess: () => { toast.success('Proyecto eliminado'); queryClient.invalidateQueries({ queryKey: ['tenant-module'] }); onChanged(); },
-    onError: (err: any) => toast.error(err?.message || 'No se pudo eliminar el proyecto'),
+    mutationFn: (args: { id: string; cascadeFiles: boolean }) =>
+      projectsService.remove(args.id, args.cascadeFiles),
+    onSuccess: (_data, args) => {
+      setDeleting(null);
+      setDeleteImpact(null);
+      toast.success(
+        args.cascadeFiles
+          ? 'Proyecto y archivos dependientes eliminados'
+          : 'Proyecto eliminado',
+      );
+      invalidateTenantQueries(queryClient);
+      onChanged();
+    },
+    onError: (err: any) => {
+      setDeleting(null);
+      setDeleteImpact(null);
+      toast.error(err?.message || 'No se pudo eliminar el proyecto');
+    },
   });
+
+  // Antes de borrar se pide el desglose: el backend responde cuántos archivos
+  // se perderían para que la persona decida con los números a la vista.
+  const openDelete = (row: ProjectListItem) => {
+    setDeleting(row);
+    setDeleteImpact(null);
+    projectsService
+      .getDeleteImpact(row.id)
+      .then(setDeleteImpact)
+      .catch(() => setDeleteImpact(null));
+  };
 
   const openCreate = () => { setEditing(null); setDialogOpen(true); };
   const openEdit = (row: ProjectListItem) => { setEditing(row); setDialogOpen(true); };
@@ -256,7 +285,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
                         {canEdit && <Button size="icon" variant="ghost" className="size-8" title="Editar" onClick={() => openEdit(row)}><Pencil className="size-4" /></Button>}
                         {canDelete && (
                           <Button size="icon" variant="ghost" className="size-8 text-rose-500" title="Eliminar"
-                            onClick={() => { if (window.confirm(`¿Eliminar el proyecto ${row.name}? Esta acción no se puede deshacer.`)) deleteMutation.mutate(row.id); }}>
+                            onClick={() => openDelete(row)}>
                             <Trash2 className="size-4" />
                           </Button>
                         )}
@@ -282,6 +311,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
       )}
 
       <ProjectFormDialog
+        key={editing?.id || 'new'}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editing={editing}
@@ -292,11 +322,124 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
         saving={saveMutation.isPending}
         onSubmit={(payload) => saveMutation.mutate(payload)}
       />
+
+      <ProjectDeleteDialog
+        project={deleting}
+        impact={deleteImpact}
+        saving={deleteMutation.isPending}
+        onCancel={() => { setDeleting(null); setDeleteImpact(null); }}
+        onConfirm={(cascadeFiles) => {
+          if (deleting) deleteMutation.mutate({ id: deleting.id, cascadeFiles });
+        }}
+      />
     </div>
   );
 }
 
+<<<<<<< HEAD
 function ProjectFormDialog({ open, onOpenChange, editing, users, customers, branches, saving, onSubmit, canViewCosts }: {
+=======
+function ProjectDeleteDialog({ project, impact, saving, onCancel, onConfirm }: {
+  project: ProjectListItem | null;
+  impact: ProjectDeleteImpact | null;
+  saving: boolean;
+  onCancel: () => void;
+  onConfirm: (cascadeFiles: boolean) => void;
+}) {
+  // Cualquier dependencia (imágenes almacenadas, enlaces externos o documentos)
+  // obliga al borrado masivo: el backend rechaza el borrado simple para que nadie
+  // destruya archivos sin haber leído antes el aviso con las cifras.
+  const hasDependencies = Boolean(impact?.hasDependencies);
+  const dependencyCount = impact ? impact.storedImages + impact.storedDocuments : 0;
+  const blockedByCosts = Boolean(impact?.hasExecutedCosts);
+  const loading = Boolean(project) && !impact;
+
+  return (
+    <Dialog open={Boolean(project)} onOpenChange={(open) => { if (!open && !saving) onCancel(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base font-bold">Eliminar proyecto</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3 text-xs">
+          <p className="font-semibold">
+            ¿Eliminar <span className="text-primary">{project?.name}</span>? Esta acción no se puede deshacer.
+          </p>
+
+          {loading ? (
+            <p className="text-muted-foreground">Revisando archivos dependientes…</p>
+          ) : null}
+
+          {impact && impact.executedCosts > 0 ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+              <p className="font-semibold text-destructive">
+                No se puede eliminar: tiene {impact.executedCosts} costo{impact.executedCosts === 1 ? '' : 's'} ejecutado{impact.executedCosts === 1 ? '' : 's'}.
+              </p>
+              <p className="mt-1 text-muted-foreground">Cancelá el proyecto en su lugar para conservar el historial.</p>
+            </div>
+          ) : null}
+
+          {impact && !blockedByCosts ? (
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1.5">
+              <p className="font-semibold">Al eliminar el proyecto:</p>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• Se borran hitos, tareas, presupuesto, costos y miembros.</li>
+                {impact.storedImages > 0 ? (
+                  <li className="font-semibold text-destructive">
+                    • Se eliminan {impact.storedImages} imagen{impact.storedImages === 1 ? '' : 'es'} de avance
+                    {impact.storedImages === 1 ? '' : 's'} y el archivo en el almacenamiento. No se pueden recuperar.
+                  </li>
+                ) : null}
+                {impact.attachedDocuments > 0 ? (
+                  <li className="font-semibold text-destructive">
+                    • Se eliminan {impact.attachedDocuments} documento{impact.attachedDocuments === 1 ? '' : 's'} adjunto{impact.attachedDocuments === 1 ? '' : 's'}{' '}
+                    {impact.storedDocuments > 0
+                      ? `y ${impact.storedDocuments} archivo${impact.storedDocuments === 1 ? '' : 's'} en el almacenamiento.`
+                      : 'y sus enlaces quedan sin referencia.'}{' '}
+                    No se pueden recuperar.
+                  </li>
+                ) : null}
+                {impact.externalLinks > 0 ? (
+                  <li>• Se quitan {impact.externalLinks} enlace{impact.externalLinks === 1 ? '' : 's'} externo{impact.externalLinks === 1 ? '' : 's'} de la lista de evidencias.</li>
+                ) : null}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={saving} className="h-8 text-xs">
+            Cancelar
+          </Button>
+          {hasDependencies ? (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => onConfirm(true)}
+              disabled={saving || loading || blockedByCosts}
+              className="h-8 text-xs font-bold"
+            >
+              {saving ? 'Eliminando...' : `Eliminar todo (${dependencyCount} archivo${dependencyCount === 1 ? '' : 's'})`}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => onConfirm(false)}
+              disabled={saving || loading || blockedByCosts}
+              className="h-8 text-xs font-bold"
+            >
+              {saving ? 'Eliminando...' : 'Eliminar proyecto'}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProjectFormDialog({ open, onOpenChange, editing, users, customers, branches, saving, onSubmit }: {
+>>>>>>> 71932637565d22bdade82e0c2fe423f7bbca699c
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: ProjectListItem | null;
@@ -307,6 +450,7 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
   canViewCosts: boolean;
   onSubmit: (payload: any) => void;
 }) {
+<<<<<<< HEAD
   const [form, setForm] = useState<any>({
     name: editing?.name || '',
     description: editing?.description || '',
@@ -323,7 +467,45 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
     exchangeRate: editing?.exchangeRate && editing.exchangeRate !== 1 ? String(editing.exchangeRate) : '',
     notes: editing?.notes || '',
     memberUserIds: [],
+=======
+  const detailQuery = useTenantQuery<ProjectDetail | null>(
+    ['projects', 'form-detail', editing?.id || 'none'],
+    (signal) => (editing?.id ? projectsService.get(editing.id, signal) : Promise.resolve(null)),
+    { enabled: Boolean(open && editing?.id) },
+  );
+
+  const buildInitialState = (item: ProjectListItem | null, detail?: ProjectDetail | null) => ({
+    name: detail?.name || item?.name || '',
+    description: detail?.description || item?.description || '',
+    customerId: detail?.customer?.id || detail?.customerId || item?.customer?.id || item?.customerId || '',
+    branchId: detail?.branch?.id || detail?.branchId || item?.branch?.id || item?.branchId || '',
+    managerId: detail?.manager?.id || detail?.managerId || item?.manager?.id || item?.managerId || '',
+    status: detail?.status || item?.status || 'DRAFT',
+    priority: detail?.priority || item?.priority || 'MEDIUM',
+    startDate: toLocalDate(detail?.startDate || item?.startDate) || '',
+    endDate: toLocalDate(detail?.endDate || item?.endDate) || '',
+    plannedBudget: (detail?.plannedBudget ?? item?.plannedBudget) != null ? String(detail?.plannedBudget ?? item?.plannedBudget) : '',
+    plannedIncome: (detail?.plannedIncome ?? item?.plannedIncome) != null ? String(detail?.plannedIncome ?? item?.plannedIncome) : '',
+    currency: detail?.currency || item?.currency || 'NIO',
+    exchangeRate: (detail?.exchangeRate ?? item?.exchangeRate) && (detail?.exchangeRate ?? item?.exchangeRate) !== 1 ? String(detail?.exchangeRate ?? item?.exchangeRate) : '',
+    notes: detail?.notes || item?.notes || '',
+    memberUserIds: detail?.members ? detail.members.map((m: any) => m.user?.id || m.userId).filter(Boolean) : [],
+>>>>>>> 71932637565d22bdade82e0c2fe423f7bbca699c
   });
+
+  const [form, setForm] = useState<any>(() => buildInitialState(editing));
+  const [syncedDetail, setSyncedDetail] = useState<ProjectDetail | null>(null);
+
+  if (detailQuery.data && detailQuery.data !== syncedDetail) {
+    setSyncedDetail(detailQuery.data);
+    const d = detailQuery.data;
+    setForm((prev: any) => ({
+      ...prev,
+      description: d.description || prev.description,
+      notes: d.notes || prev.notes,
+      memberUserIds: d.members ? d.members.map((m: any) => m.user?.id || m.userId).filter(Boolean) : prev.memberUserIds,
+    }));
+  }
 
   const valid = form.name?.trim() && form.startDate;
 
@@ -466,11 +648,16 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
             <Textarea rows={2} value={form.notes || ''} onChange={(e) => setForm((f: any) => ({ ...f, notes: e.target.value }))} placeholder="Observaciones generales..." />
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-          <Button data-testid="projects-form-submit" onClick={submit} disabled={!valid || saving} className="gap-2">
-            {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear proyecto'}
-          </Button>
+        <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground text-left">
+            {!form.name?.trim() ? 'Ingresa el nombre del proyecto.' : !form.startDate ? 'Selecciona la fecha de inicio para continuar.' : ''}
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
+            <Button data-testid="projects-form-submit" onClick={submit} disabled={!valid || saving} className="gap-2">
+              {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear proyecto'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

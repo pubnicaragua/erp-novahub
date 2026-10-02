@@ -42,8 +42,9 @@ button,input,select,textarea{font:inherit}
 .search button:hover{background:#cdeee0}
 .search-zone{border:1px solid #cfe6dc;border-radius:11px;background:#edf8f3;color:#0b7155;padding:0 9px;font-size:8.5px;font-weight:800;cursor:pointer;white-space:nowrap}
 .search-zone:hover{background:#d9f1e7}
-.search-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:17px;margin:0 2px 9px;color:#788984;font-size:8px}
+.search-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:17px;margin:0 2px 7px;color:#788984;font-size:8px}
 .search-meta button{border:0;background:transparent;color:#08785a;font-size:8px;font-weight:700;cursor:pointer;padding:2px 0}
+.search-tools{display:grid;grid-template-columns:1fr 86px 66px;gap:6px;margin:-1px 0 9px}.search-tools button,.search-tools select{min-height:34px;border:1px solid #cfe6dc;border-radius:10px;background:#edf8f3;color:#0b7155;padding:6px 8px;font-size:8.5px;font-weight:800;cursor:pointer}.search-tools select{background:white;color:#496058;font-weight:700;cursor:pointer}.search-tools button:hover{background:#d9f1e7}.search-tools button.active{background:#123f35;color:white;border-color:#123f35}
 .sect{margin:12px 0}
 .stitle{display:flex;justify-content:space-between;align-items:center;margin:0 2px 7px;font-size:9px;text-transform:uppercase;letter-spacing:.75px;color:#61736d;font-weight:700}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
@@ -111,9 +112,9 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .bulkbar.is-empty{display:none}
 .toast{position:fixed;z-index:2000;left:50%;bottom:22px;transform:translate(-50%,18px);opacity:0;background:#153d35;color:white;padding:10px 13px;border-radius:11px;font-size:9px;transition:.2s;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}
 .quick-capture{position:fixed;z-index:1900;left:calc(var(--sheet) + 18px);bottom:18px;width:min(390px,calc(100vw - var(--sheet) - 36px));padding:15px;border:1px solid #bfe2d4;border-radius:18px;background:rgba(255,255,255,.98);box-shadow:0 18px 45px rgba(12,53,43,.24)}.quick-capture[hidden]{display:none}.quick-capture h2{margin:0;font-size:14px}.quick-capture p{margin:4px 0 10px;color:#6c7c77;font-size:9px}.quick-capture-grid{display:grid;grid-template-columns:1fr;gap:7px}.quick-capture input{width:100%;height:40px;border:1px solid #dce8e3;border-radius:10px;padding:0 10px;font-size:11px;outline:none}.quick-capture input:focus{border-color:#12aa7b;box-shadow:0 0 0 3px rgba(18,170,123,.12)}.quick-capture-photo{display:flex;align-items:center;gap:8px;margin:8px 0;padding:6px;border:1px solid #dce8e3;border-radius:10px;background:#f7fbf9}.quick-capture-photo[hidden]{display:none}.quick-capture-photo img{width:56px;height:56px;border-radius:8px;object-fit:cover}.quick-capture-photo span{flex:1;font-size:8px;color:#526a60}.quick-capture-photo button{border:0;background:transparent;color:#08785a;font-size:8px;font-weight:800;cursor:pointer}.quick-capture-actions{display:flex;gap:7px;margin-top:10px}.quick-capture-actions button{flex:1;border:0;border-radius:10px;padding:10px 8px;font-size:9px;font-weight:800;cursor:pointer}.quick-capture-actions button:disabled{opacity:.45;cursor:not-allowed}.quick-capture-actions .cancel{background:#edf5f1;color:#537068}.quick-capture-actions .camera{background:#e5f5ed;color:#08785a}.quick-capture-actions .save{background:#08785a;color:white}
-.primary-float{background:#08785a;color:white;border-color:#08785a}.standalone-view #map{display:none}.standalone-view .sidebar{left:0;top:0;bottom:0;width:100%;border:0;border-radius:0;box-shadow:none}.standalone-view .sidebar .scroll{width:min(1180px,100%);margin:0 auto}.standalone-view .fabbar,.standalone-view .quick-capture{display:none}.map-fullscreen #map{left:0;width:100vw}.map-fullscreen .fabbar{left:14px}.map-fullscreen:not(.standalone-view) .sidebar{display:none}.map-fullscreen .legend{right:14px}.fullscreen-float{min-width:32px;padding:8px 9px;font-size:14px}.modal-backdrop{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;padding:18px;background:rgba(8,31,25,.42);backdrop-filter:blur(4px)}.modal-backdrop[hidden]{display:none}.confirm-modal{width:min(430px,100%);border:1px solid #d6e7df;border-radius:20px;background:#fff;padding:19px;box-shadow:0 24px 70px rgba(8,42,32,.28)}.confirm-modal h2{margin:0;color:#123f35;font-size:16px}.confirm-modal p{margin:6px 0 14px;color:#64766f;font-size:10px;line-height:1.5}.confirm-modal label{display:block;color:#51655e;font-size:9px;font-weight:800;margin:10px 0 5px}.confirm-modal select,.confirm-modal textarea{width:100%;border:1px solid #dce8e3;border-radius:10px;background:#fbfdfc;padding:9px;font-size:10px}.confirm-modal textarea{min-height:64px;resize:vertical}.confirm-modal-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:15px}.confirm-modal-actions button{border:0;border-radius:10px;padding:10px 13px;font-size:9px;font-weight:800;cursor:pointer}.confirm-modal-actions .cancel{background:#edf5f1;color:#537068}.confirm-modal-actions .danger{background:#b63849;color:white}
+.primary-float{background:#08785a;color:white;border-color:#08785a}.standalone-view #map{display:none}.standalone-view .sidebar{left:0;top:0;bottom:0;width:100%;border:0;border-radius:0;box-shadow:none}.standalone-view .sidebar .scroll{width:min(1180px,100%);margin:0 auto}.standalone-view .fabbar,.standalone-view .quick-capture{display:none}.map-fullscreen #map{left:0;width:100vw}.map-fullscreen .fabbar{left:14px}.map-fullscreen:not(.standalone-view) .sidebar{display:none}.map-fullscreen .legend{right:14px}.fullscreen-float{min-width:32px;padding:8px 9px;font-size:14px}.modal-backdrop{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;padding:18px;background:rgba(8,31,25,.42);backdrop-filter:blur(4px)}.modal-backdrop[hidden]{display:none}.confirm-modal{width:min(430px,100%);max-height:min(92dvh,760px);overflow:auto;border:1px solid #d6e7df;border-radius:20px;background:#fff;padding:19px;box-shadow:0 24px 70px rgba(8,42,32,.28)}.confirm-modal h2{margin:0;color:#123f35;font-size:16px}.confirm-modal p{margin:6px 0 14px;color:#64766f;font-size:10px;line-height:1.5}.confirm-modal label{display:block;color:#51655e;font-size:9px;font-weight:800;margin:10px 0 5px}.confirm-modal select,.confirm-modal textarea{width:100%;border:1px solid #dce8e3;border-radius:10px;background:#fbfdfc;padding:9px;font-size:10px}.confirm-modal textarea{min-height:64px;resize:vertical}.confirm-modal-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:15px;flex-wrap:wrap}.confirm-modal-actions button{border:0;border-radius:10px;padding:10px 13px;font-size:9px;font-weight:800;cursor:pointer}.confirm-modal-actions button:disabled{opacity:.45;cursor:not-allowed}.confirm-modal-actions .cancel{background:#edf5f1;color:#537068}.confirm-modal-actions .danger{background:#b63849;color:white}
 .evidence-modal-media{display:grid;place-items:center;min-height:120px;margin-top:12px;border-radius:12px;overflow:hidden;background:#f0f6f3}.evidence-modal-media img{display:block;max-width:100%;max-height:56vh;object-fit:contain}.evidence-modal-media iframe{width:100%;height:58vh;border:0}.evidence-modal-media a{color:#08785a;font-size:11px;font-weight:800;padding:25px}.confirm-modal-actions .save{background:#08785a;color:white}.location-steps{margin:8px 0 0;padding-left:20px;color:#64766f;font-size:10px;line-height:1.6}.location-privacy{margin-top:14px;padding:10px;border:1px solid #dcebe4;border-radius:12px;background:#f3faf7}.location-privacy[hidden]{display:none}.location-privacy b{display:block;font-size:10px;color:#123f35}.location-privacy span{display:block;margin-top:3px;color:#6c7c77;font-size:8.5px;line-height:1.4}.location-privacy button{margin-top:8px;border:0;border-radius:9px;background:#123f35;color:#fff;padding:8px 10px;font-size:9px;font-weight:800;cursor:pointer}
-.route-stops{display:flex;flex-direction:column;gap:6px;max-height:38vh;overflow:auto;margin-top:10px}.route-stop{display:flex;align-items:center;gap:8px;border:1px solid #dce8e3;border-radius:10px;background:#f7fbf9;padding:8px}.route-stop b{font-size:10px;color:#123f35}.route-stop span{display:block;color:#6c7c77;font-size:8px}.route-stop .route-number{width:22px;height:22px;display:grid;place-items:center;border-radius:7px;background:#d8eee5;color:#08785a;font-size:9px;font-weight:800}
+.route-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0 4px}.route-stat{border:1px solid #dce8e3;border-radius:10px;background:#f7fbf9;padding:8px}.route-stat b{display:block;font-size:14px;color:#123f35}.route-stat span{display:block;margin-top:2px;font-size:7.5px;color:#6c7c77;text-transform:uppercase;font-weight:800}.route-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;color:#6c7c77;font-size:8px}.route-toolbar button{border:0;background:transparent;color:#b63849;font-size:8px;font-weight:800;cursor:pointer;padding:3px}.route-stops{display:flex;flex-direction:column;gap:6px;max-height:38vh;overflow:auto;margin-top:10px}.route-stop{display:flex;align-items:center;gap:8px;border:1px solid #dce8e3;border-radius:10px;background:#f7fbf9;padding:8px}.route-stop.current{border-color:#12aa7b;background:#effaf5;box-shadow:0 3px 10px rgba(8,120,90,.09)}.route-stop.completed{opacity:.65}.route-stop b{font-size:10px;color:#123f35}.route-stop span{display:block;color:#6c7c77;font-size:8px}.route-stop .route-number{width:22px;height:22px;display:grid;place-items:center;border-radius:7px;background:#d8eee5;color:#08785a;font-size:9px;font-weight:800;flex:0 0 auto}.route-stop-copy{min-width:0;flex:1}.route-stop-copy b,.route-stop-copy span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.route-stop-tag{display:inline-block!important;margin-top:3px;color:#08785a!important;font-size:7px!important;font-weight:800}.route-stop-actions{display:flex;align-items:center;gap:3px}.route-stop-actions button{border:1px solid #d4e7df;border-radius:7px;background:white;color:#08785a;padding:5px 6px;font-size:8px;font-weight:800;cursor:pointer}.route-stop-actions button:hover{background:#e4f5ed}.route-stop-actions .danger{color:#b63849}.route-progress{height:6px;margin-top:9px;border-radius:999px;background:#e3eee9;overflow:hidden}.route-progress span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#087858,#12a779);transition:width .2s ease}
 .sheetHandle{display:none}
 @media(max-width:820px){
  :root{--sheet:100%}
@@ -137,6 +138,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .scroll{padding:10px 11px 18px;overscroll-behavior-y:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}
  .kpis{display:flex;gap:5px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}.kpis::-webkit-scrollbar{display:none}.kpi{flex:0 0 84px;padding:7px 6px;border-radius:11px}.kpi b{font-size:15px}.kpi span{font-size:7px}
  .search input{height:40px;font-size:12px}.search button{height:30px;width:30px}.search-zone{padding:0 8px;font-size:8px}
+ .search-tools{grid-template-columns:1fr 74px 58px}.search-tools button,.search-tools select{min-height:38px;font-size:8.5px;padding:6px 5px}
  .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}.chip{flex:0 0 auto;padding:8px 10px;font-size:9.5px}
  .filters{grid-template-columns:1fr 1fr}.filters select{font-size:10px;min-height:38px}
  .segment button{min-height:35px;font-size:9.5px}
@@ -199,9 +201,14 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 
   <div class="search-row">
    <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off"><button id="searchGoogle" type="button" title="Buscar negocios de Nova">⌕</button></div>
-   <button class="search-zone" id="searchViewport" type="button">Buscar zona</button>
+   <button class="search-zone" id="searchViewport" type="button">Buscar vista</button>
   </div>
   <div class="search-meta"><span id="searchStatus">Escribe un rubro o usa el mapa para buscar nuevos negocios.</span><button id="clearGoogleCache" type="button">Actualizar datos</button></div>
+  <div class="search-tools">
+   <button id="searchNearby" type="button">◎ Cerca de mí</button>
+   <select id="nearbyRadius" aria-label="Radio de búsqueda cercana"><option value="2000">2 km</option><option value="5000" selected>5 km</option><option value="10000">10 km</option></select>
+   <button id="toggle3d" type="button" title="Activar vista inclinada">3D</button>
+  </div>
 
   <div class="sect">
    <div class="stitle"><span>Zonas rápidas</span><span>Deslice →</span></div>
@@ -234,7 +241,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   <div class="bulkbar" id="bulkbar">
    <b id="selectionSummary">0 seleccionados</b>
    <button id="selectVisible">Seleccionar visibles</button>
-   <button id="clearSelection">Quitar selección</button>
+   <button id="clearSelection">Limpiar selección</button>
    <button id="bulkKanban">Añadir a Kanban</button>
    <button id="bulkRoute">Armar ruta</button>
    <button id="bulkVisit">Registrar visitas</button>
@@ -296,7 +303,10 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 <div class="modal-backdrop" id="routeModal" hidden>
  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="routeTitle">
   <h2 id="routeTitle">Planificar ruta comercial</h2>
-  <p id="routeDescription">Organiza los prospectos seleccionados y asigna la ruta a un vendedor.</p>
+  <p id="routeDescription">Organiza hasta 30 prospectos, define el orden de visita y abre cada parada directamente en Waze.</p>
+  <div class="route-summary"><div class="route-stat"><b id="routeStopCount">0/30</b><span>Paradas</span></div><div class="route-stat"><b id="routeCompletedCount">0</b><span>Completadas</span></div><div class="route-stat"><b id="routeNextStop">—</b><span>Siguiente</span></div></div>
+  <div class="route-progress"><span id="routeProgressBar" style="width:0%"></span></div>
+  <div class="route-toolbar"><span>Orden de visita · 1 → 30</span><button id="routeClear" type="button">Limpiar ruta</button></div>
   <label for="routeAssignee">Vendedor responsable</label>
   <select id="routeAssignee"><option value="">Mi ruta</option></select>
   <div class="route-stops" id="routeStops"></div>
@@ -304,9 +314,9 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
    <button class="cancel" id="routeClose" type="button">Cerrar</button>
    <button class="cancel" id="routeOptimize" type="button">Ordenar por cercanía</button>
    <button class="save" id="routeDraw" type="button">Mostrar ruta aquí</button>
-   <button class="cancel" id="routeOpenMaps" type="button">Abrir navegación</button>
+   <button class="cancel" id="routeOpenMaps" type="button">Abrir siguiente en Waze</button>
   </div>
-  <div class="confirm-modal-actions"><button class="save" id="routeSave" type="button">Guardar y asignar ruta</button></div>
+  <div class="confirm-modal-actions"><button class="cancel" id="routeCompleteStop" type="button">Marcar siguiente completada</button><button class="save" id="routeSave" type="button">Guardar y asignar ruta</button></div>
  </div>
 </div>
 <div class="modal-backdrop" id="zoneModal" hidden>
@@ -507,9 +517,16 @@ let lastRemoteRefreshAt = 0;
 let lastOutboxFlushAt = 0;
 let assignees = [];
 let routeBusinesses = [];
+const ROUTE_MAX_STOPS = 30;
+const ROUTE_STORAGE_KEY = 'novaFuerzaRouteV2';
+const ROUTE_PROGRESS_KEY = 'novaFuerzaRouteProgressV2';
+let routeProgress = Math.max(0, Number(readStore(ROUTE_PROGRESS_KEY, 0)) || 0);
 let routePolyline = null;
 let zonePolygons = new Map();
 let zonesVisible = false;
+let map3DEnabled = false;
+let activeNearbyCenter = null;
+let activeNearbyRadius = null;
 
 if(NOVAHUB_ISOTIPO_URL){
   const brandIcon=document.querySelector('.logoicon');
@@ -736,6 +753,15 @@ function isDiscarded(b){return stateOf(b).discarded === true || statusOf(b)==='D
 function isGoogleFound(b){return String(b?.source || '').includes('Nova')}
 function stateClass(b){if(isDiscarded(b)) return 'discarded'; if(isInterested(b)) return 'interested'; if(isVisited(b)) return 'visited'; if(isKanban(b)) return 'kanban'; if(isSelected(b)) return 'selected'; return ''}
 function selectedBusinesses(){return businesses.filter(isSelected)}
+function distanceMetersFromActive(b){
+  if(!activeNearbyCenter)return Infinity;
+  return Math.hypot((Number(b.lat)-activeNearbyCenter.lat)*111000,(Number(b.lng)-activeNearbyCenter.lng)*111000*Math.cos(activeNearbyCenter.lat*Math.PI/180));
+}
+function distanceLabel(b){
+  if(!activeNearbyCenter)return '';
+  const meters=distanceMetersFromActive(b);
+  return meters<1000 ? `${Math.round(meters)} m` : `${(meters/1000).toFixed(1)} km`;
+}
 const stages = ['Nuevo','Contactado','Visitado','Interesado','Demo','Negociación','Cliente','Descartado'];
 const apiStageByUi = {Nuevo:'NEW',Contactado:'CONTACTED',Visitado:'VISITED',Interesado:'INTERESTED',Demo:'DEMO','Negociación':'NEGOTIATION',Cliente:'CLIENT',Descartado:'DISCARDED'};
 const uiStageByApi = Object.fromEntries(Object.entries(apiStageByUi).map(([ui,api]) => [api,ui]));
@@ -992,6 +1018,7 @@ function pass(b){
   if(c !== 'all' && b.category !== c) return false;
   if(s !== 'all' && !b.source.includes(s)) return false;
   if(st === 'all' && isDiscarded(b)) return false;
+  if(activeNearbyCenter && activeNearbyRadius && distanceMetersFromActive(b)>activeNearbyRadius) return false;
   if(st !== 'all' && statusOf(b) !== st) return false;
   if(pipelineFilter === 'found' && !isGoogleFound(b)) return false;
   if(pipelineFilter === 'selected' && !isSelected(b)) return false;
@@ -1203,12 +1230,16 @@ document.getElementById('locationClose').addEventListener('click',closeLocationH
 document.getElementById('locationRetry').addEventListener('click',()=>{closeLocationHelp();locateMe()});
 document.getElementById('locationModal').addEventListener('click',event=>{if(event.target===event.currentTarget)closeLocationHelp()});
 document.getElementById('routeClose').addEventListener('click',()=>{document.getElementById('routeModal').hidden=true});
+document.getElementById('routeClear').addEventListener('click',clearRoute);
 document.getElementById('routeOptimize').addEventListener('click',optimizeRoute);
 document.getElementById('routeDraw').addEventListener('click',drawRouteOnMap);
 document.getElementById('routeOpenMaps').addEventListener('click',openRouteInMaps);
+document.getElementById('routeCompleteStop').addEventListener('click',completeCurrentRouteStop);
 document.getElementById('routeSave').addEventListener('click',()=>{void saveRouteAssignment()});
 document.getElementById('routeModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
 document.getElementById('routeTop').addEventListener('click',()=>{if(selectedBusinesses().length)addSelectedToRoute();else openRoutePlanner([])});
+document.getElementById('searchNearby').addEventListener('click',searchNearbyFromDevice);
+document.getElementById('toggle3d').addEventListener('click',toggleMap3D);
 document.getElementById('zoneManager').addEventListener('click',openZoneManager);
 document.getElementById('zoneClose').addEventListener('click',()=>{document.getElementById('zoneModal').hidden=true});
 document.getElementById('zoneModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
@@ -1552,6 +1583,14 @@ function locateMe(){
     toast('Ubicación actual centrada en el mapa');
   },'No se pudo obtener la ubicación para centrar el mapa');
 }
+function toggleMap3D(){
+  map3DEnabled=!map3DEnabled;
+  if(typeof googleMap.setTilt==='function')googleMap.setTilt(map3DEnabled?45:0);
+  if(map3DEnabled && typeof googleMap.setHeading==='function')googleMap.setHeading(0);
+  const button=document.getElementById('toggle3d');
+  if(button){button.classList.toggle('active',map3DEnabled);button.textContent=map3DEnabled?'2D':'3D'}
+  toast(map3DEnabled?'Vista 3D activada · gira y acerca el mapa':'Vista 2D activada');
+}
 window.saveFollowup = async function(id){
   const sid = safeId(id);
   const b = findBusiness(id);
@@ -1671,7 +1710,10 @@ function updateView(){
   if(!mapView&&!kanban)renderHistory();
 }
 function render(){
-  filtered = businesses.filter(pass).sort((a,b)=>a.priority.localeCompare(b.priority)||b.score-a.score||a.name.localeCompare(b.name));
+  filtered = businesses.filter(pass);
+  if(activeNearbyCenter){
+    filtered.sort((a,b)=>distanceMetersFromActive(a)-distanceMetersFromActive(b)||a.name.localeCompare(b.name));
+  }else filtered.sort((a,b)=>a.priority.localeCompare(b.priority)||b.score-a.score||a.name.localeCompare(b.name));
   cluster.clearLayers();
   markerById.clear();
   const currentBounds=googleMap.getBounds?.();
@@ -1704,7 +1746,7 @@ function render(){
         <input class="check" type="checkbox" data-action="select" data-id="${esc(b.id)}" ${isSelected(b)?'checked':''} aria-label="Seleccionar ${esc(b.name)}">
         <div>
           <div class="itemname">${esc(b.name)}</div>
-          <div class="meta">${esc(b.zone)} · ${esc(b.category)}</div>
+          <div class="meta">${esc(b.zone)} · ${esc(b.category)}${activeNearbyCenter ? ` · ${esc(distanceLabel(b))}` : ''}</div>
         </div>
       </div>
       <span class="status">${esc(isKanban(b)?'En Kanban':statusOf(b))} · ${b.score}% afinidad</span>
@@ -1733,9 +1775,15 @@ function render(){
 function populateFilters(){
   const zonesList = ['Todos',...Object.keys(centers)];
   document.getElementById('zoneChips').innerHTML = zonesList.map(z => `<button class="chip ${z===selectedZone?'active':''}" data-zone="${z}">${z}</button>`).join('');
+  const zoneSearchButton=document.getElementById('searchViewport');
+  if(zoneSearchButton)zoneSearchButton.textContent=selectedZone==='Todos'?'Buscar vista':'Buscar zona';
   document.querySelectorAll('[data-zone]').forEach(btn => btn.addEventListener('click', () => {
     selectedZone = btn.dataset.zone;
+    activeNearbyCenter=null;
+    activeNearbyRadius=null;
     document.querySelectorAll('[data-zone]').forEach(x => x.classList.toggle('active', x === btn));
+    const zoneSearchButton=document.getElementById('searchViewport');
+    if(zoneSearchButton)zoneSearchButton.textContent=selectedZone==='Todos'?'Buscar vista':'Buscar zona';
     render();
     if(selectedZone === 'Todos') map.flyTo([12.115,-86.26], 11, {duration:.6});
     else map.flyTo(centers[selectedZone], selectedZone==='Ciudad Sandino'||selectedZone==='Veracruz' ? 14 : 13, {duration:.6});
@@ -1780,6 +1828,14 @@ function boundsKey(bounds){
   return [sw.lat(),sw.lng(),ne.lat(),ne.lng()].map(value=>Number(value).toFixed(3)).join(',');
 }
 function currentBounds(){return googleMap.getBounds?.() || null}
+function radiusFromBounds(bounds){
+  if(!bounds)return 15000;
+  const ne=bounds.getNorthEast(), sw=bounds.getSouthWest();
+  const centerLat=(ne.lat()+sw.lat())/2;
+  const latMeters=Math.abs(ne.lat()-sw.lat())*111000;
+  const lngMeters=Math.abs(ne.lng()-sw.lng())*111000*Math.max(.25,Math.cos(centerLat*Math.PI/180));
+  return Math.max(1200,Math.min(25000,Math.round(Math.max(latMeters,lngMeters)/2)));
+}
 function setSearchStatus(message){
   const node=document.getElementById('searchStatus'); if(node)node.textContent=message;
   const live=document.getElementById('liveStatus'); if(live)live.textContent=message;
@@ -1816,10 +1872,11 @@ async function searchTextPlaces(Place,request,query,runId){
     return [];
   }
 }
-function buildNovaDiscoveryPlan(normalizedQuery,visibleOnly){
+function buildNovaDiscoveryPlan(normalizedQuery,visibleOnly,options={}){
   const cursor=Number(readStore(NOVA_SEARCH_CURSOR_KEY,0)) || 0;
   const currentCenter=googleMap.getCenter();
-  const currentArea={name:selectedZone==='Todos'?'vista actual':selectedZone,center:[currentCenter?.lat?.() ?? 12.115,currentCenter?.lng?.() ?? -86.26],radius:15000};
+  const center=options.center || [currentCenter?.lat?.() ?? 12.115,currentCenter?.lng?.() ?? -86.26];
+  const currentArea={name:options.areaName || (selectedZone==='Todos'?'vista actual':selectedZone),center,radius:Number(options.radius)||radiusFromBounds(currentBounds())};
   if(visibleOnly){
     const queries=normalizedQuery ? [normalizedQuery] : Array.from({length:5},(_,index)=>NOVA_DISCOVERY_QUERIES[(cursor+index)%NOVA_DISCOVERY_QUERIES.length]);
     localStorage.setItem(NOVA_SEARCH_CURSOR_KEY,String((cursor+queries.length)%NOVA_DISCOVERY_QUERIES.length));
@@ -1840,6 +1897,8 @@ function buildNovaDiscoveryPlan(normalizedQuery,visibleOnly){
 async function searchGooglePlaces(query='', options={}){
   const force=options.force===true;
   const visibleOnly=options.visibleOnly===true;
+  activeNearbyCenter=options.center ? {lat:Number(options.center[0]),lng:Number(options.center[1])} : null;
+  activeNearbyRadius=options.center ? Number(options.radius)||15000 : null;
   const runId=++googleSearchRun;
   const btn=document.getElementById('refresh'); const searchBtn=document.getElementById('searchGoogle'); const zoneBtn=document.getElementById('searchViewport');
   [btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=true});
@@ -1855,7 +1914,7 @@ async function searchGooglePlaces(query='', options={}){
     setSearchStatus(`${Math.max(0,googlePlaces.length-before)} nuevos · ${googlePlaces.length} negocios Nova acumulados.`);
     [btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false}); return;
   }
-  const discoveryPlan=buildNovaDiscoveryPlan(normalizedQuery,visibleOnly);
+  const discoveryPlan=buildNovaDiscoveryPlan(normalizedQuery,visibleOnly,options);
   const collected=[];
   try{
     const placesLibrary=await novaMapsLibrary('places');
@@ -1894,26 +1953,71 @@ async function searchGooglePlaces(query='', options={}){
   }finally{[btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false});if(btn)btn.textContent='↻ Actualizar negocios Nova'}
 }
 function loadGooglePlaces(force=false){return searchGooglePlaces('',{force})}
+function searchNearbyFromDevice(){
+  const query=document.getElementById('search')?.value.trim() || '';
+  const radius=Number(document.getElementById('nearbyRadius')?.value || 5000);
+  toast('Obteniendo tu ubicación para buscar negocios cercanos…');
+  withLocationAccess(position=>{
+    const center=[Number(position.coords.latitude),Number(position.coords.longitude)];
+    activeNearbyCenter={lat:center[0],lng:center[1]};
+    showUserLocation(position.coords);
+    googleMap.panTo({lat:center[0],lng:center[1]});
+    googleMap.setZoom(radius<=2500?16:radius<=5000?15:14);
+    void searchGooglePlaces(query,{force:true,visibleOnly:true,center, radius, areaName:`radio de ${Math.round(radius/1000)} km`});
+  },'No se pudo obtener tu ubicación para buscar negocios a la redonda');
+}
+function persistRoute(){
+  localStorage.setItem(ROUTE_STORAGE_KEY,JSON.stringify(routeBusinesses.map(keyOf)));
+  localStorage.setItem(ROUTE_PROGRESS_KEY,String(Math.max(0,Math.min(routeProgress,routeBusinesses.length))));
+}
 function routeBusinessesFromStore(){
-  return readStore('novaFuerzaRouteV1',[]).map(key=>findBusinessByKey(key)).filter(Boolean);
+  const keys=readStore(ROUTE_STORAGE_KEY,readStore('novaFuerzaRouteV1',[]));
+  return keys.map(key=>findBusinessByKey(key)).filter(Boolean).slice(0,ROUTE_MAX_STOPS);
+}
+function routeWazeUrl(b){
+  const lat=Number(b?.lat), lng=Number(b?.lng);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng))return '';
+  const query=[b.name,b.address].filter(Boolean).join(' ');
+  return `https://waze.com/ul?ll=${encodeURIComponent(`${lat},${lng}`)}&navigate=yes&q=${encodeURIComponent(query)}&utm_source=novahub`;
 }
 function renderRoutePlanner(){
+  routeProgress=Math.max(0,Math.min(routeProgress,routeBusinesses.length));
   const select=document.getElementById('routeAssignee');
   if(select){
+    const current=select.value;
     select.innerHTML='<option value="">Mi ruta</option>' + assignees.map(item=>'<option value="' + esc(item.id) + '">' + esc(item.name || item.email || 'Vendedor') + '</option>').join('');
+    if(current)select.value=current;
   }
+  const completed=document.getElementById('routeCompletedCount');
+  const count=document.getElementById('routeStopCount');
+  const next=document.getElementById('routeNextStop');
+  const progressBar=document.getElementById('routeProgressBar');
+  if(count)count.textContent=`${routeBusinesses.length}/${ROUTE_MAX_STOPS}`;
+  if(completed)completed.textContent=String(routeProgress);
+  if(next)next.textContent=routeBusinesses[routeProgress]?.name ? routeBusinesses[routeProgress].name.slice(0,18) : 'Finalizada';
+  if(progressBar)progressBar.style.width=`${routeBusinesses.length ? Math.round((routeProgress/routeBusinesses.length)*100) : 0}%`;
   const stops=document.getElementById('routeStops');
   if(stops){
-    stops.innerHTML=routeBusinesses.length ? routeBusinesses.map((b,index)=>'<div class="route-stop"><span class="route-number">' + (index+1) + '</span><div><b>' + esc(b.name) + '</b><span>' + esc(b.address || b.zone) + '</span></div></div>').join('') : '<div class="history-empty">Selecciona prospectos para comenzar una ruta.</div>';
+    stops.innerHTML=routeBusinesses.length ? routeBusinesses.map((b,index)=>{
+      const isCurrent=index===routeProgress;
+      const isCompleted=index<routeProgress;
+      const tag=isCompleted?'✓ Visitada':isCurrent?'Siguiente parada':'Pendiente';
+      return `<div class="route-stop ${isCurrent?'current ':''}${isCompleted?'completed':''}"><span class="route-number">${index+1}</span><div class="route-stop-copy"><b>${esc(b.name)}</b><span>${esc(b.address || b.zone || 'Ubicación disponible')}</span><span class="route-stop-tag">${tag}</span></div><div class="route-stop-actions"><button type="button" title="Subir parada" onclick="moveRouteStop(${index},-1)">↑</button><button type="button" title="Bajar parada" onclick="moveRouteStop(${index},1)">↓</button><button type="button" title="Abrir esta parada en Waze" onclick="openRouteStop(${index})">W</button><button class="danger" type="button" title="Quitar parada" onclick="removeRouteStop(${index})">×</button></div></div>`;
+    }).join('') : '<div class="history-empty">Selecciona prospectos para comenzar una ruta.</div>';
   }
   const description=document.getElementById('routeDescription');
-  if(description)description.textContent=routeBusinesses.length + ' prospecto' + (routeBusinesses.length===1?'':'s') + ' en esta ruta. Puedes ordenar las paradas y asignarlas a un vendedor.';
+  if(description)description.textContent=routeBusinesses.length ? `${routeBusinesses.length} parada${routeBusinesses.length===1?'':'s'} · inicia en tu ubicación actual y avanza en el orden indicado. Waze se abre una parada a la vez.` : 'Organiza hasta 30 prospectos, define el orden de visita y abre cada parada directamente en Waze.';
+  const completeButton=document.getElementById('routeCompleteStop');
+  if(completeButton)completeButton.disabled=routeProgress>=routeBusinesses.length;
+  const wazeButton=document.getElementById('routeOpenMaps');
+  if(wazeButton)wazeButton.disabled=routeProgress>=routeBusinesses.length;
+  persistRoute();
 }
 function openRoutePlanner(ids){
   const requested=(ids || []).map(findBusiness).filter(Boolean);
-  routeBusinesses=requested.length ? requested : routeBusinessesFromStore();
+  routeBusinesses=(requested.length ? requested : routeBusinessesFromStore()).slice(0,ROUTE_MAX_STOPS);
   if(!routeBusinesses.length){toast('Selecciona negocios para armar una ruta');return}
-  localStorage.setItem('novaFuerzaRouteV1',JSON.stringify(routeBusinesses.map(keyOf)));
+  if(requested.length)routeProgress=0;
   renderRoutePlanner();
   document.getElementById('routeModal').hidden=false;
 }
@@ -1927,11 +2031,11 @@ function optimizeRoute(){
     pending.forEach((candidate,index)=>{const distance=routeDistance(current,candidate);if(distance<bestDistance){bestDistance=distance;bestIndex=index}});
     ordered.push(pending.splice(bestIndex,1)[0]);
   }
-  routeBusinesses=ordered;localStorage.setItem('novaFuerzaRouteV1',JSON.stringify(routeBusinesses.map(keyOf)));renderRoutePlanner();toast('Ruta ordenada por cercanía');
+  routeBusinesses=ordered;routeProgress=0;renderRoutePlanner();toast('Ruta ordenada por cercanía desde la primera parada');
 }
 function drawRouteOnMap(){
   if(!routeBusinesses.length){toast('Selecciona negocios para armar una ruta');return}
-  const path=routeBusinesses.map(b=>({lat:Number(b.lat),lng:Number(b.lng)})).filter(point=>Number.isFinite(point.lat)&&Number.isFinite(point.lng));
+  const path=[...(lastKnownCoords?[{lat:Number(lastKnownCoords.latitude),lng:Number(lastKnownCoords.longitude)}]:[]),...routeBusinesses.map(b=>({lat:Number(b.lat),lng:Number(b.lng)}))].filter(point=>Number.isFinite(point.lat)&&Number.isFinite(point.lng));
   if(!path.length)return;
   routePolyline?.setMap(null);
   routePolyline=new google.maps.Polyline({map:googleMap,path,geodesic:true,strokeColor:'#08785a',strokeOpacity:.9,strokeWeight:4,zIndex:1100});
@@ -1939,15 +2043,45 @@ function drawRouteOnMap(){
   path.forEach(point=>bounds.extend(point));
   if(path.length>1)googleMap.fitBounds(bounds,64);
   document.getElementById('routeModal').hidden=true;
-  toast(`${path.length} paradas trazadas en Nova Maps`);
+  toast(`${routeBusinesses.length} paradas trazadas en Nova Maps`);
 }
-function openRouteInMaps(){
-  if(!routeBusinesses.length)return;
-  const destination=routeBusinesses[routeBusinesses.length-1];
-  const waypoints=routeBusinesses.slice(0,-1).map(b=>encodeURIComponent(b.lat + ',' + b.lng)).join('|');
-  const url='https://www.google.com/maps/dir/?api=1&origin=Current+Location&destination=' + encodeURIComponent(destination.lat + ',' + destination.lng) + (waypoints ? '&waypoints=' + waypoints : '');
+function openRouteStop(index){
+  const stop=routeBusinesses[index];
+  const url=routeWazeUrl(stop);
+  if(!stop||!url){toast('Esta parada no tiene coordenadas válidas');return}
   window.open(url,'_blank','noopener,noreferrer');
+  toast(`Waze abierto · parada ${index+1} de ${routeBusinesses.length}`);
 }
+function openRouteInMaps(){openRouteStop(routeProgress)}
+function completeCurrentRouteStop(){
+  if(routeProgress>=routeBusinesses.length){toast('Ruta completada');return}
+  const business=routeBusinesses[routeProgress];
+  const state=stateOf(business); state.routeCompletedAt=new Date().toISOString(); state.visitedAt=state.visitedAt || state.routeCompletedAt; state.stage='Visitado'; state.kanban=true;
+  routeProgress+=1; persistCommercial(); persistRoute(); renderRoutePlanner(); void syncProspects([business]);
+  toast(routeProgress<routeBusinesses.length ? `Parada completada · sigue ${routeProgress+1}/${routeBusinesses.length}` : 'Ruta completada');
+}
+function moveRouteStop(index,direction){
+  const next=index+direction;
+  if(index<0||next<0||next>=routeBusinesses.length)return;
+  [routeBusinesses[index],routeBusinesses[next]]=[routeBusinesses[next],routeBusinesses[index]];
+  renderRoutePlanner();
+}
+function removeRouteStop(index){
+  if(index<0||index>=routeBusinesses.length)return;
+  routeBusinesses.splice(index,1);
+  if(index<routeProgress)routeProgress-=1;
+  renderRoutePlanner();
+  toast('Parada retirada de la ruta');
+}
+function clearRoute(){
+  routeBusinesses=[];routeProgress=0;persistRoute();routePolyline?.setMap(null);routePolyline=null;
+  document.getElementById('routeModal').hidden=true;
+  render();
+  toast('Ruta limpiada');
+}
+window.openRouteStop=openRouteStop;
+window.moveRouteStop=moveRouteStop;
+window.removeRouteStop=removeRouteStop;
 async function saveRouteAssignment(){
   const assigneeId=document.getElementById('routeAssignee')?.value || CURRENT_USER_ID || null;
   routeBusinesses.forEach(b=>{const c=stateOf(b);c.assignedToId=assigneeId;c.kanban=true;c.stage=c.stage || 'Nuevo'});
@@ -1956,8 +2090,9 @@ async function saveRouteAssignment(){
 function addSelectedToRoute(){
   const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona negocios para armar una ruta');return}
   const current=routeBusinessesFromStore(); const keys=new Set(current.map(keyOf));
-  chosen.forEach(b=>{if(!keys.has(keyOf(b)))current.push(b)});
-  routeBusinesses=current;localStorage.setItem('novaFuerzaRouteV1',JSON.stringify(current.map(keyOf)));renderRoutePlanner();document.getElementById('routeModal').hidden=false;
+  chosen.forEach(b=>{if(!keys.has(keyOf(b))&&current.length<ROUTE_MAX_STOPS){current.push(b)}});
+  if(chosen.some(b=>!keys.has(keyOf(b)))&&current.length>=ROUTE_MAX_STOPS)toast('La ruta admite como máximo 30 paradas');
+  routeBusinesses=current.slice(0,ROUTE_MAX_STOPS);renderRoutePlanner();document.getElementById('routeModal').hidden=false;
 }
 function visitSelected(){
   const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona negocios para registrar visitas');return}
@@ -2003,7 +2138,10 @@ document.querySelectorAll('#labels button').forEach(btn => btn.addEventListener(
 }));
 document.getElementById('refresh').addEventListener('click', () => loadGooglePlaces(true));
 document.getElementById('searchGoogle').addEventListener('click', () => searchGooglePlaces(document.getElementById('search').value,{force:true}));
-document.getElementById('searchViewport').addEventListener('click', () => searchGooglePlaces(document.getElementById('search').value,{force:true,visibleOnly:true}));
+document.getElementById('searchViewport').addEventListener('click', () => {
+  const inSelectedZone=selectedZone && selectedZone!=='Todos';
+  searchGooglePlaces(document.getElementById('search').value,{force:true,visibleOnly:!inSelectedZone});
+});
 document.getElementById('search').addEventListener('keydown', event => {if(event.key==='Enter'){event.preventDefault();searchGooglePlaces(event.currentTarget.value,{force:true})}});
 document.getElementById('clearGoogleCache').addEventListener('click', () => {
   Object.keys(localStorage).filter(key=>key.startsWith('novaGooglePlacesCacheV')).forEach(key=>localStorage.removeItem(key));

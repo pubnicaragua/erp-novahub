@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from '../ui/utils';
 import { toast } from '@/app/services/toast';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
-import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { buildDateFilteredDownloadFileName, buildDateFilteredLabeledPdfFileName } from '../../utils/exportFileNames';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
@@ -431,7 +431,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         ...fIncomes.map((row: any) => ({ ...row, reportType: 'Ingreso' })),
         ...fExpenses.map((row: any) => ({ ...row, reportType: 'Gasto' })),
       ];
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.balance', title: 'Balance general', tenantName: companyName, tenantLogo: logoUrl, rows: reportRows, columns: [{ header: 'Concepto', value: row => row.description || row.concept || row.category || '—' }, { header: 'Tipo', value: row => row.reportType }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Monto', value: row => fmtNum(Math.abs(cv(row))), align: 'right' }], totals: { 'Total Ingresos': fmtNum(totalIncome), 'Total Gastos': fmtNum(totalExpense), 'Balance Neto': fmtNum(balance) }, fileName: buildDateFilteredDownloadFileName(['balance_general'], 'pdf', dateRange.start, dateRange.end) });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.balance', title: 'Balance general', tenantName: companyName, tenantLogo: logoUrl, rows: reportRows, columns: [{ header: 'Concepto', value: row => row.description || row.concept || row.category || '—' }, { header: 'Tipo', value: row => row.reportType }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Monto', value: row => fmtNum(Math.abs(cv(row))), align: 'right' }], totals: { 'Total Ingresos': fmtNum(totalIncome), 'Total Gastos': fmtNum(totalExpense), 'Balance Neto': fmtNum(balance) }, fileName: buildDateFilteredLabeledPdfFileName('Balance general', 'pdf', dateRange.start, dateRange.end) });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const primaryColor = themeConfig.colors.primary || '#10b981';
       const rgbPrimary = primaryColor.startsWith('#') 
@@ -730,7 +730,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         }
       }
 
-      doc.save(buildDateFilteredDownloadFileName(['balance_general'], 'pdf', dateRange.start, dateRange.end));
+      doc.save(buildDateFilteredLabeledPdfFileName('Balance general', 'pdf', dateRange.start, dateRange.end));
       toast.success("PDF exportado exitosamente");
     } catch (e: any) {
        console.error(e);

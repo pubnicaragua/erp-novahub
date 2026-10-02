@@ -45,7 +45,7 @@ export function playNotificationSound() {
       osc1.type = 'sine';
       osc1.frequency.value = 880;
       gain1.gain.setValueAtTime(0.001, now);
-      gain1.gain.exponentialRampToValueAtTime(0.45, now + 0.012);
+      gain1.gain.exponentialRampToValueAtTime(0.68, now + 0.012);
       gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.10);
       osc1.connect(gain1);
       gain1.connect(ctx.destination);
@@ -58,7 +58,7 @@ export function playNotificationSound() {
       osc2.type = 'sine';
       osc2.frequency.value = 1175;
       gain2.gain.setValueAtTime(0.001, now + 0.08);
-      gain2.gain.exponentialRampToValueAtTime(0.55, now + 0.092);
+      gain2.gain.exponentialRampToValueAtTime(0.78, now + 0.092);
       gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
       osc2.connect(gain2);
       gain2.connect(ctx.destination);

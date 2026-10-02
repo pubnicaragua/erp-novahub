@@ -20,11 +20,14 @@ export interface PdfTemplateReportSection {
   columns: PdfTemplateColumn[];
   rows: Array<Record<string, unknown>>;
   templateIndex?: number;
+  /** Color base heredado del renderer nativo del módulo Reportes. */
+  color?: readonly number[];
 }
 
 export interface PdfTemplateReportSectionStyle {
   headerColor?: string;
   headerTextColor?: string;
+  rowTextColor?: string;
   rowColor?: string;
   stripeColor?: string;
   columnColors?: Record<string, string>;
@@ -98,6 +101,7 @@ export interface PdfTemplateNode {
   columns?: PdfTemplateColumn[];
   tableHeaderColor?: string;
   tableHeaderTextColor?: string;
+  tableTextColor?: string;
   tableRowColor?: string;
   tableStripeColor?: string;
   chartType?: PdfTemplateChartType;
@@ -107,6 +111,22 @@ export interface PdfTemplateNode {
   firstPageOnly?: boolean;
   subsequentY?: number;
   subsequentHeight?: number;
+}
+
+export function pdfTemplateImageShapeStyles(shape: PdfTemplateNode['shape'], borderRadius = 0) {
+  const selectedShape = shape || 'rectangle';
+  const borderRadiusByShape: Record<string, string> = {
+    pill: '999px',
+    circle: '50%',
+    blob: '42% 58% 62% 38% / 45% 35% 65% 55%',
+    arc: '50% 50% 0 0 / 60% 60% 0 0',
+    wave: '50% 50% 0 0 / 42% 42% 0 0',
+    'wave-bottom': '0 0 50% 50% / 0 0 42% 42%',
+  };
+  return {
+    borderRadius: borderRadiusByShape[selectedShape] || `${Math.max(0, Number(borderRadius) || 0)}px`,
+    clipPath: selectedShape === 'angled' ? 'polygon(0 0,100% 0,88% 100%,0 100%)' : 'none',
+  };
 }
 
 export interface PdfTemplateDefinition {
@@ -798,6 +818,8 @@ function defaultTableColumns(targetKey: string): PdfTemplateColumn[] {
     'compras.purchase-request': ['Solicitud', 'Solicitante', 'Fecha', 'Estado'],
     'finanzas.balance': ['Concepto', 'Tipo', 'Fecha', 'Monto'],
     'finanzas.transactions': ['Fecha', 'Concepto', 'Tipo', 'Monto'],
+    'contabilidad.journal': ['# Asiento', 'Fecha', 'Descripción', 'Estado', 'Debe', 'Haber', 'Ref. Tipo', 'Referencia'],
+    'contabilidad.ledger': ['Fecha', 'Código', 'Cuenta', 'Tipo', 'Descripción', 'Referencia', 'Débito', 'Crédito', 'Saldo'],
     'recursos-humanos.payrolls': ['Colaborador', 'Periodo', 'Neto', 'Estado'],
     'recursos-humanos.dashboard': ['Indicador', 'Valor', 'Detalle'],
     'recursos-humanos.employees': ['Colaborador', 'Identificación', 'Cargo', 'Departamento', 'Estado', 'Ingreso'],
@@ -907,23 +929,23 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
 
   if (family === 'cash-ticket') {
     const columns = [
-      { id: 'description', label: 'Descripción', token: 'description', width: 48, align: 'left' as const },
-      { id: 'quantity', label: 'Cant.', token: 'quantity', width: 12, align: 'right' as const },
-      { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 19, align: 'right' as const },
-      { id: 'total', label: 'Total', token: 'total', width: 21, align: 'right' as const },
+      { id: 'description', label: 'Descripción', token: 'description', width: 35, align: 'left' as const },
+      { id: 'quantity', label: 'Cant.', token: 'quantity', width: 15, align: 'right' as const },
+      { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 24, align: 'right' as const },
+      { id: 'total', label: 'Total', token: 'total', width: 26, align: 'right' as const },
     ];
     return {
       version: 1,
       page: { paperSize: settingsValue(settings, 'paperSize', 'ROLL-80'), orientation: 'portrait', background },
       nodes: [
-        node({ type: 'field', label: 'Empresa', token: 'company.name', x: 5, y: 4, width: 90, height: 7, fontSize: 10, bold: true, align: 'center', borderStyle: 'none' }, 'company-name'),
-        node({ type: 'field', label: 'Título', token: 'document.title', x: 5, y: 12, width: 90, height: 5, fontSize: 8, bold: true, align: 'center', borderStyle: 'none' }, 'document-title'),
-        node({ type: 'field', label: 'Número y fecha', token: 'document.meta', x: 5, y: 18, width: 90, height: 7, fontSize: 6.5, align: 'center', borderStyle: 'none' }, 'ticket-meta'),
-        node({ type: 'field', label: 'Cliente', token: 'customer.name', x: 5, y: 26, width: 90, height: 6, fontSize: 7, borderStyle: 'none' }, 'party-name'),
-        node({ type: 'table', label: 'Detalle del ticket', x: 5, y: 34, width: 90, height: 48, fontSize: 6, columns, repeatHeader: true, tableHeaderColor: '#ffffff', tableHeaderTextColor: text, tableRowColor: '#ffffff', tableStripeColor: '#ffffff' }, 'items-table'),
-        node({ type: 'totals', label: 'Totales', x: 5, y: 84, width: 90, height: 10, fontSize: 7, backgroundColor: '#ffffff', borderColor: line }, 'totals'),
-        node({ type: 'field', label: 'Pago', token: 'document.notes', x: 5, y: 94.5, width: 90, height: 3, fontSize: 5.5, borderStyle: 'none' }, 'ticket-payment'),
-        node({ type: 'field', label: 'Gracias por su compra', text: 'Gracias por su compra', x: 5, y: 98, width: 90, height: 2, fontSize: 5.5, align: 'center', borderStyle: 'none' }, 'ticket-footer'),
+        node({ type: 'field', label: 'Empresa', token: 'company.name', x: 5, y: 3, width: 90, height: 6, fontSize: 10, bold: true, align: 'center', borderStyle: 'none' }, 'company-name'),
+        node({ type: 'field', label: 'Título', token: 'document.title', x: 5, y: 9.5, width: 90, height: 4.5, fontSize: 8, bold: true, align: 'center', borderStyle: 'none' }, 'document-title'),
+        node({ type: 'field', label: 'Número y fecha', token: 'document.meta', x: 5, y: 14.5, width: 90, height: 6.5, fontSize: 6.5, align: 'center', borderStyle: 'none' }, 'ticket-meta'),
+        node({ type: 'field', label: 'Cliente', token: 'customer.name', x: 5, y: 21.5, width: 90, height: 5.5, fontSize: 7, borderStyle: 'none' }, 'party-name'),
+        node({ type: 'table', label: 'Detalle del ticket', x: 5, y: 27.5, width: 90, height: 51, fontSize: 6, columns, repeatHeader: true, tableHeaderColor: '#ffffff', tableHeaderTextColor: text, tableRowColor: '#ffffff', tableStripeColor: '#ffffff' }, 'items-table'),
+        node({ type: 'totals', label: 'Totales', x: 5, y: 79.5, width: 90, height: 14, fontSize: 7, backgroundColor: '#ffffff', borderColor: line }, 'totals'),
+        node({ type: 'field', label: 'Pago', token: 'document.notes', x: 5, y: 94, width: 90, height: 3.5, fontSize: 5.5, borderStyle: 'none' }, 'ticket-payment'),
+        node({ type: 'field', label: 'Gracias por su compra', text: 'Gracias por su compra', x: 5, y: 97.5, width: 90, height: 2, fontSize: 5.5, align: 'center', borderStyle: 'none' }, 'ticket-footer'),
       ],
       metadata: { preset: 'system-default-cash-ticket' },
     };
@@ -934,12 +956,11 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
       version: 1,
       page: { paperSize: settingsValue(settings, 'paperSize', 'LABEL'), orientation: 'landscape', background },
       nodes: [
-        node({ type: 'image', label: 'Logotipo de la sucursal', x: 68, y: 1, width: 25, height: 6, enabled: hasLogo, borderStyle: 'none', backgroundColor: 'transparent', align: 'right' }, 'label-logo'),
-        node({ type: 'barcode', label: 'Código de barras', token: 'product.barcode', x: 7, y: 7, width: 86, height: 38, fontSize: 7, color: text, borderStyle: 'none', padding: 0.2 }, 'label-barcode'),
-        node({ type: 'field', label: 'Nombre del producto', token: 'product.name', x: 7, y: 47, width: 86, height: 17, fontSize: 7.5, fontWeight: 700, color: text, align: 'center', lineHeight: 1.05, borderStyle: 'none', padding: 0.2 }, 'label-name'),
-        node({ type: 'field', label: 'Precio', token: 'product.price', x: 7, y: 64, width: 86, height: 16, fontSize: 9, fontWeight: 800, color: primary, align: 'center', lineHeight: 1.05, borderStyle: 'none', padding: 0.2 }, 'label-price'),
-        node({ type: 'field', label: 'Empresa', token: 'company.name', x: 7, y: 80, width: 86, height: 9, fontSize: 5.5, color: text, align: 'center', lineHeight: 1, borderStyle: 'none', padding: 0.2 }, 'label-company'),
-        node({ type: 'field', label: 'Fecha', token: 'document.date', x: 7, y: 90, width: 86, height: 7, fontSize: 4.5, color: text, align: 'center', lineHeight: 1, borderStyle: 'none', padding: 0.2 }, 'label-date'),
+        node({ type: 'barcode', label: 'Código de barras', token: 'product.barcode', x: 5, y: 5, width: 90, height: 40, fontSize: 7, color: text, borderStyle: 'none', padding: 0.2 }, 'label-barcode'),
+        node({ type: 'field', label: 'Nombre del producto', token: 'product.name', x: 5, y: 47, width: 90, height: 16, fontSize: 8.5, fontWeight: 700, color: text, align: 'center', lineHeight: 1.25, borderStyle: 'none', padding: 0.2 }, 'label-name'),
+        node({ type: 'field', label: 'Precio', token: 'product.price', x: 5, y: 64, width: 90, height: 16, fontSize: 11, fontWeight: 800, color: primary, align: 'center', lineHeight: 1.2, borderStyle: 'none', padding: 0.2 }, 'label-price'),
+        node({ type: 'field', label: 'Empresa', token: 'company.name', x: 5, y: 81, width: 90, height: 8, fontSize: 5.5, fontWeight: 600, color: text, align: 'center', lineHeight: 1.2, borderStyle: 'none', padding: 0.2 }, 'label-company'),
+        node({ type: 'field', label: 'Fecha', token: 'document.date', x: 5, y: 90, width: 90, height: 6, fontSize: 4.5, color: text, align: 'center', lineHeight: 1.2, borderStyle: 'none', padding: 0.2 }, 'label-date'),
       ],
       metadata: { preset: 'system-default-label' },
     };
@@ -1228,6 +1249,7 @@ function safeReportSectionStyles(value: unknown): Record<string, PdfTemplateRepo
     entries.push([key.slice(0, 80), {
         headerColor: safeText(style.headerColor, ''),
         headerTextColor: safeText(style.headerTextColor, ''),
+        rowTextColor: safeText(style.rowTextColor, ''),
         rowColor: safeText(style.rowColor, ''),
         stripeColor: safeText(style.stripeColor, ''),
         columnColors: safeColorMap(style.columnColors),
@@ -1363,7 +1385,7 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
           backgroundColor: safeText(column?.backgroundColor, ''), color: safeText(column?.color, ''),
         })) : undefined,
         chartType: item.chartType === 'area' || item.chartType === 'donut' ? item.chartType : type === 'chart' ? 'bar' : undefined,
-        tableHeaderColor: safeText(item.tableHeaderColor, ''), tableHeaderTextColor: safeText(item.tableHeaderTextColor, ''),
+        tableHeaderColor: safeText(item.tableHeaderColor, ''), tableHeaderTextColor: safeText(item.tableHeaderTextColor, ''),tableTextColor: safeText(item.tableTextColor, ''),
         tableRowColor: safeText(item.tableRowColor, ''), tableStripeColor: safeText(item.tableStripeColor, ''),
         reportSectionVisibility: item.reportSectionVisibility && typeof item.reportSectionVisibility === 'object'
           ? Object.fromEntries(Object.entries(item.reportSectionVisibility as Record<string, unknown>).slice(0, 120).map(([key, visible]) => [key.slice(0, 80), Boolean(visible)]))
@@ -1380,6 +1402,41 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
     // recorta la segunda línea del resumen fiscal aunque el preset nuevo ya
     // tenga dimensiones correctas. Normalizamos solo este nodo semántico;
     // los demás tamaños siguen siendo editables por el usuario.
+    if (targetKey === 'ventas.cash-ticket' || getPdfTemplateTarget(targetKey).family === 'cash-ticket') {
+      if (sanitizedNode.type === 'table' || sanitizedNode.id === 'items-table') {
+        return [{
+          ...sanitizedNode,
+          y: Math.min(sanitizedNode.y, 27.5),
+          columns: [
+            { id: 'description', label: 'Descripción', token: 'description', width: 35, align: 'left' as const },
+            { id: 'quantity', label: 'Cant.', token: 'quantity', width: 15, align: 'right' as const },
+            { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 24, align: 'right' as const },
+            { id: 'total', label: 'Total', token: 'total', width: 26, align: 'right' as const },
+          ],
+        }];
+      }
+      if (sanitizedNode.type === 'totals' || sanitizedNode.id === 'totals') {
+        return [{
+          ...sanitizedNode,
+          y: 79.5,
+          height: 14,
+        }];
+      }
+      if (sanitizedNode.id === 'ticket-payment') {
+        return [{
+          ...sanitizedNode,
+          y: 94,
+          height: 3.5,
+        }];
+      }
+      if (sanitizedNode.id === 'ticket-footer') {
+        return [{
+          ...sanitizedNode,
+          y: 97.5,
+          height: 2,
+        }];
+      }
+    }
     if (/^report-kpi-label-\d+$/.test(sanitizedNode.id)) {
       return [{
         ...sanitizedNode,

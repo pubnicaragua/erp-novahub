@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { toast } from '@/app/services/toast';
-import { Activity, ArrowRightLeft, ArrowUpRight, BarChart3, Building2, Boxes, ChevronLeft, ChevronRight, Cloud, Download, FileStack, KeyRound, Landmark, MapPin, Package, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, Users, UserCheck, UserX, Warehouse, RefreshCw, Tags, X } from 'lucide-react';
+import { Activity, ArrowRightLeft, ArrowUpRight, BarChart3, Building2, Boxes, ChevronLeft, ChevronRight, Download, KeyRound, Landmark, MapPin, Package, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, Users, UserCheck, UserX, Warehouse, RefreshCw, Tags, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -60,18 +60,6 @@ function managerUserTypeLabel(user: { userType?: unknown; managerGroup?: unknown
   return USER_TYPE_LABELS[userType] || 'Tipo no definido';
 }
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
-const formatStorage = (value: unknown) => {
-  const bytes = Number(value || 0);
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let amount = bytes;
-  let unitIndex = -1;
-  while (amount >= 1024 && unitIndex < units.length - 1) {
-    amount /= 1024;
-    unitIndex += 1;
-  }
-  return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${units[unitIndex]}`;
-};
 
 type ManagerNavigationSnapshot = {
   section: ManagerSection;
@@ -686,15 +674,15 @@ function OverviewContent({ overview, groupId, onEnterBranch, enterableBranchIds 
   const visibleBranches = overview?.branches || [];
   const activeBranches = visibleBranches.filter((branch) => branch.isActive !== false).length;
   const cards = [
-    { label: 'Sucursales visibles', value: metrics?.branches, icon: Building2, tone: 'text-primary bg-primary/10' },
-    { label: 'Usuarios generales', value: metrics?.users, icon: Users, tone: 'text-primary bg-primary/10' },
-    { label: 'Usuarios activos', value: metrics?.activeUsers, icon: ShieldCheck, tone: 'text-primary bg-primary/10' },
-    { label: 'Unidades en inventario', value: metrics?.inventoryUnits, icon: Package, tone: 'text-primary bg-primary/10' },
-    { label: 'Archivos almacenados', value: formatStorage(metrics?.storageBytes), icon: Cloud, tone: 'text-primary bg-primary/10' },
-    { label: 'Objetos registrados', value: metrics?.storageObjects, icon: FileStack, tone: 'text-primary bg-primary/10' },
+    { label: 'Sucursales visibles', detail: 'Cobertura del grupo', value: metrics?.branches, icon: Building2, tone: 'text-primary bg-primary/10' },
+    { label: 'Usuarios generales', detail: 'Accesos configurados', value: metrics?.users, icon: Users, tone: 'text-primary bg-primary/10' },
+    { label: 'Usuarios activos', detail: 'Con acceso vigente', value: metrics?.activeUsers, icon: ShieldCheck, tone: 'text-primary bg-primary/10' },
+    { label: 'Unidades en inventario', detail: 'Existencias consolidadas', value: metrics?.inventoryUnits, icon: Package, tone: 'text-primary bg-primary/10' },
+    { label: 'Bodegas operativas', detail: 'Puntos de control', value: metrics?.warehouses, icon: Warehouse, tone: 'text-primary bg-primary/10' },
+    { label: 'Movimientos contables', detail: 'Actividad registrada', value: metrics?.accountingMovements, icon: Landmark, tone: 'text-primary bg-primary/10' },
   ];
   return <>
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{cards.map((card, index) => { const Icon = card.icon; return <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}><Card className="h-full rounded-3xl border-border/60 bg-card/50"><CardContent className="p-5"><div className={`mb-4 flex size-11 items-center justify-center rounded-2xl ${card.tone}`}><Icon className="size-5" /></div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className="mt-1 text-3xl font-black tracking-tight">{typeof card.value === 'string' ? card.value : formatNumber(card.value)}</p></CardContent></Card></motion.div>; })}</div>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{cards.map((card, index) => { const Icon = card.icon; return <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}><Card className="h-full rounded-3xl border-border/60 bg-card/70 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><CardContent className="p-5"><div className={`mb-4 flex size-11 items-center justify-center rounded-2xl ${card.tone}`}><Icon className="size-5" /></div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className="mt-1 text-3xl font-black tracking-tight">{typeof card.value === 'string' ? card.value : formatNumber(card.value)}</p><p className="mt-1 text-[11px] text-muted-foreground">{card.detail}</p></CardContent></Card></motion.div>; })}</div>
     <Card className="rounded-3xl border-primary/20 bg-primary/[0.04]">
       <CardContent className="space-y-4 p-5 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

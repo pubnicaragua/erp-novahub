@@ -209,6 +209,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       ...(canViewBranding ? brandingColors(branding) : {}),
       ...(canUsePersonalTheme ? userTheme.colors : {}),
     };
+    if (typeof window !== 'undefined' && (branding.logo || branding.companyName)) {
+      try {
+        const currentSessionBranding = JSON.parse(localStorage.getItem('nh-session-branding') || 'null') || {};
+        localStorage.setItem('nh-session-branding', JSON.stringify({
+          ...currentSessionBranding,
+          tenantId: currentSessionBranding.tenantId || tenantId,
+          logo: branding.logo || currentSessionBranding.logo || '',
+          name: branding.companyName || currentSessionBranding.name || 'NovaHub ERP',
+        }));
+      } catch {
+        // Ignore storage write errors
+      }
+    }
     setThemeConfig(previous => {
       const base = canUsePersonalTheme && previous.userId === userId && previous.tenantId === tenantId
         ? previous
@@ -230,7 +243,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         tenantName: branding.companyName || base.tenantName,
         // Logo y nombre pertenecen a la identidad corporativa del contexto
         // actual; no se recuperan del almacenamiento privado del usuario.
-        logo: branding.logo || undefined,
+        logo: branding.logo || (previous.tenantId === tenantId ? previous.logo : undefined),
         colors: {
           ...nextColors,
           primaryForeground: resolveThemeForeground(nextColors.primary, nextColors.primaryForeground),
@@ -244,11 +257,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Cada usuario mantiene su propia preferencia visual. El tenant solo aporta
     // el fallback corporativo cuando ese usuario aún no ha personalizado el tema.
-    setThemeConfig(() => {
+    setThemeConfig(previous => {
       if (!user) return createDefaultTheme();
-      return canUsePersonalTheme
+      const next = canUsePersonalTheme
         ? readStoredTheme(themeUserId, activeTenantId)
         : createDefaultTheme(themeUserId, activeTenantId);
+      const sameContext = previous.userId === themeUserId && previous.tenantId === activeTenantId;
+      return {
+        ...next,
+        tenantName: (sameContext ? previous.tenantName : undefined)
+          || user.sessionBranding?.name
+          || user.clientTenant?.name
+          || next.tenantName,
+        logo: (sameContext ? previous.logo : undefined)
+          || user.sessionBranding?.logo
+          || user.clientTenant?.logo
+          || undefined,
+      };
     });
   }, [activeTenantId, canUsePersonalTheme, themeUserId, user]);
 

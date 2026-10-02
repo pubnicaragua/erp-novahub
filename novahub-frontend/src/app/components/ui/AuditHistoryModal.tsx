@@ -36,6 +36,25 @@ const actionLabels: Record<string, string> = {
   PAYMENT: 'Pago',
   INVENTORY_AUDIT: 'Auditoría de inventario',
   DUPLICATE_OVERRIDE: 'Continuación tras advertencia de duplicado',
+  QUOTATION_CREATED: 'Cotización Creada',
+  SUBQUOTATION_CREATED: 'Subcotización Creada',
+  SUBQUOTATION_SUBMITTED: 'Subcotización Enviada',
+  SUBQUOTATION_RECEIVED: 'Subcotización Recibida',
+  SUBQUOTATION_OVERWRITTEN: 'Subcotización Sobrescrita',
+  SUBQUOTATION_DISMISSED: 'Sobrescritura Descartada',
+  SUBQUOTATION_REGENERATED: 'Enlace Regenerado',
+  OFFER_SELECTED: 'Oferta Seleccionada',
+  MANUAL_FILL: 'Llenado Manual',
+  PUBLIC_LINK_CREATED: 'Enlace Público Creado',
+  PUBLIC_LINK_REVOKED: 'Enlace Público Revocado',
+  PROGRESS_CAPTURE_ADDED: 'Evidencia Registrada',
+  TERMS_ACCEPTED: 'Términos Aceptados',
+  TASK_CREATED: 'Tarea Creada',
+  TASK_COMPLETED: 'Tarea Completada',
+  MILESTONE_CREATED: 'Hito Creado',
+  MILESTONE_COMPLETED: 'Hito Completado',
+  STAGE_CREATED: 'Etapa Creada',
+  STAGE_UPDATED: 'Etapa Actualizada',
 };
 
 const detailKeyLabels: Record<string, string> = {
@@ -207,6 +226,12 @@ const detailValueLabels: Record<string, string> = {
   BULK_IMPORT: 'Importación masiva',
 };
 
+const formatAction = (action?: string): string => {
+  if (!action) return 'Acción';
+  if (actionLabels[action]) return actionLabels[action];
+  return action.toLowerCase().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+};
+
 export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = 'Historial de Cambios', presentation = 'dialog', logs: providedLogs }: AuditHistoryModalProps) {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -295,7 +320,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                     "text-[9px] font-black uppercase tracking-widest border",
                     actionColors[log.action] || 'bg-muted/20 text-muted-foreground'
                   )}>
-                    {actionLabels[log.action] || log.action}
+                    {formatAction(log.action)}
                   </Badge>
                   <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
                     <Calendar className="size-3" />

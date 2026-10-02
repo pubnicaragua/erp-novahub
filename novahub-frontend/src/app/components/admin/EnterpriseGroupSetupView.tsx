@@ -1459,10 +1459,11 @@ function ManagersEditStep({
         description="Administra los accesos globales del grupo sin mezclarlos con los usuarios operativos de las sucursales. Los permisos y la contraseña se pueden gestionar desde soporte de plataforma."
       />
       <Card className="rounded-3xl border-border/60">
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-lg font-black uppercase">
             <Users className="size-5 text-primary" /> Accesos Manager
           </CardTitle>
+          <GroupManagerSupportDialog group={group} onChanged={onChanged} />
         </CardHeader>
         <CardContent className="space-y-3 p-6">
           {managers.map((assignment: any) => (
@@ -1492,7 +1493,6 @@ function ManagersEditStep({
                 <p className="font-black">Este grupo no tiene un Manager asignado</p>
                 <p className="mt-1 text-sm text-muted-foreground">Puedes crear el acceso global desde el botón de soporte.</p>
               </div>
-              <GroupManagerSupportDialog group={group} onChanged={onChanged} />
             </div>
           )}
         </CardContent>

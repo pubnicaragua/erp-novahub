@@ -19,6 +19,23 @@ test.describe('NovaHub ERP — portafolio, planificación, costos e idempotencia
     }
   }
 
+  test('hidrata el formulario al editar un proyecto recién creado', async ({ page, fullTenantSession }) => {
+    const projectsPage = new ProjectsPage(page);
+    const suffix = fullTenantSession.runId.replace(/[^a-z0-9]/gi, '').slice(0, 18);
+    const name = `Proyecto edición ${suffix}`;
+    const description = 'Los valores guardados deben mostrarse al abrir Editar.';
+
+    await projectsPage.openPortfolio();
+    await projectsPage.createProject({ name, description, plannedBudget: 1250 });
+
+    const row = page.getByRole('row', { name: new RegExp(name) });
+    await row.getByTitle('Editar').click();
+
+    await expect(page.getByTestId('projects-form-name')).toHaveValue(name);
+    await expect(page.getByTestId('projects-form-description')).toHaveValue(description);
+    await expect(page.getByTestId('projects-form-planned-budget')).toHaveValue('1250');
+  });
+
   test('crea proyecto desde UI, agrega planificación/costo y conserva aislamiento', async ({
     page,
     request,

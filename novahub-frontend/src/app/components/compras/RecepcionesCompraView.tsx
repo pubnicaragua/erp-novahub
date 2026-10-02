@@ -42,6 +42,8 @@ import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { VoiceSaleComposer } from '../ventas/VoiceSaleComposer';
+import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-parser';
 
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
@@ -1236,6 +1238,53 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     });
   };
 
+  const applyVoiceLinesToReceipt = (lines: VoiceSaleLine<any>[], metadata: VoiceSaleMetadata) => {
+    if (!lines.length) return;
+    setLocalDoc((current) => {
+      if (!current) return current;
+      const order = orders.find((candidate) => String(candidate.id) === String(current.purchaseOrderId));
+      const defaultWarehouseId = String((order as any)?.warehouseId || (order as any)?.warehouse?.id || '');
+      const addedItems = lines.map((line) => {
+        const product = line.product as any;
+        const variant = line.variantName
+          ? (product.variants || []).find((candidate: any) => String(candidate.name || '').trim().toLowerCase() === String(line.variantName || '').trim().toLowerCase())
+          : undefined;
+        const quantity = Math.max(0, Number(line.quantity || 0));
+        return {
+          productId: product.id,
+          variantId: variant?.id || null,
+          description: product.name,
+          quantityOrdered: quantity,
+          quantityReceived: quantity,
+          quantityRejected: 0,
+          unitPrice: Number(product.costPrice ?? product.details?.costPrice ?? 0),
+          taxType: 'GRAVADO',
+          taxRate: 15,
+          withholdingType: 'NONE',
+          withholdingRate: 0,
+          stockApplies: true,
+          warehouseId: defaultWarehouseId,
+          currentStock: getReceiptCurrentStock(product, availableProducts, defaultWarehouseId) ?? null,
+          categoryId: product.categoryId || '',
+          commercialNoteSnapshot: product.commercialNote || null,
+        };
+      });
+      const normalizedItems = normalizeReceiptItemsForForm([...(current.items || []), ...addedItems]);
+      const financialTotals = calculateReceiptTotalsForForm(normalizedItems);
+      const nextStatus = calcStatus(normalizedItems);
+      return {
+        ...current,
+        items: normalizedItems as any,
+        status: nextStatus as any,
+        notes: metadata.notes || metadata.unmatchedText
+          ? `${String(current.notes || '').trim()}${current.notes ? '\n' : ''}${metadata.notes ? `[DICTADO] ${metadata.notes}` : ''}${metadata.unmatchedText ? `${metadata.notes ? '\n' : ''}[NO CATALOGADO] ${metadata.unmatchedText}` : ''}`
+          : current.notes,
+        ...financialTotals,
+        total: roundReceiptMoney(financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal),
+      };
+    });
+  };
+
   const currentAvailableOrders = orders.filter(o => o.supplierId === localDoc?.supplierId && ['APPROVED'].includes((o.status||'').toUpperCase()) && !(o.receipts || []).some((receipt: any) => String(receipt.status || '').toUpperCase() === 'PENDING'));
 
   const paymentDialog = <ReceiptPaymentDialog draft={paymentDraft} onClose={() => setPaymentDraft(null)} onSaved={() => { onRefresh(); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); }} onRegisterInvoice={registerInvoiceFromPaymentModal} />;
@@ -1492,6 +1541,14 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
             </CardContent>
           </Card>
         </div>
+
+        <VoiceSaleComposer
+          products={availableProducts}
+          disabled={!canEditCurrent || products.length === 0}
+          title="Entrada rápida por voz"
+          description="Dictá productos recibidos y cantidades. Se agregan al borrador; el inventario solo cambia al guardar y aprobar la recepción."
+          onApply={applyVoiceLinesToReceipt}
+        />
 
         {(localDoc.items || []).some((it: any) => {
           const qOrd = Number(it.quantityOrdered||0);

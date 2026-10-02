@@ -2103,7 +2103,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
-        targetKey: 'compras.list',
+        targetKey: 'compras.purchase-order',
         summary: { label: 'Total general', value: formatConvertedAmount(totalOrders, displayCurrency as any, globalRate), columnIndex: 4 },
         summaryPlacement: 'footer',
         columns: [

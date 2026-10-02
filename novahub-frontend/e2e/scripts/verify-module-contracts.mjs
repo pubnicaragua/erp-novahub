@@ -6,7 +6,11 @@ const appSource = fs.readFileSync(path.join(frontendRoot, 'src', 'app', 'App.tsx
 const sidebarSource = fs.readFileSync(path.join(frontendRoot, 'src', 'app', 'components', 'Sidebar.tsx'), 'utf8');
 const catalogSource = fs.readFileSync(path.join(frontendRoot, 'e2e', 'module-catalog.ts'), 'utf8');
 const contractsSource = fs.readFileSync(path.join(frontendRoot, 'e2e', 'module-contracts.ts'), 'utf8');
-const backendRoot = path.resolve(frontendRoot, '..', '..', 'Backend', 'src');
+const backendDir = process.env.E2E_BACKEND_DIR?.trim()
+  || (fs.existsSync(path.resolve(frontendRoot, '..', '..', 'BackendERPNH', 'src'))
+    ? path.resolve(frontendRoot, '..', '..', 'BackendERPNH')
+    : path.resolve(frontendRoot, '..', '..', 'Backend'));
+const backendRoot = path.join(backendDir, 'src');
 
 const catalogIds = [...catalogSource.matchAll(/\bid:\s*'([^']+)'/g)].map((match) => match[1]);
 const appCaseIds = [...appSource.matchAll(/case\s+'([^']+)'/g)].map((match) => match[1]);

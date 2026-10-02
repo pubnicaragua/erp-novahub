@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -8,21 +8,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import {
   Search, Filter, RefreshCw, X, ArrowDownUp,
   ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, BookOpen, Loader2,
-  Download, FileSpreadsheet, FileText,
 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from '@/app/services/toast';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { referenceTypeLabel } from '../../utils/accountingLabels';
 import { DateField } from '../ui/DateField';
 import { useAuth } from '../../contexts/AuthContext';
-import { useCurrency } from '../../contexts/CurrencyContext';
 import { generateLedgerPDF } from '../../utils/pdfGenerator';
+import { PdfDownloadButton, type PdfExportScope } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 // import { motion } from 'motion/react';
 
@@ -82,7 +81,6 @@ function journalStatusLabel(value?: string): string {
 
 export function LibroMayorView() {
   const { user, canPerform } = useAuth();
-  const { baseCurrency, formatAmount } = useCurrency();
   const [filterAccountId, setFilterAccountId] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -92,7 +90,7 @@ export function LibroMayorView() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [selectedEntry, setSelectedEntry] = useState<LedgerEntry | null>(null);
-  const [selectedJournal, setSelectedJournal] = useState<any | null>(null);
+  const [selectedJournal, setSelectedJournal] = useState<unknown | null>(null);
   const [journalLoading, setJournalLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -103,12 +101,12 @@ export function LibroMayorView() {
     ...(filterDateTo ? { dateTo: filterDateTo } : {}),
   }), [filterAccountId, filterDateFrom, filterDateTo]);
   const entriesQuery = useAccountingQuery<LedgerEntry[]>(['ledger', ledgerParams], async (signal) => accountingList(await contabilidadService.getLedger(ledgerParams, signal)) as LedgerEntry[]);
-  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
-  const entries = entriesQuery.data || [];
+  const accountsQuery = useAccountingQuery<Array<{ id: string; code: string; name: string; children?: unknown[] }>>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)) as Array<{ id: string; code: string; name: string; children?: unknown[] }>);
+  const entries = useMemo(() => entriesQuery.data || [], [entriesQuery.data]);
   const loading = entriesQuery.isLoading || entriesQuery.isFetching;
   const accounts = useMemo(() => {
     const result: { id: string; code: string; name: string }[] = [];
-    const flatten = (items: any[]) => items.forEach(a => { result.push({ id: a.id, code: a.code, name: a.name }); if (a.children) flatten(a.children); });
+    const flatten = (items: Array<{ id: string; code: string; name: string; children?: unknown[] }>) => items.forEach(a => { result.push({ id: a.id, code: a.code, name: a.name }); if (Array.isArray(a.children)) flatten(a.children as Array<{ id: string; code: string; name: string; children?: unknown[] }>); });
     flatten(accountsQuery.data || []);
     return result;
   }, [accountsQuery.data]);
@@ -124,8 +122,8 @@ export function LibroMayorView() {
     setJournalLoading(true);
     try {
       setSelectedJournal(await contabilidadService.getJournal(entry.journalId));
-    } catch (error: any) {
-      toast.error(error?.message || 'No se pudo cargar el detalle del asiento');
+    } catch (error: unknown) {
+      toast.error((error as { message?: string })?.message || 'No se pudo cargar el detalle del asiento');
     } finally {
       setJournalLoading(false);
     }
@@ -191,12 +189,15 @@ export function LibroMayorView() {
     return acc ? `${acc.code} - ${acc.name}` : undefined;
   }, [filterAccountId, accounts]);
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = async (format: PdfDownloadFormat = 'configured', scope?: PdfExportScope) => {
     if (!canExport) return;
     setExportingPdf(true);
     try {
-      const exportResponse = await contabilidadService.getLedger({ ...ledgerParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
-      const exportEntries = accountingList(exportResponse) as LedgerEntry[];
+      let exportEntries = orderedEntries;
+      if (scope === 'all' || orderedEntries.length === 0) {
+        const exportResponse = await contabilidadService.getLedger({ ...ledgerParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
+        exportEntries = accountingList(exportResponse) as LedgerEntry[];
+      }
       const orderedExportEntries = [...exportEntries].sort((left, right) => {
         const leftCreatedAt = new Date(left.createdAt || left.date).getTime();
         const rightCreatedAt = new Date(right.createdAt || right.date).getTime();
@@ -226,6 +227,7 @@ export function LibroMayorView() {
         dateFrom: filterDateFrom,
         dateTo: filterDateTo,
         accountName: selectedAccountName,
+        format,
         totals: {
           debitos: formatCurrency(exportDebits),
           creditos: formatCurrency(exportCredits),
@@ -233,20 +235,23 @@ export function LibroMayorView() {
         },
       });
       toast.success(`PDF exportado con ${orderedExportEntries.length} movimiento(s)`);
-    } catch (error: any) {
-      toast.error(error?.message || 'Error al exportar a PDF');
+    } catch (error: unknown) {
+      toast.error((error as { message?: string })?.message || 'Error al exportar a PDF');
     } finally {
       setExportingPdf(false);
     }
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = (scope?: PdfExportScope) => {
     if (!canExport) return;
     setExportingExcel(true);
     void (async () => {
     try {
-      const exportResponse = await contabilidadService.getLedger({ ...ledgerParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
-      const exportEntries = accountingList(exportResponse) as LedgerEntry[];
+      let exportEntries = orderedEntries;
+      if (scope === 'all' || orderedEntries.length === 0) {
+        const exportResponse = await contabilidadService.getLedger({ ...ledgerParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
+        exportEntries = accountingList(exportResponse) as LedgerEntry[];
+      }
       const orderedExportEntries = [...exportEntries].sort((left, right) => {
         const leftCreatedAt = new Date(left.createdAt || left.date).getTime();
         const rightCreatedAt = new Date(right.createdAt || right.date).getTime();
@@ -297,8 +302,8 @@ export function LibroMayorView() {
 
       XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['libro_mayor'], 'xlsx', filterDateFrom, filterDateTo));
       toast.success(`Excel exportado con ${orderedExportEntries.length} movimiento(s)`);
-    } catch (error: any) {
-      toast.error(error?.message || 'Error al exportar a Excel');
+    } catch (error: unknown) {
+      toast.error((error as { message?: string })?.message || 'Error al exportar a Excel');
     } finally {
       setExportingExcel(false);
     }
@@ -317,14 +322,6 @@ export function LibroMayorView() {
 
   const hasFilters = filterAccountId || filterDateFrom || filterDateTo || filterSearch || filterMovement;
 
-  useEffect(() => {
-    setPage(1);
-  }, [filterAccountId, filterDateFrom, filterDateTo, filterSearch, filterMovement, sortOrder, pageSize]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
   return (
     <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center sm:justify-between gap-4">
@@ -335,24 +332,18 @@ export function LibroMayorView() {
         </div>
         {canExport && (
           <div className="flex items-center gap-2 self-start lg:self-auto">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={orderedEntries.length === 0 || exportingPdf || exportingExcel} className="gap-1.5">
-                  {exportingPdf || exportingExcel ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Exportar
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExportPDF} disabled={exportingPdf} className="cursor-pointer gap-2">
-                  <FileText className="size-4 text-rose-500" />
-                  Exportar a PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportExcel} disabled={exportingExcel} className="cursor-pointer gap-2">
-                  <FileSpreadsheet className="size-4 text-emerald-600" />
-                  Exportar a Excel (.xlsx)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <PdfDownloadButton
+              label={exportingPdf || exportingExcel ? 'Exportando…' : 'Exportar'}
+              disabled={orderedEntries.length === 0 || exportingPdf || exportingExcel}
+              includePageSizes
+              includeRoll={false}
+              scopeSelector={{
+                pageCount: orderedEntries.length,
+                totalCount: orderedEntries.length,
+              }}
+              onDownload={(format, scope) => void handleExportPDF(format, scope)}
+              onExcel={(scope) => void handleExportExcel(scope)}
+            />
           </div>
         )}
       </div>
@@ -672,7 +663,7 @@ export function LibroMayorView() {
                   <p className="mt-3 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Sucursal de origen</p>
                   <p className="mt-1 text-sm font-semibold">
                     {selectedJournal.branchLinks?.length
-                      ? selectedJournal.branchLinks.map((link: any) => link.branch?.name).filter(Boolean).join(' · ')
+                      ? selectedJournal.branchLinks.map((link: { branch?: { name?: string } }) => link.branch?.name).filter(Boolean).join(' · ')
                       : 'General / sin sucursal vinculada'}
                   </p>
                   <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">Este asiento se generó a partir de la operación indicada y sus líneas son las que alimentan el Libro Mayor.</p>
@@ -689,7 +680,7 @@ export function LibroMayorView() {
                     <span className="text-right text-rose-500">Haber</span>
                   </div>
                   <div className="divide-y divide-border/60">
-                    {(selectedJournal.lines || []).map((line: any) => (
+                    {(selectedJournal.lines || []).map((line: { id: string; account?: { code?: string; name?: string }; accountId?: string; description?: string; debit?: number; credit?: number }) => (
                       <div key={line.id} className="grid grid-cols-[minmax(0,1fr)_minmax(88px,auto)_minmax(88px,auto)] items-center gap-3 px-4 py-3">
                         <div className="min-w-0">
                           <p className="truncate text-xs font-bold" title={line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}>{line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}</p>
@@ -702,7 +693,7 @@ export function LibroMayorView() {
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-muted/30 px-4 py-3 text-xs font-black tabular-nums">
                     <span className="uppercase tracking-widest text-muted-foreground">Totales</span>
-                    <span className="text-right"><span className="text-emerald-600">{formatCurrency((selectedJournal.lines || []).reduce((sum: number, line: any) => sum + Number(line.debit || 0), 0))}</span><span className="mx-1 text-muted-foreground">·</span><span className="text-rose-500">{formatCurrency((selectedJournal.lines || []).reduce((sum: number, line: any) => sum + Number(line.credit || 0), 0))}</span></span>
+                    <span className="text-right"><span className="text-emerald-600">{formatCurrency((selectedJournal.lines || []).reduce((sum: number, line: { debit?: number }) => sum + Number(line.debit || 0), 0))}</span><span className="mx-1 text-muted-foreground">·</span><span className="text-rose-500">{formatCurrency((selectedJournal.lines || []).reduce((sum: number, line: { credit?: number }) => sum + Number(line.credit || 0), 0))}</span></span>
                   </div>
                 </section>
               </>

@@ -7,6 +7,10 @@ const MAX_EMBEDDED_IMAGE_EDGE = 1200;
 const IMAGE_LOAD_TIMEOUT_MS = 1_200;
 const EXCEL_IMAGE_MAX_WIDTH = 600;
 const EXCEL_IMAGE_MAX_HEIGHT = 420;
+const REPORT_TABLE_GREEN = '39AD85';
+const REPORT_TABLE_NAVY = '173B63';
+const REPORT_TABLE_LIGHT_GREEN = 'EAF5F1';
+const REPORT_TABLE_STRIPE = 'F4F7FA';
 
 async function imageBlobAsPng(blob: Blob) {
   if (blob.type && !/^image\//i.test(blob.type)) return '';
@@ -334,4 +338,97 @@ export async function downloadExcelWorkbook(wb: import('exceljs').Workbook, file
   link.download = filename;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function getReportColumnFormat(header: string) {
+  const normalized = header.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/\b(cantidad|unidades|operaciones|facturas|conteo|registros|pagina|dias|edad|stock|existencia|items)\b/.test(normalized)) {
+    return '#,##0;[Red]-#,##0;0';
+  }
+  if (/\b(monto|total|ticket|venta|ventas|ingreso|gasto|costo|precio|saldo|utilidad|margen|pago|pagado|subtotal|impuesto|descuento|balance|debe|haber|deuda|capital|efectivo)\b/.test(normalized)) {
+    return '#,##0.00;[Red]-#,##0.00;0.00';
+  }
+  return undefined;
+}
+
+/** Applies the table appearance used by the Excel dashboard report. */
+export function applyDashboardExcelTableStyle(
+  worksheet: import('exceljs').Worksheet,
+  headerRow: number,
+  headers: string[],
+  startRow: number,
+  endRow: number,
+  titleRow?: number,
+) {
+  if (titleRow) {
+    const title = worksheet.getRow(titleRow);
+    title.height = 24;
+    for (let columnIndex = 1; columnIndex <= headers.length; columnIndex += 1) {
+      const cell = title.getCell(columnIndex);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: REPORT_TABLE_LIGHT_GREEN } };
+      cell.border = { bottom: { style: 'hair', color: { argb: 'DCE4EA' } } };
+    }
+    const titleCell = title.getCell(1);
+    titleCell.font = { bold: true, color: { argb: REPORT_TABLE_NAVY }, size: 12 };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'left' };
+  }
+
+  const header = worksheet.getRow(headerRow);
+  header.height = 24;
+  headers.forEach((_, index) => {
+    const cell = header.getCell(index + 1);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: REPORT_TABLE_GREEN } };
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+    cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+    cell.border = { bottom: { style: 'medium', color: { argb: REPORT_TABLE_NAVY } } };
+  });
+
+  for (let rowIndex = startRow; rowIndex <= endRow; rowIndex += 1) {
+    const row = worksheet.getRow(rowIndex);
+    row.height = 20;
+    headers.forEach((headerName, columnIndex) => {
+      const cell = row.getCell(columnIndex + 1);
+      if (rowIndex % 2 === startRow % 2) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: REPORT_TABLE_STRIPE } };
+      }
+      cell.alignment = { vertical: 'top', horizontal: typeof cell.value === 'number' ? 'right' : 'left', wrapText: true };
+      if (typeof cell.value === 'number') {
+        const directFormat = getReportColumnFormat(headerName);
+        const normalizedHeader = headerName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const descriptorIndex = headers.findIndex(candidate => /^(indicador|metrica|concepto|kpi)$/.test(candidate.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()));
+        const descriptorFormat = !directFormat && descriptorIndex >= 0 && /^(valor|resultado)$/.test(normalizedHeader)
+          ? getReportColumnFormat(String(row.getCell(descriptorIndex + 1).value ?? ''))
+          : undefined;
+        cell.numFmt = directFormat || descriptorFormat || '#,##0.##';
+      }
+      cell.border = { bottom: { style: 'hair', color: { argb: 'DCE4EA' } } };
+    });
+  }
+}
+
+/** Adds a report table with the shared dashboard Excel style. */
+export function appendDashboardExcelTable(
+  worksheet: import('exceljs').Worksheet,
+  title: string,
+  headers: string[],
+  rows: Array<import('exceljs').CellValue[]>,
+) {
+  const titleRow = worksheet.rowCount + 1;
+  const titleExcelRow = worksheet.addRow([title]);
+  if (headers.length > 1) {
+    worksheet.mergeCells(titleRow, 1, titleRow, headers.length);
+  }
+  const headerExcelRow = worksheet.addRow(headers);
+  const firstDataRow = worksheet.rowCount + 1;
+  rows.forEach(row => worksheet.addRow(row));
+  applyDashboardExcelTableStyle(
+    worksheet,
+    headerExcelRow.number,
+    headers,
+    firstDataRow,
+    worksheet.rowCount,
+    titleExcelRow.number,
+  );
+  worksheet.addRow([]);
+  worksheet.addRow([]);
 }

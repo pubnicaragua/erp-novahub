@@ -6,6 +6,7 @@ import App from './app/App.tsx';
 import './styles/index.css';
 import { queryClient } from './app/services/query-client';
 import { installVitePreloadRecovery } from './app/utils/chunk-recovery';
+import { AuthProvider } from './app/contexts/AuthContext';
 
 Sentry.init({
   dsn:
@@ -51,7 +52,9 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </BrowserRouter>
   </QueryClientProvider>
 );

@@ -12,22 +12,60 @@ interface WhatsAppActionButtonProps {
 
 export function resolveCustomerPhone(
   customerId: string | null | undefined,
-  customer: Pick<Customer, 'phone'> | null | undefined,
+  customer: Partial<Pick<Customer, 'phone' | 'contactPhone'>> | null | undefined,
   customers: Customer[] = [],
+  customPhone?: string | null,
 ) {
-  const documentPhone = String(customer?.phone || '').trim();
-  if (documentPhone) return normalizeWhatsAppPhone(documentPhone);
+  const docPhone = String(customer?.phone || '').trim();
+  const normalizedDocPhone = normalizeWhatsAppPhone(docPhone);
+  if (normalizedDocPhone) return normalizedDocPhone;
 
-  const catalogPhone = String(customers.find((entry) => entry.id === customerId)?.phone || '').trim();
-  return normalizeWhatsAppPhone(catalogPhone);
+  const docContactPhone = String(customer?.contactPhone || '').trim();
+  const normalizedDocContactPhone = normalizeWhatsAppPhone(docContactPhone);
+  if (normalizedDocContactPhone) return normalizedDocContactPhone;
+
+  const customDocPhone = String(customPhone || '').trim();
+  const normalizedCustomPhone = normalizeWhatsAppPhone(customDocPhone);
+  if (normalizedCustomPhone) return normalizedCustomPhone;
+
+  if (customerId && customers.length > 0) {
+    const catalogCustomer = customers.find((entry) => entry.id === customerId);
+    if (catalogCustomer) {
+      const catalogPhone = String(catalogCustomer.phone || '').trim();
+      const normalizedCatalogPhone = normalizeWhatsAppPhone(catalogPhone);
+      if (normalizedCatalogPhone) return normalizedCatalogPhone;
+
+      const catalogContactPhone = String(catalogCustomer.contactPhone || '').trim();
+      const normalizedCatalogContactPhone = normalizeWhatsAppPhone(catalogContactPhone);
+      if (normalizedCatalogContactPhone) return normalizedCatalogContactPhone;
+    }
+  }
+
+  return null;
 }
 
-/** WhatsApp solo recibe el teléfono persistido en E.164; nunca se adivina un país. */
+/** WhatsApp normaliza teléfono en formato dígitos para wa.me. */
 export function normalizeWhatsAppPhone(value: string | null | undefined): string | null {
   const raw = String(value || '').trim();
-  if (!raw.startsWith('+')) return null;
+  if (!raw) return null;
+
+  if (raw.startsWith('+')) {
+    const digits = raw.replace(/\D/g, '');
+    return /^\d{7,15}$/.test(digits) ? digits : null;
+  }
+
   const digits = raw.replace(/\D/g, '');
-  return /^\d{7,15}$/.test(digits) ? digits : null;
+  if (!/^\d{7,15}$/.test(digits)) return null;
+
+  if (digits.length > 8 || digits.startsWith('505')) {
+    return digits;
+  }
+
+  if (digits.length === 8) {
+    return `505${digits}`;
+  }
+
+  return digits;
 }
 
 export function buildCustomerWhatsAppUrl(phone: string | null | undefined, message?: string): string | null {
