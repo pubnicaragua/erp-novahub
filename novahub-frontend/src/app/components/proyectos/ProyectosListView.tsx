@@ -452,41 +452,37 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
     { enabled: Boolean(open && editing?.id) },
   );
 
-  const buildInitialState = (item: ProjectListItem | null) => ({
-    name: item?.name || '',
-    description: item?.description || '',
-    customerId: item?.customer?.id || item?.customerId || '',
-    branchId: item?.branch?.id || item?.branchId || '',
-    managerId: item?.manager?.id || item?.managerId || '',
-    status: item?.status || 'DRAFT',
-    priority: item?.priority || 'MEDIUM',
-    startDate: toLocalDate(item?.startDate) || '',
-    endDate: toLocalDate(item?.endDate) || '',
-    plannedBudget: canViewCosts && item?.plannedBudget != null ? String(item.plannedBudget) : '',
-    plannedIncome: canViewCosts && item?.plannedIncome != null ? String(item.plannedIncome) : '',
-    currency: item?.currency || 'NIO',
-    exchangeRate: item?.exchangeRate && item.exchangeRate !== 1 ? String(item.exchangeRate) : '',
-    notes: item?.notes || '',
-    memberUserIds: [] as string[],
+  const buildInitialState = (item: ProjectListItem | null, detail?: ProjectDetail | null) => ({
+    name: detail?.name || item?.name || '',
+    description: detail?.description || item?.description || '',
+    customerId: detail?.customer?.id || detail?.customerId || item?.customer?.id || item?.customerId || '',
+    branchId: detail?.branch?.id || detail?.branchId || item?.branch?.id || item?.branchId || '',
+    managerId: detail?.manager?.id || detail?.managerId || item?.manager?.id || item?.managerId || '',
+    status: detail?.status || item?.status || 'DRAFT',
+    priority: detail?.priority || item?.priority || 'MEDIUM',
+    startDate: toLocalDate(detail?.startDate || item?.startDate) || '',
+    endDate: toLocalDate(detail?.endDate || item?.endDate) || '',
+    plannedBudget: canViewCosts && (detail?.plannedBudget ?? item?.plannedBudget) != null ? String(detail?.plannedBudget ?? item?.plannedBudget) : '',
+    plannedIncome: canViewCosts && (detail?.plannedIncome ?? item?.plannedIncome) != null ? String(detail?.plannedIncome ?? item?.plannedIncome) : '',
+    currency: detail?.currency || item?.currency || 'NIO',
+    exchangeRate: (detail?.exchangeRate ?? item?.exchangeRate) && (detail?.exchangeRate ?? item?.exchangeRate) !== 1 ? String(detail?.exchangeRate ?? item?.exchangeRate) : '',
+    notes: detail?.notes || item?.notes || '',
+    memberUserIds: detail?.members ? detail.members.map((m: any) => m.user?.id || m.userId).filter(Boolean) : [],
   });
 
   const [form, setForm] = useState<any>(() => buildInitialState(editing));
-  const [hasSyncedDetail, setHasSyncedDetail] = useState(false);
+  const [syncedDetail, setSyncedDetail] = useState<ProjectDetail | null>(null);
 
-  useEffect(() => {
-    const detail = detailQuery.data;
-    if (!detail || hasSyncedDetail) return;
-
-    setHasSyncedDetail(true);
+  if (detailQuery.data && detailQuery.data !== syncedDetail) {
+    setSyncedDetail(detailQuery.data);
+    const d = detailQuery.data;
     setForm((prev: any) => ({
       ...prev,
-      description: detail.description || prev.description,
-      notes: detail.notes || prev.notes,
-      memberUserIds: Array.isArray(detail.members)
-        ? detail.members.map((member) => member.user?.id || member.userId).filter(Boolean)
-        : prev.memberUserIds,
+      description: d.description || prev.description,
+      notes: d.notes || prev.notes,
+      memberUserIds: d.members ? d.members.map((m: any) => m.user?.id || m.userId).filter(Boolean) : prev.memberUserIds,
     }));
-  }, [detailQuery.data, hasSyncedDetail]);
+  }
 
   const valid = form.name?.trim() && form.startDate;
 
