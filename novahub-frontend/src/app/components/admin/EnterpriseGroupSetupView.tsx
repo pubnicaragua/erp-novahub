@@ -53,6 +53,7 @@ import {
   ENTERPRISE_MODULE_OPTIONS,
 } from "../../constants/enterpriseModules";
 import { formatCurrencyDescriptor } from "../../utils/currency";
+import { PERMISSION_SUBMODULES } from "../../utils/sidebarPermissions";
 
 type SetupMode = "create" | "edit";
 type SetupStep = "identity" | "units" | "warehouses" | "branches" | "summary";
@@ -151,6 +152,7 @@ export function EnterpriseGroupSetupView({
       initialGroup.enabledModules.length
         ? initialGroup.enabledModules
         : [...DEFAULT_ENTERPRISE_MODULES],
+    modulePolicies: initialGroup?.modulePolicies || {},
   });
   const [managerForm, setManagerForm] = useState({
     name: "",
@@ -166,6 +168,7 @@ export function EnterpriseGroupSetupView({
     slug: "",
     description: "",
     enabledModules: [...DEFAULT_ENTERPRISE_MODULES],
+    moduleViewOverrides: {} as Record<string, string[]>,
   });
   const [warehouseForm, setWarehouseForm] = useState({
     name: "",
@@ -186,6 +189,7 @@ export function EnterpriseGroupSetupView({
     adminPassword: "",
     moduleMode: "INHERIT" as "INHERIT" | "CUSTOM",
     enabledModules: [] as string[],
+    moduleViewOverrides: {} as Record<string, string[]>,
   });
   const [branchAdminEmailStatus, setBranchAdminEmailStatus] = useState<
     "idle" | "checking" | "available" | "taken" | "error"
@@ -245,6 +249,7 @@ export function EnterpriseGroupSetupView({
           description: result.description || "",
           logo: result.logo || "",
           consolidationCurrency: result.consolidationCurrency || "NIO",
+          modulePolicies: result.modulePolicies || current.modulePolicies,
           enabledModules:
             Array.isArray(result.enabledModules) && result.enabledModules.length
               ? result.enabledModules
@@ -266,6 +271,7 @@ export function EnterpriseGroupSetupView({
       description: group.description || "",
       logo: group.logo || "",
       consolidationCurrency: group.consolidationCurrency || "NIO",
+      modulePolicies: group.modulePolicies || current.modulePolicies,
       enabledModules:
         Array.isArray(group.enabledModules) && group.enabledModules.length
           ? group.enabledModules
@@ -342,6 +348,7 @@ export function EnterpriseGroupSetupView({
       logo: groupForm.logo || null,
       consolidationCurrency: groupForm.consolidationCurrency,
       enabledModules: groupForm.enabledModules,
+      modulePolicies: groupForm.modulePolicies,
       businessUnits: current?.businessUnits || [],
       warehouses: current?.warehouses || [],
       branches: current?.branches || [],
@@ -359,6 +366,7 @@ export function EnterpriseGroupSetupView({
         logo: await persistLogo(groupForm.logo, "groups", "group-logo.png") || null,
         consolidationCurrency: groupForm.consolidationCurrency,
         enabledModules: enabledModules ?? groupForm.enabledModules,
+        modulePolicies: groupForm.modulePolicies,
       }),
     onSuccess: (updated) => {
       setGroup(updated);
@@ -414,6 +422,7 @@ export function EnterpriseGroupSetupView({
         slug: unitForm.slug.trim(),
         description: unitForm.description.trim() || undefined,
         enabledModules: unitForm.enabledModules,
+        moduleViewOverrides: unitForm.moduleViewOverrides,
       }),
     onSuccess: async () => {
       setUnitForm({
@@ -421,6 +430,7 @@ export function EnterpriseGroupSetupView({
         slug: "",
         description: "",
         enabledModules: groupModuleIds,
+        moduleViewOverrides: {},
       });
       await refreshGroup();
       toast.success("Rubro agregado");
@@ -497,6 +507,7 @@ export function EnterpriseGroupSetupView({
         adminPassword: branchForm.adminPassword,
         moduleMode: branchForm.moduleMode,
         enabledModules: branchForm.enabledModules,
+        moduleViewOverrides: branchForm.moduleViewOverrides,
       }),
     onSuccess: async () => {
       setBranchForm({
@@ -512,6 +523,7 @@ export function EnterpriseGroupSetupView({
         adminPassword: "",
         moduleMode: "INHERIT",
         enabledModules: [],
+        moduleViewOverrides: {},
       });
       await refreshGroup();
       toast.success("Sucursal agregada");
@@ -542,6 +554,7 @@ export function EnterpriseGroupSetupView({
       name: unitForm.name.trim(),
       description: unitForm.description.trim() || null,
       enabledModules: unitForm.enabledModules,
+      moduleViewOverrides: unitForm.moduleViewOverrides,
       isActive: true,
       __draft: true,
     };
@@ -554,6 +567,7 @@ export function EnterpriseGroupSetupView({
       slug: "",
       description: "",
       enabledModules: groupModuleIds,
+      moduleViewOverrides: {},
     });
     toast.success("Rubro agregado");
   };
@@ -595,6 +609,7 @@ export function EnterpriseGroupSetupView({
       adminPassword: branchForm.adminPassword,
       moduleMode: branchForm.moduleMode,
       enabledModules: branchForm.enabledModules,
+      moduleViewOverrides: branchForm.moduleViewOverrides,
       _count: { users: 1, warehouses: 0 },
       __draft: true,
     };
@@ -615,6 +630,7 @@ export function EnterpriseGroupSetupView({
       adminPassword: "",
       moduleMode: "INHERIT",
       enabledModules: [],
+      moduleViewOverrides: {},
     });
     setBranchAdminEmailStatus("idle");
     toast.success("Sucursal agregada");
@@ -630,6 +646,7 @@ export function EnterpriseGroupSetupView({
         Array.isArray(unit.enabledModules) && unit.enabledModules.length
           ? unit.enabledModules
           : [...DEFAULT_ENTERPRISE_MODULES],
+      moduleViewOverrides: unit.moduleViewOverrides || {},
     });
   };
 
@@ -644,6 +661,7 @@ export function EnterpriseGroupSetupView({
               name: unitForm.name.trim(),
               description: unitForm.description.trim() || null,
               enabledModules: unitForm.enabledModules,
+              moduleViewOverrides: unitForm.moduleViewOverrides,
             }
           : unit,
       ),
@@ -654,6 +672,7 @@ export function EnterpriseGroupSetupView({
       slug: "",
       description: "",
       enabledModules: groupModuleIds,
+      moduleViewOverrides: {},
     });
     toast.success("Rubro actualizado");
   };
@@ -667,6 +686,7 @@ export function EnterpriseGroupSetupView({
         slug: unitForm.slug.trim() || unitForm.name.trim(),
         description: unitForm.description.trim() || null,
         enabledModules: unitForm.enabledModules,
+        moduleViewOverrides: unitForm.moduleViewOverrides,
       },
     });
   };
@@ -771,6 +791,7 @@ export function EnterpriseGroupSetupView({
       enabledModules: Array.isArray(branch.enabledModules)
         ? branch.enabledModules
         : [],
+      moduleViewOverrides: branch.moduleViewOverrides || {},
     });
     setBranchAdminEmailStatus("idle");
   };
@@ -794,6 +815,7 @@ export function EnterpriseGroupSetupView({
               adminPassword: branchForm.adminPassword,
               moduleMode: branchForm.moduleMode,
               enabledModules: branchForm.enabledModules,
+              moduleViewOverrides: branchForm.moduleViewOverrides,
             }
           : branch,
       ),
@@ -812,6 +834,7 @@ export function EnterpriseGroupSetupView({
       adminPassword: "",
       moduleMode: "INHERIT",
       enabledModules: [],
+      moduleViewOverrides: {},
     });
     setBranchAdminEmailStatus("idle");
     toast.success("Sucursal actualizada");
@@ -831,6 +854,7 @@ export function EnterpriseGroupSetupView({
         businessUnitId: branchForm.businessUnitId || undefined,
         moduleMode: branchForm.moduleMode,
         enabledModules: branchForm.enabledModules,
+        moduleViewOverrides: branchForm.moduleViewOverrides,
       },
     });
   };
@@ -886,7 +910,8 @@ export function EnterpriseGroupSetupView({
           description: groupForm.description.trim() || undefined,
           logo: groupLogo || undefined,
           consolidationCurrency: groupForm.consolidationCurrency,
-          enabledModules: groupForm.enabledModules,
+        enabledModules: groupForm.enabledModules,
+        modulePolicies: groupForm.modulePolicies,
         },
         manager: {
           name: managerForm.name.trim(),
@@ -924,6 +949,7 @@ export function EnterpriseGroupSetupView({
           adminPassword: branch.adminPassword,
           enabledModules:
             branch.moduleMode === "CUSTOM" ? branch.enabledModules : undefined,
+          moduleViewOverrides: branch.moduleViewOverrides || {},
         })),
       });
     },
@@ -1042,7 +1068,7 @@ export function EnterpriseGroupSetupView({
         manager={manager}
         updating={updateGroupMutation.isPending}
         onSave={requestGroupSave}
-        onUpdateUnit={(unitId: string, enabledModules: string[]) => updateUnitMutation.mutate({ unitId, body: { enabledModules } })}
+        onUpdateUnit={(unitId: string, enabledModules: string[], moduleViewOverrides: Record<string, string[]>) => updateUnitMutation.mutate({ unitId, body: { enabledModules, moduleViewOverrides } })}
         updatingUnitId={updateUnitMutation.isPending ? String(updateUnitMutation.variables?.unitId || '') : ''}
         onBack={onBack}
         activeTab={activeEditTab}
@@ -1214,6 +1240,7 @@ export function EnterpriseGroupSetupView({
                 unitForm={unitForm}
                 setUnitForm={setUnitForm}
                 availableModules={groupModuleIds}
+                groupPolicies={groupForm.modulePolicies || {}}
                 creating={isDraft ? false : unitMutation.isPending || updateUnitMutation.isPending}
                 editingId={editingUnitId}
                 onCreate={
@@ -1235,6 +1262,7 @@ export function EnterpriseGroupSetupView({
                     slug: "",
                     description: "",
                     enabledModules: groupModuleIds,
+                    moduleViewOverrides: {},
                   });
                 }}
                 onNext={() => setStep("branches")}
@@ -1246,6 +1274,7 @@ export function EnterpriseGroupSetupView({
                 branches={branches}
                 editMode={mode === "edit"}
                 availableModules={groupModuleIds}
+                groupPolicies={groupForm.modulePolicies || {}}
                 form={branchForm}
                 setForm={setBranchForm}
                 creating={isDraft ? false : branchMutation.isPending || updateBranchMutation.isPending}
@@ -1279,6 +1308,7 @@ export function EnterpriseGroupSetupView({
                     adminPassword: "",
                     moduleMode: "INHERIT",
                     enabledModules: [],
+                    moduleViewOverrides: {},
                   });
                 }}
                 onNext={() => setStep("warehouses")}
@@ -1591,9 +1621,11 @@ function GroupConfigurationView({
 }: any) {
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
   const [unitModuleDrafts, setUnitModuleDrafts] = useState<Record<string, string[]>>({});
+  const [unitViewDrafts, setUnitViewDrafts] = useState<Record<string, Record<string, string[]>>>({});
   const startUnitEdit = (unit: any) => {
     setEditingUnitId(unit.id);
     setUnitModuleDrafts((current) => ({ ...current, [unit.id]: Array.isArray(unit.enabledModules) ? [...unit.enabledModules] : [] }));
+    setUnitViewDrafts((current) => ({ ...current, [unit.id]: unit.moduleViewOverrides || {} }));
   };
   return (
     <div className="enterprise-group-configuration min-w-0 max-w-full overflow-x-hidden bg-background">
@@ -1717,6 +1749,13 @@ function GroupConfigurationView({
                   }))
                 }
               />
+              <div className="mt-4">
+                <ModulePolicyEditor
+                  modules={groupForm.enabledModules}
+                  value={groupForm.modulePolicies || {}}
+                  onChange={(modulePolicies) => setGroupForm((current: any) => ({ ...current, modulePolicies }))}
+                />
+              </div>
               <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
                 Los rubros y sucursales no podrán seleccionar módulos fuera de
                 este conjunto. Al reducirlo se restringe el acceso de forma
@@ -1787,7 +1826,7 @@ function GroupConfigurationView({
                   <div className="min-w-0"><p className="font-black">{unit.name}</p><p className="text-xs text-muted-foreground">{modules.length} módulos activos · las sucursales pueden heredar esta selección</p></div>
                   <Button type="button" variant={editing ? 'secondary' : 'outline'} className="w-fit shrink-0 rounded-xl" onClick={() => editing ? setEditingUnitId(null) : startUnitEdit(unit)}>{editing ? 'Cerrar edición' : 'Editar módulos'}</Button>
                 </div>
-                {editing && <div className="mt-4 space-y-3"><ModuleSelector value={modules} availableModules={groupForm.enabledModules} onChange={(enabledModules) => setUnitModuleDrafts((current) => ({ ...current, [unit.id]: enabledModules }))} /><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Incluye “Restaurante POS” para habilitar la facturación rápida de caja en este rubro.</p><Button type="button" className="rounded-xl" disabled={updatingUnitId === unit.id} onClick={() => onUpdateUnit(unit.id, modules)}>{updatingUnitId === unit.id ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}Guardar rubro</Button></div></div>}
+                {editing && <div className="mt-4 space-y-3"><ModuleSelector value={modules} availableModules={groupForm.enabledModules} onChange={(enabledModules) => setUnitModuleDrafts((current) => ({ ...current, [unit.id]: enabledModules }))} /><ModuleViewOverrideEditor modules={modules} groupPolicies={groupForm.modulePolicies || {}} value={unitViewDrafts[unit.id] || {}} onChange={(moduleViewOverrides) => setUnitViewDrafts((current) => ({ ...current, [unit.id]: moduleViewOverrides }))} /><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">El rubro y sus sucursales solo pueden reducir las vistas máximas del grupo.</p><Button type="button" className="rounded-xl" disabled={updatingUnitId === unit.id} onClick={() => onUpdateUnit(unit.id, modules, unitViewDrafts[unit.id] || unit.moduleViewOverrides || {})}>{updatingUnitId === unit.id ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}Guardar rubro</Button></div></div>}
               </div>;
             })}
             {!units.length && <p className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">Crea primero un rubro para configurar sus módulos.</p>}
@@ -2085,6 +2124,13 @@ function IdentityStep({
               setGroupForm((current: any) => ({ ...current, enabledModules }))
             }
           />
+          <div className="mt-4">
+            <ModulePolicyEditor
+              modules={groupForm.enabledModules}
+              value={groupForm.modulePolicies || {}}
+              onChange={(modulePolicies) => setGroupForm((current: any) => ({ ...current, modulePolicies }))}
+            />
+          </div>
           <p className="mt-3 text-xs text-muted-foreground">
             Los rubros solo podrán heredar módulos seleccionados aquí. Luego
             cada sucursal podrá heredar del rubro o tener una selección más
@@ -2230,6 +2276,7 @@ function UnitsStep({
   unitForm,
   setUnitForm,
   availableModules,
+  groupPolicies,
   creating,
   editingId,
   onCreate,
@@ -2359,6 +2406,12 @@ function UnitsStep({
               onChange={(enabledModules) =>
                 setUnitForm((current: any) => ({ ...current, enabledModules }))
               }
+            />
+            <ModuleViewOverrideEditor
+              modules={unitForm.enabledModules}
+              groupPolicies={groupPolicies || {}}
+              value={unitForm.moduleViewOverrides || {}}
+              onChange={(moduleViewOverrides) => setUnitForm((current: any) => ({ ...current, moduleViewOverrides }))}
             />
             <div className="flex gap-2">
               <Button
@@ -2654,6 +2707,7 @@ function BranchesStep({
   branches,
   editMode,
   availableModules,
+  groupPolicies,
   form,
   setForm,
   creating,
@@ -2791,6 +2845,7 @@ function BranchesStep({
                     current.moduleMode === "CUSTOM"
                       ? unit?.enabledModules || availableModules
                       : current.enabledModules,
+                  moduleViewOverrides: current.moduleViewOverrides || {},
                 }));
               }}
               className={inputClass}
@@ -2895,9 +2950,9 @@ function BranchesStep({
           </div>
           <div className="sm:col-span-2 rounded-2xl border border-border/60 bg-background/50 p-4">
             <p className={labelClass}>Módulos de la sucursal</p>
-            <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 text-sm leading-relaxed text-muted-foreground">
-              La sucursal hereda todos los módulos activos de <span className="font-bold text-foreground">{selectedUnit?.name || "su rubro"}</span>. Los permisos particulares se administran desde el rol del usuario o desde la asignación del Manager.
-            </div>
+            <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-foreground"><input type="checkbox" checked={form.moduleMode === "CUSTOM"} onChange={(event) => setForm((current: any) => ({ ...current, moduleMode: event.target.checked ? "CUSTOM" : "INHERIT", enabledModules: event.target.checked ? [...(selectedUnit?.enabledModules || availableModules)] : [] }))} className="size-4 accent-primary" />Personalizar módulos de esta sucursal</label>
+            {form.moduleMode === "CUSTOM" ? <div className="mt-3"><ModuleSelector value={form.enabledModules || []} availableModules={selectedUnit?.enabledModules || availableModules} onChange={(enabledModules) => setForm((current: any) => ({ ...current, enabledModules }))} /></div> : <div className="mt-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 text-sm leading-relaxed text-muted-foreground">La sucursal hereda los módulos de <span className="font-bold text-foreground">{selectedUnit?.name || "su rubro"}</span>.</div>}
+            <div className="mt-3"><ModuleViewOverrideEditor modules={form.moduleMode === "CUSTOM" ? (form.enabledModules || []) : (selectedUnit?.enabledModules || availableModules)} groupPolicies={groupPolicies || {}} parentViewOverrides={selectedUnit?.moduleViewOverrides || {}} value={form.moduleViewOverrides || {}} onChange={(moduleViewOverrides) => setForm((current: any) => ({ ...current, moduleViewOverrides }))} /></div>
           </div>
           <div className="sm:col-span-2 flex justify-end gap-2">
             <Button
@@ -2997,6 +3052,110 @@ function ModuleSelector({
       </div>
     </div>
   );
+}
+
+function moduleViewsFor(parentId: string) {
+  const seen = new Set<string>();
+  return PERMISSION_SUBMODULES.filter((view) => {
+    if (view.parent !== parentId || seen.has(view.id)) return false;
+    seen.add(view.id);
+    return true;
+  });
+}
+
+function ModulePolicyEditor({
+  modules,
+  value,
+  onChange,
+}: {
+  modules: string[];
+  value: Record<string, { state?: string; viewIds?: string[] | null }>;
+  onChange: (value: Record<string, { state: string; viewIds?: string[] | null }>) => void;
+}) {
+  const setPolicy = (moduleId: string, next: { state?: string; viewIds?: string[] | null }) => {
+    const current = value[moduleId] || {};
+    const updated: Record<string, { state: string; viewIds?: string[] | null }> = {};
+    for (const [id, policy] of Object.entries(value)) {
+      updated[id] = { ...policy, state: policy.state || 'VISIBLE' };
+    }
+    onChange({
+      ...updated,
+      [moduleId]: { ...current, ...next, state: next.state || current.state || 'VISIBLE' },
+    });
+  };
+
+  return <div className="space-y-2 rounded-2xl border border-border/60 bg-background/60 p-4">
+    <div><p className="text-xs font-black uppercase tracking-wider">Disponibilidad por módulo y vista</p><p className="mt-1 text-xs text-muted-foreground">Elige si el módulo se muestra, se oculta conservando procesos internos o se desactiva.</p></div>
+    <div className="max-h-[34rem] space-y-2 overflow-y-auto pr-1">
+      {ENTERPRISE_MODULE_OPTIONS.filter((module) => modules.includes(module.id)).map((module) => {
+        const views = moduleViewsFor(module.id);
+        const policy = value[module.id] || { state: 'VISIBLE', viewIds: null };
+        const allowed = Array.isArray(policy.viewIds) ? new Set(policy.viewIds) : null;
+        return <details key={module.id} className="group rounded-xl border border-border/60 bg-card">
+          <summary className="flex cursor-pointer list-none flex-col gap-2 p-3 marker:hidden [&::-webkit-details-marker]:hidden sm:flex-row sm:items-center sm:justify-between">
+            <span className="min-w-0"><span className="block text-xs font-black">{module.label}</span><span className="block text-[10px] text-muted-foreground">{views.length ? `${allowed ? allowed.size : views.length} de ${views.length} vistas` : 'Acceso al módulo'}</span></span>
+            <select aria-label={`Disponibilidad de ${module.label}`} value={policy.state || 'VISIBLE'} onClick={(event) => event.stopPropagation()} onChange={(event) => setPolicy(module.id, { state: event.target.value })} className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs font-bold sm:w-48">
+              <option value="VISIBLE">Visible y operativo</option><option value="HIDDEN">Oculto, procesos activos</option><option value="DISABLED">Desactivado</option>
+            </select>
+          </summary>
+          {views.length > 0 && <div className="space-y-2 border-t border-border/50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Vistas permitidas para este grupo</p><div className="flex gap-2"><Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[10px]" disabled={policy.state !== 'VISIBLE'} onClick={() => setPolicy(module.id, { viewIds: null })}>Todas</Button><Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[10px]" disabled={policy.state !== 'VISIBLE'} onClick={() => setPolicy(module.id, { viewIds: [] })}>Ninguna</Button></div></div>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {views.map((view) => <label key={view.id} className={`flex min-w-0 items-start gap-2 rounded-lg border border-border/50 p-2 text-xs ${policy.state === 'VISIBLE' ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
+                <input type="checkbox" checked={allowed === null || allowed.has(view.id)} disabled={policy.state !== 'VISIBLE'} onChange={(event) => {
+                  const next = allowed === null ? new Set(views.map((item) => item.id)) : new Set(allowed);
+                  if (event.target.checked) next.add(view.id); else next.delete(view.id);
+                  setPolicy(module.id, { viewIds: next.size === views.length ? null : [...next] });
+                }} className="mt-0.5 size-3.5 shrink-0 accent-primary" />
+                <span className="min-w-0"><span className="block font-semibold">{view.label}</span><span className="block text-[9px] text-muted-foreground">{view.id}</span></span>
+              </label>)}
+            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground">Oculto: los usuarios no entran ni reciben avisos, pero los registros internos continúan. Desactivado: se detienen los nuevos registros del módulo.</p>
+          </div>}
+        </details>;
+      })}
+      {!modules.length && <p className="rounded-xl border border-dashed p-3 text-xs text-muted-foreground">Activa primero al menos un módulo para configurar sus vistas.</p>}
+    </div>
+  </div>;
+}
+
+function ModuleViewOverrideEditor({
+  modules,
+  groupPolicies,
+  parentViewOverrides = {},
+  value,
+  onChange,
+}: {
+  modules: string[];
+  groupPolicies: Record<string, { state?: string; viewIds?: string[] | null }>;
+  parentViewOverrides?: Record<string, string[]>;
+  value: Record<string, string[]>;
+  onChange: (value: Record<string, string[]>) => void;
+}) {
+  const update = (moduleId: string, views: string[] | null) => {
+    const next = { ...value };
+    if (views === null) delete next[moduleId]; else next[moduleId] = views;
+    onChange(next);
+  };
+  const choices = modules.flatMap((moduleId) => {
+    const allViews = moduleViewsFor(moduleId);
+    const groupPolicy = groupPolicies[moduleId];
+    if (groupPolicy?.state && groupPolicy.state !== 'VISIBLE') return [];
+    const maximum = groupPolicy?.viewIds;
+    let views = Array.isArray(maximum) ? allViews.filter((view) => maximum.includes(view.id)) : allViews;
+    const parentLimit = parentViewOverrides[moduleId];
+    if (Array.isArray(parentLimit)) views = views.filter((view) => parentLimit.includes(view.id));
+    return views.length ? [{ moduleId, views }] : [];
+  });
+
+  return <div className="space-y-2 rounded-2xl border border-border/60 bg-background/60 p-4">
+    <div><p className="text-xs font-black uppercase tracking-wider">Restricciones adicionales de vistas</p><p className="mt-1 text-xs text-muted-foreground">Este nivel puede limitar las vistas heredadas; no puede recuperar las que el grupo quitó.</p></div>
+    {!choices.length ? <p className="text-xs text-muted-foreground">No hay vistas que este nivel pueda reducir.</p> : <div className="max-h-80 space-y-2 overflow-y-auto pr-1">{choices.map(({ moduleId, views }) => {
+      const selected = Object.prototype.hasOwnProperty.call(value, moduleId) ? new Set(value[moduleId]) : null;
+      const moduleLabel = ENTERPRISE_MODULE_OPTIONS.find((module) => module.id === moduleId)?.label || moduleId;
+      return <details key={moduleId} className="group rounded-xl border border-border/60 bg-card"><summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3 marker:hidden [&::-webkit-details-marker]:hidden"><span className="text-xs font-bold">{moduleLabel}</span><span className="text-[10px] text-muted-foreground">{selected ? `${selected.size} seleccionadas` : 'Hereda todas'}</span></summary><div className="grid gap-1.5 border-t border-border/50 p-3 sm:grid-cols-2">{views.map((view) => <label key={view.id} className="flex min-w-0 cursor-pointer items-start gap-2 rounded-lg border border-border/50 p-2 text-xs"><input type="checkbox" checked={selected === null || selected.has(view.id)} onChange={(event) => { const next = selected === null ? new Set(views.map((item) => item.id)) : new Set(selected); if (event.target.checked) next.add(view.id); else next.delete(view.id); update(moduleId, next.size === views.length ? null : [...next]); }} className="mt-0.5 size-3.5 shrink-0 accent-primary" /><span className="min-w-0">{view.label}</span></label>)}</div></details>;
+    })}</div>}
+  </div>;
 }
 
 function SummaryStep({

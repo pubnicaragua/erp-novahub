@@ -25,21 +25,30 @@ const EMPTY_SELECT_VALUE = '__none__';
 
 interface ProyectoPlanificacionPanelProps {
   projectId: string;
+  showTasks?: boolean;
+  showMilestones?: boolean;
+  showTimeline?: boolean;
 }
 
-export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionPanelProps) {
+export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMilestones = true, showTimeline = true }: ProyectoPlanificacionPanelProps) {
   const { canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [taskDialog, setTaskDialog] = useState<{ open: boolean; editing?: ProjectTask | null }>({ open: false, editing: null });
   const [milestoneDialog, setMilestoneDialog] = useState<{ open: boolean; editing?: ProjectMilestone | null }>({ open: false, editing: null });
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'milestone' | 'task'; id: string; title: string } | null>(null);
 
-  const tasksQuery = useTenantQuery<ProjectTask[]>(['projects', 'tasks', projectId], (s) => projectsService.tasks(projectId, s), { enabled: true });
-  const milestonesQuery = useTenantQuery<ProjectMilestone[]>(['projects', 'milestones', projectId], (s) => projectsService.milestones(projectId, s), { enabled: true });
-  const usersQuery = useTenantQuery<any[]>(['projects', 'users'], (s) => usersService.getLookup(undefined, s), { enabled: true });
+  const canViewTasks = showTasks && canPerform('PROJECTS_TASKS', 'view');
+  const canViewMilestones = showMilestones && canPerform('PROJECTS_MILESTONES', 'view');
+  const canViewTimeline = showTimeline && canPerform('PROJECTS_TIME', 'view');
+  const tasksQuery = useTenantQuery<ProjectTask[]>(['projects', 'tasks', projectId], (s) => projectsService.tasks(projectId, s), { enabled: canViewTasks });
+  const milestonesQuery = useTenantQuery<ProjectMilestone[]>(['projects', 'milestones', projectId], (s) => projectsService.milestones(projectId, s), { enabled: canViewMilestones });
+  const timelineQuery = useTenantQuery<any>(['projects', 'timeline', projectId], (s) => projectsService.timeline(projectId, s), { enabled: canViewTimeline });
+  const usersQuery = useTenantQuery<any[]>(['projects', 'users'], (s) => usersService.getLookup(undefined, s), { enabled: canViewTasks && taskDialog.open });
 
   const tasks = asList(tasksQuery.data) as ProjectTask[];
   const milestones = asList(milestonesQuery.data) as ProjectMilestone[];
+  const timelineTasks = asList(timelineQuery.data?.tasks) as ProjectTask[];
+  const timelineMilestones = asList(timelineQuery.data?.milestones) as ProjectMilestone[];
   const users = asList(usersQuery.data);
 
   const invalidate = () => invalidateTenantQueries(queryClient);
@@ -68,13 +77,16 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
   const canEditTasks = canPerform('PROJECTS_TASKS', 'edit');
   const canCreateTasks = canPerform('PROJECTS_TASKS', 'create');
   const canDeleteTasks = canPerform('PROJECTS_TASKS', 'delete');
+  const canEditMilestones = canViewMilestones && canPerform('PROJECTS_MILESTONES', 'edit');
+  const canCreateMilestones = canViewMilestones && canPerform('PROJECTS_MILESTONES', 'create');
+  const canDeleteMilestones = canViewMilestones && canPerform('PROJECTS_MILESTONES', 'delete');
 
   return (
     <div className="space-y-4">
-      <Card className="rounded-2xl border-border/60 shadow-sm">
+      {canViewMilestones && <Card className="rounded-2xl border-border/60 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="flex items-center gap-2 text-sm"><Flag className="size-4 text-primary" /> Hitos</CardTitle>
-          {canCreateTasks && <Button size="sm" onClick={() => setMilestoneDialog({ open: true })} className="gap-1.5"><Plus className="size-4" /> Hito</Button>}
+          {canCreateMilestones && <Button size="sm" onClick={() => setMilestoneDialog({ open: true })} className="gap-1.5"><Plus className="size-4" /> Hito</Button>}
         </CardHeader>
         <CardContent>
           {milestones.length === 0 ? (
@@ -90,12 +102,12 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
                     </div>
                     <Badge variant="outline" className={cn('border', TASK_STATUS_META[m.status].badge)}>{TASK_STATUS_META[m.status].label}</Badge>
                   </div>
-                  {m._count?.tasks != null && <p className="mt-2 text-xs text-muted-foreground">{m._count.tasks} tareas vinculadas</p>}
-                  {canEditTasks && (
+                  {canPerform('PROJECTS_TASKS', 'view') && m._count?.tasks != null && <p className="mt-2 text-xs text-muted-foreground">{m._count.tasks} tareas vinculadas</p>}
+                  {canEditMilestones && (
                     <div className="mt-3 flex gap-1">
                       {m.status !== 'COMPLETED' && <Button size="sm" variant="outline" onClick={() => milestoneMutations.mutate({ type: 'update', id: m.id, payload: { status: 'COMPLETED' } })}><CheckCircle2 className="size-3.5" /> Completar</Button>}
                       <Button size="icon" variant="ghost" className="size-8" onClick={() => setMilestoneDialog({ open: true, editing: m })}><Pencil className="size-4" /></Button>
-                      {canDeleteTasks && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setConfirmDelete({ type: 'milestone', id: m.id, title: m.name })}><Trash2 className="size-4" /></Button>}
+                      {canDeleteMilestones && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setConfirmDelete({ type: 'milestone', id: m.id, title: m.name })}><Trash2 className="size-4" /></Button>}
                     </div>
                   )}
                 </div>
@@ -103,9 +115,9 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
-      <Card className="rounded-2xl border-border/60 shadow-sm">
+      {canViewTasks && <Card className="rounded-2xl border-border/60 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="flex items-center gap-2 text-sm"><ListTodo className="size-4 text-primary" /> Tareas</CardTitle>
           {canCreateTasks && <Button size="sm" onClick={() => setTaskDialog({ open: true })} className="gap-1.5"><Plus className="size-4" /> Nueva tarea</Button>}
@@ -162,15 +174,15 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
             </Table>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
-      <Cronograma tasks={tasks} milestones={milestones} />
+      {canViewTimeline && <Cronograma tasks={timelineTasks} milestones={timelineMilestones} />}
 
       {taskDialog.open && (
         <TaskFormDialog editing={taskDialog.editing} users={users} milestones={milestones} onClose={() => setTaskDialog({ open: false, editing: null })}
           onSubmit={(payload) => taskMutations.mutate(taskDialog.editing ? { type: 'update', id: taskDialog.editing.id, payload } : { type: 'create', payload })} />
       )}
-      {milestoneDialog.open && (
+      {canViewMilestones && milestoneDialog.open && (
         <MilestoneFormDialog editing={milestoneDialog.editing} onClose={() => setMilestoneDialog({ open: false, editing: null })}
           onSubmit={(payload) => milestoneMutations.mutate(milestoneDialog.editing ? { type: 'update', id: milestoneDialog.editing.id, payload } : { type: 'create', payload })} />
       )}
@@ -198,7 +210,7 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
   );
 }
 
-function Cronograma({ tasks, milestones }: { tasks: ProjectTask[]; milestones: ProjectMilestone[] }) {
+export function Cronograma({ tasks, milestones }: { tasks: Array<Pick<ProjectTask, 'id' | 'title' | 'startDate' | 'dueDate' | 'status'>>; milestones: Array<Pick<ProjectMilestone, 'id' | 'name' | 'dueDate' | 'status'>> }) {
   const active = useMemo(() => {
     const items = [
       ...tasks.map((t) => ({ id: t.id, kind: 'task' as const, label: t.title, start: t.startDate || t.dueDate, end: t.dueDate || t.startDate, status: t.status })),
