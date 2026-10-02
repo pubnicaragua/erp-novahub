@@ -336,9 +336,6 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
   );
 }
 
-<<<<<<< HEAD
-function ProjectFormDialog({ open, onOpenChange, editing, users, customers, branches, saving, onSubmit, canViewCosts }: {
-=======
 function ProjectDeleteDialog({ project, impact, saving, onCancel, onConfirm }: {
   project: ProjectListItem | null;
   impact: ProjectDeleteImpact | null;
@@ -438,8 +435,7 @@ function ProjectDeleteDialog({ project, impact, saving, onCancel, onConfirm }: {
   );
 }
 
-function ProjectFormDialog({ open, onOpenChange, editing, users, customers, branches, saving, onSubmit }: {
->>>>>>> 71932637565d22bdade82e0c2fe423f7bbca699c
+function ProjectFormDialog({ open, onOpenChange, editing, users, customers, branches, saving, onSubmit, canViewCosts }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: ProjectListItem | null;
@@ -450,24 +446,6 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
   canViewCosts: boolean;
   onSubmit: (payload: any) => void;
 }) {
-<<<<<<< HEAD
-  const [form, setForm] = useState<any>({
-    name: editing?.name || '',
-    description: editing?.description || '',
-    customerId: editing?.customer?.id || editing?.customerId || '',
-    branchId: editing?.branch?.id || editing?.branchId || '',
-    managerId: editing?.manager?.id || editing?.managerId || '',
-    status: editing?.status || 'DRAFT',
-    priority: editing?.priority || 'MEDIUM',
-    startDate: toLocalDate(editing?.startDate) || '',
-    endDate: toLocalDate(editing?.endDate) || '',
-    plannedBudget: canViewCosts && editing?.plannedBudget != null ? String(editing.plannedBudget) : '',
-    plannedIncome: canViewCosts && editing?.plannedIncome != null ? String(editing.plannedIncome) : '',
-    currency: editing?.currency || 'NIO',
-    exchangeRate: editing?.exchangeRate && editing.exchangeRate !== 1 ? String(editing.exchangeRate) : '',
-    notes: editing?.notes || '',
-    memberUserIds: [],
-=======
   const detailQuery = useTenantQuery<ProjectDetail | null>(
     ['projects', 'form-detail', editing?.id || 'none'],
     (signal) => (editing?.id ? projectsService.get(editing.id, signal) : Promise.resolve(null)),
@@ -484,13 +462,12 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
     priority: detail?.priority || item?.priority || 'MEDIUM',
     startDate: toLocalDate(detail?.startDate || item?.startDate) || '',
     endDate: toLocalDate(detail?.endDate || item?.endDate) || '',
-    plannedBudget: (detail?.plannedBudget ?? item?.plannedBudget) != null ? String(detail?.plannedBudget ?? item?.plannedBudget) : '',
-    plannedIncome: (detail?.plannedIncome ?? item?.plannedIncome) != null ? String(detail?.plannedIncome ?? item?.plannedIncome) : '',
+    plannedBudget: canViewCosts && (detail?.plannedBudget ?? item?.plannedBudget) != null ? String(detail?.plannedBudget ?? item?.plannedBudget) : '',
+    plannedIncome: canViewCosts && (detail?.plannedIncome ?? item?.plannedIncome) != null ? String(detail?.plannedIncome ?? item?.plannedIncome) : '',
     currency: detail?.currency || item?.currency || 'NIO',
     exchangeRate: (detail?.exchangeRate ?? item?.exchangeRate) && (detail?.exchangeRate ?? item?.exchangeRate) !== 1 ? String(detail?.exchangeRate ?? item?.exchangeRate) : '',
     notes: detail?.notes || item?.notes || '',
     memberUserIds: detail?.members ? detail.members.map((m: any) => m.user?.id || m.userId).filter(Boolean) : [],
->>>>>>> 71932637565d22bdade82e0c2fe423f7bbca699c
   });
 
   const [form, setForm] = useState<any>(() => buildInitialState(editing));
