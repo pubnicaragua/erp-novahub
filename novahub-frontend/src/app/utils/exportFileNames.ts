@@ -47,6 +47,7 @@ export function buildDownloadFileName(parts: readonly unknown[], extension: stri
 export function pdfFormatLabel(format?: PdfDownloadFormat | string): string {
   switch (format) {
     case 'letter': return 'carta';
+    case 'novahub-format': return 'novahub_format';
     case 'oficio': return 'oficio';
     case 'A4': return 'a4';
     case 'legal': return 'legal';

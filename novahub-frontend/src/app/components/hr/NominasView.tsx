@@ -50,6 +50,14 @@ const payrollEffectiveStatus = (payroll: any) => {
   return String(payroll?.status || 'PENDING').toUpperCase();
 };
 
+const isOverdue = (payroll: any) => {
+  const status = payrollEffectiveStatus(payroll);
+  if (status === 'PAID' || status === 'APPROVED') return false;
+  if (!payroll?.periodEnd) return false;
+  const end = new Date(payroll.periodEnd);
+  return !isNaN(end.getTime()) && end < new Date();
+};
+
 const startOfLocalDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
 const endOfLocalDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
 
@@ -99,7 +107,15 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
 
   const filteredPayrolls = payrolls.filter((p: any) => {
     const matchesEmployee = filterEmployee === 'all' || p.employeeId === filterEmployee;
-    const matchesStatus = filterStatus === 'all' || payrollEffectiveStatus(p) === filterStatus;
+    let matchesStatus = true;
+    if (filterStatus === 'OVERDUE') {
+      matchesStatus = isOverdue(p);
+    } else if (filterStatus === 'PENDING') {
+      const eff = payrollEffectiveStatus(p);
+      matchesStatus = eff === 'PENDING' || eff === 'REQUESTED' || isOverdue(p);
+    } else if (filterStatus !== 'all') {
+      matchesStatus = payrollEffectiveStatus(p) === filterStatus;
+    }
     return matchesEmployee && matchesStatus;
   });
 
@@ -111,17 +127,19 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     gross: (p: any) => Number(p.grossPay ?? p.grossPayBase ?? 0),
     net: (p: any) => Number(p.netPay ?? p.netPayBase ?? 0),
     cost: (p: any) => Number(p.costoTotalEmpresa ?? p.costoTotalEmpresaBase ?? 0),
-    status: (p: any) => String(p.status || ''),
+    status: (p: any) => (isOverdue(p) ? 'OVERDUE' : payrollEffectiveStatus(p)),
   };
   const colFilteredPayrolls = colFilters.applyTo(filteredPayrolls, colFilterGetters);
   const employeeNameOptions = [...new Map(filteredPayrolls.map((p: any) => [payrollEmployeeName(p), payrollEmployeeName(p)])).entries()]
     .map(([, label]) => ({ value: label as string, label: label as string, count: filteredPayrolls.filter((p: any) => payrollEmployeeName(p) === label).length }));
   const statusOptionsForFilter = [
-    { value: 'PENDING', label: 'Pendiente', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING').length },
+    { value: 'OVERDUE', label: 'Vencida', count: filteredPayrolls.filter((p: any) => isOverdue(p)).length },
+    { value: 'PENDING', label: 'Pendiente', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING' && !isOverdue(p)).length },
+    { value: 'REQUESTED', label: 'Solicitud enviada', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'REQUESTED' && !isOverdue(p)).length },
     { value: 'PARTIAL', label: 'Pago parcial', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PARTIAL').length },
     { value: 'APPROVED', label: 'Aprobada', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'APPROVED').length },
     { value: 'PAID', label: 'Pagado', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PAID').length },
-  ];
+  ].filter((opt) => opt.count > 0 || opt.value === 'OVERDUE' || opt.value === 'PENDING' || opt.value === 'PAID');
 
   const payrollBase = (p: any, field: string, baseField: string) => {
     const amount = Number(p[field] ?? p[baseField] ?? 0);
@@ -344,7 +362,15 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     const rows: any[] = Array.isArray(payload) ? payload : payload?.items || payload?.rows || payload?.data || [];
     return rows.filter((payroll) => {
       const employeeMatch = filterEmployee === 'all' || payroll.employeeId === filterEmployee;
-      const statusMatch = filterStatus === 'all' || payrollEffectiveStatus(payroll) === filterStatus;
+      let statusMatch = true;
+      if (filterStatus === 'OVERDUE') {
+        statusMatch = isOverdue(payroll);
+      } else if (filterStatus === 'PENDING') {
+        const eff = payrollEffectiveStatus(payroll);
+        statusMatch = eff === 'PENDING' || eff === 'REQUESTED' || isOverdue(payroll);
+      } else if (filterStatus !== 'all') {
+        statusMatch = payrollEffectiveStatus(payroll) === filterStatus;
+      }
       return employeeMatch && statusMatch;
     });
   };
@@ -356,14 +382,14 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     'Salario bruto': payrollDisplay(payroll, 'grossPay', 'grossPayBase'),
     'Neto a pagar': payrollDisplay(payroll, 'netPay', 'netPayBase'),
     'Costo empresa': payrollDisplay(payroll, 'costoTotalEmpresa', 'costoTotalEmpresaBase'),
-    Estado: pdfStatusLabel(payroll.status),
+    Estado: isOverdue(payroll) ? 'Vencida' : pdfStatusLabel(payroll.status),
   }));
 
   const handleExportPDF = async () => {
     if (!canPerform('HR_PAYROLL', 'export')) return;
     try {
       const exportRows = await loadPayrollExportRows();
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: exportRows, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Periodicidad', value: row => payrollFrequencyLabel(row.frequency || row.employee?.payFrequency) }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => pdfStatusLabel(row.status) }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: exportRows, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Periodicidad', value: row => payrollFrequencyLabel(row.frequency || row.employee?.payFrequency) }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => (isOverdue(row) ? 'Vencida' : pdfStatusLabel(row.status)) }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
       if (configured) { toast.success('Reporte PDF descargado'); return; }
       const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings)) as any;
@@ -379,7 +405,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           payrollDisplay(p, 'grossPay', 'grossPayBase'),
           payrollDisplay(p, 'netPay', 'netPayBase'),
           payrollDisplay(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase'),
-          pdfStatusLabel(p.status)
+          isOverdue(p) ? 'Vencida' : pdfStatusLabel(p.status)
         ];
       });
 
@@ -405,7 +431,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         sheets: [{ name: 'Nóminas', rows: payrollExportRows(rows) }],
         filters: {
           Empleado: filterEmployee === 'all' ? 'Todos' : employeeOptions.find((option) => option.value === filterEmployee)?.label || filterEmployee,
-          Estado: filterStatus === 'all' ? 'Todos' : filterStatus,
+          Estado: filterStatus === 'all' ? 'Todos' : filterStatus === 'OVERDUE' ? 'Vencida' : filterStatus,
         },
       });
       toast.success('Reporte Excel descargado');
@@ -429,12 +455,16 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       <StatCard key={`${key}-${currency}`} label={`${label} (${currency})`} value={formatExplicitAmount(amountByCurrency(currency), currency)} icon={icon} tone={tone} valueClassName="text-xl" onClick={onClick} />
     ))
     : <StatCard label={`${label}${valuationModeSuffix}`} value={formatCurrentAmount(total, displayCurrency)} icon={icon} tone={tone} sub={key === 'company-cost' ? (valuationModeSuffix ? valuationModeLabel : undefined) : undefined} valueClassName="text-xl" onClick={onClick} />;
-  const pendingCount = filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING').length;
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-  const isOverdue = (p: any) => p.status === 'PENDING' && new Date(p.periodEnd) < new Date();
-  const overduePayrolls = filteredPayrolls.filter(isOverdue);
+  const allEmployeePayrolls = payrolls.filter((p: any) => filterEmployee === 'all' || p.employeeId === filterEmployee);
+  const overduePayrolls = allEmployeePayrolls.filter(isOverdue);
   const overdueCount = overduePayrolls.length;
+  const pendingPayrollsCount = allEmployeePayrolls.filter((p: any) => {
+    const eff = payrollEffectiveStatus(p);
+    return eff === 'PENDING' || eff === 'REQUESTED' || isOverdue(p);
+  }).length;
+  const pendingToRequestCount = filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING').length;
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -444,7 +474,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <AlertTriangle className="size-4" />
           <AlertTitle className="font-black tracking-widest uppercase text-xs">Atención Requerida</AlertTitle>
           <AlertDescription>
-            Existen {overdueCount} nóminas(s) con fechas de pago o periodos calculados vencidos. Puedes visualizarlas filtrando por "Pendiente".
+            Existen {overdueCount} nóminas(s) con fechas de pago o periodos calculados vencidos. Puedes visualizarlas filtrando por "Vencida" o "Pendiente".
           </AlertDescription>
         </Alert>
       )}
@@ -456,13 +486,13 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         {renderPayrollMoneyCard('tax', 'Total Impuestos Empresa', Receipt, 'primary', totalCostoEmpresa - totalGross, originalCompanyTax, () => { setFilterStatus('all'); setCurrentPage(1); })}
         <StatCard
           label={overdueCount > 0 ? 'Pendientes (Vencidas)' : 'Pendientes'}
-          value={pendingCount}
+          value={overdueCount > 0 ? overdueCount : pendingPayrollsCount}
           icon={CheckCircle}
           tone={overdueCount > 0 ? 'red' : 'amber'}
           sub={overdueCount > 0 ? `${overdueCount} vencida(s) requieren atención` : 'Por pagar'}
-          active={filterStatus === 'PENDING'}
+          active={filterStatus === 'PENDING' || filterStatus === 'OVERDUE'}
           onClick={() => {
-            setFilterStatus(prev => (prev === 'PENDING' ? 'all' : 'PENDING'));
+            setFilterStatus(prev => (prev === 'OVERDUE' || prev === 'PENDING' ? 'all' : (overdueCount > 0 ? 'OVERDUE' : 'PENDING')));
             setCurrentPage(1);
           }}
         />
@@ -487,6 +517,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             className="h-8 px-3 rounded-md border border-input bg-background text-xs font-medium w-[130px]"
           >
             <option value="all">Todos</option>
+            <option value="OVERDUE">Vencida</option>
             <option value="PENDING">Pendiente</option>
             <option value="PARTIAL">Pago parcial</option>
             <option value="APPROVED">Aprobada</option>
@@ -497,10 +528,10 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           {canPerform('HR_PAYROLL', 'export') && (
             <ExportMenu onPdf={() => void handleExportPDF()} onExcel={() => void handleExportExcel()} pdfDescription="Nóminas con la estructura configurada" excelDescription="Todas las nóminas filtradas" />
           )}
-          {pendingCount > 0 && canPerform('HR_PAYROLL', 'approve') && (
+          {pendingToRequestCount > 0 && canPerform('HR_PAYROLL', 'approve') && (
             <Button size="sm" onClick={handleRequestAllPayments} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
               <Send className="size-4 mr-2" />
-              Solicitar pagos ({pendingCount})
+              Solicitar pagos ({pendingToRequestCount})
             </Button>
           )}
           <div className="flex items-center gap-2 mx-2">
@@ -585,10 +616,10 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                         effectiveStatus === 'PARTIAL' ? 'bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-500' :
                         effectiveStatus === 'APPROVED' ? 'bg-info/10 text-info dark:bg-info/30 dark:text-info' :
                         isOverdue(payroll) ? 'bg-destructive/10 text-destructive dark:bg-destructive/30 dark:text-destructive border border-destructive/20 shadow-sm shadow-destructive/20' :
-                        effectiveStatus === 'PENDING' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
+                        effectiveStatus === 'PENDING' || effectiveStatus === 'REQUESTED' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
                         'bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground'
                       }`}>
-                        {effectiveStatus === 'PAID' ? 'Pagado' : effectiveStatus === 'PARTIAL' ? 'Pago parcial' : effectiveStatus === 'APPROVED' ? 'Aprobada' : isOverdue(payroll) ? 'Vencida' : effectiveStatus === 'PENDING' ? 'Pendiente' : effectiveStatus}
+                        {effectiveStatus === 'PAID' ? 'Pagado' : effectiveStatus === 'PARTIAL' ? 'Pago parcial' : effectiveStatus === 'APPROVED' ? 'Aprobada' : isOverdue(payroll) ? 'Vencida' : effectiveStatus === 'REQUESTED' ? 'Solicitada' : effectiveStatus === 'PENDING' ? 'Pendiente' : pdfStatusLabel(effectiveStatus)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -710,10 +741,10 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                     effectiveStatus === 'PARTIAL' ? 'bg-orange-500/10 text-orange-600 dark:bg-orange-500/20' :
                     effectiveStatus === 'APPROVED' ? 'bg-info/10 text-info dark:bg-info/30' :
                     isOverdue(payroll) ? 'bg-destructive/10 text-destructive dark:bg-destructive/30 border border-destructive/20 shadow-destructive/20' :
-                    effectiveStatus === 'PENDING' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
+                    effectiveStatus === 'PENDING' || effectiveStatus === 'REQUESTED' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
                     'bg-muted text-muted-foreground dark:bg-muted'
                   }`}>
-                    {effectiveStatus === 'PAID' ? 'PAGADO' : effectiveStatus === 'PARTIAL' ? 'PAGO PARCIAL' : effectiveStatus === 'APPROVED' ? 'APROBADA' : isOverdue(payroll) ? 'VENCIDA' : effectiveStatus === 'PENDING' ? 'PENDIENTE' : effectiveStatus}
+                    {effectiveStatus === 'PAID' ? 'PAGADO' : effectiveStatus === 'PARTIAL' ? 'PAGO PARCIAL' : effectiveStatus === 'APPROVED' ? 'APROBADA' : isOverdue(payroll) ? 'VENCIDA' : effectiveStatus === 'REQUESTED' ? 'SOLICITADA' : effectiveStatus === 'PENDING' ? 'PENDIENTE' : pdfStatusLabel(effectiveStatus).toUpperCase()}
                   </span>
                 </div>
 

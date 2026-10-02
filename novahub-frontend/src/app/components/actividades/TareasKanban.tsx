@@ -16,10 +16,10 @@ export interface TaskKanbanColumn {
 }
 
 const KANBAN_COLUMNS: TaskKanbanColumn[] = [
-  { id: 'col_pending', label: 'Pendiente', status: 'PENDING', color: '#f59e0b', bgBadge: 'bg-amber-500/10 text-amber-500' },
-  { id: 'col_in_progress', label: 'En Progreso', status: 'IN_PROGRESS', color: '#3b82f6', bgBadge: 'bg-blue-500/10 text-blue-500' },
-  { id: 'col_waiting_approval', label: 'Por Aprobar', status: 'WAITING_APPROVAL', color: '#a855f7', bgBadge: 'bg-purple-500/10 text-purple-500' },
-  { id: 'col_completed', label: 'Completada', status: 'COMPLETED', color: '#10b981', bgBadge: 'bg-emerald-500/10 text-emerald-500' },
+  { id: 'col_pending', label: 'Pendiente', status: 'PENDING', color: '#3b82f6', bgBadge: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+  { id: 'col_in_progress', label: 'En Progreso', status: 'IN_PROGRESS', color: '#3b82f6', bgBadge: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+  { id: 'col_waiting_approval', label: 'Por Aprobar', status: 'WAITING_APPROVAL', color: 'var(--primary)', bgBadge: 'bg-primary/10 text-primary' },
+  { id: 'col_completed', label: 'Completada', status: 'COMPLETED', color: '#10b981', bgBadge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
 ];
 
 interface TareasKanbanProps {

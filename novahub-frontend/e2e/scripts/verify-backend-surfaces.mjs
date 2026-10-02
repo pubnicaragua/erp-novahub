@@ -4,7 +4,9 @@ import process from 'node:process';
 
 const frontendDir = process.cwd();
 const backendDir = process.env.E2E_BACKEND_DIR?.trim()
-  || path.resolve(frontendDir, '..', '..', 'Backend');
+  || (fs.existsSync(path.resolve(frontendDir, '..', '..', 'BackendERPNH', 'src'))
+    ? path.resolve(frontendDir, '..', '..', 'BackendERPNH')
+    : path.resolve(frontendDir, '..', '..', 'Backend'));
 const sourceDir = path.join(backendDir, 'src');
 
 /**
@@ -29,6 +31,7 @@ const SURFACE_CLASSIFICATION = {
   'src/financing/financing.controller.ts': { category: 'ui', uiModule: 'financiamiento-pyme' },
   'src/fixed-assets/fixed-assets.controller.ts': { category: 'backend-only', reason: 'activos fijos sin superficie raíz propia' },
   'src/force-sales/force-sales.controller.ts': { category: 'ui', uiModule: 'fuerza-comercial' },
+  'src/activities/guest-rsvp.controller.ts': { category: 'public', reason: 'invitaciones y confirmaciones públicas de actividades' },
   'src/health/health.controller.ts': { category: 'infrastructure', reason: 'health checks' },
   'src/hr/hr.controller.ts': { category: 'ui', uiModule: 'rh' },
   'src/inventory/bank-account.controller.ts': { category: 'backend-only', reason: 'cuentas bancarias usadas por Finanzas/Caja' },
@@ -36,6 +39,7 @@ const SURFACE_CLASSIFICATION = {
   'src/inventory/inventory.controller.ts': { category: 'ui', uiModule: 'inventario' },
   'src/inventory/sucursal.controller.ts': { category: 'backend-only', reason: 'alcance operativo de sucursal' },
   'src/inventory/warehouse-supply.controller.ts': { category: 'backend-only', reason: 'abastecimiento de bodega' },
+  'src/intl-imports/intl-imports.controller.ts': { category: 'ui', uiModule: 'intl-imports' },
   'src/leads/leads.controller.ts': { category: 'backend-only', reason: 'compatibilidad de leads' },
   'src/legal/legal.controller.ts': { category: 'ui', uiModule: 'asesoria-legal' },
   'src/logistics/logistics.controller.ts': { category: 'backend-only', reason: 'logística auxiliar' },
@@ -43,6 +47,9 @@ const SURFACE_CLASSIFICATION = {
   'src/module-pricing/module-pricing.controller.ts': { category: 'backend-only', reason: 'precios de módulos de plataforma' },
   'src/notifications/notifications.controller.ts': { category: 'ui', uiModule: 'notificaciones' },
   'src/novachat/novachat.controller.ts': { category: 'ui', uiModule: 'novachat' },
+  'src/novachat/chatwoot-webhook.controller.ts': { category: 'public', reason: 'webhook externo de sincronización Chatwoot' },
+  'src/nova-pulse/nova-pulse.controller.ts': { category: 'ui', uiModule: 'configuracion' },
+  'src/integrations/poket/poket.controller.ts': { category: 'ui', uiModule: 'ventas' },
   'src/pdf-document-designs/pdf-document-designs.controller.ts': { category: 'backend-only', reason: 'plantillas PDF' },
   'src/pdf-previews/pdf-previews.controller.ts': { category: 'backend-only', reason: 'previsualización PDF' },
   'src/projects/projects.controller.ts': { category: 'ui', uiModule: 'proyectos' },

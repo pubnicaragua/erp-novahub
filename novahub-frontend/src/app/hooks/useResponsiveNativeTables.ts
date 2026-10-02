@@ -30,7 +30,7 @@ function enhanceNativeTables(scope?: Iterable<HTMLTableElement>) {
       Array.from(body.rows).forEach((row) => {
         Array.from(row.cells).forEach((cell, index) => {
           if (cell.hasAttribute('colspan')) return;
-          const label = labels[index] || `Campo ${index + 1}`;
+          const label = headerRow ? (labels[index] ?? '') : (labels[index] || `Campo ${index + 1}`);
           if (cell.dataset.label !== label) cell.dataset.label = label;
         });
       });
@@ -38,7 +38,10 @@ function enhanceNativeTables(scope?: Iterable<HTMLTableElement>) {
 
     table.dataset.responsiveCards = 'true';
     if (isPlatformQuoteHistory) table.dataset.platformQuoteHistory = 'true';
-    table.parentElement?.setAttribute('data-responsive-cards-container', 'true');
+    const parent = table.parentElement;
+    if (parent && !parent.className.includes('max-h-') && !parent.className.includes('overflow-y-auto')) {
+      parent.setAttribute('data-responsive-cards-container', 'true');
+    }
   });
 }
 

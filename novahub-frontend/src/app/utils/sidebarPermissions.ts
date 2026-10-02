@@ -20,6 +20,7 @@ export const SIDEBAR_PERMISSION_PARENT_ORDER = [
   'PURCHASES',
   'RESTAURANT',
   'TRACKING',
+  'IMPORT_INTL',
   'INVENTORY',
   'FINANCIAL',
   'ACCOUNTING',
@@ -81,6 +82,12 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'TRACKING_BILLING', label: 'Disponibles para facturar', parent: 'TRACKING' },
   { id: 'TRACKING_CONFIG', label: 'Configuración de tracking', parent: 'TRACKING' },
 
+  // Importaciones Internacionales
+  { id: 'IMPORT_INTL_ORIGIN', label: 'Bodega Origen', parent: 'IMPORT_INTL' },
+  { id: 'IMPORT_INTL_CONTAINERS', label: 'Contenedores', parent: 'IMPORT_INTL' },
+  { id: 'IMPORT_INTL_CUSTOMS', label: 'Aduana / Prorrateo', parent: 'IMPORT_INTL' },
+  { id: 'IMPORT_INTL_CONFIG', label: 'Configuración importaciones', parent: 'IMPORT_INTL' },
+
   // Inventario
   // Productos, Servicios, Ajustes, Auditorías y Pérdidas son vistas del
   // mismo catálogo/control de inventario y usan sus permisos existentes.
@@ -137,7 +144,8 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   // Proyectos
   { id: 'PROJECTS_LIST', label: 'Portafolio', parent: 'PROJECTS' },
   { id: 'PROJECTS_TASKS', label: 'Planificación y tareas', parent: 'PROJECTS' },
-  { id: 'PROJECTS_MILESTONES', label: 'Hitos', parent: 'PROJECTS' },
+  { id: 'PROJECTS_MILESTONES', label: 'Hitos y Avances', parent: 'PROJECTS' },
+  { id: 'PROJECTS_QUOTATIONS', label: 'Cotizaciones Materiales', parent: 'PROJECTS' },
   { id: 'PROJECTS_EXPENSES', label: 'Costos y presupuesto', parent: 'PROJECTS' },
   { id: 'PROJECTS_DOCUMENTS', label: 'Documentos', parent: 'PROJECTS' },
   { id: 'PROJECTS_TIME', label: 'Tiempo y cronograma', parent: 'PROJECTS' },
@@ -247,6 +255,12 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'tracking-facturacion': ['TRACKING_BILLING'],
   'tracking-configuracion': ['TRACKING_CONFIG'],
 
+  'intl-imports': ['IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  'bodega-origen': ['IMPORT_INTL_ORIGIN', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  contenedores: ['IMPORT_INTL_CONTAINERS', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  'aduana-prorrateo': ['IMPORT_INTL_CUSTOMS', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  'intl-configuracion': ['IMPORT_INTL_CONFIG', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+
   'dashboard-hr': ['HR_DASHBOARD'],
   empleados: ['HR_EMPLOYEES'],
   departamentos: ['HR_DEPARTMENTS'],
@@ -311,12 +325,18 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   calendario: ['ACTIVITIES_CALENDAR'],
   reuniones: ['ACTIVITIES_MEETINGS'],
 
-  proyectos: ['PROJECTS_LIST'],
-  'proyectos-tareas': ['PROJECTS_TASKS'],
-  'proyectos-hitos': ['PROJECTS_MILESTONES'],
-  'proyectos-costos': ['PROJECTS_EXPENSES'],
-  'proyectos-documentos': ['PROJECTS_DOCUMENTS'],
-  'proyectos-tiempo': ['PROJECTS_TIME'],
+  proyectos: ['PROJECTS_LIST', 'PROJECTS'],
+  'proyectos-resumen': ['PROJECTS_LIST', 'PROJECTS'],
+  'proyectos-cotizaciones': ['PROJECTS_QUOTATIONS', 'PROJECTS'],
+  'proyectos-evm': ['PROJECTS', 'PROJECTS'],
+  'proyectos-planificacion': ['PROJECTS_TASKS', 'PROJECTS'],
+  'proyectos-costos': ['PROJECTS_EXPENSES', 'PROJECTS'],
+  'proyectos-actividades': ['PROJECTS_LIST', 'PROJECTS'],
+  // Legacy aliases fallback
+  'proyectos-tareas': ['PROJECTS_TASKS', 'PROJECTS'],
+  'proyectos-hitos': ['PROJECTS_MILESTONES', 'PROJECTS'],
+  'proyectos-documentos': ['PROJECTS_DOCUMENTS', 'PROJECTS'],
+  'proyectos-tiempo': ['PROJECTS_TIME', 'PROJECTS'],
 
   tickets: ['TICKETS_LIST'],
   // TICKETS_FAQS es el identificador histórico de esta misma vista.
@@ -487,4 +507,9 @@ export const LEGACY_VIEW_PERMISSION_ALIASES: Record<string, string[]> = {
   HR_DEPARTMENTS: ['HR_EMPLOYEES'],
   ACTIVITIES_CALENDAR: ['ACTIVITIES_EVENTS'],
   ACTIVITIES_MEETINGS: ['ACTIVITIES_EVENTS'],
+  IMPORT_INTL: ['IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING', 'INVENTORY'],
+  IMPORT_INTL_ORIGIN: ['IMPORT_INTL_ORIGIN', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  IMPORT_INTL_CONTAINERS: ['IMPORT_INTL_CONTAINERS', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  IMPORT_INTL_CUSTOMS: ['IMPORT_INTL_CUSTOMS', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  IMPORT_INTL_CONFIG: ['IMPORT_INTL_CONFIG', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
 };

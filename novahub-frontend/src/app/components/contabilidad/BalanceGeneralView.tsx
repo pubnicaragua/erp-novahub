@@ -7,6 +7,7 @@ import { Separator } from '../ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Search, Filter, Scale, CheckCircle2, AlertTriangle, ChevronDown, ChevronUp, Settings2, X } from 'lucide-react';
 import { cn } from '../ui/utils';
+import * as XLSX from 'xlsx';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
@@ -14,6 +15,11 @@ import { AccountMovementsDetail } from './AccountMovementsDetail';
 import { ReportSectionsDialog, type ReportSection, type ReportSign } from './ReportSectionsDialog';
 import { DateField } from '../ui/DateField';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { ExportMenu } from '../ui/ExportMenu';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 const BALANCE_SHEET_SECTIONS: ReportSection[] = [
   { id: 'activos-corrientes', label: 'Activos corrientes', sign: 'ASSET', accountIds: [] },
@@ -67,6 +73,8 @@ interface BSData {
 }
 
 export function BalanceGeneralView() {
+  const { canPerform, user } = useAuth();
+  const canExportBalanceSheet = canPerform('ACCOUNTING_BALANCE_SHEET', 'export') || canPerform('ACCOUNTING_BALANCE_SHEET', 'view');
   const { baseCurrency, formatCurrentAmount } = useCurrency();
   const [dateFrom, setDateFrom] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -144,6 +152,89 @@ export function BalanceGeneralView() {
     return accounts.filter(a =>
       a.cuenta.toLowerCase().includes(term) || a.codigo.toLowerCase().includes(term),
     );
+  };
+
+  const handleExportExcel = () => {
+    if (!canExportBalanceSheet || !data) return;
+    const sections = data.sections && data.sections.length > 0
+      ? data.sections
+      : [
+        { id: 'assets', label: 'ACTIVOS', sign: 'ASSET', accounts: data.assets, total: data.totalAssets },
+        { id: 'liabilities', label: 'PASIVOS', sign: 'LIABILITY', accounts: data.liabilities, total: data.totalLiabilities },
+        { id: 'equity', label: 'PATRIMONIO', sign: 'EQUITY', accounts: data.equity, total: data.totalEquity },
+      ];
+    const rows = sections.flatMap((section) => [
+      ...section.accounts.map((account) => ({
+        Sección: section.label,
+        Código: account.codigo,
+        Cuenta: account.cuenta,
+        ...(showOpening ? { 'Saldo inicial': account.openingAmount != null ? account.openingAmount : 0 } : {}),
+        'Saldo': account.currentAmount,
+      })),
+      { Sección: `Total ${section.label}`, Código: '', Cuenta: '', ...(showOpening ? { 'Saldo inicial': '' } : {}), 'Saldo': section.total },
+    ]);
+    const workbook = XLSX.utils.book_new();
+    const detailSheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]);
+    detailSheet['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 38 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Balance general');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ['Reporte', 'Balance General'],
+      ['Corte', date],
+      ...(dateFrom ? [['Desde', dateFrom]] : []),
+      ['Moneda', baseCurrency],
+      ['Total activos', data.totalAssets],
+      ['Total pasivos', data.totalLiabilities],
+      ['Total patrimonio', data.totalEquity],
+      ['Total pasivo y patrimonio', totalPasivoPatrimonio],
+      ['Estado', isBalanced ? 'Balanceado' : 'No balanceado'],
+    ]), 'Resumen');
+    XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['balance_general'], 'xlsx', dateFrom, date));
+    toast.success(`Balance general exportado con ${rows.length} fila(s)`);
+  };
+
+  const handleExportPdf = async (format?: PdfDownloadFormat) => {
+    if (!canExportBalanceSheet || !data) return;
+    const sections = data.sections && data.sections.length > 0
+      ? data.sections
+      : [
+        { id: 'assets', label: 'ACTIVOS', sign: 'ASSET', accounts: data.assets, total: data.totalAssets },
+        { id: 'liabilities', label: 'PASIVOS', sign: 'LIABILITY', accounts: data.liabilities, total: data.totalLiabilities },
+        { id: 'equity', label: 'PATRIMONIO', sign: 'EQUITY', accounts: data.equity, total: data.totalEquity },
+      ];
+    const rows = sections.flatMap((section) =>
+      section.accounts.map((account) => ({
+        section: section.label,
+        code: account.codigo,
+        account: account.cuenta,
+        ...(showOpening ? { opening: account.openingAmount != null ? fmt(account.openingAmount) : '—' } : {}),
+        amount: fmt(account.currentAmount),
+      })),
+    );
+    const columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }> = [
+      { header: 'Sección', value: (row: any) => row.section },
+      { header: 'Código', value: (row: any) => row.code },
+      { header: 'Cuenta', value: (row: any) => row.account },
+      ...(showOpening ? [{ header: 'Saldo inicial', value: (row: any) => row.opening, align: 'right' as const }] : []),
+      { header: 'Saldo', value: (row: any) => row.amount, align: 'right' as const },
+    ];
+    await generateConfiguredReportTemplate({
+      targetKey: 'contabilidad.balance-sheet',
+      title: `Balance General · Al ${date}`,
+      tenantName: user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub ERP',
+      tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
+      rows,
+      columns,
+      format: format || 'configured',
+      totals: {
+        'Total activos': fmt(data.totalAssets),
+        'Total pasivos': fmt(data.totalLiabilities),
+        'Total patrimonio': fmt(data.totalEquity),
+        'Total pasivo y patrimonio': fmt(totalPasivoPatrimonio),
+        'Estado': isBalanced ? 'Balanceado' : 'No balanceado',
+      },
+      fileName: buildDateFilteredDownloadFileName(['balance_general'], 'pdf', dateFrom, date),
+    });
+    toast.success(format === 'novahub-format' ? `PDF exportado con NovaHubFormat (${rows.length} cuentas)` : `PDF exportado con ${rows.length} cuenta(s)`);
   };
 
   const renderSection = (title: string, accounts: BSAccount[], total: number, openingTotal: number | undefined, headerClass: string) => {
@@ -352,6 +443,13 @@ export function BalanceGeneralView() {
           )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2">
+          {canExportBalanceSheet && (
+            <ExportMenu
+              disabled={!data || loading}
+              onPdf={(format) => void handleExportPdf(format)}
+              onExcel={handleExportExcel}
+            />
+          )}
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
             <Settings2 className="size-4" /> Configuración
           </Button>

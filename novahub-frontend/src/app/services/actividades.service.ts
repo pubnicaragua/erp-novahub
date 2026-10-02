@@ -39,6 +39,12 @@ export const tasksService = {
   reject: async (id: string, reason: string) => {
     return await api.post(`/activities/tasks/${id}/reject`, { reason });
   },
+  reassign: async (id: string, payload: { newAssigneeId: string; reason: string }) => {
+    return await api.post(`/activities/tasks/${id}/reassign`, payload) as Task;
+  },
+  claim: async (id: string) => {
+    return await api.post(`/activities/tasks/${id}/claim`, {}) as Task;
+  },
   // Subtasks
   getSubtasks: async (id: string) => {
     return await api.get(`/activities/tasks/${id}/subtasks`) as ActivitySubtask[];

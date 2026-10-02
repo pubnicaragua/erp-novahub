@@ -30,6 +30,7 @@ import { DateField } from '../ui/DateField';
 import { generateTrialBalancePDF } from '../../utils/pdfGenerator';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { ExportMenu } from '../ui/ExportMenu';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -500,7 +501,7 @@ export function BalanceComprobacionView() {
     ? '✓ BALANCEADO — Débitos = Créditos'
     : `✗ NO BALANCEADO — Diferencia de C$ ${fmt(differenceAbs)} (${higherSide})`;
 
-  const handlePrint = async () => {
+  const handlePrint = async (format?: PdfDownloadFormat) => {
     if (!canExportTrialBalance) return;
     const flattenForPdf = (nodes: TrialBalanceTreeNode[]): any[] => {
       const out: any[] = [];
@@ -527,12 +528,13 @@ export function BalanceComprobacionView() {
         tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
         dateFrom,
         dateTo,
+        format: format || 'configured',
         totals: {
           debitos: fmt(totalDebitos),
           creditos: fmt(totalCreditos),
         },
       });
-      toast.success('Balance de comprobación generado con la plantilla de esta vista');
+      toast.success(format === 'novahub-format' ? 'Balance de comprobación exportado con NovaHubFormat' : 'Balance de comprobación generado con la plantilla de esta vista');
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el balance de comprobación');
     }
