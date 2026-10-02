@@ -231,6 +231,7 @@ export function CustomerDetailDrawer({
   const [historyExportScope, setHistoryExportScope] = useState<HistoryExportScope>('ALL');
   const [historyExportFilter, setHistoryExportFilter] = useState<string>('ALL');
   const [historyExportCurrency, setHistoryExportCurrency] = useState<HistoryExportCurrency>(baseCurrency);
+  const [historyExportNovaHubFormat, setHistoryExportNovaHubFormat] = useState(false);
 
   useEffect(() => {
     if (!customerId) {
@@ -478,7 +479,7 @@ export function CustomerDetailDrawer({
 
   const confirmHistoryExport = () => {
     setHistoryExportDialogOpen(false);
-    void downloadHistory('configured', historyExportScope);
+    void downloadHistory(historyExportNovaHubFormat ? 'novahub-format' : 'configured', historyExportScope);
   };
 
   const createPortalLink = async () => {
@@ -906,6 +907,18 @@ export function CustomerDetailDrawer({
             </Select>
             <p className="text-[11px] text-muted-foreground">Los montos se convertirán a la moneda seleccionada antes de generar el PDF.</p>
           </div>
+          <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-primary/25 bg-primary/5 p-3 transition-colors hover:bg-primary/10">
+            <input
+              type="checkbox"
+              checked={historyExportNovaHubFormat}
+              onChange={(e) => setHistoryExportNovaHubFormat(e.target.checked)}
+              className="mt-0.5 size-4 rounded border-primary text-primary focus:ring-primary"
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-black text-primary">Exportar con NovaHubFormat</span>
+              <span className="block text-[10px] text-muted-foreground">Diseño corporativo estructurado e independiente, adaptado a Marca y Tema.</span>
+            </span>
+          </label>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setHistoryExportDialogOpen(false)} disabled={exportingHistory}>Cancelar</Button>
             <Button type="button" onClick={confirmHistoryExport} disabled={!selectedHistoryRows.length || exportingHistory} className="gap-2">
@@ -1066,7 +1079,19 @@ function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName, 
   const items = Array.isArray(document.items) ? document.items : [];
   const additionalCharges = getSalesAdditionalCharges(document);
   const deliveryAmount = Array.isArray(document.selectedCharges) ? 0 : Number(document.deliveryAmount || 0);
-  const documentType = transaction.kind === 'Cotización' ? 'estimate' : transaction.kind === 'Orden de venta' ? 'order' : undefined;
+  const documentType = transaction.kind === 'Cotización'
+    ? 'estimate'
+    : transaction.kind === 'Orden de venta'
+      ? 'order'
+      : transaction.kind === 'Nota de crédito'
+        ? 'return'
+        : transaction.kind === 'Crédito'
+          ? 'credit-note'
+          : transaction.kind === 'Pago recibido'
+            ? 'payment'
+            : transaction.kind === 'Factura recurrente'
+              ? 'recurring'
+              : undefined;
   const handleDownloadPdf = async (format: PdfDownloadFormat) => {
     if (!documentType) return;
     const previewToastId = toast.loading(`Preparando la previsualización de ${transaction.kind.toLowerCase()}...`);

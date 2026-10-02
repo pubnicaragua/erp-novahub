@@ -21,6 +21,7 @@ export type StoragePurpose =
   | 'activity-log'
   | 'task-evidence'
   | 'fiscal-reports'
+  | 'project-evidence'
   | 'inventory-audit';
 
 interface PreparedUpload {

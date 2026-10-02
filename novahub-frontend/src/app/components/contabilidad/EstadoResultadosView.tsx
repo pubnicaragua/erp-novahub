@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { ExportMenu } from '../ui/ExportMenu';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 interface PnLAccount {
   accountId: string;
@@ -45,7 +46,7 @@ interface PnLData {
 }
 
 export function EstadoResultadosView() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canExportProfitLoss = canPerform('ACCOUNTING_PROFIT_LOSS', 'export');
   const { baseCurrency, formatCurrentAmount } = useCurrency();
   const toLocalDate = (value: Date) => {
@@ -148,7 +149,7 @@ export function EstadoResultadosView() {
     toast.success(`Estado de resultados exportado con ${rows.length} fila(s)`);
   };
 
-  const handleExportPdf = async () => {
+  const handleExportPdf = async (format?: PdfDownloadFormat) => {
     if (!canExportProfitLoss || !data) return;
     const sections = data.sections && data.sections.length > 0
       ? data.sections
@@ -166,8 +167,10 @@ export function EstadoResultadosView() {
     await generateConfiguredReportTemplate({
       targetKey: 'contabilidad.profit-loss',
       title: 'Estado de resultados',
-      tenantName: 'Mi Empresa',
+      tenantName: user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub ERP',
+      tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
       rows,
+      format: format || 'configured',
       columns: [
         { header: 'Sección', value: row => row.section },
         { header: 'Código', value: row => row.code },
@@ -178,7 +181,7 @@ export function EstadoResultadosView() {
       totals: { 'Total ingresos': fmt(data.totalIngresos), 'Total gastos': fmt(data.totalGastos), 'Resultado neto': fmt(netIncome) },
       fileName: buildDateFilteredDownloadFileName(['estado_resultados'], 'pdf', dateFrom, dateTo),
     });
-    toast.success(`PDF exportado con ${rows.length} cuenta(s)`);
+    toast.success(format === 'novahub-format' ? `PDF exportado con NovaHubFormat (${rows.length} cuentas)` : `PDF exportado con ${rows.length} cuenta(s)`);
   };
 
   const filterAccounts = (accounts: PnLAccount[]) => {
@@ -364,7 +367,7 @@ export function EstadoResultadosView() {
           )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2">
-          {canExportProfitLoss && <ExportMenu disabled={!data || loading} onPdf={() => void handleExportPdf()} onExcel={handleExportExcel} />}
+          {canExportProfitLoss && <ExportMenu disabled={!data || loading} onPdf={(format) => void handleExportPdf(format)} onExcel={handleExportExcel} />}
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
             <Settings2 className="size-4" /> Configuración
           </Button>

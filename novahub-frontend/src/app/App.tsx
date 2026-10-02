@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import * as Sentry from '@sentry/react';
 import { Toaster } from './components/ui/sonner';
-import { AuthProvider, useAuth, type Module } from './contexts/AuthContext';
+import { useAuth, type Module } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { ImpersonationProvider, useImpersonation } from './contexts/ImpersonationContext';
@@ -24,6 +24,8 @@ import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMe
 import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
 import { PublicTrackingPage } from './components/public/PublicTrackingPage';
 import { PoketPaymentCallbackPage } from './components/public/PoketPaymentCallbackPage';
+import { PublicProjectProgressPage } from './components/public/PublicProjectProgressPage';
+import { PublicSupplierQuotationPage } from './components/public/PublicSupplierQuotationPage';
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { BrowserNotificationPrompt } from './components/notificaciones/BrowserNotificationPrompt';
@@ -48,6 +50,7 @@ const InventarioPage = lazyWithChunkRecovery(async () => {
 const VentasPage = lazyWithChunkRecovery(() => import('./components/VentasPage').then(m => ({ default: m.VentasPage })), 'ventas');
 const RestaurantePage = lazyWithChunkRecovery(() => import('./components/RestaurantePage').then(m => ({ default: m.RestaurantePage })), 'restaurante');
 const TrackingPage = lazyWithChunkRecovery(() => import('./components/TrackingPage').then(m => ({ default: m.TrackingPage })), 'tracking');
+const IntlImportsPage = lazyWithChunkRecovery(() => import('./components/intl-imports/IntlImportsPage').then(m => ({ default: m.IntlImportsPage })), 'intl-imports');
 const ComprasPage = lazyWithChunkRecovery(() => import('./components/ComprasPage').then(m => ({ default: m.ComprasPage })), 'compras');
 const FinanzasPage = lazyWithChunkRecovery(() => import('./components/FinanzasPage').then(m => ({ default: m.FinanzasPage })), 'finanzas');
 const RecursosHumanosPage = lazyWithChunkRecovery(() => import('./components/RecursosHumanosPage').then(m => ({ default: m.RecursosHumanosPage })), 'rh');
@@ -197,12 +200,16 @@ function DashboardLayout() {
   }, [searchParams, canPerform]);
 
   useEffect(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams);
     if (activeModule && activeModule !== 'overview') {
       params.set('m', activeModule);
+    } else {
+      params.delete('m');
     }
     if (activeSubModule) {
       params.set('sm', activeSubModule);
+    } else {
+      params.delete('sm');
     }
     const next = params.toString();
     const current = searchParams.toString();
@@ -401,6 +408,7 @@ function DashboardLayout() {
       case 'ventas': return <ModuleErrorBoundary moduleName="Ventas"><VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'restaurante': return <ModuleErrorBoundary moduleName="Restaurante"><RestaurantePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'tracking': return <ModuleErrorBoundary moduleName="Tracking"><TrackingPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
+      case 'intl-imports': return <ModuleErrorBoundary moduleName="Importaciones Internacionales"><IntlImportsPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'compras': return <ModuleErrorBoundary moduleName="Compras"><ComprasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'finanzas': return <ModuleErrorBoundary moduleName="Finanzas"><FinanzasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
@@ -579,6 +587,8 @@ function AppContent() {
   if (location.pathname.startsWith('/rsvp/') || location.pathname.startsWith('/public/rsvp/')) return <PublicRsvpPage />;
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
   if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
+  if (location.pathname.startsWith('/public/project/')) return <PublicProjectProgressPage />;
+  if (location.pathname.startsWith('/public/subquotation/')) return <PublicSupplierQuotationPage />;
   if (location.pathname.startsWith('/restaurant/menu/')) {
     const tableToken = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
     return <PublicRestaurantMenuPage tableToken={tableToken} />;
@@ -668,16 +678,14 @@ export default function App() {
     <>
       <Toaster position="top-right" />
       <Sentry.ErrorBoundary fallback={<ErrorBoundaryFallback />}>
-        <AuthProvider>
-          <ThemeProvider>
-            <CurrencyProvider>
-              <ImpersonationProvider>
-                <ActionClickGuard />
-                <AppContent />
-              </ImpersonationProvider>
-            </CurrencyProvider>
-          </ThemeProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <CurrencyProvider>
+            <ImpersonationProvider>
+              <ActionClickGuard />
+              <AppContent />
+            </ImpersonationProvider>
+          </CurrencyProvider>
+        </ThemeProvider>
       </Sentry.ErrorBoundary>
     </>
   );

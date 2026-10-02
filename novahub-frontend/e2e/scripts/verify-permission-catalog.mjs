@@ -6,7 +6,11 @@ const frontendRoot = process.cwd();
 const sidebarPath = path.join(frontendRoot, 'src', 'app', 'utils', 'sidebarPermissions.ts');
 const permissionsPath = path.join(frontendRoot, 'src', 'app', 'utils', 'permissions.ts');
 const sidebarSource = fs.readFileSync(path.join(frontendRoot, 'src', 'app', 'components', 'Sidebar.tsx'), 'utf8');
-const backendRoot = path.resolve(frontendRoot, '..', '..', 'Backend', 'src');
+const backendDir = process.env.E2E_BACKEND_DIR?.trim()
+  || (fs.existsSync(path.resolve(frontendRoot, '..', '..', 'BackendERPNH', 'src'))
+    ? path.resolve(frontendRoot, '..', '..', 'BackendERPNH')
+    : path.resolve(frontendRoot, '..', '..', 'Backend'));
+const backendRoot = path.join(backendDir, 'src');
 const sidebar = await import(pathToFileURL(sidebarPath).href);
 const permissions = await import(pathToFileURL(permissionsPath).href);
 

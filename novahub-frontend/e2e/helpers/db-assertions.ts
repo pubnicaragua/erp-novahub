@@ -34,6 +34,7 @@ const SAFE_TABLES = {
   salesProspects: 'SalesProspect',
   activities: 'Activity',
   activityEvidences: 'ActivityEvidence',
+  activityLogs: 'ActivityLog',
   reminders: 'Reminder',
   projects: 'Project',
   projectTasks: 'Task',
@@ -41,6 +42,15 @@ const SAFE_TABLES = {
   projectBudgetLines: 'ProjectBudgetLine',
   projectCosts: 'ProjectCost',
   projectActivities: 'ProjectActivity',
+  projectProgressCaptures: 'ProjectProgressCapture',
+  projectPublicLinks: 'ProjectPublicLink',
+  projectMaterialQuotations: 'ProjectMaterialQuotation',
+  projectQuotationMaterials: 'ProjectQuotationMaterial',
+  projectSubQuotations: 'ProjectSubQuotation',
+  projectSubQuotationOffers: 'ProjectSubQuotationOffer',
+  projectSubQuotationTerms: 'ProjectSubQuotationTermsAcceptance',
+  projectSubQuotationHistory: 'ProjectSubQuotationHistory',
+  projectPublicAccessLogs: 'ProjectPublicAccessLog',
   restaurantTables: 'RestaurantTable',
   restaurantOrders: 'RestaurantOrder',
   restaurantOrderItems: 'RestaurantOrderItem',
@@ -400,6 +410,14 @@ export class DbAssertions {
     await this.connect();
     return this.runtime.client.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT id, "activityId", "fileUrl", "uploadedBy" FROM ${tableName('activityEvidences')} WHERE "activityId" = $1 ORDER BY "uploadedAt" ASC`,
+      activityId,
+    );
+  }
+
+  async activityLogsForActivity(activityId: string): Promise<Array<Record<string, unknown>>> {
+    await this.connect();
+    return this.runtime.client.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT id, "activityId", action, entity, details, "clientTenantId", "createdAt" FROM ${tableName('activityLogs')} WHERE "activityId" = $1 ORDER BY "createdAt" ASC`,
       activityId,
     );
   }
