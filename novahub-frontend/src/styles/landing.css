@@ -1,531 +1,168 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,500;1,500;1,600&display=swap');
 
 #novahub-landing {
-  --nova-bosque: #01422C;
-  --nova-verde: #74C044;
-  --nova-menta: #C8E6D0;
-  --nova-blanco: #FFFFFF;
+  --nh-grafito: #141313;
+  --nh-night: #202324;
+  --nh-bosque: #01422c;
+  --nh-verde: #74c044;
+  --nh-menta: #c8e6d0;
+  --nh-paper: #f7f7f4;
+  --nh-ink-soft: #68706c;
   font-family: 'Montserrat', 'Acumin Pro', ui-sans-serif, system-ui, sans-serif;
   scroll-behavior: smooth;
 }
+#novahub-landing .nh-shell { width: min(1280px, calc(100% - 3rem)); margin-inline: auto; }
+#novahub-landing .nh-serif { font-family: 'Playfair Display', Georgia, serif; font-style: italic; font-weight: 500; }
+#novahub-landing .nh-header { position: fixed; inset: 0 0 auto; z-index: 40; color: #fff; transition: background .35s ease, box-shadow .35s ease, backdrop-filter .35s ease; }
+#novahub-landing .nh-header-scrolled { background: rgba(20, 19, 19, .92); box-shadow: 0 14px 40px -28px rgba(0,0,0,.8); backdrop-filter: blur(16px); }
+#novahub-landing .nh-nav-link { color: rgba(255,255,255,.68); font-size: 11px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; transition: color .25s ease; }
+#novahub-landing .nh-nav-link:hover, #novahub-landing .nh-login-link:hover { color: var(--nh-verde); }
+#novahub-landing .nh-login-link { color: rgba(255,255,255,.7); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; transition: color .25s ease; }
+#novahub-landing .nh-header-cta, #novahub-landing .nh-mobile-cta { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; border-radius: 999px; background: var(--nh-verde); color: var(--nh-grafito); font-size: 11px; font-weight: 800; letter-spacing: .12em; padding: .8rem 1.2rem; text-transform: uppercase; transition: transform .25s ease, background .25s ease, color .25s ease; }
+#novahub-landing .nh-header-cta:hover, #novahub-landing .nh-mobile-cta:hover { background: #fff; color: var(--nh-bosque); transform: translateY(-2px); }
+#novahub-landing .nh-menu-button { display: grid; place-items: center; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; color: #fff; padding: .65rem; }
+#novahub-landing .nh-mobile-menu { border-top: 1px solid rgba(200,230,208,.35); background: var(--nh-paper); color: var(--nh-bosque); box-shadow: 0 18px 42px -30px rgba(0,0,0,.8); }
+#novahub-landing .nh-mobile-link { border-bottom: 1px solid rgba(1,66,44,.12); color: var(--nh-bosque); font-size: 12px; font-weight: 800; letter-spacing: .14em; padding: .95rem .25rem; text-transform: uppercase; }
+#novahub-landing .nh-mobile-cta { margin-top: .7rem; }
 
-#novahub-landing .landing-serif {
-  font-family: 'Playfair Display', Georgia, serif;
-}
+#novahub-landing .nh-hero { position: relative; isolation: isolate; min-height: 780px; overflow: hidden; background: var(--nh-grafito); color: #fff; }
+#novahub-landing .nh-hero-grid { position: absolute; inset: 0; opacity: .24; background-image: linear-gradient(rgba(200,230,208,.13) 1px, transparent 1px), linear-gradient(90deg, rgba(200,230,208,.13) 1px, transparent 1px); background-size: 80px 80px; mask-image: linear-gradient(to bottom, #000, transparent 88%); }
+#novahub-landing .nh-hero-grid::after { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 0 48%, rgba(116,192,68,.1) 48.1% 48.4%, transparent 48.5% 100%); }
+#novahub-landing .nh-hero-orbit { position: absolute; pointer-events: none; border: 1px solid rgba(200,230,208,.14); border-radius: 999px; transform: rotate(-18deg); }
+#novahub-landing .nh-hero-orbit-one { width: 740px; height: 280px; right: -170px; top: 150px; }
+#novahub-landing .nh-hero-orbit-two { width: 680px; height: 230px; right: -120px; top: 175px; border-color: rgba(116,192,68,.18); }
+#novahub-landing .nh-display { margin: 0; font-size: clamp(3.4rem, 7.1vw, 7.8rem); font-weight: 800; letter-spacing: -.085em; line-height: .91; }
+#novahub-landing .nh-display-hero { max-width: 730px; color: #fff; }
+#novahub-landing .nh-hero-serif { display: block; color: var(--nh-verde); letter-spacing: -.07em; }
+#novahub-landing .nh-eyebrow { display: flex; align-items: center; gap: .75rem; color: var(--nh-bosque); font-size: 10px; font-weight: 800; letter-spacing: .22em; line-height: 1.2; text-transform: uppercase; }
+#novahub-landing .nh-eyebrow > span { display: block; width: 2rem; height: 2px; background: var(--nh-verde); }
+#novahub-landing .nh-eyebrow-dark { color: var(--nh-menta); }
+#novahub-landing .nh-eyebrow-dark > span { background: var(--nh-verde); }
+#novahub-landing .nh-hero-copy { max-width: 600px; margin-top: 2rem; color: rgba(255,255,255,.65); font-size: 16px; line-height: 1.85; }
+#novahub-landing .nh-button { display: inline-flex; align-items: center; justify-content: center; gap: .6rem; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .13em; padding: 1rem 1.35rem; text-transform: uppercase; transition: transform .25s ease, background .25s ease, border-color .25s ease, color .25s ease; }
+#novahub-landing .nh-button:hover { transform: translateY(-2px); }
+#novahub-landing .nh-button-green { background: var(--nh-verde); color: var(--nh-grafito); }
+#novahub-landing .nh-button-green:hover { background: #fff; color: var(--nh-bosque); }
+#novahub-landing .nh-button-outline { border: 1px solid rgba(255,255,255,.25); color: rgba(255,255,255,.86); }
+#novahub-landing .nh-button-outline:hover { border-color: var(--nh-verde); color: var(--nh-verde); }
+#novahub-landing .nh-hero-signals { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-top: 2rem; color: rgba(255,255,255,.42); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+#novahub-landing .nh-hero-signals span { display: inline-flex; align-items: center; gap: .35rem; }
+#novahub-landing .nh-hero-signals svg { color: var(--nh-verde); }
+#novahub-landing .nh-hero-index { position: absolute; left: -2.7rem; top: 2.2rem; display: flex; flex-direction: column; gap: .6rem; color: rgba(200,230,208,.45); writing-mode: vertical-rl; }
+#novahub-landing .nh-hero-index strong { color: var(--nh-verde); font-size: 14px; letter-spacing: .1em; }
+#novahub-landing .nh-hero-index span { font-size: 9px; font-weight: 800; letter-spacing: .2em; }
+#novahub-landing .nh-product-frame { position: relative; overflow: hidden; border: 1px solid rgba(200,230,208,.42); background: rgba(255,255,255,.05); box-shadow: 0 45px 100px -55px rgba(0,0,0,.95); transform: rotate(1.2deg); }
+#novahub-landing .nh-frame-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid rgba(200,230,208,.2); padding: .75rem 1rem; color: rgba(255,255,255,.55); font-size: 9px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
+#novahub-landing .nh-frame-live { display: inline-flex; align-items: center; gap: .4rem; color: var(--nh-menta); }
+#novahub-landing .nh-frame-live i { display: block; width: .4rem; height: .4rem; border-radius: 999px; background: var(--nh-verde); box-shadow: 0 0 0 4px rgba(116,192,68,.12); }
+#novahub-landing .nh-frame-image { overflow: hidden; background: #f4f7f4; }
+#novahub-landing .nh-frame-image img { display: block; width: 100%; height: auto; }
+#novahub-landing .nh-hero-caption { max-width: 320px; margin: 1.25rem 0 0 auto; color: rgba(255,255,255,.42); font-family: 'Playfair Display', Georgia, serif; font-size: 18px; font-style: italic; line-height: 1.35; text-align: right; }
+#novahub-landing .nh-hero-footer { position: absolute; right: 0; bottom: 1.4rem; left: 0; display: flex; justify-content: space-between; padding-inline: max(1.5rem, calc((100vw - 1280px) / 2)); color: rgba(255,255,255,.32); font-size: 9px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
 
-#novahub-landing .landing-module-card {
-  box-shadow: 0 16px 40px -30px rgba(1, 66, 44, 0.55);
-}
+#novahub-landing .nh-signal-strip { overflow: hidden; border-bottom: 1px solid #d9e4dd; background: var(--nh-paper); }
+#novahub-landing .nh-signal-track { display: flex; min-width: max-content; justify-content: space-between; gap: 2rem; padding-block: 1.2rem; }
+#novahub-landing .nh-signal-track span { display: flex; align-items: center; gap: .65rem; color: #65706a; font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+#novahub-landing .nh-signal-track b { color: var(--nh-verde); font-weight: 800; }
+#novahub-landing .nh-light-section { background: var(--nh-paper); color: var(--nh-grafito); }
+#novahub-landing .nh-manifesto, #novahub-landing .nh-modules-section, #novahub-landing .nh-process { padding-block: clamp(5.5rem, 10vw, 10rem); }
+#novahub-landing .nh-section-number { margin-top: 2rem; color: var(--nh-bosque); font-size: clamp(7rem, 15vw, 13rem); font-weight: 800; letter-spacing: -.12em; line-height: .72; opacity: .13; }
+#novahub-landing .nh-section-number-dark { color: var(--nh-verde); opacity: .75; }
+#novahub-landing .nh-small-note { max-width: 240px; margin-top: 2rem; color: #59655f; font-size: 11px; font-weight: 700; letter-spacing: .13em; line-height: 1.7; text-transform: uppercase; }
+#novahub-landing .nh-small-note-dark { color: rgba(255,255,255,.55); }
+#novahub-landing .nh-display-light { max-width: 900px; color: var(--nh-grafito); font-size: clamp(3rem, 6.4vw, 6.7rem); }
+#novahub-landing .nh-body-copy { color: var(--nh-ink-soft); font-size: 15px; line-height: 1.85; }
+#novahub-landing .nh-body-copy-dark { color: rgba(255,255,255,.58); }
+#novahub-landing .nh-action { display: inline-flex; align-items: center; gap: .75rem; margin-top: 2rem; color: var(--nh-bosque); font-size: 11px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+#novahub-landing .nh-action:hover { color: var(--nh-verde); }
 
-#novahub-landing .landing-module-card:focus-visible,
-#novahub-landing button:focus-visible,
-#novahub-landing a:focus-visible {
-  outline: 3px solid var(--nova-verde);
-  outline-offset: 3px;
-}
+#novahub-landing .nh-dark-section { position: relative; isolation: isolate; overflow: hidden; background: var(--nh-bosque); color: #fff; padding-block: clamp(5.5rem, 10vw, 10rem); }
+#novahub-landing .nh-ecosystem-lines { position: absolute; inset: 0; opacity: .17; background-image: linear-gradient(90deg, transparent 0 9%, rgba(200,230,208,.24) 9.1% 9.2%, transparent 9.3% 100%), linear-gradient(rgba(200,230,208,.18) 1px, transparent 1px); background-size: 160px 100%, 100% 130px; mask-image: linear-gradient(to bottom, #000, transparent); }
+#novahub-landing .nh-display-dark { max-width: 800px; color: #fff; font-size: clamp(3rem, 6.2vw, 6.4rem); }
+#novahub-landing .nh-flow-map { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-top: 6rem; }
+#novahub-landing .nh-flow-line { position: absolute; top: 1.05rem; right: 10%; left: 10%; height: 1px; background: linear-gradient(90deg, transparent, rgba(116,192,68,.9), rgba(200,230,208,.55), rgba(116,192,68,.9), transparent); }
+#novahub-landing .nh-flow-node { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; text-align: center; }
+#novahub-landing .nh-flow-node span { display: grid; width: 2.15rem; height: 2.15rem; place-items: center; border: 1px solid var(--nh-verde); border-radius: 999px; background: var(--nh-bosque); color: var(--nh-verde); font-size: 9px; font-weight: 800; }
+#novahub-landing .nh-flow-node strong { margin-top: 1.1rem; color: #fff; font-size: 18px; font-weight: 700; }
+#novahub-landing .nh-flow-node small { margin-top: .45rem; color: rgba(255,255,255,.44); font-size: 10px; letter-spacing: .05em; }
+#novahub-landing .nh-data-line { border-left: 1px solid rgba(200,230,208,.24); padding-left: 1rem; }
+#novahub-landing .nh-data-line span { color: var(--nh-verde); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+#novahub-landing .nh-data-line p { margin-top: .6rem; color: #fff; font-size: 18px; font-weight: 700; }
+#novahub-landing .nh-data-line small { display: block; margin-top: .4rem; color: rgba(255,255,255,.42); font-size: 11px; }
 
-/* Keep the existing landing structure, but bring its main accents back to the
-   NovaHub palette while the smaller legacy surfaces are gradually refactored. */
-#novahub-landing .bg-\[\#071b18\],
-#novahub-landing .bg-\[\#0c3d31\],
-#novahub-landing .bg-\[\#061511\] {
-  background-color: var(--nova-bosque) !important;
-}
+#novahub-landing .nh-module-list { border-top: 1px solid #cfd9d2; }
+#novahub-landing .nh-module-row { display: grid; grid-template-columns: 4rem 2.5rem minmax(9rem, .7fr) minmax(15rem, 1.25fr) 1.5rem; align-items: center; gap: 1rem; border-bottom: 1px solid #cfd9d2; padding: 1.35rem .25rem; color: var(--nh-grafito); transition: padding .3s ease, background .3s ease, color .3s ease; }
+#novahub-landing .nh-module-row:hover { background: var(--nh-bosque); color: #fff; padding-inline: 1.25rem; }
+#novahub-landing .nh-module-number { color: var(--nh-verde); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+#novahub-landing .nh-module-icon { color: var(--nh-bosque); transition: color .3s ease; }
+#novahub-landing .nh-module-row:hover .nh-module-icon { color: var(--nh-verde); }
+#novahub-landing .nh-module-name { font-size: 20px; font-weight: 800; letter-spacing: -.04em; }
+#novahub-landing .nh-module-body { color: #6d7771; font-size: 13px; line-height: 1.55; transition: color .3s ease; }
+#novahub-landing .nh-module-row:hover .nh-module-body { color: rgba(255,255,255,.62); }
+#novahub-landing .nh-module-arrow { margin-left: auto; color: var(--nh-verde); }
 
-#novahub-landing .bg-\[\#0eaa77\],
-#novahub-landing .bg-\[\#12b77a\],
-#novahub-landing .bg-\[\#16b978\] {
-  background-color: var(--nova-verde) !important;
-}
+#novahub-landing .nh-industries { background: var(--nh-grafito); }
+#novahub-landing .nh-industry-list { border-top: 1px solid rgba(255,255,255,.22); }
+#novahub-landing .nh-industry-row { display: grid; grid-template-columns: 3rem 2rem minmax(0, 1fr) 1rem; align-items: start; gap: 1rem; border-bottom: 1px solid rgba(255,255,255,.16); padding: 1.4rem 0; }
+#novahub-landing .nh-industry-number { color: var(--nh-verde); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+#novahub-landing .nh-industry-icon { color: var(--nh-menta); }
+#novahub-landing .nh-industry-row h3 { color: #fff; font-size: 20px; font-weight: 700; letter-spacing: -.035em; }
+#novahub-landing .nh-industry-row p { max-width: 430px; margin-top: .45rem; color: rgba(255,255,255,.46); font-size: 12px; line-height: 1.65; }
+#novahub-landing .nh-industry-arrow { margin-top: .35rem; color: rgba(255,255,255,.4); }
 
-#novahub-landing .bg-\[\#5ce1d5\] {
-  background-color: var(--nova-menta) !important;
-}
+#novahub-landing .nh-process-step { min-height: 220px; border-top: 1px solid #cfd9d2; border-right: 1px solid #cfd9d2; padding: 1.5rem 1.25rem 1.5rem 0; }
+#novahub-landing .nh-process-step:last-child { border-right: 0; }
+#novahub-landing .nh-process-step > span { color: var(--nh-verde); font-size: 11px; font-weight: 800; letter-spacing: .15em; }
+#novahub-landing .nh-process-step h3 { margin-top: 3rem; color: var(--nh-grafito); font-size: 21px; font-weight: 800; letter-spacing: -.04em; }
+#novahub-landing .nh-process-step p { max-width: 220px; margin-top: .75rem; color: var(--nh-ink-soft); font-size: 12px; line-height: 1.7; }
+#novahub-landing .nh-proof-section { background: var(--nh-menta); padding-block: clamp(5.5rem, 10vw, 10rem); }
+#novahub-landing .nh-proof-frame { position: relative; overflow: hidden; border: 1px solid rgba(1,66,44,.24); background: #f6f8f5; box-shadow: 0 30px 70px -50px rgba(1,66,44,.75); }
+#novahub-landing .nh-proof-label { border-bottom: 1px solid rgba(1,66,44,.16); padding: .85rem 1rem; color: var(--nh-bosque); font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+#novahub-landing .nh-proof-frame img { display: block; width: 100%; height: auto; }
+#novahub-landing .nh-about-section { position: relative; overflow: hidden; background: var(--nh-night); color: #fff; padding-block: clamp(5.5rem, 10vw, 10rem); }
+#novahub-landing .nh-about-section::after { content: 'N'; position: absolute; right: -2vw; bottom: -13vw; color: rgba(116,192,68,.08); font-size: 48vw; font-weight: 800; line-height: .7; pointer-events: none; }
+#novahub-landing .nh-quote { max-width: 920px; color: #fff; font-family: 'Playfair Display', Georgia, serif; font-size: clamp(2.3rem, 4.7vw, 5rem); font-style: italic; line-height: 1.08; letter-spacing: -.045em; }
+#novahub-landing .nh-final-cta { position: relative; isolation: isolate; overflow: hidden; background: var(--nh-bosque); padding-block: clamp(6rem, 11vw, 11rem); }
+#novahub-landing .nh-final-grid { position: absolute; inset: 0; opacity: .18; background-image: linear-gradient(90deg, transparent 0 12%, rgba(200,230,208,.22) 12.1% 12.2%, transparent 12.3% 100%), linear-gradient(rgba(200,230,208,.2) 1px, transparent 1px); background-size: 180px 100%, 100% 120px; mask-image: linear-gradient(to bottom, transparent, #000 25%, #000 75%, transparent); }
+#novahub-landing .nh-footer { background: var(--nh-grafito); color: #fff; }
+#novahub-landing .nh-footer a { transition: color .25s ease; }
+#novahub-landing .nh-footer a:hover { color: var(--nh-verde); }
 
-#novahub-landing .text-\[\#0c3d31\],
-#novahub-landing .text-\[\#071b18\] {
-  color: var(--nova-bosque) !important;
-}
-
-#novahub-landing .text-\[\#0eaa77\],
-#novahub-landing .text-\[\#0a9f7b\],
-#novahub-landing .text-\[\#12b77a\],
-#novahub-landing .text-\[\#16b978\] {
-  color: var(--nova-verde) !important;
-}
-
-#novahub-landing .text-\[\#5ce1d5\],
-#novahub-landing .text-\[\#9af5e9\],
-#novahub-landing .text-\[\#8cf4e7\] {
-  color: var(--nova-menta) !important;
-}
-
-#novahub-landing .border-\[\#0eaa77\],
-#novahub-landing .border-\[\#5ce1d5\] {
-  border-color: var(--nova-verde) !important;
-}
-#novahub-landing #producto h2 span,
-#novahub-landing #contacto h2 span {
-  font-family: 'Playfair Display', Georgia, serif;
-  font-style: italic;
-  font-weight: 500;
-  letter-spacing: -0.035em;
-}
-
-/* Commercial landing refinements: one dark NovaHub canvas, organic section breaks, and the real wordmark. */
-#novahub-landing header,
-#novahub-landing footer {
-  background-color: var(--nova-bosque) !important;
-}
-
-#novahub-landing header > div > a[aria-label*='NovaHub'] > span:first-child,
-#novahub-landing header > div > a[aria-label*='NovaHub'] > span:last-child {
-  display: none;
-}
-
-#novahub-landing header > div > a[aria-label*='NovaHub']::before {
-  content: '';
-  display: block;
-  width: 148px;
-  height: 42px;
-  background: url('/novahub-logotipo-transparent.png') center / contain no-repeat;
-}
-
-#novahub-landing footer .bg-white {
-  width: 230px !important;
-  height: 76px !important;
-  background: transparent !important;
-  padding: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
-#novahub-landing footer .bg-white img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: left center;
-}
-
-#novahub-landing #precios,
-#novahub-landing a[href='#precios'],
-#novahub-landing #contacto button {
-  display: none !important;
-}
-
-#novahub-landing main > section:not(:first-child) {
-  position: relative;
-  isolation: isolate;
-}
-
-#novahub-landing main > section:not(:first-child)::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  top: -48px;
-  left: 0;
-  width: 100%;
-  height: 56px;
-  background: inherit;
-  clip-path: polygon(0 74%, 10% 32%, 22% 68%, 35% 12%, 48% 72%, 62% 26%, 76% 68%, 88% 20%, 100% 62%, 100% 100%, 0 100%);
-}
-
-#novahub-landing .landing-hero-tagline {
-  margin: 1.25rem auto 0;
-  color: var(--nova-menta);
-  font-family: 'Playfair Display', Georgia, serif;
-  font-size: clamp(1.8rem, 3vw, 3rem);
-  font-style: italic;
-  font-weight: 500;
-  letter-spacing: -0.045em;
-  text-align: center;
-}
-
-/* Static brand chrome: the official green wordmark needs a light canvas. */
-#novahub-landing header,
-#novahub-landing footer {
-  background-color: var(--nova-blanco) !important;
-  color: var(--nova-bosque) !important;
-}
-
-#novahub-landing header a,
-#novahub-landing header button {
-  color: var(--nova-bosque) !important;
-}
-
-#novahub-landing header button {
-  border-color: var(--nova-menta) !important;
-}
-
-#novahub-landing header > div > a[aria-label*='NovaHub']::before {
-  filter: saturate(1.05) brightness(1.05);
-}
-
-#novahub-landing footer a,
-#novahub-landing footer p,
-#novahub-landing footer span {
-  color: var(--nova-bosque) !important;
-}
-
-#novahub-landing footer a:hover {
-  color: var(--nova-verde) !important;
-}
-
-#novahub-landing footer .border-t {
-  border-color: var(--nova-menta) !important;
-}
-
-#novahub-landing main > section[class*='bg-white'],
-#novahub-landing main > section[class*='bg-[#f8fbfa]'] {
-  --nova-edge: #ffffff;
-}
-
-#novahub-landing main > section[class*='bg-[#C8E6D0]'] {
-  --nova-edge: rgba(200, 230, 208, 0.35);
-}
-
-#novahub-landing main > section[class*='bg-[#071b18]'],
-#novahub-landing main > section[class*='bg-[#0c3d31]'] {
-  --nova-edge: var(--nova-bosque);
-}
-
-#novahub-landing main > section:not(:first-child)::before {
-  top: -62px;
-  z-index: 0;
-  height: 70px;
-  background: var(--nova-edge, var(--nova-bosque));
-  clip-path: none;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 84 C100 64 160 42 250 72 C360 100 430 15 560 62 C680 108 760 37 880 70 C1000 102 1110 25 1230 58 C1320 84 1380 78 1440 55 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 84 C100 64 160 42 250 72 C360 100 430 15 560 62 C680 108 760 37 880 70 C1000 102 1110 25 1230 58 C1320 84 1380 78 1440 55 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-}
-
-#novahub-landing main > section:not(:first-child) > * {
-  position: relative;
-  z-index: 1;
-}
-
-#novahub-landing img[alt^='Vista de facturación'] {
-  cursor: zoom-in;
-  transform: scale(1.035);
-  transform-origin: center;
-  transition: transform 350ms ease;
-}
-
-#novahub-landing img[alt^='Vista de facturación']:hover {
-  transform: scale(1.07);
-}
-
-#novahub-landing .landing-image-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  padding: 2rem;
-  background: rgba(1, 18, 13, 0.82);
-  backdrop-filter: blur(14px);
-}
-
-#novahub-landing .landing-image-lightbox img {
-  width: min(1180px, 94vw);
-  max-height: 88vh;
-  border: 1px solid rgba(200, 230, 208, 0.5);
-  border-radius: 1.25rem;
-  object-fit: contain;
-  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.45);
-  cursor: zoom-out;
-}
-
-/* Final visual corrections: stable white chrome, compact rhythm and one
-   predictable mountain treatment across the landing. */
-#novahub-landing > header,
-#novahub-landing > footer {
-  background: var(--nova-blanco) !important;
-  color: var(--nova-bosque) !important;
-}
-
-#novahub-landing > header > div:first-child > div > a[href*='whatsapp'],
-#novahub-landing > header > div:first-child > div > a[href='/login'] {
-  background: var(--nova-verde) !important;
-  color: var(--nova-blanco) !important;
-  border-radius: 999px;
-  padding: 0.8rem 1.35rem;
-  box-shadow: 0 12px 26px -16px rgba(1, 66, 44, 0.65);
-}
-
-#novahub-landing > header > div:first-child > div > a[href*='whatsapp']:hover,
-#novahub-landing > header > div:first-child > div > a[href='/login']:hover {
-  background: var(--nova-bosque) !important;
-  color: var(--nova-blanco) !important;
-}
-
-#novahub-landing > footer .bg-white {
-  display: flex !important;
-  width: 250px !important;
-  height: 82px !important;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--nova-menta) !important;
-  border-radius: 1rem !important;
-  background: var(--nova-blanco) !important;
-  padding: 0.75rem 1rem !important;
-  box-shadow: 0 16px 36px -28px rgba(1, 66, 44, 0.45) !important;
-}
-
-#novahub-landing > footer .bg-white img {
-  object-position: center !important;
-}
-
-#novahub-landing > footer,
-#novahub-landing > footer a,
-#novahub-landing > footer p,
-#novahub-landing > footer span {
-  color: var(--nova-bosque) !important;
-}
-
-#novahub-landing > footer p[class*='text-[#5ce1d5]'] {
-  color: var(--nova-verde) !important;
-}
-
-#novahub-landing > footer a:hover {
-  color: var(--nova-verde) !important;
-}
-
-#novahub-landing main > section:not(#inicio) {
-  padding-top: clamp(4rem, 6vw, 5.5rem) !important;
-  padding-bottom: clamp(4rem, 6vw, 5.5rem) !important;
-}
-
-#novahub-landing main > section:not(:first-child)::before {
-  top: -34px;
-  height: 42px;
-  opacity: 0.82;
-  z-index: 2;
-  pointer-events: none;
-}
-
-#novahub-landing #flujo::before,
-#novahub-landing #producto::before,
-#novahub-landing main > section[class*='bg-[#071b18]']::before {
-  top: -48px;
-  height: 56px;
-  opacity: 1;
-}
-
-#novahub-landing .landing-image-lightbox {
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 9999 !important;
-  width: 100vw;
-  height: 100dvh;
-  min-height: 100vh;
-  overflow: auto;
-  align-items: center;
-  justify-items: center;
-  place-items: center;
-  padding: 1.5rem;
-}
-
-#novahub-landing .landing-image-lightbox img {
-  width: min(1180px, calc(100vw - 3rem));
-  max-width: 100%;
-  max-height: calc(100dvh - 3rem);
-  margin: auto;
-}
-
+#novahub-landing a:focus-visible, #novahub-landing button:focus-visible { outline: 3px solid var(--nh-verde); outline-offset: 4px; }
 @media (max-width: 1023px) {
-  #novahub-landing > header nav {
-    border-color: var(--nova-menta) !important;
-    background: var(--nova-blanco) !important;
-    box-shadow: 0 18px 34px -26px rgba(1, 66, 44, 0.6);
-  }
-
-  #novahub-landing > header nav a {
-    color: var(--nova-bosque) !important;
-  }
-
-  #novahub-landing > header nav a:hover {
-    background: var(--nova-menta) !important;
-    color: var(--nova-bosque) !important;
-  }
-
-  #novahub-landing main > section:not(#inicio) {
-    padding-top: 3.75rem !important;
-    padding-bottom: 3.75rem !important;
-  }
+  #novahub-landing .nh-shell { width: min(100% - 2.25rem, 760px); }
+  #novahub-landing .nh-hero { min-height: auto; }
+  #novahub-landing .nh-hero-footer { display: none; }
+  #novahub-landing .nh-hero-index { left: -.35rem; top: 1.4rem; }
+  #novahub-landing .nh-product-frame { margin-left: 1.5rem; }
+  #novahub-landing .nh-flow-map { gap: .5rem; }
 }
-
-/* The lightbox is appended to body, so its viewport rules cannot depend on
-   #novahub-landing being an ancestor. */
-body > .landing-image-lightbox {
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 9999 !important;
-  display: grid !important;
-  width: 100vw;
-  height: 100dvh;
-  min-height: 100vh;
-  overflow: auto;
-  place-items: center;
-  padding: 1.5rem;
+@media (max-width: 767px) {
+  #novahub-landing .nh-shell { width: min(100% - 2rem, 540px); }
+  #novahub-landing .nh-display { letter-spacing: -.07em; }
+  #novahub-landing .nh-hero { padding-bottom: 2.5rem; }
+  #novahub-landing .nh-hero .nh-shell { min-height: 0; padding-top: 9rem; }
+  #novahub-landing .nh-hero-copy { font-size: 14px; line-height: 1.75; }
+  #novahub-landing .nh-hero-signals { gap: .8rem; }
+  #novahub-landing .nh-hero-index { display: none; }
+  #novahub-landing .nh-product-frame { margin-left: 0; transform: none; }
+  #novahub-landing .nh-frame-bar { align-items: flex-start; flex-direction: column; gap: .35rem; }
+  #novahub-landing .nh-hero-caption { margin-inline: 0; text-align: left; }
+  #novahub-landing .nh-signal-track { justify-content: flex-start; gap: 1.4rem; overflow-x: auto; padding-block: 1rem; }
+  #novahub-landing .nh-signal-track span { flex: 0 0 auto; font-size: 9px; }
+  #novahub-landing .nh-flow-map { grid-template-columns: repeat(2, 1fr); row-gap: 2.5rem; margin-top: 4rem; }
+  #novahub-landing .nh-flow-line { top: 1.05rem; right: 16%; left: 16%; height: 52%; background: linear-gradient(90deg, transparent, rgba(116,192,68,.75), transparent); }
+  #novahub-landing .nh-data-line { padding-block: .3rem; }
+  #novahub-landing .nh-module-row { grid-template-columns: 2.25rem 1.5rem minmax(0, 1fr) 1rem; gap: .65rem; padding-block: 1.15rem; }
+  #novahub-landing .nh-module-name { font-size: 16px; }
+  #novahub-landing .nh-module-body { grid-column: 3 / -1; font-size: 11px; }
+  #novahub-landing .nh-module-arrow { grid-column: 4; grid-row: 1; }
+  #novahub-landing .nh-industry-row { grid-template-columns: 2.3rem 1.5rem minmax(0, 1fr); gap: .65rem; }
+  #novahub-landing .nh-industry-arrow { display: none; }
+  #novahub-landing .nh-industry-row h3 { font-size: 16px; }
+  #novahub-landing .nh-industry-row p { font-size: 11px; }
+  #novahub-landing .nh-process-step { min-height: 190px; border-right: 0; padding-right: 0; }
 }
-
-body > .landing-image-lightbox img {
-  width: min(1180px, calc(100vw - 3rem));
-  max-width: 100%;
-  max-height: calc(100dvh - 3rem);
-  margin: auto;
-}
-
-#novahub-landing main > section:not(#inicio),
-#novahub-landing > footer {
-  border-top: 0 !important;
-}
-
-#novahub-landing > footer {
-  position: relative;
-  isolation: isolate;
-}
-
-#novahub-landing > footer::before {
-  content: '';
-  position: absolute;
-  z-index: 2;
-  top: -42px;
-  left: 0;
-  width: 100%;
-  height: 50px;
-  pointer-events: none;
-  background: var(--nova-blanco);
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 82 C120 55 180 50 300 74 C420 98 500 38 620 66 C760 98 830 42 960 70 C1090 96 1190 40 1320 68 C1370 78 1410 74 1440 58 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 82 C120 55 180 50 300 74 C420 98 500 38 620 66 C760 98 830 42 960 70 C1090 96 1190 40 1320 68 C1370 78 1410 74 1440 58 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-}
-
-#novahub-landing > footer > * {
-  position: relative;
-  z-index: 3;
-}
-
-/* Decorative rings/glows must stay out of document flow. The content layer
-   remains above the mountain without turning these ornaments into spacing. */
-#novahub-landing main > section:not(:first-child) > .pointer-events-none.absolute {
-  position: absolute !important;
-  z-index: 0 !important;
-}
-
-#novahub-landing > header > div:first-child > div > a[href*='whatsapp']:hover,
-#novahub-landing > header > div:first-child > div > a[href='/login']:hover,
-#novahub-landing > header nav a[href*='whatsapp']:hover {
-  background: var(--nova-verde) !important;
-  color: var(--nova-blanco) !important;
-}
-
-#novahub-landing #catalogo-modulos,
-#novahub-landing #giros {
-  --nova-edge: var(--nova-menta);
-}
-
-#novahub-landing #catalogo-modulos::before,
-#novahub-landing #giros::before,
-#novahub-landing #contacto::before {
-  top: -52px;
-  height: 64px;
-  opacity: 1;
-}
-
-#novahub-landing #catalogo-modulos::before {
-  background: var(--nova-menta);
-  -webkit-mask-image: none;
-  mask-image: none;
-  clip-path: polygon(0 68%, 8% 42%, 16% 63%, 25% 28%, 35% 67%, 45% 38%, 55% 70%, 66% 30%, 76% 64%, 87% 36%, 100% 62%, 100% 100%, 0 100%);
-}
-
-#novahub-landing img[alt^='Vista de facturación'] {
-  display: block;
-  height: auto !important;
-  max-width: 100%;
-  object-fit: contain !important;
-  object-position: center !important;
-  transform: none !important;
-}
-
-#novahub-landing img[alt^='Vista de facturación']:hover {
-  transform: scale(1.015) !important;
-}
-
-body > .landing-image-lightbox .landing-image-lightbox-close {
-  position: fixed;
-  top: 1rem;
-  right: 1rem;
-  z-index: 2;
-  display: grid;
-  width: 2.75rem;
-  height: 2.75rem;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
-  background: rgba(1, 66, 44, 0.9);
-  color: #fff;
-  font-size: 1.8rem;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
-}
-
-body > .landing-image-lightbox .landing-image-lightbox-close:hover {
-  background: var(--nova-verde);
-}
-
-/* Final palette and section-edge pass. Keep the hero on the exact NovaHub
-   Bosque token and use one smooth organic edge instead of mixed zigzags. */
-#novahub-landing #inicio {
-  background-color: #01422C !important;
-}
-
-#novahub-landing #catalogo-modulos::before,
-#novahub-landing #giros::before {
-  top: -48px;
-  height: 58px;
-  background: #edf7f1 !important;
-  clip-path: none;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 82 C100 64 170 48 270 70 C380 96 455 30 570 62 C690 98 780 38 900 70 C1015 98 1110 30 1230 62 C1325 84 1380 72 1440 54 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 82 C100 64 170 48 270 70 C380 96 455 30 570 62 C690 98 780 38 900 70 C1015 98 1110 30 1230 62 C1325 84 1380 72 1440 54 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-}
-
-#novahub-landing #giros::before {
-  background: #f8fbfa !important;
-}
-
-#novahub-landing #catalogo-modulos {
-  background-color: #edf7f1 !important;
-}
-
-#novahub-landing main > section[class*='bg-[#071b18]']::before {
-  top: -44px;
-  height: 54px;
-}
-
-@keyframes landing-hero-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}
-
-#novahub-landing .landing-hero-demo > .relative {
-  animation: landing-hero-float 7s ease-in-out infinite;
-}
-
-#novahub-landing .landing-hero-demo:hover > .relative {
-  animation-play-state: paused;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  #novahub-landing .landing-hero-demo > .relative {
-    animation: none;
-  }
+  #novahub-landing *, #novahub-landing *::before, #novahub-landing *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }

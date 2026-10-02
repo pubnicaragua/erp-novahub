@@ -787,7 +787,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       onSelectExisting={(group, match) => { void resolveSimilarGroup(group, { action: 'USE_EXISTING', match }); }}
       onCreateNew={(group) => { void resolveSimilarGroup(group, { action: 'CREATE_NEW' }); }}
     />
-    <Dialog open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
+    <Dialog modal={false} open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
       <DialogContent className={presentation === 'page'
         ? '!fixed !inset-0 !top-0 !left-0 !z-[60] !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !gap-0 !overflow-hidden !rounded-none !border-0 !bg-background !p-4 !shadow-none !backdrop-blur-none sm:!p-6 lg:!p-10'
         : 'w-[calc(100vw-2rem)] !max-w-[min(95vw,1100px)] max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col overflow-hidden'}>
