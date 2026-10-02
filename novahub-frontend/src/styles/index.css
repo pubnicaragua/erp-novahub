@@ -3222,3 +3222,23 @@ th .column-filter-menu .column-filter-icon,
   }
 }
 
+
+/* Custom Scrollbar suave para contenedores horizontales y navbar */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, hsl(var(--primary)) 40%, transparent);
+  border-radius: 999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, hsl(var(--primary)) 70%, transparent);
+}
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, hsl(var(--primary)) 40%, transparent) transparent;
+}

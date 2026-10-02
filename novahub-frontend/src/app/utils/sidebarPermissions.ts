@@ -147,6 +147,11 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'PROJECTS_MILESTONES', label: 'Hitos y Avances', parent: 'PROJECTS' },
   { id: 'PROJECTS_QUOTATIONS', label: 'Cotizaciones Materiales', parent: 'PROJECTS' },
   { id: 'PROJECTS_EXPENSES', label: 'Costos y presupuesto', parent: 'PROJECTS' },
+  { id: 'PROJECTS_COSTEO6D', label: 'Costeo 6D', parent: 'PROJECTS' },
+  { id: 'PROJECTS_EVM', label: 'Control EVM', parent: 'PROJECTS' },
+  { id: 'PROJECTS_MEMORIAS', label: 'Memorias de Cálculo', parent: 'PROJECTS' },
+  { id: 'PROJECTS_EXPORT', label: 'Cotización Ejecutiva', parent: 'PROJECTS' },
+  { id: 'PROJECTS_PARAMETROS', label: 'Parámetros del Proyecto', parent: 'PROJECTS' },
   { id: 'PROJECTS_DOCUMENTS', label: 'Documentos', parent: 'PROJECTS' },
   { id: 'PROJECTS_TIME', label: 'Tiempo y cronograma', parent: 'PROJECTS' },
 
