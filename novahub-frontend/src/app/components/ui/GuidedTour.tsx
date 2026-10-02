@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, CheckCircle2, Lightbulb, X } from 'lucide-react';
 import { cn } from './utils';
+import { GUIDED_TOUR_STARTED_EVENT } from '../../services/guided-tour.service';
 
 export interface GuidedTourStep {
   target: string;
@@ -60,6 +61,10 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
   const tooltipRef = useRef<HTMLDivElement>(null);
   const currentStep = steps[stepIndex];
   const isLastStep = stepIndex === steps.length - 1;
+
+  useEffect(() => {
+    window.dispatchEvent(new Event(GUIDED_TOUR_STARTED_EVENT));
+  }, []);
 
   const updateHighlight = useCallback(() => {
     if (!currentStep) return;

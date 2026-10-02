@@ -1,4 +1,5 @@
 export const GUIDED_TOUR_REQUEST_EVENT = 'erp-guided-tour-request';
+export const GUIDED_TOUR_STARTED_EVENT = 'erp-guided-tour-started';
 
 export interface GuidedTourRequestResult {
   started: boolean;
