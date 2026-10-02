@@ -20,6 +20,7 @@ import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { canAccessModuleView } from '../../utils/moduleViewAccess';
 
 interface TeamAccessPanelProps {
   tenantId: string;
@@ -201,6 +202,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
     // acceso a Roles puede administrarlas, aunque no sean módulos facturables.
     return ROLE_PERMISSION_MODULES.filter((module: any) => {
       if (HIDDEN_PERMISSION_MODULE_IDS.has(String(module.id).toUpperCase())) return false;
+      if (!canAccessModuleView(currentUser?.moduleAccessPolicies, module.id)) return false;
       if (module.id === 'DASHBOARD') return true;
       if (module.parent === 'MY_COMPANY' || module.parent === 'CONFIGURATION') return true;
       if (module.parent && module.subscription === false) return hasParentScope(module.parent);

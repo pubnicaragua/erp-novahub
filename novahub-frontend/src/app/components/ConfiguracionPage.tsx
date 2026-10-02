@@ -49,6 +49,7 @@ import { FastColorInput } from './ui/FastColorInput';
 import { AuditoriaPage } from './AuditoriaPage';
 import { THEME_PRESETS, type ThemePreset } from '../constants/themePresets';
 import { NovaPulseView } from './configuracion/NovaPulseView';
+import { canAccessModuleView } from '../utils/moduleViewAccess';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -621,6 +622,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
 
     return ALL_PERM_MODULES
       .filter(m => !HIDDEN_PERMISSION_MODULE_IDS.has(String(m.id).toUpperCase()))
+      .filter((m) => canAccessModuleView(user.moduleAccessPolicies, m.id))
       .filter(m => {
         const moduleId = normalize(m.id);
         const parentMod = 'parent' in m ? normalize((m as any).parent) : null;
