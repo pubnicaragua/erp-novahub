@@ -61,7 +61,6 @@ export const ProyectosPage = ({ activeSubModule, onSubModuleChange }: ProyectosP
   const tabToSubModuleMap: Record<string, string> = {
     'resumen': 'proyectos-resumen',
     'cotizaciones': 'proyectos-cotizaciones',
-    'costos': 'proyectos-costos',
     'costeo6d': 'proyectos-costeo6d',
     'evm': 'proyectos-evm',
     'memorias': 'proyectos-memorias',
@@ -75,7 +74,6 @@ export const ProyectosPage = ({ activeSubModule, onSubModuleChange }: ProyectosP
   const submoduleLabels: Record<string, string> = {
     'proyectos-resumen': 'Resumen, Avance y Documentos',
     'proyectos-cotizaciones': 'Cotizaciones Materiales',
-    'proyectos-evm': 'Control EVM',
     'proyectos-planificacion': 'Planificación y Tareas',
     'proyectos-costos': 'Presupuesto y Costos',
     'proyectos-costeo6d': 'Costeo 6D',

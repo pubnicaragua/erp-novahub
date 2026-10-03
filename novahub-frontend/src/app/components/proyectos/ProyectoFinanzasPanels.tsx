@@ -376,6 +376,13 @@ function CostDialog({ projectId, editing, suppliers, onClose, onSubmit }: { proj
   );
   const quotations = asList(quotationsQuery.data) as ProjectMaterialQuotation[];
 
+  const costLinesQuery = useTenantQuery<any[]>(
+    ['projects', 'cost-lines', projectId],
+    (s) => projectsService.getCostLines(projectId, s).then((res: any) => asList(res)),
+    { enabled: Boolean(projectId) }
+  );
+  const costLines = asList(costLinesQuery.data);
+
   const [form, setForm] = useState<any>({
     concept: editing?.concept || '',
     category: editing?.category || 'OPERATIVO',
@@ -384,6 +391,7 @@ function CostDialog({ projectId, editing, suppliers, onClose, onSubmit }: { proj
     exchangeRate: editing?.exchangeRate && editing.exchangeRate !== 1 ? String(editing.exchangeRate) : '',
     costDate: toLocalDate(editing?.costDate) || '',
     supplierId: editing?.supplierId || '',
+    costLineId: (editing as any)?.costLineId || '',
     documentReference: editing?.documentReference || '',
     source: editing?.source || 'MANUAL',
     sourceId: editing?.sourceId || '',
@@ -410,6 +418,7 @@ function CostDialog({ projectId, editing, suppliers, onClose, onSubmit }: { proj
       exchangeRate: form.exchangeRate === '' ? undefined : Number(form.exchangeRate),
       costDate: fromLocalDate(form.costDate),
       supplierId: form.supplierId || undefined,
+      costLineId: form.costLineId || null,
       documentReference: form.documentReference?.trim() || undefined,
       source: form.source,
       sourceId: form.sourceId?.trim() || undefined,
@@ -424,6 +433,23 @@ function CostDialog({ projectId, editing, suppliers, onClose, onSubmit }: { proj
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader><DialogTitle>{editing ? 'Editar costo' : 'Registrar costo'}</DialogTitle></DialogHeader>
         <div className="grid gap-4 py-2 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Label>Partida Presupuestaria 6D (Opcional)</Label>
+            <Select
+              value={form.costLineId || 'NONE'}
+              onValueChange={(val) => setForm((f: any) => ({ ...f, costLineId: val === 'NONE' ? '' : val }))}
+            >
+              <SelectTrigger><SelectValue placeholder="Seleccionar partida 6D..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Sin partida asignada (General)</SelectItem>
+                {costLines.map((line: any) => (
+                  <SelectItem key={line.id} value={line.id}>
+                    {line.name} ({line.code || `P-${line.position + 1}`})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="sm:col-span-2">
             <Label>Vincular Cotización de Materiales (Opcional)</Label>
             <Select
