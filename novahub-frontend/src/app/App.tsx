@@ -58,6 +58,7 @@ const RecursosHumanosPage = lazyWithChunkRecovery(() => import('./components/Rec
 const ClientesPage = lazyWithChunkRecovery(() => import('./components/ClientesPage').then(m => ({ default: m.ClientesPage })), 'clientes');
 const ProveedoresPage = lazyWithChunkRecovery(() => import('./components/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })), 'proveedores');
 const ActividadesPage = lazyWithChunkRecovery(() => import('./components/ActividadesPage').then(m => ({ default: m.ActividadesPage })), 'actividades');
+const AsanaPage = lazyWithChunkRecovery(() => import('./components/AsanaPage').then(m => ({ default: m.AsanaPage })), 'asana');
 const ProyectosPage = lazyWithChunkRecovery(() => import('./components/ProyectosPage').then(m => ({ default: m.ProyectosPage })), 'proyectos');
 const FuerzaComercialPage = lazyWithChunkRecovery(() => import('./components/FuerzaComercialPage').then(m => ({ default: m.FuerzaComercialPage })), 'fuerza-comercial');
 const TicketsPage = lazyWithChunkRecovery(() => import('./components/TicketsPage').then(m => ({ default: m.TicketsPage })), 'tickets');
@@ -459,6 +460,7 @@ function DashboardLayout() {
       case 'clientes': return <ClientesPage />;
       case 'proveedores': return <ProveedoresPage />;
       case 'actividades': return <ActividadesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
+      case 'asana': return <ModuleErrorBoundary moduleName="Asana"><AsanaPage /></ModuleErrorBoundary>;
       case 'proyectos': return <ModuleErrorBoundary moduleName="Proyectos"><ProyectosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'fuerza-comercial': return <FuerzaComercialPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'tickets': return <TicketsPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;

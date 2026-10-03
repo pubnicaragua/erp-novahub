@@ -46,6 +46,10 @@ export const ProyectosPage = ({ activeSubModule, onSubModuleChange }: ProyectosP
     'proyectos-evm': 'evm',
     'proyectos-planificacion': 'planificacion',
     'proyectos-costos': 'costos',
+    'proyectos-costeo6d': 'costeo6d',
+    'proyectos-memorias': 'memorias',
+    'proyectos-exportar': 'exportar',
+    'proyectos-parametros': 'parametros',
     'proyectos-actividades': 'actividades',
     // Fallbacks
     'proyectos-hitos': 'planificacion',
@@ -57,7 +61,11 @@ export const ProyectosPage = ({ activeSubModule, onSubModuleChange }: ProyectosP
   const tabToSubModuleMap: Record<string, string> = {
     'resumen': 'proyectos-resumen',
     'cotizaciones': 'proyectos-cotizaciones',
+    'costeo6d': 'proyectos-costeo6d',
     'evm': 'proyectos-evm',
+    'memorias': 'proyectos-memorias',
+    'exportar': 'proyectos-exportar',
+    'parametros': 'proyectos-parametros',
     'planificacion': 'proyectos-planificacion',
     'costos': 'proyectos-costos',
     'actividades': 'proyectos-actividades',
@@ -66,9 +74,13 @@ export const ProyectosPage = ({ activeSubModule, onSubModuleChange }: ProyectosP
   const submoduleLabels: Record<string, string> = {
     'proyectos-resumen': 'Resumen, Avance y Documentos',
     'proyectos-cotizaciones': 'Cotizaciones Materiales',
-    'proyectos-evm': 'Control EVM',
     'proyectos-planificacion': 'Planificación y Tareas',
     'proyectos-costos': 'Presupuesto y Costos',
+    'proyectos-costeo6d': 'Costeo 6D',
+    'proyectos-evm': 'Control EVM',
+    'proyectos-memorias': 'Memorias de Cálculo',
+    'proyectos-exportar': 'Cotización Ejecutiva',
+    'proyectos-parametros': 'Parámetros del Proyecto',
     'proyectos-actividades': 'Actividades e Historial',
   };
 

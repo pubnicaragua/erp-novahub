@@ -89,6 +89,7 @@ export type Module =
   | 'inventario_movimientos'
   | 'proveedores'
   | 'actividades'
+  | 'asana'
   | 'proyectos'
   | 'tickets'
   | 'documentos'
@@ -284,7 +285,7 @@ function tenantPermissionSubscriptionCandidates(module: string): string[] {
   const normalized = String(module || '').toUpperCase();
   const candidates = new Set(TENANT_PERMISSION_SUBSCRIPTION_ALIASES[normalized] || [normalized]);
   const parent = normalized.split('_')[0];
-  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'FINANCING', 'IMPORT', 'PROJECTS'].includes(parent)) {
+  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'ASANA', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'FINANCING', 'IMPORT', 'PROJECTS'].includes(parent)) {
     candidates.add(parent);
   }
   return [...candidates];
@@ -501,6 +502,7 @@ const createUserObject = (apiPayload: any): User => {
     'PROVIDERS': 'proveedores',
     'TOOLS': 'herramientas',
     'ACTIVITIES': 'actividades',
+    'ASANA': 'asana',
     'DOCUMENTS': 'documentos',
     'NOVACHAT': 'novachat',
     'NOTIFICATIONS': 'notificaciones',
@@ -887,6 +889,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'proveedores': 'PROVIDERS',
       'herramientas': 'TOOLS',
       'actividades': 'ACTIVITIES',
+      'asana': 'ASANA',
       'tickets': 'TOOLS',
       'documentos': 'DOCUMENTS',
       'notificaciones': 'NOTIFICATIONS',
@@ -937,6 +940,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'ACTIVITIES',
         'ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_LOGS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS',
       ],
+      asana: ['ASANA', 'ASANA_TASKS'],
       proyectos: [
         'PROJECTS', 'PROYECTOS',
         'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_QUOTATIONS', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_TIME',
@@ -1063,6 +1067,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'REPORTS_': 'REPORTS',
       'DOCUMENTS_': 'DOCUMENTS',
       'ACTIVITIES_': 'ACTIVITIES',
+      'ASANA_': 'ASANA',
       'PROVIDERS_': 'PROVIDERS',
       'CLIENTS_': 'CLIENTS',
       'PROJECTS_': 'PROJECTS',
@@ -1099,6 +1104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'proveedores': 'PROVIDERS',
         'herramientas': 'TOOLS',
         'actividades': 'ACTIVITIES',
+        'asana': 'ASANA',
         'documentos': 'DOCUMENTS',
       'notificaciones': 'NOTIFICATIONS',
       'reportes': 'REPORTS',
