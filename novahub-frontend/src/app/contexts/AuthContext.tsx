@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { api, clearRequestCaches } from '../services/api';
 import { isLegacyAuthToken, storeAuthToken } from '../services/auth-token';
-import { subscriptionsService } from '../services/subscriptions.service';
 import { queryClient } from '../services/query-client';
 import { clearSessionCache } from '../services/session-cache';
 import { clearStorageUrlCache } from '../services/storage.service';
 import { BrandLogoLoader } from '../components/BrandLogo';
 import { LEGACY_VIEW_PERMISSION_ALIASES, SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_PARENT_ORDER, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
+import { canAccessModuleShell, canAccessModuleView, type ModuleViewPolicies } from '../utils/moduleViewAccess';
 import type { UserThemeSettings } from '../services/branding.service';
 
 const SIDEBAR_PERMISSION_PARENT_MODULE_IDS = new Set<string>(SIDEBAR_PERMISSION_PARENT_ORDER);
@@ -188,6 +188,8 @@ export interface User {
   permissions: Permission[];
   platformPermissions: string[];
   enabledModules: string[];
+  /** Políticas operativas heredadas del grupo, rubro y sucursal activa. */
+  moduleAccessPolicies?: ModuleViewPolicies;
   isPlatformAdmin: boolean;
   isTenantUser: boolean;
   isTenantAdmin: boolean;
@@ -651,6 +653,9 @@ const createUserObject = (apiPayload: any): User => {
       ? apiUser.platformPermissions.map((permission: unknown) => String(permission))
       : [],
     enabledModules: apiUser.enabledModules || [],
+    moduleAccessPolicies: apiUser.moduleAccessPolicies && typeof apiUser.moduleAccessPolicies === 'object'
+      ? apiUser.moduleAccessPolicies as ModuleViewPolicies
+      : undefined,
     isPlatformAdmin,
     isTenantUser: !isPlatformAdmin,
     isTenantAdmin: userType === 'admin' && role === 'admin' && !isPlatformAdmin,
@@ -820,6 +825,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasAccess = useCallback((module: string): boolean => {
     if (!user) return false;
+    if (!user.isPlatformAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
 
     // Fuerza Comercial es una superficie cerrada: solo Super Admin y
     // colaboradores expresamente habilitados pueden verla.
@@ -1040,6 +1046,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const canPerform = useCallback((module: string, action: PermissionAction): boolean => {
     if (!user) return false;
+    if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, module)) return false;
     if (user.managerMode && action !== 'viewCost') return tenantAdminHasModuleEnabled(user, module);
     // El administrador de la empresa tiene todas las acciones de los módulos
     // habilitados, incluidos permisos de flujo nuevos.
@@ -1247,13 +1254,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshEnabledModules = useCallback(async () => {
     if (!user) return;
     try {
-      const modules = await subscriptionsService.getEnabledModules(user.tenantId);
-      const moduleList = Array.isArray(modules) ? modules : (modules as any)?.data || [];
-      setUser(prev => prev ? { ...prev, enabledModules: moduleList } : prev);
+      const profile = await api.get<any>('/auth/profile');
+      rememberSessionBranding(profile);
+      setUser(createUserObject(profile));
     } catch (error) {
       console.error('Error refreshing enabledModules:', error);
     }
-  }, [user?.tenantId]);
+  }, [user?.id, user?.tenantId]);
+
+  // Rehydrate module/view availability when an open tenant session returns to
+  // the app, so a SuperAdmin change cannot leave stale navigation visible.
+  React.useEffect(() => {
+    if (!user?.id || user.isPlatformAdmin) return;
+    let lastRefreshAt = 0;
+    const refreshVisibleSession = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastRefreshAt < 5000) return;
+      lastRefreshAt = Date.now();
+      void refreshEnabledModules();
+    };
+    window.addEventListener('focus', refreshVisibleSession);
+    document.addEventListener('visibilitychange', refreshVisibleSession);
+    return () => {
+      window.removeEventListener('focus', refreshVisibleSession);
+      document.removeEventListener('visibilitychange', refreshVisibleSession);
+    };
+  }, [user?.id, user?.isPlatformAdmin, refreshEnabledModules]);
 
   return (
     <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, setSession, logout, switchIdentity, refreshEnabledModules, refreshProfile, sessionStartVersion, isLoading, userBranches, selectedBranchId, setSelectedBranchId }}>

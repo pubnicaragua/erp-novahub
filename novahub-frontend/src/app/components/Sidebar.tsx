@@ -82,6 +82,7 @@ import { BrandLogo } from './BrandLogo';
 import { NovaSuiteIcon } from './ui/NovaIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from '../utils/sidebarPermissions';
+import { canAccessModuleView } from '../utils/moduleViewAccess';
 
 interface SidebarProps {
   activeModule: Module | 'overview';
@@ -634,6 +635,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
+    if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, subId)) return false;
     const parentMod = PARENT_MODULE_MAP[parentId] || (parentId === 'inventario' ? 'INVENTORY' : null);
     const isForceSalesPlatformUser = parentId === 'fuerza-comercial'
       && (user?.isPlatformAdmin || user?.platformPermissions.includes('PLATFORM_FORCE_SALES') || user?.platformPermissions.includes('PLATFORM_QUOTES'));

@@ -37,9 +37,11 @@ interface ProyectosListViewProps {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canViewCosts: boolean;
+  canViewTimeline: boolean;
 }
 
-export function ProyectosListView({ loading, onSelect, onChanged, canCreate, canEdit, canDelete }: ProyectosListViewProps) {
+export function ProyectosListView({ loading, onSelect, onChanged, canCreate, canEdit, canDelete, canViewCosts, canViewTimeline }: ProyectosListViewProps) {
   const { userBranches, user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -102,12 +104,11 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
         Responsable: project.manager?.name || '—',
         Inicio: project.startDate ? new Date(project.startDate).toLocaleDateString('es-NI') : '—',
         Fin: project.endDate ? new Date(project.endDate).toLocaleDateString('es-NI') : '—',
-        Avance: `${Number(project.progress || 0).toFixed(2)}%`,
-        Presupuesto: project.plannedBudget,
-        Ejecutado: project.executedCost,
-      }));
+        ...(canViewTimeline ? { Avance: `${Number(project.progress || 0).toFixed(2)}%` } : {}),
+        ...(canViewCosts ? { Presupuesto: project.plannedBudget, Ejecutado: project.executedCost } : {}),
+      })) as Array<Record<string, string | number | undefined>>;
       const headers = Object.keys(exportRows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' });
-      const sections = [{ id: 'projects-list', title: 'Listado de proyectos', headers, rows: exportRows.length ? exportRows.map((row) => headers.map((header) => row[header] as string | number)) : [['Sin registros para el alcance seleccionado']] }];
+      const sections = [{ id: 'projects-list', title: 'Listado de proyectos', headers, rows: exportRows.length ? exportRows.map((row) => headers.map((header) => row[header] ?? '')) : [['Sin registros para el alcance seleccionado']] }];
       const filters = { Búsqueda: search || '—', Estado: status === 'ALL' ? 'Todos' : status, Prioridad: priority === 'ALL' ? 'Todas' : priority, Sucursal: branchId === 'ALL' ? 'Todas' : branchId, Responsable: managerId === 'ALL' ? 'Todos' : managerId };
       if (format === 'xlsx') {
         createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_proyectos'], 'xlsx'), sheets: [{ name: 'Proyectos', rows: exportRows }], filters });
@@ -240,17 +241,17 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
                   <TableHead>Prioridad</TableHead>
                   <TableHead>Responsable</TableHead>
                   <TableHead>Inicio · Fin</TableHead>
-                  <TableHead>Avance</TableHead>
-                  <TableHead className="text-right">Presupuesto</TableHead>
-                  <TableHead className="text-right">Ejecutado</TableHead>
+                  {canViewTimeline && <TableHead>Avance</TableHead>}
+                  {canViewCosts && <TableHead className="text-right">Presupuesto</TableHead>}
+                  {canViewCosts && <TableHead className="text-right">Ejecutado</TableHead>}
                   <TableHead className="w-28" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading && rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={10} className="py-12 text-center text-muted-foreground">Cargando proyectos...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6 + Number(canViewTimeline) + Number(canViewCosts) * 2 + 1} className="py-12 text-center text-muted-foreground">Cargando proyectos...</TableCell></TableRow>
                 ) : rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={10} className="py-12 text-center text-muted-foreground">No hay proyectos. Crea el primero.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6 + Number(canViewTimeline) + Number(canViewCosts) * 2 + 1} className="py-12 text-center text-muted-foreground">No hay proyectos. Crea el primero.</TableCell></TableRow>
                 ) : rows.map((row) => (
                   <TableRow key={row.id} className="cursor-pointer" onClick={() => onSelect(row.id)}>
                     <TableCell className="font-mono text-xs font-bold text-primary">{row.code}</TableCell>
@@ -270,14 +271,14 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
                     </TableCell>
                     <TableCell>{row.manager?.name || '—'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatDate(row.startDate)} · {formatDate(row.endDate)}</TableCell>
-                    <TableCell className="min-w-[130px]">
+                    {canViewTimeline && <TableCell className="min-w-[130px]">
                       <div className="flex items-center gap-2">
                         <Progress value={Number(row.progress) || 0} className="h-1.5 w-20" />
                         <span className="text-xs font-bold">{Number(row.progress) || 0}%</span>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-right text-xs">{money(row.basePlannedBudget, row.currency)}</TableCell>
-                    <TableCell className={cn('text-right text-xs', row.summary?.overBudget ? 'font-bold text-rose-600' : '')}>{money(row.baseExecutedCost, row.currency)}</TableCell>
+                    </TableCell>}
+                    {canViewCosts && <TableCell className="text-right text-xs">{money(row.basePlannedBudget, row.currency)}</TableCell>}
+                    {canViewCosts && <TableCell className={cn('text-right text-xs', row.summary?.overBudget ? 'font-bold text-rose-600' : '')}>{money(row.baseExecutedCost, row.currency)}</TableCell>}
                     <TableCell>
                       <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                         <Button size="icon" variant="ghost" className="size-8" title="Abrir" onClick={() => onSelect(row.id)}><ExternalLink className="size-4" /></Button>
@@ -314,6 +315,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editing={editing}
+        canViewCosts={canViewCosts}
         users={users}
         customers={asList(customersQuery.data)}
         branches={userBranches || []}
@@ -433,7 +435,7 @@ function ProjectDeleteDialog({ project, impact, saving, onCancel, onConfirm }: {
   );
 }
 
-function ProjectFormDialog({ open, onOpenChange, editing, users, customers, branches, saving, onSubmit }: {
+function ProjectFormDialog({ open, onOpenChange, editing, users, customers, branches, saving, onSubmit, canViewCosts }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: ProjectListItem | null;
@@ -441,6 +443,7 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
   customers: any[];
   branches: any[];
   saving: boolean;
+  canViewCosts: boolean;
   onSubmit: (payload: any) => void;
 }) {
   const detailQuery = useTenantQuery<ProjectDetail | null>(
@@ -460,8 +463,8 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
     priority: detail?.priority || item?.priority || 'MEDIUM',
     startDate: toLocalDate(detail?.startDate || item?.startDate) || '',
     endDate: toLocalDate(detail?.endDate || item?.endDate) || '',
-    plannedBudget: (detail?.plannedBudget ?? item?.plannedBudget) != null ? String(detail?.plannedBudget ?? item?.plannedBudget) : '',
-    plannedIncome: (detail?.plannedIncome ?? item?.plannedIncome) != null ? String(detail?.plannedIncome ?? item?.plannedIncome) : '',
+    plannedBudget: canViewCosts && (detail?.plannedBudget ?? item?.plannedBudget) != null ? String(detail?.plannedBudget ?? item?.plannedBudget) : '',
+    plannedIncome: canViewCosts && (detail?.plannedIncome ?? item?.plannedIncome) != null ? String(detail?.plannedIncome ?? item?.plannedIncome) : '',
     currency: detail?.currency || item?.currency || 'NIO',
     exchangeRate: (detail?.exchangeRate ?? item?.exchangeRate) && (detail?.exchangeRate ?? item?.exchangeRate) !== 1 ? String(detail?.exchangeRate ?? item?.exchangeRate) : '',
     notes: detail?.notes || item?.notes || '',
@@ -497,8 +500,10 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
       priority: form.priority,
       startDate: fromLocalDate(form.startDate),
       endDate: fromLocalDate(form.endDate),
-      plannedBudget: form.plannedBudget === '' ? 0 : Number(form.plannedBudget),
-      plannedIncome: form.plannedIncome === '' ? 0 : Number(form.plannedIncome),
+      ...(canViewCosts ? {
+        plannedBudget: form.plannedBudget === '' ? 0 : Number(form.plannedBudget),
+        plannedIncome: form.plannedIncome === '' ? 0 : Number(form.plannedIncome),
+      } : {}),
       currency: form.currency,
       exchangeRate: form.exchangeRate === '' ? undefined : Number(form.exchangeRate),
       notes: form.notes?.trim() || undefined,
@@ -580,14 +585,14 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
               <DateField value={form.endDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, endDate: v }))} />
             </div>
           </div>
-          <div>
+          {canViewCosts && <div>
             <Label>Presupuesto proyectado</Label>
-              <Input data-testid="projects-form-planned-budget" type="number" min={0} value={form.plannedBudget} onChange={(e) => setForm((f: any) => ({ ...f, plannedBudget: e.target.value }))} placeholder="0.00" />
-          </div>
-          <div>
+            <Input data-testid="projects-form-planned-budget" type="number" min={0} value={form.plannedBudget} onChange={(e) => setForm((f: any) => ({ ...f, plannedBudget: e.target.value }))} placeholder="0.00" />
+          </div>}
+          {canViewCosts && <div>
             <Label>Ingresos proyectados</Label>
             <Input type="number" min={0} value={form.plannedIncome} onChange={(e) => setForm((f: any) => ({ ...f, plannedIncome: e.target.value }))} placeholder="0.00" />
-          </div>
+          </div>}
           <div>
             <Label>Moneda</Label>
             <Select value={form.currency} onValueChange={(v) => setForm((f: any) => ({ ...f, currency: v }))}>

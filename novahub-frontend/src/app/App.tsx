@@ -34,6 +34,7 @@ import { loadModuleWithChunkRecovery } from './utils/chunk-recovery';
 import { readPersistedDarkMode } from './utils/theme-mode';
 import { useResponsiveNativeTables } from './hooks/useResponsiveNativeTables';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from './utils/sidebarPermissions';
+import { GUIDED_TOUR_REQUEST_EVENT, type GuidedTourRequestResult } from './services/guided-tour.service';
 
 function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(loader: () => Promise<T>, moduleName: string) {
   return lazy(() => loadModuleWithChunkRecovery(loader, moduleName));
@@ -226,6 +227,49 @@ function DashboardLayout() {
 
   const mainRef = useRef<HTMLElement | null>(null);
   const mainScrollStorageKey = `erp-scroll-position:${user?.id || 'anonymous'}:${activeModule}:${activeSubModule || ''}`;
+
+  useEffect(() => {
+    const isVisibleGuideTrigger = (element: HTMLElement) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && rect.width > 0
+        && rect.height > 0
+        && !element.closest('[aria-hidden="true"]')
+        && !element.closest('[data-state="closed"]')
+        && !element.closest('[data-nova-ai-chat]');
+    };
+
+    const handleGuidedTourRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ respond?: (result: GuidedTourRequestResult) => void }>).detail;
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>([
+        '[data-tutorial-trigger="true"]',
+        'button[aria-label*="Cómo"]',
+        'button[title*="Cómo"]',
+        'button[aria-label*="tutorial"]',
+        'button[title*="tutorial"]',
+      ].join(','))).filter(isVisibleGuideTrigger);
+      // Prefer the guide inside the active dialog. This matters for full-page
+      // forms such as product creation, where the underlying list is still
+      // mounted and can also contain a help trigger.
+      const trigger = candidates.filter((element) => element.closest('[role="dialog"]')).at(-1) || candidates[0];
+      if (!trigger) {
+        detail?.respond?.({ started: false });
+        return;
+      }
+
+      trigger.focus({ preventScroll: true });
+      trigger.click();
+      detail?.respond?.({
+        started: true,
+        label: trigger.getAttribute('aria-label') || trigger.getAttribute('title') || undefined,
+      });
+    };
+
+    window.addEventListener(GUIDED_TOUR_REQUEST_EVENT, handleGuidedTourRequest);
+    return () => window.removeEventListener(GUIDED_TOUR_REQUEST_EVENT, handleGuidedTourRequest);
+  }, []);
 
   useEffect(() => {
     const main = mainRef.current;
