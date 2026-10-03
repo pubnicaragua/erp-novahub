@@ -27,6 +27,7 @@ export const SIDEBAR_PERMISSION_PARENT_ORDER = [
   'REPORTS',
   'HR',
   'ACTIVITIES',
+  'ASANA',
   'PROJECTS',
   'FORCE_SALES',
   'TICKETS',
@@ -140,6 +141,9 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'ACTIVITIES_LOGS', label: 'Bitácora', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_CALENDAR', label: 'Calendario', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_MEETINGS', label: 'Reuniones', parent: 'ACTIVITIES' },
+
+  // Asana
+  { id: 'ASANA_TASKS', label: 'Tareas de Asana', parent: 'ASANA' },
 
   // Proyectos
   { id: 'PROJECTS_LIST', label: 'Portafolio', parent: 'PROJECTS' },
@@ -330,6 +334,8 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   calendario: ['ACTIVITIES_CALENDAR'],
   reuniones: ['ACTIVITIES_MEETINGS'],
 
+  asana: ['ASANA'],
+
   proyectos: ['PROJECTS_LIST', 'PROJECTS'],
   'proyectos-resumen': ['PROJECTS_LIST', 'PROJECTS'],
   'proyectos-cotizaciones': ['PROJECTS_QUOTATIONS', 'PROJECTS'],
@@ -441,6 +447,7 @@ export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
   'inventario:perdidas': ['INVENTORY_LOSSES'],
   'inventario:mobiliario-equipos': ['INVENTORY_ASSETS'],
   'inventario:configuracion': ['INVENTORY_CONFIG'],
+  asana: ['ASANA'],
 };
 
 /** Suscripciones equivalentes que exponen una fila de permiso en Roles. */
@@ -480,7 +487,7 @@ export const PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
 
 export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
   'SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'ACCOUNTING', 'HR',
-  'ACTIVITIES', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
+  'ACTIVITIES', 'ASANA', 'ASANA_TASKS', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
   'FINANCING', 'LEGAL', 'HR_TRAINING', 'SUPPORT_TECH', 'NOVACHAT',
   'PROJECTS', 'FORCE_SALES', 'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT',
   'RESTAURANT_TABLES', 'RESTAURANT_SALON', 'RESTAURANT_ORDERS', 'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS',

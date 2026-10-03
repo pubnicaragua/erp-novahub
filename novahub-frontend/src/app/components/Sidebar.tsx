@@ -310,6 +310,12 @@ const menuItems: MenuItem[] = [
     ]
   },
   {
+    id: 'asana',
+    label: 'Asana',
+    icon: <ClipboardPen className="size-5" />,
+    section: 'Herramientas',
+  },
+  {
     id: 'proyectos',
     label: 'Proyectos',
     icon: <FolderKanban className="size-5" />,
@@ -610,6 +616,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     reportes: 'REPORTS',
     documentos: 'DOCUMENTS',
     actividades: 'ACTIVITIES',
+    asana: 'ASANA',
     tickets: 'TICKETS',
     notificaciones: 'NOTIFICATIONS',
     contabilidad: 'ACCOUNTING',

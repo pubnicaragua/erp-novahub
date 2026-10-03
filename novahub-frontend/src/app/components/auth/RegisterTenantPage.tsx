@@ -108,6 +108,7 @@ const PARENT_SUBMODULES: Record<string, string[]> = SIDEBAR_PERMISSION_PARENT_OR
 }, {} as Record<string, string[]>);
 
 const SUBMODULE_NAMES_ES: Record<string, string> = {
+  ASANA_TASKS: 'Tareas de Asana',
   TICKETS_LIST: 'Tickets',
   TICKETS_KNOWLEDGE_BASE: 'Base de Conocimiento',
   TICKETS_FAQS: 'Base de Conocimiento',
@@ -248,6 +249,7 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
 const PARENT_KEYS = new Set(Object.keys(PARENT_SUBMODULES));
 
 const PARENT_NAMES_ES: Record<string, string> = {
+  ASANA: 'Asana',
   SALES: 'Ventas',
   PURCHASES: 'Compras',
   INVENTORY: 'Inventario de Mercancías',
@@ -270,6 +272,7 @@ const PARENT_NAMES_ES: Record<string, string> = {
 };
 
 const PARENT_DESCRIPTIONS_ES: Record<string, string> = {
+  ASANA: 'Organiza tableros y tareas de equipo.',
   SALES: 'Controla clientes, cotizaciones y facturación.',
   PURCHASES: 'Gestiona proveedores, órdenes y gastos.',
   INVENTORY: 'Bodegas, existencias y conteo físico.',
