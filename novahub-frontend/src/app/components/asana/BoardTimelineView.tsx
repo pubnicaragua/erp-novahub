@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { Calendar, Flag, GitFork } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 
 type Task = {
   id: string;
@@ -11,6 +12,7 @@ type Task = {
   startDate?: string | null;
   dueDate?: string | null;
   progress?: number;
+  assignee?: { id: string; name: string; avatar?: string; avatarUrl?: string } | null;
 };
 
 type BoardTimelineViewProps = {
@@ -230,6 +232,14 @@ export function BoardTimelineView({ tasks, onSelectTask }: BoardTimelineViewProp
                       {task.priority && task.priority !== 'NONE' && (
                         <Flag className="size-3 text-muted-foreground shrink-0" />
                       )}
+                      {task.assignee && (
+                        <Avatar className="size-5 shrink-0 border ml-auto shadow-sm">
+                          <AvatarImage src={task.assignee.avatar || task.assignee.avatarUrl || ''} />
+                          <AvatarFallback className="text-[9px]">
+                            {task.assignee.name.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
                     </div>
 
                     {/* Barra de tiempo horizontal */}
@@ -244,11 +254,19 @@ export function BoardTimelineView({ tasks, onSelectTask }: BoardTimelineViewProp
                           }}
                           title={`${task.title} (${task.dueDate ? new Date(task.dueDate).toLocaleDateString('es-NI') : ''})`}
                         >
-                          <span className="truncate">{task.title}</span>
+                          <span className="truncate flex-1">{task.title}</span>
                           {task.progress !== undefined && Number(task.progress) > 0 && (
-                            <span className="text-[9px] opacity-75 ml-1">
+                            <span className="text-[9px] opacity-75 mx-1">
                               {Number(task.progress)}%
                             </span>
+                          )}
+                          {task.assignee && (
+                            <Avatar className="size-4 border border-background shadow-sm ml-1 shrink-0 bg-background">
+                              <AvatarImage src={task.assignee.avatar || task.assignee.avatarUrl || ''} />
+                              <AvatarFallback className="text-[8px]">
+                                {task.assignee.name.substring(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
                           )}
                         </div>
                       ) : (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Calendar,
@@ -15,13 +15,15 @@ import {
 import { toast } from 'sonner';
 import { api } from '../../services/api';
 import { invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
+import { useAuth } from '../../contexts/AuthContext';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../ui/sheet';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 
-export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'BLOCKED' | 'COMPLETED';
+export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type TaskPriority = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
 export type Subtask = {
@@ -37,7 +39,7 @@ export type Comment = {
   content: string;
   createdAt: string;
   authorId?: string;
-  author?: { id: string; name?: string; email?: string };
+  author?: { id: string; name?: string; email?: string; avatar?: string; avatarUrl?: string };
 };
 
 export type TaskDetail = {
@@ -47,14 +49,17 @@ export type TaskDetail = {
   status: TaskStatus;
   priority: TaskPriority;
   sectionId?: string | null;
+  assigneeId?: string | null;
+  assignee?: { id: string; name: string; email: string; avatar?: string; avatarUrl?: string } | null;
   startDate?: string | null;
   dueDate?: string | null;
   progress?: number;
   estimatedHours?: number;
   loggedHours?: number;
   createdAt: string;
-  subtasks?: Subtask[];
+  subtasks?: (Subtask & { assignee?: { id: string; name: string; avatar?: string; avatarUrl?: string } | null })[];
   comments?: Comment[];
+  attachments?: { id: string; fileName: string; fileUrl: string; mimeType: string | null; createdBy: { name: string; avatar?: string; avatarUrl?: string } }[];
 };
 
 type Section = { id: string; name: string };
@@ -74,9 +79,8 @@ type TaskDetailModalProps = {
 const STATUS_LABELS: Record<TaskStatus, { label: string; color: string }> = {
   TODO: { label: 'Por hacer', color: 'bg-muted text-muted-foreground' },
   IN_PROGRESS: { label: 'En curso', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
-  REVIEW: { label: 'En revisión', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
-  BLOCKED: { label: 'Bloqueado', color: 'bg-destructive/10 text-destructive' },
   COMPLETED: { label: 'Completado', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  CANCELLED: { label: 'Cancelado', color: 'bg-destructive/10 text-destructive' },
 };
 
 const PRIORITY_LABELS: Record<TaskPriority, { label: string; color: string }> = {
@@ -98,21 +102,44 @@ export function TaskDetailModal({
   onTaskUpdated,
   onTaskDeleted,
 }: TaskDetailModalProps) {
+  const { user } = useAuth();
+  
+  const [taskStack, setTaskStack] = useState<{id: string, title: string}[]>([]);
+
+  // Resetea el stack al abrir con una nueva tarea
+  useEffect(() => {
+    if (open && taskId) {
+      setTaskStack([{ id: taskId, title: 'Tarea Principal' }]);
+    } else {
+      setTaskStack([]);
+    }
+  }, [taskId, open]);
+
+  const currentTaskId = taskStack[taskStack.length - 1]?.id || taskId;
+
+
   // Consulta el detalle completo de la tarea desde el backend
   const taskQuery = useTenantQuery<TaskDetail | null>(
-    ['asana', 'board', boardId, 'task', taskId],
+    ['asana', 'board', boardId, 'task', currentTaskId],
     async () => {
-      if (!boardId || !taskId) return null;
-      return await api.get<TaskDetail>(`/asana/boards/${boardId}/tasks/${taskId}`);
+      if (!boardId || !currentTaskId) return null;
+      return await api.get<TaskDetail>(`/asana/boards/${boardId}/tasks/${currentTaskId}`);
     },
-    { enabled: Boolean(boardId && taskId && open) }
+    { enabled: Boolean(boardId && currentTaskId && open) }
   );
+
+  // Cada vez que se carga la tarea principal por primera vez, ajustamos el título en el stack
+  useEffect(() => {
+    if (taskQuery.data && taskStack.length === 1 && taskStack[0].title === 'Tarea Principal') {
+      setTaskStack([{ id: taskQuery.data.id, title: taskQuery.data.title }]);
+    }
+  }, [taskQuery.data, taskStack]);
 
   const task = taskQuery.data;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-6">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent hideOverlay side="right" className="w-[90vw] sm:max-w-xl lg:max-w-3xl xl:max-w-4xl p-6 overflow-y-auto shadow-2xl border-l">
         {taskQuery.isLoading ? (
           <div className="flex h-64 items-center justify-center gap-2 text-muted-foreground">
             <Loader2 className="size-6 animate-spin" />
@@ -130,14 +157,17 @@ export function TaskDetailModal({
             sections={sections}
             canEdit={canEdit}
             canDelete={canDelete}
+            currentTaskId={currentTaskId}
+            taskStack={taskStack}
+            setTaskStack={setTaskStack}
             onRefetch={() => void taskQuery.refetch()}
             onClose={() => onOpenChange(false)}
             onTaskUpdated={onTaskUpdated}
             onTaskDeleted={onTaskDeleted}
           />
         )}
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -147,6 +177,9 @@ type TaskDetailBodyProps = {
   sections: Section[];
   canEdit: boolean;
   canDelete: boolean;
+  currentTaskId: string;
+  taskStack: {id: string, title: string}[];
+  setTaskStack: (stack: {id: string, title: string}[]) => void;
   onRefetch: () => void;
   onClose: () => void;
   onTaskUpdated?: () => void;
@@ -160,12 +193,22 @@ function TaskDetailBody({
   sections,
   canEdit,
   canDelete,
+  currentTaskId,
+  taskStack,
+  setTaskStack,
   onRefetch,
   onClose,
   onTaskUpdated,
   onTaskDeleted,
 }: TaskDetailBodyProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  const assigneesQuery = useTenantQuery<{ id: string; name: string; email: string; avatar?: string; avatarUrl?: string }[]>(
+    ['users', 'assignees'],
+    async () => await api.get('/users/lookups/assignees')
+  );
+
   const [title, setTitle] = useState(task.title || '');
   const [description, setDescription] = useState(task.description || '');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
@@ -173,17 +216,39 @@ function TaskDetailBody({
   const [newComment, setNewComment] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Mutación para actualizar propiedades generales de la tarea
   const updateTask = useMutation({
     mutationFn: (changes: Partial<TaskDetail>) =>
-      api.patch(`/asana/boards/${boardId}/tasks/${task.id}`, changes),
+      api.patch(`/asana/boards/${boardId}/tasks/${currentTaskId}`, changes),
+    onMutate: async (changes) => {
+      const queryKey = ['asana', 'board', boardId, 'task', currentTaskId];
+      const tasksQueryKey = ['asana', 'board', boardId, 'tasks'];
+      
+      await queryClient.cancelQueries({ queryKey });
+      await queryClient.cancelQueries({ queryKey: tasksQueryKey });
+      
+      const previousTask = queryClient.getQueryData<TaskDetail>(queryKey);
+      
+      queryClient.setQueryData<TaskDetail | undefined>(queryKey, (old) => {
+        if (!old) return old;
+        return { ...old, ...changes };
+      });
+      
+      queryClient.setQueryData(tasksQueryKey, (old: any) => {
+        if (!old) return old;
+        return old.map((t: any) => t.id === currentTaskId ? { ...t, ...changes } : t);
+      });
+
+      return { previousTask, queryKey, tasksQueryKey };
+    },
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+      // Refresh background quietly
       onRefetch();
       onTaskUpdated?.();
-      toast.success('Tarea actualizada');
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, _variables, context) => {
+      if (context?.previousTask) {
+        queryClient.setQueryData(context.queryKey, context.previousTask);
+      }
       const msg = err instanceof Error ? err.message : 'Error al actualizar la tarea';
       toast.error(msg);
     },
@@ -192,9 +257,9 @@ function TaskDetailBody({
   // Mutación para mover la tarea a otra sección
   const moveSection = useMutation({
     mutationFn: (sectionId: string) =>
-      api.post(`/asana/boards/${boardId}/tasks/move`, { taskId: task.id, sectionId }),
+      api.post(`/asana/boards/${boardId}/tasks/move`, { taskId: currentTaskId, sectionId }),
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       onRefetch();
       onTaskUpdated?.();
       toast.success('Sección actualizada');
@@ -207,11 +272,11 @@ function TaskDetailBody({
     mutationFn: ({ title: subtaskTitle, dueDate }: { title: string; dueDate?: string | null }) =>
       api.post(`/asana/boards/${boardId}/tasks`, {
         title: subtaskTitle,
-        parentTaskId: task.id,
+        parentTaskId: currentTaskId,
         dueDate: dueDate || undefined,
       }),
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       onRefetch();
       setNewSubtaskTitle('');
       setNewSubtaskDueDate('');
@@ -231,7 +296,7 @@ function TaskDetailBody({
         dueDate: dueDate || null,
       }),
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       onRefetch();
       onTaskUpdated?.();
     },
@@ -243,7 +308,7 @@ function TaskDetailBody({
     mutationFn: (subtaskId: string) =>
       api.delete(`/asana/boards/${boardId}/tasks/${subtaskId}`),
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       onRefetch();
       onTaskUpdated?.();
       toast.success('Subtarea eliminada');
@@ -258,7 +323,7 @@ function TaskDetailBody({
         status: completed ? 'COMPLETED' : 'TODO',
       }),
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       onRefetch();
       onTaskUpdated?.();
     },
@@ -271,9 +336,9 @@ function TaskDetailBody({
   // Mutación para publicar un comentario
   const addComment = useMutation({
     mutationFn: (content: string) =>
-      api.post(`/asana/boards/${boardId}/tasks/${task.id}/comments`, { content }),
+      api.post(`/asana/boards/${boardId}/tasks/${currentTaskId}/comments`, { content }),
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       onRefetch();
       setNewComment('');
       toast.success('Comentario agregado');
@@ -283,9 +348,9 @@ function TaskDetailBody({
 
   // Mutación para eliminar la tarea
   const deleteTask = useMutation({
-    mutationFn: () => api.delete(`/asana/boards/${boardId}/tasks/${task.id}`),
+    mutationFn: () => api.delete(`/asana/boards/${boardId}/tasks/${currentTaskId}`),
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       onClose();
       onTaskDeleted?.();
       toast.success('Tarea eliminada');
@@ -319,15 +384,33 @@ function TaskDetailBody({
   return (
     <div className="space-y-6">
       {/* Cabecera con título editable y estado */}
-      <DialogHeader className="space-y-3">
+      <SheetHeader className="space-y-3">
+        {taskStack.length > 1 && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+            {taskStack.map((step, index) => (
+              <div key={step.id} className="flex items-center gap-2">
+                {index > 0 && <span>/</span>}
+                <button
+                  className={`hover:underline truncate max-w-[150px] ${
+                    index === taskStack.length - 1 ? 'font-semibold text-foreground' : ''
+                  }`}
+                  onClick={() => setTaskStack(taskStack.slice(0, index + 1))}
+                  title={step.title}
+                >
+                  {step.title}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full max-w-xl">
             <button
               type="button"
               onClick={() =>
                 handleStatusChange(task.status === 'COMPLETED' ? 'TODO' : 'COMPLETED')
               }
-              disabled={!canEdit || updateTask.isPending}
+              disabled={!canEdit }
               className="text-muted-foreground hover:text-primary transition"
               title={task.status === 'COMPLETED' ? 'Marcar incompleta' : 'Marcar completada'}
             >
@@ -382,20 +465,20 @@ function TaskDetailBody({
           )}
         </div>
 
-        <DialogTitle className="text-xl">
+        <SheetTitle className="text-xl">
           <Input
             value={title}
-            disabled={!canEdit || updateTask.isPending}
+            disabled={!canEdit }
             onChange={(e) => setTitle(e.target.value)}
             onBlur={handleTitleBlur}
             placeholder="Título de la tarea"
             className="text-xl font-bold border-transparent hover:border-border focus:border-primary px-1 -mx-1"
           />
-        </DialogTitle>
-        <DialogDescription className="sr-only">
+        </SheetTitle>
+        <SheetDescription className="sr-only">
           Detalle y edición de la tarea de Asana
-        </DialogDescription>
-      </DialogHeader>
+        </SheetDescription>
+      </SheetHeader>
 
       {/* Cuadrícula de 2 columnas: contenido y propiedades */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -408,7 +491,7 @@ function TaskDetailBody({
             </label>
             <Textarea
               value={description}
-              disabled={!canEdit || updateTask.isPending}
+              disabled={!canEdit }
               onChange={(e) => setDescription(e.target.value)}
               onBlur={handleDescriptionBlur}
               placeholder="Escribe una descripción detallada o notas..."
@@ -468,15 +551,24 @@ function TaskDetailBody({
                         )}
                       </button>
                       <span
-                        className={`text-sm truncate flex-1 ${
+                        className={`text-sm truncate flex-1 hover:underline cursor-pointer ${
                           isDone ? 'line-through text-muted-foreground' : 'font-medium'
                         }`}
+                        onClick={() => setTaskStack([...taskStack, { id: subtask.id, title: subtask.title }])}
                       >
                         {subtask.title}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {subtask.assignee && (
+                        <Avatar className="size-6 border">
+                          <AvatarImage src={subtask.assignee.avatar || subtask.assignee.avatarUrl || ''} />
+                          <AvatarFallback className="text-[10px]">
+                            {subtask.assignee.name.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
                       {/* Configuración de fecha límite para la subtarea */}
                       <Input
                         type="date"
@@ -638,20 +730,51 @@ function TaskDetailBody({
             </select>
           </div>
 
+          {/* Responsable */}
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Responsable</label>
+            <div className="flex gap-2">
+              <select
+                value={task.assigneeId || ''}
+                disabled={!canEdit }
+                onChange={(e) => updateTask.mutate({ assigneeId: e.target.value || null })}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Sin asignar</option>
+                {assigneesQuery.data?.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+              {user && user.id !== task.assigneeId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 h-9"
+                  disabled={!canEdit }
+                  onClick={() => updateTask.mutate({ assigneeId: user.id })}
+                  title="Asignarme a mí"
+                >
+                  Yo
+                </Button>
+              )}
+            </div>
+          </div>
+
           {/* Estado */}
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Estado</label>
             <select
               value={task.status}
-              disabled={!canEdit || updateTask.isPending}
+              disabled={!canEdit }
               onChange={(e) => handleStatusChange(e.target.value as TaskStatus)}
               className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
             >
               <option value="TODO">Por hacer</option>
               <option value="IN_PROGRESS">En curso</option>
-              <option value="REVIEW">En revisión</option>
-              <option value="BLOCKED">Bloqueado</option>
               <option value="COMPLETED">Completado</option>
+              <option value="CANCELLED">Cancelado</option>
             </select>
           </div>
 
@@ -660,7 +783,7 @@ function TaskDetailBody({
             <label className="text-xs text-muted-foreground">Prioridad</label>
             <select
               value={task.priority}
-              disabled={!canEdit || updateTask.isPending}
+              disabled={!canEdit }
               onChange={(e) => handlePriorityChange(e.target.value as TaskPriority)}
               className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
             >
@@ -679,7 +802,7 @@ function TaskDetailBody({
             </label>
             <Input
               type="date"
-              disabled={!canEdit || updateTask.isPending}
+              disabled={!canEdit }
               value={task.startDate ? task.startDate.substring(0, 10) : ''}
               onChange={(e) =>
                 updateTask.mutate({ startDate: e.target.value || null })
@@ -695,7 +818,7 @@ function TaskDetailBody({
             </label>
             <Input
               type="date"
-              disabled={!canEdit || updateTask.isPending}
+              disabled={!canEdit }
               value={task.dueDate ? task.dueDate.substring(0, 10) : ''}
               onChange={(e) =>
                 updateTask.mutate({ dueDate: e.target.value || null })
@@ -714,7 +837,7 @@ function TaskDetailBody({
                 type="number"
                 step="0.5"
                 min="0"
-                disabled={!canEdit || Boolean(totalSubtasks) || updateTask.isPending}
+                disabled={!canEdit || Boolean(totalSubtasks) }
                 value={task.estimatedHours ?? 0}
                 onChange={(e) =>
                   updateTask.mutate({ estimatedHours: Number(e.target.value) || 0 })
@@ -730,7 +853,7 @@ function TaskDetailBody({
                 type="number"
                 step="0.5"
                 min="0"
-                disabled={!canEdit || Boolean(totalSubtasks) || updateTask.isPending}
+                disabled={!canEdit || Boolean(totalSubtasks) }
                 value={task.loggedHours ?? 0}
                 onChange={(e) =>
                   updateTask.mutate({ loggedHours: Number(e.target.value) || 0 })

@@ -15,6 +15,8 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  TrendingUp,
+  Paperclip,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../services/api';
@@ -26,15 +28,18 @@ import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { moveAsanaTask } from './asana/moveTask';
 import { TaskDetailModal } from './asana/TaskDetailModal';
 import { BoardListView } from './asana/BoardListView';
 import { BoardTimelineView } from './asana/BoardTimelineView';
 import { BoardCalendarView } from './asana/BoardCalendarView';
+import { BoardFilesView } from './asana/BoardFilesView';
+import { BoardProgressView } from './asana/BoardProgressView';
 import { SmartFiltersBar, type SmartFilterType } from './asana/SmartFiltersBar';
 
 type Section = { id: string; name: string; color?: string | null; sortOrder: number };
-type Board = { id: string; name: string; description?: string | null; branchId: string; sections?: Section[] };
+type Board = { id: string; name: string; description?: string | null; branchId: string; sections?: Section[]; statusColor?: string; statusText?: string | null; statusUpdatedAt?: string | null; };
 type Task = {
   id: string;
   title: string;
@@ -45,10 +50,12 @@ type Task = {
   dueDate?: string | null;
   startDate?: string | null;
   progress?: number;
+  assigneeId?: string | null;
+  assignee?: { id: string; name: string; avatar?: string; avatarUrl?: string } | null;
 };
 type Branch = { id: string; name: string };
 type BoardDetailResponse = Board & { tasks?: Task[] };
-type ViewMode = 'kanban' | 'list' | 'timeline' | 'calendar';
+type ViewMode = 'kanban' | 'list' | 'timeline' | 'calendar' | 'files' | 'progress';
 
 type BoardViewProps = {
   board: Board | null;
@@ -102,7 +109,7 @@ const errorMessage = (error: unknown, fallback: string) => error instanceof Erro
 const boardKey = ['asana', 'boards'];
 
 export function AsanaPage() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { accessibleBranches, selectedBranchId, isLoading: branchesLoading } = useBranchScope();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -139,7 +146,7 @@ export function AsanaPage() {
         blank: blankBoard || undefined,
       }),
     onSuccess: (board: Board) => {
-      invalidateTenantQueries(queryClient);
+
       setCreateOpen(false);
       setName('');
       setDescription('');
@@ -153,10 +160,28 @@ export function AsanaPage() {
 
   // Mutación para agregar una tarea rápidamente a una columna.
   const createTask = useMutation({
-    mutationFn: ({ sectionId, title }: { sectionId: string; title: string }) =>
-      api.post(`/asana/boards/${selectedBoardId}/tasks`, { title, sectionId }),
+    mutationFn: ({ sectionId, title }: { sectionId: string; title: string }) => {
+      const payload: any = { title, sectionId };
+      const todayStr = new Date().toISOString().substring(0, 10);
+
+      // Si el usuario crea una tarea estando en un filtro activo, la tarea se adapta para no desaparecer
+      if (smartFilter === 'my-day') {
+        payload.dueDate = `${todayStr}T23:59:59Z`;
+        payload.assigneeId = user?.id;
+      } else if (smartFilter === 'important') {
+        payload.priority = 'HIGH';
+      } else if (smartFilter === 'urgent') {
+        payload.priority = 'URGENT';
+      } else if (smartFilter === 'in-progress') {
+        payload.status = 'IN_PROGRESS';
+      } else if (smartFilter === 'planned') {
+        payload.dueDate = `${todayStr}T23:59:59Z`;
+      }
+
+      return api.post(`/asana/boards/${selectedBoardId}/tasks`, payload);
+    },
     onSuccess: (_, variables) => {
-      invalidateTenantQueries(queryClient);
+
       void tasksQuery.refetch();
       void detailQuery.refetch();
       setQuickTitles((current) => ({ ...current, [variables.sectionId]: '' }));
@@ -170,7 +195,7 @@ export function AsanaPage() {
     mutationFn: ({ parentTaskId, title }: { parentTaskId: string; title: string }) =>
       api.post(`/asana/boards/${selectedBoardId}/tasks`, { title, parentTaskId }),
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       void tasksQuery.refetch();
       void detailQuery.refetch();
       toast.success('Subtarea creada');
@@ -185,7 +210,7 @@ export function AsanaPage() {
       return moveAsanaTask(api, selectedBoardId, taskId, sectionId, afterTaskId);
     },
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       void tasksQuery.refetch();
       void detailQuery.refetch();
     },
@@ -198,12 +223,27 @@ export function AsanaPage() {
       const nextStatus = currentStatus === 'COMPLETED' ? 'TODO' : 'COMPLETED';
       return api.patch(`/asana/boards/${selectedBoardId}/tasks/${taskId}`, { status: nextStatus });
     },
-    onSuccess: () => {
-      invalidateTenantQueries(queryClient);
-      void tasksQuery.refetch();
-      void detailQuery.refetch();
+    onMutate: async ({ taskId, currentStatus }) => {
+      const nextStatus = currentStatus === 'COMPLETED' ? 'TODO' : 'COMPLETED';
+      const queryKey = ['asana', 'board', selectedBoardId, 'tasks'];
+      await queryClient.cancelQueries({ queryKey });
+      const previousTasks = queryClient.getQueryData(queryKey);
+      queryClient.setQueryData(queryKey, (oldTasks: Task[] | undefined) => {
+        if (!oldTasks) return oldTasks;
+        return oldTasks.map(t => (t.id === taskId ? { ...t, status: nextStatus } : t));
+      });
+      return { previousTasks, queryKey };
     },
-    onError: (error: unknown) => toast.error(errorMessage(error, 'No se pudo cambiar el estado')),
+    onSuccess: () => {
+      // Background refetch instead of forced invalidation blocker
+      void tasksQuery.refetch();
+    },
+    onError: (error: unknown, _variables, context) => {
+      if (context?.previousTasks) {
+        queryClient.setQueryData(context.queryKey, context.previousTasks);
+      }
+      toast.error(errorMessage(error, 'No se pudo cambiar el estado'));
+    },
   });
 
   // Mutación para crear una nueva sección / columna personalizada en el tablero.
@@ -211,7 +251,7 @@ export function AsanaPage() {
     mutationFn: (sectionName: string) =>
       api.post(`/asana/boards/${selectedBoardId}/sections`, { name: sectionName }),
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       void detailQuery.refetch();
       toast.success('Columna añadida');
     },
@@ -223,7 +263,7 @@ export function AsanaPage() {
     mutationFn: (sectionId: string) =>
       api.delete(`/asana/boards/${selectedBoardId}/sections/${sectionId}`),
     onSuccess: () => {
-      invalidateTenantQueries(queryClient);
+
       void detailQuery.refetch();
       void tasksQuery.refetch();
       toast.success('Columna eliminada');
@@ -235,6 +275,8 @@ export function AsanaPage() {
   const sections = detail?.sections ?? [];
   const allTasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const canCreateBoard = canPerform('ASANA', 'create');
+  
+  
   const canManageBoard = canPerform('ASANA', 'edit');
   const canCreateTask = canPerform('ASANA_TASKS', 'create');
   const canMoveTask = canPerform('ASANA_TASKS', 'edit');
@@ -249,7 +291,7 @@ export function AsanaPage() {
     const todayStr = new Date().toISOString().substring(0, 10);
     switch (smartFilter) {
       case 'my-day':
-        return list.filter((t) => t.dueDate && t.dueDate.substring(0, 10) === todayStr);
+        return list.filter((t) => t.assigneeId === user?.id || (t.dueDate && t.dueDate.substring(0, 10) === todayStr));
       case 'important':
         return list.filter((t) => t.priority === 'HIGH' || t.priority === 'URGENT');
       case 'planned':
@@ -565,6 +607,30 @@ function BoardView({
                 <CalendarDays className="size-3.5" />
                 Calendario
               </button>
+              <button
+                type="button"
+                onClick={() => onViewModeChange('progress')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  viewMode === 'progress'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <TrendingUp className="size-3.5" />
+                Progreso
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewModeChange('files')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  viewMode === 'files'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Paperclip className="size-3.5" />
+                Archivos
+              </button>
             </div>
 
             <Button variant="outline" size="sm" onClick={onRefresh}>
@@ -644,11 +710,24 @@ function BoardView({
                           } ${draggedTaskId === task.id ? 'opacity-30 scale-95' : ''}`}
                         >
                           <p className="text-sm font-medium">{task.title}</p>
-                          {task.dueDate && (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              Vence {new Date(task.dueDate).toLocaleDateString('es-NI')}
-                            </p>
-                          )}
+                          <div className="flex flex-wrap items-center justify-between gap-2 mt-1">
+                            {task.dueDate ? (
+                              <span className="flex items-center gap-1 text-[11px] text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
+                                <Calendar className="size-3" />
+                                {new Date(task.dueDate).toLocaleDateString('es-NI')}
+                              </span>
+                            ) : (
+                              <div />
+                            )}
+                            {task.assignee && (
+                              <Avatar className="size-5 shrink-0 border ml-auto shadow-sm">
+                                <AvatarImage src={task.assignee.avatar || task.assignee.avatarUrl || ''} />
+                                <AvatarFallback className="text-[9px]">
+                                  {task.assignee.name.substring(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                            )}
+                          </div>
 
                           {/* Vista visible de subtareas dentro de la tarjeta Kanban */}
                           {taskSubtasks.length > 0 && (
@@ -705,6 +784,19 @@ function BoardView({
                                         >
                                           {subtask.title}
                                         </span>
+                                        {subtask.dueDate && (
+                                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                            {new Date(subtask.dueDate).toLocaleDateString('es-NI', { month: 'short', day: 'numeric' })}
+                                          </span>
+                                        )}
+                                        {subtask.assignee && (
+                                          <Avatar className="size-4 shrink-0 border shadow-sm ml-1">
+                                            <AvatarImage src={subtask.assignee.avatar || subtask.assignee.avatarUrl || ''} />
+                                            <AvatarFallback className="text-[8px]">
+                                              {subtask.assignee.name.substring(0, 2).toUpperCase()}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                        )}
                                       </div>
                                     );
                                   })}
@@ -844,6 +936,20 @@ function BoardView({
           <BoardCalendarView
             tasks={filteredTasks}
             onSelectTask={onSelectTask}
+          />
+        )}
+
+        {/* 5. Vista de Archivos */}
+        {viewMode === 'files' && (
+          <BoardFilesView boardId={board.id} />
+        )}
+
+        {/* 6. Vista de Progreso */}
+        {viewMode === 'progress' && (
+          <BoardProgressView
+            board={board}
+            allTasks={allTasks}
+            canEdit={canManageBoard}
           />
         )}
       </div>
