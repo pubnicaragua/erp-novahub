@@ -453,6 +453,7 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
   );
 
   const buildInitialState = (item: ProjectListItem | null, detail?: ProjectDetail | null) => ({
+    code: detail?.code || item?.code || '',
     name: detail?.name || item?.name || '',
     description: detail?.description || item?.description || '',
     customerId: detail?.customer?.id || detail?.customerId || item?.customer?.id || item?.customerId || '',
@@ -489,6 +490,7 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
   const submit = () => {
     if (!valid || saving) return;
     const payload: any = {
+      code: form.code?.trim() || undefined,
       name: form.name.trim(),
       description: form.description?.trim() || undefined,
       customerId: form.customerId || undefined,
@@ -517,7 +519,11 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
           <DialogTitle>{editing ? `Editar proyecto ${editing.code}` : 'Nuevo proyecto'}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-1">
+            <Label>Código del proyecto (Opcional)</Label>
+            <Input value={form.code || ''} onChange={(e) => setForm((f: any) => ({ ...f, code: e.target.value }))} placeholder="Ej. PRJ-2026-NICA-01" />
+          </div>
+          <div className="sm:col-span-1">
             <Label>Nombre del proyecto *</Label>
             <Input data-testid="projects-form-name" value={form.name || ''} onChange={(e) => setForm((f: any) => ({ ...f, name: e.target.value }))} placeholder="Ej. Remodelación de sucursal Managua" />
           </div>
