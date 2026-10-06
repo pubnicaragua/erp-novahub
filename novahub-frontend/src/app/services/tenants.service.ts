@@ -67,6 +67,7 @@ export const tenantsService = {
     email: string; 
     password: string;
     role?: string;
+    customRoleId?: string | null;
     avatar?: string | null;
     departmentId?: string | null;
     employeeId?: string | null;
