@@ -100,7 +100,6 @@ const actionAliases = {
   reconcile: 'approve',
   convert: 'approve',
   generate: 'approve',
-  send: 'approve',
 };
 
 function collectSourceFiles(directory) {

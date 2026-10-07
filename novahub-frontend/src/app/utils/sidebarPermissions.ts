@@ -342,12 +342,20 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'proyectos-evm': ['PROJECTS', 'PROJECTS'],
   'proyectos-planificacion': ['PROJECTS_TASKS', 'PROJECTS'],
   'proyectos-costos': ['PROJECTS_EXPENSES', 'PROJECTS'],
+  'proyectos-costeo6d': ['PROJECTS_COSTEO6D', 'PROJECTS'],
   'proyectos-actividades': ['PROJECTS_LIST', 'PROJECTS'],
+  'proyectos-memorias': ['PROJECTS_MEMORIAS', 'PROJECTS'],
+  'proyectos-exportar': ['PROJECTS_EXPORT', 'PROJECTS'],
+  'proyectos-parametros': ['PROJECTS_PARAMETROS', 'PROJECTS'],
   // Legacy aliases fallback
   'proyectos-tareas': ['PROJECTS_TASKS', 'PROJECTS'],
   'proyectos-hitos': ['PROJECTS_MILESTONES', 'PROJECTS'],
   'proyectos-documentos': ['PROJECTS_DOCUMENTS', 'PROJECTS'],
   'proyectos-tiempo': ['PROJECTS_TIME', 'PROJECTS'],
+
+  'fuerza-comercial': ['FORCE_SALES'],
+  'fuerza-comercial-kanban': ['FORCE_SALES'],
+  'fuerza-comercial-historial': ['FORCE_SALES'],
 
   tickets: ['TICKETS_LIST'],
   // TICKETS_FAQS es el identificador histórico de esta misma vista.
@@ -414,6 +422,7 @@ export const HIDDEN_PERMISSION_MODULE_IDS = new Set([
   'CONFIG_MODULE_PRICING',
   'CONFIG_ORG_CHART',
   'COMPANY_BRANCHES',
+  'DATA_VISIBILITY',
 ]);
 
 /** Permiso exacto de cada vista del sidebar. Puede diferir del módulo que habilita la suscripción. */
