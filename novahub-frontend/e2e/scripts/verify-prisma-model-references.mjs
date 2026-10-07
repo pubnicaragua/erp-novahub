@@ -3,7 +3,11 @@ import path from 'node:path';
 
 const frontendRoot = process.cwd();
 const contractsPath = path.join(frontendRoot, 'e2e', 'module-contracts.ts');
-const schemaPath = path.resolve(frontendRoot, '..', '..', 'Backend', 'prisma', 'schema.prisma');
+const backendRoot = process.env.E2E_BACKEND_DIR?.trim()
+  || (fs.existsSync(path.resolve(frontendRoot, '..', '..', 'BackendERPNH', 'prisma', 'schema.prisma'))
+    ? path.resolve(frontendRoot, '..', '..', 'BackendERPNH')
+    : path.resolve(frontendRoot, '..', '..', 'Backend'));
+const schemaPath = path.join(backendRoot, 'prisma', 'schema.prisma');
 const contractsSource = fs.readFileSync(contractsPath, 'utf8');
 const schemaSource = fs.readFileSync(schemaPath, 'utf8');
 

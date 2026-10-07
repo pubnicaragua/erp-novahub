@@ -37,6 +37,7 @@ interface TeamAccessPanelProps {
 
 const permissionActions = [...PERMISSION_ACTION_DEFINITIONS, ...SENSITIVE_PERMISSION_ACTION_DEFINITIONS];
 const LEGACY_PERMISSION_KEYS = ['view', 'canView', 'write', 'canWrite', 'canCreate', 'canEdit', 'canApprove', 'canViewCost', 'deactivate', 'cancel', 'reject', 'reverse', 'canDelete', 'canDeactivate', 'canCancel', 'canReject', 'canReverse'];
+const DATA_VISIBILITY_MODULE = 'DATA_VISIBILITY';
 
 /**
  * Los padres siguen viniendo del catálogo histórico para conservar sus
@@ -73,11 +74,11 @@ const ROLE_PERMISSION_MODULES = (() => {
 
 const ROLE_PERMISSION_CHILDREN = ROLE_PERMISSION_MODULES.filter((module: any) => module.parent);
 
-const emptyPermissions = () => ROLE_PERMISSION_MODULES.map((module: any) => ({
+const emptyPermissions = () => [...ROLE_PERMISSION_MODULES.map((module: any) => ({
   module: module.id,
   ...Object.fromEntries(permissionActions.map(({ key }) => [key, false])),
   ...(module.id === 'SALES_PRICE_LISTS' ? { allowedPriceListIds: [] } : {}),
-}));
+})), { module: DATA_VISIBILITY_MODULE, customerVisibility: 'TENANT', userVisibility: 'TENANT' }];
 
 const getPermissionGroupLabel = (group: string) => {
   const module = ROLE_PERMISSION_MODULES.find((item: any) => item.id === group) as any;
@@ -130,8 +131,11 @@ function RolePermissionsTutorial({ mode }: { mode: 'preview' | 'editor' }) {
 }
 
 function hydratePermissions(role: any) {
-  const current = normalizePermissions(role?.permissions)
-    .filter((permission: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(permission.module || '').toUpperCase()));
+  const rawPermissions = normalizePermissions(role?.permissions);
+  const visibility = rawPermissions.find((permission: any) => String(permission.module || '').toUpperCase() === DATA_VISIBILITY_MODULE)
+    || { module: DATA_VISIBILITY_MODULE, customerVisibility: 'TENANT', userVisibility: 'TENANT' };
+  const current = rawPermissions
+    .filter((permission: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(permission.module || '').toUpperCase()) && String(permission.module || '').toUpperCase() !== DATA_VISIBILITY_MODULE);
   const hydrated = ROLE_PERMISSION_MODULES.map((module: any) => {
     const candidates = [module.id, ...(LEGACY_VIEW_PERMISSION_ALIASES[module.id] || [])]
       .map((candidate) => String(candidate).toUpperCase());
@@ -150,7 +154,7 @@ function hydratePermissions(role: any) {
   });
   // El editor se guarda contra el catálogo canónico. Así los identificadores
   // retirados o desconocidos se limpian al editar un rol existente.
-  return hydrated;
+  return [...hydrated, visibility];
 }
 
 export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesChange, canViewRoles = true, canCreateRoles = true, canEditRoles = true, canDeleteRoles = true, roleHighlightRequest = null }: TeamAccessPanelProps) {
@@ -467,6 +471,25 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
     setViewingRole(null);
   };
 
+  const setDataVisibility = (field: 'customerVisibility' | 'userVisibility', value: 'TENANT' | 'OWN') => {
+    if (!canEditRoles && !canCreateRoles) return;
+    setEditingRole((current: any) => {
+      if (!current) return current;
+      const permissions = normalizePermissions(current.permissions).map((permission: any) => ({ ...permission }));
+      let visibility = permissions.find((permission: any) => String(permission.module || '').toUpperCase() === DATA_VISIBILITY_MODULE);
+      if (!visibility) {
+        visibility = { module: DATA_VISIBILITY_MODULE, customerVisibility: 'TENANT', userVisibility: 'TENANT' };
+        permissions.push(visibility);
+      }
+      visibility[field] = value;
+      return { ...current, permissions };
+    });
+  };
+
+  const dataVisibility = normalizePermissions(editingRole?.permissions).find(
+    (permission: any) => String(permission.module || '').toUpperCase() === DATA_VISIBILITY_MODULE,
+  ) || { customerVisibility: 'TENANT', userVisibility: 'TENANT' };
+
   const togglePermission = (moduleId: string, action: PermissionMatrixAction) => {
     if ((!canEditRoles && !canCreateRoles) || !actionIsAvailable(moduleId, action)) return;
     setEditingRole((current: any) => {
@@ -526,11 +549,19 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
         existing.write = Boolean(existing.write || permission.write);
         return result;
       }, []);
-      const permissions = serializePermissionActions(mergedPermissions)
+      const visibilityPermission = mergedPermissions.find((permission: any) => String(permission.module || '').toUpperCase() === DATA_VISIBILITY_MODULE) || {};
+      const permissions = [
+        ...serializePermissionActions(mergedPermissions.filter((permission: any) => String(permission.module || '').toUpperCase() !== DATA_VISIBILITY_MODULE)),
+        {
+          module: DATA_VISIBILITY_MODULE,
+          customerVisibility: String(visibilityPermission.customerVisibility || '').toUpperCase() === 'OWN' ? 'OWN' : 'TENANT',
+          userVisibility: String(visibilityPermission.userVisibility || '').toUpperCase() === 'OWN' ? 'OWN' : 'TENANT',
+        },
+      ]
         // El catálogo visible puede estar cargando o usar un identificador
         // histórico. El backend valida el alcance real de la sucursal; no
         // descartamos aquí una vista que el usuario acaba de marcar.
-        .filter((permission: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(permission.module || '').toUpperCase()))
+        .filter((permission: any) => String(permission.module || '').toUpperCase() === DATA_VISIBILITY_MODULE || !HIDDEN_PERMISSION_MODULE_IDS.has(String(permission.module || '').toUpperCase()))
         .map((permission: any) => ({ ...permission }));
       const payload = {
         name,
@@ -665,6 +696,35 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
         </div>
 
           <Card className="min-w-0 border-border/50"><CardHeader className="border-b border-border/30 bg-muted/10"><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><ShieldCheck className="size-4 text-primary" /> Datos del rol</CardTitle><CardDescription className="mt-1 text-xs">El nombre y la descripción ayudan a identificar el alcance del equipo.</CardDescription></CardHeader><CardContent className="grid min-w-0 gap-4 p-4 sm:p-6 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="role-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del rol</Label><Input id="role-name" data-tour="role-name" value={editingRole.name || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ej: Gerencia" className="h-11" /></div><div className="space-y-2"><Label htmlFor="role-description" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción (opcional)</Label><Input id="role-description" data-tour="role-description" value={editingRole.description || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, description: event.target.value }))} placeholder="Describe el alcance del rol" className="h-11" /></div>{editingRole.id && <div className="md:col-span-2"><AuditHistoryDisclosure entity="ROLE" entityId={String(editingRole.id)} createdAt={editingRole.createdAt} /></div>}</CardContent></Card>
+
+        <Card className="min-w-0 border-primary/20 bg-primary/[0.03]">
+          <CardHeader className="border-b border-primary/10 bg-primary/[0.04]">
+            <CardTitle className="text-sm font-black uppercase tracking-wider">Alcance de datos</CardTitle>
+            <CardDescription className="mt-1 text-xs">Define si este rol puede consultar toda la empresa o únicamente los registros que sus integrantes creen.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 p-4 sm:p-6 md:grid-cols-2">
+            {([
+              ['customerVisibility', 'Clientes', 'Controla los clientes visibles en listados, búsquedas y facturación.'],
+              ['userVisibility', 'Usuarios', 'Controla los usuarios visibles en Roles y Accesos y asignaciones.'],
+            ] as const).map(([field, label, description]) => (
+              <div key={field} className="space-y-2">
+                <Label htmlFor={`role-${field}`} className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</Label>
+                <select
+                  id={`role-${field}`}
+                  value={dataVisibility[field] === 'OWN' ? 'OWN' : 'TENANT'}
+                  onChange={(event) => setDataVisibility(field, event.target.value === 'OWN' ? 'OWN' : 'TENANT')}
+                  disabled={roleSaving || (!canEditRoles && !canCreateRoles)}
+                  className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="TENANT">Toda la empresa</option>
+                  <option value="OWN">Solo registros propios</option>
+                </select>
+                <p className="text-[10px] leading-relaxed text-muted-foreground">{description}</p>
+              </div>
+            ))}
+            <p className="md:col-span-2 rounded-xl border border-primary/15 bg-background/70 p-3 text-[10px] leading-relaxed text-muted-foreground">Los administradores mantienen acceso completo. Los registros existentes antes de activar “Solo registros propios” no tienen propietario y no se muestran a ese alcance restringido; los nuevos clientes y usuarios quedan asociados automáticamente al creador.</p>
+          </CardContent>
+        </Card>
 
         <Card className="min-w-0 border-border/50">
           <CardHeader className="border-b border-border/30 bg-muted/10">
