@@ -10,7 +10,7 @@ import {
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MapPinned, ChevronDown,
   BookOpen, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe, MessageCircle, CreditCard,
-  FolderKanban, ClipboardPen
+  FolderKanban, ClipboardPen, BedDouble
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -73,6 +73,7 @@ const AVAILABLE_MODULES = [
   { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
   { id: 'RESTAURANT', label: 'Restaurante POS', icon: Utensils, description: 'Salón, carta, cocina y comandas' },
+  { id: 'HOTEL', label: 'Hotel', icon: BedDouble, description: 'Habitaciones, reservas y estadías' },
   { id: 'TRACKING', label: 'Tracking de Importaciones', icon: Ship, description: 'Envíos de agencia por código de tracking' },
   { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra' },
   { id: 'INVENTORY', label: 'Inventario de Mercancías', icon: Package, description: 'Stock, Almacenes y SKU' },

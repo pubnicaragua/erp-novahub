@@ -64,7 +64,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'RESTAURANT_MENU', label: 'Carta', parent: 'RESTAURANT' },
   { id: 'RESTAURANT_REPORTS', label: 'Reportes restaurante', parent: 'RESTAURANT' },
 
-  // Hospedaje
+  // Hotel
   { id: 'HOTEL_ROOMS', label: 'Habitaciones', parent: 'HOTEL' },
   { id: 'HOTEL_RESERVATIONS', label: 'Reservas y estadías', parent: 'HOTEL' },
 
