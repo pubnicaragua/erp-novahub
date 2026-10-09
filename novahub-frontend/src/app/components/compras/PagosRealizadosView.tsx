@@ -215,8 +215,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
            paymentLineRate(initialCurrency),
          ).toFixed(2));
          setLocalDoc({
-           supplierId: prefilled.supplierId || '',
+            supplierId: prefilled.supplierId || '',
            supplierInvoiceId: prefilled.supplierInvoiceId || '',
+            balanceApplicationType: prefilled.balanceApplicationType || null,
             date: prefilled.date || new Date().toISOString(),
             amount: Number(prefilled.amount || 0),
             currency: initialCurrency,
@@ -303,6 +304,10 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const selectedInvoice = localDoc?.supplierInvoiceId
     ? bills.find((bill) => bill.id === localDoc.supplierInvoiceId) || (localDoc as any).supplierInvoice || null
     : null;
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === localDoc?.supplierId) || null;
+  const paymentApplicationTarget = localDoc?.balanceApplicationType === 'GENERAL_BALANCE'
+    ? 'GENERAL_BALANCE'
+    : localDoc?.supplierInvoiceId ? 'INVOICE' : 'ADVANCE';
   const getPaymentLineBase = (line: PurchasePaymentLine) => toBaseAmount(
     Number(line.amount || 0),
     line.currency,
@@ -312,6 +317,11 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const originalEditingPaymentBase = editingId && editingId !== 'NEW' && localDoc
     ? Number(localDoc.baseAmount ?? toBaseAmount(Number(localDoc.amount || 0), localDoc.currency, Number(localDoc.exchangeRate || globalRate)))
     : 0;
+  const originalEditingPayment = editingId && editingId !== 'NEW' ? data.find((payment) => payment.id === editingId) : null;
+  const originalGeneralBalancePaymentBase = originalEditingPayment?.balanceApplicationType === 'GENERAL_BALANCE'
+    ? Number(originalEditingPayment.baseAmount ?? toBaseAmount(Number(originalEditingPayment.amount || 0), originalEditingPayment.currency, Number(originalEditingPayment.exchangeRate || globalRate)))
+    : 0;
+  const selectedGeneralBalanceAvailableBase = Math.max(0, Number(selectedSupplier?.openingBalanceDue || 0) + originalGeneralBalancePaymentBase);
   const selectedInvoiceBalanceBase = selectedInvoice
     ? Math.max(0, toBaseAmount(
       Number((selectedInvoice as any).balance ?? (selectedInvoice as any).total ?? 0),
@@ -331,6 +341,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     ? convertBetweenCurrencies(paymentRemainingBase, baseCurrency, selectedInvoiceCurrency, 1, selectedInvoiceRate)
     : 0;
   const paymentOverInvoiceBalance = Boolean(selectedInvoice && paymentTotalBase > selectedInvoiceBalanceBase + 0.01);
+  const paymentOverGeneralBalance = paymentApplicationTarget === 'GENERAL_BALANCE' && paymentTotalBase > selectedGeneralBalanceAvailableBase + 0.01;
   const expectedPaymentAmount = (payment: PaymentMade) => {
     const invoice = linkedInvoiceForPayment(payment) as any;
     return Number(invoice?.total || payment.amount || 0);
@@ -447,10 +458,10 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const columns: ColumnDef<PaymentMade>[] = [
     { key: 'reference', header: 'N° Pago / Referencia', width: '175px',
       render: (_value, row) => <span className="text-xs font-mono text-muted-foreground">{row.displayReference || paymentReferenceLabel(row)}</span> },
-    { key: 'supplierInvoiceId', header: 'N° Factura', width: '120px',
-      render: (val) => {
+    { key: 'supplierInvoiceId', header: 'Destino', width: '120px',
+      render: (val, row) => {
         const invoice = bills.find((bill) => bill.id === val);
-        return <span className="text-xs font-bold text-primary">{invoice?.number || '-'}</span>;
+        return <span className="text-xs font-bold text-primary">{invoice?.number || (row.balanceApplicationType === 'GENERAL_BALANCE' ? 'Saldo general' : 'Anticipo')}</span>;
       } },
     { key: 'supplier',  header: 'Proveedor',
       headerExtra: <ColumnFilterMenu label="Proveedor" options={distinctSuppliers} selected={colFilters.state.supplier?.values || []} onSelect={(values) => colFilters.setValues('supplier', values)} sort={colFilters.state.supplier?.sort || null} onSort={(sort) => colFilters.setSort('supplier', sort)} />,
@@ -535,6 +546,12 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     if (selectedInvoice && effectivePaymentBase > invoiceBalanceBase + 0.01) {
       return toast.error('El pago no puede superar el saldo pendiente de la factura del proveedor');
     }
+    if (paymentApplicationTarget === 'GENERAL_BALANCE' && effectivePaymentBase > selectedGeneralBalanceAvailableBase + 0.01) {
+      return toast.error('El pago no puede superar el saldo pendiente general del proveedor');
+    }
+    if (paymentApplicationTarget === 'GENERAL_BALANCE' && selectedGeneralBalanceAvailableBase <= 0.01) {
+      return toast.error('El proveedor no tiene saldo inicial pendiente para abonar');
+    }
     if (selectedInvoice && effectivePaymentBase < invoiceBalanceBase - 0.01 && !partialPaymentEnabled) {
       return toast.error('Active "Pago parcial" para registrar solo una parte de la factura');
     }
@@ -566,6 +583,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       ), 0).toFixed(2));
       const payload = {
         ...localDoc,
+        balanceApplicationType: paymentApplicationTarget === 'GENERAL_BALANCE' ? 'GENERAL_BALANCE' : null,
         method: firstLine.method,
         amount,
         currency,
@@ -639,7 +657,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           status: payment.isActive === false ? 'Anulado' : 'Pagado',
           supplier: payment.supplier?.name || 'Sin proveedor',
           fields: [
-            { label: 'Factura', value: linkedInvoiceForPayment(payment)?.number || 'Sin factura asociada' },
+            { label: 'Destino', value: linkedInvoiceForPayment(payment)?.number || (payment.balanceApplicationType === 'GENERAL_BALANCE' ? 'Abono al saldo general' : 'Anticipo') },
             { label: 'Tipo', value: payment.paymentLabel || 'Pago único' },
             { label: 'Referencia', value: payment.displayReference || paymentReferenceLabel(payment) },
           ],
@@ -685,7 +703,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                 </Button>
              )}
             {((isNew && canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve')) || (!isNew && canPerform('PURCHASES_PAYMENTS', 'edit'))) && (
-              <Button onClick={handleSaveDoc} disabled={paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+              <Button onClick={handleSaveDoc} disabled={paymentOverInvoiceBalance || paymentOverGeneralBalance || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Pago
               </Button>
             )}
@@ -704,14 +722,36 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                       disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
                       options={suppliers
                         .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
-                        .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
+                        .map(s => ({ label: s.name, value: s.id, description: [s.companyName, s.code ? `[${s.code}]` : '', s.phone || ''].filter(Boolean).join(' · ') || 'Sin datos adicionales' }))}
                       value={localDoc.supplierId || ''}
-                      onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val, supplierInvoiceId: '' })}
+                      onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val, supplierInvoiceId: '', balanceApplicationType: null })}
                       placeholder="Seleccionar proveedor..."
                     />
                   </div>
                   <div className="col-span-2">
-                    <p className="text-[10px] text-muted-foreground mb-1">Factura a Pagar / Abono (Opcional)</p>
+                    <p className="text-[10px] text-muted-foreground mb-1">Destino del pago</p>
+                    <Select
+                      disabled={(isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')) || (!isNew && Boolean(localDoc.supplierInvoiceId))}
+                      value={paymentApplicationTarget}
+                      onValueChange={(value) => {
+                        setPartialPaymentEnabled(false);
+                        setLocalDoc({
+                          ...localDoc,
+                          supplierInvoiceId: '',
+                          balanceApplicationType: value === 'GENERAL_BALANCE' ? 'GENERAL_BALANCE' : null,
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="h-10 w-full max-w-full text-xs font-bold"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ADVANCE">Anticipo al proveedor</SelectItem>
+                        <SelectItem value="INVOICE" disabled={!isNew && !localDoc.supplierInvoiceId}>Factura de proveedor</SelectItem>
+                        <SelectItem value="GENERAL_BALANCE">Abono al saldo general</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {paymentApplicationTarget === 'INVOICE' && <div className="col-span-2">
+                    <p className="text-[10px] text-muted-foreground mb-1">Factura a pagar</p>
                     <Combobox
                       disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
                       options={currentBills.map(s => ({ label: `${s.number} (Saldo: ${s.balance ?? s.total})`, value: s.id }))}
@@ -724,8 +764,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                             ? Number(convertBetweenCurrencies(nextAmount, b.currency || baseCurrency, nextCurrency, Number(b.exchangeRate || 1), paymentLineRate(nextCurrency)).toFixed(2))
                             : Number(convertBetweenCurrencies(nextAmount, localDoc.currency || displayCurrency, nextCurrency, Number(localDoc.exchangeRate || globalRate), paymentLineRate(nextCurrency)).toFixed(2));
                           setLocalDoc({
-                            ...localDoc,
-                            supplierInvoiceId: val,
+                          ...localDoc,
+                          supplierInvoiceId: val,
+                          balanceApplicationType: null,
                             amount: nextAmountInPaymentCurrency,
                             currency: nextCurrency,
                             exchangeRate: paymentLineRate(nextCurrency),
@@ -739,7 +780,13 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                       placeholder={localDoc.supplierId ? "Seleccionar factura abierta" : "Primero seleccione un proveedor"}
                       emptyMessage="No hay facturas abiertas para este proveedor."
                     />
-                  </div>
+                  </div>}
+                  {paymentApplicationTarget === 'GENERAL_BALANCE' && <div className="col-span-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Abono al saldo general</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Se aplicará solo al saldo inicial pendiente, sin modificar facturas ni créditos del proveedor.</p>
+                    <p className="mt-2 text-xs font-bold">Disponible: {formatConvertedAmount(selectedGeneralBalanceAvailableBase, baseCurrency)}</p>
+                    {paymentOverGeneralBalance && <p className="mt-1 text-[10px] font-bold text-rose-600">El pago excede el saldo pendiente general.</p>}
+                  </div>}
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Fecha de Pago</p>
                     <Input 
@@ -1009,7 +1056,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           sourceCurrency: detailPayment.currency || displayCurrency,
           sourceExchangeRate: detailPayment.exchangeRate,
           summaryDetails: [{ label: 'Tipo', value: detailPayment.paymentLabel || 'Pago único' }, { label: 'Método', value: getMethodLabel(detailPayment.method) }],
-          metadata: [{ label: 'Fecha', value: detailPayment.date ? formatDateEs(detailPayment.date) : 'No disponible' }, { label: 'Factura', value: linkedInvoiceForPayment(detailPayment)?.number || 'Sin factura asociada' }, { label: 'Referencia', value: detailPayment.displayReference || paymentReferenceLabel(detailPayment) }],
+          metadata: [{ label: 'Fecha', value: detailPayment.date ? formatDateEs(detailPayment.date) : 'No disponible' }, { label: 'Destino', value: linkedInvoiceForPayment(detailPayment)?.number || (detailPayment.balanceApplicationType === 'GENERAL_BALANCE' ? 'Abono al saldo general' : 'Anticipo') }, { label: 'Referencia', value: detailPayment.displayReference || paymentReferenceLabel(detailPayment) }],
           lines: (detailPayment.payments?.length ? detailPayment.payments : [detailPayment]).map((payment, index) => ({ id: String(payment.id || index), description: getMethodLabel(payment.method), quantity: 1, unitPriceLabel: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency), totalLabel: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency), secondaryLabel: `Referencia: ${paymentReferenceLabel(payment)}${payment.bankAccountId ? ` · Banco: ${payment.bankAccountId}` : ''}` })),
           notes: detailPayment.notes,
         } : null}

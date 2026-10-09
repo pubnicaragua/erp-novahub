@@ -69,6 +69,7 @@ export function ClientesPage() {
 
   const filtered = clientesData.filter(c =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.contactName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -113,6 +114,7 @@ export function ClientesPage() {
       setEditingCliente(cliente);
       setFormData({
         name: cliente.name,
+        companyName: cliente.companyName || '',
         type: String(cliente.type || 'company').toLowerCase() as Customer['type'],
         ruc: cliente.ruc || '',
         taxId: cliente.taxId || '',
@@ -128,7 +130,7 @@ export function ClientesPage() {
       });
     } else {
       setEditingCliente(null);
-      setFormData({ name: '', type: 'company', ruc: '', taxId: '', dv: '', razonSocial: '', contactName: '', email: '', phone: '', contactPhone: '', countryCode: defaultCountryCode, country: countryNameForForm(defaultCountryCode, countries), status: 'active' });
+      setFormData({ name: '', companyName: '', type: 'company', ruc: '', taxId: '', dv: '', razonSocial: '', contactName: '', email: '', phone: '', contactPhone: '', countryCode: defaultCountryCode, country: countryNameForForm(defaultCountryCode, countries), status: 'active' });
     }
     setIsDialogOpen(true);
   };
@@ -148,10 +150,14 @@ export function ClientesPage() {
     if (formData.phone && !isCustomerPhoneValid(formData.phone, countryCode)) { toast.error('El teléfono no es válido para el país seleccionado'); return; }
     if (formData.contactPhone && !isCustomerPhoneValid(formData.contactPhone, countryCode)) { toast.error('El teléfono del contacto no es válido para el país seleccionado'); return; }
     try {
+      const payload: Partial<Customer> = {
+        ...formData,
+        companyName: formData.type === 'company' ? String(formData.companyName || '').trim() || null : null,
+      };
       if (editingCliente) {
-        await customersService.update(editingCliente.id, formData);
+        await customersService.update(editingCliente.id, payload);
       } else {
-        await customersService.create(formData);
+        await customersService.create(payload);
       }
       setIsDialogOpen(false);
       toast.success(editingCliente ? 'Cliente actualizado' : 'Cliente creado');
@@ -205,6 +211,10 @@ export function ClientesPage() {
                 </div>
                 {formData.type === 'company' && (
                   <>
+                    <div className="grid gap-2">
+                      <Label htmlFor="companyName">Nombre de empresa</Label>
+                      <Input id="companyName" value={formData.companyName || ''} onChange={e => setFormData({ ...formData, companyName: e.target.value })} />
+                    </div>
                     <div className="grid gap-2">
                       <Label htmlFor="razonSocial">Razón Social</Label>
                       <Input id="razonSocial" value={formData.razonSocial || ''} onChange={e => setFormData({ ...formData, razonSocial: e.target.value })} />
@@ -288,6 +298,7 @@ export function ClientesPage() {
                       <TableCell>
                         <div className="flex flex-col">
                            <span className="font-semibold text-foreground">{c.name}</span>
+                          {String(c.type || '').toUpperCase() === 'COMPANY' && c.companyName && <span className="text-xs text-muted-foreground">{c.companyName}</span>}
                           <span className="text-xs text-muted-foreground">{c.code || c.id} • {(c.type || '').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Individual'}</span>
                         </div>
                       </TableCell>

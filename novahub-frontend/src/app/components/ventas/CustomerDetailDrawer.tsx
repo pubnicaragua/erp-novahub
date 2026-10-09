@@ -208,7 +208,7 @@ export function CustomerDetailDrawer({
   canExport = true,
   extraActions,
 }: CustomerDetailDrawerProps) {
-  const { baseCurrency, formatConvertedAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
+  const { baseCurrency, formatConvertedAmount, formatExplicitAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
   const { user } = useAuth();
   const { themeConfig } = useTheme();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
@@ -392,6 +392,8 @@ export function CustomerDetailDrawer({
   const creditLimitCurrency = normalizeCurrency(customer?.creditLimitCurrency, baseCurrency);
   const customerDebt = getCustomerDebtAmount(customer);
   const customerFavor = getCustomerFavorAmount(customer);
+  const customerDebtByCurrency = customer?.balanceDueOriginalCurrencyBreakdown || [];
+  const customerFavorByCurrency = customer?.balanceFavorOriginalCurrencyBreakdown || [];
   const creditDays = customer?.creditDays != null ? Number(customer.creditDays) : 0;
 
   const toBaseValue = (value: number, currency?: string, exchangeRate?: number) => {
@@ -604,6 +606,17 @@ export function CustomerDetailDrawer({
                     <MetricCard label="Estado" value={statusInfo.label} icon={CheckCircle2} accent="text-primary" loading={loading} />
                 </div>
 
+                {(customerDebtByCurrency.length > 0 || customerFavorByCurrency.length > 0) && <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                  {customerDebtByCurrency.length > 0 && <section className="min-w-0 rounded-xl border border-rose-500/20 bg-rose-500/[0.03] p-3">
+                    <h3 className="text-[9px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">Pendiente por moneda</h3>
+                    <div className="mt-2 flex flex-wrap gap-2">{customerDebtByCurrency.map((item) => <span key={`due-${item.currency}`} className="rounded-lg border border-rose-500/15 bg-background/70 px-2.5 py-1.5 text-xs font-bold tabular-nums text-foreground">{formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency, baseCurrency))}</span>)}</div>
+                  </section>}
+                  {customerFavorByCurrency.length > 0 && <section className="min-w-0 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.03] p-3">
+                    <h3 className="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">A favor por moneda</h3>
+                    <div className="mt-2 flex flex-wrap gap-2">{customerFavorByCurrency.map((item) => <span key={`favor-${item.currency}`} className="rounded-lg border border-emerald-500/15 bg-background/70 px-2.5 py-1.5 text-xs font-bold tabular-nums text-foreground">{formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency, baseCurrency))}</span>)}</div>
+                  </section>}
+                </div>}
+
                 <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
@@ -694,6 +707,7 @@ export function CustomerDetailDrawer({
                     <Building2 className="size-4 text-primary" /> Datos Fiscales y Financieros
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    {String(customer?.type || '').toUpperCase() === 'COMPANY' && <InfoField label="Nombre de empresa" value={customer?.companyName || 'No registrado'} icon={Building2} muted={!customer?.companyName} />}
                     <InfoField label={customerRucLabel} value={customer?.ruc || '—'} icon={Hash} mono muted={!customer?.ruc} />
                     <InfoField label={customerTaxLabel} value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
                     <InfoField label="Régimen Fiscal" value={customer?.fiscalRegime || 'No registrado'} icon={ShieldAlert} muted={!customer?.fiscalRegime} />

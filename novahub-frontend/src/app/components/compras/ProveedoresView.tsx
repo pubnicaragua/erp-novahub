@@ -38,6 +38,7 @@ interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: 
 const emptyDraft = () => ({
   code: '',
   name: '',
+  companyName: '',
   type: 'COMPANY' as 'COMPANY' | 'INDIVIDUAL',
   ruc: '',
   contactName: '',
@@ -97,6 +98,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     const search = searchTerm.toLowerCase();
     return (
       String(s.name || '').toLowerCase().includes(search) ||
+      String(s.companyName || '').toLowerCase().includes(search) ||
       (s.email || '').toLowerCase().includes(search) ||
       (s.code || '').toLowerCase().includes(search) ||
       (s.phone || '').toLowerCase().includes(search)
@@ -110,7 +112,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   };
 
   const emptyImportRow = (): SupplierImportRow => ({
-    code: '', name: '', taxId: '', contactName: '', email: '', phone: '', address: '', city: '', country: 'Nicaragua', paymentTerms: '', status: 'ACTIVE',
+    code: '', name: '', type: '', companyName: '', taxId: '', contactName: '', email: '', phone: '', address: '', city: '', country: 'Nicaragua', paymentTerms: '', openingBalanceType: '', openingBalanceAmount: '', openingBalanceCurrency: baseCurrency, status: 'ACTIVE',
   });
 
   const validateImportRows = (rows: SupplierImportRow[]) => {
@@ -122,10 +124,17 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       const next: SupplierImportRow = { ...row, error: undefined, warning: undefined };
       const email = row.email.trim().toLowerCase();
       const taxId = row.taxId.trim().toLowerCase();
+      const openingAmountText = String(row.openingBalanceAmount || '').trim();
+      const openingAmount = openingAmountText ? Number(openingAmountText) : 0;
       if (!row.name.trim()) next.error = 'Nombre obligatorio';
+      else if (row.type && !['COMPANY', 'INDIVIDUAL'].includes(row.type)) next.error = 'Tipo de proveedor inválido';
+      else if (row.type === 'COMPANY' && !taxId) next.error = 'RUC obligatorio para empresas';
       else if (email && !/^\S+@\S+\.\S+$/.test(email)) next.error = 'Correo inválido';
       else if (email && (existingEmails.has(email) || seenEmails.has(email))) next.error = 'Correo duplicado';
       else if (taxId && (existingTaxIds.has(taxId) || seenTaxIds.has(taxId))) next.error = 'Identificación fiscal duplicada';
+      else if (openingAmountText && (!Number.isFinite(openingAmount) || openingAmount < 0)) next.error = 'Importe de saldo inicial inválido';
+      else if (openingAmount > 0 && !row.openingBalanceType) next.error = 'Indica si el saldo inicial está pendiente o a favor';
+      else if (openingAmount > 0 && !['NIO', 'USD'].includes(row.openingBalanceCurrency)) next.error = 'Moneda inicial inválida';
       if (!next.error && row.code.trim()) next.warning = 'El código proporcionado se ignorará; se generará un consecutivo automáticamente';
       if (email) { existingEmails.add(email); seenEmails.add(email); }
       if (taxId) { existingTaxIds.add(taxId); seenTaxIds.add(taxId); }
@@ -134,8 +143,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   };
 
   const downloadTemplate = () => {
-    const headers = ['Nombre', 'RUC / identificación', 'Persona de contacto', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'País', 'Condiciones de pago', 'Estado'];
-    const example = ['Proveedor Ejemplo', 'J0310000000000', 'María López', 'proveedor@correo.com', '8888-1111', 'Managua', 'Managua', 'Nicaragua', 'Contado', 'ACTIVO'];
+    const headers = ['Nombre', 'Tipo', 'Nombre de empresa', 'RUC / identificación', 'Persona de contacto', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'País', 'Condiciones de pago', 'Tipo de saldo inicial', 'Importe de saldo inicial', 'Moneda de saldo inicial', 'Estado'];
+    const example = ['Proveedor Ejemplo', 'Empresa', 'Proveedor Ejemplo S.A.', 'J0310000000000', 'María López', 'proveedor@correo.com', '8888-1111', 'Managua', 'Managua', 'Nicaragua', 'Contado', '', '', baseCurrency, 'ACTIVO'];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const guide = XLSX.utils.aoa_to_sheet([
@@ -143,10 +152,13 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       ['Puedes repetir la importación. El código se genera automáticamente y conserva el consecutivo por sucursal.'],
       ['Campo', 'Regla'],
       ['Nombre', 'Obligatorio. Es el nombre comercial o razón social del proveedor.'],
-      ['RUC / identificación', 'Opcional. No se puede repetir dentro de la empresa.'],
+      ['Tipo', 'Empresa o Individual. Si falta esta columna, se conserva la compatibilidad con plantillas anteriores.'],
+      ['Nombre de empresa', 'Opcional y separado del nombre del proveedor; aplica cuando el tipo es Empresa.'],
+      ['RUC / identificación', 'Obligatorio al indicar Empresa; no se puede repetir dentro de la empresa.'],
       ['Correo', 'Opcional, pero debe tener formato válido y no estar registrado.'],
       ['Contacto y ubicación', 'Completa persona de contacto, teléfono, dirección, ciudad y país cuando aplique.'],
       ['Condiciones de pago', 'Opcional. Ejemplos: Contado, 30 días, crédito.'],
+      ['Saldo inicial', 'Opcional. Elige Pendiente o A favor e indica importe y moneda. Si no hay importe, se omite. La moneda sugerida es la moneda base del tenant.'],
       ['Estado', 'Usa ACTIVO o INACTIVO.'],
       ['Previsualización', 'Después de cargar el archivo podrás corregir los datos y revisar los errores antes de guardar.'],
     ]);
@@ -176,6 +188,11 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         const row = emptyImportRow();
         row.code = String(getCell(source, ['codigo', 'code', 'codigoproveedor']) || '').trim();
         row.name = String(getCell(source, ['nombre', 'name', 'proveedor', 'razonsocial']) || '').trim();
+        const rawType = normalizeHeader(getCell(source, ['tipo', 'type', 'tipoproveedor']) || '');
+        row.type = rawType.includes('individ') || rawType.includes('person') || rawType.includes('particular')
+          ? 'INDIVIDUAL'
+          : rawType.includes('empresa') || rawType.includes('company') ? 'COMPANY' : rawType ? 'INVALID' as any : '';
+        row.companyName = String(getCell(source, ['nombredeempresa', 'nombreempresa', 'companyname', 'empresa']) || '').trim();
         // La plantilla oficial usa "RUC / identificación"; al normalizar el
         // encabezado queda como "rucidentificacion", por lo que debe aceptar
         // tanto ese formato combinado como los nombres abreviados.
@@ -187,6 +204,12 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         row.city = String(getCell(source, ['ciudad', 'city']) || '').trim();
         row.country = String(getCell(source, ['pais', 'country']) || 'Nicaragua').trim();
         row.paymentTerms = String(getCell(source, ['condicionesdepago', 'condiciones', 'paymentterms']) || '').trim();
+        const rawOpeningType = normalizeHeader(getCell(source, ['tipodesaldoinicial', 'tiposaldoinicial', 'openingbalancetype', 'saldoinicialtipo']) || '');
+        row.openingBalanceType = rawOpeningType.includes('pendiente') || rawOpeningType === 'pending'
+          ? 'PENDING'
+          : rawOpeningType.includes('favor') ? 'FAVOR' : rawOpeningType ? 'INVALID' as any : '';
+        row.openingBalanceAmount = String(getCell(source, ['importedesaldoinicial', 'saldoinicialimporte', 'openingbalanceamount', 'saldoapertura']) || '').trim();
+        row.openingBalanceCurrency = String(getCell(source, ['monedadesaldoinicial', 'saldoinicialmoneda', 'openingbalancecurrency']) || baseCurrency).trim().toUpperCase() as 'NIO' | 'USD';
         const status = normalizeHeader(getCell(source, ['estado', 'status']) || 'activo');
         row.status = status.includes('inactiv') ? 'INACTIVE' : 'ACTIVE';
         return row;
@@ -239,7 +262,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     setImportResult(null);
     try {
       const result = await suppliersService.importMassive({
-        rows: validRows.map(({ error: _error, warning: _warning, ...row }) => ({ ...row, code: row.code || undefined, ruc: row.taxId || undefined })),
+        rows: validRows.map(({ error: _error, warning: _warning, ...row }) => ({ ...row, type: row.type || undefined, companyName: row.type === 'INDIVIDUAL' ? undefined : row.companyName || undefined, openingBalanceType: row.openingBalanceType || undefined, code: row.code || undefined, ruc: row.taxId || undefined })),
       });
       setImportProgress(90);
       setImportResult(result);
@@ -398,7 +421,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       headerExtra: <ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} sortType="number" />,
       render: (val, row) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val || row.id.slice(0, 8)}</span> },
     { key: 'name',        header: 'Nombre',    editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
-      headerExtra: <ColumnFilterMenu label="Nombre" sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Z → A (alfabético inverso)' }]} /> },
+      headerExtra: <ColumnFilterMenu label="Nombre" sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Z → A (alfabético inverso)' }]} />,
+      render: (val, row) => <div className="min-w-0"><span className="block truncate text-sm font-bold">{String(val || '')}</span>{row.companyName && <span className="block truncate text-[10px] text-muted-foreground">{row.companyName}</span>}</div> },
     { key: 'type', header: 'Tipo', width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'), type: 'select',
       headerExtra: <ColumnFilterMenu label="Tipo" options={typeOptions} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} />,
       options: [
@@ -482,6 +506,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     setDraft({
       code: row.code || '',
       name: row.name || '',
+      companyName: row.companyName || '',
       type: String(row.type || 'COMPANY').toUpperCase() === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'COMPANY',
       ruc: row.ruc || row.taxId || '',
       contactName: row.contactName || '',
@@ -499,6 +524,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     const payload: any = {
       name: draft.name,
       type: draft.type,
+      companyName: draft.type === 'COMPANY' ? draft.companyName.trim() || undefined : undefined,
       ruc: draft.ruc.trim() || undefined,
       contactName: draft.contactName || undefined,
       email: draft.email || undefined,
@@ -704,6 +730,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</label><Input value={draft.code} placeholder={editingSupplier ? undefined : 'Se asigna al guardar'} className="h-11 rounded-xl bg-muted/30" readOnly disabled /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label><Select value={draft.type} onValueChange={(v) => setDraft({ ...draft, type: v as 'COMPANY' | 'INDIVIDUAL' })}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="COMPANY">Empresa</SelectItem><SelectItem value="INDIVIDUAL">Individual</SelectItem></SelectContent></Select></div>
+                {draft.type === 'COMPANY' && <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre de empresa</label><Input value={draft.companyName} onChange={(e) => setDraft({ ...draft, companyName: e.target.value })} placeholder="Razón social" className="h-11 rounded-xl" /></div>}
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {draft.type === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={draft.ruc} onChange={(e) => setDraft({ ...draft, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
               </div>
             </section>
@@ -741,6 +768,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</label><div className="flex h-11 items-center rounded-xl border border-input bg-muted/30 px-3 text-sm text-muted-foreground">{draft.code || '—'}</div></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label><Select value={draft.type} onValueChange={(v) => setDraft({ ...draft, type: v as 'COMPANY' | 'INDIVIDUAL' })}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="COMPANY">Empresa</SelectItem><SelectItem value="INDIVIDUAL">Individual</SelectItem></SelectContent></Select></div>
+                {draft.type === 'COMPANY' && <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre de empresa</label><Input value={draft.companyName} onChange={(e) => setDraft({ ...draft, companyName: e.target.value })} placeholder="Razón social" className="h-11 rounded-xl" /></div>}
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {draft.type === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={draft.ruc} onChange={(e) => setDraft({ ...draft, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
               </div>
             </section>

@@ -330,6 +330,7 @@ export function SupplierDetailDrawer({
                   {supplier?.createdAt && <span className="flex items-center gap-1 font-sans text-[11px]"><Calendar className="size-3" /> Registrado {format(new Date(supplier.createdAt), 'dd MMM yyyy', { locale: es })}</span>}
                   {(loading || loadingTransactions) && <span role="status" className="inline-flex items-center gap-1 font-sans text-[10px] font-bold text-primary"><Loader2 className="size-3 animate-spin" /> Cargando detalle…</span>}
                 </div>
+                {supplier?.companyName && <p className="truncate text-xs font-semibold text-muted-foreground">{supplier.companyName}</p>}
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2" data-tour="supplier-detail-actions">
@@ -379,6 +380,7 @@ export function SupplierDetailDrawer({
                   <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80"><FileText className="size-4 text-primary" /> Información comercial</h3>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <InfoField label="Código interno" value={supplier?.code || '—'} icon={Truck} mono />
+                    <InfoField label="Nombre de empresa" value={supplier?.companyName || 'No registrado'} icon={Building2} muted={!supplier?.companyName} />
                     <InfoField label="RUC / identificación" value={supplier?.ruc || supplier?.taxId || 'No registrado'} icon={FileText} mono muted={!supplier?.ruc && !supplier?.taxId} />
                     <InfoField label="Condiciones de pago" value={supplier?.paymentTerms || 'No configuradas'} icon={Clock3} muted={!supplier?.paymentTerms} />
                     <InfoField label="Total relacionado" value={formatConvertedAmount(totalCommitted, baseCurrency)} icon={CircleDollarSign} mono />

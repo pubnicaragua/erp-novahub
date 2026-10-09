@@ -46,6 +46,7 @@ interface ClientesViewProps {
 
 type CustomerDraft = {
   name: string;
+  companyName: string;
   type: 'individual' | 'company';
   fiscalRegime: string;
   priceListId: string;
@@ -67,7 +68,7 @@ type CustomerDraft = {
 };
 
 const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO', countryCode = 'NI', country = 'Nicaragua'): CustomerDraft => ({
-  name: '', type: 'individual', fiscalRegime: '', priceListId: '',
+  name: '', companyName: '', type: 'individual', fiscalRegime: '', priceListId: '',
   taxId: '', ruc: '', email: '', phone: '', contactPhone: '', address: '', city: '', department: '',
   country, countryCode, creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE',
 });
@@ -88,6 +89,7 @@ const compareCustomerCodes = (left: Customer, right: Customer) =>
 
 const customerToDraft = (customer: Customer, fallbackCurrency: SupportedCurrency = 'NIO'): CustomerDraft => ({
   name: customer.name || '',
+  companyName: customer.companyName || '',
   type: String(customer.type || '').toUpperCase() === 'COMPANY' ? 'company' : 'individual',
   fiscalRegime: customer.fiscalRegime || '',
   priceListId: customer.priceListId || customer.priceList?.id || '',
@@ -179,7 +181,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     return match ? row[match] : '';
   };
 
-  const emptyImportRow = (): CustomerImportRow => ({ name: '', type: 'INDIVIDUAL', fiscalRegime: '', priceListCode: '', taxId: '', ruc: '', email: '', phone: '', contactPhone: '', address: '', city: '', department: '', country: countryNameForForm(defaultCountryCode, countries), countryCode: defaultCountryCode, creditLimit: '', creditLimitCurrency: displayCurrency, status: 'ACTIVE', notes: '' });
+  const emptyImportRow = (): CustomerImportRow => ({ name: '', type: 'INDIVIDUAL', companyName: '', fiscalRegime: '', priceListCode: '', taxId: '', ruc: '', email: '', phone: '', contactPhone: '', address: '', city: '', department: '', country: countryNameForForm(defaultCountryCode, countries), countryCode: defaultCountryCode, creditLimit: '', creditLimitCurrency: displayCurrency, openingBalanceType: '', openingBalanceAmount: '', openingBalanceCurrency: baseCurrency, status: 'ACTIVE', notes: '' });
 
   const validateImportRows = (rows: CustomerImportRow[]) => {
     const existingTaxIds = new Set(data.flatMap((customer) => [customer.taxId, customer.ruc]).map(identifierComparisonKey).filter(Boolean));
@@ -197,6 +199,9 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       else if (customerRucRequired(row.type, row.countryCode) && !row.ruc.trim()) next.error = 'RUC obligatorio para empresas';
       else if (row.creditLimit !== '' && (!Number.isFinite(Number(row.creditLimit)) || Number(row.creditLimit) < 0)) next.error = 'Límite de crédito inválido';
       else if (row.creditLimitCurrencyError || !['NIO', 'USD'].includes(row.creditLimitCurrency)) next.error = 'Moneda del límite inválida';
+      else if (row.openingBalanceAmount !== '' && (!Number.isFinite(Number(row.openingBalanceAmount)) || Number(row.openingBalanceAmount) < 0)) next.error = 'Saldo inicial inválido';
+      else if (Number(row.openingBalanceAmount || 0) > 0 && (row.openingBalanceTypeError || !['PENDING', 'FAVOR'].includes(row.openingBalanceType))) next.error = 'Selecciona un tipo válido para el saldo inicial';
+      else if (row.openingBalanceCurrencyError || !['NIO', 'USD'].includes(row.openingBalanceCurrency)) next.error = 'Moneda del saldo inicial inválida';
       if (!next.error && row.priceListCode && !priceListMatch) next.warning = 'Lista no encontrada; se importará sin lista';
       identifiers.forEach((identifier) => { seenTaxIds.add(identifier); existingTaxIds.add(identifier); });
       return next;
@@ -215,8 +220,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     const importablePriceLists = availablePriceLists.filter((list) => list.isActive !== false);
     const defaultCountry = countries.find((country) => country.code === defaultCountryCode);
     const taxIdHeader = defaultCountry?.taxIdLabel || 'Identificación fiscal';
-    const headers = ['Nombre', 'Tipo', taxIdHeader, 'RUC', 'Correo', 'Teléfono', 'Teléfono contacto', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Código país', 'Régimen fiscal', 'Límite de crédito', 'Moneda límite de crédito', 'Lista de precios', 'Estado', 'Notas'];
-    const example = ['Cliente Ejemplo', 'PARTICULAR', defaultCountryCode === 'NI' ? '001-010190-1000A' : '', '', 'cliente@correo.com', defaultCountryCode === 'NI' ? '88888888' : '', '', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', countryNameForForm(defaultCountryCode, countries), defaultCountryCode, 'Régimen general', 0, displayCurrency, importablePriceLists[0]?.code || '', 'ACTIVO', ''];
+    const headers = ['Nombre', 'Tipo', 'Nombre de empresa', taxIdHeader, 'RUC', 'Correo', 'Teléfono', 'Teléfono contacto', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Código país', 'Régimen fiscal', 'Límite de crédito', 'Moneda límite de crédito', 'Lista de precios', 'Tipo saldo inicial', 'Saldo inicial', 'Moneda saldo inicial', 'Estado', 'Notas'];
+    const example = ['Cliente Ejemplo', 'PARTICULAR', '', defaultCountryCode === 'NI' ? '001-010190-1000A' : '', '', 'cliente@correo.com', defaultCountryCode === 'NI' ? '88888888' : '', '', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', countryNameForForm(defaultCountryCode, countries), defaultCountryCode, 'Régimen general', 0, displayCurrency, importablePriceLists[0]?.code || '', '', '', baseCurrency, 'ACTIVO', ''];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const guideRows: any[][] = [
@@ -225,6 +230,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       ['Campo', 'Regla'],
       ['Nombre', 'Obligatorio. Identifica a la persona natural o jurídica.'],
       ['Tipo', 'Usa PARTICULAR para una persona o EMPRESA para una empresa.'],
+      ['Nombre de empresa', 'Opcional y solo para empresas. Se guarda por separado del nombre y de la razón social.'],
       ['Cédula y RUC', 'Completa el identificador fiscal que corresponda al tipo de cliente.'],
       ['País y Código país', 'Indica el país del cliente. Usa preferiblemente Código país con el código ISO de 2 letras (por ejemplo, NI, US, CA o MX); el teléfono se interpretará según ese país.'],
       ['Teléfono', 'Escribe preferiblemente solo los dígitos nacionales, sin guiones ni espacios: Nicaragua 88888888, Estados Unidos 2025550123. También se acepta el formato internacional completo con +: +50588888888 o +12025550123. El prefijo debe corresponder al Código país; no combines el prefijo con el número nacional sin + (por ejemplo, no uses 50588888888).'],
@@ -234,6 +240,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       ['Lista de precios', 'Opcional. Usa el código o nombre de una lista existente. Si no existe, se mostrará un aviso y se importará sin asignación.'],
       ['Límite de crédito', 'Opcional. Usa un número mayor o igual a cero. El importe se guarda en la moneda indicada en la columna Moneda límite de crédito.'],
       ['Moneda límite de crédito', `Obligatoria si capturas un límite. Usa NIO o USD. Si el archivo no trae esta columna, se usará ${displayCurrency}, la moneda seleccionada arriba al preparar la importación.`],
+      ['Tipo saldo inicial y saldo inicial', 'Opcional. Indica PENDIENTE para una deuda general que el cliente tiene con tu empresa o A FAVOR para un saldo disponible. Deja el importe vacío si no hay saldo inicial.'],
+      ['Moneda saldo inicial', `Usa NIO o USD; si no se indica, se usará ${baseCurrency}, la moneda base de la empresa. La tasa vigente se conservará al importar.`],
       ['Estado', 'Usa ACTIVO o INACTIVO. Los clientes inactivos no podrán utilizarse en nuevas operaciones.'],
       ['Previsualización', 'Después de cargar el archivo, abre la previsualización para corregir datos. Los errores se omiten; los avisos no bloquean la importación.'],
       [],
@@ -270,6 +278,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         row.name = String(getCell(source, ['nombre', 'name', 'cliente']) || '').trim();
         const type = normalizeHeader(getCell(source, ['tipo', 'type']) || 'particular');
         row.type = type.includes('company') || type.includes('empresa') || type.includes('juridica') ? 'COMPANY' : 'INDIVIDUAL';
+        row.companyName = String(getCell(source, ['nombredeempresa', 'companyname', 'empresanombre', 'nombreempresa']) || '').trim();
         row.fiscalRegime = String(getCell(source, ['regimenfiscal', 'regimen', 'fiscalregime']) || '').trim();
         const priceListValue = String(getCell(source, ['listadeprecios', 'lista', 'priceList', 'priceListCode']) || '').trim();
         row.priceListCode = priceLists.find((list) => list.code.toLowerCase() === priceListValue.toLowerCase() || list.name.toLowerCase() === priceListValue.toLowerCase())?.code || priceListValue;
@@ -292,6 +301,17 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           const acceptedCreditLimitCurrencies = ['NIO', 'USD', 'US$', '$', 'C$', 'CORDOBA', 'CORDOBAS'];
           row.creditLimitCurrency = creditLimitCurrency === 'USD' || creditLimitCurrency === 'US$' || creditLimitCurrency === '$' ? 'USD' : creditLimitCurrency === 'NIO' || creditLimitCurrency === 'C$' || creditLimitCurrency === 'CORDOBA' || creditLimitCurrency === 'CORDOBAS' ? 'NIO' : displayCurrency;
           if (!acceptedCreditLimitCurrencies.includes(creditLimitCurrency)) row.creditLimitCurrencyError = true;
+        }
+        const openingBalanceAmount = getCell(source, ['saldoinicial', 'openingbalanceamount', 'importeapertura', 'saldoapertura']);
+        row.openingBalanceAmount = openingBalanceAmount === '' || openingBalanceAmount === undefined ? '' : Number(openingBalanceAmount);
+        const openingBalanceType = normalizeHeader(getCell(source, ['tiposaldoinicial', 'openingbalancetype', 'tipodesaldo', 'direccionsaldo']));
+        row.openingBalanceType = openingBalanceType.includes('favor') ? 'FAVOR' : openingBalanceType.includes('pendiente') || openingBalanceType.includes('deuda') ? 'PENDING' : '';
+        if (openingBalanceType && !row.openingBalanceType) row.openingBalanceTypeError = true;
+        const openingBalanceCurrency = String(getCell(source, ['monedasaldoinicial', 'openingbalancecurrency', 'monedasaldo', 'monedaapertura']) || '').trim().toUpperCase();
+        if (openingBalanceCurrency) {
+          const acceptedOpeningCurrencies = ['NIO', 'USD', 'US$', '$', 'C$', 'CORDOBA', 'CORDOBAS'];
+          row.openingBalanceCurrency = openingBalanceCurrency === 'USD' || openingBalanceCurrency === 'US$' || openingBalanceCurrency === '$' ? 'USD' : openingBalanceCurrency === 'NIO' || openingBalanceCurrency === 'C$' || openingBalanceCurrency === 'CORDOBA' || openingBalanceCurrency === 'CORDOBAS' ? 'NIO' : baseCurrency;
+          if (!acceptedOpeningCurrencies.includes(openingBalanceCurrency)) row.openingBalanceCurrencyError = true;
         }
         const status = normalizeHeader(getCell(source, ['estado', 'status']) || 'activo');
         row.status = status.includes('inactiv') ? 'INACTIVE' : 'ACTIVE';
@@ -333,8 +353,10 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const updateImportRow = (index: number, field: keyof CustomerImportRow, value: string) => {
     setImportRows((current) => current.map((row, rowIndex) => rowIndex === index ? {
       ...row,
-      [field]: field === 'creditLimit' ? (value === '' ? '' : Number(value)) : value,
+      [field]: field === 'creditLimit' || field === 'openingBalanceAmount' ? (value === '' ? '' : Number(value)) : value,
       ...(field === 'creditLimitCurrency' ? { creditLimitCurrencyError: undefined } : {}),
+      ...(field === 'openingBalanceCurrency' ? { openingBalanceCurrencyError: undefined } : {}),
+      ...(field === 'openingBalanceType' ? { openingBalanceTypeError: undefined } : {}),
     } : row));
     if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
     importValidationTimerRef.current = window.setTimeout(() => {
@@ -351,11 +373,14 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     setImportResult(null);
     try {
       const result = await customersService.importMassive({
-        rows: validRows.map(({ error: _error, warning: _warning, creditLimitCurrencyError: _currencyError, ...row }) => ({
+        rows: validRows.map(({ error: _error, warning: _warning, creditLimitCurrencyError: _currencyError, openingBalanceCurrencyError: _openingCurrencyError, openingBalanceTypeError: _openingTypeError, ...row }) => ({
           ...row,
           type: row.type === 'COMPANY' ? 'company' : 'individual',
+          companyName: row.type === 'COMPANY' ? row.companyName.trim() || undefined : undefined,
           creditLimit: row.creditLimit === '' ? undefined : row.creditLimit,
           creditLimitCurrency: row.creditLimitCurrency,
+          openingBalanceAmount: row.openingBalanceAmount === '' ? undefined : row.openingBalanceAmount,
+          openingBalanceType: row.openingBalanceType || undefined,
         })),
       });
       setImportProgress(90);
@@ -386,7 +411,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     if (statusFilter !== 'ALL' && customerStatus !== statusFilter) return false;
     if (customerTypeFilter !== 'ALL' && String(c.type || '').toUpperCase() !== customerTypeFilter) return false;
     return (
-      String(c.name || '').toLowerCase().includes(search) || 
+      String(c.name || '').toLowerCase().includes(search) ||
+      String(c.companyName || '').toLowerCase().includes(search) ||
       (c.email || '').toLowerCase().includes(search) ||
       (c.code || '').toLowerCase().includes(search) ||
       (c.phone || '').toLowerCase().includes(search)
@@ -472,6 +498,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
 
   const buildCustomerPayload = (draft: CustomerDraft): Partial<Customer> => ({
     name: draft.name.trim(),
+    companyName: draft.type === 'company' ? draft.companyName.trim() || null : null,
     type: draft.type,
     fiscalRegime: draft.fiscalRegime.trim() || undefined,
     priceListId: draft.priceListId || undefined,
@@ -637,7 +664,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   };
 
   if (importPreviewOpen) {
-    return <CustomerImportPreview rows={importRows} fileName={importFile?.name || ''} priceLists={priceLists} defaultCreditLimitCurrency={displayCurrency} countryOptions={countries} isSidebarCollapsed={isSidebarCollapsed} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
+    return <CustomerImportPreview rows={importRows} fileName={importFile?.name || ''} priceLists={priceLists} defaultCreditLimitCurrency={displayCurrency} defaultOpeningBalanceCurrency={baseCurrency} countryOptions={countries} isSidebarCollapsed={isSidebarCollapsed} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
   }
 
   const renderCustomerAmount = (
@@ -668,7 +695,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       width: '220px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
       headerExtra: <ColumnFilterMenu label="Nombre" options={[{ value: '__empty__', label: 'Sin nombre' }]} selected={colFilters.state.name?.values || []} onSelect={(values) => colFilters.setValues('name', values)} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Z → A (alfabético inverso)' }]} />,
-      render: (val) => <span className="text-[13px] font-medium text-foreground">{val || 'Sin nombre'}</span>
+      render: (val, row) => <span className="block min-w-0"><span className="block truncate text-[13px] font-medium text-foreground">{val || 'Sin nombre'}</span>{row.companyName && <span className="block truncate text-[11px] text-muted-foreground">{row.companyName}</span>}</span>
     },
     { 
       key: 'type', 
@@ -1029,6 +1056,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <div className="space-y-1.5 sm:col-span-2 xl:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} placeholder="Nombre del particular o empresa" className="h-11 rounded-xl" autoFocus /></div>
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><Select value={newCustomer.type} onValueChange={(value) => setNewCustomer({ ...newCustomer, type: value as CustomerDraft['type'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="individual">Particular</SelectItem><SelectItem value="company">Empresa</SelectItem></SelectContent></Select></div>
+                  {newCustomer.type === 'company' && <div className="space-y-1.5 sm:col-span-2 xl:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre de empresa</label><Input value={newCustomer.companyName} onChange={(e) => setNewCustomer({ ...newCustomer, companyName: e.target.value })} placeholder="Nombre comercial o corporativo" className="h-11 rounded-xl" /></div>}
                   <CustomerIdentifierInput id="new-customer-tax-id" value={newCustomer.taxId} onChange={(value) => setNewCustomer({ ...newCustomer, taxId: value })} countryCode={newCustomer.countryCode} kind="taxId" className="h-11 rounded-xl" />
                   <CustomerIdentifierInput id="new-customer-ruc" value={newCustomer.ruc} onChange={(value) => setNewCustomer({ ...newCustomer, ruc: value })} countryCode={newCustomer.countryCode} kind="ruc" required={customerRucRequired(newCustomer.type, newCustomer.countryCode)} className="h-11 rounded-xl" />
                 </div>
@@ -1094,6 +1122,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={editCustomer.name} onChange={(e) => setEditCustomer({ ...editCustomer, name: e.target.value })} placeholder="Nombre del particular o empresa" className="h-11 rounded-xl" autoFocus /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><Select value={editCustomer.type} onValueChange={(value) => setEditCustomer({ ...editCustomer, type: value as CustomerDraft['type'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="individual">Particular</SelectItem><SelectItem value="company">Empresa</SelectItem></SelectContent></Select></div>
+                {editCustomer.type === 'company' && <div className="space-y-1.5 sm:col-span-2 xl:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre de empresa</label><Input value={editCustomer.companyName} onChange={(e) => setEditCustomer({ ...editCustomer, companyName: e.target.value })} placeholder="Nombre comercial o corporativo" className="h-11 rounded-xl" /></div>}
                 <CustomerIdentifierInput id="edit-customer-tax-id" value={editCustomer.taxId} onChange={(value) => setEditCustomer({ ...editCustomer, taxId: value })} countryCode={editCustomer.countryCode} kind="taxId" className="h-11 rounded-xl" />
                 <CustomerIdentifierInput id="edit-customer-ruc" value={editCustomer.ruc} onChange={(value) => setEditCustomer({ ...editCustomer, ruc: value })} countryCode={editCustomer.countryCode} kind="ruc" required={customerRucRequired(editCustomer.type, editCustomer.countryCode)} className="h-11 rounded-xl" />
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><Select value={editCustomer.status} onValueChange={(value) => setEditCustomer({ ...editCustomer, status: value as CustomerDraft['status'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select></div>

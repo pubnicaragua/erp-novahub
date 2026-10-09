@@ -119,6 +119,7 @@ export interface Customer {
   tenantId: string;
   code: string;
   name: string;
+  companyName?: string | null;
   type: 'individual' | 'company';
   fiscalRegime?: string;
   customerClass?: string;
@@ -143,6 +144,8 @@ export interface Customer {
   /** Saldo calculado en moneda base; puede coexistir con saldo a favor. */
   balanceDue?: number;
   balanceFavor?: number;
+  openingBalanceDue?: number;
+  openingBalanceFavor?: number;
   balanceDueOriginalCurrencyBreakdown?: Array<{ currency: string; amount: number; count?: number }>;
   balanceFavorOriginalCurrencyBreakdown?: Array<{ currency: string; amount: number; count?: number }>;
   availableCredit?: number;
@@ -576,6 +579,8 @@ export interface PaymentReceived {
   invoice?: Invoice;
   creditNoteId?: string;
   creditNote?: CreditNote;
+  balanceApplicationType?: 'GENERAL_BALANCE' | null;
+  openingBalanceAppliedAmount?: number | null;
   sourceType?: 'SALES_ORDER' | 'CASH_SALE' | string;
   sourceLabel?: string | null;
   date: string;
@@ -746,6 +751,7 @@ export interface Supplier {
   code: string;
   name: string;
   type?: 'COMPANY' | 'INDIVIDUAL';
+  companyName?: string | null;
   taxId?: string;
   ruc?: string;
   email?: string;
@@ -758,6 +764,8 @@ export interface Supplier {
   contactPhone?: string;
   paymentTerms?: string;
   balance: number;
+  openingBalanceDue?: number;
+  openingBalanceFavor?: number;
   balanceOriginalCurrencyBreakdown?: Array<{ currency: string; amount: number; count?: number }>;
   balanceFavorOriginalCurrencyBreakdown?: Array<{ currency: string; amount: number; count?: number }>;
   rating: number;
@@ -1060,6 +1068,8 @@ export interface PaymentMade {
   supplierId: string;
   supplier?: Supplier;
   supplierInvoiceId?: string;
+  balanceApplicationType?: 'GENERAL_BALANCE' | null;
+  openingBalanceAppliedAmount?: number | null;
   date: string;
   amount: number;
   currency: Currency;

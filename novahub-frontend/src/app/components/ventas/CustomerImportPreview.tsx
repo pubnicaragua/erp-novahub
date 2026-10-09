@@ -17,6 +17,7 @@ import type { CustomerCountryOption } from '../../utils/customer-data';
 export type CustomerImportRow = {
   name: string;
   type: 'INDIVIDUAL' | 'COMPANY';
+  companyName: string;
   fiscalRegime: string;
   priceListCode: string;
   taxId: string;
@@ -32,6 +33,11 @@ export type CustomerImportRow = {
   creditLimit: number | '';
   creditLimitCurrency: 'NIO' | 'USD';
   creditLimitCurrencyError?: boolean;
+  openingBalanceType: '' | 'PENDING' | 'FAVOR';
+  openingBalanceAmount: number | '';
+  openingBalanceCurrency: 'NIO' | 'USD';
+  openingBalanceCurrencyError?: boolean;
+  openingBalanceTypeError?: boolean;
   status: 'ACTIVE' | 'INACTIVE';
   notes: string;
   error?: string;
@@ -45,6 +51,7 @@ interface CustomerImportPreviewProps {
   fileName: string;
   priceLists: Array<{ id: string; code: string; name: string }>;
   defaultCreditLimitCurrency: 'NIO' | 'USD';
+  defaultOpeningBalanceCurrency: 'NIO' | 'USD';
   countryOptions: CustomerCountryOption[];
   isSidebarCollapsed: boolean;
   importing: boolean;
@@ -114,6 +121,7 @@ function CustomerImportMobileCard({
             <SelectContent><SelectItem value="INDIVIDUAL">Particular</SelectItem><SelectItem value="COMPANY">Empresa</SelectItem></SelectContent>
           </Select>
         </ImportField>
+        {row.type === 'COMPANY' && <ImportField label="Nombre de empresa" className="sm:col-span-2"><Input className={fieldClass} value={row.companyName} onChange={(event) => update('companyName', event.target.value)} disabled={importing} /></ImportField>}
         <ImportField label="Régimen fiscal">
           <Input className={fieldClass} value={row.fiscalRegime} placeholder="General" onChange={(event) => update('fiscalRegime', event.target.value)} disabled={importing} />
         </ImportField>
@@ -139,6 +147,19 @@ function CustomerImportMobileCard({
             <SelectContent><SelectItem value="NIO">Córdobas (NIO)</SelectItem><SelectItem value="USD">Dólares (USD)</SelectItem></SelectContent>
           </Select>
         </ImportField>
+        <ImportField label="Tipo de saldo inicial">
+          <Select value={row.openingBalanceType || '__none__'} onValueChange={(value) => update('openingBalanceType', value === '__none__' ? '' : value)} disabled={importing}>
+            <SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="__none__">Sin saldo inicial</SelectItem><SelectItem value="PENDING">Pendiente</SelectItem><SelectItem value="FAVOR">A favor</SelectItem></SelectContent>
+          </Select>
+        </ImportField>
+        <ImportField label="Importe de saldo inicial"><Input className={`${fieldClass} text-right`} type="number" min="0" step="0.01" value={row.openingBalanceAmount} onChange={(event) => update('openingBalanceAmount', event.target.value)} disabled={importing} /></ImportField>
+        <ImportField label="Moneda saldo inicial">
+          <Select value={row.openingBalanceCurrency} onValueChange={(value) => update('openingBalanceCurrency', value)} disabled={importing}>
+            <SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="NIO">Córdobas (NIO)</SelectItem><SelectItem value="USD">Dólares (USD)</SelectItem></SelectContent>
+          </Select>
+        </ImportField>
         <ImportField label="Estado">
           <Select value={row.status} onValueChange={(value) => update('status', value)} disabled={importing}>
             <SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger>
@@ -159,6 +180,7 @@ export function CustomerImportPreview({
   fileName,
   priceLists,
   defaultCreditLimitCurrency,
+  defaultOpeningBalanceCurrency,
   countryOptions,
   isSidebarCollapsed,
   importing,
@@ -174,7 +196,7 @@ export function CustomerImportPreview({
   const [confirmText, setConfirmText] = useState('');
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
-  const gridTemplate = '80px 288px 160px 192px 224px 192px 176px 256px 176px 176px 288px 160px 192px 192px 144px 144px 144px 288px';
+  const gridTemplate = '80px 288px 160px 224px 192px 224px 192px 176px 256px 176px 176px 288px 160px 192px 160px 176px 144px 160px 144px 144px 144px 288px';
   const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 58);
   const validRows = rows.filter((row) => !row.error).length;
   const errorRows = rows.filter((row) => row.error).length;
@@ -193,25 +215,26 @@ export function CustomerImportPreview({
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación masiva</p>
             <h1 className="mt-1 text-xl font-black tracking-tight sm:text-3xl">Previsualizar clientes</h1>
-            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Edita los datos antes de crear los clientes. El número de cliente se genera automáticamente. La moneda del límite queda visible por fila; si el archivo no la indica, se usa {defaultCreditLimitCurrency}.</p>
+            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Edita los datos antes de crear los clientes. El número de cliente se genera automáticamente. La moneda del límite usa {defaultCreditLimitCurrency} si no se indica; el saldo inicial usa la moneda base {defaultOpeningBalanceCurrency}.</p>
           </div>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
           <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Archivo cargado</p><p className="truncate text-sm font-bold" title={fileName}>{fileName}</p></div>
-          <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Límite por moneda</Badge><Badge variant="secondary">Avisos no bloquean</Badge></div>
+          <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Empresa y saldos iniciales</Badge><Badge variant="secondary">Avisos no bloquean</Badge></div>
         </div>
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="clientes" />
 
         <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex">
           <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 flex-1" tableClassName="scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="overflow-visible" containerStyle={{ width: '3100px', minWidth: '3100px', maxWidth: 'none' }} className="block w-[3100px] min-w-[3100px]">
+          <Table containerClassName="overflow-visible" containerStyle={{ width: '4200px', minWidth: '4200px', maxWidth: 'none' }} className="block w-[4200px] min-w-[4200px]">
             <TableHeader className="sticky top-0 z-10 block bg-muted/95 backdrop-blur">
               <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
                 <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Estado</TableHead>
                 <TableHead className="w-72 min-w-72 whitespace-nowrap">Nombre *</TableHead>
                 <TableHead className="w-40 min-w-40 whitespace-nowrap">Tipo *</TableHead>
+                <TableHead className="w-56 min-w-56 whitespace-nowrap">Nombre de empresa</TableHead>
                 <TableHead className="w-48 min-w-48 whitespace-nowrap">Régimen fiscal</TableHead>
                 <TableHead className="w-56 min-w-56 whitespace-nowrap">Lista de precios</TableHead>
                 <TableHead className="w-48 min-w-48 whitespace-nowrap">Cédula</TableHead>
@@ -225,6 +248,9 @@ export function CustomerImportPreview({
                 <TableHead className="w-40 min-w-40 whitespace-nowrap">País</TableHead>
                 <TableHead className="w-44 min-w-44 whitespace-nowrap text-right">Límite crédito</TableHead>
                 <TableHead className="w-36 min-w-36 whitespace-nowrap">Moneda límite</TableHead>
+                <TableHead className="w-40 min-w-40 whitespace-nowrap">Tipo saldo inicial</TableHead>
+                <TableHead className="w-36 min-w-36 whitespace-nowrap text-right">Saldo inicial</TableHead>
+                <TableHead className="w-36 min-w-36 whitespace-nowrap">Moneda saldo</TableHead>
                 <TableHead className="w-36 min-w-36 whitespace-nowrap">Estado</TableHead>
                 <TableHead className="w-72 min-w-72 whitespace-nowrap">Validación</TableHead>
               </TableRow>
@@ -238,6 +264,7 @@ export function CustomerImportPreview({
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row.warning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                   <TableCell><Input className={fieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Select value={row.type} onValueChange={(value) => onRowUpdate(index, 'type', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="INDIVIDUAL">Particular</SelectItem><SelectItem value="COMPANY">Empresa</SelectItem></SelectContent></Select></TableCell>
+                  <TableCell>{row.type === 'COMPANY' && <Input className={fieldClass} value={row.companyName} onChange={(event) => onRowUpdate(index, 'companyName', event.target.value)} disabled={importing} />}</TableCell>
                   <TableCell><Input className={fieldClass} value={row.fiscalRegime} placeholder="General" onChange={(event) => onRowUpdate(index, 'fiscalRegime', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Select value={row.priceListCode || '__no_price_list__'} onValueChange={(value) => onRowUpdate(index, 'priceListCode', value === '__no_price_list__' ? '' : value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.code}>{list.name}</SelectItem>)}</SelectContent></Select></TableCell>
                   <TableCell><CustomerIdentifierInput id={`import-desktop-tax-id-${index}`} value={row.taxId} onChange={(value) => onRowUpdate(index, 'taxId', value)} countryCode={row.countryCode} kind="taxId" disabled={importing} className={fieldClass} labelClassName="sr-only" /></TableCell>
@@ -251,6 +278,9 @@ export function CustomerImportPreview({
                   <TableCell><CustomerCountrySelect id={`import-desktop-country-${index}`} value={row.countryCode} countries={countryOptions} onChange={(value) => { onRowUpdate(index, 'countryCode', value); onRowUpdate(index, 'country', countryOptions.find((country) => country.code === value)?.name || value); }} disabled={importing} /></TableCell>
                   <TableCell><Input className="h-9 w-full min-w-0 rounded-lg border-border/70 bg-background/70 text-right text-xs" type="number" min="0" value={row.creditLimit} onChange={(event) => onRowUpdate(index, 'creditLimit', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Select value={row.creditLimitCurrency} onValueChange={(value) => onRowUpdate(index, 'creditLimitCurrency', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></TableCell>
+                  <TableCell><Select value={row.openingBalanceType || '__none__'} onValueChange={(value) => onRowUpdate(index, 'openingBalanceType', value === '__none__' ? '' : value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">Sin saldo inicial</SelectItem><SelectItem value="PENDING">Pendiente</SelectItem><SelectItem value="FAVOR">A favor</SelectItem></SelectContent></Select></TableCell>
+                  <TableCell><Input className={`${fieldClass} text-right`} type="number" min="0" step="0.01" value={row.openingBalanceAmount} onChange={(event) => onRowUpdate(index, 'openingBalanceAmount', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Select value={row.openingBalanceCurrency} onValueChange={(value) => onRowUpdate(index, 'openingBalanceCurrency', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></TableCell>
                   <TableCell><Select value={row.status} onValueChange={(value) => onRowUpdate(index, 'status', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select></TableCell>
                   <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : row.warning ? 'text-xs font-medium text-amber-600' : 'text-xs text-emerald-600'}>{row.error || row.warning || 'Correcto'}</TableCell>
                 </TableRow>
@@ -268,7 +298,7 @@ export function CustomerImportPreview({
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
           </div>
           <div className="flex min-h-0 flex-1 flex-col">
-            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={440} overscan={2} className="pt-3 pr-1" renderItem={(index) => <div className="pb-3"><CustomerImportMobileCard row={rows[index]} index={index} priceLists={priceLists} countries={countryOptions} importing={importing} onRowUpdate={onRowUpdate} /></div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={540} overscan={2} className="pt-3 pr-1" renderItem={(index) => <div className="pb-3"><CustomerImportMobileCard row={rows[index]} index={index} priceLists={priceLists} countries={countryOptions} importing={importing} onRowUpdate={onRowUpdate} /></div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
           </div>
         </section>
 

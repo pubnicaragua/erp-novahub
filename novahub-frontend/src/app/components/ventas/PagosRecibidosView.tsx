@@ -271,6 +271,11 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
   );
   const rawPaymentTotalBase = getPaymentTotalBase(paymentLines, getPaymentLineBase);
+  const paymentCustomer = customers.find((customer) => customer.id === localDoc?.customerId);
+  const paymentOpeningBalanceDue = Math.max(0, Number(paymentCustomer?.openingBalanceDue || 0));
+  const isGeneralBalancePayment = String(localDoc?.balanceApplicationType || '').toUpperCase() === 'GENERAL_BALANCE';
+  const paymentGeneralBalanceExceeded = isGeneralBalancePayment && rawPaymentTotalBase > paymentOpeningBalanceDue + 0.01;
+  const paymentGeneralBalanceRemainingBase = Math.max(0, paymentOpeningBalanceDue - rawPaymentTotalBase);
   const paymentCustomerFavorBase = getCustomerFavorAmount(
     customers.find((customer) => customer.id === localDoc?.customerId),
   );
@@ -347,7 +352,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const paymentPartialActive = partialPaymentEnabled && paymentPartialCreditFits;
   const paymentSettlementLabel = paymentRemainingBase > 0.01
     ? 'Pendiente'
-    : paymentChangeBase > 0.01 ? 'Vuelto por dar' : linkedPaymentDocument ? 'Saldo cubierto' : 'Anticipo';
+    : paymentChangeBase > 0.01 ? 'Vuelto por dar' : linkedPaymentDocument ? 'Saldo cubierto' : isGeneralBalancePayment ? 'Saldo general' : 'Anticipo';
   const handlePaymentMethodChange = (index: number, nextMethod: ReceivedPaymentLine['method']) => {
     setPaymentLines((current) => current.map((item, itemIndex) => {
       if (itemIndex !== index) return item;
@@ -423,8 +428,10 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     setPartialPaymentEnabled(false);
     commitLocalDoc({
       customerId: '',
+      paymentTarget: 'ADVANCE',
       invoiceId: '',
       creditNoteId: '',
+      balanceApplicationType: '',
       date: new Date().toISOString().split('T')[0],
       dueDate: '',
       amount: 0,
@@ -500,6 +507,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       ), 0);
     if (customerFavorAppliedBase > paymentCustomerFavorBase + 0.01) { toast.error(`El saldo a favor disponible es de ${formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}`); return; }
     if (customerFavorAppliedBase > 0.01 && !localDoc.invoiceId && !localDoc.creditNoteId) { toast.error('Selecciona una factura o crédito pendiente para aplicar el saldo a favor'); return; }
+    if (isGeneralBalancePayment && paymentOpeningBalanceDue <= 0.01) { toast.error('El cliente no tiene un saldo inicial pendiente para abonar.'); return; }
+    if (paymentGeneralBalanceExceeded) { toast.error(`El abono supera el saldo inicial pendiente de ${formatConvertedAmount(paymentOpeningBalanceDue, baseCurrency)}.`); return; }
+    if (isGeneralBalancePayment && submittedLines.some((line) => line.method === 'CUSTOMER_BALANCE')) { toast.error('El saldo a favor no puede utilizarse como medio de pago de un abono general.'); return; }
     if (submittedLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) { toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque'); return; }
     if (submittedLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) { toast.error('Selecciona la cuenta contable que recibirá cada pago'); return; }
     if (submittedLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) { toast.error('Selecciona el banco global donde se recibió cada pago'); return; }
@@ -508,6 +518,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       const firstLine = submittedLines[0];
       const payload = {
         customerId: localDoc.customerId,
+        balanceApplicationType: isGeneralBalancePayment ? 'GENERAL_BALANCE' : undefined,
         invoiceId: localDoc.invoiceId || undefined,
         creditNoteId: localDoc.creditNoteId || undefined,
         date: new Date(localDoc.date).toISOString(),
@@ -558,7 +569,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     try {
       const tenantName = user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa';
       const paymentRows = row.payments?.length ? row.payments : [row];
-      const documentReference = row.invoice?.number || row.creditNote?.number || 'Anticipo';
+      const documentReference = row.invoice?.number || row.creditNote?.number || (row.balanceApplicationType === 'GENERAL_BALANCE' ? 'Saldo general del cliente' : 'Anticipo');
       await previewSalesTransactionPDF({
         document: {
           ...row,
@@ -612,6 +623,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     setPartialPaymentEnabled(false);
     setLocalDoc({
       ...localDoc,
+      paymentTarget: id ? kind === 'invoice' ? 'INVOICE' : 'CREDIT' : 'ADVANCE',
+      balanceApplicationType: '',
       invoiceId: kind === 'invoice' ? id : '',
       creditNoteId: kind === 'creditNote' ? id : '',
       amount,
@@ -621,14 +634,46 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     });
   };
 
+  const setPaymentTarget = (target: 'ADVANCE' | 'GENERAL_BALANCE' | 'INVOICE' | 'CREDIT') => {
+    const nextIsGeneral = target === 'GENERAL_BALANCE';
+    const currentLine = paymentLines[0] || paymentLine('TRANSFER');
+    const nextMethod = currentLine.method === 'CUSTOMER_BALANCE' ? 'TRANSFER' : currentLine.method;
+    const targetAmount = nextIsGeneral
+      ? Number(convertBetweenCurrencies(paymentOpeningBalanceDue, baseCurrency, currentLine.currency, 1, Number(currentLine.exchangeRate || globalRate)).toFixed(2))
+      : 0;
+    const nextLine: ReceivedPaymentLine = {
+      ...currentLine,
+      method: nextMethod,
+      amount: targetAmount,
+      accountId: undefined,
+      bankAccountId: undefined,
+      reference: '',
+      cardCommissionPercent: nextMethod === 'CARD' ? currentLine.cardCommissionPercent : 0,
+      cardCommissionAmount: nextMethod === 'CARD' ? currentLine.cardCommissionAmount : 0,
+      cardCommissionAccountId: nextMethod === 'CARD' ? currentLine.cardCommissionAccountId : undefined,
+    };
+    setPaymentLines([nextLine]);
+    setMixedPaymentEnabled(false);
+    setPartialPaymentEnabled(false);
+    setLocalDoc({
+      ...localDoc,
+      paymentTarget: target,
+      balanceApplicationType: nextIsGeneral ? 'GENERAL_BALANCE' : '',
+      invoiceId: '',
+      creditNoteId: '',
+      dueDate: '',
+      amount: targetAmount,
+    });
+  };
+
   const columns: ColumnDef<PaymentReceived>[] = [
     { key: 'number', header: 'N° Pago', width: '120px', render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val}</span> },
     { key: 'customer', header: 'Cliente', headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />, render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
-    { key: 'reference', header: 'Referencia / Documento', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || row.creditNote?.number || val || 'Anticipo'}</span> },
+    { key: 'reference', header: 'Referencia / Documento', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || row.creditNote?.number || (row.balanceApplicationType === 'GENERAL_BALANCE' ? 'Abono al saldo general' : val || 'Anticipo')}</span> },
     {
       key: 'sourceType', header: 'Origen', width: '180px', render: (_val, row) => {
         if (row.creditNote?.number) return <Badge className="border-none bg-primary/10 px-2 py-0.5 text-[9px] font-black text-primary">Crédito</Badge>;
-        if (!row.invoice?.number) return <span className="text-xs text-muted-foreground">Sin documento</span>;
+        if (!row.invoice?.number) return <span className="text-xs text-muted-foreground">{row.balanceApplicationType === 'GENERAL_BALANCE' ? 'Saldo general' : 'Sin documento'}</span>;
           const isCashSale = String(row.invoice?.sourceType ?? row.sourceType ?? '').toUpperCase() === 'CASH_SALE'
             || Boolean(row.invoice?.cashSessionId ?? row.cashSessionId)
 
@@ -729,7 +774,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="payments" context="form" />
             {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
-            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={paymentCustomerFavorExceeded || paymentChangeUnsupported || Boolean(cashRegisterId && (cashLoading || !cashSession)) || (Boolean(linkedPaymentDocument) && paymentRemainingBase > 0.01 && (!partialPaymentEnabled || !paymentPartialCreditFits || !localDoc.dueDate)) || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)}>
+            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={paymentCustomerFavorExceeded || paymentGeneralBalanceExceeded || paymentChangeUnsupported || Boolean(cashRegisterId && (cashLoading || !cashSession)) || (Boolean(linkedPaymentDocument) && paymentRemainingBase > 0.01 && (!partialPaymentEnabled || !paymentPartialCreditFits || !localDoc.dueDate)) || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)}>
               Confirmar Pago
             </Button>
             )}
@@ -745,23 +790,35 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   <Combobox 
                     options={(customers || [])
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc.customerId)
-                      .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
+                      .map(c => ({ label: c.name, value: c.id, description: [c.code ? `[${c.code}]` : '', c.companyName || '', c.phone || ''].filter(Boolean).join(' · ') || 'Sin teléfono' }))}
                     value={localDoc.customerId} 
-                    onChange={(val) => { setLocalDoc({ ...localDoc, customerId: val, invoiceId: '', creditNoteId: '', amount: 0 }); setPaymentLines((current) => current.map((line, index) => index === 0 ? { ...line, amount: 0 } : line)); }}
+                    onChange={(val) => { setLocalDoc({ ...localDoc, customerId: val, paymentTarget: 'ADVANCE', balanceApplicationType: '', invoiceId: '', creditNoteId: '', amount: 0 }); setPaymentLines((current) => current.map((line, index) => index === 0 ? { ...line, amount: 0 } : line)); }}
                     placeholder="Seleccionar Cliente" 
                   /></div>
-                <div><p className="text-[10px] text-muted-foreground mb-1">Factura (Opcional)</p>
+                <div><p className="text-[10px] text-muted-foreground mb-1">Destino del pago</p>
+                  <Select value={localDoc.paymentTarget || (localDoc.invoiceId ? 'INVOICE' : localDoc.creditNoteId ? 'CREDIT' : isGeneralBalancePayment ? 'GENERAL_BALANCE' : 'ADVANCE')} onValueChange={(value) => setPaymentTarget(value as 'ADVANCE' | 'GENERAL_BALANCE' | 'INVOICE' | 'CREDIT')}>
+                    <SelectTrigger className="h-9 w-full min-w-0 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="ADVANCE">Anticipo del cliente</SelectItem><SelectItem value="GENERAL_BALANCE">Abono al saldo general</SelectItem><SelectItem value="INVOICE">Factura</SelectItem><SelectItem value="CREDIT">Crédito</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                {localDoc.paymentTarget === 'INVOICE' && <div><p className="text-[10px] text-muted-foreground mb-1">Factura pendiente</p>
                   <Combobox options={customerInvoices.map(i => ({
                     label: `${i.number} — ${formatConvertedAmount(Number(i.balance || 0), i.currency, i.exchangeRate)} pend.`,
                     value: i.id,
                   }))}
-                    value={localDoc.invoiceId} onChange={(val) => setPaymentDocument('invoice', val)} placeholder="Sin factura (anticipo)" /></div>
-                <div><p className="text-[10px] text-muted-foreground mb-1">Crédito a liquidar (Opcional)</p>
+                    value={localDoc.invoiceId} onChange={(val) => setPaymentDocument('invoice', val)} placeholder="Selecciona una factura" /></div>}
+                {localDoc.paymentTarget === 'CREDIT' && <div><p className="text-[10px] text-muted-foreground mb-1">Crédito pendiente</p>
                   <Combobox options={credits.filter((credit) => credit.customerId === localDoc.customerId && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status || '').toUpperCase()) && Number(credit.balance ?? credit.total ?? 0) > 0).map((credit) => ({
                     label: `${credit.number} — ${formatConvertedAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate)} pend.`,
                     value: credit.id,
                   }))}
-                    value={localDoc.creditNoteId} onChange={(val) => setPaymentDocument('creditNote', val)} placeholder="Sin crédito" /></div>
+                    value={localDoc.creditNoteId} onChange={(val) => setPaymentDocument('creditNote', val)} placeholder="Selecciona un crédito" /></div>}
+                {isGeneralBalancePayment && <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.05] p-3 sm:col-span-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Saldo inicial pendiente</p>
+                  <p className="mt-1 text-sm font-black tabular-nums text-foreground">{formatConvertedAmount(paymentOpeningBalanceDue, baseCurrency)}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Este abono se aplicará al saldo general importado y no a una factura ni a un crédito.</p>
+                  {paymentGeneralBalanceExceeded && <p className="mt-2 text-[10px] font-bold text-rose-600 dark:text-rose-400">El importe supera el saldo general disponible.</p>}
+                </div>}
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" value={localDoc.date} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
                 <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-3 text-xs text-muted-foreground sm:col-span-2">
@@ -812,7 +869,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   {paymentLines.map((line, index) => (
                     <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-start">
-                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => handlePaymentMethodChange(index, nextMethod as ReceivedPaymentLine['method'])}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || (paymentCustomerFavorBase > 0.01 && Boolean(localDoc.invoiceId || localDoc.creditNoteId))).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => handlePaymentMethodChange(index, nextMethod as ReceivedPaymentLine['method'])}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || (!isGeneralBalancePayment && paymentCustomerFavorBase > 0.01 && Boolean(localDoc.invoiceId || localDoc.creditNoteId))).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
                         <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" disabled={line.method === 'CUSTOMER_BALANCE'} onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
@@ -839,10 +896,11 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   ))}
                   {mixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>}
                   <div className="flex items-center justify-between border-t border-border/50 pt-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
+                  {isGeneralBalancePayment && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Pendiente general después del abono</span><span className={cn('font-black tabular-nums', paymentGeneralBalanceExceeded ? 'text-rose-600' : 'text-amber-600')}>{formatConvertedAmount(paymentGeneralBalanceRemainingBase, baseCurrency)}</span></div>}
                   {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Aplicado en documento</span><span className="font-black text-primary">{formatExplicitAmount(paymentTotalInDocumentCurrency, linkedDocumentCurrency)}</span></div>}
                    {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className={cn("font-black uppercase tracking-widest", paymentSettlementLabel === 'Pendiente' ? 'text-amber-600' : 'text-muted-foreground')}>{paymentSettlementLabel}</span><span className={cn("font-black", paymentSettlementLabel === 'Pendiente' ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentSettlementLabel === 'Pendiente' ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</span></div>}
                   {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Equivalente en documento</span><span className="font-black">{formatExplicitAmount(paymentRemainingBase > 0.01 ? paymentRemainingInDocumentCurrency : paymentChangeInDocumentCurrency, linkedDocumentCurrency)}</span></div>}
-                  {!linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Destino</span><span className="font-black text-muted-foreground">Anticipo de cliente</span></div>}
+                  {!linkedPaymentDocument && <div className="flex items-center justify-between gap-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Destino</span><span className="text-right font-black text-muted-foreground">{isGeneralBalancePayment ? 'Abono al saldo general del cliente' : 'Anticipo de cliente'}</span></div>}
                    {paymentChangeBase > 0.01 && <p className={cn("rounded-lg px-3 py-2 text-[10px] font-bold", paymentChangeUnsupported ? 'bg-rose-500/10 text-rose-600' : 'bg-emerald-500/10 text-emerald-600')}>{paymentChangeUnsupported ? 'No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe ser efectivo.' : `Vuelto por dar: ${formatConvertedAmount(paymentChangeBase, baseCurrency)} · efectivo disponible: ${formatConvertedAmount(paymentCashBase, baseCurrency)}`}</p>}
                 </div>
                 {linkedPaymentDocument && <div className="space-y-2 rounded-xl border border-border/60 bg-muted/10 p-3">
@@ -982,13 +1040,13 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</p><p className="mt-1 break-words text-sm font-bold">{detailPayment.customer?.name || 'Cliente'}</p></div>
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</p><p className="mt-1 text-sm font-bold">{formatDateEs(detailPayment.date, true) || '—'}</p></div>
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><p className="mt-1 text-sm font-bold">{paymentMethodLabel(String(detailPayment.method || '').toUpperCase())}</p></div>
-                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Documento</p><p className="mt-1 break-words text-sm font-bold text-primary">{detailPayment.invoice?.number || detailPayment.creditNote?.number || detailPayment.reference || 'Anticipo'}</p></div>
+                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Documento / destino</p><p className="mt-1 break-words text-sm font-bold text-primary">{detailPayment.invoice?.number || detailPayment.creditNote?.number || (detailPayment.balanceApplicationType === 'GENERAL_BALANCE' ? 'Abono al saldo general del cliente' : detailPayment.reference || 'Anticipo')}</p></div>
               </div>
 
               <div className="space-y-3 rounded-2xl border border-border/50 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Información de conciliación</p>
                 <div className="grid gap-3 text-sm sm:grid-cols-2">
-                  <div><p className="text-[10px] text-muted-foreground">Origen</p><p className="mt-1 font-semibold">{detailPayment.sourceLabel || (detailPayment.invoice?.number ? 'Factura' : detailPayment.creditNote?.number ? 'Crédito' : 'Anticipo')}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground">Origen</p><p className="mt-1 font-semibold">{detailPayment.sourceLabel || (detailPayment.invoice?.number ? 'Factura' : detailPayment.creditNote?.number ? 'Crédito' : detailPayment.balanceApplicationType === 'GENERAL_BALANCE' ? 'Saldo general del cliente' : 'Anticipo')}</p></div>
                   <div><p className="text-[10px] text-muted-foreground">Referencia</p><p className="mt-1 break-words font-semibold">{detailPayment.reference || 'Sin referencia'}</p></div>
                   <div><p className="text-[10px] text-muted-foreground">Cuenta contable</p><p className="mt-1 break-words font-semibold">{(detailPayment as any).account?.name || detailPayment.accountId || 'No especificada'}</p></div>
                   <div><p className="text-[10px] text-muted-foreground">Banco</p><p className="mt-1 break-words font-semibold">{detailPayment.bankAccount?.bankName || detailPayment.bankAccount?.accountNumber || detailPayment.bankAccountId || 'No especificado'}</p></div>
