@@ -11,6 +11,20 @@ export interface RestaurantTable {
   branchId: string;
 }
 
+export interface RestaurantMenuOptionChoice {
+  id: string;
+  name: string;
+  priceAdjustment: number;
+}
+
+export interface RestaurantMenuOptionGroup {
+  id: string;
+  name: string;
+  required?: boolean;
+  multiple?: boolean;
+  choices: RestaurantMenuOptionChoice[];
+}
+
 export interface RestaurantMenuItem {
   id: string;
   categoryId: string;
@@ -23,6 +37,7 @@ export interface RestaurantMenuItem {
   prepStation: string;
   isAvailable: boolean;
   isFeatured: boolean;
+  options?: RestaurantMenuOptionGroup[] | null;
 }
 
 export interface RestaurantMenuCategory {
@@ -38,11 +53,12 @@ export interface RestaurantOrder {
   type: string;
   status: string;
   table?: { id: string; code: string; name: string } | null;
+  hotelReservation?: { reservationNumber: string; guestName: string; room: { code: string; name: string } } | null;
   total: number;
   currency: string;
   createdAt?: string;
   sentAt?: string | null;
-  items: Array<{ id: string; description: string; quantity: number; total: number; status: string; productId?: string | null }>;
+  items: Array<{ id: string; description: string; quantity: number; total: number; status: string; productId?: string | null; options?: Array<{ groupId: string; groupName: string; choiceId: string; choiceName: string; priceAdjustment: number }> | null }>;
 }
 
 export interface RestaurantKitchenTicket {
@@ -50,8 +66,8 @@ export interface RestaurantKitchenTicket {
   station: string;
   status: string;
   sentAt: string;
-  order: { id: string; number: string; table?: { code: string; name: string } | null };
-  items: Array<{ item: { description: string; quantity: number; notes?: string | null } }>;
+  order: { id: string; number: string; table?: { code: string; name: string } | null; hotelReservation?: { reservationNumber: string; guestName: string; room: { code: string; name: string } } | null };
+  items: Array<{ item: { description: string; quantity: number; notes?: string | null; options?: Array<{ groupId: string; groupName: string; choiceId: string; choiceName: string; priceAdjustment: number }> | null } }>;
 }
 
 export interface RestaurantSummary {
@@ -81,7 +97,7 @@ export interface RestaurantMenuSettings {
 export const restaurantService = {
   getPublicMenu: (tableToken: string, signal?: AbortSignal) =>
     api.get<{ table: { name: string; code: string }; categories: RestaurantMenuCategory[]; branding: RestaurantPublicBranding }>(`/restaurant/public/${encodeURIComponent(tableToken)}/menu`, { signal }),
-  createPublicOrder: (tableToken: string, body: { items: Array<{ menuItemId: string; quantity: number }>; customerName?: string; customerPhone?: string; notes?: string }) =>
+  createPublicOrder: (tableToken: string, body: { items: Array<{ menuItemId: string; quantity: number; selectedOptions?: Record<string, string | string[]> }>; customerName?: string; customerPhone?: string; notes?: string }) =>
     api.idempotentPost<RestaurantOrder>(`/restaurant/public/${encodeURIComponent(tableToken)}/orders`, body),
   listTables: (branchId?: string, signal?: AbortSignal) =>
     api.get<RestaurantTable[]>('/restaurant/tables', { params: { branchId }, signal }),
@@ -106,7 +122,7 @@ export const restaurantService = {
     prepStation?: string;
     imageUrl?: string | null;
     accountingKey?: string;
-    options?: unknown;
+    options?: RestaurantMenuOptionGroup[];
     sortOrder?: number;
     isFeatured?: boolean;
   }) => api.post<RestaurantMenuItem>('/restaurant/menu/items', body),
@@ -121,10 +137,11 @@ export const restaurantService = {
     prepStation: string;
     isAvailable: boolean;
     isFeatured: boolean;
+    options: RestaurantMenuOptionGroup[];
   }>) => api.patch<RestaurantMenuItem>(`/restaurant/menu/items/${id}`, body),
   listOrders: (branchId?: string, signal?: AbortSignal) =>
     api.get<RestaurantOrder[]>('/restaurant/orders', { params: { branchId }, signal }),
-  createOrder: (body: { tableId: string; items: Array<{ menuItemId: string; quantity: number; notes?: string }>; notes?: string }) =>
+  createOrder: (body: { tableId: string; items: Array<{ menuItemId: string; quantity: number; notes?: string; selectedOptions?: Record<string, string | string[]> }>; notes?: string }) =>
     api.idempotentPost<RestaurantOrder>('/restaurant/orders', body),
   updateOrderStatus: (id: string, status: string) =>
     api.patch<RestaurantOrder>(`/restaurant/orders/${id}/status`, { status }),

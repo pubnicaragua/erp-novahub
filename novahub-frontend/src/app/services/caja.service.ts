@@ -17,6 +17,7 @@ export interface CashRegister {
   code: string;
   location?: string;
   isActive: boolean;
+  branchId?: string | null;
   /** Legacy only. Caja is associated with the branch, not a warehouse. */
   warehouseId?: string | null;
   warehouse?: any;
@@ -569,7 +570,7 @@ export const cajaService = {
   getRegisters: (all: boolean = false, signal?: AbortSignal) =>
     api.get<CashRegister[]>('/caja/registers', { params: all ? { all: 'true' } : undefined, signal }),
   getRegisterLookup: (signal?: AbortSignal) =>
-    api.get<Pick<CashRegister, 'id' | 'code' | 'name' | 'isActive' | 'warehouseId'>[]>('/caja/registers/lookup', { signal }),
+    api.get<Pick<CashRegister, 'id' | 'code' | 'name' | 'isActive' | 'branchId' | 'warehouseId'>[]>('/caja/registers/lookup', { signal }),
 
   getRegisterAvailability: () =>
     api.get<CashRegisterAvailability>('/caja/registers/status'),

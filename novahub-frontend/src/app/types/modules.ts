@@ -30,3 +30,4 @@ export const ACTIVITIES_SUBMODULES = submodulesFor('ACTIVITIES');
 export const DOCUMENTS_SUBMODULES = submodulesFor('DOCUMENTS');
 export const REPORTS_SUBMODULES = submodulesFor('REPORTS');
 export const ACCOUNTING_SUBMODULES = submodulesFor('ACCOUNTING');
+export const HOTEL_SUBMODULES = submodulesFor('HOTEL');

@@ -19,6 +19,7 @@ export const SIDEBAR_PERMISSION_PARENT_ORDER = [
   'SALES',
   'PURCHASES',
   'RESTAURANT',
+  'HOTEL',
   'TRACKING',
   'IMPORT_INTL',
   'INVENTORY',
@@ -62,6 +63,10 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'RESTAURANT_KITCHEN', label: 'Cocina', parent: 'RESTAURANT' },
   { id: 'RESTAURANT_MENU', label: 'Carta', parent: 'RESTAURANT' },
   { id: 'RESTAURANT_REPORTS', label: 'Reportes restaurante', parent: 'RESTAURANT' },
+
+  // Hospedaje
+  { id: 'HOTEL_ROOMS', label: 'Habitaciones', parent: 'HOTEL' },
+  { id: 'HOTEL_RESERVATIONS', label: 'Reservas y estadías', parent: 'HOTEL' },
 
   // Compras
   { id: 'PURCHASES_REQUESTS', label: 'Solicitudes', parent: 'PURCHASES' },
@@ -255,6 +260,9 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   cocina: ['RESTAURANT_KITCHEN'],
   carta: ['RESTAURANT_MENU'],
   'reportes-restaurante': ['RESTAURANT_REPORTS'],
+  habitaciones: ['HOTEL_ROOMS'],
+  reservas: ['HOTEL_RESERVATIONS'],
+  'calendario-hospedaje': ['HOTEL_RESERVATIONS'],
 
   tracking: ['TRACKING_TRANSIT'],
   'tracking-recepcion': ['TRACKING_RECEPTION'],
@@ -500,6 +508,7 @@ export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
   'FINANCING', 'LEGAL', 'HR_TRAINING', 'SUPPORT_TECH', 'NOVACHAT',
   'PROJECTS', 'FORCE_SALES', 'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT',
   'RESTAURANT_TABLES', 'RESTAURANT_SALON', 'RESTAURANT_ORDERS', 'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS',
+  'HOTEL', 'HOTEL_ROOMS', 'HOTEL_RESERVATIONS',
   'TRACKING', 'DASHBOARD',
   ...PERMISSION_SUBMODULES.map(({ id }) => id),
 ]);

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChefHat, Loader2, Minus, Plus, Send, ShoppingBag, Star } from 'lucide-react';
+import { Check, ChefHat, Loader2, Minus, Plus, Send, ShoppingBag, Star, X } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { getApiErrorMessage } from '../../services/api';
-import { restaurantService, type RestaurantMenuCategory, type RestaurantPublicBranding } from '../../services/restaurant.service';
+import { restaurantService, type RestaurantMenuCategory, type RestaurantMenuItem, type RestaurantMenuOptionGroup, type RestaurantPublicBranding } from '../../services/restaurant.service';
+import { hotelService } from '../../services/hotel.service';
 import { getReadableForeground, getReadableForegroundForBackgrounds } from '../../utils/color-contrast';
 
 type MenuTheme = RestaurantPublicBranding['theme'];
@@ -21,7 +22,7 @@ const DEFAULT_BRANDING: RestaurantPublicBranding = {
 
 const money = (value: number) => `C$ ${Number(value || 0).toFixed(2)}`;
 
-function themeStyles(theme: MenuTheme, primary: string, accent: string) {
+function themeStyles(theme: MenuTheme, _primary: string, _accent: string) {
   switch (theme) {
     case 'classic':
       return {
@@ -114,11 +115,17 @@ function themeStyles(theme: MenuTheme, primary: string, accent: string) {
   }
 }
 
-export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string }) {
+type SelectedOptions = Record<string, string | string[]>;
+type GuestCartLine = { itemId: string; quantity: number; selectedOptions: SelectedOptions };
+
+export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToken?: string; hotelToken?: string }) {
+  const isHotelStay = Boolean(hotelToken);
   const [table, setTable] = useState<{ name: string; code: string } | null>(null);
   const [categories, setCategories] = useState<RestaurantMenuCategory[]>([]);
   const [branding, setBranding] = useState<RestaurantPublicBranding>(DEFAULT_BRANDING);
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const [cart, setCart] = useState<Record<string, GuestCartLine>>({});
+  const [selectingItem, setSelectingItem] = useState<RestaurantMenuItem | null>(null);
+  const [selectionDraft, setSelectionDraft] = useState<SelectedOptions>({});
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
@@ -129,7 +136,10 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
 
   useEffect(() => {
     const controller = new AbortController();
-    restaurantService.getPublicMenu(tableToken, controller.signal).then((result) => {
+    const request = hotelToken
+      ? hotelService.getGuestMenu(hotelToken, controller.signal)
+      : tableToken ? restaurantService.getPublicMenu(tableToken, controller.signal) : Promise.reject(new Error('Enlace no disponible.'));
+    request.then((result) => {
       setTable(result.table);
       setCategories(result.categories || []);
       if (result.branding) setBranding({ ...DEFAULT_BRANDING, ...result.branding });
@@ -137,7 +147,7 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
       if (!(error instanceof Error) || error.name !== 'AbortError') toast.error(getApiErrorMessage(error, 'Esta carta no está disponible.'));
     }).finally(() => setLoading(false));
     return () => controller.abort();
-  }, [tableToken]);
+  }, [hotelToken, tableToken]);
 
   const t = themeStyles(branding.theme, branding.primaryColor, branding.accentColor);
   const isDark = branding.theme === 'elegant';
@@ -145,19 +155,63 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
   const accentForeground = getReadableForeground(branding.accentColor);
   const headerForeground = getReadableForegroundForBackgrounds([branding.accentColor, branding.primaryColor]);
 
-  const lines = useMemo(() => categories.flatMap((category) => category.items.filter((item) => cart[item.id]).map((item) => ({ item, quantity: cart[item.id] }))), [categories, cart]);
-  const total = lines.reduce((sum, line) => sum + Number(line.item.price || 0) * line.quantity, 0);
-  const change = (id: string, delta: number) => setCart((current) => {
-    const next = { ...current, [id]: (current[id] || 0) + delta };
-    if (next[id] <= 0) delete next[id];
+  const itemById = useMemo(() => new Map(categories.flatMap((category) => category.items).map((item) => [item.id, item])), [categories]);
+  const lines = useMemo(() => Object.entries(cart).flatMap(([key, line]) => {
+    const item = itemById.get(line.itemId);
+    return item ? [{ key, item, quantity: line.quantity, selectedOptions: line.selectedOptions }] : [];
+  }), [cart, itemById]);
+  const optionPrice = (item: RestaurantMenuItem, selected: SelectedOptions) => (item.options || []).reduce((total, group) => {
+    const value = selected[group.id];
+    const ids = Array.isArray(value) ? value : value ? [value] : [];
+    return total + ids.reduce((sum, id) => sum + Number(group.choices.find((choice) => choice.id === id)?.priceAdjustment || 0), 0);
+  }, 0);
+  const optionNames = (item: RestaurantMenuItem, selected: SelectedOptions) => (item.options || []).flatMap((group) => {
+    const value = selected[group.id];
+    const ids = Array.isArray(value) ? value : value ? [value] : [];
+    return ids.map((id) => group.choices.find((choice) => choice.id === id)?.name).filter(Boolean);
+  }).join(' · ');
+  const lineTotal = (item: RestaurantMenuItem, selected: SelectedOptions, quantity: number) => {
+    const base = Number(item.price || 0) + optionPrice(item, selected);
+    return base * quantity * (1 + Number(item.taxRate || 0) / 100);
+  };
+  const total = lines.reduce((sum, line) => sum + lineTotal(line.item, line.selectedOptions, line.quantity), 0);
+  const addItem = (item: RestaurantMenuItem, selectedOptions: SelectedOptions = {}) => {
+    const selectionKey = JSON.stringify(Object.fromEntries(Object.entries(selectedOptions).sort(([a], [b]) => a.localeCompare(b))));
+    const key = `${item.id}:${selectionKey}`;
+    setCart((current) => ({ ...current, [key]: { itemId: item.id, quantity: (current[key]?.quantity || 0) + 1, selectedOptions } }));
+  };
+  const addFromMenu = (item: RestaurantMenuItem) => {
+    if (item.options?.length) {
+      setSelectingItem(item);
+      setSelectionDraft({});
+    } else addItem(item);
+  };
+  const change = (key: string, delta: number) => setCart((current) => {
+    const next = { ...current };
+    const line = next[key];
+    if (!line) return current;
+    const quantity = line.quantity + delta;
+    if (quantity <= 0) delete next[key];
+    else next[key] = { ...line, quantity };
     return next;
   });
+
+  const confirmOptions = () => {
+    if (!selectingItem) return;
+    const missing = (selectingItem.options || []).find((group) => group.required && !selectionDraft[group.id]);
+    if (missing) { toast.error(`Selecciona una opción para ${missing.name}.`); return; }
+    addItem(selectingItem, selectionDraft);
+    setSelectingItem(null);
+  };
 
   const sendOrder = async () => {
     if (!lines.length) return;
     setSending(true);
     try {
-      const order = await restaurantService.createPublicOrder(tableToken, { items: lines.map(({ item, quantity }) => ({ menuItemId: item.id, quantity })), customerName: name || undefined, customerPhone: phone || undefined, notes: notes || undefined });
+      const payload = { items: lines.map(({ item, quantity, selectedOptions }) => ({ menuItemId: item.id, quantity, selectedOptions })), ...(notes.trim() ? { notes: notes.trim() } : {}) };
+      const order = isHotelStay
+        ? await hotelService.createGuestOrder(hotelToken!, payload)
+        : await restaurantService.createPublicOrder(tableToken!, { ...payload, customerName: name || undefined, customerPhone: phone || undefined });
       setSentNumber(order.number);
       setCart({});
       setShowCart(false);
@@ -180,7 +234,7 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
             {branding.logo ? <img src={branding.logo} alt={branding.name} className="size-14 rounded-2xl border border-white/20 object-cover shadow-lg" /> : <div className="flex size-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur"><ChefHat className="size-7" /></div>}
             <div>
             <h1 className="text-2xl font-black sm:text-4xl" style={{ color: headerForeground }}>{branding.name}</h1>
-            <p className="mt-1 text-sm font-medium" style={{ color: headerForeground }}>Mesa {table?.code || '—'} · {table?.name || 'Carta digital'}</p>
+            <p className="mt-1 text-sm font-medium" style={{ color: headerForeground }}>{isHotelStay ? table?.name || 'Servicios para tu estadía' : `Mesa ${table?.code || '—'} · ${table?.name || 'Carta digital'}`}</p>
             </div>
           </div>
           {featured.length > 0 && (
@@ -212,7 +266,7 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   {category.items.map((item) => {
-                    const qty = cart[item.id] || 0;
+                    const qty = Object.values(cart).filter((line) => line.itemId === item.id).reduce((sum, line) => sum + line.quantity, 0);
                     return (
                       <div key={item.id} className={`rounded-2xl p-4 transition-all ${isDark ? 'bg-white/[0.04] border border-white/10' : 'bg-white/70 border border-slate-100 hover:border-slate-200 hover:shadow-md'}`}>
                         <div className="flex justify-between gap-3">
@@ -226,20 +280,20 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
                           {branding.showImages && item.imageUrl ? (
                             <img src={item.imageUrl} alt={item.name} className="size-16 shrink-0 rounded-xl object-cover" />
                           ) : (
-                            <span className={`shrink-0 ${t.price}`} style={{ color: branding.primaryColor }}>{money(item.price)}</span>
+                            <span className={`shrink-0 ${t.price}`} style={{ color: branding.primaryColor }}>{item.options?.length ? `Desde ${money(item.price)}` : money(item.price)}</span>
                           )}
                         </div>
-                        {branding.showImages && item.imageUrl && <p className={`mt-2 text-right ${t.price}`} style={{ color: branding.primaryColor }}>{money(item.price)}</p>}
+                        {branding.showImages && item.imageUrl && <p className={`mt-2 text-right ${t.price}`} style={{ color: branding.primaryColor }}>{item.options?.length ? `Desde ${money(item.price)}` : money(item.price)}</p>}
                         <div className="mt-3 flex items-center justify-end gap-2">
-                          {qty > 0 ? (
+                          {qty > 0 && !item.options?.length ? (
                             <div className="flex items-center gap-2">
-                              <button type="button" aria-label="Quitar uno" onClick={() => change(item.id, -1)} className="flex size-8 items-center justify-center rounded-full border border-slate-300 text-slate-600 active:scale-90"><Minus className="size-3.5" /></button>
+                              <button type="button" aria-label="Quitar uno" onClick={() => { const line = lines.find((current) => current.item.id === item.id); if (line) change(line.key, -1); }} className="flex size-8 items-center justify-center rounded-full border border-slate-300 text-slate-600 active:scale-90"><Minus className="size-3.5" /></button>
                               <span className="min-w-5 text-center text-sm font-black">{qty}</span>
-                              <button type="button" aria-label="Agregar uno" onClick={() => change(item.id, 1)} className="flex size-8 items-center justify-center active:scale-90" style={{ background: branding.primaryColor, color: primaryForeground }}><Plus className="size-3.5" /></button>
+                              <button type="button" aria-label="Agregar uno" onClick={() => addFromMenu(item)} className="flex size-8 items-center justify-center active:scale-90" style={{ background: branding.primaryColor, color: primaryForeground }}><Plus className="size-3.5" /></button>
                             </div>
                           ) : (
-                            <button type="button" onClick={() => change(item.id, 1)} className={`flex h-9 items-center gap-1.5 px-4 text-xs font-black uppercase tracking-wide active:scale-95 ${t.addButton}`}>
-                              <Plus className="size-3.5" /> Agregar
+                            <button type="button" onClick={() => addFromMenu(item)} className={`flex h-9 items-center gap-1.5 px-4 text-xs font-black uppercase tracking-wide active:scale-95 ${t.addButton}`}>
+                              <Plus className="size-3.5" /> {item.options?.length ? 'Elegir opciones' : 'Agregar'}
                             </button>
                           )}
                         </div>
@@ -265,10 +319,10 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
               </div>
               {lines.length ? (
                 <div className="mt-4 space-y-2">
-                  {lines.map(({ item, quantity }) => (
-                    <div key={item.id} className="flex items-center justify-between gap-2 text-sm">
-                      <span className="min-w-0 truncate"><strong>{quantity}×</strong> {item.name}</span>
-                      <span className="shrink-0 font-bold">{money(Number(item.price) * quantity)}</span>
+                  {lines.map(({ key, item, quantity, selectedOptions }) => (
+                    <div key={key} className="flex items-start justify-between gap-2 text-sm">
+                      <span className="min-w-0"><strong>{quantity}×</strong> {item.name}{optionNames(item, selectedOptions) && <small className="block text-xs text-muted-foreground">{optionNames(item, selectedOptions)}</small>}</span>
+                      <span className="flex shrink-0 items-center gap-1"><strong>{money(lineTotal(item, selectedOptions, quantity))}</strong><button type="button" aria-label={`Quitar una unidad de ${item.name}`} onClick={() => change(key, -1)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" aria-label={`Agregar una unidad de ${item.name}`} onClick={() => change(key, 1)} className="rounded bg-muted px-2 py-0.5">+</button></span>
                     </div>
                   ))}
                   <div className="mt-3 border-t pt-3">
@@ -277,8 +331,7 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
                 </div>
               ) : <p className={`mt-4 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Todavía no agregas platillos. Explora la carta y toca «Agregar».</p>}
               <div className="mt-4 space-y-2">
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre (opcional)" className="h-10 rounded-xl text-sm" />
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Teléfono (opcional)" className="h-10 rounded-xl text-sm" />
+                {!isHotelStay && <><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre (opcional)" className="h-10 rounded-xl text-sm" /><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Teléfono (opcional)" className="h-10 rounded-xl text-sm" /></>}
                 <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas para la cocina" className="h-10 rounded-xl text-sm" />
                 <Button className="w-full h-11 rounded-xl font-black uppercase tracking-wide" disabled={!lines.length || sending} style={{ background: branding.primaryColor, color: primaryForeground }} onClick={sendOrder}>
                   {sending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />} Enviar pedido
@@ -299,14 +352,14 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
         </button>
         {showCart && (
           <div className={`mt-2 max-h-72 overflow-y-auto rounded-2xl p-4 shadow-2xl ${t.card}`}>
-            {lines.map(({ item, quantity }) => (
-              <div key={item.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
-                <span className="min-w-0 truncate"><strong>{quantity}×</strong> {item.name}</span>
-                <span className="shrink-0 font-bold">{money(Number(item.price) * quantity)}</span>
+            {lines.map(({ key, item, quantity, selectedOptions }) => (
+              <div key={key} className="flex items-start justify-between gap-2 py-1.5 text-sm">
+                <span className="min-w-0"><strong>{quantity}×</strong> {item.name}{optionNames(item, selectedOptions) && <small className="block text-xs text-muted-foreground">{optionNames(item, selectedOptions)}</small>}</span>
+                <span className="flex shrink-0 items-center gap-1"><strong>{money(lineTotal(item, selectedOptions, quantity))}</strong><button type="button" aria-label={`Quitar una unidad de ${item.name}`} onClick={() => change(key, -1)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" aria-label={`Agregar una unidad de ${item.name}`} onClick={() => change(key, 1)} className="rounded bg-muted px-2 py-0.5">+</button></span>
               </div>
             ))}
             <div className="mt-2 space-y-2 border-t pt-3">
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre (opcional)" className="h-10 rounded-xl text-sm" />
+              {!isHotelStay && <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre (opcional)" className="h-10 rounded-xl text-sm" />}
               <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas para la cocina" className="h-10 rounded-xl text-sm" />
               <Button className="w-full h-11 rounded-xl font-black uppercase" disabled={sending} style={{ background: branding.primaryColor, color: primaryForeground }} onClick={sendOrder}>
                 {sending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />} Enviar pedido
@@ -316,5 +369,6 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
         )}
       </div>
     )}
+    {selectingItem && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3" role="dialog" aria-modal="true" aria-labelledby="guest-options-title"><div className={`max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-3xl p-5 shadow-2xl ${t.card}`}><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest" style={{ color: branding.primaryColor }}>Personaliza tu platillo</p><h2 id="guest-options-title" className="mt-1 text-xl font-black">{selectingItem.name}</h2></div><button type="button" aria-label="Cerrar opciones" onClick={() => setSelectingItem(null)} className="rounded-lg p-2 hover:bg-black/5"><X className="size-5" /></button></div><div className="mt-4 space-y-4">{(selectingItem.options || []).map((group: RestaurantMenuOptionGroup) => <fieldset key={group.id}><legend className="text-sm font-black">{group.name}{group.required && <span className="ml-1 text-rose-600">*</span>}<span className="ml-2 text-xs font-medium text-muted-foreground">{group.multiple ? 'Puedes elegir varios' : 'Elige uno'}</span></legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{group.choices.map((choice) => { const value = selectionDraft[group.id]; const active = Array.isArray(value) ? value.includes(choice.id) : value === choice.id; return <button key={choice.id} type="button" aria-pressed={active} onClick={() => setSelectionDraft((current) => ({ ...current, [group.id]: group.multiple ? (Array.isArray(current[group.id]) ? (current[group.id] as string[]).includes(choice.id) ? (current[group.id] as string[]).filter((id) => id !== choice.id) : [...(current[group.id] as string[]), choice.id] : [choice.id]) : choice.id }))} className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition ${active ? 'border-primary bg-primary/10 ring-2 ring-primary/15' : 'border-border/60 hover:border-primary/40'}`}><span className="font-semibold">{choice.name}</span><span className="flex items-center gap-2 font-bold">{Number(choice.priceAdjustment) > 0 ? `+${money(choice.priceAdjustment)}` : 'Incluido'}{active && <Check className="size-4 text-primary" />}</span></button>; })}</div></fieldset>)}</div><div className="mt-5 flex flex-col-reverse gap-2 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-semibold">Precio estimado: <strong>{money(Number(selectingItem.price) + optionPrice(selectingItem, selectionDraft))}</strong></p><div className="flex gap-2"><Button variant="outline" onClick={() => setSelectingItem(null)}>Cancelar</Button><Button onClick={confirmOptions} style={{ background: branding.primaryColor, color: primaryForeground }}>Agregar al pedido</Button></div></div></div></div>}
   </main>;
 }

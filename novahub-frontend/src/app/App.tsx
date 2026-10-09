@@ -21,6 +21,7 @@ import { ActionClickGuard } from './components/ui/ActionClickGuard';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
 import { PublicRsvpPage } from './components/public/PublicRsvpPage';
 import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
+import { PublicHotelGuestPage } from './components/public/PublicHotelGuestPage';
 import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
 import { PublicTrackingPage } from './components/public/PublicTrackingPage';
 import { PoketPaymentCallbackPage } from './components/public/PoketPaymentCallbackPage';
@@ -50,6 +51,7 @@ const InventarioPage = lazyWithChunkRecovery(async () => {
 }, 'inventario');
 const VentasPage = lazyWithChunkRecovery(() => import('./components/VentasPage').then(m => ({ default: m.VentasPage })), 'ventas');
 const RestaurantePage = lazyWithChunkRecovery(() => import('./components/RestaurantePage').then(m => ({ default: m.RestaurantePage })), 'restaurante');
+const HospedajePage = lazyWithChunkRecovery(() => import('./components/HospedajePage').then(m => ({ default: m.HospedajePage })), 'hospedaje');
 const TrackingPage = lazyWithChunkRecovery(() => import('./components/TrackingPage').then(m => ({ default: m.TrackingPage })), 'tracking');
 const IntlImportsPage = lazyWithChunkRecovery(() => import('./components/intl-imports/IntlImportsPage').then(m => ({ default: m.IntlImportsPage })), 'intl-imports');
 const ComprasPage = lazyWithChunkRecovery(() => import('./components/ComprasPage').then(m => ({ default: m.ComprasPage })), 'compras');
@@ -452,6 +454,7 @@ function DashboardLayout() {
       case 'inventario': return <ModuleErrorBoundary moduleName="Inventario"><InventarioPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'ventas': return <ModuleErrorBoundary moduleName="Ventas"><VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'restaurante': return <ModuleErrorBoundary moduleName="Restaurante"><RestaurantePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
+      case 'hospedaje': return <ModuleErrorBoundary moduleName="Hospedaje"><HospedajePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'tracking': return <ModuleErrorBoundary moduleName="Tracking"><TrackingPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'intl-imports': return <ModuleErrorBoundary moduleName="Importaciones Internacionales"><IntlImportsPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'compras': return <ModuleErrorBoundary moduleName="Compras"><ComprasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
@@ -638,6 +641,10 @@ function AppContent() {
   if (location.pathname.startsWith('/restaurant/menu/')) {
     const tableToken = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
     return <PublicRestaurantMenuPage tableToken={tableToken} />;
+  }
+  if (location.pathname.startsWith('/hotel/guest/')) {
+    const token = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
+    return <PublicHotelGuestPage token={token} />;
   }
   if (location.pathname === '/preview/arca-supply' || location.pathname === '/ecommerce/arcasupply') {
     return <ArcaSupplyEcommercePreviewPage />;

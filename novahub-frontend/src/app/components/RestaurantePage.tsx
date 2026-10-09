@@ -51,12 +51,35 @@ import {
   type RestaurantKitchenTicket,
   type RestaurantMenuCategory,
   type RestaurantMenuItem,
+  type RestaurantMenuOptionGroup,
   type RestaurantOrder,
   type RestaurantSummary,
   type RestaurantTable,
 } from '../services/restaurant.service';
 
 type RestaurantTab = 'salon' | 'comandas' | 'cocina' | 'carta' | 'reportes';
+type RestaurantSelectedOptions = Record<string, string | string[]>;
+type RestaurantCartLine = { menuItemId: string; quantity: number; selectedOptions: RestaurantSelectedOptions };
+
+function restaurantOptionPrice(item: RestaurantMenuItem, selected: RestaurantSelectedOptions) {
+  return (item.options || []).reduce((total, group) => {
+    const value = selected[group.id];
+    const ids = Array.isArray(value) ? value : value ? [value] : [];
+    return total + ids.reduce((sum, id) => sum + Number(group.choices.find((choice) => choice.id === id)?.priceAdjustment || 0), 0);
+  }, 0);
+}
+
+function restaurantOptionLabel(item: RestaurantMenuItem, selected: RestaurantSelectedOptions) {
+  return (item.options || []).flatMap((group) => {
+    const value = selected[group.id];
+    const ids = Array.isArray(value) ? value : value ? [value] : [];
+    return ids.map((id) => group.choices.find((choice) => choice.id === id)?.name).filter(Boolean);
+  }).join(' · ');
+}
+
+function restaurantSnapshotLabel(options?: Array<{ groupName: string; choiceName: string }> | null) {
+  return (options || []).map((option) => `${option.groupName}: ${option.choiceName}`).join(' · ');
+}
 
 const RESTAURANT_TAB_PERMISSION: Record<RestaurantTab, string> = {
   salon: 'RESTAURANT_SALON',
@@ -144,14 +167,19 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     () => tabs.filter(({ id }) => canPerform(RESTAURANT_TAB_PERMISSION[id], 'view')),
     [canPerform],
   );
-  const [tab, setTab] = useState<RestaurantTab>('salon');
+  const [localTab, setLocalTab] = useState<RestaurantTab>('salon');
+  const requestedTab = activeSubModule ? restaurantSubmoduleToTab[activeSubModule] : undefined;
+  const tab = requestedTab && visibleTabs.some(({ id }) => id === requestedTab)
+    ? requestedTab
+    : visibleTabs.some(({ id }) => id === localTab) ? localTab : visibleTabs[0]?.id || 'salon';
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menu, setMenu] = useState<RestaurantMenuCategory[]>([]);
   const [orders, setOrders] = useState<RestaurantOrder[]>([]);
   const [tickets, setTickets] = useState<RestaurantKitchenTicket[]>([]);
   const [summary, setSummary] = useState<RestaurantSummary | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const [cart, setCart] = useState<Record<string, RestaurantCartLine>>({});
+  const [pendingOptionItem, setPendingOptionItem] = useState<RestaurantMenuItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showTableForm, setShowTableForm] = useState(false);
@@ -169,27 +197,12 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   const sessionCreatedOrderIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const nextTab = activeSubModule ? restaurantSubmoduleToTab[activeSubModule] : undefined;
-    if (nextTab && visibleTabs.some(({ id }) => id === nextTab) && nextTab !== tab) {
-      setTab(nextTab);
-    }
-  }, [activeSubModule, tab, visibleTabs]);
-
-  useEffect(() => {
-    if (visibleTabs.length > 0 && !visibleTabs.some(({ id }) => id === tab)) {
-      const fallback = visibleTabs[0].id;
-      setTab(fallback);
-      onSubModuleChange?.(restaurantTabToSubmodule[fallback]);
-    }
-  }, [onSubModuleChange, tab, visibleTabs]);
-
-  useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent).detail as { module?: string; subModule?: string; orderId?: string; targetId?: string } | undefined;
       if (detail?.module !== 'restaurante') return;
       const nextTab = detail.subModule ? restaurantSubmoduleToTab[detail.subModule] : undefined;
       if (!nextTab || !visibleTabs.some(({ id }) => id === nextTab)) return;
-      setTab(nextTab);
+      setLocalTab(nextTab);
       onSubModuleChange?.(restaurantTabToSubmodule[nextTab]);
       const orderId = String(detail.orderId || detail.targetId || '').trim();
       setTargetOrderId(orderId || null);
@@ -280,10 +293,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   });
 
   useEffect(() => {
-    if (!canViewRestaurant) {
-      setLoading(false);
-      return;
-    }
+    if (!canViewRestaurant) return;
     const controller = new AbortController();
     // La carga inicial sincroniza la pantalla con el API; el abort evita
     // actualizar estado si el usuario cambia de módulo antes de responder.
@@ -361,10 +371,10 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   }, [canViewMenu, canViewReports, canViewRestaurant, selectedBranchId]);
 
   const selectedTable = useMemo(() => tables.find((table) => table.id === selectedTableId) || null, [tables, selectedTableId]);
-  const cartLines = useMemo(() => menu.flatMap((category) => category.items
-    .filter((item) => cart[item.id])
-    .map((item) => ({ item, quantity: cart[item.id] }))), [menu, cart]);
-  const cartTotal = cartLines.reduce((total, line) => total + Number(line.item.price || 0) * line.quantity, 0);
+  const cartLines = useMemo(() => menu.flatMap((category) => category.items.flatMap((item) => Object.entries(cart)
+    .filter(([, line]) => line.menuItemId === item.id)
+    .map(([key, line]) => ({ key, item, quantity: line.quantity, selectedOptions: line.selectedOptions })))), [menu, cart]);
+  const cartTotal = cartLines.reduce((total, line) => total + (Number(line.item.price || 0) + restaurantOptionPrice(line.item, line.selectedOptions)) * line.quantity * (1 + Number(line.item.taxRate || 0) / 100), 0);
   const openTables = tables.filter((table) => ['OCCUPIED', 'RESERVED', 'CLEANING'].includes(table.status)).length;
   const pendingTickets = tickets.filter((ticket) => ['PENDING', 'IN_PREPARATION'].includes(ticket.status)).length;
 
@@ -401,11 +411,21 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     } catch (error: any) { toast.error(error?.message || 'No se pudo exportar el reporte de restaurante.'); }
   };
 
-  const addToCart = (itemId: string) => setCart((current) => ({ ...current, [itemId]: (current[itemId] || 0) + 1 }));
-  const removeFromCart = (itemId: string) => setCart((current) => {
+  const addCartLine = (item: RestaurantMenuItem, selectedOptions: RestaurantSelectedOptions = {}) => {
+    const normalized = Object.fromEntries(Object.entries(selectedOptions).sort(([a], [b]) => a.localeCompare(b)));
+    const key = `${item.id}:${JSON.stringify(normalized)}`;
+    setCart((current) => ({ ...current, [key]: { menuItemId: item.id, quantity: (current[key]?.quantity || 0) + 1, selectedOptions } }));
+  };
+  const addToCart = (itemId: string) => {
+    const item = menu.flatMap((category) => category.items).find((candidate) => candidate.id === itemId);
+    if (!item) return;
+    if (item.options?.length) setPendingOptionItem(item);
+    else addCartLine(item);
+  };
+  const removeFromCart = (key: string) => setCart((current) => {
     const next = { ...current };
-    if ((next[itemId] || 0) <= 1) delete next[itemId];
-    else next[itemId] -= 1;
+    if (!next[key] || next[key].quantity <= 1) delete next[key];
+    else next[key] = { ...next[key], quantity: next[key].quantity - 1 };
     return next;
   });
 
@@ -422,7 +442,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     try {
       const order = await restaurantService.createOrder({
         tableId: selectedTable.id,
-        items: cartLines.map(({ item, quantity }) => ({ menuItemId: item.id, quantity })),
+        items: cartLines.map(({ item, quantity, selectedOptions }) => ({ menuItemId: item.id, quantity, selectedOptions })),
       });
       sessionCreatedOrderIds.current.add(order.id);
       setCart({});
@@ -631,7 +651,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
 
           <Tabs value={tab} className="w-full" onValueChange={(value) => {
             if (!visibleTabs.some(({ id }) => id === value)) return;
-            setTab(value as RestaurantTab);
+            setLocalTab(value as RestaurantTab);
             if (value === 'comandas') setNewOrdersCount(0);
             onSubModuleChange?.(restaurantTabToSubmodule[value as RestaurantTab]);
           }}>
@@ -657,11 +677,11 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
                     {tables.length === 0 ? <EmptyState icon={<LayoutGrid className="size-8" />} title="Aún no hay mesas configuradas" description="Crea la primera mesa para comenzar a operar el salón." action={canCreateTables ? <Button size="sm" onClick={() => setShowTableForm(true)}><Plus className="size-4" />Crear mesa</Button> : undefined} /> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{tables.map((table) => { const status = tableStatus[table.status] || tableStatus.AVAILABLE; return <div key={table.id} role="button" tabIndex={0} onClick={() => setSelectedTableId(table.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedTableId(table.id); }} className={`group relative min-h-32 cursor-pointer rounded-2xl border-2 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selectedTableId === table.id ? 'border-primary ring-4 ring-primary/10' : 'border-border/60'}`}><div className="flex items-start justify-between"><span className="text-2xl font-black">{table.code}</span><Badge className={status.className}>{status.label}</Badge></div><p className="mt-2 text-sm font-semibold text-foreground">{table.name}</p><p className="mt-1 text-xs text-muted-foreground">{table.zone || 'Salón principal'} · {table.seats} puestos</p><button type="button" onClick={(event) => { event.stopPropagation(); void showTableQr(table); }} className="absolute bottom-3 right-3 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground" title="Generar QR de la mesa" aria-label={`Generar QR de ${table.name}`}><QrCode className="size-4" /></button></div>; })}</div>}
                     {publicLink && <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4"><p className="text-xs font-black uppercase tracking-widest text-primary">Enlace público para clientes</p><div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input readOnly value={publicLink} aria-label="Enlace público del menú" /><Button variant="outline" onClick={() => void copyQrLink()}>Copiar</Button><a className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90" href={publicLink} target="_blank" rel="noreferrer">Abrir menú</a></div><p className="mt-2 text-xs text-muted-foreground">El QR de la mesa ya se puede descargar o imprimir directamente desde NovaHub.</p></div>}
                   </section>
-                  <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva comanda</p><h2 className="mt-1 text-2xl font-black">{selectedTable ? `Mesa ${selectedTable.code}` : 'Selecciona una mesa'}</h2></div><ShoppingBag className="size-5 text-muted-foreground/40" /></div>{selectedTable && <div className="mb-4 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{selectedTable.name} · {selectedTable.zone || 'Salón principal'} <span className="float-right font-bold text-foreground">{money(cartTotal)}</span></div>}<div className="max-h-[430px] space-y-4 overflow-y-auto pr-1">{menu.map((category) => <div key={category.id}><p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground/70">{category.name}</p><div className="space-y-2">{category.items.filter((item) => item.isAvailable).map((item) => <button type="button" key={item.id} onClick={() => addToCart(item.id)} className="flex w-full items-center justify-between rounded-xl border border-border/60 p-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]"><span><span className="block text-sm font-bold">{item.name}</span><span className="block text-xs text-muted-foreground">{item.prepStation}</span></span><span className="font-black text-primary">{money(item.price, item.currency)}</span></button>)}</div></div>)}{menu.length === 0 && <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea las categorías y platillos en Carta para operar." />}</div><div className="mt-5 border-t border-border/60 pt-4">{cartLines.length > 0 && <div className="mb-3 space-y-2">{cartLines.map(({ item, quantity }) => <div key={item.id} className="flex items-center justify-between text-sm"><span>{quantity} × {item.name}</span><div className="flex items-center gap-2"><button type="button" onClick={() => removeFromCart(item.id)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" onClick={() => addToCart(item.id)} className="rounded bg-muted px-2 py-0.5">+</button></div></div>)}</div>}<Button className="w-full" disabled={!selectedTable || cartLines.length === 0 || !canCreateOrders} onClick={createOrder}><Send className="size-4" />Enviar comanda a cocina</Button></div></section>
+                  <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva comanda</p><h2 className="mt-1 text-2xl font-black">{selectedTable ? `Mesa ${selectedTable.code}` : 'Selecciona una mesa'}</h2></div><ShoppingBag className="size-5 text-muted-foreground/40" /></div>{selectedTable && <div className="mb-4 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{selectedTable.name} · {selectedTable.zone || 'Salón principal'} <span className="float-right font-bold text-foreground">{money(cartTotal)}</span></div>}<div className="max-h-[430px] space-y-4 overflow-y-auto pr-1">{menu.map((category) => <div key={category.id}><p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground/70">{category.name}</p><div className="space-y-2">{category.items.filter((item) => item.isAvailable).map((item) => <button type="button" key={item.id} onClick={() => addToCart(item.id)} className="flex w-full items-center justify-between rounded-xl border border-border/60 p-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]"><span><span className="block text-sm font-bold">{item.name}</span><span className="block text-xs text-muted-foreground">{item.prepStation}{item.options?.length ? ' · Personalizable' : ''}</span></span><span className="font-black text-primary">{item.options?.length ? 'Desde ' : ''}{money(item.price, item.currency)}</span></button>)}</div></div>)}{menu.length === 0 && <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea las categorías y platillos en Carta para operar." />}</div><div className="mt-5 border-t border-border/60 pt-4">{cartLines.length > 0 && <div className="mb-3 space-y-2">{cartLines.map(({ key, item, quantity, selectedOptions }) => <div key={key} className="flex items-center justify-between gap-2 text-sm"><span className="min-w-0">{quantity} × {item.name}{restaurantOptionLabel(item, selectedOptions) && <small className="block text-xs text-muted-foreground">{restaurantOptionLabel(item, selectedOptions)}</small>}</span><div className="flex shrink-0 items-center gap-2"><button type="button" aria-label={`Quitar una unidad de ${item.name}`} onClick={() => removeFromCart(key)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" aria-label={`Agregar una unidad de ${item.name}`} onClick={() => addToCart(item.id)} className="rounded bg-muted px-2 py-0.5">+</button></div></div>)}</div>}<Button className="w-full" disabled={!selectedTable || cartLines.length === 0 || !canCreateOrders} onClick={createOrder}><Send className="size-4" />Enviar comanda a cocina</Button></div></section>
                 </div>}
                 {tab === 'comandas' && <div data-tour="restaurant-orders"><OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} canApproveKitchen={canApproveKitchen} canApproveOrders={canApproveOrders} onSend={sendToKitchen} onStatus={changeOrderStatus} onCheckout={openCheckout} /></div>}
                 {tab === 'cocina' && <div data-tour="restaurant-kitchen"><KitchenBoard tickets={tickets} canApprove={canApproveKitchen} onStatus={updateKitchen} /></div>}
-                {tab === 'carta' && <div data-tour="restaurant-menu"><MenuBoard menu={menu} canCreate={canCreateMenu} canEdit={canEditMenu} onSaved={() => loadData()} /></div>}
+                {tab === 'carta' && <div data-tour="restaurant-menu"><MenuBoard menu={menu} canCreate={canCreateMenu} canEdit={canEditMenu} canExport={canPerform('RESTAURANT_MENU', 'export')} onSaved={() => loadData()} /></div>}
                 {tab === 'reportes' && <div data-tour="restaurant-reports"><ReportsBoard summary={summary} canExport={canPerform('RESTAURANT_REPORTS', 'export')} onExport={exportRestaurantReport} /></div>}
               </motion.div>
             </AnimatePresence>
@@ -672,6 +692,8 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       {qrTable && <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-foreground/60 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-qr-title"><div className="nh-modal-surface w-full max-w-md rounded-3xl border border-border/60 bg-card p-5 shadow-2xl sm:p-6"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Carta digital por mesa</p><h2 id="restaurant-qr-title" className="mt-1 text-2xl font-black">QR · Mesa {qrTable.code}</h2><p className="mt-1 text-sm text-muted-foreground">{qrTable.name} · escanea para abrir la carta.</p></div><button type="button" onClick={() => setQrTable(null)} className="size-9 rounded-xl p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Cerrar código QR"><X className="size-5" /></button></div><div className="mt-5 flex min-h-64 items-center justify-center rounded-3xl border border-primary/15 bg-white p-5">{qrLoading ? <RefreshCw className="size-8 animate-spin text-primary" /> : qrDataUrl ? <img src={qrDataUrl} alt={`Código QR de la mesa ${qrTable.code}`} className="size-64 max-w-full object-contain" /> : <p className="text-sm text-muted-foreground">No se pudo generar el QR.</p>}</div><div className="mt-4 rounded-xl bg-muted/40 p-3"><p className="break-all text-xs leading-5 text-muted-foreground">{publicLink}</p></div><div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4"><Button variant="outline" onClick={() => void copyQrLink()} disabled={!qrDataUrl}>Copiar enlace</Button><Button variant="outline" onClick={downloadQr} disabled={!qrDataUrl}><Download className="size-4" />PNG</Button><Button className="sm:col-span-2" onClick={printQr} disabled={!qrDataUrl}><FileText className="size-4" />Imprimir QR</Button></div></div></div>}
 
       {checkoutOrder && <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-checkout-title"><div className="nh-modal-surface my-auto max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6"><div className="nh-modal-header flex min-w-0 items-start justify-between gap-3 pb-4"><div className="min-w-0"><p className="text-xs font-black uppercase tracking-widest text-primary">Cobro POS</p><h2 id="restaurant-checkout-title" className="mt-1 break-words text-2xl font-black">Pedido {checkoutOrder.number}</h2></div><button type="button" onClick={() => setCheckoutOrder(null)} className="size-9 shrink-0 rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Cerrar cobro" title="Cerrar"><X className="size-5" /></button></div><div className="my-5 rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Total a cobrar</p><p className="mt-1 text-3xl font-black">{money(checkoutOrder.total, checkoutOrder.currency)}</p></div><label className="text-sm font-bold">Caja registradora<select value={checkoutRegisterId} onChange={(event) => setCheckoutRegisterId(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">{registers.length === 0 && <option value="">No hay cajas disponibles</option>}{registers.map((register) => <option key={register.id} value={register.id}>{register.name}</option>)}</select></label><p className="mt-3 text-xs leading-5 text-muted-foreground">El cobro valida la sesión activa, emite la factura POS, descuenta inventario y genera el asiento contable existente.</p><div className="nh-modal-footer mt-5 pt-4"><Button className="w-full" disabled={!checkoutRegisterId} onClick={checkout}><CreditCard className="size-4" />Cobrar en efectivo</Button></div></div></div>}
+      {checkoutOrder && <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-checkout-title"><div className="nh-modal-surface my-auto max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6"><div className="nh-modal-header flex min-w-0 items-start justify-between gap-3 pb-4"><div className="min-w-0"><p className="text-xs font-black uppercase tracking-widest text-primary">Cobro POS</p><h2 id="restaurant-checkout-title" className="mt-1 break-words text-2xl font-black">Pedido {checkoutOrder.number}</h2></div><button type="button" onClick={() => setCheckoutOrder(null)} className="size-9 shrink-0 rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Cerrar cobro" title="Cerrar"><X className="size-5" /></button></div><div className="my-5 rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Total a cobrar</p><p className="mt-1 text-3xl font-black">{money(checkoutOrder.total, checkoutOrder.currency)}</p></div><label className="text-sm font-bold">Caja registradora<select value={checkoutRegisterId} onChange={(event) => setCheckoutRegisterId(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">{registers.length === 0 && <option value="">No hay cajas disponibles</option>}{registers.map((register) => <option key={register.id} value={register.id}>{register.name}</option>)}</select></label><p className="mt-3 text-xs leading-5 text-muted-foreground">El cobro valida la sesión activa, emite la factura POS, descuenta inventario y genera el asiento contable existente.</p><div className="nh-modal-footer mt-5 pt-4"><Button className="w-full" disabled={!checkoutRegisterId} onClick={checkout}><CreditCard className="size-4" />Cobrar en efectivo</Button></div></div></div>}
+      {pendingOptionItem && <RestaurantOptionsDialog item={pendingOptionItem} onClose={() => setPendingOptionItem(null)} onConfirm={(selectedOptions) => { addCartLine(pendingOptionItem, selectedOptions); setPendingOptionItem(null); }} />}
     </div>
   );
 }
@@ -714,7 +736,7 @@ function OrderBoard({ orders, targetOrderId, onTargetHandled, onSend, onStatus, 
     return () => cancelAnimationFrame(frame);
   }, [targetOrderId, onTargetHandled, orders]);
 
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Flujo de servicio</p><h2 className="mt-1 text-2xl font-black">Cola de comandas</h2><p className="mt-1 text-sm text-muted-foreground">Ordenadas desde la más antigua para respetar la llegada de cada mesa.</p></div><ClipboardList className="size-6 text-muted-foreground/40" /></div>{orderedOrders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : <div className="grid gap-3 lg:grid-cols-2">{orderedOrders.map((order, index) => <div id={`restaurant-order-${order.id}`} key={order.id} tabIndex={-1} className={`rounded-2xl border p-4 transition-all duration-500 ${targetOrderId === order.id ? 'border-primary bg-primary/[0.06] ring-4 ring-primary/15 shadow-lg' : 'border-border/60'}`}><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">{index + 1}</span><p className="text-lg font-black">{order.number}</p></div><p className="text-xs text-muted-foreground">{order.table ? `Mesa ${order.table.code} · ${order.table.name}` : order.type}</p></div><Badge variant="outline">{orderStatus[order.status] || order.status}</Badge></div><div className="mt-4 space-y-1 text-sm">{order.items.map((item) => <div key={item.id} className="flex justify-between"><span>{Number(item.quantity)} × {item.description}</span><span className="font-semibold">{money(item.total, order.currency)}</span></div>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3"><span className="font-black">{money(order.total, order.currency)}</span><div className="flex gap-2">{canApproveKitchen && ['CONFIRMED', 'PENDING_CONFIRMATION'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onSend(order)}><Send className="size-3" />Cocina</Button>}{canApproveOrders && ['READY', 'SERVED'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onCheckout(order)}><CreditCard className="size-3" />Cobrar</Button>}{canApproveOrders && order.status === 'READY' && <Button size="sm" onClick={() => onStatus(order, 'SERVED')}>Servido</Button>}</div></div></div>)}</div>}</section>;
+  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Flujo de servicio</p><h2 className="mt-1 text-2xl font-black">Cola de comandas</h2><p className="mt-1 text-sm text-muted-foreground">Ordenadas desde la más antigua para respetar la llegada de cada mesa.</p></div><ClipboardList className="size-6 text-muted-foreground/40" /></div>{orderedOrders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : <div className="grid gap-3 lg:grid-cols-2">{orderedOrders.map((order, index) => <div id={`restaurant-order-${order.id}`} key={order.id} tabIndex={-1} className={`rounded-2xl border p-4 transition-all duration-500 ${targetOrderId === order.id ? 'border-primary bg-primary/[0.06] ring-4 ring-primary/15 shadow-lg' : 'border-border/60'}`}><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">{index + 1}</span><p className="text-lg font-black">{order.number}</p></div><p className="text-xs text-muted-foreground">{order.hotelReservation ? `Habitación ${order.hotelReservation.room.code} · ${order.hotelReservation.guestName} · ${order.hotelReservation.reservationNumber}` : order.table ? `Mesa ${order.table.code} · ${order.table.name}` : order.type}</p></div><Badge variant="outline">{orderStatus[order.status] || order.status}</Badge></div><div className="mt-4 space-y-1 text-sm">{order.items.map((item) => <div key={item.id} className="flex justify-between gap-3"><span className="min-w-0">{Number(item.quantity)} × {item.description}{restaurantSnapshotLabel(item.options) && <small className="block text-xs text-muted-foreground">{restaurantSnapshotLabel(item.options)}</small>}</span><span className="shrink-0 font-semibold">{money(item.total, order.currency)}</span></div>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3"><span className="font-black">{money(order.total, order.currency)}</span><div className="flex gap-2">{canApproveKitchen && ['CONFIRMED', 'PENDING_CONFIRMATION'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onSend(order)}><Send className="size-3" />Cocina</Button>}{canApproveOrders && ['READY', 'SERVED'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onCheckout(order)}><CreditCard className="size-3" />Cobrar</Button>}{canApproveOrders && order.status === 'READY' && <Button size="sm" onClick={() => onStatus(order, 'SERVED')}>Servido</Button>}</div></div></div>)}</div>}</section>;
 }
 
 function KitchenBoard({ tickets, onStatus, canApprove }: { tickets: RestaurantKitchenTicket[]; onStatus: (ticket: RestaurantKitchenTicket, status: string) => void; canApprove: boolean }) {
@@ -735,11 +757,12 @@ function KitchenBoard({ tickets, onStatus, canApprove }: { tickets: RestaurantKi
       setTvMode((current) => !current);
     }
   };
-  return <section ref={boardRef} className={`rounded-2xl border border-border/60 bg-card p-5 shadow-sm ${tvMode ? 'overflow-y-auto bg-slate-950 p-8 text-white' : ''}`}><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Kitchen display</p><h2 className="mt-1 text-2xl font-black">Centro de preparación</h2><p className={`mt-1 text-sm ${tvMode ? 'text-slate-300' : 'text-muted-foreground'}`}>Las comandas se ordenan por hora de llegada para que cocina atienda primero lo más antiguo.</p></div><Button type="button" variant={tvMode ? 'secondary' : 'outline'} size="sm" className="gap-2 rounded-xl" onClick={() => void toggleTvMode}>{tvMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}{tvMode ? 'Salir de pantalla TV' : 'Modo TV'}</Button></div><div className="grid gap-4 lg:grid-cols-3">{columns.map((column) => { const columnTickets = orderedTickets.filter((ticket) => ticket.status === column); return <div key={column} className={`min-h-64 rounded-2xl border p-3 ${tvMode ? 'border-white/15 bg-white/5' : 'border-border/50 bg-muted/20'}`}><div className="mb-3 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-widest opacity-80">{kitchenStatus[column].label}</span><Badge variant="outline" className={tvMode ? 'border-white/30 text-white' : ''}>{columnTickets.length}</Badge></div><div className="space-y-3">{columnTickets.map((ticket, index) => <div key={ticket.id} className={`rounded-2xl border p-4 shadow-sm ${tvMode ? 'border-white/15 bg-slate-900' : 'border-border/60 bg-card'}`}><div className="flex items-start justify-between gap-3"><div><span className="text-lg font-black">{ticket.order.number}</span><p className="mt-1 text-xs opacity-70">#{index + 1} en cola · {ticket.station}</p></div><span className="text-xs opacity-70">{ticket.order.table?.code || '—'}</span></div><div className="mt-3 space-y-1 text-sm">{ticket.items.map(({ item }) => <p key={item.description}>{Number(item.quantity)} × {item.description}</p>)}</div>{canApprove && column === 'PENDING' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'IN_PREPARATION')}><Clock3 className="size-3" />Iniciar</Button>}{canApprove && column === 'IN_PREPARATION' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'READY')}>Marcar listo</Button>}{canApprove && column === 'READY' && <Button className="mt-4 w-full" size="sm" variant="secondary" onClick={() => onStatus(ticket, 'SERVED')}>Entregar</Button>}</div>)}</div></div>; })}</div></section>;
+  return <section ref={boardRef} className={`rounded-2xl border border-border/60 bg-card p-5 shadow-sm ${tvMode ? 'overflow-y-auto bg-slate-950 p-8 text-white' : ''}`}><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Kitchen display</p><h2 className="mt-1 text-2xl font-black">Centro de preparación</h2><p className={`mt-1 text-sm ${tvMode ? 'text-slate-300' : 'text-muted-foreground'}`}>Las comandas se ordenan por hora de llegada para que cocina atienda primero lo más antiguo.</p></div><Button type="button" variant={tvMode ? 'secondary' : 'outline'} size="sm" className="gap-2 rounded-xl" onClick={() => void toggleTvMode}>{tvMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}{tvMode ? 'Salir de pantalla TV' : 'Modo TV'}</Button></div><div className="grid gap-4 lg:grid-cols-3">{columns.map((column) => { const columnTickets = orderedTickets.filter((ticket) => ticket.status === column); return <div key={column} className={`min-h-64 rounded-2xl border p-3 ${tvMode ? 'border-white/15 bg-white/5' : 'border-border/50 bg-muted/20'}`}><div className="mb-3 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-widest opacity-80">{kitchenStatus[column].label}</span><Badge variant="outline" className={tvMode ? 'border-white/30 text-white' : ''}>{columnTickets.length}</Badge></div><div className="space-y-3">{columnTickets.map((ticket, index) => <div key={ticket.id} className={`rounded-2xl border p-4 shadow-sm ${tvMode ? 'border-white/15 bg-slate-900' : 'border-border/60 bg-card'}`}><div className="flex items-start justify-between gap-3"><div><span className="text-lg font-black">{ticket.order.number}</span><p className="mt-1 text-xs opacity-70">#{index + 1} en cola · {ticket.station}</p></div><span className="text-xs opacity-70">{ticket.order.hotelReservation ? `Hab. ${ticket.order.hotelReservation.room.code}` : ticket.order.table?.code || '—'}</span></div><div className="mt-3 space-y-1 text-sm">{ticket.items.map(({ item }) => <div key={item.description}><p>{Number(item.quantity)} × {item.description}</p>{restaurantSnapshotLabel(item.options) && <p className="ml-4 text-xs text-amber-700 dark:text-amber-300">{restaurantSnapshotLabel(item.options)}</p>}{item.notes && <p className="ml-4 text-xs opacity-70">Nota: {item.notes}</p>}</div>)}</div>{canApprove && column === 'PENDING' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'IN_PREPARATION')}><Clock3 className="size-3" />Iniciar</Button>}{canApprove && column === 'IN_PREPARATION' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'READY')}>Marcar listo</Button>}{canApprove && column === 'READY' && <Button className="mt-4 w-full" size="sm" variant="secondary" onClick={() => onStatus(ticket, 'SERVED')}>Entregar</Button>}</div>)}</div></div>; })}</div></section>;
 }
 
-function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenuCategory[]; onSaved: () => Promise<void>; canCreate: boolean; canEdit: boolean }) {
-  const emptyForm = { categoryId: '', name: '', description: '', price: '', taxRate: '15', prepStation: 'KITCHEN' };
+function MenuBoard({ menu, onSaved, canCreate, canEdit, canExport }: { menu: RestaurantMenuCategory[]; onSaved: () => Promise<void>; canCreate: boolean; canEdit: boolean; canExport: boolean }) {
+  const { user } = useAuth();
+  const emptyForm = { categoryId: '', name: '', description: '', price: '', taxRate: '15', prepStation: 'KITCHEN', options: [] as RestaurantMenuOptionGroup[] };
   const [categoryName, setCategoryName] = useState('');
   const [categoryDescription, setCategoryDescription] = useState('');
   const [itemForm, setItemForm] = useState(emptyForm);
@@ -748,10 +771,7 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
   const [theme, setTheme] = useState<'modern' | 'classic' | 'elegant' | 'rustic' | 'neon' | 'tropical' | 'editorial' | 'retro'>('modern');
   const [showImages, setShowImages] = useState(true);
   const [savingTheme, setSavingTheme] = useState(false);
-
-  useEffect(() => {
-    if (!itemForm.categoryId && menu[0]) setItemForm((current) => ({ ...current, categoryId: menu[0].id }));
-  }, [itemForm.categoryId, menu]);
+  const categoryId = itemForm.categoryId || menu[0]?.id || '';
 
   useEffect(() => {
     const controller = new AbortController();
@@ -789,6 +809,40 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
     { id: 'retro', label: 'Retro diner', description: 'Inspiración fast food clásica con alto impacto visual.', preview: 'bg-[#f9edcf]', header: 'bg-[#9f1239]' },
   ];
 
+  const exportMenu = async (format: 'pdf' | 'xlsx') => {
+    if (!canExport) return;
+    const rows = menu.flatMap((category) => category.items.map((item) => ({
+      Categoría: category.name,
+      Platillo: item.name,
+      Descripción: item.description || '',
+      Precio: Number(item.price || 0),
+      Moneda: item.currency || 'NIO',
+      Impuesto: Number(item.taxRate || 0),
+      Estación: item.prepStation,
+      Opciones: (item.options || []).map((group) => `${group.name}${group.required ? ' *' : ''}: ${group.choices.map((choice) => `${choice.name}${Number(choice.priceAdjustment) ? ` (+${money(choice.priceAdjustment, item.currency)})` : ''}`).join(', ')}`).join(' | '),
+      Estado: item.isAvailable ? 'Publicado' : 'Oculto',
+    })));
+    if (!rows.length) { toast.error('Agrega platillos antes de exportar la carta.'); return; }
+    try {
+      if (format === 'xlsx') {
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Carta');
+        XLSX.writeFile(workbook, buildDatedDownloadFileName(['carta_restaurante'], 'xlsx'));
+      } else {
+        await generateConfiguredReportSectionsPDF({
+          targetKey: 'restaurante.menu', title: 'Carta de Restaurante', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
+          sections: menu.map((category) => ({
+            id: `menu-${category.id}`, title: category.name,
+            headers: ['Platillo', 'Descripción', 'Precio', 'Opciones'],
+            rows: category.items.map((item) => [item.name, item.description || '', money(item.price, item.currency), (item.options || []).map((group) => `${group.name}: ${group.choices.map((choice) => `${choice.name}${Number(choice.priceAdjustment) ? ` (+${money(choice.priceAdjustment, item.currency)})` : ''}`).join(', ')}`).join(' | ') || '—']),
+          })),
+          fileName: buildDatedDownloadFileName(['carta_restaurante'], 'pdf'), forceNative: true,
+        });
+      }
+      toast.success(`Carta exportada en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
+    } catch (error: any) { toast.error(error?.message || 'No se pudo exportar la carta.'); }
+  };
+
   const saveCategory = async () => {
     if (!categoryName.trim()) { toast.error('Escribe el nombre de la categoría.'); return; }
     setSaving(true);
@@ -803,28 +857,38 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
 
   const saveItem = async () => {
     const price = Number(itemForm.price);
-    if (!itemForm.categoryId || !itemForm.name.trim() || !Number.isFinite(price) || price < 0) {
+    if (!categoryId || !itemForm.name.trim() || !Number.isFinite(price) || price < 0) {
       toast.error('Completa categoría, nombre y un precio válido.'); return;
     }
+    const invalidGroup = itemForm.options.find((group) => !group.name.trim() || !group.choices.length || group.choices.some((choice) => !choice.name.trim() || !Number.isFinite(Number(choice.priceAdjustment)) || Number(choice.priceAdjustment) < 0));
+    if (invalidGroup) { toast.error('Completa el nombre del grupo y sus opciones con precios adicionales válidos.'); return; }
     setSaving(true);
     const actionToken = beginNotificationAction();
     try {
       if (editingItemId) {
-        await restaurantService.updateMenuItem(editingItemId, { name: itemForm.name.trim(), description: itemForm.description.trim() || null, price, taxRate: Number(itemForm.taxRate) || 0, prepStation: itemForm.prepStation });
+        await restaurantService.updateMenuItem(editingItemId, { name: itemForm.name.trim(), description: itemForm.description.trim() || null, price, taxRate: Number(itemForm.taxRate) || 0, prepStation: itemForm.prepStation, options: itemForm.options });
         toast.success('Platillo actualizado.');
       } else {
-        await restaurantService.createMenuItem({ categoryId: itemForm.categoryId, name: itemForm.name.trim(), description: itemForm.description.trim() || undefined, price, taxRate: Number(itemForm.taxRate) || 0, prepStation: itemForm.prepStation });
+        await restaurantService.createMenuItem({ categoryId, name: itemForm.name.trim(), description: itemForm.description.trim() || undefined, price, taxRate: Number(itemForm.taxRate) || 0, prepStation: itemForm.prepStation, options: itemForm.options });
         toast.success('Platillo agregado a la carta.');
       }
-      setItemForm({ ...emptyForm, categoryId: itemForm.categoryId }); setEditingItemId(null); await onSaved();
+      setItemForm({ ...emptyForm, categoryId }); setEditingItemId(null); await onSaved();
     } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo guardar el platillo.')); }
     finally { completeNotificationAction(actionToken); setSaving(false); }
   };
 
   const editItem = (categoryId: string, item: RestaurantMenuItem) => {
     setEditingItemId(item.id);
-    setItemForm({ categoryId, name: item.name, description: item.description || '', price: String(item.price), taxRate: String(item.taxRate || 0), prepStation: item.prepStation || 'KITCHEN' });
+    setItemForm({ categoryId, name: item.name, description: item.description || '', price: String(item.price), taxRate: String(item.taxRate || 0), prepStation: item.prepStation || 'KITCHEN', options: item.options || [] });
   };
+
+  const updateOptionGroup = (groupId: string, patch: Partial<RestaurantMenuOptionGroup>) => setItemForm((current) => ({
+    ...current, options: current.options.map((group) => group.id === groupId ? { ...group, ...patch } : group),
+  }));
+  const addOptionGroup = () => setItemForm((current) => ({
+    ...current,
+    options: [...current.options, { id: `group-${crypto.randomUUID()}`, name: '', required: false, multiple: false, choices: [{ id: `choice-${crypto.randomUUID()}`, name: '', priceAdjustment: 0 }] }],
+  }));
 
   const toggleItem = async (item: RestaurantMenuItem) => {
     setSaving(true);
@@ -835,7 +899,7 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
   };
 
   return <section className="space-y-5">
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Administración de carta</p><h2 className="mt-1 text-2xl font-black">Menú, precios y estaciones</h2><p className="mt-1 text-sm text-muted-foreground">Los platillos disponibles también aparecen en el enlace público de cada mesa.</p></div><Settings2 className="size-6 text-muted-foreground/40" /></div>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Administración de carta</p><h2 className="mt-1 text-2xl font-black">Menú, precios y estaciones</h2><p className="mt-1 text-sm text-muted-foreground">Los platillos disponibles también aparecen en el enlace público de cada mesa.</p></div><div className="flex items-center gap-2">{canExport && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" disabled={!menu.some((category) => category.items.length)}><Download className="size-4" />Exportar carta<ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => void exportMenu('pdf')}><FileText className="mr-2 size-4 text-rose-600" />PDF</DropdownMenuItem><DropdownMenuItem onClick={() => void exportMenu('xlsx')}><FileSpreadsheet className="mr-2 size-4 text-emerald-600" />Excel</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}<Settings2 className="size-6 text-muted-foreground/40" /></div></div>
     <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div><p className="text-xs font-black uppercase tracking-widest text-primary">Diseño de la carta pública</p><h3 className="mt-1 text-lg font-black">Elige el estilo que verán tus clientes</h3></div>
@@ -879,12 +943,24 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
       </div>
       <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">{editingItemId ? 'Editar platillo' : 'Nuevo platillo'}</p><h3 className="mt-1 text-lg font-black">Contenido del menú</h3></div>{editingItemId && <Button variant="ghost" size="sm" onClick={() => { setEditingItemId(null); setItemForm({ ...emptyForm, categoryId: itemForm.categoryId }); }}>Cancelar</Button>}</div>
-        <div className="grid gap-3 sm:grid-cols-2"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={itemForm.categoryId} onChange={(event) => setItemForm({ ...itemForm, categoryId: event.target.value })}><option value="">Selecciona categoría</option>{menu.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Input placeholder="Nombre del platillo" value={itemForm.name} onChange={(event) => setItemForm({ ...itemForm, name: event.target.value })} /><Input placeholder="Descripción" value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} /><Input type="number" min="0" step="0.01" placeholder="Precio NIO" value={itemForm.price} onChange={(event) => setItemForm({ ...itemForm, price: event.target.value })} /><Input type="number" min="0" max="100" step="0.01" placeholder="Impuesto %" value={itemForm.taxRate} onChange={(event) => setItemForm({ ...itemForm, taxRate: event.target.value })} /><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={itemForm.prepStation} onChange={(event) => setItemForm({ ...itemForm, prepStation: event.target.value })}><option value="KITCHEN">Cocina</option><option value="GRILL">Parrilla</option><option value="FRYER">Freidora</option><option value="BAR">Bar</option></select></div>
+        <div className="grid gap-3 sm:grid-cols-2"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={categoryId} onChange={(event) => setItemForm({ ...itemForm, categoryId: event.target.value })}><option value="">Selecciona categoría</option>{menu.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Input placeholder="Nombre del platillo" value={itemForm.name} onChange={(event) => setItemForm({ ...itemForm, name: event.target.value })} /><Input placeholder="Descripción" value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} /><Input type="number" min="0" step="0.01" placeholder="Precio NIO" value={itemForm.price} onChange={(event) => setItemForm({ ...itemForm, price: event.target.value })} /><Input type="number" min="0" max="100" step="0.01" placeholder="Impuesto %" value={itemForm.taxRate} onChange={(event) => setItemForm({ ...itemForm, taxRate: event.target.value })} /><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={itemForm.prepStation} onChange={(event) => setItemForm({ ...itemForm, prepStation: event.target.value })}><option value="KITCHEN">Cocina</option><option value="GRILL">Parrilla</option><option value="FRYER">Freidora</option><option value="BAR">Bar</option></select></div>
+        <fieldset disabled={saving || (editingItemId ? !canEdit : !canCreate)} className="mt-5 space-y-3 border-t border-border/60 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="font-black">Opciones del platillo</h4><p className="text-xs text-muted-foreground">Configura tamaño, acompañamientos u otros adicionales con su precio.</p></div><Button type="button" variant="outline" size="sm" onClick={addOptionGroup}><Plus className="size-4" />Agregar grupo</Button></div>
+          {itemForm.options.map((group) => <div key={group.id} className="rounded-xl border border-border/60 bg-muted/20 p-3"><div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]"><Input aria-label="Nombre del grupo de opciones" placeholder="Ej. Tamaño" value={group.name} onChange={(event) => updateOptionGroup(group.id, { name: event.target.value })} /><label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={Boolean(group.required)} onChange={(event) => updateOptionGroup(group.id, { required: event.target.checked })} />Obligatorio</label><label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={Boolean(group.multiple)} onChange={(event) => updateOptionGroup(group.id, { multiple: event.target.checked })} />Múltiple</label><Button type="button" variant="ghost" size="icon" aria-label="Quitar grupo" onClick={() => setItemForm((current) => ({ ...current, options: current.options.filter((item) => item.id !== group.id) }))}><X className="size-4" /></Button></div>
+            <div className="mt-3 space-y-2">{group.choices.map((choice) => <div key={choice.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]"><Input aria-label="Nombre de la opción" placeholder="Ej. Individual" value={choice.name} onChange={(event) => updateOptionGroup(group.id, { choices: group.choices.map((item) => item.id === choice.id ? { ...item, name: event.target.value } : item) })} /><Input aria-label="Precio adicional de la opción" type="number" min="0" step="0.01" placeholder="Adicional C$" value={choice.priceAdjustment} onChange={(event) => updateOptionGroup(group.id, { choices: group.choices.map((item) => item.id === choice.id ? { ...item, priceAdjustment: Number(event.target.value) || 0 } : item) })} /><Button type="button" variant="ghost" size="icon" aria-label="Quitar opción" disabled={group.choices.length <= 1} onClick={() => updateOptionGroup(group.id, { choices: group.choices.filter((item) => item.id !== choice.id) })}><X className="size-4" /></Button></div>)}<Button type="button" size="sm" variant="ghost" onClick={() => updateOptionGroup(group.id, { choices: [...group.choices, { id: `choice-${crypto.randomUUID()}`, name: '', priceAdjustment: 0 }] })}><Plus className="size-3.5" />Agregar opción</Button></div>
+          </div>)}
+        </fieldset>
         <Button className="mt-4" onClick={saveItem} disabled={saving || !menu.length || (editingItemId ? !canEdit : !canCreate)}><Check className="size-4" />{editingItemId ? 'Guardar cambios' : 'Agregar platillo'}</Button>
       </div>
     </div>
     {!menu.length ? <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea una categoría y luego agrega tus primeros platillos." /> : <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{menu.map((category) => <div key={category.id} className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{category.name}</h3><p className="mt-1 text-xs text-muted-foreground">{category.description || 'Sin descripción'}</p></div><Badge variant="outline">{category.items.length}</Badge></div><div className="mt-4 space-y-2">{category.items.map((item) => <div key={item.id} className="rounded-xl border border-border/50 bg-muted/20 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-bold">{item.name}</p><p className="mt-1 text-xs text-muted-foreground">{item.prepStation} · {item.productId ? 'Inventario vinculado' : 'Sin inventario vinculado'}</p></div><span className="shrink-0 font-black text-primary">{money(item.price, item.currency)}</span></div><div className="mt-3 flex items-center justify-between gap-2"><Badge className={item.isAvailable ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-muted-foreground'}>{item.isAvailable ? 'Publicado' : 'Oculto'}</Badge><div className="flex gap-1"><Button variant="ghost" size="icon" className="size-8" onClick={() => editItem(category.id, item)} aria-label={`Editar ${item.name}`}><Pencil className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-8" onClick={() => void toggleItem(item)} disabled={saving} aria-label={item.isAvailable ? `Ocultar ${item.name}` : `Publicar ${item.name}`}>{item.isAvailable ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}</Button></div></div></div>)}</div></div>)}</div>}
   </section>;
+}
+
+function RestaurantOptionsDialog({ item, onClose, onConfirm }: { item: RestaurantMenuItem; onClose: () => void; onConfirm: (selected: RestaurantSelectedOptions) => void }) {
+  const [selected, setSelected] = useState<RestaurantSelectedOptions>({});
+  const missing = (item.options || []).find((group) => group.required && !selected[group.id]);
+  return <div className="nh-modal-root fixed inset-0 z-[70] flex items-center justify-center bg-foreground/50 p-3" role="dialog" aria-modal="true" aria-labelledby="restaurant-options-title"><div className="nh-modal-surface my-auto max-h-[min(92vh,calc(100dvh-1.5rem))] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-card p-5 shadow-2xl"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Opciones del platillo</p><h2 id="restaurant-options-title" className="mt-1 text-xl font-black">{item.name}</h2></div><button type="button" aria-label="Cerrar opciones" onClick={onClose} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="size-5" /></button></div><div className="mt-4 space-y-4">{(item.options || []).map((group) => <fieldset key={group.id}><legend className="text-sm font-black">{group.name}{group.required && <span className="ml-1 text-rose-600">*</span>}<span className="ml-2 text-xs font-medium text-muted-foreground">{group.multiple ? 'Puedes elegir varios' : 'Elige uno'}</span></legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{group.choices.map((choice) => { const value = selected[group.id]; const active = Array.isArray(value) ? value.includes(choice.id) : value === choice.id; return <button key={choice.id} type="button" aria-pressed={active} onClick={() => setSelected((current) => { const currentValue = current[group.id]; if (!group.multiple) return { ...current, [group.id]: active ? '' : choice.id }; const currentIds = Array.isArray(currentValue) ? currentValue : currentValue ? [currentValue] : []; return { ...current, [group.id]: currentIds.includes(choice.id) ? currentIds.filter((id) => id !== choice.id) : [...currentIds, choice.id] }; })} className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-3 text-left text-sm transition ${active ? 'border-primary bg-primary/10 ring-2 ring-primary/15' : 'border-border/60 hover:border-primary/40'}`}><span className="font-semibold">{choice.name}</span><span className="shrink-0 font-bold">{Number(choice.priceAdjustment) > 0 ? `+${money(choice.priceAdjustment, item.currency)}` : 'Incluido'}{active && <Check className="ml-1 inline size-4 text-primary" />}</span></button>; })}</div></fieldset>)}</div><div className="mt-5 flex flex-col-reverse gap-2 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm">Precio estimado: <strong>{money(Number(item.price) + restaurantOptionPrice(item, selected), item.currency)}</strong></p><div className="flex gap-2"><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={() => onConfirm(selected)} disabled={Boolean(missing)}><Check className="size-4" />Agregar a comanda</Button></div></div></div></div>;
 }
 
 function ReportsBoard({ summary, canExport, onExport }: { summary: RestaurantSummary | null; canExport: boolean; onExport: (format: 'pdf' | 'xlsx') => void }) {

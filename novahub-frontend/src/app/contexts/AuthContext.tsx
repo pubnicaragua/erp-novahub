@@ -77,6 +77,7 @@ export type Module =
   | 'inventario'
   | 'ventas'
   | 'restaurante'
+  | 'hospedaje'
   | 'compras'
   | 'finanzas'
   | 'rh'
@@ -878,6 +879,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
       'restaurante': 'RESTAURANT',
+      'hospedaje': 'HOTEL',
       'tracking': 'TRACKING',
       'intl-imports': 'IMPORT_INTL',
       'compras': 'PURCHASES',
@@ -915,6 +917,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'SALES_PRICE_LISTS', 'RETAIL_CASH_CONTROL',
       ],
        restaurante: ['RESTAURANT', 'RESTAURANT_SALON', 'RESTAURANT_ORDERS', 'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS'],
+      hospedaje: ['HOTEL', 'HOTEL_ROOMS', 'HOTEL_RESERVATIONS'],
       tracking: ['TRACKING', 'TRACKING_TRANSIT', 'TRACKING_RECEPTION', 'TRACKING_BATCHES', 'TRACKING_PACKAGES', 'TRACKING_RECONCILIATION', 'TRACKING_BILLING', 'TRACKING_CONFIG'],
       'intl-imports': ['IMPORT_INTL', 'IMPORT_INTL_ORIGIN', 'IMPORT_INTL_CONTAINERS', 'IMPORT_INTL_CUSTOMS', 'IMPORT_INTL_CONFIG', 'TRACKING', 'TRACKING_TRANSIT'],
       compras: [
@@ -1060,6 +1063,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'PURCHASES_': 'PURCHASES',
       'SALES_': 'SALES',
       'RESTAURANT_': 'RESTAURANT',
+      'HOTEL_': 'HOTEL',
       'INVENTORY_': 'INVENTORY',
       'FINANCIAL_': 'FINANCIAL',
       'HR_': 'HR',
