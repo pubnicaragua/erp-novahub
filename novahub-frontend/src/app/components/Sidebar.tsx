@@ -173,7 +173,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'hospedaje',
-    label: 'Hospedaje',
+    label: 'Hotel',
     icon: <BedDouble className="size-5" />,
     section: 'Operaciones',
     submenu: [
