@@ -25,15 +25,18 @@ export function HotelCalendarView({ reservations, month, onMonthChange, onSelect
   const monthName = month.toLocaleDateString('es-NI', { month: 'long', year: 'numeric' });
 
   return <section className="min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div><p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Ocupación</p><h2 className="mt-1 text-xl font-black capitalize">{monthName}</h2></div>
-      <div className="flex items-center gap-2">
+    <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0"><p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Ocupación</p><h2 className="mt-1 break-words text-xl font-black capitalize">{monthName}</h2></div>
+      <div className="flex shrink-0 items-center gap-2">
         <Button variant="outline" size="icon" aria-label="Mes anterior" onClick={() => onMonthChange(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft className="size-4" /></Button>
         <Button variant="outline" size="sm" onClick={() => onMonthChange(new Date())}>Hoy</Button>
         <Button variant="outline" size="icon" aria-label="Mes siguiente" onClick={() => onMonthChange(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight className="size-4" /></Button>
       </div>
     </div>
-    <div className="grid grid-cols-7 border-l border-t border-border/60">
+    <p className="mb-2 text-xs text-muted-foreground lg:hidden">Desliza el calendario para ver todos los días.</p>
+    <div className="min-w-0 overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" role="region" tabIndex={0} aria-label="Calendario de ocupación; desliza horizontalmente para ver todos los días">
+    <div className="min-w-[560px] lg:min-w-0">
+    <div className="grid min-w-0 grid-cols-7 border-l border-t border-border/60">
       {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((day) => <div key={day} className="border-b border-r border-border/60 bg-muted/40 px-1 py-2 text-center text-[10px] font-black uppercase tracking-wider text-muted-foreground sm:text-xs">{day}</div>)}
       {days.map((day) => {
         const key = dateKey(day);
@@ -51,6 +54,8 @@ export function HotelCalendarView({ reservations, month, onMonthChange, onSelect
           </div>
         </div>;
       })}
+    </div>
+    </div>
     </div>
     <div className="mt-3 flex flex-wrap gap-3 text-[10px] font-semibold text-muted-foreground sm:text-xs"><span className="flex items-center gap-1.5"><i className="size-2 rounded-full bg-sky-500" />Confirmada</span><span className="flex items-center gap-1.5"><i className="size-2 rounded-full bg-emerald-500" />En curso</span><span className="flex items-center gap-1.5">Entrada/salida: el último día no ocupa habitación</span></div>
   </section>;
