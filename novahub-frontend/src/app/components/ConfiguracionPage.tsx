@@ -302,9 +302,9 @@ const colorPresets: ThemePreset[] = THEME_PRESETS;
 function generateThemeFromColor(hex: string, sidebarHex: string, accentHex: string): BrandColors {
   // Mantener el hex elegido por el usuario evita que una conversión a OKLCH
   // y su posterior aproximación cambien el color después de recargar.
-  const primary = normalizeHexColor(hex, '#10b981');
+  const primary = normalizeHexColor(hex, '#01422c');
   const sidebar = normalizeHexColor(sidebarHex, '#0c1a12');
-  const accent = normalizeHexColor(accentHex, '#064e3b');
+  const accent = normalizeHexColor(accentHex, '#74c044');
 
   return {
     primary,
@@ -688,7 +688,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
   const [accentHex, setAccentHex] = useState(() => oklchToApproxHex(themeConfig.colors.accent));
   const [sidebarFgHex, setSidebarFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.sidebarForeground));
   const [primaryFgHex, setPrimaryFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.primaryForeground));
-  const [portalPrimaryHex, setPortalPrimaryHex] = useState('#10b981');
+  const [portalPrimaryHex, setPortalPrimaryHex] = useState('#01422c');
   const [portalAccentHex, setPortalAccentHex] = useState('#0f172a');
   const [portalTextHex, setPortalTextHex] = useState('#f8fafc');
   const [paletteMode, setPaletteMode] = useState<ThemePaletteMode>(() => themeConfig.paletteMode);
@@ -863,11 +863,11 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
   const handleReset = async () => {
     if (!canEditBranding) return;
     resetTheme();
-    setPrimaryHex('#10b981');
+    setPrimaryHex('#01422c');
     setSidebarHex('#0c1a12');
-    setAccentHex('#064e3b');
+    setAccentHex('#74c044');
     setPaletteMode('details');
-    setPrimaryFgHex(getReadableForeground('#10b981'));
+    setPrimaryFgHex('#ffffff');
     setSidebarFgHex(getReadableForeground('#0c1a12'));
     setActivePreset('Esmeralda');
     try {
@@ -1562,7 +1562,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
             tenantId={user?.tenantId}
             branchName={userBranches.find((branch) => branch.id === user?.clientTenantId)?.name || user?.clientTenant?.name || user?.tenantName || ''}
             companyName={companyName || user?.tenantName || ''}
-            corporateColor={themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#10b981'}
+            corporateColor={themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#01422c'}
             logo={corporateLogo}
             canEdit={canEditPdf}
             canCreate={canCreatePdf}

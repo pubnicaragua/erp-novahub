@@ -1,20 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
-  BarChart3,
   Banknote,
   CalendarDays,
   Check,
   ChevronRight,
   CircleHelp,
-  Clock3,
   FileDown,
   FileSpreadsheet,
   Loader2,
   Package,
+  Receipt,
   RefreshCw,
   Settings2,
   ShieldAlert,
@@ -27,11 +26,8 @@ import { NovaHubLogo } from './NovaHubLogo';
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
-  LabelList,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -49,6 +45,7 @@ import { safeGetItem, safeSetItem } from '../services/safe-storage';
 import type { PdfTemplateChart } from '../services/pdf-template-definition';
 import { loadModuleWithChunkRecovery } from '../utils/chunk-recovery';
 import { CurrencyValuationAmount, CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { ProductThumbnail } from './ui/ProductImage';
 import { Button } from './ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Checkbox } from './ui/checkbox';
@@ -63,6 +60,14 @@ import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import { capturePdfChartSnapshot, yieldToBrowser } from '../utils/pdf-template-renderer';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { getBase64Image } from '../utils/reportExportUtils';
+import salesKpiAsset from '../../assets/dashboard/VentasPagadas.png';
+import expensesKpiAsset from '../../assets/dashboard/GastosRegistrados.png';
+import invoicesKpiAsset from '../../assets/dashboard/FacturasPagadas.png';
+import ticketKpiAsset from '../../assets/dashboard/TicketVentaPagada.png';
+import capitalAsset from '../../assets/dashboard/CapitalInmovilizado.png';
+import reposicionAsset from '../../assets/dashboard/Reposicion.png';
+import signalsAsset from '../../assets/dashboard/Senales.png';
+import noSalesRegisterAsset from '../../assets/dashboard/NoHayVentasPorCaja.png';
 import './dashboard/executive-dashboard.css';
 
 const ProductDetailDrawer = lazy(() =>
@@ -84,97 +89,41 @@ const PERIOD_LABELS: Record<DashboardPeriod, string> = {
   custom: 'Rango personalizado',
 };
 
-const PRODUCT_TABS = [
-  { id: 'topSelling', label: 'Más vendidos' },
-  { id: 'leastSelling', label: 'Menos vendidos' },
-  { id: 'noSaleProducts', label: 'Sin ventas' },
-  { id: 'topMargin', label: 'Utilidad de referencia' },
-] as const;
-
-type ProductTab = typeof PRODUCT_TABS[number]['id'];
-
-const CHART_COLORS = ['#08b78a', '#2563eb', '#f59e0b', '#ef6b73', '#7767d9', '#0ea5a4'];
-const shortenLabel = (value: unknown, max = 18) => {
-  const label = String(value || 'Sin nombre');
-  return label.length > max ? `${label.slice(0, max - 1)}…` : label;
+const CHART_COLORS = ['#01422c', '#74c044', '#0a6b48', '#4f936d', '#a0cf82', '#2563eb'];
+const INVENTORY_COLORS: Record<string, string> = {
+  'Sin stock': '#ef3340',
+  'Stock bajo': '#74c044',
+  Reordenar: '#01422c',
 };
-
-const wrapLabel = (value: unknown, budget = 22): string[] => {
-  const tokens = String(value || 'Sin nombre').split(/\s+/).filter(Boolean).flatMap((word) => word.length > budget ? Array.from({ length: Math.ceil(word.length / budget) }, (_, i) => word.slice(i * budget, (i + 1) * budget)) : [word]);
-  const lines: string[] = [];
-  let current = '';
-  for (const token of tokens) {
-    const candidate = current ? `${current} ${token}` : token;
-    if (current && candidate.length > budget) {
-      lines.push(current);
-      current = token;
-      if (lines.length === 2) break;
-    } else {
-      current = candidate;
-    }
-  }
-  if (current) lines.push(current);
-  const result = lines.slice(0, 2);
-  if (lines.length > 2) result[1] = `${result[1]}…`;
-  return result;
+const KPI_ASSETS: Record<string, string> = {
+  totalRevenue: salesKpiAsset,
+  totalExpenses: expensesKpiAsset,
+  paidInvoicesCount: invoicesKpiAsset,
+  averagePaidInvoice: ticketKpiAsset,
 };
-
-const CategoryTick = ({ x, y, payload }: any) => {
-  const lines = wrapLabel(payload?.value);
-  return (
-    <text x={x} y={y} textAnchor="end" fill="var(--muted-foreground)" fontSize={10}>
-      {lines.map((line, index) => <tspan key={index} x={x} dy={index === 0 ? (lines.length === 1 ? 4 : -3) : 10}>{line}</tspan>)}
-    </text>
-  );
-};
-
 const formatDate = (value: string) => new Intl.DateTimeFormat('es-NI', { day: '2-digit', month: 'short' }).format(new Date(`${value}T12:00:00Z`));
 
 const safeNumber = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
-
-const TRANSACTION_STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Pendiente',
-  IN_PROCESS: 'En proceso',
-  IN_PROGRESS: 'En progreso',
-  APPROVED: 'Aprobado',
-  CONFIRMED: 'Confirmado',
-  PAID: 'Pagada',
-  PARTIAL: 'Pago parcial',
-  DRAFT: 'Borrador',
-  COMPLETED: 'Completado',
-  SENT: 'Enviada',
-  SUBMITTED: 'Enviada',
-  IN_REVIEW: 'En revisión',
-  PENDING_REVIEW: 'Pendiente de revisión',
-  PENDING_APPROVAL: 'Pendiente de aprobación',
-  IN_QUOTATION: 'En cotización',
-  RETURNED_FOR_CORRECTION: 'Devuelta para corrección',
-  CONVERTED_TO_ORDER: 'Convertida a orden',
-  CLOSED: 'Cerrada',
-  SHIPPED: 'Enviada',
-  DELIVERED: 'Entregada',
-  REJECTED: 'Rechazada',
-  CANCELLED: 'Cancelada',
-  EXPIRED: 'Vencida',
-  OVERDUE: 'Vencida',
-  WITH_INCIDENTS: 'Con incidencias',
-  ISSUED: 'Emitida',
-  CREDIT: 'A crédito',
-  REFUNDED: 'Reembolsada',
-  VOIDED: 'Anulada',
-  POSTED: 'Registrada',
-};
-
-const formatTransactionStatus = (value: unknown) => {
-  const normalized = String(value || '').trim().toUpperCase();
-  return TRANSACTION_STATUS_LABELS[normalized] || (normalized ? 'Sin estado' : 'Pagada');
-};
+const COST_DERIVED_INDICATORS = ['operatingMargin', 'grossMargin', 'commercialMargin', 'netMargin', 'profitability', 'netProfit'];
 
 const readPreferences = (key: string): DashboardPreferences => {
-  const raw = safeGetItem(key);
+  const stored = safeGetItem(key);
+  const raw = stored
+    || safeGetItem(key.replace('.v4.', '.v3.'))
+    || safeGetItem(key.replace('.v4.', '.v2.'))
+    || safeGetItem(key.replace('.v4.', '.v1.'));
   if (!raw) return DEFAULT_PREFERENCES;
   try {
-    return normalizePreferences(JSON.parse(raw));
+    const normalized = normalizePreferences(JSON.parse(raw));
+    if (!stored && key.includes('.v4.')) {
+      const migratedIndicators = [...new Set(normalized.indicators.map((id) => id === 'netMargin' ? 'operatingMargin' : id))];
+      return {
+        ...normalized,
+        indicators: migratedIndicators.includes('operatingMargin') ? migratedIndicators : [...migratedIndicators, 'operatingMargin'],
+        blocks: [...new Set([...normalized.blocks, ...DEFAULT_PREFERENCES.blocks])],
+      };
+    }
+    return normalized;
   } catch {
     return DEFAULT_PREFERENCES;
   }
@@ -195,6 +144,12 @@ const indicatorValue = (id: string, kpis: any, performance: any, data: any) => {
     paidInvoicesCount: safeNumber(kpis?.paidInvoicesCount),
     averagePaidInvoice: safeNumber(kpis?.averagePaidInvoice),
     operatingResult: safeNumber(kpis?.totalRevenue) - safeNumber(kpis?.totalExpenses),
+    netProfit: safeNumber(kpis?.netProfit),
+    operatingMargin: safeNumber(kpis?.operatingMargin),
+    grossMargin: safeNumber(kpis?.grossMargin),
+    commercialMargin: safeNumber(kpis?.commercialMargin),
+    netMargin: safeNumber(kpis?.netMargin),
+    profitability: safeNumber(kpis?.profitability),
     ordersCount: safeNumber(kpis?.ordersCount),
     pendingOrders: safeNumber(kpis?.pendingOrders),
     inventoryAlerts: new Set((data?.inventoryAlerts || []).map((row: any) => getProductId(row))).size,
@@ -211,7 +166,11 @@ const indicatorValue = (id: string, kpis: any, performance: any, data: any) => {
 };
 
 function KpiValue({ definition, value, data }: { definition: IndicatorDefinition; value: string | number; data: any }) {
-  const money = ['totalRevenue', 'totalExpenses', 'averagePaidInvoice', 'operatingResult'].includes(definition.id);
+  if (COST_DERIVED_INDICATORS.includes(definition.id) && data?.kpis?.hasComparableCostData === false) {
+    return <span className="executive-kpi-value executive-kpi-value-muted" title="Configura el costo unitario de los productos para calcular este indicador">—</span>;
+  }
+  if (['operatingMargin', 'grossMargin', 'commercialMargin', 'netMargin', 'profitability'].includes(definition.id)) return <span className="executive-kpi-value">{safeNumber(value).toFixed(1)}%</span>;
+  const money = ['totalRevenue', 'totalExpenses', 'averagePaidInvoice', 'operatingResult', 'netProfit'].includes(definition.id);
   if (!money) return <span className="executive-kpi-value">{typeof value === 'number' ? value.toLocaleString('es-NI') : value}</span>;
   const amount = typeof value === 'number' ? value : 0;
   return (
@@ -226,11 +185,16 @@ function KpiValue({ definition, value, data }: { definition: IndicatorDefinition
 }
 
 function KpiIcon({ id }: { id: string }) {
-  if (id.includes('Revenue') || id === 'averagePaidInvoice' || id === 'operatingResult') return <WalletCards />;
+  const asset = KPI_ASSETS[id];
+  if (asset) return <img src={asset} alt="" className="executive-kpi-asset" />;
+  if (id === 'totalRevenue' || id === 'operatingResult') return <Banknote />;
   if (id.includes('Expense')) return <TrendingDown />;
+  if (id === 'averagePaidInvoice') return <WalletCards />;
   if (id.includes('Product') || id.includes('Sale')) return <Package />;
   if (id.includes('Register')) return <Store />;
-  if (id.includes('Order') || id.includes('Invoice')) return <ShoppingCart />;
+  if (id === 'netMargin') return <Activity />;
+  if (id.includes('Invoice')) return <Receipt />;
+  if (id.includes('Order')) return <ShoppingCart />;
   return <Activity />;
 }
 
@@ -241,7 +205,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   const canViewPos = canPerform('RETAIL_POS', 'view') || canPerform('SALES', 'view');
   const canViewInventory = canPerform('INVENTORY_PRODUCTS', 'view') || canPerform('INVENTORY', 'view');
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
-  const storageKey = `novahub.dashboard.executive.v1.${tenantKey}.${user?.id || 'user'}`;
+  const storageKey = `novahub.dashboard.executive.v4.${tenantKey}.${user?.id || 'user'}`;
   const [period, setPeriod] = useState<DashboardPeriod>('month');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -249,29 +213,63 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   const [draftPreferences, setDraftPreferences] = useState<DashboardPreferences>(() => readPreferences(storageKey));
   const [configOpen, setConfigOpen] = useState(false);
   const [configSearch, setConfigSearch] = useState('');
+  const [rangeEditorOpen, setRangeEditorOpen] = useState(false);
+  const [draftDateFrom, setDraftDateFrom] = useState('');
+  const [draftDateTo, setDraftDateTo] = useState('');
   const [isExporting, setIsExporting] = useState(false);
-  const [productTab, setProductTab] = useState<ProductTab>('topSelling');
+  const [trendGranularity, setTrendGranularity] = useState<'day' | 'month'>('day');
+  const [productMetric, setProductMetric] = useState<'units' | 'revenue'>('units');
   const [productDrawerId, setProductDrawerId] = useState<string | null>(null);
   const [productSnapshot, setProductSnapshot] = useState<any>(null);
-  const attentionRef = useRef<HTMLDivElement>(null);
+  const [formulaProduct, setFormulaProduct] = useState<any>(null);
 
   const range = useMemo(() => dashboardRange(period, dateFrom, dateTo), [period, dateFrom, dateTo]);
+  const openRangeEditor = () => {
+    setDraftDateFrom(period === 'custom' ? dateFrom : range?.start || '');
+    setDraftDateTo(period === 'custom' ? dateTo : range?.end || '');
+    setRangeEditorOpen(true);
+  };
+  const applyDateRange = () => {
+    if (!dashboardRange('custom', draftDateFrom, draftDateTo)) {
+      toast.error('Selecciona una fecha inicial y una fecha final válidas.');
+      return;
+    }
+    setDateFrom(draftDateFrom);
+    setDateTo(draftDateTo);
+    setPeriod('custom');
+    setRangeEditorOpen(false);
+  };
   const fetchDashboard = (start: string, end: string, signal: AbortSignal) => cajaService.getDashboard('custom', undefined, start, end, signal, valuationMode).then((response: any) => response?.data ?? response);
   const currentQuery = useTenantQuery<any>(['executive-dashboard', period, range?.start, range?.end, valuationMode], (signal) => fetchDashboard(range!.start, range!.end, signal), { enabled: canViewPos && Boolean(range) });
   const previousQuery = useTenantQuery<any>(['executive-dashboard-previous', period, range?.previousStart, range?.previousEnd, valuationMode], (signal) => fetchDashboard(range!.previousStart, range!.previousEnd, signal), { enabled: canViewPos && Boolean(range) });
   const inventoryQuery = useTenantQuery<any>(['executive-inventory-insights', tenantKey], (signal) => inventoryService.getDashboardInsights(signal).then((response: any) => response?.data ?? response), { enabled: canViewInventory });
+  const registersQuery = useTenantQuery<any[]>(['executive-dashboard-registers', tenantKey], (signal) => cajaService.getRegisters(true, signal).then((response: any) => response?.data ?? response), { enabled: canViewPos });
   const data = currentQuery.data && typeof currentQuery.data === 'object' ? currentQuery.data : null;
   const kpis = data?.kpis || {};
   const performance = useMemo(() => data?.productPerformance || {}, [data]);
   const previous = previousQuery.data?.kpis || {};
   const alerts = useMemo(() => Array.isArray(data?.inventoryAlerts) ? data.inventoryAlerts : [], [data]);
   const registers = useMemo(() => Array.isArray(data?.salesByRegister) ? data.salesByRegister : [], [data]);
-  const transactions = Array.isArray(data?.recentTransactions) ? data.recentTransactions : [];
-  const trend = range ? chartRows(Array.isArray(data?.dailyTrend) ? data.dailyTrend : [], range) : [];
+  const registerDirectory = useMemo(() => (Array.isArray(registersQuery.data) ? registersQuery.data : []).filter((register: any) => register?.isActive !== false), [registersQuery.data]);
+  const registerSummary = useMemo(() => {
+    const salesById = new Map(registers.map((item: any) => [String(item.registerId), item]));
+    const configured = registerDirectory.map((register: any) => {
+      const sale = salesById.get(String(register.id));
+      return {
+        registerId: register.id,
+        registerCode: register.code,
+        registerName: register.name,
+        total: safeNumber(sale?.total),
+        count: safeNumber(sale?.count),
+      };
+    });
+    const known = new Set(configured.map((item: any) => String(item.registerId)));
+    const missingSales = registers.filter((item: any) => !known.has(String(item.registerId)));
+    return [...configured, ...missingSales].sort((a: any, b: any) => String(a.registerCode || a.registerName || '').localeCompare(String(b.registerCode || b.registerName || ''), 'es'));
+  }, [registerDirectory, registers]);
+  const trend = range ? chartRows(Array.isArray(data?.dailyTrend) ? data.dailyTrend : [], range, trendGranularity) : [];
   const inventoryInsights = inventoryQuery.data && typeof inventoryQuery.data === 'object' ? inventoryQuery.data : null;
   const inventorySummary = inventoryInsights?.inventory || {};
-  const expirySummary = inventoryInsights?.expiry?.summary || {};
-  const expiryItems = Array.isArray(inventoryInsights?.expiry?.items) ? inventoryInsights.expiry.items : [];
 
   useEffect(() => {
     const next = readPreferences(storageKey);
@@ -294,25 +292,57 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   const alertCount = new Set(alerts.map((row: any) => getProductId(row))).size;
   const hasData = Boolean(data && data.kpis);
   const productSalesChart = useMemo(() => (performance.topSelling || []).slice(0, 6).map((item: any) => ({
+    productId: getProductId(item),
     name: getProductName(item),
-    value: safeNumber(item.totalQty),
-  })).reverse(), [performance]);
+    value: productMetric === 'revenue' ? safeNumber(item.totalRevenue) : safeNumber(item.totalQty),
+    imageUrl: item.imageUrl || null,
+    raw: item,
+  })).reverse(), [performance, productMetric]);
   const productMarginChart = useMemo(() => (performance.topMargin || []).slice(0, 6).map((item: any) => ({
+    productId: getProductId(item),
     name: getProductName(item),
     value: safeNumber(item.profit),
+    imageUrl: item.imageUrl || null,
+    raw: item,
   })).reverse(), [performance]);
-  const registerChart = useMemo(() => registers.slice(0, 6).map((item: any) => ({
-    name: shortenLabel(item.registerName || item.registerCode || 'Caja'),
-    value: safeNumber(item.total),
-  })).reverse(), [registers]);
   const inventoryChart = useMemo(() => {
+    const statusCounts = data?.inventoryStatusCounts;
+    if (statusCounts && Number.isFinite(Number(statusCounts.total))) {
+      return [
+        { name: 'Reordenar', value: safeNumber(statusCounts.reorder), fill: INVENTORY_COLORS.Reordenar },
+        { name: 'Sin stock', value: safeNumber(statusCounts.outOfStock), fill: INVENTORY_COLORS['Sin stock'] },
+        { name: 'Óptimo', value: safeNumber(statusCounts.optimal), fill: '#74c044' },
+      ];
+    }
     const counts = alerts.reduce((result: Record<string, number>, item: any) => {
       const key = item.status === 'SIN_STOCK' ? 'Sin stock' : item.status === 'STOCK_BAJO' ? 'Stock bajo' : 'Reordenar';
       result[key] = (result[key] || 0) + 1;
       return result;
     }, {} as Record<string, number>);
-    return Object.entries(counts).map(([name, value], index) => ({ name, value, fill: CHART_COLORS[index + 2] || CHART_COLORS[0] }));
-  }, [alerts]);
+    return ['Reordenar', 'Sin stock', 'Stock bajo']
+      .filter((name) => counts[name])
+      .map((name) => ({ name, value: counts[name], fill: INVENTORY_COLORS[name] }));
+  }, [alerts, data]);
+  const inventoryCriticalCount = inventoryChart.filter((entry: any) => entry.name !== 'Óptimo').reduce((total: number, entry: any) => total + safeNumber(entry.value), 0);
+
+  const openMarginFormula = (item: any) => setFormulaProduct(item);
+
+  const renderProductBars = (items: any[], formatValue: (value: number) => string, emptyText: string, onItemClick: (item: any) => void = openProduct) => {
+    if (!items.length) return <div className="executive-no-data">{emptyText}</div>;
+    const maxValue = Math.max(...items.map((item) => safeNumber(item.value)), 1);
+    return (
+      <div className="executive-product-bars">
+        {items.map((item) => (
+          <button type="button" className="executive-product-bar-row" key={item.productId || item.name} onClick={() => onItemClick(item.raw)}>
+            <ProductThumbnail src={item.imageUrl} alt={item.name} size="sm" fit="contain" className="executive-product-thumb" />
+            <span className="executive-product-bar-name" title={item.name}>{item.name}</span>
+            <span className="executive-product-bar-track"><i style={{ width: `${Math.max(4, Math.round((safeNumber(item.value) / maxValue) * 100))}%` }} /></span>
+            <strong className="executive-product-bar-value">{formatValue(safeNumber(item.value))}</strong>
+          </button>
+        ))}
+      </div>
+    );
+  };
 
   const toggleIndicator = (id: string, checked: boolean) => {
     setDraftPreferences((current) => ({ ...current, indicators: checked ? [...current.indicators, id] : current.indicators.filter((item) => item !== id) }));
@@ -342,26 +372,23 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       const selectedKpis = preferences.indicators.map((id) => {
         const definition = INDICATORS.find((item) => item.id === id);
         const value = indicatorValue(id, kpis, performance, data);
-        return { label: definition?.label || id, value: typeof value === 'number' ? money(value) : String(value), detail: definition?.description || '' };
+        return {
+          label: definition?.label || id,
+          value: id === 'netMargin'
+            ? `${safeNumber(value).toFixed(1)}%`
+            : typeof value === 'number' ? money(value) : String(value),
+          detail: definition?.description || '',
+        };
       });
       const sections: Array<{ id: string; title: string; headers: string[]; rows: Array<Array<string | number | null | undefined>>; widths?: number[] }> = [
         { id: 'dashboard-kpis', title: 'Indicadores seleccionados', headers: ['Indicador', 'Valor', 'Detalle'], rows: selectedKpis.map(item => [item.label, item.value, item.detail]), widths: [22, 18, 60] },
       ];
       const charts: PdfTemplateChart[] = [];
       if (preferences.blocks.includes('trend')) {
-        charts.push({ id: 'dashboard.trend', title: 'Ventas y gastos', type: 'area', labels: trend.map(item => item.date.length > 7 ? item.date.slice(5) : formatDate(item.date)), valueFormat: 'currency', unitLabel: data?.baseCurrency || baseCurrency, series: [{ label: 'Ventas', values: trend.map(item => safeNumber(item.revenue)), color: CHART_COLORS[0] }, { label: 'Gastos', values: trend.map(item => safeNumber(item.expenses)), color: '#f59e0b' }] });
-      }
-      if (preferences.blocks.includes('attention')) {
-        const attentionRows: Array<Array<string | number>> = [['Órdenes abiertas', safeNumber(kpis.pendingOrders), 'Seguimiento comercial y despacho']];
-        if (canViewInventory) {
-          attentionRows.push(['Productos con alertas', alertCount, 'Agotados, bajo mínimo o por reordenar']);
-          attentionRows.push(['Productos sin ventas', safeNumber(kpis.noSaleProductsCount ?? performance.noSaleProducts?.length), 'Con existencias disponibles']);
-          charts.push({ id: 'dashboard.attention', title: 'Estado del inventario', type: 'donut', labels: inventoryChart.length ? inventoryChart.map(item => item.name) : ['Sin alertas'], values: inventoryChart.length ? inventoryChart.map(item => safeNumber(item.value)) : [0], valueFormat: 'count', unitLabel: 'registros', colors: inventoryChart.length ? inventoryChart.map(item => item.fill) : [CHART_COLORS[0]] });
-        }
-        sections.push({ id: 'dashboard-attention', title: 'Atención requerida', headers: ['Prioridad', 'Cantidad', 'Detalle'], rows: attentionRows, widths: [28, 14, 58] });
+        charts.push({ id: 'dashboard.trend', title: 'Ventas y gastos', type: 'area', labels: trend.map(item => item.date.length > 7 ? item.date.slice(5) : formatDate(item.date)), valueFormat: 'currency', unitLabel: data?.baseCurrency || baseCurrency, series: [{ label: 'Ventas', values: trend.map(item => safeNumber(item.revenue)), color: CHART_COLORS[0] }, { label: 'Gastos', values: trend.map(item => safeNumber(item.expenses)), color: '#ef3340' }] });
       }
       if (preferences.blocks.includes('products') && canViewInventory) {
-        charts.push({ id: 'dashboard.products-sales', title: 'Productos más vendidos', type: 'bar', labels: productSalesChart.map((item: { name: string; value: number }) => item.name), values: productSalesChart.map((item: { name: string; value: number }) => safeNumber(item.value)), valueFormat: 'count', unitLabel: 'unidades', colors: CHART_COLORS });
+        charts.push({ id: 'dashboard.products-sales', title: 'Ventas por producto', type: 'bar', labels: productSalesChart.map((item: { name: string; value: number }) => item.name), values: productSalesChart.map((item: { name: string; value: number }) => safeNumber(item.value)), valueFormat: productMetric === 'revenue' ? 'currency' : 'count', unitLabel: productMetric === 'revenue' ? (data?.baseCurrency || baseCurrency) : 'unidades', colors: CHART_COLORS });
         charts.push({ id: 'dashboard.products-margin', title: 'Utilidad de referencia', type: 'bar', labels: productMarginChart.map((item: { name: string; value: number }) => item.name), values: productMarginChart.map((item: { name: string; value: number }) => safeNumber(item.value)), valueFormat: 'currency', unitLabel: data?.baseCurrency || baseCurrency, colors: CHART_COLORS });
         const productsById = new Map<string, any>();
         [...(performance.topSelling || []), ...(performance.topMargin || [])].forEach((item: any) => {
@@ -376,11 +403,10 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         sections.push({ id: 'dashboard-products', title: 'Desempeño de productos', headers: ['Producto', 'Unidades', 'Venta pagada', 'Utilidad de referencia'], rows: productRows, widths: [42, 14, 22, 22] });
       }
       if (preferences.blocks.includes('registers')) {
-        charts.push({ id: 'dashboard.registers', title: 'Ventas por caja', type: 'bar', labels: registerChart.map((item: { name: string; value: number }) => item.name), values: registerChart.map((item: { name: string; value: number }) => safeNumber(item.value)), valueFormat: 'currency', unitLabel: data?.baseCurrency || baseCurrency, colors: [CHART_COLORS[4], CHART_COLORS[1], CHART_COLORS[2]] });
-        sections.push({ id: 'dashboard-registers', title: 'Ventas por caja', headers: ['Caja', 'Operaciones', 'Ventas pagadas'], rows: registers.slice(0, 8).map((item: any) => [item.registerName || item.registerCode || 'Caja', safeNumber(item.count), money(safeNumber(item.total))]), widths: [44, 20, 36] });
+        sections.push({ id: 'dashboard-registers', title: 'Ventas por caja', headers: ['Caja', 'Operaciones', 'Ventas pagadas'], rows: registerSummary.slice(0, 8).map((item: any) => [item.registerName || item.registerCode || 'Caja', safeNumber(item.count), money(safeNumber(item.total))]), widths: [44, 20, 36] });
       }
-      if (preferences.blocks.includes('transactions')) {
-        sections.push({ id: 'dashboard-transactions', title: 'Actividad reciente', headers: ['Documento', 'Fecha', 'Origen', 'Cliente', 'Monto', 'Estado'], rows: transactions.slice(0, 12).map((item: any, index: number) => [item.number || `Factura ${index + 1}`, item.date ? new Date(item.date).toLocaleDateString('es-NI') : '—', item.register?.name || item.origin || 'Factura de venta', item.customer || 'Cliente general', money(safeNumber(item.sourceTotal ?? item.total)), formatTransactionStatus(item.status)]), widths: [16, 13, 19, 22, 15, 15] });
+      if (preferences.blocks.includes('inventory') && canViewInventory) {
+        charts.push({ id: 'dashboard.inventory', title: 'Estado del inventario', type: 'donut', labels: inventoryChart.length ? inventoryChart.map(item => item.name) : ['Sin alertas'], values: inventoryChart.length ? inventoryChart.map(item => safeNumber(item.value)) : [0], valueFormat: 'count', unitLabel: 'productos', colors: inventoryChart.length ? inventoryChart.map(item => item.fill) : [CHART_COLORS[0]] });
       }
       const chartPanels = new Map(Array.from(document.querySelectorAll<HTMLElement>('[data-pdf-chart-id]')).map(panel => [panel.dataset.pdfChartId || '', panel]));
       const exportCharts: PdfTemplateChart[] = [];
@@ -455,9 +481,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         },
         sheets: [
           { name: 'Indicadores', rows: selectedKpis },
-          { name: 'Tendencia', rows: trend.map((item) => ({ Fecha: item.date, Ventas: safeNumber(item.revenue), Gastos: safeNumber(item.expenses) })) },
-          { name: 'Ventas por caja', rows: registers.map((item: any) => ({ Caja: item.registerName || item.registerCode || 'Caja', Operaciones: safeNumber(item.count), Ventas: safeNumber(item.total) })) },
-          { name: 'Actividad reciente', rows: transactions.map((item: any, index: number) => ({ Documento: item.number || `Factura ${index + 1}`, Fecha: item.date || '', Origen: item.register?.name || item.origin || 'Factura de venta', Cliente: item.customer || 'Cliente general', Monto: safeNumber(item.sourceTotal ?? item.total), Estado: formatTransactionStatus(item.status) })) },
+          { name: 'Finanzas', rows: trend.map((item) => ({ Fecha: item.date, Ventas: safeNumber(item.revenue), Gastos: safeNumber(item.expenses) })) },
+          { name: 'Ventas por caja', rows: registerSummary.map((item: any) => ({ Caja: item.registerName || item.registerCode || 'Caja', Operaciones: safeNumber(item.count), Ventas: safeNumber(item.total) })) },
           { name: 'Productos', rows: productRows },
         ],
         filters: { Periodo: rangeLabel, Alcance: hasData ? 'Datos disponibles' : 'Sin datos para el periodo' },
@@ -484,40 +509,24 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       if (definition.id === 'topSellingProduct') return openProduct(performance.topSelling?.[0]);
       if (definition.id === 'leastSellingProduct') return openProduct(performance.leastSelling?.[0]);
       if (definition.id === 'topMarginProduct') return openProduct(performance.topMargin?.[0]);
-      attentionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      navigate('inventario', { subModule: 'productos', stockFilter: definition.id === 'outOfStock' ? 'out' : 'low' });
       return;
     }
     const target: Record<string, unknown> = definition.id === 'totalExpenses'
       ? { subModule: 'egresos' }
-      : definition.id === 'operatingResult'
+      : ['operatingResult', 'operatingMargin', 'grossMargin', 'commercialMargin', 'netMargin', 'profitability', 'netProfit'].includes(definition.id)
         ? { subModule: 'resumen-financiero' }
         : definition.id === 'registersWithSales' || definition.id === 'topRegister'
           ? { subModule: 'control-caja', section: 'history', registerId: 'ALL' }
           : definition.id === 'ordersCount' || definition.id === 'pendingOrders'
             ? { subModule: 'ordenes-venta' }
             : { subModule: 'facturas' };
-    navigate(definition.id === 'totalExpenses' || definition.id === 'operatingResult' ? 'finanzas' : 'ventas', target);
-  };
-
-  const openTransaction = (transaction: any) => {
-    const destination = transaction?.destination;
-    if (destination?.module) {
-      navigate(destination.module as Module, { subModule: destination.subModule, targetId: destination.id, invoiceId: destination.subModule === 'facturas' ? destination.id : undefined, orderId: destination.subModule === 'ordenes-venta' ? destination.id : undefined });
-      return;
-    }
-    navigate('ventas', { subModule: 'facturas', invoiceId: transaction?.id });
+    navigate(definition.id === 'totalExpenses' || ['operatingResult', 'operatingMargin', 'grossMargin', 'commercialMargin', 'netMargin', 'profitability', 'netProfit'].includes(definition.id) ? 'finanzas' : 'ventas', target);
   };
 
   const askNova = (message = '¿Cómo va mi negocio en este período?') => {
     window.dispatchEvent(new CustomEvent('open-erp-chat', { detail: { message, context: { source: 'executive-dashboard', periodFrom: range?.start, periodTo: range?.end } } }));
   };
-
-  const productRows = useMemo(() => {
-    if (productTab === 'noSaleProducts') return (performance.noSaleProducts || []).slice(0, 6);
-    if (productTab === 'leastSelling') return (performance.leastSelling || []).slice(0, 6);
-    if (productTab === 'topMargin') return (performance.topMargin || []).slice(0, 6);
-    return (performance.topSelling || []).slice(0, 6);
-  }, [performance, productTab]);
 
   const visibleIndicators = INDICATORS.filter((definition) => definition.label.toLowerCase().includes(configSearch.toLowerCase()) || definition.description.toLowerCase().includes(configSearch.toLowerCase()));
   const groupedIndicators = visibleIndicators.reduce<Record<string, IndicatorDefinition[]>>((groups, definition) => { (groups[definition.group] ||= []).push(definition); return groups; }, {});
@@ -531,10 +540,10 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       <header className="executive-header">
         <div>
           <div className="executive-eyebrow"><span className="executive-eyebrow-dot" /> Panel ejecutivo</div>
-          <h1>Resumen de gestión</h1>
+          <h1><em>Resumen de gestión</em></h1>
         </div>
         <div className="executive-toolbar">
-          <Select value={period} onValueChange={(value) => setPeriod(value as DashboardPeriod)}>
+          <Select value={period} onValueChange={(value) => value === 'custom' ? openRangeEditor() : setPeriod(value as DashboardPeriod)}>
             <SelectTrigger className="executive-period"><CalendarDays className="size-4" /><SelectValue /></SelectTrigger>
             <SelectContent>{Object.entries(PERIOD_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
           </Select>
@@ -546,30 +555,11 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
             </DropdownMenuContent>
           </DropdownMenu>}
           <Button variant="outline" className="executive-toolbar-button" onClick={() => { setDraftPreferences(preferences); setConfigOpen(true); }}><Settings2 className="size-4" /> Configurar</Button>
-          <Button className="executive-toolbar-button" onClick={() => askNova()}><NovaHubLogo size={17} className="rounded-full bg-white p-0.5" /> Preguntar a Nova</Button>
+          <Button className="executive-toolbar-button executive-ask-button" onClick={() => askNova()}><NovaHubLogo size={17} /> <span>Preguntar a Nova</span></Button>
           <Button variant="outline" size="icon" className="executive-toolbar-icon" onClick={() => void currentQuery.refetch()} aria-label="Actualizar dashboard"><RefreshCw className={`size-4 ${currentQuery.isFetching ? 'animate-spin' : ''}`} /></Button>
         </div>
       </header>
 
-      {period === 'custom' && <div className="executive-date-row">
-        <DateField
-          value={dateFrom}
-          onChange={setDateFrom}
-          maxDate={dateTo || undefined}
-          className="h-9 w-[160px] rounded-[10px]"
-          placeholder="Fecha inicial"
-          title="Fecha inicial"
-        />
-        <span>hasta</span>
-        <DateField
-          value={dateTo}
-          onChange={setDateTo}
-          minDate={dateFrom || undefined}
-          className="h-9 w-[160px] rounded-[10px]"
-          placeholder="Fecha final"
-          title="Fecha final"
-        />
-      </div>}
       <div className="executive-meta-row"><span>Período: <strong>{rangeLabel}</strong></span><span className="executive-meta-separator">•</span><span>{data?.generatedAt ? `Actualizado ${new Date(data.generatedAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' })}` : 'Actualización automática'}</span><span className="executive-meta-spacer" /><span className="executive-live-dot" /> Datos del tenant actual</div>
       <CurrencyValuationBanner className="mb-5" compact />
 
@@ -583,106 +573,80 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
             const definition = INDICATORS.find((item) => item.id === id);
             if (!definition) return null;
             const value = indicatorValue(id, kpis, performance, data);
-            const previousValue = typeof value === 'number' && ['totalRevenue', 'totalExpenses', 'ordersCount', 'paidInvoicesCount', 'averagePaidInvoice'].includes(id) ? safeNumber(previous[id]) : undefined;
-            const change = changeLabel(typeof value === 'number' ? value : 0, previousValue);
-            return <button type="button" key={id} className="executive-kpi" onClick={() => openKpi(definition)} title={`Abrir detalle de ${definition.label}`}><span className="executive-kpi-top"><span className="executive-kpi-icon"><KpiIcon id={id} /></span><span className="executive-kpi-label">{definition.label}</span><ArrowUpRight className="executive-kpi-arrow" /></span><KpiValue definition={definition} value={value} data={data} />{change && <span className={`executive-kpi-change ${change.startsWith('-') ? 'is-negative' : 'is-positive'}`}>{change} vs. período anterior</span>}</button>;
+            const previousValue = typeof value === 'number' && ['totalRevenue', 'totalExpenses', 'ordersCount', 'paidInvoicesCount', 'averagePaidInvoice', 'operatingMargin', 'grossMargin', 'commercialMargin', 'netMargin', 'profitability', 'netProfit'].includes(id) ? safeNumber(previous[id]) : undefined;
+            const costDataUnavailable = COST_DERIVED_INDICATORS.includes(id) && data?.kpis?.hasComparableCostData === false;
+            const change = costDataUnavailable ? null : changeLabel(typeof value === 'number' ? value : 0, previousValue);
+            const title = costDataUnavailable ? `${definition.label}: configura costos unitarios para calcularlo` : `Abrir detalle de ${definition.label}`;
+            return <button type="button" key={id} className="executive-kpi" onClick={() => openKpi(definition)} title={title}><span className="executive-kpi-top"><span className="executive-kpi-icon"><KpiIcon id={id} /></span><span className="executive-kpi-label">{definition.label}</span><ArrowUpRight className="executive-kpi-arrow" /></span><KpiValue definition={definition} value={value} data={data} />{change && <span className={`executive-kpi-change ${change.startsWith('-') ? 'is-negative' : 'is-positive'}`}>{change} vs. período anterior</span>}</button>;
           })}
         </section>
 
         {canViewInventory && <section className="executive-insights-panel" aria-labelledby="nova-insights-title">
-          <div className="executive-insights-heading">
-            <div>
-              <span className="executive-section-kicker"><NovaHubLogo size={17} className="rounded-full bg-white p-0.5" /> Nova detectó estas señales</span>
-              <h2 id="nova-insights-title">Datos que necesitan una decisión</h2>
+          <div className="executive-insights-layout">
+            <div className="executive-insights-heading">
+              <img src={signalsAsset} alt="" className="executive-insights-image" />
+              <div className="executive-insights-copy">
+                <span className="executive-section-kicker" aria-label="Nova detectó estas señales"><NovaHubLogo size={20} className="executive-insights-logo" /><span className="executive-insights-brand-copy">ova detectó estas señales</span></span>
+                <h2 id="nova-insights-title">Datos que necesitan una <em>decisión</em></h2>
+                <p className="executive-insights-description">Hemos analizado tu inventario y operaciones para ayudarte a tomar mejores decisiones.</p>
+              </div>
+              <span className="executive-panel-caption">Inventario · actualización automática</span>
             </div>
-            <span className="executive-panel-caption">Inventario · actualización automática</span>
-          </div>
-          {inventoryQuery.isPending ? <div className="executive-insights-loading"><Loader2 className="animate-spin" /> Calculando capital, vencimientos y rotación…</div> : inventoryQuery.isError ? <div className="executive-insights-loading">No se pudo consultar el análisis de inventario. El resto del dashboard sigue disponible.</div> : <>
-            <div className="executive-insights-grid">
-              {(safeNumber(expirySummary.totalLots) > 0 || safeNumber(expirySummary.atRiskCost) > 0) && <article className="executive-insight-card is-danger">
-                <div className="executive-insight-icon"><Clock3 /></div>
-                <div className="executive-insight-copy">
-                  <span>Productos por vencer</span>
-                  <strong>{safeNumber(expirySummary.totalLots).toLocaleString('es-NI')} lotes · {money(expirySummary.atRiskCost || 0)}</strong>
-                  <small>{safeNumber(expirySummary.expiredLots)} vencidos · {safeNumber(expirySummary.criticalLots)} críticos en los próximos 7 días.</small>
-                </div>
-                <button type="button" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'expiring' })}>Ver lotes <ArrowUpRight /></button>
-              </article>}
-              {(safeNumber(inventorySummary.stuckProductsCount) > 0 || safeNumber(inventorySummary.stuckInventoryValue) > 0) && <article className="executive-insight-card is-warning">
-                <div className="executive-insight-icon"><Banknote /></div>
-                <div className="executive-insight-copy">
-                  <span>Capital inmovilizado</span>
-                  <strong>{money(inventorySummary.stuckInventoryValue || 0)}</strong>
-                  <small>{safeNumber(inventorySummary.stuckProductsCount)} productos sin salidas de inventario en 90 días.</small>
-                </div>
-                <button type="button" onClick={() => setProductTab('noSaleProducts')}>Ver productos <ArrowUpRight /></button>
-              </article>}
-              {(alertCount > 0 || safeNumber(inventorySummary.lowStockValue) > 0) && <article className="executive-insight-card is-info">
-                <div className="executive-insight-icon"><Package /></div>
-                <div className="executive-insight-copy">
-                  <span>Reposición prioritaria</span>
-                  <strong>{money(inventorySummary.lowStockValue || 0)} en stock bajo</strong>
-                  <small>{safeNumber(alertCount)} productos con agotado, mínimo o reordenación detectada.</small>
-                </div>
-                <button type="button" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'low' })}>Revisar stock <ArrowUpRight /></button>
-              </article>}
-            </div>
-            <div className="executive-insights-footer">
-              <span>{(safeNumber(expirySummary.atRiskUnits) || safeNumber(inventorySummary.productsWithoutCost)) > 0 ? <><strong>{safeNumber(expirySummary.atRiskUnits).toLocaleString('es-NI')}</strong> unidades con vencimiento dentro de 30 días · <strong>{safeNumber(inventorySummary.productsWithoutCost)}</strong> niveles sin costo configurado.</> : 'No hay hallazgos de inventario que requieran una decisión en este período.'}</span>
-            </div>
-            {expiryItems.length > 0 && <div className="executive-expiry-list" aria-label="Lotes por vencer">
-              {expiryItems.slice(0, 5).map((item: any) => <button type="button" key={`${item.id}-${item.lotId}`} onClick={() => openProduct({ id: item.productId, name: item.productName, code: item.productCode })}>
-                <span><strong>{item.productName}</strong><small>Lote {item.lotNumber} · {item.warehouseName}</small></span>
-                <span className={item.status === 'EXPIRED' ? 'is-expired' : item.status === 'CRITICAL' ? 'is-critical' : ''}>{item.status === 'EXPIRED' ? 'Vencido' : `${Math.max(0, safeNumber(item.daysToExpire))} días`} · {money(item.atRiskCost)}</span>
-              </button>)}
+            {inventoryQuery.isPending ? <div className="executive-insights-loading executive-insights-loading-grid"><Loader2 className="animate-spin" /> Calculando inventario…</div> : inventoryQuery.isError ? <div className="executive-insights-loading executive-insights-loading-grid">No se pudo consultar el análisis de inventario. El resto del dashboard sigue disponible.</div> : <div className="executive-insights-grid">
+            <article className="executive-insight-card is-warning">
+              <img src={capitalAsset} alt="" className="executive-insight-asset" />
+              <div className="executive-insight-copy">
+                <span>Capital inmovilizado</span>
+                <strong>{money(inventorySummary.stuckInventoryValue || 0)}</strong>
+                <small>{safeNumber(inventorySummary.stuckProductsCount)} productos sin salidas de inventario en 90 días.</small>
+              </div>
+              <button type="button" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'no-sale' })}>Ver productos <ArrowUpRight /></button>
+            </article>
+            <article className="executive-insight-card is-info">
+              <img src={reposicionAsset} alt="" className="executive-insight-asset" />
+              <div className="executive-insight-copy">
+                <span>Reposición prioritaria</span>
+                <strong>{money(inventorySummary.lowStockValue || 0)} en stock bajo</strong>
+                <small>{safeNumber(alertCount)} productos con agotado, mínimo o reordenación detectada.</small>
+              </div>
+              <button type="button" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'low' })}>Revisar stock <ArrowUpRight /></button>
+            </article>
             </div>}
-          </>}
+          </div>
         </section>}
 
         <div className="executive-chart-wall" aria-label="Gráficas ejecutivas">
           {preferences.blocks.includes('trend') && <section className="executive-panel executive-chart-card executive-chart-card-trend" data-pdf-chart-id="dashboard.trend">
-            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Tendencia</span><h2>Ventas y gastos</h2></div><span className="executive-panel-caption">{(range?.days || 0) > 62 ? 'Por mes' : 'Por día'}</span></div>
-            <div className="executive-chart executive-chart-wall-trend"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}><defs><linearGradient id="executiveRevenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} /><stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} /></linearGradient><linearGradient id="executiveExpenses" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2} /><stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" /><XAxis dataKey="date" tickFormatter={(value) => String(value).length > 7 ? String(value).slice(5) : formatDate(String(value))} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} minTickGap={28} /><YAxis tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} tickFormatter={(value) => compactAxis(value)} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number, name: string) => [money(value), name === 'revenue' ? 'Ventas' : 'Gastos']} labelFormatter={(label) => String(label).length > 7 ? String(label) : formatDate(String(label))} /><Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--primary)" fill="url(#executiveRevenue)" strokeWidth={2.5} /><Area type="monotone" dataKey="expenses" name="expenses" stroke="#f59e0b" fill="url(#executiveExpenses)" strokeWidth={2} /></AreaChart></ResponsiveContainer></div><div className="executive-legend"><span><i className="legend-dot revenue" /> Ventas</span><span><i className="legend-dot expenses" /> Gastos</span></div>
+            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Finanzas</span><h2>Ventas y gastos</h2></div><div className="executive-chart-controls"><button type="button" className="executive-chart-range-button" onClick={openRangeEditor}><CalendarDays className="size-3.5" /> {period === 'custom' ? 'Editar rango' : 'Personalizar rango'}</button><span className="executive-chart-range">{rangeLabel}</span><Select value={trendGranularity} onValueChange={(value) => setTrendGranularity(value as 'day' | 'month')}><SelectTrigger className="executive-chart-filter"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="day">Por día</SelectItem><SelectItem value="month">Por mes</SelectItem></SelectContent></Select></div></div>
+            <div className="executive-chart executive-chart-wall-trend"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}><defs><linearGradient id="executiveRevenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} /><stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} /></linearGradient><linearGradient id="executiveExpenses" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef3340" stopOpacity={0.2} /><stop offset="100%" stopColor="#ef3340" stopOpacity={0.02} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" /><XAxis dataKey="date" tickFormatter={(value) => String(value).length > 7 ? String(value).slice(5) : formatDate(String(value))} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} minTickGap={28} /><YAxis tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} tickFormatter={(value) => compactAxis(value)} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number, name: string) => [money(value), name === 'revenue' ? 'Ventas' : 'Gastos']} labelFormatter={(label) => String(label).length > 7 ? String(label) : formatDate(String(label))} /><Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--primary)" fill="url(#executiveRevenue)" strokeWidth={2.5} /><Area type="monotone" dataKey="expenses" name="expenses" stroke="#ef3340" fill="url(#executiveExpenses)" strokeWidth={2} /></AreaChart></ResponsiveContainer></div><div className="executive-legend"><span><i className="legend-dot revenue" /> Ventas</span><span><i className="legend-dot expenses" /> Gastos</span></div>
           </section>}
 
           {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-sales" data-pdf-chart-id="dashboard.products-sales">
-            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Volumen</span><h2>Ventas por producto</h2></div><BarChart3 className="executive-chart-heading-icon" /></div>
-            <div className="executive-mini-chart">{productSalesChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productSalesChart} layout="vertical" margin={{ top: 4, right: 48, left: 0, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={140} interval={0} axisLine={false} tickLine={false} tick={<CategoryTick />} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [`${safeNumber(value).toLocaleString('es-NI')} uds.`, 'Unidades']} /><Bar dataKey="value" fill="var(--primary)" radius={[0, 6, 6, 0]} barSize={16}><LabelList dataKey="value" position="right" formatter={(value: number) => `${safeNumber(value).toLocaleString('es-NI')} uds.`} fill="var(--foreground)" fontSize={10} fontWeight={600} /></Bar></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin ventas</div>}</div>
+            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Volumen</span><h2>Ventas por producto</h2></div><Select value={productMetric} onValueChange={(value) => setProductMetric(value as 'units' | 'revenue')}><SelectTrigger className="executive-chart-filter"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="units">Unidades</SelectItem><SelectItem value="revenue">Ventas pagadas</SelectItem></SelectContent></Select></div>
+            <div className="executive-mini-chart">{renderProductBars(productSalesChart, (value) => productMetric === 'revenue' ? compactAxis(value) : `${value.toLocaleString('es-NI')} uds.`, 'Sin ventas')}</div>
           </section>}
 
           {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-margin" data-pdf-chart-id="dashboard.products-margin">
-            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Rentabilidad</span><h2>Utilidad por producto</h2></div><WalletCards className="executive-chart-heading-icon" /></div>
-            <div className="executive-mini-chart">{productMarginChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productMarginChart} layout="vertical" margin={{ top: 4, right: 58, left: 0, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={140} interval={0} axisLine={false} tickLine={false} tick={<CategoryTick />} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [money(value), 'Utilidad']} /><Bar dataKey="value" fill="#2563eb" radius={[0, 6, 6, 0]} barSize={16}><LabelList dataKey="value" position="right" formatter={(value: number) => compactAxis(safeNumber(value))} fill="var(--foreground)" fontSize={10} fontWeight={600} /></Bar></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin datos de utilidad</div>}</div>
+            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Inventario</span><h2>Utilidad por producto</h2></div><WalletCards className="executive-chart-heading-icon" /></div>
+            <div className="executive-mini-chart">{renderProductBars(productMarginChart, (value) => compactAxis(value), 'Sin datos de utilidad', openMarginFormula)}</div>
           </section>}
 
-          {preferences.blocks.includes('registers') && <section className="executive-panel executive-chart-card executive-chart-card-registers" data-pdf-chart-id="dashboard.registers">
-            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Puntos de venta</span><h2>Ventas por caja</h2></div><Store className="executive-chart-heading-icon" /></div>
-            <div className="executive-mini-chart">{registerChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={registerChart} margin={{ top: 24, right: 8, left: -18, bottom: 2 }}><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} /><YAxis hide /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [money(value), 'Ventas']} /><Bar dataKey="value" fill="#7767d9" radius={[6, 6, 0, 0]} barSize={28}><LabelList dataKey="value" position="top" formatter={(value: number) => compactAxis(safeNumber(value))} fill="var(--foreground)" fontSize={10} fontWeight={600} /></Bar></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin ventas por caja</div>}</div>
-          </section>}
+          {preferences.blocks.includes('registers') && <section className="executive-panel executive-chart-card executive-chart-card-registers"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Puntos de venta</span><h2>Ventas por caja</h2></div><button type="button" className="executive-text-button" onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: 'ALL' })}>Ver control de caja <ArrowUpRight /></button></div><div className="executive-register-list">{registers.length ? registerSummary.slice(0, 6).map((register: any, index: number) => { const max = Math.max(...registerSummary.map((item: any) => safeNumber(item.total)), 1); const percent = Math.round(safeNumber(register.total) / max * 100); const label = register.registerName || `Caja ${register.registerCode}`; return <button type="button" className="executive-register-row" key={register.registerId || index} title={`Abrir historial de ${label}`} onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: register.registerId })}><span className="executive-register-label"><span><Store className="size-4" /> <span className="executive-register-name">{label}</span></span><strong>{money(register.total)}</strong></span><span className="executive-progress"><i style={{ width: `${percent}%` }} /></span><small>{safeNumber(register.count)} operaciones · {percent}% de la caja líder</small></button>; }) : <div className="executive-register-empty"><img src={noSalesRegisterAsset} alt="" /><strong>Aún no hay ventas por caja</strong><span>Cuando registres ventas, aquí podrás comparar el rendimiento de cada caja.</span><button type="button" onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'settings' })}>Configurar cajas</button></div>} {registerSummary.length > 0 && <div className="executive-register-chips" aria-label={`${registerSummary.length} cajas configuradas`}>{registerSummary.map((register: any, index: number) => { const label = register.registerName || `Caja ${register.registerCode}`; return <button type="button" className={`executive-register-chip tone-${index % 4}`} key={`chip-${register.registerId || index}`} title={`Abrir historial de ${label}`} onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: register.registerId })}><span><Store className="size-3.5" /><span className="executive-register-chip-name">{label}</span></span><strong>{money(register.total)}</strong></button>; })}</div>}</div></section>}
 
-          {preferences.blocks.includes('attention') && <section className="executive-panel executive-chart-card executive-chart-card-inventory" data-pdf-chart-id="dashboard.attention">
+          {preferences.blocks.includes('inventory') && <section className="executive-panel executive-chart-card executive-chart-card-inventory" data-pdf-chart-id="dashboard.inventory">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Existencias</span><h2>Estado del inventario</h2></div><Package className="executive-chart-heading-icon" /></div>
-            <div className="executive-donut-wrap">{inventoryChart.length ? <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={inventoryChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={53} outerRadius={79} paddingAngle={4} stroke="none">{inventoryChart.map((entry: any) => <Cell key={entry.name} fill={entry.fill} />)}</Pie><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [`${safeNumber(value)} productos`, 'Cantidad']} /></PieChart></ResponsiveContainer> : <div className="executive-no-data">Inventario sin alertas</div>}</div>
-            <div className="executive-chart-legend">{inventoryChart.map((entry: any) => <span key={entry.name}><i style={{ background: entry.fill }} />{entry.name}<strong>{entry.value}</strong></span>)}</div>
+            <div className="executive-donut-wrap">{inventoryChart.length ? <><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={inventoryChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={53} outerRadius={79} paddingAngle={4} stroke="none">{inventoryChart.map((entry: any) => <Cell key={entry.name} fill={entry.fill} />)}</Pie><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--primary)', borderRadius: 10, fontSize: 11, color: 'var(--foreground)', boxShadow: '0 10px 24px color-mix(in srgb, var(--foreground) 12%, transparent)' }} labelStyle={{ color: 'var(--foreground)', fontWeight: 800 }} itemStyle={{ color: 'var(--foreground)', fontWeight: 700 }} formatter={(value: number) => [`${safeNumber(value)} productos`, 'Cantidad']} /></PieChart></ResponsiveContainer><div className="executive-donut-center"><strong>{inventoryCriticalCount.toLocaleString('es-NI')}</strong><span>productos críticos</span></div></> : <div className="executive-no-data">Inventario sin alertas</div>}</div>
+            <div className="executive-chart-legend executive-inventory-legend">{inventoryChart.map((entry: any) => <span key={entry.name}><i style={{ background: entry.fill }} /><span>{entry.name}</span><strong>{safeNumber(entry.value).toLocaleString('es-NI')}</strong></span>)}</div>
           </section>}
         </div>
 
-        <div className="executive-section-grid executive-attention-grid">
-          {preferences.blocks.includes('attention') && <section ref={attentionRef} className="executive-panel executive-attention-panel"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Prioridades</span><h2>Atención requerida</h2></div><span className="executive-attention-count">{alertCount} alertas</span></div><div className="executive-attention-list"><button type="button" className="executive-attention-row" onClick={() => navigate('ventas', { subModule: 'ordenes-venta' })}><span className="executive-attention-icon orange"><ShoppingCart /></span><span><strong>{safeNumber(kpis.pendingOrders)} órdenes abiertas</strong><small>Seguimiento comercial y despacho</small></span><ChevronRight /></button><button type="button" className="executive-attention-row" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'low' })}><span className="executive-attention-icon red"><AlertTriangle /></span><span><strong>{alertCount} productos requieren revisión</strong><small>Agotados, bajo mínimo o por reordenar</small></span><ChevronRight /></button><button type="button" className="executive-attention-row" onClick={() => setProductTab('noSaleProducts')}><span className="executive-attention-icon blue"><Package /></span><span><strong>{safeNumber(kpis.noSaleProductsCount ?? performance.noSaleProducts?.length)} productos sin ventas</strong><small>Con stock disponible en el período</small></span><ChevronRight /></button></div><div className="executive-panel-footer"><span><CircleHelp className="size-3.5" /> Las alertas muestran productos distintos, aunque existan en varias ubicaciones.</span></div></section>}
-        </div>
-
-        <div className="executive-section-grid lower">
-          {preferences.blocks.includes('products') && canViewInventory && <section className="executive-panel executive-products-panel"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Catálogo</span><h2>Desempeño de productos</h2></div><button type="button" className="executive-text-button" onClick={() => navigate('inventario', { subModule: 'productos' })}>Abrir inventario <ArrowUpRight /></button></div><div className="executive-tabs" role="tablist">{PRODUCT_TABS.map((tab) => <button type="button" key={tab.id} className={productTab === tab.id ? 'active' : ''} onClick={() => setProductTab(tab.id)}>{tab.label}</button>)}</div><div className="executive-product-list">{productRows.length ? productRows.map((product: any, index: number) => <button type="button" className="executive-product-row" key={`${getProductId(product)}-${index}`} onClick={() => openProduct(product)}><span className="executive-product-rank">{String(index + 1).padStart(2, '0')}</span><span className="executive-product-main"><strong>{getProductName(product)}</strong><small>{product.code || 'Sin código'} {product.totalQty != null ? `· ${safeNumber(product.totalQty).toLocaleString('es-NI')} unidades` : product.stock != null ? `· ${safeNumber(product.stock).toLocaleString('es-NI')} en stock` : ''}</small></span><span className="executive-product-value">{productTab === 'topMargin' && product.profit != null ? money(product.profit) : productTab === 'noSaleProducts' ? `${safeNumber(product.stock).toLocaleString('es-NI')} uds.` : money(product.totalRevenue || 0)}<ArrowUpRight /></span></button>) : <div className="executive-no-data">No hay productos suficientes para este ranking.</div>}</div></section>}
-
-          {preferences.blocks.includes('registers') && <section className="executive-panel executive-registers-panel"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Puntos de venta</span><h2>Ventas por caja</h2></div><button type="button" className="executive-text-button" onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: 'ALL' })}>Ver control de caja <ArrowUpRight /></button></div><div className="executive-register-list">{registers.length ? registers.slice(0, 6).map((register: any, index: number) => { const max = Math.max(...registers.map((item: any) => safeNumber(item.total)), 1); const percent = Math.round(safeNumber(register.total) / max * 100); return <button type="button" className="executive-register-row" key={register.registerId || index} onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: register.registerId })}><span className="executive-register-label"><span><Store className="size-4" /> {register.registerName || `Caja ${register.registerCode}`}</span><strong>{money(register.total)}</strong></span><span className="executive-progress"><i style={{ width: `${percent}%` }} /></span><small>{safeNumber(register.count)} operaciones · {percent}% de la caja líder</small></button>; }) : <div className="executive-no-data">No hay ventas por caja en el período.</div>}</div></section>}
-        </div>
-
-        {preferences.blocks.includes('transactions') && <section className="executive-panel executive-transactions-panel"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Trazabilidad</span><h2>Actividad reciente</h2></div><button type="button" className="executive-text-button" onClick={() => navigate('ventas', { subModule: 'facturas' })}>Ver facturas <ArrowUpRight /></button></div><div className="executive-table-wrap"><table><thead><tr><th>Documento</th><th>Origen</th><th>Cliente</th><th className="align-right">Monto</th><th>Estado</th></tr></thead><tbody>{transactions.slice(0, 8).map((transaction: any, index: number) => <tr key={`${transaction.id || 'transaction'}-${index}`} onClick={() => openTransaction(transaction)}><td><strong>{transaction.number || `Factura ${index + 1}`}</strong><small>{transaction.date ? new Date(transaction.date).toLocaleDateString('es-NI') : '—'}</small></td><td>{transaction.register?.name || transaction.origin || 'Factura de venta'}</td><td>{transaction.customer || 'Cliente general'}</td><td className="align-right"><CurrencyValuationAmount amount={safeNumber(transaction.sourceTotal ?? transaction.total)} sourceCurrency={transaction.currency || data?.baseCurrency} sourceExchangeRate={transaction.exchangeRate} showDifference={false} /></td><td><span className="executive-status"><Check className="size-3" /> {formatTransactionStatus(transaction.status)}</span></td></tr>)}</tbody></table>{!transactions.length && <div className="executive-no-data">No hay transacciones recientes en este período.</div>}</div></section>}
       </>}
 
       <div className="executive-footnote"><CircleHelp className="size-4" /><span>Los importes de ventas y gastos provienen del resumen de Caja. Para utilidad contable, costo de ventas, cuentas por cobrar y cuentas por pagar, utiliza los reportes financieros y contables.</span></div>
 
-      <Dialog open={configOpen} onOpenChange={setConfigOpen}><DialogContent className="executive-config-dialog sm:!max-w-3xl"><DialogHeader><DialogTitle className="executive-dialog-title"><Settings2 /> Configurar resumen de gestión</DialogTitle><DialogDescription>Elige los indicadores y bloques que ayudan a tu rol a decidir más rápido. Las selecciones se guardan para este usuario y tenant.</DialogDescription></DialogHeader><div className="executive-config-search"><Input placeholder="Buscar indicador…" value={configSearch} onChange={(event) => setConfigSearch(event.target.value)} /><span>{draftPreferences.indicators.length} indicadores seleccionados</span></div><div className="executive-config-body"><div className="executive-config-column"><h3>Indicadores</h3>{Object.entries(groupedIndicators).map(([group, definitions]) => <section key={group} className="executive-config-group"><div className="executive-config-group-title">{group}</div>{definitions.map((definition) => { const checked = draftPreferences.indicators.includes(definition.id); const allowed = !definition.permission || canPerform(definition.permission, 'view'); return <label key={definition.id} className={`executive-config-item ${!allowed ? 'disabled' : ''}`}><Checkbox checked={checked} disabled={!allowed} onCheckedChange={(value) => toggleIndicator(definition.id, value === true)} /><span><strong>{definition.label}</strong><small>{definition.description}</small><em>Decisión: {definition.decision}</em></span></label>; })}</section>)}</div><div className="executive-config-column"><h3>Bloques de información</h3>{BLOCKS.map((block) => { const allowed = !block.permission || canPerform(block.permission, 'view'); return <label key={block.id} className={`executive-config-item ${!allowed ? 'disabled' : ''}`}><Checkbox checked={draftPreferences.blocks.includes(block.id)} disabled={!allowed} onCheckedChange={(value) => toggleBlock(block.id, value === true)} /><span><strong>{block.label}</strong><small>{block.description}</small></span></label>; })}<div className="executive-config-callout"><CircleHelp /><span>Los clics en tarjetas, rankings, cajas y transacciones abren el detalle operativo correspondiente.</span></div></div></div><DialogFooter><Button variant="outline" onClick={() => setDraftPreferences(DEFAULT_PREFERENCES)}>Restaurar recomendados</Button><Button onClick={savePreferences}><Check className="size-4" /> Aplicar cambios</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={rangeEditorOpen} onOpenChange={setRangeEditorOpen}><DialogContent className="executive-range-dialog sm:!max-w-md"><DialogHeader><DialogTitle className="executive-dialog-title"><CalendarDays /> Personalizar rango</DialogTitle><DialogDescription>Elige las fechas que alimentan el resumen, las gráficas y la comparación del período anterior.</DialogDescription></DialogHeader><div className="executive-range-form"><label><span>Desde</span><DateField value={draftDateFrom} onChange={setDraftDateFrom} maxDate={draftDateTo || undefined} placeholder="Fecha inicial" /></label><span className="executive-range-separator">hasta</span><label><span>Hasta</span><DateField value={draftDateTo} onChange={setDraftDateTo} minDate={draftDateFrom || undefined} placeholder="Fecha final" /></label></div><DialogFooter><Button variant="outline" onClick={() => setRangeEditorOpen(false)}>Cancelar</Button><Button onClick={applyDateRange}>Aplicar rango</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={Boolean(formulaProduct)} onOpenChange={(open) => { if (!open) setFormulaProduct(null); }}><DialogContent className="executive-formula-dialog sm:!max-w-md"><DialogHeader><DialogTitle className="executive-dialog-title"><WalletCards /> Cómo se calcula la utilidad</DialogTitle><DialogDescription>Detalle de la fórmula aplicada a {getProductName(formulaProduct)}.</DialogDescription></DialogHeader><div className="executive-formula-card"><div><span>Precio de venta unitario</span><strong>{money(safeNumber(formulaProduct?.salePrice))}</strong></div><div><span>Costo unitario</span><strong>{money(safeNumber(formulaProduct?.costPrice))}</strong></div><div><span>Unidades vendidas</span><strong>{safeNumber(formulaProduct?.totalQty).toLocaleString('es-NI')}</strong></div><div className="executive-formula-total"><span>Utilidad estimada</span><strong>{money(safeNumber(formulaProduct?.profit))}</strong></div></div><p className="executive-formula-equation">(Precio de venta − costo unitario) × unidades vendidas</p><DialogFooter><Button variant="outline" onClick={() => setFormulaProduct(null)}>Cerrar</Button><Button onClick={() => { openProduct(formulaProduct); setFormulaProduct(null); }}>Ver producto <ArrowUpRight className="size-4" /></Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={configOpen} onOpenChange={setConfigOpen}><DialogContent className="executive-config-dialog sm:!max-w-3xl"><DialogHeader><DialogTitle className="executive-dialog-title"><Settings2 /> Configurar resumen de gestión</DialogTitle><DialogDescription>Elige los indicadores y bloques que ayudan a tu rol a decidir más rápido. Las selecciones se guardan para este usuario y tenant.</DialogDescription></DialogHeader><div className="executive-config-search"><Input placeholder="Buscar indicador…" value={configSearch} onChange={(event) => setConfigSearch(event.target.value)} /><span>{draftPreferences.indicators.length} indicadores seleccionados</span></div><div className="executive-config-body"><div className="executive-config-column"><h3>Indicadores</h3>{Object.entries(groupedIndicators).map(([group, definitions]) => <section key={group} className="executive-config-group"><div className="executive-config-group-title">{group}</div>{definitions.map((definition) => { const checked = draftPreferences.indicators.includes(definition.id); const allowed = !definition.permission || canPerform(definition.permission, 'view'); return <label key={definition.id} className={`executive-config-item ${!allowed ? 'disabled' : ''}`}><Checkbox checked={checked} disabled={!allowed} onCheckedChange={(value) => toggleIndicator(definition.id, value === true)} /><span><strong>{definition.label}</strong><small>{definition.description}</small><em>Decisión: {definition.decision}</em></span></label>; })}</section>)}</div><div className="executive-config-column"><h3>Bloques de información</h3>{BLOCKS.map((block) => { const allowed = !block.permission || canPerform(block.permission, 'view'); return <label key={block.id} className={`executive-config-item ${!allowed ? 'disabled' : ''}`}><Checkbox checked={draftPreferences.blocks.includes(block.id)} disabled={!allowed} onCheckedChange={(value) => toggleBlock(block.id, value === true)} /><span><strong>{block.label}</strong><small>{block.description}</small></span></label>; })}<div className="executive-config-callout"><CircleHelp /><span>Las gráficas de ventas, productos, utilidad, cajas e inventario se actualizan según el período y los datos disponibles.</span></div></div></div><DialogFooter><Button variant="outline" onClick={() => setDraftPreferences(DEFAULT_PREFERENCES)}>Restaurar recomendados</Button><Button onClick={savePreferences}><Check className="size-4" /> Aplicar cambios</Button></DialogFooter></DialogContent></Dialog>
       {productDrawerId && <Suspense fallback={null}><ProductDetailDrawer productId={productDrawerId} productSnapshot={productSnapshot} onOpenChange={(open) => { if (!open) { setProductDrawerId(null); setProductSnapshot(null); } }} /></Suspense>}
     </div>
   );

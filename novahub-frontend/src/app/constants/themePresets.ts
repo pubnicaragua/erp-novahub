@@ -8,7 +8,7 @@ export interface ThemePreset {
 
 /** Paletas compartidas por la configuración de sucursal y la consola Manager. */
 export const THEME_PRESETS: ThemePreset[] = [
-  { name: 'Esmeralda', description: 'Tema predeterminado de NovaHub', primary: '#10b981', sidebar: '#0c1a12', accent: '#064e3b' },
+  { name: 'Esmeralda', description: 'Tema predeterminado de NovaHub', primary: '#01422c', sidebar: '#0c1a12', accent: '#74c044' },
   { name: 'Azul corporativo', description: 'Azul corporativo profesional', primary: '#2563eb', sidebar: '#0f172a', accent: '#1e3a5f' },
   { name: 'Índigo', description: 'Índigo clásico', primary: '#6366f1', sidebar: '#1a1a2e', accent: '#312e81' },
   { name: 'Rosa', description: 'Rosa premium', primary: '#f43f5e', sidebar: '#1a0a10', accent: '#4c0519' },

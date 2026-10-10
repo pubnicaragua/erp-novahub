@@ -420,6 +420,24 @@ export function ManagerShell({
   const [themeMode, setThemeMode] = useState<"light" | "dark">(
     () => (document.documentElement.classList.contains("dark") || readPersistedDarkMode() ? "dark" : "light"),
   );
+  const profileAvatarKey = `novahub:manager-avatar:${user?.id || "current"}`;
+  const [profileAvatar, setProfileAvatar] = useState(() => safeGetItem(profileAvatarKey) || user?.avatar || "");
+
+  useEffect(() => {
+    setProfileAvatar(safeGetItem(profileAvatarKey) || user?.avatar || "");
+  }, [profileAvatarKey, user?.avatar]);
+
+  const handleProfileAvatarChange = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const next = typeof reader.result === "string" ? reader.result : "";
+      if (!next) return;
+      safeSetItem(profileAvatarKey, next);
+      setProfileAvatar(next);
+    };
+    reader.readAsDataURL(file);
+  };
 
   useLayoutEffect(() => {
     const isDark = readPersistedDarkMode();
@@ -750,6 +768,8 @@ export function ManagerShell({
           onClose={() => setSidebarOpen(false)}
           groupName={displayGroupName}
           groupLogo={displayGroupLogo}
+          profileAvatar={profileAvatar}
+          onProfileAvatarChange={handleProfileAvatarChange}
           canViewCorporateWarehouses={canReadCorporateWarehouses(group)}
           sections={visibleSections}
           settingsView={settingsView}
@@ -957,13 +977,8 @@ export function ManagerShell({
                       className="ml-1 h-10 gap-2 rounded-xl border-l border-border/60 pl-3 pr-1 hover:bg-muted/60 focus-visible:ring-1"
                       aria-label="Menú de usuario Manager"
                     >
-                      <div className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-black text-primary-foreground">
-                        {String(user?.name || "M")
-                          .split(" ")
-                          .map((part) => part[0])
-                          .slice(0, 2)
-                          .join("")
-                          .toUpperCase()}
+                      <div className="flex size-9 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-black text-primary-foreground ring-1 ring-primary/20">
+                        {profileAvatar ? <img src={profileAvatar} alt="" className="size-full object-cover" /> : String(user?.name || "M").split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
                       </div>
                       <div className="hidden min-w-0 flex-col items-start text-left leading-tight xl:flex">
                         <span className="max-w-32 truncate text-xs font-black">
@@ -990,6 +1005,13 @@ export function ManagerShell({
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => document.getElementById("manager-profile-avatar")?.click()}
+                      className="gap-2 rounded-lg"
+                    >
+                      <UserRound className="size-4 text-primary" />
+                      <span>Cambiar foto de perfil</span>
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={logout}
                       className="text-red-600 transition-colors focus:bg-red-500/10 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"
@@ -1054,6 +1076,8 @@ function ManagerSidebar({
   onClose,
   groupName,
   groupLogo,
+  profileAvatar,
+  onProfileAvatarChange,
   canViewCorporateWarehouses,
   sections = MANAGER_SECTIONS,
   settingsView = "theme",
@@ -1084,6 +1108,8 @@ function ManagerSidebar({
   onClose: () => void;
   groupName?: string;
   groupLogo?: string | null;
+  profileAvatar?: string;
+  onProfileAvatarChange?: (file: File) => void;
   canViewCorporateWarehouses: boolean;
   sections?: typeof MANAGER_SECTIONS;
   settingsView?: ManagerSettingsView;
@@ -1415,11 +1441,10 @@ function ManagerSidebar({
                   : undefined
               }
             >
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-sm">
-                {String(user?.name || "M")
-                  .charAt(0)
-                  .toUpperCase()}
-              </div>
+              <input id="manager-profile-avatar" type="file" accept="image/*" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) onProfileAvatarChange?.(file); event.currentTarget.value = ""; }} />
+              <button type="button" className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-sm ring-1 ring-primary/20" onClick={() => document.getElementById("manager-profile-avatar")?.click()} aria-label="Cambiar foto de perfil" title="Cambiar foto de perfil">
+                {profileAvatar ? <img src={profileAvatar} alt="Foto de perfil" className="size-full object-cover" /> : String(user?.name || "M").charAt(0).toUpperCase()}
+              </button>
               {!collapsed && (
                 <div className="flex-1 overflow-hidden">
                   <p className="truncate text-sm font-medium text-sidebar-accent-foreground">

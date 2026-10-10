@@ -35,14 +35,16 @@ interface ThemeContextType {
 }
 
 const defaultColors: BrandColors = {
-  primary: 'oklch(0.65 0.2 155)',
-  primaryForeground: 'oklch(0.145 0 0)',
-  accent: 'oklch(0.22 0.02 155)',
-  accentForeground: 'oklch(0.985 0 0)',
+  // NovaHub default identity. Tenant/user branding still overrides these
+  // values through the existing theme configuration flow.
+  primary: '#01422c',
+  primaryForeground: '#ffffff',
+  accent: '#74c044',
+  accentForeground: '#01422c',
   sidebar: 'oklch(0.16 0.01 155)',
   sidebarForeground: 'oklch(0.985 0 0)',
-  sidebarPrimary: 'oklch(0.65 0.2 155)',
-  sidebarAccent: 'oklch(0.22 0.02 155)',
+  sidebarPrimary: '#01422c',
+  sidebarAccent: '#74c044',
 };
 
 const DEFAULT_PALETTE_MODE: ThemePaletteMode = 'details';
@@ -127,7 +129,12 @@ function readStoredTheme(userId: string, tenantId: string): ThemeConfig {
     const saved = localStorage.getItem(themeStorageKey(userId));
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<ThemeConfig>;
-      const colors = { ...defaultColors, ...(parsed.colors || {}) };
+      const storedColors = { ...defaultColors, ...(parsed.colors || {}) };
+      const legacyDefault = String(storedColors.primary || '').toLowerCase() === '#10b981'
+        && ['#064e3b', '#0f172a'].includes(String(storedColors.accent || '').toLowerCase());
+      const colors = legacyDefault
+        ? { ...storedColors, primary: defaultColors.primary, primaryForeground: defaultColors.primaryForeground, accent: defaultColors.accent, accentForeground: defaultColors.accentForeground, sidebarPrimary: defaultColors.sidebarPrimary, sidebarAccent: defaultColors.sidebarAccent }
+        : storedColors;
       if (parsed.tenantName === 'Solcom ERP') return createDefaultTheme(userId, tenantId);
       const hasStoredColors = Boolean(parsed.colors && typeof parsed.colors === 'object' && Object.keys(parsed.colors).length > 0);
       return {
