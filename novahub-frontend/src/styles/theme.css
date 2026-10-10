@@ -8,14 +8,14 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.52 0.16 155);
+  --primary: #01422c;
   --primary-foreground: #ffffff;
   --secondary: oklch(0.95 0.0058 264.53);
   --secondary-foreground: #030213;
   --muted: #ececf0;
   --muted-foreground: #717182;
-  --accent: oklch(0.95 0.04 155);
-  --accent-foreground: oklch(0.3 0.05 155);
+  --accent: #74c044;
+  --accent-foreground: #01422c;
   --destructive: #d4183d;
   --destructive-foreground: #ffffff;
   /* Semantic aliases intentionally derive from the configured brand tokens.
@@ -64,14 +64,14 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.235 0.005 155);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.68 0.16 155);
-  --primary-foreground: oklch(0.15 0.01 155);
+  --primary: #01422c;
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.31 0.005 155);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.28 0.005 155);
   --muted-foreground: oklch(0.72 0.005 155);
-  --accent: oklch(0.3 0.04 155);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: #74c044;
+  --accent-foreground: #01422c;
   --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.35 0.005 155);
@@ -209,7 +209,7 @@ html[data-theme-transition="active"]::view-transition-new(root) {
 
   body {
     @apply text-foreground min-h-screen bg-transparent;
-    font-family: 'Acumin Pro', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-family: 'Montserrat', 'Inter', ui-sans-serif, system-ui, sans-serif;
     font-size: 14px;
   }
 
@@ -378,8 +378,8 @@ html[data-theme-transition="active"]::view-transition-new(root) {
   }
 
   .font-handwritten {
-    font-family: 'Acumin Pro', 'Inter', ui-sans-serif, system-ui, sans-serif;
-    /* fallback */
+    font-family: 'Playfair Display', Georgia, serif;
+    font-style: italic;
   }
 
   .no-scrollbar::-webkit-scrollbar,

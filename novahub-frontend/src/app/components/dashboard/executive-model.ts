@@ -1,5 +1,5 @@
 export type DashboardPeriod = 'today' | 'month' | 'quarter' | 'year' | 'custom';
-export type DashboardBlock = 'trend' | 'attention' | 'products' | 'registers' | 'transactions';
+export type DashboardBlock = 'trend' | 'products' | 'registers' | 'inventory';
 export interface DashboardPreferences { indicators: string[]; blocks: DashboardBlock[] }
 export interface IndicatorDefinition {
   id: string; label: string; description: string; decision: string; group: string;
@@ -11,6 +11,12 @@ export const INDICATORS: IndicatorDefinition[] = [
   { id: 'paidInvoicesCount', label: 'Facturas pagadas', description: 'Número total de facturas pagadas del período; incluye todas las facturas del alcance consultado.', decision: 'Medir el volumen de operaciones.', group: 'Desempeño', recommended: true },
   { id: 'averagePaidInvoice', label: 'Ticket de venta pagada', description: 'Ventas pagadas divididas entre el total de facturas pagadas. Incluye impuestos.', decision: 'Evaluar el valor medio de cada venta.', group: 'Desempeño', recommended: true },
   { id: 'operatingResult', label: 'Ventas menos gastos', description: 'Diferencia entre ventas pagadas y gastos registrados. No representa utilidad contable ni utilidad bruta.', decision: 'Comparar ambas magnitudes antes del costo de venta.', group: 'Desempeño', permission: 'FINANCIAL_EXPENSES' },
+  { id: 'operatingMargin', label: 'Margen operativo', description: 'Porcentaje de ventas que queda después del costo de venta estimado y los gastos registrados. Requiere costos configurados para mostrar un resultado calculable.', decision: 'Medir cuánto queda de cada venta después de operar.', group: 'Desempeño', permission: 'FINANCIAL_EXPENSES', recommended: true },
+  { id: 'grossMargin', label: 'Margen bruto', description: 'Utilidad bruta sobre ventas: ventas pagadas menos costo de venta estimado, dividido entre ventas. Requiere costos configurados.', decision: 'Evaluar la contribución de los productos antes de gastos operativos.', group: 'Desempeño', permission: 'INVENTORY_PRODUCTS' },
+  { id: 'commercialMargin', label: 'Margen comercial', description: 'Margen generado por la venta de productos con costo configurado, antes de gastos operativos. Requiere costos configurados.', decision: 'Revisar si el precio comercial protege la contribución del negocio.', group: 'Desempeño', permission: 'INVENTORY_PRODUCTS' },
+  { id: 'netMargin', label: 'Margen neto', description: 'Utilidad neta conocida sobre ventas, después del costo de venta estimado y los gastos registrados.', decision: 'Conocer qué porcentaje de la venta permanece como utilidad conocida.', group: 'Desempeño', permission: 'FINANCIAL_EXPENSES' },
+  { id: 'profitability', label: 'Rentabilidad', description: 'Utilidad neta conocida comparada contra el costo de venta estimado. Requiere costos configurados.', decision: 'Medir el rendimiento obtenido por cada unidad monetaria invertida en inventario.', group: 'Desempeño', permission: 'INVENTORY_PRODUCTS' },
+  { id: 'netProfit', label: 'Utilidad neta', description: 'Ventas pagadas menos costo de venta estimado y gastos registrados. Requiere costos configurados y no incluye ajustes contables que no estén en estas fuentes.', decision: 'Conocer la utilidad monetaria conocida del período.', group: 'Desempeño', permission: 'FINANCIAL_EXPENSES' },
   { id: 'ordersCount', label: 'Órdenes creadas', description: 'Órdenes de venta creadas dentro del período, independientemente de su estado actual.', decision: 'Observar la actividad comercial.', group: 'Desempeño', permission: 'SALES_ORDERS' },
   { id: 'pendingOrders', label: 'Órdenes abiertas', description: 'Órdenes en estados abiertos a la fecha de consulta, incluidos borradores. No se limita al período.', decision: 'Dar seguimiento al trabajo por completar.', group: 'Atención', permission: 'SALES_ORDERS' },
   { id: 'inventoryAlerts', label: 'Productos con alertas', description: 'Productos distintos con alguna ubicación agotada, bajo mínimo o con hasta 10 unidades. Existencias actuales.', decision: 'Priorizar la revisión de existencias.', group: 'Atención', permission: 'INVENTORY_PRODUCTS' },
@@ -24,15 +30,14 @@ export const INDICATORS: IndicatorDefinition[] = [
   { id: 'topRegister', label: 'Caja con más ventas', description: 'Caja con mayor importe de facturas pagadas en el período completo.', decision: 'Comparar puntos de venta.', group: 'Caja' },
 ];
 export const BLOCKS: { id: DashboardBlock; label: string; description: string; permission?: string }[] = [
-  { id: 'trend', label: 'Evolución del período', description: 'Ventas pagadas y gastos por día; en rangos amplios se agrupan por mes.' },
-  { id: 'attention', label: 'Atención requerida', description: 'Órdenes abiertas y existencias que requieren revisión.' },
-  { id: 'products', label: 'Desempeño de productos', description: 'Más vendidos, menos vendidos, sin ventas y utilidad de referencia.', permission: 'INVENTORY_PRODUCTS' },
-  { id: 'registers', label: 'Ventas por caja', description: 'Participación de cada caja en la venta pagada.' },
-  { id: 'transactions', label: 'Actividad reciente', description: 'Últimos documentos del período, con acceso a su módulo.' },
+  { id: 'trend', label: 'Ventas y gastos', description: 'Evolución de las ventas pagadas y gastos del período.' },
+  { id: 'products', label: 'Productos', description: 'Ventas y utilidad por producto.', permission: 'INVENTORY_PRODUCTS' },
+  { id: 'registers', label: 'Ventas por caja', description: 'Ventas pagadas y operaciones por caja.' },
+  { id: 'inventory', label: 'Estado del inventario', description: 'Distribución de existencias sin stock, bajo stock y por reordenar.', permission: 'INVENTORY_PRODUCTS' },
 ];
 export const DEFAULT_PREFERENCES: DashboardPreferences = {
-  indicators: ['totalRevenue', 'totalExpenses', 'paidInvoicesCount', 'averagePaidInvoice'],
-  blocks: ['trend', 'attention', 'products', 'registers', 'transactions'],
+  indicators: ['totalRevenue', 'totalExpenses', 'paidInvoicesCount', 'averagePaidInvoice', 'operatingMargin'],
+  blocks: ['trend', 'products', 'registers', 'inventory'],
 };
 export function normalizePreferences(value: unknown): DashboardPreferences {
   const candidate = value as Partial<DashboardPreferences> | null;
@@ -68,12 +73,12 @@ export function changeLabel(current: number, previous: number | undefined): stri
   const change = (current - previous) / Math.abs(previous) * 100;
   return `${change > 0 ? '+' : ''}${change.toLocaleString('es-NI', { maximumFractionDigits: 1 })}%`;
 }
-export function chartRows(rows: { date: string; revenue: number; expenses: number }[], range: NonNullable<ReturnType<typeof dashboardRange>>) {
+export function chartRows(rows: { date: string; revenue: number; expenses: number }[], range: NonNullable<ReturnType<typeof dashboardRange>>, granularity: 'auto' | 'day' | 'month' = 'auto') {
   const values = new Map(rows.map(r => [r.date, r]));
   const buckets = new Map<string, { date: string; revenue: number; expenses: number }>();
   for (let i = 0; i < range.days; i++) {
     const date = day(new Date(+new Date(`${range.start}T00:00:00Z`) + i * 86400000));
-    const key = range.days > 62 ? date.slice(0, 7) : date;
+    const key = granularity === 'month' || (granularity === 'auto' && range.days > 62) ? date.slice(0, 7) : date;
     const row = buckets.get(key) || { date: key, revenue: 0, expenses: 0 };
     row.revenue += Number(values.get(date)?.revenue || 0);
     row.expenses += Number(values.get(date)?.expenses || 0);

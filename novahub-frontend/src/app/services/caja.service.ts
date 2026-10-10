@@ -498,13 +498,21 @@ export interface DashboardKPIs {
   averagePaidInvoice?: number;
   productsWithSalesCount?: number;
   noSaleProductsCount?: number;
+  grossMargin?: number;
+  commercialMargin?: number;
+  operatingMargin?: number;
   netMargin: number;
+  profitability?: number;
+  netProfit?: number;
+  costOfGoodsSold?: number;
+  hasComparableCostData?: boolean;
 }
 
 export interface ProductPerformanceItem {
   productId: string;
   name: string;
   code: string;
+  imageUrl?: string | null;
   totalQty: number;
   totalRevenue: number;
   costPrice?: number;
@@ -522,6 +530,13 @@ export interface RegisterSales {
   total: number;
   count: number;
   originalCurrencyBreakdown?: { currency: 'NIO' | 'USD'; amount: number; count: number }[];
+}
+
+export interface CustomerSales {
+  customerId: string | null;
+  name: string;
+  total: number;
+  count: number;
 }
 
 export interface InventoryAlert {
@@ -559,7 +574,9 @@ export interface DashboardData {
     noSaleProducts: { id: string; name: string; code: string; salePrice: number; stock?: number }[];
   };
   salesByRegister: RegisterSales[];
+  topCustomers?: CustomerSales[];
   inventoryAlerts: InventoryAlert[];
+  inventoryStatusCounts?: { reorder: number; outOfStock: number; optimal: number; total: number };
   recentTransactions: RecentTransaction[];
   dailyTrend?: { date: string; revenue: number; expenses: number }[];
   generatedAt?: string;
@@ -783,8 +800,10 @@ export const cajaService = {
     return res?.data !== undefined ? res.data : res;
   },
 
-  getDashboard: (period?: string, registerId?: string, startDate?: string, endDate?: string, signal?: AbortSignal, valuationMode?: 'HISTORICAL' | 'CURRENT') =>
-    api.get<DashboardData>('/caja/dashboard', { params: { period, registerId, startDate, endDate, valuationMode }, signal }),
+  getDashboard: async (period?: string, registerId?: string, startDate?: string, endDate?: string, signal?: AbortSignal, valuationMode?: 'HISTORICAL' | 'CURRENT') => {
+    const response = await api.get<DashboardData>('/caja/dashboard', { params: { period, registerId, startDate, endDate, valuationMode }, signal });
+    return resolveStorageReferences(response);
+  },
 };
 
 export interface InvoiceCashQueueEvent {
