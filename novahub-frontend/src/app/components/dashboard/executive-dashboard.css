@@ -379,7 +379,17 @@
   padding: 19px 20px 12px;
 }
 
-.executive-panel-heading h2 { margin: 3px 0 0; color: var(--primary); font-family: 'Playfair Display', Georgia, serif !important; font-size: 19px; font-style: italic !important; font-weight: 600; letter-spacing: -.02em; }
+.executive-panel-heading h2,
+.executive-panel-heading .executive-editorial-title {
+  margin: 3px 0 0;
+  color: var(--primary) !important;
+  font-family: 'Playfair Display', Georgia, serif !important;
+  font-size: 19px;
+  font-style: italic !important;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 1.08;
+}
 .executive-panel-caption { color: var(--muted-foreground); font-size: 11px; }
 .executive-attention-count { padding: 5px 8px; color: var(--primary); border-radius: 999px; background: color-mix(in srgb, var(--primary) 9%, var(--card)); font-size: 11px; font-weight: 750; }
 .executive-chart { height: 258px; padding: 12px 12px 0 2px; }
