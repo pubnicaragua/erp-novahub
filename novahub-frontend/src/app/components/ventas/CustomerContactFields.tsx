@@ -31,9 +31,9 @@ export function useCustomerFormOptions() {
 
 type SharedProps = { id: string; disabled?: boolean; className?: string; labelClassName?: string };
 
-export function CustomerCountrySelect({ value, onChange, countries, disabled, id = 'customer-country' }: { value: string; onChange: (value: string) => void; countries: CustomerCountryOption[]; disabled?: boolean; id?: string }) {
-  return <div className="min-w-0 space-y-1.5">
-    <Label htmlFor={id} className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</Label>
+export function CustomerCountrySelect({ value, onChange, countries, disabled, id = 'customer-country', showLabel = true }: { value: string; onChange: (value: string) => void; countries: CustomerCountryOption[]; disabled?: boolean; id?: string; showLabel?: boolean }) {
+  return <div className={`min-w-0 ${showLabel ? 'space-y-1.5' : ''}`}>
+    {showLabel && <Label htmlFor={id} className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</Label>}
     <Combobox
       id={id}
       value={value}
@@ -54,14 +54,14 @@ export function CustomerCountrySelect({ value, onChange, countries, disabled, id
   </div>;
 }
 
-export function CustomerPhoneInput({ value, onChange, countryCode, label = 'Teléfono', ...props }: SharedProps & { value: string; onChange: (value: string) => void; countryCode: string; label?: string }) {
+export function CustomerPhoneInput({ value, onChange, countryCode, label = 'Teléfono', showHint = true, ...props }: SharedProps & { value: string; onChange: (value: string) => void; countryCode: string; label?: string; showHint?: boolean }) {
   const display = formatCustomerPhoneForDisplay(value, countryCode);
   const hint = customerPhoneHint(value, countryCode);
   const { id, disabled, className, labelClassName } = props;
   return <div className="min-w-0 space-y-1.5">
     <Label htmlFor={id} className={labelClassName || 'text-[10px] font-black uppercase tracking-widest text-muted-foreground'}>{label}</Label>
     <Input id={id} disabled={disabled} type="tel" inputMode="tel" value={display} onChange={(event) => onChange(formatCustomerPhoneInput(event.target.value, countryCode))} placeholder={`+${countryOption(countryCode).phoneCode} ${countryCode === 'NI' ? '8888-8888' : '...'}`} className={className || 'h-11 rounded-xl'} />
-    {hint && <p className="text-[10px] text-muted-foreground" aria-live="polite">{hint}</p>}
+    {showHint && hint && <p className="text-[10px] text-muted-foreground" aria-live="polite">{hint}</p>}
   </div>;
 }
 
