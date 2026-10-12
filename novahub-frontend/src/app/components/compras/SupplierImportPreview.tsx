@@ -90,7 +90,7 @@ export function SupplierImportPreview({
     <ImportPreviewMobileCard index={index} title={row.name || row.code} error={row.error} warning={row.warning}>
       <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
         <ImportPreviewField label="Código" className="sm:col-span-2">
-          <Input className={importPreviewFieldClass} value={row.code} placeholder="Automático" onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} />
+          <Input className={importPreviewFieldClass} value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} />
         </ImportPreviewField>
         <ImportPreviewField label="Nombre *" className="sm:col-span-2">
           <Input className={importPreviewFieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} />
@@ -123,14 +123,14 @@ export function SupplierImportPreview({
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación masiva</p>
             <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar proveedores</h1>
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Edita los datos antes de crear proveedores. El sistema asignará un código consecutivo por sucursal e ignorará cualquier código incluido en el archivo.</p>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Edita los datos antes de crear proveedores.</p>
             <div className="mt-3"><PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo importar proveedores" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-import" /></div>
           </div>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
           <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Archivo cargado</p><p className="truncate text-sm font-bold" title={fileName}>{fileName}</p></div>
-          <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Avisos no bloquean</Badge></div>
+          <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Avisos no bloquean</Badge></div>
         </div>
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="proveedores" />
@@ -168,7 +168,7 @@ export function SupplierImportPreview({
                 return (
                 <TableRow key={virtualRow.key} ref={tableVirtualizer.measureElement} data-index={virtualRow.index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row.warning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
-                  <TableCell><Input className={importPreviewFieldClass} value={row.code} placeholder="Automático" onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Input className={importPreviewFieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><select className={importPreviewFieldClass} value={row.type || 'COMPANY'} onChange={(event) => onRowUpdate(index, 'type', event.target.value)} disabled={importing}><option value="COMPANY">Empresa</option><option value="INDIVIDUAL">Individual</option></select></TableCell>
                   <TableCell><Input className={importPreviewFieldClass} value={(row.type || 'COMPANY') === 'COMPANY' ? row.companyName || '' : ''} onChange={(event) => onRowUpdate(index, 'companyName', event.target.value)} disabled={importing || (row.type || 'COMPANY') !== 'COMPANY'} /></TableCell>
