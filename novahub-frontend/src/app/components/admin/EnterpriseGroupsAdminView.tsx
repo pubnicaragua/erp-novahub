@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
-import { Building2, CalendarClock, ChevronLeft, ChevronRight, Clock3, FileText, GitBranch, HardDrive, Link2, Loader2, Plus, Search, UserRound, Users, Warehouse } from 'lucide-react';
+import { Building2, CalendarClock, ChevronLeft, ChevronRight, Clock3, FileText, GitBranch, HardDrive, LifeBuoy, Link2, Loader2, Plus, Search, UserRound, Users, Warehouse } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -17,6 +17,7 @@ import { ModuleQuoteRequestsPanel } from './ModuleQuoteRequestsPanel';
 import { BrandLogo } from '../BrandLogo';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscriptionsService } from '../../services/subscriptions.service';
+import { PlatformSupportAgentsPanel } from './PlatformSupportAgentsPanel';
 
 const normalizeSearchValue = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase();
 
@@ -30,24 +31,22 @@ function formatStorage(value: unknown) {
   return `${amount >= 10 || index === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[index]}`;
 }
 
-const ENTERPRISE_GROUP_TABS = ['groups', 'legacy', 'requests', 'module-requests', 'quotes'] as const;
+const ENTERPRISE_GROUP_TABS = ['groups', 'legacy', 'requests', 'module-requests', 'quotes', 'support-agents'] as const;
 type EnterpriseGroupTab = typeof ENTERPRISE_GROUP_TABS[number];
 
 export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabChange }: { embedded?: boolean; initialTab?: string; onTabChange?: (tab: string) => void }) {
   const { user } = useAuth();
   const quoteOnly = user?.role === 'platform_quote_user';
-  const isSuperAdmin = String(user?.role || '').toUpperCase().replace(/[-\s]/g, '_') === 'SUPER_ADMIN';
+  const isSuperAdmin = ['SUPER_ADMIN', 'SUPERADMIN'].includes(String(user?.role || '').toUpperCase().replace(/[-\s]/g, '_'));
   const [workspace, setWorkspace] = useState<{ mode: 'create' | 'edit'; groupId?: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [groupsPage, setGroupsPage] = useState(1);
   const resolvedInitialTab: EnterpriseGroupTab = quoteOnly
     ? 'quotes'
-    : ENTERPRISE_GROUP_TABS.find((tab) => tab === initialTab) || 'groups';
-  const [activeTab, setActiveTab] = useState<EnterpriseGroupTab>(resolvedInitialTab);
-  useEffect(() => setActiveTab(resolvedInitialTab), [resolvedInitialTab]);
+    : (ENTERPRISE_GROUP_TABS.find((tab) => tab === initialTab && (tab !== 'support-agents' || isSuperAdmin)) || 'groups');
+  const activeTab = resolvedInitialTab;
   const handleTabChange = (tab: EnterpriseGroupTab) => {
-    setActiveTab(tab);
     onTabChange?.(tab);
   };
   useEffect(() => {
@@ -111,7 +110,8 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
           ['requests', 'Solicitudes de trial', Clock3],
           ['module-requests', 'Cotizar módulos', FileText],
           ['quotes', 'Cotizaciones', FileText],
-        ] as const).filter(([tab]) => !quoteOnly && (tab !== 'module-requests' || isSuperAdmin) || quoteOnly && tab === 'quotes').map(([tab, label, Icon]) => (
+          ['support-agents', 'Agentes de soporte', LifeBuoy],
+        ] as const).filter(([tab]) => !quoteOnly && (tab !== 'module-requests' || isSuperAdmin) && (tab !== 'support-agents' || isSuperAdmin) || quoteOnly && tab === 'quotes').map(([tab, label, Icon]) => (
           <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => handleTabChange(tab)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wide transition ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>
             <Icon className="size-4" /> {label}{tab === 'module-requests' && moduleQuotePendingCount > 0 && <Badge className="ml-1 bg-background/20 px-1.5 py-0 text-[9px]">{moduleQuotePendingCount}</Badge>}
           </button>
@@ -206,6 +206,8 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
         <TrialExtensionRequestsPanel />
       ) : activeTab === 'module-requests' ? (
         <ModuleQuoteRequestsPanel onOpenQuotes={() => handleTabChange('quotes')} />
+      ) : activeTab === 'support-agents' ? (
+        <PlatformSupportAgentsPanel />
       ) : (
         <PlatformQuotesPanel groups={data?.groupOptions?.length ? data.groupOptions : data?.groups || []} />
       )}
@@ -236,7 +238,7 @@ function LegacyUsersPanel({ data, loading, onExtend }: { data?: { cutoff: string
       ].map((value) => String(value ?? '')).join(' ').toLocaleLowerCase();
       return !normalized || haystack.includes(normalized);
     });
-  }, [data?.tenants, term]);
+  }, [data, term]);
   return (
     <Card className="rounded-3xl border-border/60 shadow-sm">
       <CardHeader className="gap-4 p-6 pb-4 sm:flex-row sm:items-end sm:justify-between">

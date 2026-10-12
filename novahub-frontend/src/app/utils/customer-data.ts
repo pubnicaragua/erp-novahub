@@ -197,6 +197,11 @@ export function customerRucRequired(type: string | null | undefined, countryCode
   return String(type || '').toUpperCase() === 'COMPANY' && String(countryCode || '').toUpperCase() === 'NI';
 }
 
+export function hasPendingCompanyRucImportNote(notes: string | null | undefined): boolean {
+  const normalized = String(notes || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return /codigo\s+anterior\s*:\s*\S+/.test(normalized) && /ruc.{0,40}pendiente/.test(normalized);
+}
+
 export function customerPhoneHint(value: string | null | undefined, countryCode: string): string {
   const region = resolveCustomerCountryCode(countryCode);
   if (region === 'NI') {

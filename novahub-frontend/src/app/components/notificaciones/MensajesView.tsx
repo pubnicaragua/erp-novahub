@@ -15,6 +15,8 @@ import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { ChatMessage, Message, MessageParticipant } from '../../types';
 import { messagesService } from '../../services/notificaciones.service';
+import { supportConversationsService, type SupportConversation } from '../../services/support-conversations.service';
+import { subscribeToNotificationEvents } from '../../services/notifications.service';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
@@ -40,7 +42,7 @@ interface MensajesViewProps {
   onHelp: () => void;
 }
 
-type MessageFilter = 'all' | 'unread' | 'direct';
+type MessageFilter = 'all' | 'unread' | 'direct' | 'support';
 
 const initials = (name?: string) =>
   String(name || 'Sistema')
@@ -77,7 +79,7 @@ const ParticipantAvatar = ({ participant, system = false }: { participant?: Mess
 );
 
 export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRefresh, onHelp }) => {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { refresh: refreshInbox } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<MessageFilter>('all');
@@ -93,6 +95,17 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   const [replyError, setReplyError] = useState('');
   const [replying, setReplying] = useState(false);
   const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+  const supportConversationsQuery = useTenantQuery<SupportConversation[]>(
+    ['support-conversations', user?.id || 'current', 'branch-inbox'],
+    signal => supportConversationsService.getConversations(signal),
+    {
+      enabled: Boolean(user?.id && user?.clientTenantId && !user.isPlatformSupportAgent && canPerform('NOTIFICATIONS_MESSAGES', 'read')),
+      refetchInterval: 15_000,
+      refetchIntervalInBackground: false,
+    },
+  );
+  const supportThreads = asList(supportConversationsQuery.data) as SupportConversation[];
+  const threads = useMemo(() => [...data, ...supportThreads].sort((left, right) => new Date(right.lastMessageAt).getTime() - new Date(left.lastMessageAt).getTime()), [data, supportThreads]);
   const recipientsQuery = useTenantQuery<MessageParticipant[]>(
     ['notifications', 'recipients'],
     signal => messagesService.getRecipients(signal),
@@ -100,36 +113,40 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   );
   const recipients = asList(recipientsQuery.data) as MessageParticipant[];
   const recipientsLoading = recipientsQuery.isLoading || recipientsQuery.isFetching;
+  const composeFeedbackError = composeError || (composeOpen && recipientsQuery.isError ? 'No pudimos cargar las personas de tu empresa.' : '');
 
   useEffect(() => {
-    if (composeOpen && recipientsQuery.isError) {
-      setComposeError('No pudimos cargar las personas de tu empresa.');
-    }
-  }, [composeOpen, recipientsQuery.isError]);
+    if (!user?.id || !user.clientTenantId || user.isPlatformSupportAgent) return undefined;
+    const identity = `${user.clientTenantId}:${user.id}`;
+    return subscribeToNotificationEvents(identity, () => { void supportConversationsQuery.refetch(); });
+  }, [user?.id, user?.clientTenantId, user?.isPlatformSupportAgent, supportConversationsQuery.refetch]);
 
   useEffect(() => {
-    if (selectedId && !data.some((thread) => thread.id === selectedId)) {
+    if (selectedId && !threads.some((thread) => thread.id === selectedId)) {
       Promise.resolve().then(() => {
         setSelectedId(null);
         setMobileThreadOpen(false);
       });
     }
-  }, [data, selectedId]);
+  }, [threads, selectedId]);
 
   useEffect(() => {
-    if (!selectedId && data.length > 0 && window.matchMedia('(min-width: 1024px)').matches) {
-      Promise.resolve().then(() => setSelectedId(data[0].id));
+    if (!selectedId && threads.length > 0 && window.matchMedia('(min-width: 1024px)').matches) {
+      Promise.resolve().then(() => setSelectedId(threads[0].id));
     }
-  }, [data, selectedId]);
+  }, [threads, selectedId]);
 
   useEffect(() => {
-    const visibleThread = data.find((thread) => thread.id === selectedId);
+    const visibleThread = threads.find((thread) => thread.id === selectedId);
     if (!visibleThread || visibleThread.unreadCount === 0 || markingReadId === visibleThread.id) return;
 
     let active = true;
     Promise.resolve().then(() => setMarkingReadId(visibleThread.id));
-    void messagesService.markRead(visibleThread.id)
-      .then(async () => { await refreshInbox(); await onRefresh(); })
+    const markRead = visibleThread.kind === 'SUPPORT'
+      ? supportConversationsService.markRead(visibleThread.id)
+      : messagesService.markRead(visibleThread.id);
+    void markRead
+      .then(async () => { await refreshInbox(); await onRefresh(); await supportConversationsQuery.refetch(); })
       .catch((e: any) => {
         if (active) toast.error(e?.response?.data?.message || 'No pudimos marcar la conversación como leída');
       })
@@ -140,27 +157,29 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     return () => {
       active = false;
     };
-  }, [data, selectedId]);
+  }, [threads, selectedId]);
 
-  const selected = data.find((thread) => thread.id === selectedId) || null;
-  const unreadTotal = data.reduce((total, thread) => total + thread.unreadCount, 0);
-  const directTotal = data.filter((thread) => thread.kind === 'DIRECT').length;
+  const selected = threads.find((thread) => thread.id === selectedId) || null;
+  const unreadTotal = threads.reduce((total, thread) => total + thread.unreadCount, 0);
+  const directTotal = threads.filter((thread) => thread.kind === 'DIRECT').length;
+  const supportTotal = threads.filter((thread) => thread.kind === 'SUPPORT').length;
 
   const filtered = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    return data.filter((thread) => {
+    return threads.filter((thread) => {
       const matchesFilter = filter === 'all'
         || (filter === 'unread' && thread.unreadCount > 0)
-        || (filter === 'direct' && thread.kind === 'DIRECT');
+        || (filter === 'direct' && thread.kind === 'DIRECT')
+        || (filter === 'support' && thread.kind === 'SUPPORT');
       const matchesSearch = !query || [thread.title, thread.preview, thread.participant?.name, thread.participant?.email]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
       return matchesFilter && matchesSearch;
     });
-  }, [data, filter, searchTerm]);
+  }, [threads, filter, searchTerm]);
 
   const refresh = async () => {
-    await onRefresh();
+    await Promise.all([Promise.resolve(onRefresh()), supportConversationsQuery.refetch()]);
   };
 
   const openThread = async (thread: Message) => {
@@ -171,7 +190,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
 
     setMarkingReadId(thread.id);
     try {
-      await messagesService.markRead(thread.id);
+      if (thread.kind === 'SUPPORT') await supportConversationsService.markRead(thread.id);
+      else await messagesService.markRead(thread.id);
       await refreshInbox();
       await refresh();
     } catch {
@@ -228,7 +248,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     setReplying(true);
     setReplyError('');
     try {
-      await messagesService.reply(selected.id, reply.trim());
+      if (selected.kind === 'SUPPORT') await supportConversationsService.reply(selected.id, reply.trim());
+      else await messagesService.reply(selected.id, reply.trim());
       setReply('');
       await refresh();
     } catch (error: any) {
@@ -260,7 +281,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
               <div>
                 <h2 className="text-xl font-bold tracking-tight">Mensajes</h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {data.length} conversaciones · {unreadTotal} sin leer
+                  {threads.length} conversaciones · {unreadTotal} sin leer
                 </p>
               </div>
               {canPerform('NOTIFICATIONS_MESSAGES', 'create') && (
@@ -292,6 +313,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                 ['all', 'Todos'],
                 ['unread', `Sin leer${unreadTotal ? ` ${unreadTotal}` : ''}`],
                 ['direct', `Personas${directTotal ? ` ${directTotal}` : ''}`],
+                ['support', `Soporte${supportTotal ? ` ${supportTotal}` : ''}`],
               ] as Array<[MessageFilter, string]>).map(([value, label]) => (
                 <button
                   key={value}
@@ -310,7 +332,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto" role="list" aria-label="Conversaciones">
-            {loading ? (
+            {loading || supportConversationsQuery.isLoading ? (
               <div className="space-y-2 p-3" aria-label="Cargando conversaciones">
                 {[1, 2, 3, 4].map((item) => <div key={item} className="h-20 animate-pulse rounded-xl bg-muted/40" />)}
               </div>
@@ -324,6 +346,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
               filtered.map((thread) => {
                 const active = selectedId === thread.id;
                 const system = thread.kind === 'SYSTEM';
+                const support = thread.kind === 'SUPPORT';
                 return (
                   <button
                     key={thread.id}
@@ -348,6 +371,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                       <span className="mt-0.5 flex items-center gap-2">
                         <span className="truncate text-xs font-medium text-foreground/80">{thread.title}</span>
                         {system && <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600">Sistema</span>}
+                        {support && <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">Soporte</span>}
                       </span>
                       <span className="mt-1 flex items-center gap-2">
                         <span className="truncate text-xs text-muted-foreground">{thread.preview || 'Sin contenido'}</span>
@@ -481,7 +505,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                 </form>
               ) : (
                 <div className="border-t border-border/60 bg-muted/20 px-4 py-3 text-center text-xs text-muted-foreground">
-                  Este aviso fue generado por el sistema y no admite respuestas.
+                  {selected.kind === 'SUPPORT' ? 'Tu perfil puede consultar esta conversación, pero no responder.' : 'Este aviso fue generado por el sistema y no admite respuestas.'}
                 </div>
               )}
             </>
@@ -518,7 +542,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                   <option key={recipient.id} value={recipient.id}>{recipient.name} · {recipient.email}</option>
                 ))}
               </select>
-              {!recipientsLoading && recipients.length === 0 && !composeError && (
+              {!recipientsLoading && recipients.length === 0 && !composeFeedbackError && (
                 <p className="text-xs text-muted-foreground">No hay otros usuarios activos en esta empresa.</p>
               )}
             </div>
@@ -550,7 +574,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
               <p className="text-right text-[11px] text-muted-foreground">{content.length}/4000</p>
             </div>
 
-            {composeError && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{composeError}</p>}
+            {composeFeedbackError && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{composeFeedbackError}</p>}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setComposeOpen(false)} disabled={sending}>Cancelar</Button>

@@ -11,7 +11,7 @@ import type { UserThemeSettings } from '../services/branding.service';
 
 const SIDEBAR_PERMISSION_PARENT_MODULE_IDS = new Set<string>(SIDEBAR_PERMISSION_PARENT_ORDER);
 
-export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer' | 'platform_quote_user';
+export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer' | 'platform_quote_user' | 'platform_support_agent';
 export type UserType = 'admin' | 'collaborator' | 'manager' | 'customer_portal';
 
 const SESSION_BRANDING_KEY = 'nh-session-branding';
@@ -192,6 +192,7 @@ export interface User {
   /** Políticas operativas heredadas del grupo, rubro y sucursal activa. */
   moduleAccessPolicies?: ModuleViewPolicies;
   isPlatformAdmin: boolean;
+  isPlatformSupportAgent: boolean;
   isTenantUser: boolean;
   isTenantAdmin: boolean;
   /** Sesión temporal de trabajo de un Manager dentro de una sucursal. */
@@ -440,6 +441,7 @@ const normalizeRole = (rawRole: string): Role => {
   const lowered = rawRole.toLowerCase().replace(/[^a-z_]/g, '');
   if (lowered === 'superadmin' || lowered === 'super_admin') return 'superadmin';
   if (lowered === 'platform_quote_user') return 'platform_quote_user';
+  if (lowered === 'platform_support_agent') return 'platform_support_agent';
   return lowered as Role;
 };
 
@@ -469,6 +471,7 @@ const createUserObject = (apiPayload: any): User => {
   // clientTenantId; los Managers quedan fuera porque su userType es MANAGER.
   const isPlatformAdmin = ['superadmin', 'partner', 'platform_quote_user'].includes(role)
     || (!apiUser.clientTenantId && userType === 'admin' && role !== 'manager');
+  const isPlatformSupportAgent = role === 'platform_support_agent';
 
   const hasActiveTenantBranding = Boolean(apiUser?.clientTenantId && apiUser?.clientTenant);
   const rememberedTenantLogo = (() => {
@@ -658,7 +661,8 @@ const createUserObject = (apiPayload: any): User => {
       ? apiUser.moduleAccessPolicies as ModuleViewPolicies
       : undefined,
     isPlatformAdmin,
-    isTenantUser: !isPlatformAdmin,
+    isPlatformSupportAgent,
+    isTenantUser: !isPlatformAdmin && !isPlatformSupportAgent,
     isTenantAdmin: userType === 'admin' && role === 'admin' && !isPlatformAdmin,
     managerMode: Boolean(apiUser.managerMode),
     managerCanEdit: Boolean(apiUser.managerCanEdit),
@@ -796,7 +800,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           rememberSessionBranding(me);
           const restoredUser = createUserObject(me);
           setUser(restoredUser);
-          if (restoredUser.userType !== 'customer_portal') fetchBranches();
+          if (restoredUser.userType !== 'customer_portal' && !restoredUser.isPlatformSupportAgent) fetchBranches();
         } catch {
           // Backward compatibility with backends that still use switch-context for session restore.
           const payload = JSON.parse(atob(token.split('.')[1]));
@@ -811,7 +815,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           rememberSessionBranding(response.user);
           const restoredUser = createUserObject(response.user);
           setUser(restoredUser);
-          if (restoredUser.userType !== 'customer_portal') fetchBranches();
+          if (restoredUser.userType !== 'customer_portal' && !restoredUser.isPlatformSupportAgent) fetchBranches();
         }
       } catch (error) {
         console.error('Error restoring session:', error);
@@ -1195,7 +1199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       rememberSessionBranding(response.user);
       const loggedInUser = createUserObject(response.user);
       setUser(loggedInUser);
-      if (loggedInUser.userType !== 'customer_portal') fetchBranches();
+      if (loggedInUser.userType !== 'customer_portal' && !loggedInUser.isPlatformSupportAgent) fetchBranches();
     } catch (error: any) {
       throw new Error(error.message || 'Error al iniciar sesión. Verifica tus credenciales.', { cause: error });
     }
@@ -1212,7 +1216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     rememberSessionBranding(userData);
     const sessionUser = createUserObject(userData);
     setUser(sessionUser);
-    if (sessionUser.userType !== 'customer_portal') fetchBranches();
+    if (sessionUser.userType !== 'customer_portal' && !sessionUser.isPlatformSupportAgent) fetchBranches();
   }, [fetchBranches]);
 
   const logout = useCallback(() => {
@@ -1269,7 +1273,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Rehydrate module/view availability when an open tenant session returns to
   // the app, so a SuperAdmin change cannot leave stale navigation visible.
   React.useEffect(() => {
-    if (!user?.id || user.isPlatformAdmin) return;
+    if (!user?.id || user.isPlatformAdmin || user.isPlatformSupportAgent) return;
     let lastRefreshAt = 0;
     const refreshVisibleSession = () => {
       if (document.visibilityState !== 'visible' || Date.now() - lastRefreshAt < 5000) return;
@@ -1282,7 +1286,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('focus', refreshVisibleSession);
       document.removeEventListener('visibilitychange', refreshVisibleSession);
     };
-  }, [user?.id, user?.isPlatformAdmin, refreshEnabledModules]);
+  }, [user?.id, user?.isPlatformAdmin, user?.isPlatformSupportAgent, refreshEnabledModules]);
 
   return (
     <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, setSession, logout, switchIdentity, refreshEnabledModules, refreshProfile, sessionStartVersion, isLoading, userBranches, selectedBranchId, setSelectedBranchId }}>

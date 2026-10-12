@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { Truck, Plus, Search, Eye, TrendingDown, CheckCircle2, Upload, Download, Ban, Pencil, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { suppliersService } from '../../services/compras.service';
@@ -47,6 +48,7 @@ const emptyDraft = () => ({
   address: '',
   city: '',
   country: '',
+  notes: '',
   status: 'ACTIVE' as EntityStatus,
 });
 
@@ -112,7 +114,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   };
 
   const emptyImportRow = (): SupplierImportRow => ({
-    code: '', name: '', type: '', companyName: '', taxId: '', contactName: '', email: '', phone: '', address: '', city: '', country: 'Nicaragua', paymentTerms: '', openingBalanceType: '', openingBalanceAmount: '', openingBalanceCurrency: baseCurrency, status: 'ACTIVE',
+    code: '', name: '', type: '', companyName: '', taxId: '', contactName: '', email: '', phone: '', address: '', city: '', country: 'Nicaragua', paymentTerms: '', notes: '', openingBalanceType: '', openingBalanceAmount: '', openingBalanceCurrency: baseCurrency, status: 'ACTIVE',
   });
 
   const validateImportRows = (rows: SupplierImportRow[]) => {
@@ -124,11 +126,12 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       const next: SupplierImportRow = { ...row, error: undefined, warning: undefined };
       const email = row.email.trim().toLowerCase();
       const taxId = row.taxId.trim().toLowerCase();
+      const rucPendingIsNoted = /\bruc\s+pendiente\b/i.test(row.notes.trim());
       const openingAmountText = String(row.openingBalanceAmount || '').trim();
       const openingAmount = openingAmountText ? Number(openingAmountText) : 0;
       if (!row.name.trim()) next.error = 'Nombre obligatorio';
       else if (row.type && !['COMPANY', 'INDIVIDUAL'].includes(row.type)) next.error = 'Tipo de proveedor inválido';
-      else if (row.type === 'COMPANY' && !taxId) next.error = 'RUC obligatorio para empresas';
+      else if (row.type === 'COMPANY' && !taxId && !rucPendingIsNoted) next.error = 'Indica el RUC o agrega “RUC pendiente” en Notas';
       else if (email && !/^\S+@\S+\.\S+$/.test(email)) next.error = 'Correo inválido';
       else if (email && (existingEmails.has(email) || seenEmails.has(email))) next.error = 'Correo duplicado';
       else if (taxId && (existingTaxIds.has(taxId) || seenTaxIds.has(taxId))) next.error = 'Identificación fiscal duplicada';
@@ -143,8 +146,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   };
 
   const downloadTemplate = () => {
-    const headers = ['Nombre', 'Tipo', 'Nombre de empresa', 'RUC / identificación', 'Persona de contacto', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'País', 'Condiciones de pago', 'Tipo de saldo inicial', 'Importe de saldo inicial', 'Moneda de saldo inicial', 'Estado'];
-    const example = ['Proveedor Ejemplo', 'Empresa', 'Proveedor Ejemplo S.A.', 'J0310000000000', 'María López', 'proveedor@correo.com', '8888-1111', 'Managua', 'Managua', 'Nicaragua', 'Contado', '', '', baseCurrency, 'ACTIVO'];
+    const headers = ['Nombre', 'Tipo', 'Nombre de empresa', 'RUC / identificación', 'Persona de contacto', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'País', 'Condiciones de pago', 'Notas', 'Tipo de saldo inicial', 'Importe de saldo inicial', 'Moneda de saldo inicial', 'Estado'];
+    const example = ['Proveedor Ejemplo', 'Empresa', 'Proveedor Ejemplo S.A.', 'J0310000000000', 'María López', 'proveedor@correo.com', '8888-1111', 'Managua', 'Managua', 'Nicaragua', 'Contado', '', '', '', baseCurrency, 'ACTIVO'];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const guide = XLSX.utils.aoa_to_sheet([
@@ -154,10 +157,11 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       ['Nombre', 'Obligatorio. Es el nombre comercial o razón social del proveedor.'],
       ['Tipo', 'Empresa o Individual. Si falta esta columna, se conserva la compatibilidad con plantillas anteriores.'],
       ['Nombre de empresa', 'Opcional y separado del nombre del proveedor; aplica cuando el tipo es Empresa.'],
-      ['RUC / identificación', 'Obligatorio al indicar Empresa; no se puede repetir dentro de la empresa.'],
+      ['RUC / identificación', 'Obligatorio al indicar Empresa; si aún está pendiente, agrega “RUC pendiente” en Notas. No se puede repetir dentro de la empresa.'],
       ['Correo', 'Opcional, pero debe tener formato válido y no estar registrado.'],
       ['Contacto y ubicación', 'Completa persona de contacto, teléfono, dirección, ciudad y país cuando aplique.'],
       ['Condiciones de pago', 'Opcional. Ejemplos: Contado, 30 días, crédito.'],
+      ['Notas', 'Opcional. Puedes guardar referencias como “Código anterior: CLN0001” o “RUC pendiente”.'],
       ['Saldo inicial', 'Opcional. Elige Pendiente o A favor e indica importe y moneda. Si no hay importe, se omite. La moneda sugerida es la moneda base del tenant.'],
       ['Estado', 'Usa ACTIVO o INACTIVO.'],
       ['Previsualización', 'Después de cargar el archivo podrás corregir los datos y revisar los errores antes de guardar.'],
@@ -204,6 +208,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         row.city = String(getCell(source, ['ciudad', 'city']) || '').trim();
         row.country = String(getCell(source, ['pais', 'country']) || 'Nicaragua').trim();
         row.paymentTerms = String(getCell(source, ['condicionesdepago', 'condiciones', 'paymentterms']) || '').trim();
+        row.notes = String(getCell(source, ['notas', 'notes', 'observaciones']) || '').trim();
         const rawOpeningType = normalizeHeader(getCell(source, ['tipodesaldoinicial', 'tiposaldoinicial', 'openingbalancetype', 'saldoinicialtipo']) || '');
         row.openingBalanceType = rawOpeningType.includes('pendiente') || rawOpeningType === 'pending'
           ? 'PENDING'
@@ -515,6 +520,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       address: row.address || '',
       city: row.city || '',
       country: row.country || '',
+      notes: row.notes || '',
       status: String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
     });
     setEditOpen(true);
@@ -532,6 +538,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       address: draft.address || undefined,
       city: draft.city || undefined,
       country: draft.country || undefined,
+      notes: draft.notes.trim() || undefined,
       status: draft.status,
     };
     return payload;
@@ -542,7 +549,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       toast.error('El nombre del proveedor es obligatorio');
       return;
     }
-    if (draft.type === 'COMPANY' && !draft.ruc.trim()) {
+    if (draft.type === 'COMPANY' && !draft.ruc.trim() && !/\bruc\s+pendiente\b/i.test(draft.notes)) {
       toast.error('El RUC es obligatorio para un proveedor empresa');
       return;
     }
@@ -745,6 +752,10 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><div className="flex h-11 items-center rounded-xl border border-primary/20 bg-primary/5 px-3 text-sm font-bold text-primary">{editingSupplier ? 'Usa el botón Activar / Desactivar' : 'Activo al crear'}</div></div>
               </div>
             </section>
+            <section className="space-y-3 border-t border-border/40 pt-5">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Notas</h3><p className="text-xs text-muted-foreground">Referencia interna del proveedor. Para empresas sin RUC, escribe “RUC pendiente”.</p></div>
+              <Textarea id="supplier-create-notes" aria-label="Notas del proveedor" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Código anterior: CLN0001" rows={3} className="rounded-xl" />
+            </section>
           </div>
           <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7" data-tour="purchases-form-actions">
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
@@ -782,6 +793,10 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><div className="flex h-11 items-center rounded-xl border border-border bg-muted/20 px-3 text-sm font-bold text-muted-foreground">Usa el botón Activar / Desactivar</div></div>
               </div>
+            </section>
+            <section className="space-y-3 border-t border-border/40 pt-5">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Notas</h3><p className="text-xs text-muted-foreground">Referencia interna del proveedor. Para empresas sin RUC, escribe “RUC pendiente”.</p></div>
+              <Textarea id="supplier-edit-notes" aria-label="Notas del proveedor" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Código anterior: CLN0001" rows={3} className="rounded-xl" />
             </section>
           </div>
           <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7" data-tour="purchases-form-actions">

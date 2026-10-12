@@ -84,6 +84,7 @@ const EnterpriseGroupsAdminView = lazyWithChunkRecovery(() => import('./componen
 const PlatformUsersView = lazyWithChunkRecovery(() => import('./components/admin/PlatformUsersView').then(m => ({ default: m.PlatformUsersView })), 'platform-users');
 const ImplementationGuideView = lazyWithChunkRecovery(() => import('./components/admin/ImplementationGuideView').then(m => ({ default: m.ImplementationGuideView })), 'implementation-guide');
 const CustomerPortalPage = lazyWithChunkRecovery(() => import('./components/customer-portal/CustomerPortalPage').then(m => ({ default: m.CustomerPortalPage })), 'customer-portal');
+const PlatformSupportWorkspace = lazyWithChunkRecovery(() => import('./components/help/PlatformSupportWorkspace').then(m => ({ default: m.PlatformSupportWorkspace })), 'platform-support');
 
 function PageLoader() {
   return (
@@ -699,6 +700,12 @@ function AppContent() {
   // ERP. Su única superficie autenticada es la vista de reportes de cliente.
   if (user?.userType === 'customer_portal') {
     return <Suspense fallback={<PageLoader />}><CustomerPortalPage /></Suspense>;
+  }
+
+  // La cuenta externa de soporte tiene un shell aislado y nunca monta la
+  // navegación ni el dashboard operativo del ERP.
+  if (user?.isPlatformSupportAgent) {
+    return <><Suspense fallback={<PageLoader />}><PlatformSupportWorkspace /></Suspense><SessionMonitor /></>;
   }
 
   if (showingSessionBranding || !isBrandingReady) {

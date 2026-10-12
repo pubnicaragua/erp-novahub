@@ -32,7 +32,7 @@ import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/custo
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
-import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
+import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, hasPendingCompanyRucImportNote, identifierComparisonKey, isCustomerIdentifierValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -196,7 +196,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       else if (row.phone && !isCustomerPhoneValid(row.phone, row.countryCode)) next.error = 'Teléfono inválido para el país';
       else if (row.contactPhone && !isCustomerPhoneValid(row.contactPhone, row.countryCode)) next.error = 'Teléfono de contacto inválido para el país';
       else if (identifiers.some((identifier) => existingTaxIds.has(identifier) || seenTaxIds.has(identifier))) next.error = 'Cédula o RUC duplicado';
-      else if (customerRucRequired(row.type, row.countryCode) && !row.ruc.trim()) next.error = 'RUC obligatorio para empresas';
+      else if (customerRucRequired(row.type, row.countryCode) && !row.ruc.trim() && !hasPendingCompanyRucImportNote(row.notes)) next.error = 'RUC obligatorio para empresas';
       else if (row.creditLimit !== '' && (!Number.isFinite(Number(row.creditLimit)) || Number(row.creditLimit) < 0)) next.error = 'Límite de crédito inválido';
       else if (row.creditLimitCurrencyError || !['NIO', 'USD'].includes(row.creditLimitCurrency)) next.error = 'Moneda del límite inválida';
       else if (row.openingBalanceAmount !== '' && (!Number.isFinite(Number(row.openingBalanceAmount)) || Number(row.openingBalanceAmount) < 0)) next.error = 'Saldo inicial inválido';

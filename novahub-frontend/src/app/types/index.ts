@@ -90,6 +90,7 @@ export interface User {
   branchIds?: string[];
   isTenantAdmin?: boolean;
   isPlatformAdmin?: boolean;
+  isPlatformSupportAgent?: boolean;
   email: string;
   name: string;
   avatar?: string;
@@ -102,7 +103,7 @@ export interface User {
     employmentStatus?: string;
     clientTenantId?: string;
   } | null;
-  role: 'admin' | 'manager' | 'employee' | 'viewer';
+  role: 'admin' | 'manager' | 'employee' | 'viewer' | 'platform_support_agent';
   isActive: boolean;
   lastLoginAt?: string;
   createdAt: string;
@@ -1853,7 +1854,7 @@ export interface ChatMessage {
 export interface Message {
   id: string;
   title: string;
-  kind: 'DIRECT' | 'SYSTEM';
+  kind: 'DIRECT' | 'SYSTEM' | 'SUPPORT';
   participant: MessageParticipant;
   preview: string;
   lastMessageAt: string;
