@@ -4,11 +4,21 @@ import type { Message } from '../types';
 export type SupportScopeType = 'GROUP' | 'BUSINESS_UNIT' | 'BRANCH';
 export interface SupportScope { type: SupportScopeType; id: string }
 export interface SupportAgent { id: string; name: string; email: string; isActive: boolean; createdAt: string; updatedAt: string; scopes: Array<SupportScope & { name: string }> }
-export interface SupportTargets {
-  groups: Array<{ id: string; name: string }>;
-  businessUnits: Array<{ id: string; name: string; groupName: string }>;
-  branches: Array<{ id: string; name: string; groupName: string; businessUnitName: string }>;
+export interface SupportTargetOptionBranch { id: string; name: string; selectable: boolean }
+export interface SupportTargetOptionBusinessUnit {
+  id: string;
+  name: string;
+  selectable: boolean;
+  branches: SupportTargetOptionBranch[];
 }
+export interface SupportTargetOptionGroup {
+  id: string;
+  name: string;
+  selectable: boolean;
+  businessUnits: SupportTargetOptionBusinessUnit[];
+  branches: SupportTargetOptionBranch[];
+}
+export interface SupportTargets { groups: SupportTargetOptionGroup[] }
 export interface SupportPreview {
   targets: SupportScope[];
   branchCount: number;

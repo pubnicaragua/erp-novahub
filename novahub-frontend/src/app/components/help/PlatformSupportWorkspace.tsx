@@ -5,7 +5,7 @@ import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAuth } from '../../contexts/AuthContext';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
-import { supportConversationsService, subscribeToSupportEvents, type SupportConversation, type SupportPreview, type SupportScope, type SupportTargets } from '../../services/support-conversations.service';
+import { supportConversationsService, subscribeToSupportEvents, type SupportConversation, type SupportPreview, type SupportScope, type SupportTargets, type SupportTargetOptionGroup } from '../../services/support-conversations.service';
 import type { ChatMessage } from '../../types';
 import { toast } from '@/app/services/toast';
 import { Badge } from '../ui/badge';
@@ -15,6 +15,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { cn } from '../ui/utils';
+import {
+  isSupportTargetChecked,
+  isSupportTargetInherited,
+  isSupportTargetPartiallySelected,
+  toggleSupportTargetSelection,
+} from './support-target-selection';
 
 const formatThreadDate = (value: string) => {
   const date = new Date(value);
@@ -80,9 +86,7 @@ export function PlatformSupportWorkspace() {
   }, [selected?.id, selected?.unreadCount, queryClient, identity]);
 
   const toggleTarget = (scope: SupportScope) => {
-    setSelectedTargets((current) => current.some((item) => item.type === scope.type && item.id === scope.id)
-      ? current.filter((item) => item.type !== scope.type || item.id !== scope.id)
-      : [...current, scope]);
+    setSelectedTargets((current) => toggleSupportTargetSelection(current, scope, targets.groups));
     setPreview(null);
   };
 
@@ -209,16 +213,14 @@ export function PlatformSupportWorkspace() {
 
       <Dialog open={composeOpen} onOpenChange={closeComposer}>
         <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto rounded-2xl p-4 sm:p-6">
-          <DialogHeader><DialogTitle className="flex items-center gap-2 text-xl font-black"><MailPlus className="size-5 text-primary" /> Nuevo mensaje de soporte</DialogTitle><DialogDescription>Selecciona grupos, rubros o sucursales. El sistema abrirá un hilo separado para cada sucursal con usuarios autorizados.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2 text-xl font-black"><MailPlus className="size-5 text-primary" /> Nuevo mensaje de soporte</DialogTitle><DialogDescription>Selecciona un grupo completo, rubros o sucursales concretas. Marcar un nivel superior incluye sus descendientes; desmárcalo para limitar el envío. Se abrirá un hilo privado por sucursal con usuarios autorizados.</DialogDescription></DialogHeader>
           <div className="space-y-5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-xs font-bold">Asunto <span className="text-muted-foreground">({composeTitle.length}/140)</span><Input value={composeTitle} maxLength={140} onChange={(event) => setComposeTitle(event.target.value)} className="mt-1.5 rounded-xl" placeholder="Actualización de soporte" /></label><div className="flex items-end text-xs text-muted-foreground"><Users className="mr-2 size-4 shrink-0" />El destino se resolverá a sucursales activas.</div></div>
             <label className="block text-xs font-bold">Mensaje <span className="text-muted-foreground">({composeContent.length}/4000)</span><Textarea value={composeContent} maxLength={4000} onChange={(event) => setComposeContent(event.target.value)} className="mt-1.5 min-h-28 rounded-xl" placeholder="Escribe el mensaje para las sucursales…" /></label>
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-3 sm:p-4"><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="text-sm font-black">Destinos autorizados</h3><p className="text-xs text-muted-foreground">{targetsLoading(targetsQuery.isLoading, targetsQuery.isFetching) ? 'Cargando alcances…' : `${selectedTargets.length} seleccionados`}</p></div><Button type="button" variant="outline" size="sm" className="rounded-lg" onClick={() => void runPreview()} disabled={!selectedTargets.length || previewLoading || targetsQuery.isError}>{previewLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Check className="mr-2 size-4" />} Vista previa</Button></div>
-              {targetsQuery.isError ? <p className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive">No pudimos cargar tus alcances.</p> : targetsLoading(targetsQuery.isLoading, targetsQuery.isFetching) ? <div className="flex justify-center p-6"><Loader2 className="size-5 animate-spin" /></div> : <div className="max-h-60 space-y-3 overflow-y-auto pr-1">
-                {targets.groups.map((group) => <ScopeCheckbox key={`GROUP:${group.id}`} scope={{ type: 'GROUP', id: group.id }} checked={isSelected(selectedTargets, 'GROUP', group.id)} onChange={toggleTarget} label={group.name} description="Todas las sucursales activas del grupo" />)}
-                {targets.businessUnits.map((unit) => <ScopeCheckbox key={`BUSINESS_UNIT:${unit.id}`} scope={{ type: 'BUSINESS_UNIT', id: unit.id }} checked={isSelected(selectedTargets, 'BUSINESS_UNIT', unit.id)} onChange={toggleTarget} label={unit.name} description={unit.groupName} nested />)}
-                {targets.branches.map((branch) => <ScopeCheckbox key={`BRANCH:${branch.id}`} scope={{ type: 'BRANCH', id: branch.id }} checked={isSelected(selectedTargets, 'BRANCH', branch.id)} onChange={toggleTarget} label={branch.name} description={`${branch.groupName} · ${branch.businessUnitName}`} nested />)}
-                {!targets.groups.length && !targets.businessUnits.length && !targets.branches.length && <p className="py-5 text-center text-sm text-muted-foreground">SuperAdmin todavía no asigna destinos a tu cuenta.</p>}
+            <div className="rounded-2xl border border-border/70 bg-muted/20 p-3 sm:p-4"><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="text-sm font-black">Destinos autorizados</h3><p className="text-xs text-muted-foreground">{targetsLoading(targetsQuery.isLoading, targetsQuery.isFetching) ? 'Cargando alcances…' : `${selectedTargets.length} destino${selectedTargets.length === 1 ? '' : 's'} seleccionado${selectedTargets.length === 1 ? '' : 's'}`}</p></div><Button type="button" variant="outline" size="sm" className="rounded-lg" onClick={() => void runPreview()} disabled={!selectedTargets.length || previewLoading || targetsQuery.isError}>{previewLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Check className="mr-2 size-4" />} Vista previa</Button></div>
+              {targetsQuery.isError ? <p className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive">No pudimos cargar tus alcances.</p> : targetsLoading(targetsQuery.isLoading, targetsQuery.isFetching) ? <div className="flex justify-center p-6"><Loader2 className="size-5 animate-spin" /></div> : <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+                {targets.groups.map((group) => <SupportTargetGroup key={group.id} group={group} selected={selectedTargets} onChange={toggleTarget} />)}
+                {!targets.groups.length && <p className="py-5 text-center text-sm text-muted-foreground">SuperAdmin todavía no asigna destinos a tu cuenta.</p>}
               </div>}
               {preview && <div className="mt-4 space-y-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-3"><div className="flex flex-wrap gap-2"><Badge variant="secondary">{preview.branchCount} sucursales</Badge><Badge variant="secondary">{preview.eligibleRecipientCount} destinatarios</Badge></div><div className="max-h-36 space-y-1 overflow-y-auto text-xs">{preview.branches.map((branch) => <div key={branch.id} className="flex justify-between gap-3"><span className="truncate">{branch.name}</span><span className={branch.recipientCount ? 'shrink-0 font-bold text-primary' : 'shrink-0 font-bold text-amber-600'}>{branch.recipientCount ? `${branch.recipientCount} usuarios` : 'Sin destinatarios'}</span></div>)}</div>{preview.branchesWithoutRecipients.length > 0 && <p className="text-xs text-amber-700 dark:text-amber-300">Las sucursales sin destinatarios se omitirán del envío.</p>}</div>}
             </div>
@@ -230,10 +232,39 @@ export function PlatformSupportWorkspace() {
   );
 }
 
-function ScopeCheckbox({ scope, checked, onChange, label, description, nested = false }: { scope: SupportScope; checked: boolean; onChange: (scope: SupportScope) => void; label: string; description: string; nested?: boolean }) {
-  const id = `support-target-${scope.type}-${scope.id}`;
-  return <label htmlFor={id} className={cn('flex cursor-pointer items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 hover:border-border/70 hover:bg-background/70', nested && 'ml-3 sm:ml-5')}><input id={id} type="checkbox" checked={checked} onChange={() => onChange(scope)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span className="min-w-0"><span className="block break-words text-sm font-bold">{label}</span><span className="block break-words text-xs text-muted-foreground">{description}</span></span></label>;
+function SupportTargetGroup({ group, selected, onChange }: { group: SupportTargetOptionGroup; selected: SupportScope[]; onChange: (scope: SupportScope) => void }) {
+  const groupScope = { type: 'GROUP', id: group.id } as const;
+  return <div className="space-y-1 rounded-xl border border-border/50 p-2">
+    <TargetCheckbox scope={groupScope} checked={isSupportTargetChecked(selected, groupScope, [group])} indeterminate={isSupportTargetPartiallySelected(selected, groupScope, [group])} inherited={isSupportTargetInherited(selected, groupScope, [group])} selectable={group.selectable} label={group.name} description={group.selectable ? 'Grupo empresarial · todas sus sucursales activas' : 'Grupo empresarial · contexto del alcance asignado'} onChange={onChange} />
+    {(group.businessUnits.length > 0 || group.branches.length > 0) && <div className="ml-3 space-y-1 border-l border-border/70 pl-2 sm:ml-5 sm:pl-3">
+      {group.businessUnits.map((unit) => {
+        const unitScope = { type: 'BUSINESS_UNIT', id: unit.id } as const;
+        const unitTree = [{ ...group, businessUnits: [unit], branches: [] }];
+        return <div key={unit.id}>
+          <TargetCheckbox scope={unitScope} checked={isSupportTargetChecked(selected, unitScope, unitTree)} indeterminate={isSupportTargetPartiallySelected(selected, unitScope, unitTree)} inherited={isSupportTargetInherited(selected, unitScope, unitTree)} selectable={unit.selectable} label={unit.name} description={unit.selectable ? 'Rubro · sucursales activas actuales' : 'Rubro · contexto del alcance asignado'} onChange={onChange} />
+          {unit.branches.length > 0 && <div className="ml-3 space-y-1 border-l border-border/60 pl-2 sm:ml-5 sm:pl-3">{unit.branches.map((branch) => {
+            const scope = { type: 'BRANCH', id: branch.id } as const;
+            const branchTree = [{ ...group, businessUnits: [{ ...unit, branches: [branch] }], branches: [] }];
+            return <TargetCheckbox key={branch.id} scope={scope} checked={isSupportTargetChecked(selected, scope, branchTree)} indeterminate={false} inherited={isSupportTargetInherited(selected, scope, branchTree)} selectable={branch.selectable} label={branch.name} description={branch.selectable ? 'Sucursal · envío solo a esta sucursal' : 'Sucursal fuera del alcance seleccionable'} onChange={onChange} />;
+          })}</div>}
+        </div>;
+      })}
+      {group.branches.map((branch) => {
+        const scope = { type: 'BRANCH', id: branch.id } as const;
+        const branchTree = [{ ...group, businessUnits: [], branches: [branch] }];
+        return <TargetCheckbox key={branch.id} scope={scope} checked={isSupportTargetChecked(selected, scope, branchTree)} indeterminate={false} inherited={isSupportTargetInherited(selected, scope, branchTree)} selectable={branch.selectable} label={branch.name} description="Sucursal · envío solo a esta sucursal" onChange={onChange} />;
+      })}
+    </div>}
+  </div>;
 }
 
-function isSelected(scopes: SupportScope[], type: SupportScope['type'], id: string) { return scopes.some((scope) => scope.type === type && scope.id === id); }
+function TargetCheckbox({ scope, checked, indeterminate, inherited, selectable, onChange, label, description }: { scope: SupportScope; checked: boolean; indeterminate: boolean; inherited: boolean; selectable: boolean; onChange: (scope: SupportScope) => void; label: string; description: string }) {
+  const id = `support-target-${scope.type}-${scope.id}`;
+  const disabled = !selectable || inherited;
+  return <label htmlFor={id} className={cn('flex items-start gap-3 rounded-xl border border-transparent px-3 py-2.5', disabled ? 'cursor-not-allowed opacity-75' : 'cursor-pointer hover:border-border/70 hover:bg-background/70')}>
+    <input id={id} type="checkbox" checked={checked} disabled={disabled} aria-checked={indeterminate ? 'mixed' : checked} onChange={() => onChange(scope)} ref={(element) => { if (element) element.indeterminate = indeterminate; }} className="mt-0.5 size-4 shrink-0 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:[color-scheme:dark]" />
+    <span className="min-w-0"><span className="block break-words text-sm font-bold">{label}</span><span className="block break-words text-xs text-muted-foreground">{description}{inherited ? ' · incluido por el destino superior' : ''}</span></span>
+  </label>;
+}
+
 function targetsLoading(loading: boolean, fetching: boolean) { return loading || fetching; }

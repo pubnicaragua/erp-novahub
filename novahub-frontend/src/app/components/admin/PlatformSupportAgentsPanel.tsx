@@ -9,6 +9,8 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
+import { PasswordRequirements } from '../PasswordRequirements';
+import { getSupportAgentPasswordError } from './support-agent-password';
 import {
   filterSupportScopeTree,
   isSupportScopeChecked,
@@ -38,6 +40,7 @@ export function PlatformSupportAgentsPanel() {
   const [showOnlySelected, setShowOnlySelected] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingStatusId, setPendingStatusId] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ['platform-support-agents'] });
@@ -49,6 +52,7 @@ export function PlatformSupportAgentsPanel() {
     setScopes([]);
     setScopeSearch('');
     setShowOnlySelected(false);
+    setShowPassword(false);
     setDialogOpen(true);
   };
 
@@ -58,16 +62,22 @@ export function PlatformSupportAgentsPanel() {
     setScopes(normalizeSupportScopes(agent.scopes.map(({ type, id }) => ({ type, id })), groups));
     setScopeSearch('');
     setShowOnlySelected(false);
+    setShowPassword(false);
     setDialogOpen(true);
   };
 
   const toggleScope = (scope: SupportScope) => setScopes((current) => toggleSupportScope(current, scope, groups));
   const visibleGroups = filterSupportScopeTree(groups, scopeSearch, { scopes, onlySelected: showOnlySelected });
   const selectedScopeDetails = scopes.map((scope) => ({ scope, ...getScopeDisplay(scope, groups) }));
+  const passwordError = getSupportAgentPasswordError(form.password, Boolean(editing));
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!form.name.trim() || !form.email.trim() || (!editing && !form.password)) return;
+    if (passwordError) {
+      toast.error(passwordError);
+      return;
+    }
+    if (!form.name.trim() || !form.email.trim()) return;
     setSaving(true);
     try {
       if (editing) {
@@ -79,6 +89,8 @@ export function PlatformSupportAgentsPanel() {
         toast.success('Cuenta de soporte creada');
       }
       setDialogOpen(false);
+      setForm(EMPTY_FORM);
+      setShowPassword(false);
       await refresh();
     } catch (error) { toast.error(getErrorMessage(error, 'No pudimos guardar la cuenta de soporte')); }
     finally { setSaving(false); }
@@ -94,6 +106,13 @@ export function PlatformSupportAgentsPanel() {
     finally { setPendingStatusId(null); }
   };
 
+  const closeDialog = () => {
+    if (saving) return;
+    setDialogOpen(false);
+    setForm((current) => ({ ...current, password: '' }));
+    setShowPassword(false);
+  };
+
   return <section className="space-y-5">
     <Card className="rounded-3xl border-primary/20 bg-primary/[0.03] shadow-sm"><CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div className="flex min-w-0 items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><ShieldCheck className="size-5" /></div><div><h2 className="text-base font-black uppercase">Agentes externos de soporte</h2><p className="mt-1 max-w-3xl text-sm text-muted-foreground">Estas cuentas solo entran a la bandeja de soporte. Asigna grupos, rubros o sucursales para controlar dónde pueden iniciar y continuar conversaciones.</p></div></div><Button onClick={openCreate} className="shrink-0 rounded-xl"><Plus className="mr-2 size-4" /> Crear cuenta</Button></CardContent></Card>
 
@@ -102,7 +121,7 @@ export function PlatformSupportAgentsPanel() {
         : agents.length === 0 ? <Card className="rounded-2xl border-dashed"><CardContent className="p-10 text-center"><Users className="mx-auto size-8 text-muted-foreground" /><p className="mt-3 font-bold">Aún no hay agentes</p><p className="mt-1 text-sm text-muted-foreground">Crea una cuenta externa y define sus sucursales autorizadas.</p></CardContent></Card>
           : <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">{agents.map((agent) => <Card key={agent.id} className="min-w-0 rounded-2xl border-border/70 shadow-sm"><CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3"><div className="flex min-w-0 items-start gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><UserRound className="size-4" /></div><div className="min-w-0"><CardTitle className="break-words text-base font-black">{agent.name}</CardTitle><p className="break-all text-sm text-muted-foreground">{agent.email}</p></div></div><Badge variant={agent.isActive ? 'default' : 'secondary'} className="shrink-0">{agent.isActive ? 'Activa' : 'Inactiva'}</Badge></CardHeader><CardContent className="space-y-4 px-5 pb-5 pt-2"><div className="flex flex-wrap gap-2">{agent.scopes.length ? agent.scopes.map((scope) => <Badge key={`${scope.type}:${scope.id}`} variant="outline" className="max-w-full gap-1.5 whitespace-normal break-words text-left"><ScopeIcon type={scope.type} />{scope.type === 'GROUP' ? 'Grupo' : scope.type === 'BUSINESS_UNIT' ? 'Rubro' : 'Sucursal'} · {scope.name}</Badge>) : <span className="text-xs text-amber-600">Sin alcances asignados; no puede operar.</span>}</div><div className="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-3"><Button type="button" variant="outline" size="sm" className="rounded-lg" onClick={() => openEdit(agent)}>Editar y alcances</Button><Button type="button" variant={agent.isActive ? 'ghost' : 'outline'} size="sm" className="rounded-lg" onClick={() => void toggleStatus(agent)} disabled={pendingStatusId === agent.id}>{pendingStatusId === agent.id && <Loader2 className="mr-2 size-3.5 animate-spin" />}{agent.isActive ? 'Desactivar' : 'Activar'}</Button></div></CardContent></Card>)}</div>}
 
-    <Dialog open={dialogOpen} onOpenChange={(open) => !saving && setDialogOpen(open)}>
+    <Dialog open={dialogOpen} onOpenChange={(open) => open ? setDialogOpen(true) : closeDialog()}>
       <DialogContent className="!flex !h-[min(95vh,calc(100dvh-1rem))] !max-h-[min(95vh,calc(100dvh-1rem))] !w-[calc(100vw-1rem)] !max-w-[1100px] flex-col overflow-hidden rounded-2xl p-4 sm:!h-[min(90vh,calc(100dvh-1rem))] sm:!max-h-[min(90vh,calc(100dvh-1rem))] sm:p-6">
         <DialogHeader className="shrink-0">
           <DialogTitle className="text-xl font-black">{editing ? 'Editar agente de soporte' : 'Crear agente de soporte'}</DialogTitle>
@@ -113,7 +132,20 @@ export function PlatformSupportAgentsPanel() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="text-xs font-bold">Nombre<Input className="mt-1.5 rounded-xl" value={form.name} maxLength={160} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} /></label>
               <label className="text-xs font-bold">Correo<Input className="mt-1.5 rounded-xl" type="email" value={form.email} maxLength={254} onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))} /></label>
-              <label className="text-xs font-bold sm:col-span-2">{editing ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'}<Input className="mt-1.5 rounded-xl" type="password" autoComplete="new-password" value={form.password} maxLength={200} onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))} /></label>
+              <div className="space-y-1.5 sm:col-span-2">
+                <label htmlFor="support-agent-password" className="text-xs font-bold">{editing ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'}</label>
+                <span className="relative block">
+                  <Input id="support-agent-password" className="pr-11" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={form.password} maxLength={200} aria-describedby="support-agent-password-requirements" onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))} />
+                  <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 size-8 -translate-y-1/2 rounded-lg" aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} onClick={() => setShowPassword((value) => !value)}>
+                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </Button>
+                </span>
+                {editing && <p className="text-[11px] text-muted-foreground">Deja el campo vacío para conservarla. Al restablecerla, se cerrarán las sesiones activas.</p>}
+              </div>
+              <div id="support-agent-password-requirements" className="sm:col-span-2">
+                <PasswordRequirements value={form.password} required={!editing} />
+                {passwordError && <p className="mt-2 text-xs text-destructive" role="alert">{passwordError}</p>}
+              </div>
             </div>
 
             <section aria-labelledby="support-agent-scopes-heading" className="rounded-2xl border border-border/70 bg-muted/20 p-3 sm:p-4">
@@ -159,8 +191,8 @@ export function PlatformSupportAgentsPanel() {
             </section>
           </div>
           <DialogFooter className="!flex-row shrink-0 gap-2 border-t border-border/60 pt-3 sm:gap-2">
-            <Button type="button" variant="outline" className="flex-1 sm:flex-none" onClick={() => setDialogOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button type="submit" className="flex-1 sm:flex-none" disabled={saving || !form.name.trim() || !form.email.trim() || (!editing && !form.password)}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />}{editing ? 'Guardar cambios' : 'Crear cuenta'}</Button>
+            <Button type="button" variant="outline" className="flex-1 sm:flex-none" onClick={closeDialog} disabled={saving}>Cancelar</Button>
+            <Button type="submit" className="flex-1 sm:flex-none" disabled={saving || !form.name.trim() || !form.email.trim() || Boolean(passwordError)}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />}{editing ? 'Guardar cambios' : 'Crear cuenta'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
