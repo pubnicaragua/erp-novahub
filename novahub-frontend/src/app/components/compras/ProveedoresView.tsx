@@ -124,21 +124,24 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     const seenTaxIds = new Set<string>();
     return rows.map((row) => {
       const next: SupplierImportRow = { ...row, error: undefined, warning: undefined };
+      const warnings: string[] = [];
       const email = row.email.trim().toLowerCase();
       const taxId = row.taxId.trim().toLowerCase();
-      const rucPendingIsNoted = /\bruc\s+pendiente\b/i.test(row.notes.trim());
       const openingAmountText = String(row.openingBalanceAmount || '').trim();
       const openingAmount = openingAmountText ? Number(openingAmountText) : 0;
       if (!row.name.trim()) next.error = 'Nombre obligatorio';
       else if (row.type && !['COMPANY', 'INDIVIDUAL'].includes(row.type)) next.error = 'Tipo de proveedor inválido';
-      else if (row.type === 'COMPANY' && !taxId && !rucPendingIsNoted) next.error = 'Indica el RUC o agrega “RUC pendiente” en Notas';
       else if (email && !/^\S+@\S+\.\S+$/.test(email)) next.error = 'Correo inválido';
       else if (email && (existingEmails.has(email) || seenEmails.has(email))) next.error = 'Correo duplicado';
       else if (taxId && (existingTaxIds.has(taxId) || seenTaxIds.has(taxId))) next.error = 'Identificación fiscal duplicada';
       else if (openingAmountText && (!Number.isFinite(openingAmount) || openingAmount < 0)) next.error = 'Importe de saldo inicial inválido';
       else if (openingAmount > 0 && !row.openingBalanceType) next.error = 'Indica si el saldo inicial está pendiente o a favor';
       else if (openingAmount > 0 && !['NIO', 'USD'].includes(row.openingBalanceCurrency)) next.error = 'Moneda inicial inválida';
-      if (!next.error && row.code.trim()) next.warning = 'El código proporcionado se ignorará; se generará un consecutivo automáticamente';
+      if (!next.error) {
+        if (row.type !== 'INDIVIDUAL' && !taxId) warnings.push('Empresa sin RUC; se agregará “RUC pendiente” a Notas');
+        if (row.code.trim()) warnings.push('Se generará un código nuevo y el anterior se conservará en Notas');
+        next.warning = warnings.join(' · ') || undefined;
+      }
       if (email) { existingEmails.add(email); seenEmails.add(email); }
       if (taxId) { existingTaxIds.add(taxId); seenTaxIds.add(taxId); }
       return next;
@@ -152,19 +155,19 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const guide = XLSX.utils.aoa_to_sheet([
       ['GUÍA DE LLENADO · IMPORTACIÓN DE PROVEEDORES'],
-      ['Puedes repetir la importación. El código se genera automáticamente y conserva el consecutivo por sucursal.'],
+      ['Puedes repetir la importación. Se genera un código nuevo y, si el archivo incluye uno anterior, se conserva en Notas como “Código anterior: ...”.'],
       ['Campo', 'Regla'],
       ['Nombre', 'Obligatorio. Es el nombre comercial o razón social del proveedor.'],
       ['Tipo', 'Empresa o Individual. Si falta esta columna, se conserva la compatibilidad con plantillas anteriores.'],
       ['Nombre de empresa', 'Opcional y separado del nombre del proveedor; aplica cuando el tipo es Empresa.'],
-      ['RUC / identificación', 'Obligatorio al indicar Empresa; si aún está pendiente, agrega “RUC pendiente” en Notas. No se puede repetir dentro de la empresa.'],
+      ['RUC / identificación', 'No se puede repetir dentro de la empresa. Si falta para una Empresa, se mostrará un aviso, se importará y se agregará “RUC pendiente” a Notas.'],
       ['Correo', 'Opcional, pero debe tener formato válido y no estar registrado.'],
       ['Contacto y ubicación', 'Completa persona de contacto, teléfono, dirección, ciudad y país cuando aplique.'],
       ['Condiciones de pago', 'Opcional. Ejemplos: Contado, 30 días, crédito.'],
       ['Notas', 'Opcional. Puedes guardar referencias como “Código anterior: CLN0001” o “RUC pendiente”.'],
       ['Saldo inicial', 'Opcional. Elige Pendiente o A favor e indica importe y moneda. Si no hay importe, se omite. La moneda sugerida es la moneda base del tenant.'],
       ['Estado', 'Usa ACTIVO o INACTIVO.'],
-      ['Previsualización', 'Después de cargar el archivo podrás corregir los datos y revisar los errores antes de guardar.'],
+      ['Previsualización', 'Después de cargar el archivo podrás corregir los datos y revisar errores y avisos. Los avisos no bloquean la importación.'],
     ]);
     guide['!cols'] = [{ wch: 30 }, { wch: 110 }];
     const workbook = XLSX.utils.book_new();
@@ -549,7 +552,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       toast.error('El nombre del proveedor es obligatorio');
       return;
     }
-    if (draft.type === 'COMPANY' && !draft.ruc.trim() && !/\bruc\s+pendiente\b/i.test(draft.notes)) {
+    if (draft.type === 'COMPANY' && !draft.ruc.trim()) {
       toast.error('El RUC es obligatorio para un proveedor empresa');
       return;
     }
@@ -753,7 +756,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               </div>
             </section>
             <section className="space-y-3 border-t border-border/40 pt-5">
-              <div><h3 className="text-sm font-black uppercase tracking-widest">Notas</h3><p className="text-xs text-muted-foreground">Referencia interna del proveedor. Para empresas sin RUC, escribe “RUC pendiente”.</p></div>
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Notas</h3><p className="text-xs text-muted-foreground">Referencia interna del proveedor. En importaciones, las empresas sin RUC recibirán un aviso y la nota “RUC pendiente”.</p></div>
               <Textarea id="supplier-create-notes" aria-label="Notas del proveedor" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Código anterior: CLN0001" rows={3} className="rounded-xl" />
             </section>
           </div>
@@ -795,7 +798,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               </div>
             </section>
             <section className="space-y-3 border-t border-border/40 pt-5">
-              <div><h3 className="text-sm font-black uppercase tracking-widest">Notas</h3><p className="text-xs text-muted-foreground">Referencia interna del proveedor. Para empresas sin RUC, escribe “RUC pendiente”.</p></div>
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Notas</h3><p className="text-xs text-muted-foreground">Referencia interna del proveedor. En importaciones, las empresas sin RUC recibirán un aviso y la nota “RUC pendiente”.</p></div>
               <Textarea id="supplier-edit-notes" aria-label="Notas del proveedor" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Código anterior: CLN0001" rows={3} className="rounded-xl" />
             </section>
           </div>

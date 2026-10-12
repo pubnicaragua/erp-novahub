@@ -32,7 +32,7 @@ import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/custo
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
-import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, hasPendingCompanyRucImportNote, identifierComparisonKey, isCustomerIdentifierValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
+import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerImportPhoneValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -188,21 +188,25 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     const seenTaxIds = new Set<string>();
     return rows.map((row) => {
       const next: CustomerImportRow = { ...row, error: undefined, warning: undefined };
+      const warnings: string[] = [];
       const identifiers = [row.taxId, row.ruc].map(identifierComparisonKey).filter(Boolean);
       const priceListMatch = row.priceListCode && priceLists.some((list) => list.code.toLowerCase() === row.priceListCode.trim().toLowerCase() || list.name.toLowerCase() === row.priceListCode.trim().toLowerCase());
       if (!row.name.trim()) next.error = 'Nombre obligatorio';
       else if (row.taxId && !isCustomerIdentifierValid(row.taxId, 'taxId', row.countryCode)) next.error = 'Identificación fiscal inválida para el país';
       else if (row.ruc && !isCustomerIdentifierValid(row.ruc, 'ruc', row.countryCode)) next.error = 'RUC inválido para el país';
-      else if (row.phone && !isCustomerPhoneValid(row.phone, row.countryCode)) next.error = 'Teléfono inválido para el país';
-      else if (row.contactPhone && !isCustomerPhoneValid(row.contactPhone, row.countryCode)) next.error = 'Teléfono de contacto inválido para el país';
       else if (identifiers.some((identifier) => existingTaxIds.has(identifier) || seenTaxIds.has(identifier))) next.error = 'Cédula o RUC duplicado';
-      else if (customerRucRequired(row.type, row.countryCode) && !row.ruc.trim() && !hasPendingCompanyRucImportNote(row.notes)) next.error = 'RUC obligatorio para empresas';
       else if (row.creditLimit !== '' && (!Number.isFinite(Number(row.creditLimit)) || Number(row.creditLimit) < 0)) next.error = 'Límite de crédito inválido';
       else if (row.creditLimitCurrencyError || !['NIO', 'USD'].includes(row.creditLimitCurrency)) next.error = 'Moneda del límite inválida';
       else if (row.openingBalanceAmount !== '' && (!Number.isFinite(Number(row.openingBalanceAmount)) || Number(row.openingBalanceAmount) < 0)) next.error = 'Saldo inicial inválido';
       else if (Number(row.openingBalanceAmount || 0) > 0 && (row.openingBalanceTypeError || !['PENDING', 'FAVOR'].includes(row.openingBalanceType))) next.error = 'Selecciona un tipo válido para el saldo inicial';
       else if (row.openingBalanceCurrencyError || !['NIO', 'USD'].includes(row.openingBalanceCurrency)) next.error = 'Moneda del saldo inicial inválida';
-      if (!next.error && row.priceListCode && !priceListMatch) next.warning = 'Lista no encontrada; se importará sin lista';
+      if (!next.error) {
+        if (row.type === 'COMPANY' && !row.ruc.trim()) warnings.push('Empresa sin RUC; se agregará “RUC pendiente” a Notas');
+        if (row.phone && !isCustomerImportPhoneValid(row.phone, row.countryCode)) warnings.push('No se pudo validar automáticamente el teléfono; se conservará');
+        if (row.contactPhone && !isCustomerImportPhoneValid(row.contactPhone, row.countryCode)) warnings.push('No se pudo validar automáticamente el teléfono de contacto; se conservará');
+        if (row.priceListCode && !priceListMatch) warnings.push('Lista no encontrada; se importará sin lista');
+        next.warning = warnings.join(' · ') || undefined;
+      }
       identifiers.forEach((identifier) => { seenTaxIds.add(identifier); existingTaxIds.add(identifier); });
       return next;
     });
@@ -231,9 +235,9 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       ['Nombre', 'Obligatorio. Identifica a la persona natural o jurídica.'],
       ['Tipo', 'Usa PARTICULAR para una persona o EMPRESA para una empresa.'],
       ['Nombre de empresa', 'Opcional y solo para empresas. Se guarda por separado del nombre y de la razón social.'],
-      ['Cédula y RUC', 'Completa el identificador fiscal que corresponda al tipo de cliente.'],
-      ['País y Código país', 'Indica el país del cliente. Usa preferiblemente Código país con el código ISO de 2 letras (por ejemplo, NI, US, CA o MX); el teléfono se interpretará según ese país.'],
-      ['Teléfono', 'Escribe preferiblemente solo los dígitos nacionales, sin guiones ni espacios: Nicaragua 88888888, Estados Unidos 2025550123. También se acepta el formato internacional completo con +: +50588888888 o +12025550123. El prefijo debe corresponder al Código país; no combines el prefijo con el número nacional sin + (por ejemplo, no uses 50588888888).'],
+      ['Cédula y RUC', 'Completa el identificador fiscal que corresponda al tipo de cliente. Si falta el RUC de una empresa, aparecerá un aviso, se importará y se agregará “RUC pendiente” a Notas.'],
+      ['País y Código país', 'Indica el país del cliente usando preferiblemente el código ISO de 2 letras (por ejemplo, NI, US, CA o MX). Los teléfonos sin prefijo + se interpretan según ese país; los números internacionales usan el prefijo que traen.'],
+      ['Teléfono', 'Para números nacionales, usa el Código país indicado y escribe los dígitos sin prefijo. También se acepta el formato internacional completo con +, incluso si pertenece a otro país. Si el sistema no puede validar automáticamente un número, lo conservará y mostrará un aviso.'],
       ['Teléfono contacto', 'Usa las mismas reglas que en Teléfono. Si la celda tiene un número, configura la columna como Texto para conservar el signo +, ceros iniciales y todos los dígitos.'],
       ['Correo, dirección y ubicación', 'Completa correo, dirección, ciudad y departamento cuando aplique.'],
       ['Régimen fiscal', 'Opcional. Ejemplo: Régimen general, cuota fija o exento.'],

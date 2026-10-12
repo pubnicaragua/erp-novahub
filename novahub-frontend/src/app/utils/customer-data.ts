@@ -193,13 +193,18 @@ export function isCustomerPhoneValid(value: string | null | undefined, countryCo
   return !raw || (isValidPhoneNumber(raw, region) && !phoneCountryMismatch(raw, region));
 }
 
-export function customerRucRequired(type: string | null | undefined, countryCode: string | null | undefined): boolean {
-  return String(type || '').toUpperCase() === 'COMPANY' && String(countryCode || '').toUpperCase() === 'NI';
+export function isCustomerImportPhoneValid(value: string | null | undefined, countryCode: string): boolean {
+  const raw = String(value || '').trim();
+  if (!raw) return true;
+  const region = resolveCustomerCountryCode(countryCode);
+  const parsed = raw.startsWith('+')
+    ? parsePhoneNumberFromString(raw)
+    : parsePhoneNumberFromString(raw, region);
+  return Boolean(parsed?.isValid());
 }
 
-export function hasPendingCompanyRucImportNote(notes: string | null | undefined): boolean {
-  const normalized = String(notes || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  return /codigo\s+anterior\s*:\s*\S+/.test(normalized) && /ruc.{0,40}pendiente/.test(normalized);
+export function customerRucRequired(type: string | null | undefined, countryCode: string | null | undefined): boolean {
+  return String(type || '').toUpperCase() === 'COMPANY' && String(countryCode || '').toUpperCase() === 'NI';
 }
 
 export function customerPhoneHint(value: string | null | undefined, countryCode: string): string {
