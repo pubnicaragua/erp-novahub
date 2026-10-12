@@ -65,7 +65,7 @@ export function CustomerPhoneInput({ value, onChange, countryCode, label = 'Tel√
   </div>;
 }
 
-export function CustomerIdentifierInput({ value, onChange, countryCode, kind, label, required, ...props }: SharedProps & { value: string; onChange: (value: string) => void; countryCode: string; kind: 'taxId' | 'ruc'; label?: string; required?: boolean }) {
+export function CustomerIdentifierInput({ value, onChange, countryCode, kind, label, required, showHint = true, ...props }: SharedProps & { value: string; onChange: (value: string) => void; countryCode: string; kind: 'taxId' | 'ruc'; label?: string; required?: boolean; showHint?: boolean }) {
   const selected = countryOption(countryCode);
   const resolvedLabel = label || (kind === 'taxId' ? selected.taxIdLabel : selected.rucLabel);
   const hint = customerIdentifierHint(value, kind, countryCode);
@@ -73,7 +73,7 @@ export function CustomerIdentifierInput({ value, onChange, countryCode, kind, la
   return <div className="min-w-0 space-y-1.5">
     <Label htmlFor={id} className={labelClassName || 'text-[10px] font-black uppercase tracking-widest text-muted-foreground'}>{resolvedLabel} {required && <span className="text-destructive">*</span>}</Label>
     <Input id={id} disabled={disabled} value={formatCustomerIdentifierInput(value, kind, countryCode)} onChange={(event) => onChange(formatCustomerIdentifierInput(event.target.value, kind, countryCode))} placeholder={countryCode === 'NI' ? (kind === 'taxId' ? '001-010190-1000A' : 'J0310000000000') : 'Identificaci√≥n opcional'} required={required} className={className || 'h-11 rounded-xl'} />
-    {hint && <p className="text-[10px] text-muted-foreground" aria-live="polite">{hint}</p>}
+    {showHint && hint && <p className="text-[10px] text-muted-foreground" aria-live="polite">{hint}</p>}
   </div>;
 }
 
