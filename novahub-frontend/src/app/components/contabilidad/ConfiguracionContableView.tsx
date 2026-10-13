@@ -18,7 +18,6 @@ import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { Combobox } from '../ui/Combobox'
-import { Checkbox } from '../ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { cn } from '../ui/utils'
 import { toast } from '@/app/services/toast'
@@ -635,7 +634,6 @@ function AccountMappingQuickSetupDialog({
   }
   const buildInitialSelection = () => {
     const nextCodes: Record<string, string> = {}
-    const nextChecked: Record<string, boolean> = {}
     for (const { module, field } of fields) {
       const id = fieldId(module.id, field.key)
       const currentCode = accountMappings[module.id]?.[field.key] || field.defaultCode
@@ -643,13 +641,10 @@ function AccountMappingQuickSetupDialog({
       const currentIsValid = Boolean(currentAccount && !getAccountOptionState(currentAccount, field, module.id).disabled)
       const uniqueSuggestion = uniqueSuggestionFor(module.id, field.key)
       nextCodes[id] = !currentIsValid && uniqueSuggestion ? uniqueSuggestion.code : ''
-      nextChecked[id] = !currentIsValid && Boolean(uniqueSuggestion)
     }
-    return { selectedCodes: nextCodes, checkedFields: nextChecked }
+    return nextCodes
   }
-  const [initialSelection] = useState(buildInitialSelection)
-  const [selectedCodes, setSelectedCodes] = useState(initialSelection.selectedCodes)
-  const [checkedFields, setCheckedFields] = useState(initialSelection.checkedFields)
+  const [selectedCodes, setSelectedCodes] = useState(buildInitialSelection)
   const [search, setSearch] = useState('')
 
   const filteredFields = useMemo(() => {
@@ -663,27 +658,19 @@ function AccountMappingQuickSetupDialog({
     const id = fieldId(module.id, field.key)
     const currentCode = getCurrentCode(module.id, field)
     const selectedCode = selectedCodes[id]
-    return checkedFields[id] && selectedCode && selectedCode !== currentCode
+    return selectedCode && selectedCode !== currentCode
       ? [{ moduleId: module.id, fieldKey: field.key, value: selectedCode }]
       : []
   })
 
   const selectUniqueSuggestions = () => {
     const nextCodes = { ...selectedCodes }
-    const nextChecked = { ...checkedFields }
     for (const { module, field } of fields) {
       const id = fieldId(module.id, field.key)
       const uniqueSuggestion = uniqueSuggestionFor(module.id, field.key)
-      if (uniqueSuggestion) {
-        nextCodes[id] = uniqueSuggestion.code
-        nextChecked[id] = uniqueSuggestion.code !== getCurrentCode(module.id, field)
-      } else {
-        nextCodes[id] = ''
-        nextChecked[id] = false
-      }
+      nextCodes[id] = uniqueSuggestion?.code || ''
     }
     setSelectedCodes(nextCodes)
-    setCheckedFields(nextChecked)
   }
 
   return (
@@ -694,7 +681,7 @@ function AccountMappingQuickSetupDialog({
             <Sparkles className="size-4 shrink-0 text-primary" /> Configuración rápida por asociación
           </DialogTitle>
           <DialogDescription>
-            Revisa las recomendaciones por nombre y tipo. Las cuentas actuales válidas se conservan al abrir; solo se guardan los campos marcados.
+            Elige una cuenta en cada campo que quieras cambiar. Las selecciones distintas de la cuenta actual se incluirán al aplicar; las demás quedan sin cambios.
           </DialogDescription>
         </DialogHeader>
 
@@ -705,10 +692,10 @@ function AccountMappingQuickSetupDialog({
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="outline" onClick={selectUniqueSuggestions} disabled={loading || saving}>
-              <Check className="size-3.5" /> Seleccionar recomendaciones únicas
+              <Check className="size-3.5" /> Usar recomendaciones únicas
             </Button>
             <span className="self-center text-[10px] font-bold text-muted-foreground" aria-live="polite">
-              {patches.length} cambio{patches.length === 1 ? '' : 's'} listo{patches.length === 1 ? '' : 's'}
+              {patches.length} cambio{patches.length === 1 ? '' : 's'} por aplicar
             </span>
           </div>
         </div>
@@ -753,60 +740,47 @@ function AccountMappingQuickSetupDialog({
                         })
                       }
                       const selectedCode = selectedCodes[id] || ''
-                      const selectedSuggestion = matches.find(match => match.code === selectedCode)
                       return (
                         <article key={field.key} className="min-w-0 rounded-xl border border-border/50 bg-card p-3">
-                          <div className="flex min-w-0 items-start gap-2">
-                            <Checkbox
-                              id={`quick-check-${id}`}
-                              checked={Boolean(checkedFields[id])}
-                              disabled={loading || saving}
-                              onCheckedChange={checked => setCheckedFields(value => ({ ...value, [id]: checked === true }))}
-                              aria-label={`Aplicar cuenta para ${module.label}: ${field.label}`}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <label htmlFor={`quick-check-${id}`} className="cursor-pointer text-xs font-bold">{field.label}</label>
-                                <Badge variant="outline" className="text-[9px]">{field.side === 'debit' ? 'Debe' : 'Haber'}</Badge>
-                                <Badge variant="outline" className="text-[9px]">{accountTypeLabel(field.defaultType)}</Badge>
-                              </div>
-                              <p className="mt-1 break-words text-[10px] text-muted-foreground">
-                                Actual: {currentCode ? `${currentCode} · ${currentAccount?.name || 'No está en el plan'}` : 'Sin cuenta'}
-                                {currentState ? ` · ${currentState.disabled ? currentState.label : 'Válida'}` : ''}
-                              </p>
-                              {matches.length > 0 ? (
-                                <div className="mt-1 space-y-0.5 text-[10px]">
-                                  {isTie ? (
-                                    <p className="font-semibold text-amber-600">Empate entre las mejores opciones (puntaje {topScore}); selecciona una manualmente.</p>
-                                  ) : (
-                                    <p className="font-semibold text-emerald-600">Recomendada: {matches[0].code} · {matches[0].name}</p>
-                                  )}
-                                  {(isTie ? tiedTopMatches : matches.slice(0, 1)).map(match => (
-                                    <p key={match.code} className="break-words text-muted-foreground">{match.reason} · puntaje {match.score}</p>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="mt-1 text-[10px] text-muted-foreground">Sin coincidencias aptas por nombre y tipo contable.</p>
-                              )}
-                              <div className="mt-2 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center">
-                                <Combobox
-                                  options={options}
-                                  value={selectedCode}
-                                  onChange={value => {
-                                    setSelectedCodes(current => ({ ...current, [id]: value }))
-                                    setCheckedFields(current => ({ ...current, [id]: Boolean(value) }))
-                                  }}
-                                  disabled={saving || options.length === 0}
-                                  placeholder="Elegir cuenta recomendada"
-                                  searchPlaceholder="Buscar recomendación..."
-                                  ariaLabel={`Cuenta recomendada para ${module.label}: ${field.label}`}
-                                  emptyMessage="No hay recomendaciones para este campo."
-                                  className="h-8 text-[10px]"
-                                />
-                                {checkedFields[id] && selectedCode !== currentCode && selectedSuggestion && (
-                                  <span className="shrink-0 text-[9px] font-bold text-primary">Se aplicará</span>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-xs font-bold">{field.label}</span>
+                              <Badge variant="outline" className="text-[9px]">{field.side === 'debit' ? 'Debe' : 'Haber'}</Badge>
+                              <Badge variant="outline" className="text-[9px]">{accountTypeLabel(field.defaultType)}</Badge>
+                            </div>
+                            <p className="mt-1 break-words text-[10px] text-muted-foreground">
+                              Actual: {currentCode ? `${currentCode} · ${currentAccount?.name || 'No está en el plan'}` : 'Sin cuenta'}
+                              {currentState ? ` · ${currentState.disabled ? currentState.label : 'Válida'}` : ''}
+                            </p>
+                            {matches.length > 0 ? (
+                              <div className="mt-1 space-y-0.5 text-[10px]">
+                                {isTie ? (
+                                  <p className="font-semibold text-amber-600">Empate entre las mejores opciones (puntaje {topScore}); selecciona una manualmente.</p>
+                                ) : (
+                                  <p className="font-semibold text-emerald-600">Recomendada: {matches[0].code} · {matches[0].name}</p>
                                 )}
+                                {(isTie ? tiedTopMatches : matches.slice(0, 1)).map(match => (
+                                  <p key={match.code} className="break-words text-muted-foreground">{match.reason} · puntaje {match.score}</p>
+                                ))}
                               </div>
+                            ) : (
+                              <p className="mt-1 text-[10px] text-muted-foreground">Sin coincidencias aptas por nombre y tipo contable.</p>
+                            )}
+                            <div className="mt-2 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center">
+                              <Combobox
+                                options={options}
+                                value={selectedCode}
+                                onChange={value => setSelectedCodes(current => ({ ...current, [id]: value }))}
+                                disabled={saving || options.length === 0}
+                                placeholder="Elegir cuenta recomendada"
+                                searchPlaceholder="Buscar recomendación..."
+                                ariaLabel={`Cuenta recomendada para ${module.label}: ${field.label}`}
+                                emptyMessage="No hay recomendaciones para este campo."
+                                className="h-8 text-[10px]"
+                              />
+                              {selectedCode && selectedCode !== currentCode && (
+                                <span className="shrink-0 text-[9px] font-bold text-primary">Incluida en el lote</span>
+                              )}
                             </div>
                           </div>
                         </article>
