@@ -189,7 +189,8 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     id: 'creditNote', label: 'Créditos', icon: RotateCcw,
     description: 'Crédito al cliente → un solo asiento revierte CxC, IVA e ingresos netos y reintegra el inventario',
     fields: [
-      { key: 'returns', label: 'Devoluciones', side: 'debit', description: 'Se debita la cuenta de devoluciones', defaultCode: '4100', defaultName: 'Devoluciones y Descuentos', defaultType: 'INCOME' },
+      { key: 'income', label: 'Ingresos por Ventas', side: 'debit', description: 'Se debita para revertir los ingresos reconocidos en la venta', defaultCode: '4000', defaultName: 'Ingresos por Ventas', defaultType: 'INCOME' },
+      { key: 'ivaPayable', label: 'IVA por Pagar', side: 'debit', description: 'Se debita para revertir el IVA de la venta', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita la CxC (disminuye)', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
     ],
   },
