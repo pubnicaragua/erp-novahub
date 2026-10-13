@@ -22,9 +22,11 @@ import type { KpiDefinition, KpiResult } from '../../types';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { formatDateEs } from '../../utils/dateFormat';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 
 interface KpiViewProps {
   employees?: any[];
@@ -113,11 +115,15 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
   const kpiQuery = useQuery({
     queryKey: ['hr', 'kpi-data'],
     queryFn: async ({ signal }) => {
-      const [defRes, resRes] = await Promise.all([
+      const [defRes, results] = await Promise.all([
         hrService.getKpiDefinitions(undefined, signal) as any,
-        hrService.getKpiResults(undefined, undefined, signal) as any,
+        fetchAllReportPages<KpiResult>(
+          (filters) => hrService.getKpiResults(undefined, undefined, signal, filters),
+          { pageSize: 5000, report: true },
+          signal,
+        ),
       ]);
-      return { definitions: Array.isArray(defRes) ? defRes : defRes?.data || [], results: Array.isArray(resRes) ? resRes : resRes?.data || [] };
+      return { definitions: Array.isArray(defRes) ? defRes : defRes?.data || [], results };
     },
     staleTime: 30_000,
     gcTime: 5 * 60_000,
@@ -126,7 +132,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
     enabled: canViewHr,
     placeholderData: keepPreviousData,
   });
-  const loading = kpiQuery.isLoading;
+  const loading = kpiQuery.isLoading || kpiQuery.isFetching;
   const definitions = (kpiQuery.data?.definitions || []) as KpiDefinition[];
   const results = (kpiQuery.data?.results || []) as KpiResult[];
   const fetchAll = useCallback(
@@ -210,58 +216,63 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
   const defName = (d: any) => d?.name || '';
   const empName = (e: any) => (e ? `${e.firstName || ''} ${e.lastName || ''}`.trim() : '');
 
-  const filteredDefinitions = (() => {
+  const definitionFilterGetters = {
+    name: (d: KpiDefinition) => d.name,
+    state: (d: KpiDefinition) => (d.isActive ? 'ACTIVE' : 'INACTIVE'),
+    period: (d: KpiDefinition) => d.periodType,
+    assign: (d: KpiDefinition) => d.assignToType,
+  };
+  const searchedDefinitions = (() => {
     const q = defSearch.trim().toLowerCase();
-    const searched = !q ? definitions : definitions.filter(d =>
+    return !q ? definitions : definitions.filter(d =>
       d.name.toLowerCase().includes(q) || (d.description || '').toLowerCase().includes(q)
     );
-    return defColFilters.applyTo(searched, {
-      name: (d: KpiDefinition) => d.name,
-      state: (d: KpiDefinition) => (d.isActive ? 'ACTIVE' : 'INACTIVE'),
-      period: (d: KpiDefinition) => d.periodType,
-      assign: (d: KpiDefinition) => d.assignToType,
-    });
   })();
+  const filteredDefinitions = defColFilters.applyTo(searchedDefinitions, definitionFilterGetters);
+  const definitionSummaryRows = defColFilters.applyTo(searchedDefinitions, definitionFilterGetters, ['state']);
+  const activeDefs = definitionSummaryRows.filter(d => d.isActive).length;
 
-  const activeDefs = definitions.filter(d => d.isActive).length;
-
-  const filteredResults = (() => {
+  const resultFilterGetters = {
+    employee: (r: KpiResult) => empName(r.employee || employees.find((e: any) => e.id === r.employeeId)) || 'Sin empleado',
+    definition: (r: KpiResult) => defName(r.kpiDefinition || definitions.find(d => d.id === r.kpiDefinitionId)) || 'Sin definir',
+    compliance: (r: KpiResult) => resultCompliance(r),
+    periodStart: (r: KpiResult) => (r.periodStart ? new Date(r.periodStart).getTime() : null),
+  };
+  const searchedResults = (() => {
     const q = resultSearch.trim().toLowerCase();
-    const searched = !q ? results : results.filter(r => {
+    return !q ? results : results.filter(r => {
       const emp = r.employee || employees.find((e: any) => e.id === r.employeeId);
       const def = r.kpiDefinition || definitions.find(d => d.id === r.kpiDefinitionId);
       return empName(emp).toLowerCase().includes(q)
         || (defName(def) || '').toLowerCase().includes(q)
         || (r.comment || '').toLowerCase().includes(q);
     });
-    return resultColFilters.applyTo(searched, {
-      employee: (r: KpiResult) => empName(r.employee || employees.find((e: any) => e.id === r.employeeId)) || 'Sin empleado',
-      definition: (r: KpiResult) => defName(r.kpiDefinition || definitions.find(d => d.id === r.kpiDefinitionId)) || 'Sin definir',
-      compliance: (r: KpiResult) => resultCompliance(r),
-      periodStart: (r: KpiResult) => (r.periodStart ? new Date(r.periodStart).getTime() : null),
-    });
   })();
+  const filteredResults = resultColFilters.applyTo(searchedResults, resultFilterGetters);
+  const resultSummaryRows = resultColFilters.applyTo(searchedResults, resultFilterGetters, ['compliance']);
 
-  const resultEmployeeOptions = [...new Map(results.map((r: KpiResult) => {
+  const employeeFacetRows = resultColFilters.applyTo(searchedResults, resultFilterGetters, ['employee']);
+  const definitionFacetRows = resultColFilters.applyTo(searchedResults, resultFilterGetters, ['definition']);
+  const resultEmployeeOptions = [...new Map(employeeFacetRows.map((r: KpiResult) => {
     const name = empName(r.employee || employees.find((e: any) => e.id === r.employeeId)) || 'Sin empleado';
     return [name, name] as const;
-  })).entries()].map(([, label]) => ({ value: label, label, count: results.filter(r => (empName(r.employee || employees.find((e: any) => e.id === r.employeeId)) || 'Sin empleado') === label).length }));
-  const resultDefinitionOptions = [...new Map(results.map((r: KpiResult) => {
+  })).entries()].map(([, label]) => ({ value: label, label, count: employeeFacetRows.filter(r => (empName(r.employee || employees.find((e: any) => e.id === r.employeeId)) || 'Sin empleado') === label).length }));
+  const resultDefinitionOptions = [...new Map(definitionFacetRows.map((r: KpiResult) => {
     const name = defName(r.kpiDefinition || definitions.find(d => d.id === r.kpiDefinitionId)) || 'Sin definir';
     return [name, name] as const;
-  })).entries()].map(([, label]) => ({ value: label, label, count: results.filter(r => (defName(r.kpiDefinition || definitions.find(d => d.id === r.kpiDefinitionId)) || 'Sin definir') === label).length }));
+  })).entries()].map(([, label]) => ({ value: label, label, count: definitionFacetRows.filter(r => (defName(r.kpiDefinition || definitions.find(d => d.id === r.kpiDefinitionId)) || 'Sin definir') === label).length }));
   const complianceOptions = Object.entries(COMPLIANCE_LABELS).map(([value, c]) => ({
     value,
     label: c.label,
-    count: results.filter(r => resultCompliance(r) === value).length,
+    count: resultSummaryRows.filter(r => resultCompliance(r) === value).length,
   }));
 
   const totalPages = Math.max(1, Math.ceil(filteredResults.length / pageSize));
   const paginatedResults = filteredResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const pctValues = results.map(resultPct).filter((p): p is number => p !== null);
+  const pctValues = filteredResults.map(resultPct).filter((p): p is number => p !== null);
   const avgCompliance = pctValues.length > 0 ? Math.round(pctValues.reduce((a, b) => a + b, 0) / pctValues.length) : 0;
-  const atRisk = results.filter(r => ['RISK', 'UNDER'].includes(resultCompliance(r))).length;
+  const atRisk = resultSummaryRows.filter(r => ['RISK', 'UNDER'].includes(resultCompliance(r))).length;
 
   const goToResults = (compliance?: string[]) => {
     setActiveTab('results');
@@ -285,6 +296,13 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
     );
   }
 
+  if (kpiQuery.isError) {
+    return <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-border/50 bg-card p-6">
+      <KpiSummaryNotice error />
+      <Button variant="outline" onClick={() => void kpiQuery.refetch()}>Reintentar</Button>
+    </div>;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4" data-tour="hr-kpi-title">
@@ -306,13 +324,13 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
           value={activeDefs}
           icon={Target}
           tone="primary"
-          sub={`${definitions.length} definiciones en total`}
+          sub={`${filteredDefinitions.length} definiciones según los filtros`}
           active={activeTab === 'definitions'}
           onClick={() => setActiveTab('definitions')}
         />
         <StatCard
           label="Resultados registrados"
-          value={results.length}
+          value={filteredResults.length}
           icon={BarChart3}
           tone="blue"
           sub="Mediciones de desempeño"
@@ -365,8 +383,8 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
               <ColumnFilterMenu
                 label="Estado"
                 options={[
-                  { value: 'ACTIVE', label: 'Activa', count: definitions.filter(d => d.isActive).length },
-                  { value: 'INACTIVE', label: 'Inactiva', count: definitions.filter(d => !d.isActive).length },
+                  { value: 'ACTIVE', label: 'Activa', count: definitionSummaryRows.filter(d => d.isActive).length },
+                  { value: 'INACTIVE', label: 'Inactiva', count: definitionSummaryRows.filter(d => !d.isActive).length },
                 ]}
                 selected={defColFilters.state.state?.values || []}
                 onSelect={(values) => defColFilters.setValues('state', values)}
@@ -375,7 +393,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
               />
               <ColumnFilterMenu
                 label="Asignación"
-                options={ASSIGN_TYPES.map(a => ({ value: a.value, label: a.label, count: definitions.filter(d => d.assignToType === a.value).length }))}
+                options={ASSIGN_TYPES.map(a => ({ value: a.value, label: a.label, count: defColFilters.applyTo(searchedDefinitions, definitionFilterGetters, ['assign']).filter(d => d.assignToType === a.value).length }))}
                 selected={defColFilters.state.assign?.values || []}
                 onSelect={(values) => defColFilters.setValues('assign', values)}
                 sort={defColFilters.state.assign?.sort || null}

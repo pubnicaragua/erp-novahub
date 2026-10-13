@@ -9,6 +9,8 @@ export interface NotificationStreamEvent {
   reason?: 'created' | 'updated' | 'deleted';
   occurredAt?: string;
   notificationIds?: string[];
+  supportConversationId?: string;
+  messageThreadId?: string;
 }
 
 export class NotificationStreamError extends Error {

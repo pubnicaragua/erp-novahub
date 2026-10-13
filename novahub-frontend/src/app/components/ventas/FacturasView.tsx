@@ -35,6 +35,8 @@ import { getSalesInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
@@ -61,6 +63,9 @@ import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-pa
 
 interface FacturasViewProps {
   data: Invoice[];
+  summaryData?: Invoice[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading: boolean;
   onRefresh: () => void;
   customers?: Customer[];
@@ -118,7 +123,7 @@ type InvoicePaymentLine = {
 
 type InvoiceSaveAction = 'SAVE' | 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT';
 
-export function FacturasView({ data, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasViewProps) {
+export function FacturasView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasViewProps) {
   const {
     exchangeRate: globalRate,
     displayCurrency,
@@ -541,6 +546,17 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     balance: (row: Invoice) => getInvoiceBalance(row),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((invoice) => {
+    const search = searchTerm.toLowerCase();
+    return String(invoice.number || '').toLowerCase().includes(search) || String(invoice.customer?.name || '').toLowerCase().includes(search);
+  });
+  const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
+  const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((invoice) =>
+    statusFilter === 'ALL' || (statusFilter === 'RECEIVABLE' && ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(String(invoice.status || '').toUpperCase())) || String(invoice.status || '').toUpperCase() === statusFilter,
+  ), filterGetters);
+  const summaryReceivableRows = summaryRowsWithoutStatusFilter.filter((invoice) => ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(String(invoice.status || '').toUpperCase()));
+  const summaryPaidRows = summaryRowsWithoutStatusFilter.filter((invoice) => String(invoice.status || '').toUpperCase() === 'PAID');
   const distinctCustomers = [...new Map(filtered.map((f) => [f.customer?.name || 'Varios', f.customer?.name || 'Varios'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((f) => (f.customer?.name || 'Varios') === label).length }));
 
@@ -1581,25 +1597,24 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       : convertAmount(amount, currency, rate || globalRate)
   );
 
-  const totalBilledInDisplayCurrency = data.reduce(
+  const totalBilledInDisplayCurrency = summaryFilteredData.reduce(
     (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.total ?? invoice.baseTotal ?? 0), invoice.currency, invoice.exchangeRate),
     0,
   );
-  const accountsReceivableInDisplayCurrency = data
-    .filter(invoice => ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes((invoice.status || '').toUpperCase()))
+  const accountsReceivableInDisplayCurrency = summaryReceivableRows
     .reduce((acc, invoice) => acc + displayInvoiceAmount(getInvoiceBalance(invoice), invoice.currency, invoice.exchangeRate), 0);
-  const paidInDisplayCurrency = data.reduce(
+  const paidInDisplayCurrency = summaryPaidRows.reduce(
     (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate),
     0,
   );
-  const originalBilled = summarizeAmountsByCurrency(data, (invoice) => Number(invoice.total ?? invoice.baseTotal ?? 0), (invoice) => invoice.currency, baseCurrency);
+  const originalBilled = summarizeAmountsByCurrency(summaryFilteredData, (invoice) => Number(invoice.total ?? invoice.baseTotal ?? 0), (invoice) => invoice.currency, baseCurrency);
   const originalReceivable = summarizeAmountsByCurrency(
-    data.filter(invoice => ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes((invoice.status || '').toUpperCase())),
+    summaryReceivableRows,
     getInvoiceBalance,
     (invoice) => invoice.currency,
     baseCurrency,
   );
-  const originalPaid = summarizeAmountsByCurrency(data, (invoice) => Number(invoice.amountPaid || 0), (invoice) => invoice.currency, baseCurrency);
+  const originalPaid = summarizeAmountsByCurrency(summaryPaidRows, (invoice) => Number(invoice.amountPaid || 0), (invoice) => invoice.currency, baseCurrency);
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc && !paymentDialogOpen && !creditInvoice) {
@@ -2211,17 +2226,22 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="sales-list-kpis">
-        {displayMode === 'ORIGINAL'
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {!resolvedSummaryRows
+          ? <SalesKpiCard title="Facturado Total" value="—" icon={FileText} color="text-primary" bg="bg-primary/10" />
+          : displayMode === 'ORIGINAL'
           ? originalBilled.map((summary) => <SalesKpiCard key={`billed-${summary.currency}`} title={`Facturado Total (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileText} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Facturado Total (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />}
-        {displayMode === 'ORIGINAL'
+        {!resolvedSummaryRows ? <SalesKpiCard title="Por Cobrar" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
            ? originalReceivable.map((summary) => <SalesKpiCard key={`receivable-${summary.currency}`} title={`Por Cobrar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />)
            : <SalesKpiCard title={`Por Cobrar (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />}
-         <SalesKpiCard title="Vencidas" value={data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length} icon={AlertCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
-        {displayMode === 'ORIGINAL'
+         <SalesKpiCard title="Vencidas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length : '—'} icon={AlertCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
+        {!resolvedSummaryRows ? <SalesKpiCard title="Cobrado" value="—" icon={CheckCircle2} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
            ? originalPaid.map((summary) => <SalesKpiCard key={`paid-${summary.currency}`} title={`Cobrado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />)
            : <SalesKpiCard title={`Cobrado (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />}
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

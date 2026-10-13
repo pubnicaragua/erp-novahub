@@ -27,6 +27,8 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_STATUS_COLORS } from '../../utils/salesStatus';
@@ -42,6 +44,9 @@ import { normalizeSalesExtraCharges, getSalesExtraChargesPayload, getSalesExtraC
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
+  summaryData?: RecurringInvoice[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading: boolean;
   onRefresh: () => void;
   customers?: Customer[];
@@ -104,7 +109,7 @@ const calculateNextInvoiceDate = (frequency: string, startDate: string) => {
   return next.toISOString();
 };
 
-export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasRecurrentesViewProps) {
+export function FacturasRecurrentesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasRecurrentesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, displayMode, baseCurrency, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -228,6 +233,13 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     ((r as any).profileName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (r.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((recurring) =>
+    ((recurring as any).profileName || '').toLowerCase().includes(searchTerm.toLowerCase())
+    || (recurring.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+  const summaryRowsWithoutStatusFilter = summarySearchRows;
+  const summaryFilteredData = summarySearchRows.filter((recurring) => statusFilter === 'ALL' || String(recurring.status || '').toUpperCase() === statusFilter);
 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringInvoice>) => {
     try {
@@ -552,7 +564,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     { key: 'nextInvoiceDate', header: 'Próxima Fecha', render: (val) => <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Calendar className="size-3" />{formatDateSafe(val)}</div> },
   ];
 
-  const activeRecurring = data.filter(recurring => (recurring.status || '').toUpperCase() === 'ACTIVE');
+  const activeRecurring = summaryFilteredData.filter(recurring => (recurring.status || '').toUpperCase() === 'ACTIVE');
   const activeRecurringInBaseCurrency = activeRecurring
     .reduce((acc, recurring) => acc + ((recurring as any).baseTotal !== null && (recurring as any).baseTotal !== undefined
       ? Number((recurring as any).baseTotal)
@@ -569,7 +581,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   sevenDaysAhead.setDate(sevenDaysAhead.getDate() + 7);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const upcomingIn7Days = data.filter(recurring => {
+  const upcomingIn7Days = summaryFilteredData.filter(recurring => {
     const status = (recurring.status || '').toUpperCase();
     if (status !== 'ACTIVE') return false;
     if (!recurring.nextInvoiceDate) return false;
@@ -877,11 +889,14 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        {recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`mrr-${kpi.currency}`} title={`MRR Activo (${kpi.currency})`} value={kpi.mrr} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />)}
-        <SalesKpiCard title="Próximas 7 días" value={upcomingIn7Days} icon={Calendar} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title="Activas" value={data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'ACTIVE'} onClick={() => setStatusFilter(statusFilter === 'ACTIVE' ? 'ALL' : 'ACTIVE')} />
-        {recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`arr-${kpi.currency}`} title={`ARR (${kpi.currency})`} value={kpi.arr} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)}
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {resolvedSummaryRows ? recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`mrr-${kpi.currency}`} title={`MRR Activo (${kpi.currency})`} value={kpi.mrr} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />) : <SalesKpiCard title="MRR Activo" value="—" icon={RotateCcw} color="text-primary" bg="bg-primary/10" />}
+        <SalesKpiCard title="Próximas 7 días" value={resolvedSummaryRows ? upcomingIn7Days : '—'} icon={Calendar} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Activas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'ACTIVE'} onClick={() => setStatusFilter(statusFilter === 'ACTIVE' ? 'ALL' : 'ACTIVE')} />
+        {resolvedSummaryRows ? recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`arr-${kpi.currency}`} title={`ARR (${kpi.currency})`} value={kpi.arr} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />) : <SalesKpiCard title="ARR" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

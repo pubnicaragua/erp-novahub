@@ -26,10 +26,12 @@ import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency }
 import { ActivityDetailSheet } from './ActivityDetailSheet';
 import { DateTimePickerField } from '../ui/DateTimePickerField';
 import { detectMeetingUrl } from '../../utils/meetingLink';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 interface EventosViewProps {
   data: Event[];
   loading: boolean;
+  summaryError?: boolean;
   onRefresh: () => void;
   mode?: 'eventos' | 'reuniones';
 }
@@ -66,7 +68,7 @@ const buildInvitationText = (event: { title: string; startDate: string; endDate:
   `Invitados: ${event.guests.join(', ')}`,
 ].filter(Boolean).join('\n');
 
-export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefresh, mode = 'eventos' }) => {
+export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summaryError = false, onRefresh, mode = 'eventos' }) => {
   const isMeetingMode = mode === 'reuniones';
   const [searchTerm, setSearchTerm] = useState('');
   const { currency, displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
@@ -585,17 +587,19 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear evento'); }
   };
 
+  const filtered = data.filter(e => e.title?.toLowerCase().includes(searchTerm.toLowerCase()) || e.location?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const kpiRows = loading || summaryError ? [] : filtered;
   const toDisplayAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) => {
     const sourceAmount = Number(amount || 0);
     return valuationMode === 'CURRENT'
       ? convertCurrentAmount(sourceAmount, sourceCurrency)
       : convertAmount(sourceAmount, sourceCurrency, sourceExchangeRate);
   };
-  const totalIncome = data.reduce((acc, row) => acc + toDisplayAmount(Number(row.income) || 0, row.currency || 'USD', row.exchangeRate), 0);
-  const totalCost = data.reduce((acc, row) => acc + toDisplayAmount(Number(row.cost) || 0, row.currency || 'USD', row.exchangeRate), 0);
+  const totalIncome = kpiRows.reduce((acc, row) => acc + toDisplayAmount(Number(row.income) || 0, row.currency || 'USD', row.exchangeRate), 0);
+  const totalCost = kpiRows.reduce((acc, row) => acc + toDisplayAmount(Number(row.cost) || 0, row.currency || 'USD', row.exchangeRate), 0);
   const totalBalance = totalIncome - totalCost;
-  const originalCurrencies = summarizeAmountsByCurrency(data, () => 0, (row) => row.currency || 'USD').map((item) => item.currency);
-  const originalSum = (field: 'income' | 'cost', currencyCode: SupportedCurrency) => data
+  const originalCurrencies = summarizeAmountsByCurrency(kpiRows, () => 0, (row) => row.currency || 'USD').map((item) => item.currency);
+  const originalSum = (field: 'income' | 'cost', currencyCode: SupportedCurrency) => kpiRows
     .filter((row) => normalizeCurrency(row.currency || 'USD') === currencyCode)
     .reduce((sum, row) => sum + (Number(row[field]) || 0), 0);
   const moneyKpis = displayMode === 'ORIGINAL'
@@ -615,11 +619,9 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
     ];
 
   const kpis = [
-    { title: isMeetingMode ? 'Total Reuniones' : 'Total Eventos', value: data.length, icon: isMeetingMode ? Video : CalendarDays, color: isMeetingMode ? 'text-violet-500' : 'text-blue-500', bg: isMeetingMode ? 'bg-violet-500/10' : 'bg-blue-500/10' },
+    { title: isMeetingMode ? 'Total Reuniones' : 'Total Eventos', value: kpiRows.length, icon: isMeetingMode ? Video : CalendarDays, color: isMeetingMode ? 'text-violet-500' : 'text-blue-500', bg: isMeetingMode ? 'bg-violet-500/10' : 'bg-blue-500/10' },
     ...moneyKpis,
   ];
-
-  const filtered = data.filter(e => e.title?.toLowerCase().includes(searchTerm.toLowerCase()) || e.location?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
@@ -628,11 +630,12 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           <Card key={i} className="min-w-0 rounded-2xl border-border/50 bg-card/80 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md">
             <CardContent className="p-5 flex items-center gap-4">
               <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{loading || summaryError ? '—' : kpi.value}</p></div>
             </CardContent>
           </Card>
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={summaryError} />
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center lg:justify-between">

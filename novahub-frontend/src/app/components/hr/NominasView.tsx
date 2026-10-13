@@ -105,8 +105,11 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     })),
   ];
 
-  const filteredPayrolls = payrolls.filter((p: any) => {
+  const employeeFilteredPayrolls = payrolls.filter((p: any) => {
     const matchesEmployee = filterEmployee === 'all' || p.employeeId === filterEmployee;
+    return matchesEmployee;
+  });
+  const filteredPayrolls = employeeFilteredPayrolls.filter((p: any) => {
     let matchesStatus = true;
     if (filterStatus === 'OVERDUE') {
       matchesStatus = isOverdue(p);
@@ -116,7 +119,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     } else if (filterStatus !== 'all') {
       matchesStatus = payrollEffectiveStatus(p) === filterStatus;
     }
-    return matchesEmployee && matchesStatus;
+    return matchesStatus;
   });
 
   const colFilters = useColumnFilters();
@@ -129,16 +132,17 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     cost: (p: any) => Number(p.costoTotalEmpresa ?? p.costoTotalEmpresaBase ?? 0),
     status: (p: any) => (isOverdue(p) ? 'OVERDUE' : payrollEffectiveStatus(p)),
   };
+  const summaryPayrolls = colFilters.applyTo(employeeFilteredPayrolls, colFilterGetters, ['status']);
   const colFilteredPayrolls = colFilters.applyTo(filteredPayrolls, colFilterGetters);
-  const employeeNameOptions = [...new Map(filteredPayrolls.map((p: any) => [payrollEmployeeName(p), payrollEmployeeName(p)])).entries()]
-    .map(([, label]) => ({ value: label as string, label: label as string, count: filteredPayrolls.filter((p: any) => payrollEmployeeName(p) === label).length }));
+  const employeeNameOptions = [...new Map(summaryPayrolls.map((p: any) => [payrollEmployeeName(p), payrollEmployeeName(p)])).entries()]
+    .map(([, label]) => ({ value: label as string, label: label as string, count: summaryPayrolls.filter((p: any) => payrollEmployeeName(p) === label).length }));
   const statusOptionsForFilter = [
-    { value: 'OVERDUE', label: 'Vencida', count: filteredPayrolls.filter((p: any) => isOverdue(p)).length },
-    { value: 'PENDING', label: 'Pendiente', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING' && !isOverdue(p)).length },
-    { value: 'REQUESTED', label: 'Solicitud enviada', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'REQUESTED' && !isOverdue(p)).length },
-    { value: 'PARTIAL', label: 'Pago parcial', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PARTIAL').length },
-    { value: 'APPROVED', label: 'Aprobada', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'APPROVED').length },
-    { value: 'PAID', label: 'Pagado', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PAID').length },
+    { value: 'OVERDUE', label: 'Vencida', count: summaryPayrolls.filter((p: any) => isOverdue(p)).length },
+    { value: 'PENDING', label: 'Pendiente', count: summaryPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING' && !isOverdue(p)).length },
+    { value: 'REQUESTED', label: 'Solicitud enviada', count: summaryPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'REQUESTED' && !isOverdue(p)).length },
+    { value: 'PARTIAL', label: 'Pago parcial', count: summaryPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PARTIAL').length },
+    { value: 'APPROVED', label: 'Aprobada', count: summaryPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'APPROVED').length },
+    { value: 'PAID', label: 'Pagado', count: summaryPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PAID').length },
   ].filter((opt) => opt.count > 0 || opt.value === 'OVERDUE' || opt.value === 'PENDING' || opt.value === 'PAID');
 
   const payrollBase = (p: any, field: string, baseField: string) => {
@@ -440,14 +444,14 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     }
   };
 
-  const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'grossPay', 'grossPayBase'), 0);
-  const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'netPay', 'netPayBase'), 0);
-  const totalCostoEmpresa = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), 0);
-  const payrollCurrencies = summarizeAmountsByCurrency(filteredPayrolls, () => 0, (payroll: any) => payroll.currency || payroll.employee?.currency || 'USD').map((item) => item.currency);
-  const originalPayrollSum = (field: string, baseField: string, currency: SupportedCurrency) => filteredPayrolls
+  const totalGross = summaryPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'grossPay', 'grossPayBase'), 0);
+  const totalNet = summaryPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'netPay', 'netPayBase'), 0);
+  const totalCostoEmpresa = summaryPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), 0);
+  const payrollCurrencies = summarizeAmountsByCurrency(summaryPayrolls, () => 0, (payroll: any) => payroll.currency || payroll.employee?.currency || 'USD').map((item) => item.currency);
+  const originalPayrollSum = (field: string, baseField: string, currency: SupportedCurrency) => summaryPayrolls
     .filter((payroll: any) => normalizeCurrency(payroll.currency || payroll.employee?.currency || 'USD') === currency)
     .reduce((sum: number, payroll: any) => sum + (Number(payroll[field] ?? payroll[baseField] ?? 0) || 0), 0);
-  const originalCompanyTax = (currency: SupportedCurrency) => filteredPayrolls
+  const originalCompanyTax = (currency: SupportedCurrency) => summaryPayrolls
     .filter((payroll: any) => normalizeCurrency(payroll.currency || payroll.employee?.currency || 'USD') === currency)
     .reduce((sum: number, payroll: any) => sum + ((Number(payroll.costoTotalEmpresa ?? payroll.costoTotalEmpresaBase ?? 0) || 0) - (Number(payroll.grossPay ?? payroll.grossPayBase ?? 0) || 0)), 0);
   const renderPayrollMoneyCard = (key: string, label: string, icon: any, tone: 'orange' | 'blue' | 'primary', total: number, amountByCurrency: (currency: SupportedCurrency) => number, onClick: () => void) => displayMode === 'ORIGINAL'
@@ -456,14 +460,13 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     ))
     : <StatCard label={`${label}${valuationModeSuffix}`} value={formatCurrentAmount(total, displayCurrency)} icon={icon} tone={tone} sub={key === 'company-cost' ? (valuationModeSuffix ? valuationModeLabel : undefined) : undefined} valueClassName="text-xl" onClick={onClick} />;
 
-  const allEmployeePayrolls = payrolls.filter((p: any) => filterEmployee === 'all' || p.employeeId === filterEmployee);
-  const overduePayrolls = allEmployeePayrolls.filter(isOverdue);
+  const overduePayrolls = summaryPayrolls.filter(isOverdue);
   const overdueCount = overduePayrolls.length;
-  const pendingPayrollsCount = allEmployeePayrolls.filter((p: any) => {
+  const pendingPayrollsCount = summaryPayrolls.filter((p: any) => {
     const eff = payrollEffectiveStatus(p);
     return eff === 'PENDING' || eff === 'REQUESTED' || isOverdue(p);
   }).length;
-  const pendingToRequestCount = filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING').length;
+  const pendingToRequestCount = summaryPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING').length;
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   return (

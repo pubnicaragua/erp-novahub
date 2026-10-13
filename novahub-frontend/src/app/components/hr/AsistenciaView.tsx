@@ -58,6 +58,13 @@ const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
   REMOTO: 'REMOTE', REMOTE: 'REMOTE',
   MEDIO_DIA: 'HALF_DAY', HALF_DAY: 'HALF_DAY',
 };
+const ATTENDANCE_STATUS_OPTIONS = [
+  { value: 'PRESENT', label: 'Presente' },
+  { value: 'ABSENT', label: 'Ausente' },
+  { value: 'LATE', label: 'Tardanza' },
+  { value: 'REMOTE', label: 'Remoto' },
+  { value: 'HALF_DAY', label: 'Medio día' },
+];
 
 export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
@@ -247,11 +254,6 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
     const d = new Date(dateStr);
     return !Number.isNaN(d.getTime()) && d.toDateString() === ref.toDateString();
   };
-  const todayRecords = attendance.filter((a: any) => isSameDay(a.date));
-
-  const totalHoursToday = todayRecords.reduce((sum: number, a: any) => sum + Number(a.hoursWorked || 0), 0);
-  const presentToday = todayRecords.filter((a: any) => a.status === 'PRESENT').length;
-  const absentToday = todayRecords.filter((a: any) => a.status === 'ABSENT').length;
 
   const quickFilteredAttendance = attendance.filter((a: any) => {
     if (!quickFilter) return true;
@@ -272,13 +274,20 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
     status: (r: any) => String(r.status || ''),
     location: (r: any) => r.location || '—',
   };
+  const summaryAttendance = colFilters.applyTo(attendance, filterGetters, ['status']);
+  const todayRecords = summaryAttendance.filter((a: any) => isSameDay(a.date));
+  const totalHoursToday = todayRecords.reduce((sum: number, a: any) => sum + Number(a.hoursWorked || 0), 0);
+  const presentToday = todayRecords.filter((a: any) => String(a.status || '').toUpperCase() === 'PRESENT').length;
+  const absentToday = todayRecords.filter((a: any) => String(a.status || '').toUpperCase() === 'ABSENT').length;
   const colFilteredAttendance = colFilters.applyTo(quickFilteredAttendance, filterGetters);
-  const employeeOptions = [...new Map(quickFilteredAttendance.map((r: any) => [employeeName(r), employeeName(r)])).entries()]
-    .map(([, label]) => ({ value: label as string, label: label as string, count: quickFilteredAttendance.filter((r: any) => employeeName(r) === label).length }));
-  const statusOptionsForFilter = Object.entries(ATTENDANCE_STATUS_LABELS)
-    .map(([value, label]) => ({ value, label, count: quickFilteredAttendance.filter((r: any) => String(r.status || '').toUpperCase() === value).length }));
-  const locationOptions = [...new Map(quickFilteredAttendance.map((r: any) => [r.location || '—', r.location || '—'])).entries()]
-    .map(([, label]) => ({ value: label as string, label: label as string, count: quickFilteredAttendance.filter((r: any) => (r.location || '—') === label).length }));
+  const employeeFacetRows = colFilters.applyTo(attendance, filterGetters, ['employee']);
+  const locationFacetRows = colFilters.applyTo(attendance, filterGetters, ['location']);
+  const employeeOptions = [...new Map(employeeFacetRows.map((r: any) => [employeeName(r), employeeName(r)])).entries()]
+    .map(([, label]) => ({ value: label as string, label: label as string, count: employeeFacetRows.filter((r: any) => employeeName(r) === label).length }));
+  const statusOptionsForFilter = ATTENDANCE_STATUS_OPTIONS
+    .map(({ value, label }) => ({ value, label, count: summaryAttendance.filter((r: any) => String(r.status || '').toUpperCase() === value).length }));
+  const locationOptions = [...new Map(locationFacetRows.map((r: any) => [r.location || '—', r.location || '—'])).entries()]
+    .map(([, label]) => ({ value: label as string, label: label as string, count: locationFacetRows.filter((r: any) => (r.location || '—') === label).length }));
 
   const toggleQuickFilter = (status?: string) => {
     setQuickFilter(prev => {

@@ -172,14 +172,6 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
     }
   };
 
-  const avgRating = reviews.length > 0
-    ? reviews.reduce((sum: number, r: any) => sum + (Number(r.overallRating) || 0), 0) / reviews.length
-    : 0;
-
-  const completedReviews = reviews.filter((r: any) => r.status === 'COMPLETED').length;
-  const inProgressReviews = reviews.filter((r: any) => r.status === 'IN_PROGRESS').length;
-  const pendingReviews = reviews.filter((r: any) => r.status === 'DRAFT').length;
-
   const colFilters = useColumnFilters();
   const employeeName = (r: any) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}`.trim() || 'Sin empleado';
   const reviewerName = (r: any) => `${r.reviewer?.firstName || ''} ${r.reviewer?.lastName || ''}`.trim() || 'Sin evaluador';
@@ -191,21 +183,29 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
       || (r.goals || '').toLowerCase().includes(q) || (r.comments || '').toLowerCase().includes(q);
   });
   const statusFiltered = statusFilter === 'ALL' ? searchFiltered : searchFiltered.filter((r: any) => r.status === statusFilter);
-  const filteredReviews = colFilters.applyTo(statusFiltered, {
+  const reviewFilterGetters = {
     employee: (r: any) => employeeName(r),
     reviewer: (r: any) => reviewerName(r),
     status: (r: any) => String(r.status || ''),
     periodStart: (r: any) => (r.reviewPeriodStart ? new Date(r.reviewPeriodStart).getTime() : null),
-  });
+  };
+  const summaryReviews = colFilters.applyTo(searchFiltered, reviewFilterGetters, ['status']);
+  const filteredReviews = colFilters.applyTo(statusFiltered, reviewFilterGetters);
+  const avgRating = summaryReviews.length > 0
+    ? summaryReviews.reduce((sum: number, r: any) => sum + (Number(r.overallRating) || 0), 0) / summaryReviews.length
+    : 0;
+  const completedReviews = summaryReviews.filter((r: any) => r.status === 'COMPLETED').length;
+  const inProgressReviews = summaryReviews.filter((r: any) => r.status === 'IN_PROGRESS').length;
+  const pendingReviews = summaryReviews.filter((r: any) => r.status === 'DRAFT').length;
 
   const employeeOptions = [...new Map(reviews.map((r: any) => [employeeName(r), employeeName(r)])).entries()]
     .map(([, label]) => ({ value: label as string, label: label as string, count: reviews.filter((r: any) => employeeName(r) === label).length }));
   const reviewerOptions = [...new Map(reviews.map((r: any) => [reviewerName(r), reviewerName(r)])).entries()]
     .map(([, label]) => ({ value: label as string, label: label as string, count: reviews.filter((r: any) => reviewerName(r) === label).length }));
   const statusOptionsForFilter = [
-    { value: 'DRAFT', label: 'Borrador', count: reviews.filter((r: any) => r.status === 'DRAFT').length },
-    { value: 'IN_PROGRESS', label: 'En Progreso', count: reviews.filter((r: any) => r.status === 'IN_PROGRESS').length },
-    { value: 'COMPLETED', label: 'Completada', count: reviews.filter((r: any) => r.status === 'COMPLETED').length },
+    { value: 'DRAFT', label: 'Borrador', count: summaryReviews.filter((r: any) => r.status === 'DRAFT').length },
+    { value: 'IN_PROGRESS', label: 'En Progreso', count: summaryReviews.filter((r: any) => r.status === 'IN_PROGRESS').length },
+    { value: 'COMPLETED', label: 'Completada', count: summaryReviews.filter((r: any) => r.status === 'COMPLETED').length },
   ];
 
   const toggleStatus = (s: string) => setStatusFilter(prev => (prev === s ? 'ALL' : s));

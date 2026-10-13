@@ -119,10 +119,10 @@ export const DocumentosPage = ({ activeSubModule, onSubModuleChange, isSidebarCo
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {(activeTab === 'archivos' || activeTab === 'carpetas') && <ArchivosView data={data.archivos} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'contratos' && <ContratosView data={data.contratos} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'facturas' && <FacturasLegalesView data={data.facturas} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'reportes' && <ReportesView data={data.reportes} loading={loading} onRefresh={fetchData} />}
+                {(activeTab === 'archivos' || activeTab === 'carpetas') && <ArchivosView data={data.archivos} loading={loading} error={activeQuery.isError} onRefresh={fetchData} />}
+                {activeTab === 'contratos' && <ContratosView data={data.contratos} loading={loading} error={activeQuery.isError} onRefresh={fetchData} />}
+                {activeTab === 'facturas' && <FacturasLegalesView data={data.facturas} loading={loading} error={activeQuery.isError} onRefresh={fetchData} />}
+                {activeTab === 'reportes' && <ReportesView data={data.reportes} loading={loading} error={activeQuery.isError} onRefresh={fetchData} />}
                 {activeTab === 'planes' && <NovaCloudPlanesView />}
               </motion.div>
             </AnimatePresence>

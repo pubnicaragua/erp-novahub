@@ -26,6 +26,8 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { SalesKpiCard } from './SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { hasPaymentReferenceField, isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, paymentMethodLabel, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
@@ -41,6 +43,9 @@ import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashB
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
+  summaryData?: PaymentReceived[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading: boolean;
   onRefresh: () => void;
   customers?: Customer[];
@@ -150,7 +155,7 @@ function groupReceivedPayments(
   });
 }
 
-export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {
+export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -385,6 +390,11 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     () => groupReceivedPayments(data, baseCurrency, globalRate, toBaseAmount),
     [data, baseCurrency, globalRate, toBaseAmount],
   );
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summaryGroupedPayments = useMemo(
+    () => groupReceivedPayments(resolvedSummaryRows || [], baseCurrency, globalRate, toBaseAmount),
+    [resolvedSummaryRows, baseCurrency, globalRate, toBaseAmount],
+  );
 
   useEffect(() => {
     if (!highlightedAlertId) return;
@@ -406,6 +416,15 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     amount: (row: PaymentReceived) => Number(row.amount || 0),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const summaryRowsWithoutInvoiceFilter = colFilters.applyTo(summaryGroupedPayments.filter((payment) => {
+    const search = searchTerm.toLowerCase();
+    return String(payment.number || '').toLowerCase().includes(search)
+      || (payment.customer?.name || '').toLowerCase().includes(search)
+      || (payment.invoice?.number || '').toLowerCase().includes(search);
+  }), filterGetters);
+  const summaryFilteredData = colFilters.applyTo(summaryRowsWithoutInvoiceFilter.filter((payment) =>
+    invoiceFilter === 'ALL' || Boolean(payment.invoice?.number || payment.creditNote?.number),
+  ), filterGetters);
   const distinctCustomers = [...new Map(filtered.map((p) => [p.customer?.name || 'Cliente', p.customer?.name || 'Cliente'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((p) => (p.customer?.name || 'Cliente') === label).length }));
 
@@ -710,7 +729,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     },
   ];
 
-  const paymentMethodCounts = groupedPayments.reduce((acc, payment) => {
+  const paymentMethodCounts = summaryFilteredData.reduce((acc, payment) => {
     // Un pago mixto se representa como una fila agrupada en la tabla, pero sus
     // métodos reales viven en `payments`. El KPI debe contar esas líneas y no
     // la etiqueta sintética MIXED del grupo.
@@ -728,14 +747,14 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     .sort(([methodA, countA], [methodB, countB]) => countB - countA || methodA.localeCompare(methodB))[0]?.[0] || 'SIN_DATOS';
   const mainMethod = rawMainMethod === 'SIN_DATOS' ? 'Sin datos' : paymentMethodLabel(rawMainMethod);
 
-  const totalCollectedInDisplayCurrency = groupedPayments.reduce(
+  const totalCollectedInDisplayCurrency = summaryFilteredData.reduce(
     (acc, payment) => acc + (payment.baseAmount !== null && payment.baseAmount !== undefined
       ? Number(payment.baseAmount)
       : toBaseAmount(payment.amount || 0, payment.currency, payment.exchangeRate || globalRate)),
     0,
   );
   const originalCollectedAmounts = summarizeAmountsByCurrency(
-    data.filter((payment) => payment.isActive !== false),
+    summaryFilteredData.flatMap((payment) => payment.payments?.length ? payment.payments.filter((movement) => movement.isActive !== false) : payment.isActive === false ? [] : [payment]),
     (payment) => Number(payment.amount || 0),
     (payment) => payment.currency,
     baseCurrency,
@@ -926,13 +945,18 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        {displayMode === 'ORIGINAL'
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {!resolvedSummaryRows
+          ? <SalesKpiCard title="Total Recaudado" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
+          : displayMode === 'ORIGINAL'
           ? originalCollectedAmounts.map((summary) => <SalesKpiCard key={`collected-${summary.currency}`} title={`Total Recaudado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Pagos" value={groupedPayments.length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title="Con documento" value={groupedPayments.filter(p => p.invoice?.number || p.creditNote?.number).length} icon={Clock} color="text-primary" bg="bg-primary/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
-        <SalesKpiCard title="Método Principal" value={mainMethod} icon={Wallet} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Pagos" value={resolvedSummaryRows ? summaryFilteredData.length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Con documento" value={resolvedSummaryRows ? summaryRowsWithoutInvoiceFilter.filter(p => p.invoice?.number || p.creditNote?.number).length : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
+        <SalesKpiCard title="Método Principal" value={resolvedSummaryRows ? mainMethod : '—'} icon={Wallet} color="text-primary" bg="bg-primary/10" />
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

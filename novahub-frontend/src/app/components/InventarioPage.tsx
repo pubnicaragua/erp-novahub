@@ -292,8 +292,34 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   // listado principal es paginado (50/página) y no debe limitar los totales.
   const productsSummaryQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'products-summary', tenantKey, activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', selectedBranchId, productScopeWarehouseIds.join(',')],
-    queryFn: ({ signal }) => inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', light: true, report: true, page: 1, pageSize: 5000, warehouseId: productScopeWarehouseParam || scopeNoWarehouseParam, includeInactive: true }, signal),
+    queryKey: ['inventory', 'products-summary', tenantKey, activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', selectedBranchId, productScopeWarehouseIds.join(','), searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productBrandFilters[activeTab === 'servicios' ? 'servicios' : 'productos']],
+    queryFn: ({ signal }) => {
+      const section = activeTab === 'servicios' ? 'servicios' : 'productos';
+      const filters = productFilters[section] || { categoryIds: [], warehouseIds: [] };
+      const selectedWarehouseIds = filters.warehouseIds.filter((id) => productScopeWarehouseIdSet.has(id));
+      const selectedLinkedWarehouse = selectedWarehouseIds.some((id) => linkedWarehouseIdSet.has(id));
+      const localWarehouseFallbackIds = branchScopeEnabled ? branchWarehouseIds : allBranchWarehouseIds;
+      const requestedWarehouseIds = branchScopeEnabled
+        ? (selectedWarehouseIds.length > 0
+          ? [...new Set([...selectedWarehouseIds, ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : [])])]
+          : [...productScopeWarehouseIdSet])
+        : (selectedWarehouseIds.length > 0
+          ? [...new Set([...selectedWarehouseIds, ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : [])])]
+          : []);
+      const summaryFilters = {
+        pageSize: 5000,
+        report: true,
+        type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT',
+        light: true,
+        search: searchFor(section),
+        status: activeTab === 'servicios' ? undefined : productStatusFor(section),
+        categoryId: filters.categoryIds.join(',') || undefined,
+        brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined,
+        warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined),
+        includeInactive: true,
+      };
+      return fetchAllReportPages((pageFilters) => inventoryService.getProducts({ ...summaryFilters, ...pageFilters }, signal), summaryFilters, signal);
+    },
     // El resumen puede ser grande; primero se pinta la página visible y luego
     // se resuelven KPIs, marcas y exportación sin bloquear la primera vista.
     enabled: Boolean(user) && Boolean(productsQuery.data) && summaryLoadAllowed && canViewInventorySection(activeTab) && productListIsActive,
@@ -705,6 +731,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                       <ProductosView
                         products={productItems}
                         summaryProducts={summaryProducts}
+                        summaryLoading={productsSummaryQuery.isPending || productsSummaryQuery.isFetching}
+                        summaryError={productsSummaryQuery.isError}
                         branches={allBranches}
                         categories={data.categories}
                         warehouses={scopedWarehouses}

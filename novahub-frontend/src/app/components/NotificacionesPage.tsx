@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, MessageSquare, Send } from 'lucide-react';
 import { cn } from './ui/utils';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
@@ -8,9 +9,12 @@ import { AlertasView } from './notificaciones/AlertasView';
 import { MensajesView } from './notificaciones/MensajesView';
 import { PushView } from './notificaciones/PushView';
 import { alertsService, messagesService, pushNotificationsService } from '../services/notificaciones.service';
+import { subscribeToNotificationEvents } from '../services/notifications.service';
+import { supportConversationsService, type SupportConversation } from '../services/support-conversations.service';
 import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
 import { asList, useTenantQuery } from '../hooks/useTenantQuery';
 import { useAuth } from '../contexts/AuthContext';
+import { upsertMessageThread } from './notificaciones/message-thread-cache';
 
 const NOTIFICACIONES_TOUR_STEPS: GuidedTourStep[] = [
   {
@@ -61,23 +65,30 @@ interface NotificacionesPageProps {
 
 export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: NotificacionesPageProps) => {
   const { canPerform, user } = useAuth();
+  const queryClient = useQueryClient();
+  const authUser = user as (typeof user & { clientTenantId?: string; tenantId?: string }) | null;
   const notificationUserKey = user?.id || 'current';
+  const tenantKey = authUser?.clientTenantId || authUser?.tenantId || 'current';
+  const messagesCacheKey = useMemo(() => ['tenant-module', tenantKey, 'notifications', notificationUserKey, 'messages'] as const, [tenantKey, notificationUserKey]);
+  const supportCacheKey = useMemo(() => ['tenant-module', tenantKey, 'support-conversations', notificationUserKey, 'branch-inbox'] as const, [tenantKey, notificationUserKey]);
   const tabs = [
     { id: 'alertas', label: 'Alertas', icon: AlertTriangle, module: 'NOTIFICATIONS_ALERTS' },
     { id: 'mensajes', label: 'Mensajes', icon: MessageSquare, module: 'NOTIFICATIONS_MESSAGES' },
     { id: 'push', label: 'Push', icon: Send, module: 'NOTIFICATIONS_PUSH' },
   ];
   const visibleTabs = tabs.filter(tab => canPerform(tab.module, 'view'));
-  const tabIds = tabs.map((tab) => tab.id);
-  const [activeTab, setActiveTab] = useState(() => activeSubModule || 'alertas');
+  const preferredTab = activeSubModule && visibleTabs.some((tab) => tab.id === activeSubModule)
+    ? activeSubModule
+    : visibleTabs[0]?.id || 'alertas';
+  const [localActiveTab, setLocalActiveTab] = useState(preferredTab);
+  const activeTab = activeSubModule ? preferredTab : localActiveTab;
   const [showTour, setShowTour] = useState(false);
   const alertsQuery = useTenantQuery<any[]>(['notifications', notificationUserKey, 'alerts'], signal => alertsService.getAll(signal), {
     enabled: activeTab === 'alertas' && canPerform('NOTIFICATIONS_ALERTS', 'view'),
   });
   const messagesQuery = useTenantQuery<any[]>(['notifications', notificationUserKey, 'messages'], signal => messagesService.getAll(signal), {
     enabled: activeTab === 'mensajes' && canPerform('NOTIFICATIONS_MESSAGES', 'view'),
-    refetchInterval: activeTab === 'mensajes' ? 5000 : false,
-    refetchIntervalInBackground: true,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: true,
   });
   const pushQuery = useTenantQuery<any[]>(['notifications', notificationUserKey, 'push'], signal => pushNotificationsService.getAll(signal), {
@@ -90,17 +101,40 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   };
   const activeQuery = activeTab === 'alertas' ? alertsQuery : activeTab === 'mensajes' ? messagesQuery : pushQuery;
   const loading = activeQuery.isLoading || activeQuery.isFetching;
-  const fetchData = () => activeQuery.refetch();
-  const queryError = activeQuery.error instanceof Error
-    ? activeQuery.error.message
-    : typeof activeQuery.error === 'string'
-      ? activeQuery.error
-      : '';
+  const refetchActiveQuery = activeQuery.refetch;
+  const fetchData = useCallback(() => refetchActiveQuery(), [refetchActiveQuery]);
+  const queryError = activeQuery.error instanceof Error ? activeQuery.error.message : '';
 
   useEffect(() => {
-    if (!activeSubModule) return;
-    setActiveTab(tabIds.includes(activeSubModule) && visibleTabs.some(tab => tab.id === activeSubModule) ? activeSubModule : (visibleTabs[0]?.id || 'alertas'));
-  }, [activeSubModule, visibleTabs]);
+    if (!user?.id || !tenantKey || user.isPlatformSupportAgent || !canPerform('NOTIFICATIONS_MESSAGES', 'view')) return undefined;
+    const identity = `${tenantKey}:${user.id}`;
+    return subscribeToNotificationEvents(identity, (event) => {
+      if (event.eventId.startsWith('reconnected:')) {
+        void Promise.all([messagesService.getAll(), supportConversationsService.getConversations()])
+          .then(([messages, conversations]) => {
+            queryClient.setQueryData(messagesCacheKey, messages);
+            queryClient.setQueryData(supportCacheKey, conversations);
+          })
+          .catch(() => {
+            void queryClient.invalidateQueries({ queryKey: messagesCacheKey });
+            void queryClient.invalidateQueries({ queryKey: supportCacheKey });
+          });
+        return;
+      }
+      if (event.supportConversationId) {
+        void supportConversationsService.getConversation(event.supportConversationId)
+          .then((conversation) => queryClient.setQueryData<SupportConversation[]>(supportCacheKey, (current) =>
+            upsertMessageThread(current, conversation),
+          ))
+          .catch(() => { void queryClient.invalidateQueries({ queryKey: supportCacheKey }); });
+      }
+      if (event.messageThreadId) {
+        void messagesService.getAll()
+          .then((threads) => queryClient.setQueryData(messagesCacheKey, threads))
+          .catch(() => { void queryClient.invalidateQueries({ queryKey: messagesCacheKey }); });
+      }
+    });
+  }, [canPerform, messagesCacheKey, queryClient, supportCacheKey, tenantKey, user?.id, user?.isPlatformSupportAgent]);
 
   return (
     <div className="notifications-module min-h-full bg-background">
@@ -122,7 +156,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
           value={activeTab}
           className="w-full"
           onValueChange={(value) => {
-            setActiveTab(value);
+            setLocalActiveTab(value);
             onSubModuleChange?.(value);
           }}
         >
@@ -150,9 +184,9 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18 }}
             >
-              {activeTab === 'alertas' && <AlertasView data={data.alertas} loading={loading} onRefresh={fetchData} onHelp={() => setShowTour(true)} />}
-              {activeTab === 'mensajes' && <MensajesView data={data.mensajes} loading={loading} onRefresh={fetchData} onHelp={() => setShowTour(true)} />}
-              {activeTab === 'push' && <PushView data={data.push} loading={loading} onRefresh={fetchData} onHelp={() => setShowTour(true)} />}
+              {activeTab === 'alertas' && <AlertasView data={data.alertas} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} onHelp={() => setShowTour(true)} />}
+              {activeTab === 'mensajes' && <MensajesView data={data.mensajes} loading={loading} onHelp={() => setShowTour(true)} />}
+              {activeTab === 'push' && <PushView data={data.push} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} onHelp={() => setShowTour(true)} />}
             </motion.div>
           </AnimatePresence>
         </Tabs>

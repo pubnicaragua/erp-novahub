@@ -10,14 +10,16 @@ import { toast } from '@/app/services/toast';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 interface ReportesViewProps {
   data: Report[];
   loading: boolean;
+  error?: boolean;
   onRefresh: () => void;
 }
 
-export const ReportesView: React.FC<ReportesViewProps> = ({ data, loading, onRefresh }) => {
+export const ReportesView: React.FC<ReportesViewProps> = ({ data, loading, error = false, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { canPerform } = useAuth();
 
@@ -40,22 +42,23 @@ export const ReportesView: React.FC<ReportesViewProps> = ({ data, loading, onRef
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar'); }
   };
 
-  const kpis = [
-    { title: 'Total Reportes',  value: data.length,                                                                    icon: FileBarChart,  color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Formato PDF',     value: data.filter(r => (r.format||'').toUpperCase() === 'PDF').length,                icon: FileText,      color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
-    { title: 'Formato Excel',   value: data.filter(r => (r.format||'').toUpperCase() === 'EXCEL').length,              icon: FileSpreadsheet, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Generados Hoy',   value: data.filter(r => { const d=new Date(r.generatedDate); return d.toDateString()===new Date().toDateString() }).length, icon: Download, color: 'text-purple-500', bg: 'bg-purple-500/10'  },
-  ];
-
   const filtered = data.filter(r => r.title?.toLowerCase().includes(searchTerm.toLowerCase()) || r.type?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const kpiRows = loading || error ? [] : filtered;
+  const kpis = [
+    { title: 'Total Reportes',  value: kpiRows.length,                                                                    icon: FileBarChart,  color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: 'Formato PDF',     value: kpiRows.filter(r => (r.format||'').toUpperCase() === 'PDF').length,                icon: FileText,      color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    { title: 'Formato Excel',   value: kpiRows.filter(r => (r.format||'').toUpperCase() === 'EXCEL').length,              icon: FileSpreadsheet, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Generados Hoy',   value: kpiRows.filter(r => { const d=new Date(r.generatedDate); return d.toDateString()===new Date().toDateString() }).length, icon: Download, color: 'text-purple-500', bg: 'bg-purple-500/10'  },
+  ];
 
   return (
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, i) => (
-          <SalesKpiCard key={i} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
+          <SalesKpiCard key={i} title={kpi.title} value={loading || error ? '—' : kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={error} />
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">

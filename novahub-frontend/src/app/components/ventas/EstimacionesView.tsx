@@ -31,6 +31,8 @@ import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceLis
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -52,6 +54,9 @@ import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 
 interface EstimacionesViewProps {
   data: Estimate[];
+  summaryData?: Estimate[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading: boolean;
   onRefresh: () => Promise<void> | void;
   onConvertedToOrder?: (orderId: string) => void;
@@ -96,7 +101,7 @@ const isLocalEstimate = (id: string | number | undefined | null) => String(id ||
 const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
 const actionIconClass = 'size-4 text-muted-foreground';
 
-export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: EstimacionesViewProps) {
+export function EstimacionesView({ data, summaryData, summaryLoading, summaryError, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
@@ -359,6 +364,13 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     status: (row: Estimate) => normalizeEstimateStatus(row.status),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((estimate) => {
+    const search = searchTerm.toLowerCase();
+    return estimate.number.toLowerCase().includes(search) || (estimate.customer?.name || '').toLowerCase().includes(search);
+  });
+  const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
+  const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((estimate) => statusFilter === 'ALL' || normalizeEstimateStatus(estimate.status) === statusFilter), filterGetters);
   const distinctCustomers = [...new Map(filtered.map((e) => [e.customer?.name || 'Varios', e.customer?.name || 'Varios'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((e) => (e.customer?.name || 'Varios') === label).length }));
   const statusOptionsForFilter = statusOptions.map((option) => ({ value: option.value, label: option.label, count: filtered.filter((e) => normalizeEstimateStatus(e.status) === option.value).length }));
@@ -822,13 +834,13 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     }
   ];
 
-  const quotedTotalInDisplayCurrency = data.reduce(
+  const quotedTotalInDisplayCurrency = summaryFilteredData.reduce(
     (acc, estimate) => acc + ((estimate as any).baseTotal !== null && (estimate as any).baseTotal !== undefined
       ? Number((estimate as any).baseTotal)
       : toBaseAmount(estimate.total || 0, estimate.currency, estimate.exchangeRate || globalRate)),
     0,
   );
-  const originalQuotedTotals = summarizeAmountsByCurrency(data, (estimate) => Number(estimate.total || 0), (estimate) => estimate.currency, baseCurrency);
+  const originalQuotedTotals = summarizeAmountsByCurrency(summaryFilteredData, (estimate) => Number(estimate.total || 0), (estimate) => estimate.currency, baseCurrency);
 
   if (editingId && localDoc) {
     return (
@@ -1463,13 +1475,18 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        {displayMode === 'ORIGINAL'
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {!resolvedSummaryRows
+          ? <SalesKpiCard title="Total Cotizado" value="—" icon={FileSpreadsheet} color="text-primary" bg="bg-primary/10" />
+          : displayMode === 'ORIGINAL'
           ? originalQuotedTotals.map((summary) => <SalesKpiCard key={`quoted-${summary.currency}`} title={`Total Cotizado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileSpreadsheet} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, baseCurrency)} icon={FileSpreadsheet} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Tasa Conversión" value={`${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title="En proceso" value={data.filter(e => normalizeEstimateStatus(e.status) === 'IN_PROCESS').length} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
-        <SalesKpiCard title="Aprobadas" value={data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="Tasa Conversión" value={resolvedSummaryRows ? `${((summaryRowsWithoutStatusFilter.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (summaryRowsWithoutStatusFilter.length || 1)) * 100).toFixed(0)}%` : '—'} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="En proceso" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(e => normalizeEstimateStatus(e.status) === 'IN_PROCESS').length : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
+        <SalesKpiCard title="Aprobadas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">

@@ -15,14 +15,16 @@ import { useAuth } from '../../contexts/AuthContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 interface FacturasLegalesViewProps {
   data: LegalInvoice[];
   loading: boolean;
+  error?: boolean;
   onRefresh: () => void;
 }
 
-export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, loading, onRefresh }) => {
+export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, loading, error = false, onRefresh }) => {
   const { displayCurrency, displayMode, baseCurrency, exchangeRate, valuationModeSuffix, valuationMode, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const { canPerform } = useAuth();
@@ -55,14 +57,16 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear'); }
   };
 
-  const totalConverted = data.reduce(
+  const filtered = data.filter(f => f.number?.toLowerCase().includes(searchTerm.toLowerCase()) || f.type?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const kpiRows = loading || error ? [] : filtered;
+  const totalConverted = kpiRows.reduce(
     (sum, invoice) => sum + (valuationMode === 'CURRENT'
       ? convertCurrentAmount(Number(invoice.amount || 0), invoice.currency || baseCurrency)
       : convertAmount(Number(invoice.amount || 0), invoice.currency || baseCurrency, invoice.exchangeRate)),
     0,
   );
-  const originalCurrencies = summarizeAmountsByCurrency(data, (invoice) => Number(invoice.amount || 0), (invoice) => invoice.currency || baseCurrency).map((item) => item.currency);
-  const originalTotal = (currency: SupportedCurrency) => data
+  const originalCurrencies = summarizeAmountsByCurrency(kpiRows, (invoice) => Number(invoice.amount || 0), (invoice) => invoice.currency || baseCurrency).map((item) => item.currency);
+  const originalTotal = (currency: SupportedCurrency) => kpiRows
     .filter((invoice) => normalizeCurrency(invoice.currency || baseCurrency) === currency)
     .reduce((sum, invoice) => sum + (Number(invoice.amount || 0) || 0), 0);
   const amountKpis = displayMode === 'ORIGINAL'
@@ -70,20 +74,19 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
     : [{ title: `Total Emitido (${displayCurrency}${valuationModeSuffix})`, value: formatExplicitAmount(totalConverted, displayCurrency), icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-500/10' }];
   const kpis = [
     ...amountKpis,
-    { title: 'Facturas',        value: data.length,                                                                    icon: FileText,      color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
-    { title: 'Pagadas',         value: data.filter(f => (f.status||'').toUpperCase() === 'PAID').length,               icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Vencidas',        value: data.filter(f => (f.status||'').toUpperCase() === 'OVERDUE').length,            icon: AlertTriangle, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    { title: 'Facturas',        value: kpiRows.length,                                                                    icon: FileText,      color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
+    { title: 'Pagadas',         value: kpiRows.filter(f => (f.status||'').toUpperCase() === 'PAID').length,               icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Vencidas',        value: kpiRows.filter(f => (f.status||'').toUpperCase() === 'OVERDUE').length,            icon: AlertTriangle, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
   ];
-
-  const filtered = data.filter(f => f.number?.toLowerCase().includes(searchTerm.toLowerCase()) || f.type?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, i) => (
-          <SalesKpiCard key={i} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
+          <SalesKpiCard key={i} title={kpi.title} value={loading || error ? '—' : kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={error} />
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">

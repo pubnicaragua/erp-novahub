@@ -20,6 +20,8 @@ import { toast } from '@/app/services/toast';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { inventoryService, type SimilarProductGroup, type SimilarityResolution, type SimilarProductMatch } from '../../services/inventario.service';
 import { purchaseRequestsService } from '../../services/compras.service';
 import { employeesService } from '../../services/rh.service';
@@ -298,6 +300,8 @@ const hasProductVariants = (product: any) => {
 interface ProductosViewProps {
   products: any[];
   summaryProducts?: any[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   categories: any[];
   warehouses?: any[];
   productWarehouseOptions?: any[];
@@ -1055,7 +1059,7 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, summaryProducts, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, onExport, isRefreshing = false, onCreateProduct, pagination, onSearchChange, onCategoryChange, onBrandChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, brandFilter: controlledBrandFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
+export function ProductosView({ products, summaryProducts, summaryLoading = false, summaryError = false, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, onExport, isRefreshing = false, onCreateProduct, pagination, onSearchChange, onCategoryChange, onBrandChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, brandFilter: controlledBrandFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
   const { openingId, startOpening } = useDetailOpeningFeedback();
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
@@ -1891,7 +1895,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       productBrand.toLowerCase().includes(normalizedSearch) ||
       p.category?.name?.toLowerCase().includes(normalizedSearch) ||
       matchesVariantSku;
-    const matchesCategory = true;
+    const productCategoryId = String(p.categoryId || p.category?.id || '');
+    const matchesCategory = categoryFilters.length === 0 || categoryFilters.includes(productCategoryId);
     const productWarehouseIds = [
       ...(Array.isArray(p.warehouseCatalogs) ? p.warehouseCatalogs.map((catalog: any) => catalog.warehouseId || catalog.warehouse?.id) : []),
       ...(Array.isArray(p.stockLevels) ? p.stockLevels.map((level: any) => level.warehouseId || level.warehouse?.id) : []),
@@ -1943,7 +1948,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       productBrand.toLowerCase().includes(normalizedSearch) ||
       p.category?.name?.toLowerCase().includes(normalizedSearch) ||
       matchesVariantSku;
-    const matchesCategory = true;
+    const productCategoryId = String(p.categoryId || p.category?.id || '');
+    const matchesCategory = categoryFilters.length === 0 || categoryFilters.includes(productCategoryId);
     const productWarehouseIds = [
       ...(Array.isArray(p.warehouseCatalogs) ? p.warehouseCatalogs.map((catalog: any) => catalog.warehouseId || catalog.warehouse?.id) : []),
       ...(Array.isArray(p.stockLevels) ? p.stockLevels.map((level: any) => level.warehouseId || level.warehouse?.id) : []),
@@ -1971,7 +1977,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     .filter(matchesProductFilters)
     .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
 
-  const summarySource = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
+  const resolvedSummaryProducts = getKpiSummaryRows({ data: summaryProducts, isLoading: summaryLoading, isError: summaryError });
+  const summarySource = resolvedSummaryProducts || [];
   const filteredSummaryProducts = colFilters.applyTo(summarySource.filter(matchesSummaryProductFilters), filterGetters);
   const filteredData = colFilters.applyTo(filteredProducts, filterGetters);
   const totalProductsForExport = summaryProducts && summaryProducts.length > 0
@@ -4147,11 +4154,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           </div>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-tour="inventory-products-kpis">
-          {inventoryKpis.map((item) => (
+        {inventoryKpis.map((item) => (
             <SalesKpiCard
               key={item.title}
               title={item.title}
-              value={item.value}
+              value={resolvedSummaryProducts ? item.value : '—'}
               icon={item.icon}
               color={item.color}
               bg={item.bg}
@@ -4167,6 +4174,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             />
           ))}
         </div>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         {stockFilter === 'expiring' && !isServiceView && (
           <div className="mt-4 overflow-hidden rounded-2xl border border-amber-500/30 bg-amber-500/5">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/20 px-4 py-3">

@@ -19,6 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 // Tipos para el nuevo log
 type LogFormData = {
@@ -33,10 +34,11 @@ type LogFormData = {
 interface BitacoraViewProps {
   data: ActivityLog[];
   loading: boolean;
+  summaryError?: boolean;
   onRefresh: () => void;
 }
 
-export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRefresh }) => {
+export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, summaryError = false, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
@@ -154,17 +156,17 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
     }
   };
 
-  const totalSizeBytes = data.reduce((acc, log) => acc + (Number(log.fileSize) || 0), 0);
+  const filtered = data.filter(l => l.entity?.toLowerCase().includes(searchTerm.toLowerCase()) || l.details?.toLowerCase().includes(searchTerm.toLowerCase()) || l.action?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const kpiRows = loading || summaryError ? [] : filtered;
+  const totalSizeBytes = kpiRows.reduce((acc, log) => acc + (Number(log.fileSize) || 0), 0);
   const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(2);
 
   const kpis = [
     { title: 'Almacenamiento (1GB)', value: `${totalSizeMB} MB`, icon: Database, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
-    { title: 'Total Registros', value: data.length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Agregados', value: data.filter(l => ['CREATE','UPLOAD'].includes((l.action || '').toUpperCase())).length, icon: Plus, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Eliminados', value: data.filter(l => (l.action || '').toUpperCase() === 'DELETE').length, icon: MousePointerClick, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+    { title: 'Total Registros', value: kpiRows.length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: 'Agregados', value: kpiRows.filter(l => ['CREATE','UPLOAD'].includes((l.action || '').toUpperCase())).length, icon: Plus, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Eliminados', value: kpiRows.filter(l => (l.action || '').toUpperCase() === 'DELETE').length, icon: MousePointerClick, color: 'text-rose-500', bg: 'bg-rose-500/10' },
   ];
-
-  const filtered = data.filter(l => l.entity?.toLowerCase().includes(searchTerm.toLowerCase()) || l.details?.toLowerCase().includes(searchTerm.toLowerCase()) || l.action?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
@@ -173,11 +175,12 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
           <Card key={i} className="min-w-0 rounded-2xl border-border/50 bg-card/80 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md">
             <CardContent className="p-5 flex items-center gap-4">
               <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{loading || summaryError ? '—' : kpi.value}</p></div>
             </CardContent>
           </Card>
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={summaryError} />
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">

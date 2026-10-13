@@ -32,6 +32,8 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -60,6 +62,9 @@ const paymentMethodOptions = [
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
+  summaryData?: SalesOrder[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading: boolean;
   onRefresh: () => Promise<void> | void;
   onGenerateInvoice: (order: SalesOrder) => Promise<void> | void;
@@ -115,7 +120,7 @@ const getOrderWorkflowIssues = (order: SalesOrder | null | undefined): string[] 
   return issues;
 };
 
-export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
+export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
@@ -449,6 +454,17 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     invoicedAt: (row: SalesOrder) => (row.invoicedAt ? new Date(row.invoicedAt).getTime() : null),
   };
   const filteredData = colFilters.applyTo(statusOrdered, filterGetters);
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((order) => {
+    const search = searchTerm.trim().toLowerCase();
+    return !search || String(order.number || '').toLowerCase().includes(search) || String(order.customer?.name || '').toLowerCase().includes(search);
+  });
+  const summaryRowsWithoutStatusFilter = colFilters.applyTo([...summarySearchRows].sort((a, b) => {
+    const numberDifference = getDocumentNumber(b.number) - getDocumentNumber(a.number);
+    if (Number.isFinite(numberDifference) && numberDifference !== 0) return numberDifference;
+    return new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime();
+  }), filterGetters);
+  const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((order) => statusFilter === 'ALL' || normalizeOrderStatus(order.status) === statusFilter), filterGetters);
   const distinctCustomers = [...new Map(filtered.map((o) => [o.customer?.name || 'Varios', o.customer?.name || 'Varios'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((o) => (o.customer?.name || 'Varios') === label).length }));
 
@@ -811,13 +827,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     { key: 'paymentStatus', label: 'Estado de pago' },
   ];
 
-  const approvedAmountInDisplayCurrency = data
+  const approvedAmountInDisplayCurrency = summaryFilteredData
     .filter(order => normalizeOrderStatus(order.status) === 'APPROVED')
     // `total` + la tasa histórica son la fuente de verdad. `baseTotal` puede
     // pertenecer a registros antiguos que quedaron desfasados.
     .reduce((acc, order) => acc + toBaseAmount(order.total || 0, order.currency, order.exchangeRate), 0);
   const originalApprovedAmounts = summarizeAmountsByCurrency(
-    data.filter(order => normalizeOrderStatus(order.status) === 'APPROVED'),
+    summaryFilteredData.filter(order => normalizeOrderStatus(order.status) === 'APPROVED'),
     (order) => Number(order.total || 0),
     (order) => order.currency,
     baseCurrency,
@@ -1426,13 +1442,18 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title="Órdenes en Proceso" value={data.filter(o => normalizeOrderStatus(o.status) === 'IN_PROCESS').length} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
-        {displayMode === 'ORIGINAL'
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <SalesKpiCard title="Órdenes en Proceso" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(o => normalizeOrderStatus(o.status) === 'IN_PROCESS').length : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
+        {!resolvedSummaryRows
+          ? <SalesKpiCard title="Monto Aprobado" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
+          : displayMode === 'ORIGINAL'
           ? originalApprovedAmounts.map((summary) => <SalesKpiCard key={`approved-${summary.currency}`} title={`Monto Aprobado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Monto Aprobado (${displayCurrency})`} value={formatConvertedAmount(approvedAmountInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Órdenes Aprobadas" value={data.filter(o => normalizeOrderStatus(o.status) === 'APPROVED').length} icon={Check} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
-        <SalesKpiCard title="Órdenes en Borrador" value={data.filter(o => normalizeOrderStatus(o.status) === 'DRAFT').length} icon={Eye} color="text-primary" bg="bg-primary/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
+        <SalesKpiCard title="Órdenes Aprobadas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(o => normalizeOrderStatus(o.status) === 'APPROVED').length : '—'} icon={Check} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="Órdenes en Borrador" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(o => normalizeOrderStatus(o.status) === 'DRAFT').length : '—'} icon={Eye} color="text-primary" bg="bg-primary/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

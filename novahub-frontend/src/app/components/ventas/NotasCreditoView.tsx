@@ -28,6 +28,8 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -51,6 +53,9 @@ import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtr
 
 interface NotasCreditoViewProps {
   data: CreditNote[];
+  summaryData?: CreditNote[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading: boolean;
   onRefresh: () => void;
   customers?: Customer[];
@@ -113,7 +118,7 @@ const toWholeQuantity = (value: string | number) => {
   return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
 };
 
-export function NotasCreditoView({ data, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
+export function NotasCreditoView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, convertBetweenCurrencies } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -379,6 +384,13 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     balance: (row: CreditNote) => creditDebt(row),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((credit) => {
+    const search = searchTerm.toLowerCase();
+    return [credit.number, customerName(credit), credit.reason].join(' ').toLowerCase().includes(search);
+  });
+  const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
+  const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((credit) => statusFilter === 'ALL' || normalizeStatus(credit.status) === statusFilter), filterGetters);
   const distinctCustomers = [...new Map(filtered.map((credit) => [customerName(credit), customerName(credit)])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((credit) => customerName(credit) === label).length }));
 
@@ -725,21 +737,21 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     { key: 'status', header: 'Estado', width: '115px', render: (value) => { const option = statusFor(value as string); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none', option?.color || 'bg-muted/20 text-muted-foreground')}>{option?.label || value}</Badge>; } },
   ];
 
-  const totalIssued = data.filter((credit) => ['ISSUED', 'PARTIAL', 'PAID'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.total || 0), credit.currency, credit.exchangeRate), 0);
-  const totalOpen = data.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate), 0);
+  const totalIssued = summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'PAID'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.total || 0), credit.currency, credit.exchangeRate), 0);
+  const totalOpen = summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate), 0);
   const originalIssuedAmounts = summarizeAmountsByCurrency(
-    data.filter((credit) => ['ISSUED', 'PARTIAL', 'PAID'].includes(normalizeStatus(credit.status))),
+    summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'PAID'].includes(normalizeStatus(credit.status))),
     (credit) => Number(credit.total || 0),
     (credit) => credit.currency,
     baseCurrency,
   );
   const originalOpenAmounts = summarizeAmountsByCurrency(
-    data.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(credit.status))),
+    summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(credit.status))),
     (credit) => Number(credit.balance ?? credit.total ?? 0),
     (credit) => credit.currency,
     baseCurrency,
   );
-  const overdueCount = data.filter((credit) => Number(credit.balance ?? 0) > 0 && credit.dueDate && new Date(credit.dueDate).getTime() < referenceNow).length;
+  const overdueCount = summaryFilteredData.filter((credit) => Number(credit.balance ?? 0) > 0 && credit.dueDate && new Date(credit.dueDate).getTime() < referenceNow).length;
 
   if ((editingId || isCreating) && localDoc) {
     const statusOption = statusFor(localDoc.status);
@@ -958,15 +970,20 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="sales-list-kpis">
-        {displayMode === 'ORIGINAL'
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {!resolvedSummaryRows
+          ? <SalesKpiCard title="Crédito emitido" value="—" icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" />
+          : displayMode === 'ORIGINAL'
           ? originalIssuedAmounts.map((summary) => <SalesKpiCard key={`issued-${summary.currency}`} title={`Crédito emitido (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Crédito emitido (${displayCurrency})`} value={formatConvertedAmount(totalIssued, baseCurrency)} icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" />}
-        {displayMode === 'ORIGINAL'
+        {!resolvedSummaryRows ? <SalesKpiCard title="Saldo abierto" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
           ? originalOpenAmounts.map((summary) => <SalesKpiCard key={`open-${summary.currency}`} title={`Saldo abierto (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Saldo abierto (${displayCurrency})`} value={formatConvertedAmount(totalOpen, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Activos" value={data.filter((credit) => ['ISSUED', 'PARTIAL'].includes(normalizeStatus(credit.status))).length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title="Por vencer / vencidos" value={overdueCount} icon={Clock} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Activos" value={resolvedSummaryRows ? summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL'].includes(normalizeStatus(credit.status))).length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Por vencer / vencidos" value={resolvedSummaryRows ? overdueCount : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" />
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center">

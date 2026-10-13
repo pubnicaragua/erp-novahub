@@ -59,10 +59,12 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { DateField } from '../ui/DateField';
 import { DateTimePickerField } from '../ui/DateTimePickerField';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 interface TareasViewProps {
   data: Task[];
   loading: boolean;
+  summaryError?: boolean;
   onRefresh: () => void;
 }
 
@@ -97,7 +99,7 @@ const getTaskAssigneeId = (task?: TaskLike | null): string => {
   return String(fromAssignments?.userId || '').trim();
 };
 
-export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh }) => {
+export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryError = false, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewLayout, setViewLayout] = useState<ViewLayoutMode>('table');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -496,43 +498,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     },
   ];
 
-  const kpis = [
-    { id: 'ALL', title: 'Total Tareas', value: data.length, icon: ListTodo, color: 'text-primary', bg: 'bg-primary/10' },
-    {
-      id: 'PENDING',
-      title: 'Pendientes',
-      value: data.filter((t) => getTaskDisplayStatus(t) === 'PENDING').length,
-      icon: Clock,
-      color: 'text-blue-500',
-      bg: 'bg-blue-500/10',
-    },
-    {
-      id: 'WAITING_APPROVAL',
-      title: 'Por Aprobar',
-      value: data.filter((t) => String(t.status || '').toUpperCase() === 'WAITING_APPROVAL').length,
-      icon: Send,
-      color: 'text-primary',
-      bg: 'bg-primary/10',
-    },
-    {
-      id: 'OVERDUE',
-      title: 'Vencidas',
-      value: data.filter((t) => getTaskDisplayStatus(t) === 'OVERDUE').length,
-      icon: AlertTriangle,
-      color: 'text-rose-500',
-      bg: 'bg-rose-500/10',
-    },
-    {
-      id: 'COMPLETED',
-      title: 'Completadas',
-      value: data.filter((t) => (t.status || '').toUpperCase() === 'COMPLETED').length,
-      icon: CheckCircle2,
-      color: 'text-emerald-500',
-      bg: 'bg-emerald-500/10',
-    },
-  ];
-
-  const filtered = data.filter((t) => {
+  const filterTasks = (includeStatusFilter: boolean) => data.filter((t) => {
     // Search filter
     const matchesSearch =
       !searchTerm ||
@@ -541,7 +507,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
 
     // Status filter
     const displayStatus = getTaskDisplayStatus(t);
-    const matchesStatus =
+    const matchesStatus = !includeStatusFilter ||
       statusFilter === 'ALL' ||
       (statusFilter === 'OVERDUE' ? displayStatus === 'OVERDUE' : (t.status || '').toUpperCase() === statusFilter);
 
@@ -572,6 +538,15 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       matchesDateTo
     );
   });
+  const filteredWithoutStatus = filterTasks(false);
+  const filtered = filterTasks(true);
+  const kpis = [
+    { id: 'ALL', title: 'Total Tareas', value: filteredWithoutStatus.length, icon: ListTodo, color: 'text-primary', bg: 'bg-primary/10' },
+    { id: 'PENDING', title: 'Pendientes', value: filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'PENDING').length, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { id: 'WAITING_APPROVAL', title: 'Por Aprobar', value: filteredWithoutStatus.filter((t) => String(t.status || '').toUpperCase() === 'WAITING_APPROVAL').length, icon: Send, color: 'text-primary', bg: 'bg-primary/10' },
+    { id: 'OVERDUE', title: 'Vencidas', value: filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'OVERDUE').length, icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+    { id: 'COMPLETED', title: 'Completadas', value: filteredWithoutStatus.filter((t) => (t.status || '').toUpperCase() === 'COMPLETED').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+  ];
 
   const activeFiltersCount =
     (statusFilter !== 'ALL' ? 1 : 0) +
@@ -605,7 +580,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
                       {kpi.title}
                     </p>
-                    <p className="text-2xl font-black tracking-tight">{kpi.value}</p>
+                    <p className="text-2xl font-black tracking-tight">{loading || summaryError ? '—' : kpi.value}</p>
                   </div>
                 </div>
                 {isSelected && (
@@ -618,6 +593,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           );
         })}
       </div>
+      <KpiSummaryNotice loading={loading} error={summaryError} />
 
       {/* Structured Collapsible Filter Panel (Style of Image 3) */}
       <div className="space-y-4 rounded-2xl border border-border/50 bg-muted/30 p-4 shadow-sm sm:p-5">

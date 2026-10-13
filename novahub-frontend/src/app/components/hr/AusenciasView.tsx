@@ -203,10 +203,6 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     }
   };
 
-  const pendingRequests = leaveRequests.filter((r: any) => r.status === 'PENDING');
-  const approvedRequests = leaveRequests.filter((r: any) => r.status === 'APPROVED');
-  const rejectedRequests = leaveRequests.filter((r: any) => r.status === 'REJECTED');
-
   const colFilters = useColumnFilters();
   const employeeName = (r: any) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}`.trim() || 'Sin empleado';
   const filterGetters = {
@@ -223,6 +219,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       || (r.reason || '').toLowerCase().includes(q)
       || (LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType || '').toLowerCase().includes(q);
   });
+  const summaryRequests = colFilters.applyTo(searchFiltered, filterGetters, ['status']);
   const statusFiltered = statusFilter === 'ALL' ? searchFiltered : searchFiltered.filter((r: any) => r.status === statusFilter);
   const colFilteredRequests = colFilters.applyTo(statusFiltered, filterGetters);
 
@@ -231,9 +228,9 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const leaveTypeOptions = [...new Map(searchFiltered.map((r: any) => [String(r.leaveType || ''), LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType])).entries()]
     .map(([value, label]) => ({ value: value as string, label: label as string, count: searchFiltered.filter((r: any) => String(r.leaveType || '') === value).length }));
   const statusOptionsForFilter = [
-    { value: 'PENDING', label: 'Pendiente', count: searchFiltered.filter((r: any) => r.status === 'PENDING').length },
-    { value: 'APPROVED', label: 'Aprobada', count: searchFiltered.filter((r: any) => r.status === 'APPROVED').length },
-    { value: 'REJECTED', label: 'Rechazada', count: searchFiltered.filter((r: any) => r.status === 'REJECTED').length },
+    { value: 'PENDING', label: 'Pendiente', count: summaryRequests.filter((r: any) => r.status === 'PENDING').length },
+    { value: 'APPROVED', label: 'Aprobada', count: summaryRequests.filter((r: any) => r.status === 'APPROVED').length },
+    { value: 'REJECTED', label: 'Rechazada', count: summaryRequests.filter((r: any) => r.status === 'REJECTED').length },
   ];
 
   const [pageSize, setPageSize] = useState(10);
@@ -255,7 +252,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       <div className={cn('grid grid-cols-1 md:grid-cols-3 gap-4', showNewForm && 'hidden')} data-tour="hr-leaves-title">
         <StatCard
           label="Pendientes"
-          value={pendingRequests.length}
+          value={summaryRequests.filter((r: any) => r.status === 'PENDING').length}
           icon={FileText}
           tone="orange"
           sub="Por aprobar o rechazar"
@@ -264,7 +261,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
         />
         <StatCard
           label="Aprobadas"
-          value={approvedRequests.length}
+          value={summaryRequests.filter((r: any) => r.status === 'APPROVED').length}
           icon={Check}
           tone="green"
           sub="Ausencias validadas"
@@ -273,7 +270,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
         />
         <StatCard
           label="Rechazadas"
-          value={rejectedRequests.length}
+          value={summaryRequests.filter((r: any) => r.status === 'REJECTED').length}
           icon={X}
           tone="red"
           sub="Solicitudes denegadas"

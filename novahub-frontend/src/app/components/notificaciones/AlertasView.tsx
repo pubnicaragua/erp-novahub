@@ -11,15 +11,17 @@ import { alertsService } from '../../services/notificaciones.service';
 import { navigateToNotification } from '../../utils/notificationNavigation';
 import { NotificationTable } from './NotificationTable';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 interface AlertasViewProps {
   data: Alert[];
   loading: boolean;
+  summaryError?: boolean;
   onRefresh: () => void;
   onHelp: () => void;
 }
 
-export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefresh, onHelp }) => {
+export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, summaryError = false, onRefresh, onHelp }) => {
   const { canPerform } = useAuth();
   const { markAsRead } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,22 +58,23 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
     }
   };
 
-  const kpis = [
-    { title: 'Total Alertas',   value: data.length,                                                              icon: AlertCircle,   color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Críticas',        value: data.filter(a => (a.severity||'').toUpperCase() === 'CRITICAL').length,    icon: AlertTriangle, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
-    { title: 'No Leídas',       value: data.filter(a => !a.isRead).length,                                         icon: Info,          color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
-    { title: 'Leídas',          value: data.filter(a => a.isRead).length,                                          icon: Eye,           color: 'text-primary', bg: 'bg-primary/10' },
-  ];
-
   const filtered = data.filter(a => a.title?.toLowerCase().includes(searchTerm.toLowerCase()) || a.content?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const kpiRows = loading || summaryError ? [] : filtered;
+  const kpis = [
+    { title: 'Total Alertas',   value: kpiRows.length,                                                              icon: AlertCircle,   color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: 'Críticas',        value: kpiRows.filter(a => (a.severity||'').toUpperCase() === 'CRITICAL').length,    icon: AlertTriangle, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    { title: 'No Leídas',       value: kpiRows.filter(a => !a.isRead).length,                                         icon: Info,          color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
+    { title: 'Leídas',          value: kpiRows.filter(a => a.isRead).length,                                          icon: Eye,           color: 'text-primary', bg: 'bg-primary/10' },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="notificaciones-alertas-kpis">
         {kpis.map((kpi, i) => (
-          <SalesKpiCard key={i} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
+          <SalesKpiCard key={i} title={kpi.title} value={loading || summaryError ? '—' : kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={summaryError} />
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm" data-tour="notificaciones-alertas-table">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">

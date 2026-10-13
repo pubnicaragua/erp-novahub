@@ -11,7 +11,7 @@ import { BitacoraView } from './actividades/BitacoraView';
 import { ActividadesCalendarioView } from './actividades/ActividadesCalendarioView';
 import { tasksService, eventsService, remindersService, activityLogsService } from '../services/actividades.service';
 import { useAuth } from '../contexts/AuthContext';
-import { asList, useTenantQuery } from '../hooks/useTenantQuery';
+import { asList, fetchAllReportPages, useTenantQuery } from '../hooks/useTenantQuery';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { ExportMenu } from './ui/ExportMenu';
 import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
@@ -49,17 +49,18 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
 
   // Cada pestaña consulta solo sus datos cuando se activa. React Query conserva
   // los resultados por tenant y aborta la petición anterior al cambiar rápido.
-  const tasksQuery = useTenantQuery<any[]>(['activities', 'tasks'], signal => tasksService.getAll(signal), {
+  const reportFilters = { pageSize: 5000, report: true };
+  const tasksQuery = useTenantQuery<any[]>(['activities', 'tasks'], signal => fetchAllReportPages((filters) => tasksService.getAll(signal, filters), reportFilters, signal), {
     enabled: (activeTab === 'tareas' || activeTab === 'calendario') && canPerform('ACTIVITIES_TASKS', 'view'),
   });
-  const eventsQuery = useTenantQuery<any[]>(['activities', 'events'], signal => eventsService.getAll(signal), {
+  const eventsQuery = useTenantQuery<any[]>(['activities', 'events'], signal => fetchAllReportPages((filters) => eventsService.getAll(signal, filters), reportFilters, signal), {
     enabled: ['eventos', 'calendario', 'reuniones'].includes(activeTab)
       && canPerform(activeTab === 'calendario' ? 'ACTIVITIES_CALENDAR' : activeTab === 'reuniones' ? 'ACTIVITIES_MEETINGS' : 'ACTIVITIES_EVENTS', 'view'),
   });
-  const remindersQuery = useTenantQuery<any[]>(['activities', 'reminders'], signal => remindersService.getAll(signal), {
+  const remindersQuery = useTenantQuery<any[]>(['activities', 'reminders'], signal => fetchAllReportPages((filters) => remindersService.getAll(signal, filters), reportFilters, signal), {
     enabled: activeTab === 'recordatorios' && canPerform('ACTIVITIES_REMINDERS', 'view'),
   });
-  const logsQuery = useTenantQuery<any[]>(['activities', 'logs'], signal => activityLogsService.getAll(signal), {
+  const logsQuery = useTenantQuery<any[]>(['activities', 'logs'], signal => fetchAllReportPages((filters) => activityLogsService.getAll(signal, filters), reportFilters, signal), {
     enabled: activeTab === 'bitacora' && canPerform('ACTIVITIES_LOGS', 'view'),
   });
 
@@ -207,7 +208,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} />}
                 {['eventos', 'reuniones'].includes(activeTab) && (
                   <EventosView
                     data={
@@ -217,6 +218,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                     }
                     mode={activeTab as 'eventos' | 'reuniones'}
                     loading={loading}
+                    summaryError={activeQuery.isError}
                     onRefresh={fetchData}
                   />
                 )}
@@ -236,8 +238,8 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                     }}
                   />
                 )}
-                {activeTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} />}
+                {activeTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} />}
               </motion.div>
             </AnimatePresence>
           </Tabs>

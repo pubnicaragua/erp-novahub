@@ -36,6 +36,8 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseRecordPDF, generatePurchaseListPDF } from '../../utils/purchaseExports';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseVariantPickerModal } from './PurchaseVariantPickerModal';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
@@ -60,6 +62,9 @@ import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 interface Props {
   data: PurchaseOrder[];
+  summaryData?: PurchaseOrder[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading: boolean;
   onRefresh: () => void;
   supplierCatalog?: Supplier[];
@@ -1018,7 +1023,7 @@ const buildPendingPurchaseCatalogFromRow = (row: PurchaseImportRow, priceCurrenc
   variant: null,
 });
 
-export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
+export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertBetweenCurrencies } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -2040,6 +2045,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     status: (row: PurchaseOrder) => normalizePurchaseOrderStatus(row.status),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((order) => {
+    if (!normalizedSearchTerm) return true;
+    const haystack = [order.number, order.supplier?.name, order.address, order.requestedBy, order.notes, ...(order.items || []).flatMap((item: any) => [item.code, item.name, item.category, item.description])].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(normalizedSearchTerm);
+  });
+  const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
 
   const statusOptionsForFilter = PURCHASE_ORDER_STATUS_OPTIONS.map((option) => ({
     value: option.value,
@@ -3368,21 +3380,24 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     );
   }
 
-  const countOrdersByStatus = (status: 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'REJECTED') => data.filter((order) => normalizePurchaseOrderStatus(order.status) === status).length;
+  const countOrdersByStatus = (status: 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'REJECTED') => summaryRowsWithoutStatusFilter.filter((order) => normalizePurchaseOrderStatus(order.status) === status).length;
   const kpis = [
-    { title: 'Total órdenes', value: data.length, icon: ClipboardList, color: 'text-primary', bg: 'bg-primary/10', filter: 'ALL' },
-    { title: 'Borradores', value: countOrdersByStatus('DRAFT'), icon: FileText, color: 'text-primary', bg: 'bg-primary/10', filter: 'DRAFT' },
-    { title: 'En proceso', value: countOrdersByStatus('IN_PROCESS'), icon: Clock, color: 'text-primary', bg: 'bg-primary/10', filter: 'IN_PROCESS' },
-    { title: 'Aprobadas', value: countOrdersByStatus('APPROVED'), icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'APPROVED' },
-    { title: 'Rechazadas', value: countOrdersByStatus('REJECTED'), icon: Ban, color: 'text-primary', bg: 'bg-primary/10', filter: 'REJECTED' },
+    { title: 'Total órdenes', value: resolvedSummaryRows ? summaryRowsWithoutStatusFilter.length : '—', icon: ClipboardList, color: 'text-primary', bg: 'bg-primary/10', filter: 'ALL' },
+    { title: 'Borradores', value: resolvedSummaryRows ? countOrdersByStatus('DRAFT') : '—', icon: FileText, color: 'text-primary', bg: 'bg-primary/10', filter: 'DRAFT' },
+    { title: 'En proceso', value: resolvedSummaryRows ? countOrdersByStatus('IN_PROCESS') : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', filter: 'IN_PROCESS' },
+    { title: 'Aprobadas', value: resolvedSummaryRows ? countOrdersByStatus('APPROVED') : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'APPROVED' },
+    { title: 'Rechazadas', value: resolvedSummaryRows ? countOrdersByStatus('REJECTED') : '—', icon: Ban, color: 'text-primary', bg: 'bg-primary/10', filter: 'REJECTED' },
   ];
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5" data-tour="purchases-list-kpis">
+      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="filter" active={statusFilter === k.filter} onClick={() => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next); }} />
         ))}
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">

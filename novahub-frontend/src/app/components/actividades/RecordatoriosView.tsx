@@ -19,14 +19,16 @@ import { InventoryViewTutorial } from '../inventory/InventoryViewTutorial';
 import { Label } from '../ui/label';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 interface RecordatoriosViewProps {
   data: Reminder[];
   loading: boolean;
+  summaryError?: boolean;
   onRefresh: () => void;
 }
 
-export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, loading, onRefresh }) => {
+export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, loading, summaryError = false, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
@@ -121,14 +123,14 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear recordatorio'); }
   };
 
-  const kpis = [
-    { title: 'Total Avisos', value: data.length, icon: Bell, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Pendientes', value: data.filter(r => (r.status || '').toUpperCase() === 'PENDING').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Enviados', value: data.filter(r => (r.status || '').toUpperCase() === 'SENT').length, icon: BellRing, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Cancelados', value: data.filter(r => (r.status || '').toUpperCase() === 'CANCELLED').length, icon: BellOff, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-  ];
-
   const filtered = data.filter(r => r.title?.toLowerCase().includes(searchTerm.toLowerCase()) || r.description?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const kpiRows = loading || summaryError ? [] : filtered;
+  const kpis = [
+    { title: 'Total Avisos', value: kpiRows.length, icon: Bell, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: 'Pendientes', value: kpiRows.filter(r => (r.status || '').toUpperCase() === 'PENDING').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: 'Enviados', value: kpiRows.filter(r => (r.status || '').toUpperCase() === 'SENT').length, icon: BellRing, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Cancelados', value: kpiRows.filter(r => (r.status || '').toUpperCase() === 'CANCELLED').length, icon: BellOff, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+  ];
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
@@ -137,11 +139,12 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
           <Card key={i} className="min-w-0 rounded-2xl border-border/50 bg-card/80 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md">
             <CardContent className="p-5 flex items-center gap-4">
               <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{loading || summaryError ? '—' : kpi.value}</p></div>
             </CardContent>
           </Card>
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={summaryError} />
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">

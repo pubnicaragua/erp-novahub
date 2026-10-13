@@ -15,6 +15,7 @@ import { soporteTecnicoService } from '../../services/soporte-tecnico.service';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
   OPEN: { label: 'Abierto', color: 'bg-blue-500/10 text-blue-500 border-blue-500/20', icon: Clock },
@@ -44,10 +45,8 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
   const canEditSupport = canPerform('SUPPORT_TECH', 'edit');
   const canDeleteSupport = canPerform('SUPPORT_TECH', 'delete');
   const ticketsQuery = useTenantQuery<any[]>(['technical-support', 'all-tickets'], signal => soporteTecnicoService.getAll(signal), { enabled: canViewSupport });
-  const statsQuery = useTenantQuery<any>(['technical-support', 'stats'], signal => soporteTecnicoService.getStats(signal), { enabled: canViewSupport });
   const tickets = Array.isArray(ticketsQuery.data) ? ticketsQuery.data : [];
-  const stats = statsQuery.data || {};
-  const loading = ticketsQuery.isLoading || statsQuery.isLoading || ticketsQuery.isFetching || statsQuery.isFetching;
+  const loading = ticketsQuery.isLoading || ticketsQuery.isFetching;
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState(activeSubModule || 'ALL');
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
@@ -59,7 +58,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
   useNotificationDomainRefresh({
     module: 'soporte-tecnico',
     subModules: ['tickets'],
-    onRefresh: () => { void Promise.all([ticketsQuery.refetch(), statsQuery.refetch()]); },
+    onRefresh: () => { void ticketsQuery.refetch(); },
   });
 
   useEffect(() => {
@@ -77,7 +76,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
 
   const fetchAll = async () => {
     try {
-      await Promise.all([ticketsQuery.refetch(), statsQuery.refetch()]);
+      await ticketsQuery.refetch();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al cargar soporte técnico');
     }
@@ -111,11 +110,12 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
     setNewStatus(ticket.status);
   };
 
-  const filtered = tickets.filter(t => {
+  const searchFiltered = tickets.filter(t => {
     const matchSearch = t.subject?.toLowerCase().includes(search.toLowerCase()) || t.number?.toLowerCase().includes(search.toLowerCase()) || t.clientTenant?.name?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = filterStatus === 'ALL' || t.status === filterStatus;
-    return matchSearch && matchStatus;
+    return matchSearch;
   });
+  const filtered = searchFiltered.filter((ticket) => filterStatus === 'ALL' || ticket.status === filterStatus);
+  const kpiRows = loading || ticketsQuery.isError ? [] : searchFiltered;
 
   return (
     <div className="mx-auto w-full max-w-[1700px] space-y-6 p-4 animate-in fade-in duration-500 sm:p-6 md:px-10 md:pb-10 md:pt-4">
@@ -123,17 +123,18 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total', value: stats.total || 0, gradient: 'from-primary/10' },
-          { label: 'Abiertos', value: stats.open || 0, gradient: 'from-blue-500/10' },
-          { label: 'En Progreso', value: stats.inProgress || 0, gradient: 'from-amber-500/10' },
-          { label: 'Resueltos', value: stats.resolved || 0, gradient: 'from-emerald-500/10' },
+          { label: 'Total', value: kpiRows.length, gradient: 'from-primary/10' },
+          { label: 'Abiertos', value: kpiRows.filter(t => t.status === 'OPEN').length, gradient: 'from-blue-500/10' },
+          { label: 'En Progreso', value: kpiRows.filter(t => t.status === 'IN_PROGRESS').length, gradient: 'from-amber-500/10' },
+          { label: 'Resueltos', value: kpiRows.filter(t => t.status === 'RESOLVED').length, gradient: 'from-emerald-500/10' },
         ].map(s => (
           <div key={s.label} className={cn("bg-gradient-to-br to-transparent p-4 rounded-3xl border border-border/30 shadow-sm", s.gradient)}>
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">{s.label}</p>
-            <p className="text-3xl font-black tracking-tighter italic">{s.value}</p>
+            <p className="text-3xl font-black tracking-tighter italic">{loading || ticketsQuery.isError ? '—' : s.value}</p>
           </div>
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={ticketsQuery.isError} />
 
       {/* Search & Filters */}
       <div className="flex flex-col md:flex-row gap-4 items-center bg-muted/30 p-2 rounded-3xl border border-border/40 backdrop-blur-md">

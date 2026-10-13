@@ -129,11 +129,6 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     }
   };
 
-  const scheduledTrainings = trainings.filter((t: any) => t.status === 'SCHEDULED').length;
-  const inProgressTrainings = trainings.filter((t: any) => t.status === 'IN_PROGRESS').length;
-  const completedTrainings = trainings.filter((t: any) => t.status === 'COMPLETED').length;
-  const cancelledTrainings = trainings.filter((t: any) => t.status === 'CANCELLED').length;
-
   const handleTrainingStatus = async (training: any, status: string) => {
     setChangingStatus(training.id);
     const actionToken = beginNotificationAction();
@@ -220,17 +215,23 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
       || (t.location || '').toLowerCase().includes(q);
   });
   const statusFiltered = statusFilter === 'ALL' ? searchFiltered : searchFiltered.filter((t: any) => t.status === statusFilter);
-  const filteredTrainings = colFilters.applyTo(statusFiltered, {
+  const trainingFilterGetters = {
     title: (t: any) => t.title,
     instructor: (t: any) => trainerName(t),
     status: (t: any) => String(t.status || ''),
     startDate: (t: any) => (t.startDate ? new Date(t.startDate).getTime() : null),
-  });
+  };
+  const summaryTrainings = colFilters.applyTo(searchFiltered, trainingFilterGetters, ['status']);
+  const filteredTrainings = colFilters.applyTo(statusFiltered, trainingFilterGetters);
+  const scheduledTrainings = summaryTrainings.filter((t: any) => t.status === 'SCHEDULED').length;
+  const inProgressTrainings = summaryTrainings.filter((t: any) => t.status === 'IN_PROGRESS').length;
+  const completedTrainings = summaryTrainings.filter((t: any) => t.status === 'COMPLETED').length;
+  const cancelledTrainings = summaryTrainings.filter((t: any) => t.status === 'CANCELLED').length;
 
   const trainerOptions = [...new Map(trainings.map((t: any) => [trainerName(t), trainerName(t)])).entries()]
     .map(([, label]) => ({ value: label as string, label: label as string, count: trainings.filter((t: any) => trainerName(t) === label).length }));
   const statusOptionsForFilter = Object.entries(TRAINING_STATUS_LABELS)
-    .map(([value, label]) => ({ value, label, count: trainings.filter((t: any) => t.status === value).length }));
+    .map(([value, label]) => ({ value, label, count: summaryTrainings.filter((t: any) => t.status === value).length }));
 
   const totalPages = Math.max(1, Math.ceil(filteredTrainings.length / pageSize));
   const paginatedTrainings = filteredTrainings.slice((currentPage - 1) * pageSize, currentPage * pageSize);

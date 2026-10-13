@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Building2, Check, ChevronRight, CircleHelp, Loader2, LogOut, MailPlus, MessageSquare, Search, Send, ShieldCheck, Users } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { ArrowLeft, Building2, ChevronRight, CircleHelp, Loader2, LogOut, MailPlus, MessageSquare, Search, Send, ShieldCheck, Users } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAuth } from '../../contexts/AuthContext';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
-import { supportConversationsService, subscribeToSupportEvents, type SupportConversation, type SupportPreview, type SupportScope, type SupportTargets, type SupportTargetOptionGroup } from '../../services/support-conversations.service';
+import { supportConversationsService, subscribeToSupportEvents, type SupportConversation, type SupportConversationAttachment, type SupportScope, type SupportTargets, type SupportTargetOptionGroup } from '../../services/support-conversations.service';
 import type { ChatMessage } from '../../types';
+import { updateMessageThread, upsertMessageThread } from '../notificaciones/message-thread-cache';
+import { SupportAttachmentComposer } from '../notificaciones/SupportAttachmentComposer';
+import { SupportMessageAttachments } from '../notificaciones/SupportMessageAttachments';
 import { toast } from '@/app/services/toast';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -32,16 +36,20 @@ const formatMessageDate = (value: string) => {
   return Number.isNaN(date.getTime()) ? '' : format(date, "d MMM, HH:mm", { locale: es });
 };
 const createRequestKey = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+type AttachmentComposerState = { attachments: SupportConversationAttachment[]; uploading: boolean; hasError: boolean };
+const emptyAttachmentState: AttachmentComposerState = { attachments: [], uploading: false, hasError: false };
 
 export function PlatformSupportWorkspace() {
   const { user, logout } = useAuth();
   const queryClient = useQueryClient();
+  const shouldReduceMotion = useReducedMotion();
   const identity = user?.id || 'support-agent';
-  const queryKey = ['support-conversations', identity] as const;
+  const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
+  const queryKey = useMemo(() => ['support-conversations', identity] as const, [identity]);
+  const conversationCacheKey = useMemo(() => ['tenant-module', tenantKey, ...queryKey] as const, [tenantKey, queryKey]);
   const conversationsQuery = useTenantQuery<SupportConversation[]>(queryKey, (signal) => supportConversationsService.getConversations(signal), {
     enabled: Boolean(user?.isPlatformSupportAgent),
-    refetchInterval: 15_000,
-    refetchIntervalInBackground: false,
+    refetchOnMount: 'always',
   });
   const targetsQuery = useTenantQuery<SupportTargets>(['support-conversations', identity, 'targets'], (signal) => supportConversationsService.getTargets(signal), {
     enabled: Boolean(user?.isPlatformSupportAgent),
@@ -54,19 +62,36 @@ export function PlatformSupportWorkspace() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTitle, setComposeTitle] = useState('');
   const [composeContent, setComposeContent] = useState('');
+  const [composeAttachmentState, setComposeAttachmentState] = useState<AttachmentComposerState>(emptyAttachmentState);
+  const [composeAttachmentResetKey, setComposeAttachmentResetKey] = useState(0);
   const [selectedTargets, setSelectedTargets] = useState<SupportScope[]>([]);
-  const [preview, setPreview] = useState<SupportPreview | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
   const [reply, setReply] = useState('');
+  const [replyAttachmentState, setReplyAttachmentState] = useState<AttachmentComposerState>(emptyAttachmentState);
+  const [replyAttachmentResetKey, setReplyAttachmentResetKey] = useState(0);
   const [replying, setReplying] = useState(false);
   const [replyError, setReplyError] = useState('');
   const markingReadIds = useRef(new Set<string>());
   const broadcastAttempt = useRef<{ signature: string; key: string } | null>(null);
+  const messageBodyRef = useRef<HTMLDivElement>(null);
+  const messageEndRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const lastSelectedIdRef = useRef<string | null>(null);
+  const refetchConversations = conversationsQuery.refetch;
+  const onComposeAttachmentsChange = useCallback((state: AttachmentComposerState) => setComposeAttachmentState(state), [setComposeAttachmentState]);
+  const onReplyAttachmentsChange = useCallback((state: AttachmentComposerState) => setReplyAttachmentState(state), [setReplyAttachmentState]);
 
-  useEffect(() => subscribeToSupportEvents(() => {
-    void queryClient.invalidateQueries({ queryKey });
-  }), [queryClient, identity]);
+  useEffect(() => subscribeToSupportEvents((event) => {
+    if (event.type === 'support-conversations-resync') {
+      void refetchConversations();
+      return;
+    }
+    void supportConversationsService.getConversation(event.conversationId)
+      .then((conversation) => queryClient.setQueryData<SupportConversation[]>(conversationCacheKey, (current) =>
+        upsertMessageThread(current, conversation),
+      ))
+      .catch(() => { void refetchConversations(); });
+  }), [queryClient, conversationCacheKey, refetchConversations]);
 
   const selected = conversations.find((conversation) => conversation.id === selectedId) || null;
   const filtered = useMemo(() => {
@@ -76,48 +101,96 @@ export function PlatformSupportWorkspace() {
   const unreadTotal = conversations.reduce((total, conversation) => total + conversation.unreadCount, 0);
 
   useEffect(() => {
+    if (lastSelectedIdRef.current !== selectedId) {
+      shouldAutoScrollRef.current = true;
+      lastSelectedIdRef.current = selectedId;
+    }
+    if (!shouldAutoScrollRef.current) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      messageEndRef.current?.scrollIntoView({ behavior: shouldReduceMotion ? 'auto' : 'smooth', block: 'end' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedId, selected?.messages.length, shouldReduceMotion]);
+
+  useEffect(() => {
     if (!selected || selected.unreadCount === 0 || markingReadIds.current.has(selected.id)) return;
     const conversationId = selected.id;
     markingReadIds.current.add(conversationId);
     void supportConversationsService.markRead(selected.id)
-      .then(() => queryClient.invalidateQueries({ queryKey }))
+      .then(() => queryClient.setQueryData<SupportConversation[]>(conversationCacheKey, (current) => updateMessageThread(
+        current,
+        conversationId,
+        (conversation) => ({
+          ...conversation,
+          unreadCount: 0,
+          messages: conversation.messages.map((message) => ({ ...message, isRead: true })),
+        }),
+      )))
       .catch((error: any) => toast.error(error?.response?.data?.message || 'No pudimos marcar la conversación como leída'))
       .finally(() => markingReadIds.current.delete(conversationId));
-  }, [selected?.id, selected?.unreadCount, queryClient, identity]);
+  }, [selected, queryClient, conversationCacheKey]);
 
   const toggleTarget = (scope: SupportScope) => {
     setSelectedTargets((current) => toggleSupportTargetSelection(current, scope, targets.groups));
-    setPreview(null);
-  };
-
-  const runPreview = async () => {
-    if (!selectedTargets.length) return;
-    setPreviewLoading(true);
-    try { setPreview(await supportConversationsService.preview(selectedTargets)); }
-    catch (error: any) { toast.error(error?.response?.data?.message || 'No pudimos validar los destinos'); }
-    finally { setPreviewLoading(false); }
   };
 
   const submitBroadcast = async () => {
     const title = composeTitle.trim();
     const content = composeContent.trim();
-    if (!title || !content || !preview || preview.eligibleRecipientCount < 1 || sendingBroadcast) return;
-    const payload = { title, content, targets: selectedTargets };
+    const attachments = composeAttachmentState.attachments;
+    if (!title || (!content && !attachments.length) || !selectedTargets.length || sendingBroadcast || composeAttachmentState.uploading || composeAttachmentState.hasError) return;
+    const payload = { title, content, targets: selectedTargets, attachmentUploadIds: attachments.map((attachment) => attachment.id) };
     const signature = JSON.stringify(payload);
     if (!broadcastAttempt.current || broadcastAttempt.current.signature !== signature) {
       broadcastAttempt.current = { signature, key: createRequestKey() };
     }
     setSendingBroadcast(true);
     try {
-      const result: any = await supportConversationsService.broadcast(payload, broadcastAttempt.current.key);
+      const result = await supportConversationsService.broadcast(payload, broadcastAttempt.current.key);
+      const newConversations: SupportConversation[] = result.conversations.map((item) => {
+        const id = `support:${item.id}`;
+        const sender = { id: user?.id || 'support-agent', name: user?.name || 'Soporte técnico', email: user?.email };
+        const branch = { id: item.branchId, name: item.branchName };
+        const firstMessage: ChatMessage = {
+          id: `${id}:initial`,
+          content,
+          attachments: item.attachments || [],
+          createdAt: result.createdAt,
+          isRead: true,
+          mine: true,
+          sender,
+          recipient: branch,
+          link: null,
+        };
+        return {
+          id,
+          supportConversationId: item.id,
+          title: result.title,
+          kind: 'SUPPORT',
+          participant: branch,
+          preview: content || (item.attachments?.length === 1 ? `📎 ${item.attachments[0].fileName}` : `📎 ${item.attachments?.length || 0} archivos adjuntos`),
+          lastMessageAt: result.createdAt,
+          unreadCount: 0,
+          canReply: true,
+          messages: [firstMessage],
+        };
+      });
+      queryClient.setQueryData<SupportConversation[]>(conversationCacheKey, (current) =>
+        newConversations.reduce((threads, conversation) => upsertMessageThread(threads, conversation), current || []),
+      );
+      const firstConversation = newConversations[0];
+      if (firstConversation) {
+        setSelectedId(firstConversation.id);
+        setMobileThreadOpen(true);
+      }
       toast.success(`Mensaje enviado a ${result.branchCount} sucursal${result.branchCount === 1 ? '' : 'es'}`);
       broadcastAttempt.current = null;
       setComposeOpen(false);
       setComposeTitle('');
       setComposeContent('');
       setSelectedTargets([]);
-      setPreview(null);
-      await queryClient.invalidateQueries({ queryKey });
+      setComposeAttachmentState(emptyAttachmentState);
+      setComposeAttachmentResetKey((current) => current + 1);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'No pudimos enviar el mensaje. Puedes reintentar con el mismo contenido.');
     } finally { setSendingBroadcast(false); }
@@ -125,13 +198,16 @@ export function PlatformSupportWorkspace() {
 
   const submitReply = async (event?: React.FormEvent) => {
     event?.preventDefault();
-    if (!selected || !reply.trim() || replying) return;
+    const attachments = replyAttachmentState.attachments;
+    if (!selected || (!reply.trim() && !attachments.length) || replying || replyAttachmentState.uploading || replyAttachmentState.hasError) return;
     setReplying(true);
     setReplyError('');
     try {
-      await supportConversationsService.reply(selected.id, reply.trim());
+      const updated = await supportConversationsService.reply(selected.id, reply.trim(), attachments.map((attachment) => attachment.id));
+      queryClient.setQueryData<SupportConversation[]>(conversationCacheKey, (current) => upsertMessageThread(current, updated));
       setReply('');
-      await queryClient.invalidateQueries({ queryKey });
+      setReplyAttachmentState(emptyAttachmentState);
+      setReplyAttachmentResetKey((current) => current + 1);
     } catch (error: any) {
       setReplyError(error?.response?.data?.message || 'No pudimos enviar la respuesta');
     } finally { setReplying(false); }
@@ -144,8 +220,9 @@ export function PlatformSupportWorkspace() {
 
   const openComposer = () => {
     setComposeOpen(true);
-    setPreview(null);
     setSelectedTargets([]);
+    setComposeAttachmentState(emptyAttachmentState);
+    setComposeAttachmentResetKey((current) => current + 1);
   };
 
   const closeComposer = (open: boolean) => {
@@ -155,7 +232,8 @@ export function PlatformSupportWorkspace() {
       setComposeTitle('');
       setComposeContent('');
       setSelectedTargets([]);
-      setPreview(null);
+      setComposeAttachmentState(emptyAttachmentState);
+      setComposeAttachmentResetKey((current) => current + 1);
       broadcastAttempt.current = null;
     }
   };
@@ -183,13 +261,13 @@ export function PlatformSupportWorkspace() {
             {conversationsQuery.isLoading ? <div className="flex justify-center p-12"><Loader2 className="size-5 animate-spin text-primary" /></div>
               : conversationsQuery.isError ? <div className="p-6 text-center text-sm text-destructive">No pudimos cargar la bandeja. Revisa tu conexión y vuelve a intentar.</div>
                 : filtered.length === 0 ? <div className="px-5 py-14 text-center"><MessageSquare className="mx-auto size-8 text-muted-foreground/60" /><p className="mt-3 text-sm font-bold">{conversations.length ? 'Sin coincidencias' : 'Aún no hay conversaciones'}</p><p className="mt-1 text-xs text-muted-foreground">{conversations.length ? 'Prueba con otro texto.' : 'Envía un mensaje para iniciar un hilo por sucursal.'}</p></div>
-                  : filtered.map((conversation) => (
-                    <button key={conversation.id} type="button" onClick={() => openConversation(conversation)} className={cn('mb-1 flex w-full min-w-0 items-start gap-3 rounded-xl p-3 text-left transition hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', selectedId === conversation.id && 'bg-primary/10')}>
+                  : <AnimatePresence initial={false}>{filtered.map((conversation) => (
+                    <motion.button key={conversation.id} type="button" onClick={() => openConversation(conversation)} layout={!shouldReduceMotion} initial={shouldReduceMotion ? false : { opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.18, ease: 'easeOut' }} className={cn('mb-1 flex w-full min-w-0 items-start gap-3 rounded-xl p-3 text-left transition hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', selectedId === conversation.id && 'bg-primary/10')}>
                       <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Building2 className="size-4" /></div>
                       <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-bold">{conversation.participant.name}</span><span className="shrink-0 text-[10px] text-muted-foreground">{formatThreadDate(conversation.lastMessageAt)}</span></span><span className="mt-0.5 block truncate text-xs font-semibold text-foreground/80">{conversation.title}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">{conversation.preview}</span></span>
                       {conversation.unreadCount > 0 && <Badge className="shrink-0 rounded-full px-2">{conversation.unreadCount}</Badge>}
-                    </button>
-                  ))}
+                    </motion.button>
+                  ))}</AnimatePresence>}
           </div>
         </Card>
 
@@ -201,12 +279,23 @@ export function PlatformSupportWorkspace() {
               <div className="min-w-0 flex-1"><h2 className="truncate font-black">{selected.participant.name}</h2><p className="truncate text-xs text-muted-foreground">{selected.title}</p></div>
               <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">Sucursal</Badge>
             </div>
-            <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
-              {selected.messages.map((message: ChatMessage) => <div key={message.id} className={cn('flex', message.mine ? 'justify-end' : 'justify-start')}><div className={cn('max-w-[90%] rounded-2xl px-4 py-3 sm:max-w-[72%]', message.mine ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md bg-muted/70 text-foreground')}>
-                {!message.mine && <p className="mb-1 text-[11px] font-bold text-muted-foreground">{message.sender.name}</p>}<p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content}</p><p className={cn('mt-1.5 text-right text-[10px]', message.mine ? 'text-primary-foreground/70' : 'text-muted-foreground')}>{formatMessageDate(message.createdAt)}</p>
-              </div></div>)}
+            <div
+              ref={messageBodyRef}
+              onScroll={(event) => {
+                const element = event.currentTarget;
+                shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
+              }}
+              className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6"
+              aria-live="polite"
+            >
+              <AnimatePresence initial={false}>
+                {selected.messages.map((message: ChatMessage) => <motion.div key={message.id} className={cn('flex', message.mine ? 'justify-end' : 'justify-start')} layout={!shouldReduceMotion} initial={shouldReduceMotion ? false : { opacity: 0, y: 9, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={shouldReduceMotion ? undefined : { opacity: 0, y: -3 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}><div className={cn('max-w-[90%] rounded-2xl px-4 py-3 sm:max-w-[72%]', message.mine ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md bg-muted/70 text-foreground')}>
+                  {!message.mine && <p className="mb-1 text-[11px] font-bold text-muted-foreground">{message.sender.name}</p>}{message.content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content}</p>}<SupportMessageAttachments conversationId={selected.id} attachments={message.attachments} mine={message.mine} /><p className={cn('mt-1.5 text-right text-[10px]', message.mine ? 'text-primary-foreground/70' : 'text-muted-foreground')}>{formatMessageDate(message.createdAt)}</p>
+                </div></motion.div>)}
+              </AnimatePresence>
+              <div ref={messageEndRef} aria-hidden="true" />
             </div>
-            <form onSubmit={submitReply} className="border-t border-border/60 p-3 sm:p-4"><div className="mx-auto max-w-3xl"><label htmlFor="support-agent-reply" className="sr-only">Responder a la sucursal</label><div className="flex items-end gap-2 rounded-xl border border-border bg-muted/20 p-2 focus-within:ring-2 focus-within:ring-ring/40"><Textarea id="support-agent-reply" value={reply} onChange={(event) => setReply(event.target.value.slice(0, 4000))} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') void submitReply(); }} placeholder="Escribe una respuesta…" className="max-h-36 min-h-10 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0" disabled={replying} /><Button type="submit" size="icon" className="size-10 shrink-0 rounded-lg" disabled={replying || !reply.trim()} aria-label="Enviar respuesta">{replying ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</Button></div><div className="mt-1.5 flex justify-between gap-3 px-1 text-[11px]"><span className="text-destructive" role={replyError ? 'alert' : undefined}>{replyError}</span><span className="ml-auto text-muted-foreground">Ctrl + Enter para enviar</span></div></div></form>
+            <form onSubmit={submitReply} className="border-t border-border/60 p-3 sm:p-4"><div className="mx-auto max-w-3xl"><label htmlFor="support-agent-reply" className="sr-only">Responder a la sucursal</label><div className="flex items-end gap-2 rounded-xl border border-border bg-muted/20 p-2 focus-within:ring-2 focus-within:ring-ring/40"><Textarea id="support-agent-reply" value={reply} onChange={(event) => setReply(event.target.value.slice(0, 4000))} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') void submitReply(); }} placeholder="Escribe una respuesta…" className="max-h-36 min-h-10 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0" disabled={replying} /><Button type="submit" size="icon" className="size-10 shrink-0 rounded-lg" disabled={replying || replyAttachmentState.uploading || replyAttachmentState.hasError || (!reply.trim() && !replyAttachmentState.attachments.length)} aria-label="Enviar respuesta">{replying ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</Button></div><div className="mt-2"><SupportAttachmentComposer key={`reply-${selected.id}-${replyAttachmentResetKey}`} conversationId={selected.id} disabled={replying} onChange={onReplyAttachmentsChange} /></div><div className="mt-1.5 flex justify-between gap-3 px-1 text-[11px]"><span className="text-destructive" role={replyError ? 'alert' : undefined}>{replyError}</span><span className="ml-auto text-muted-foreground">Ctrl + Enter para enviar</span></div></div></form>
           </> : <div className="flex flex-1 flex-col items-center justify-center p-8 text-center"><div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><CircleHelp className="size-6" /></div><h2 className="mt-4 font-black">Selecciona una conversación</h2><p className="mt-1 max-w-sm text-sm text-muted-foreground">Los mensajes enviados a varias sucursales se separan en hilos privados.</p></div>}
         </Card>
       </div>
@@ -217,15 +306,16 @@ export function PlatformSupportWorkspace() {
           <div className="space-y-5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-xs font-bold">Asunto <span className="text-muted-foreground">({composeTitle.length}/140)</span><Input value={composeTitle} maxLength={140} onChange={(event) => setComposeTitle(event.target.value)} className="mt-1.5 rounded-xl" placeholder="Actualización de soporte" /></label><div className="flex items-end text-xs text-muted-foreground"><Users className="mr-2 size-4 shrink-0" />El destino se resolverá a sucursales activas.</div></div>
             <label className="block text-xs font-bold">Mensaje <span className="text-muted-foreground">({composeContent.length}/4000)</span><Textarea value={composeContent} maxLength={4000} onChange={(event) => setComposeContent(event.target.value)} className="mt-1.5 min-h-28 rounded-xl" placeholder="Escribe el mensaje para las sucursales…" /></label>
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-3 sm:p-4"><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="text-sm font-black">Destinos autorizados</h3><p className="text-xs text-muted-foreground">{targetsLoading(targetsQuery.isLoading, targetsQuery.isFetching) ? 'Cargando alcances…' : `${selectedTargets.length} destino${selectedTargets.length === 1 ? '' : 's'} seleccionado${selectedTargets.length === 1 ? '' : 's'}`}</p></div><Button type="button" variant="outline" size="sm" className="rounded-lg" onClick={() => void runPreview()} disabled={!selectedTargets.length || previewLoading || targetsQuery.isError}>{previewLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Check className="mr-2 size-4" />} Vista previa</Button></div>
+            <SupportAttachmentComposer key={`broadcast-${composeAttachmentResetKey}`} disabled={sendingBroadcast} onChange={onComposeAttachmentsChange} />
+            <div className="rounded-2xl border border-border/70 bg-muted/20 p-3 sm:p-4"><div className="mb-3"><h3 className="text-sm font-black">Destinos seleccionados</h3><p className="text-xs text-muted-foreground">{targetsLoading(targetsQuery.isLoading, targetsQuery.isFetching) ? 'Cargando alcances…' : `${selectedTargets.length} destino${selectedTargets.length === 1 ? '' : 's'} seleccionado${selectedTargets.length === 1 ? '' : 's'}`}</p></div>
               {targetsQuery.isError ? <p className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive">No pudimos cargar tus alcances.</p> : targetsLoading(targetsQuery.isLoading, targetsQuery.isFetching) ? <div className="flex justify-center p-6"><Loader2 className="size-5 animate-spin" /></div> : <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
                 {targets.groups.map((group) => <SupportTargetGroup key={group.id} group={group} selected={selectedTargets} onChange={toggleTarget} />)}
                 {!targets.groups.length && <p className="py-5 text-center text-sm text-muted-foreground">SuperAdmin todavía no asigna destinos a tu cuenta.</p>}
               </div>}
-              {preview && <div className="mt-4 space-y-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-3"><div className="flex flex-wrap gap-2"><Badge variant="secondary">{preview.branchCount} sucursales</Badge><Badge variant="secondary">{preview.eligibleRecipientCount} destinatarios</Badge></div><div className="max-h-36 space-y-1 overflow-y-auto text-xs">{preview.branches.map((branch) => <div key={branch.id} className="flex justify-between gap-3"><span className="truncate">{branch.name}</span><span className={branch.recipientCount ? 'shrink-0 font-bold text-primary' : 'shrink-0 font-bold text-amber-600'}>{branch.recipientCount ? `${branch.recipientCount} usuarios` : 'Sin destinatarios'}</span></div>)}</div>{preview.branchesWithoutRecipients.length > 0 && <p className="text-xs text-amber-700 dark:text-amber-300">Las sucursales sin destinatarios se omitirán del envío.</p>}</div>}
+              <p className="mt-3 rounded-xl bg-background/60 px-3 py-2 text-xs text-muted-foreground">Se creará un hilo por sucursal. Las sucursales sin usuarios autorizados se omitirán automáticamente.</p>
             </div>
           </div>
-          <DialogFooter className="gap-2 sm:gap-2"><Button type="button" variant="outline" onClick={() => closeComposer(false)} disabled={sendingBroadcast}>Cancelar</Button><Button type="button" onClick={() => void submitBroadcast()} disabled={sendingBroadcast || !composeTitle.trim() || !composeContent.trim() || !preview || preview.eligibleRecipientCount < 1}>{sendingBroadcast && <Loader2 className="mr-2 size-4 animate-spin" />}Enviar a sucursales <ChevronRight className="ml-1 size-4" /></Button></DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2"><Button type="button" variant="outline" onClick={() => closeComposer(false)} disabled={sendingBroadcast}>Cancelar</Button><Button type="button" onClick={() => void submitBroadcast()} disabled={sendingBroadcast || composeAttachmentState.uploading || composeAttachmentState.hasError || !selectedTargets.length || !composeTitle.trim() || (!composeContent.trim() && !composeAttachmentState.attachments.length)}>{(sendingBroadcast || composeAttachmentState.uploading) && <Loader2 className="mr-2 size-4 animate-spin" />}Enviar a sucursales <ChevronRight className="ml-1 size-4" /></Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </main>

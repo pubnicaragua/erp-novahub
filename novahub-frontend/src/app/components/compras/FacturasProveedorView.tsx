@@ -27,6 +27,8 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { getPurchaseInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { CurrencySelector } from '../ui/CurrencySelector';
@@ -35,6 +37,9 @@ import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalIn
 
 interface Props {
   data: SupplierInvoice[];
+  summaryData?: SupplierInvoice[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading: boolean;
   onRefresh: () => void;
   draftInvoiceFromOrder?: any;
@@ -67,7 +72,7 @@ function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: 
   return { taxRate, taxBase, taxAmount: (taxBase * taxRate) / 100 };
 }
 
-export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId }: Props) {
+export function FacturasProveedorView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const {
     exchangeRate: globalRate,
@@ -169,6 +174,20 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       .join(' ')
       .toLowerCase();
     return haystack.includes(normalizedSearchTerm);
+  });
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((invoice) => {
+    if (!normalizedSearchTerm) return true;
+    const haystack = [invoice.number, invoice.supplier?.name, invoice.supplier?.code, invoice.supplier?.email, invoice.supplier?.phone, invoice.notes, invoice.status, invoice.date ? new Date(invoice.date).toLocaleDateString() : '', invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : '', String(invoice.total ?? ''), String(invoice.amountPaid ?? ''), String(invoice.balance ?? ''), ...(invoice.items || []).map((item: any) => item.description)].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(normalizedSearchTerm);
+  });
+  const summaryFilteredRows = summarySearchRows.filter((invoice) => {
+    const status = String(invoice.status || '').toUpperCase();
+    if (statusFilter === 'PENDING') return ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(status);
+    if (statusFilter === 'CREDIT') return status === 'CREDIT';
+    if (statusFilter === 'OVERDUE') return status === 'OVERDUE';
+    if (statusFilter === 'PAID') return status === 'PAID';
+    return true;
   });
 
   const isSupplierActive = (supplierId?: string) =>
@@ -794,8 +813,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     );
   }
 
-  const pendingTotalInDisplayCurrency = data
-    .filter(invoice => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes((invoice.status || '').toUpperCase()))
+  const pendingInvoices = summarySearchRows.filter(invoice => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes((invoice.status || '').toUpperCase()));
+  const pendingTotalInDisplayCurrency = pendingInvoices
     .reduce((acc, invoice) => {
       const amount = Number(invoice.balance ?? invoice.total ?? invoice.baseTotal ?? 0);
       const converted = valuationMode === 'CURRENT'
@@ -804,27 +823,30 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       return acc + converted;
     }, 0);
   const originalPendingAmounts = summarizeAmountsByCurrency(
-    data.filter(invoice => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes((invoice.status || '').toUpperCase())),
+    pendingInvoices,
     (invoice) => Number(invoice.balance ?? invoice.total ?? invoice.baseTotal ?? 0),
     (invoice) => invoice.currency,
     baseCurrency,
   );
 
   const kpis = [
-     { title: 'Facturas',        value: data.length,                   icon: FileStack, color: 'text-blue-500',   bg: 'bg-blue-500/10',    filter: 'ALL'       },
-     { title: 'Vencidas',        value: data.filter(b => new Date(b.dueDate).getTime() < nowMs && (b.status||'').toUpperCase() !== 'PAID').length, icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', filter: 'OVERDUE' },
-     { title: 'Pagadas (Mes)',   value: data.filter(b => (b.status||'').toUpperCase() === 'PAID').length, icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'PAID' },
+     { title: 'Facturas', value: resolvedSummaryRows ? summarySearchRows.length : '—', icon: FileStack, color: 'text-blue-500', bg: 'bg-blue-500/10', filter: 'ALL' },
+     { title: 'Vencidas', value: resolvedSummaryRows ? summarySearchRows.filter(b => new Date(b.dueDate).getTime() < nowMs && (b.status||'').toUpperCase() !== 'PAID').length : '—', icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', filter: 'OVERDUE' },
+     { title: 'Pagadas (Mes)', value: resolvedSummaryRows ? summarySearchRows.filter(b => (b.status||'').toUpperCase() === 'PAID').length : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'PAID' },
   ];
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
-        {displayMode === 'ORIGINAL'
+      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {!resolvedSummaryRows ? <PurchaseKpiCard title="Por Pagar" value="—" icon={Clock} color="text-primary" bg="bg-primary/10" kind="filter" /> : displayMode === 'ORIGINAL'
           ? originalPendingAmounts.map((summary) => <PurchaseKpiCard key={`pending-${summary.currency}`} title={`Por Pagar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={Clock} color="text-primary" bg="bg-primary/10" kind="filter" active={statusFilter === 'PENDING'} onClick={() => { const next = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'; setStatusFilter(next); onStatusChange?.(next); }} />)
           : <PurchaseKpiCard title={`Por Pagar (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(pendingTotalInDisplayCurrency, displayCurrency)} icon={Clock} color="text-primary" bg="bg-primary/10" kind="filter" active={statusFilter === 'PENDING'} onClick={() => { const next = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'; setStatusFilter(next); onStatusChange?.(next); }} />}
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="filter" active={statusFilter === k.filter} onClick={() => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next); }} />
         ))}
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">

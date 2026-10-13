@@ -136,26 +136,6 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     setShowForm(true);
   };
 
-  const totalCost = benefits.reduce((sum: number, b: any) => {
-    const count = b.employeeBenefits?.length || b.assignments?.length || 0;
-    const cost = Number(b.cost ?? b.baseCost ?? 0);
-    const displayed = valuationMode === 'CURRENT'
-      ? convertCurrentAmount(cost, b.currency || 'USD')
-      : convertAmount(cost, b.currency || 'USD', b.exchangeRate);
-    return sum + displayed * count;
-  }, 0);
-  const benefitCurrencies = summarizeAmountsByCurrency(benefits, () => 0, (benefit: any) => benefit.currency || 'USD').map((item) => item.currency);
-  const originalBenefitCost = (currency: SupportedCurrency) => benefits
-    .filter((benefit: any) => normalizeCurrency(benefit.currency || 'USD') === currency)
-    .reduce((sum: number, benefit: any) => {
-      const assignedCount = benefit.employeeBenefits?.length || benefit.assignments?.length || 0;
-      return sum + (Number(benefit.cost ?? benefit.baseCost ?? 0) || 0) * assignedCount;
-    }, 0);
-
-  const totalBenefits = benefits.length;
-  const activeBenefits = benefits.filter((b: any) => b.isActive !== false).length;
-  const inactiveBenefits = totalBenefits - activeBenefits;
-
   const searchFiltered = benefits.filter((b: any) => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
@@ -169,14 +149,34 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     if (filter === 'INACTIVE') return b.isActive === false;
     return true;
   });
-  const filteredBenefits = colFilters.applyTo(stateFiltered, {
+  const benefitFilterGetters = {
     name: (b: any) => b.name,
     type: (b: any) => String(b.type || 'OTHER'),
     state: (b: any) => (b.isActive === false ? 'INACTIVE' : 'ACTIVE'),
-  });
+  };
+  const summaryBenefits = colFilters.applyTo(searchFiltered, benefitFilterGetters, ['state']);
+  const filteredBenefits = colFilters.applyTo(stateFiltered, benefitFilterGetters);
+  const totalCost = summaryBenefits.reduce((sum: number, b: any) => {
+    const count = b.employeeBenefits?.length || b.assignments?.length || 0;
+    const cost = Number(b.cost ?? b.baseCost ?? 0);
+    const displayed = valuationMode === 'CURRENT'
+      ? convertCurrentAmount(cost, b.currency || 'USD')
+      : convertAmount(cost, b.currency || 'USD', b.exchangeRate);
+    return sum + displayed * count;
+  }, 0);
+  const benefitCurrencies = summarizeAmountsByCurrency(summaryBenefits, () => 0, (benefit: any) => benefit.currency || 'USD').map((item) => item.currency);
+  const originalBenefitCost = (currency: SupportedCurrency) => summaryBenefits
+    .filter((benefit: any) => normalizeCurrency(benefit.currency || 'USD') === currency)
+    .reduce((sum: number, benefit: any) => {
+      const assignedCount = benefit.employeeBenefits?.length || benefit.assignments?.length || 0;
+      return sum + (Number(benefit.cost ?? benefit.baseCost ?? 0) || 0) * assignedCount;
+    }, 0);
+  const totalBenefits = summaryBenefits.length;
+  const activeBenefits = summaryBenefits.filter((b: any) => b.isActive !== false).length;
+  const inactiveBenefits = summaryBenefits.filter((b: any) => b.isActive === false).length;
 
   const typeOptionsForFilter = Object.entries(BENEFIT_TYPE_LABELS)
-    .map(([value, label]) => ({ value, label, count: benefits.filter((b: any) => (b.type || 'OTHER') === value).length }))
+    .map(([value, label]) => ({ value, label, count: colFilters.applyTo(searchFiltered, benefitFilterGetters, ['type', 'state']).filter((b: any) => (b.type || 'OTHER') === value).length }))
     .filter(o => o.count > 0);
   const stateOptionsForFilter = [
     { value: 'ACTIVE', label: 'Activo', count: activeBenefits },

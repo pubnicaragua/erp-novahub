@@ -24,6 +24,8 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -45,7 +47,7 @@ import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { VoiceSaleComposer } from '../ventas/VoiceSaleComposer';
 import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-parser';
 
-interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
+interface Props { data: PurchaseReceipt[]; summaryData?: PurchaseReceipt[]; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
 const statusOpts = [
   { label: 'Pendiente', value: 'PENDING', color: 'bg-primary/10 text-primary' },
@@ -541,7 +543,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
   );
 }
 
-export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], selectedBranchId = '', pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
+export function RecepcionesCompraView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], selectedBranchId = '', pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const { baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const queryClient = useQueryClient();
@@ -702,6 +704,13 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     status: (row: PurchaseReceipt) => getReceiptDisplayStatus(row),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((receipt) =>
+    String(receipt.number || '').toLowerCase().includes(searchTerm.toLowerCase())
+    || String(receipt.supplier?.name || '').toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+  const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
+  const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((receipt) => statusFilter === 'ALL' || getReceiptDisplayStatus(receipt) === statusFilter), filterGetters);
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page', exportFilter?: string) => {
     const exportToastId = toast.loading('Generando reporte de recepciones...');
@@ -1895,22 +1904,27 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     );
   }
 
-  const totalItemsReceived = data.reduce((acc, r) => acc + (r.items?.reduce((a,i:any) => a + Number(i.quantityReceived||0),0)||0), 0);
-  const totalRechazados = data.reduce((acc, r) => acc + (r.items?.reduce((a,i:any) => a + Number(i.quantityRejected||0),0)||0), 0);
-  const withIncidencias = data.filter(r => String(r.status||'').toUpperCase() === 'WITH_INCIDENTS').length;
+  const receivedReceipts = summaryRowsWithoutStatusFilter.filter((receipt) => getReceiptDisplayStatus(receipt) === 'RECEIVED');
+  const incidentReceipts = summaryRowsWithoutStatusFilter.filter((receipt) => getReceiptDisplayStatus(receipt) === 'WITH_INCIDENTS');
+  const totalItemsReceived = receivedReceipts.reduce((acc, r) => acc + (r.items?.reduce((a,i:any) => a + Number(i.quantityReceived||0),0)||0), 0);
+  const totalRechazados = incidentReceipts.reduce((acc, r) => acc + (r.items?.reduce((a,i:any) => a + Number(i.quantityRejected||0),0)||0), 0);
+  const withIncidencias = incidentReceipts.length;
 
   const kpis = [
-    { title: 'Recepciones',   value: data.length, icon: PackageCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Ítems Recibidos', value: totalItemsReceived, icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'RECEIVED' as const },
-    { title: 'Incidencias', value: `${withIncidencias} rec. / ${totalRechazados} rech.`, icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'WITH_INCIDENTS' as const },
+    { title: 'Recepciones', value: resolvedSummaryRows ? summaryFilteredData.length : '—', icon: PackageCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Ítems Recibidos', value: resolvedSummaryRows ? totalItemsReceived : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'RECEIVED' as const },
+    { title: 'Incidencias', value: resolvedSummaryRows ? `${withIncidencias} rec. / ${totalRechazados} rech.` : '—', icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'WITH_INCIDENTS' as const },
   ];
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="purchases-list-kpis">
+      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">

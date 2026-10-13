@@ -24,6 +24,7 @@ import { filterAllowedPriceLists } from '../../utils/permissions';
 import { formatExchangeRate } from '../../utils/currency';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 import { buildDownloadFileName } from '../../utils/exportFileNames';
@@ -304,10 +305,10 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     return result;
   }, [matrixItems]);
   const productByCode = useMemo(() => new Map(catalogProducts.map((product) => [normalize(product.code), product])), [catalogProducts]);
-  const missingProducts = useMemo(() => catalogProducts.filter((product) => {
+  const missingProducts = useMemo(() => filteredCatalogProducts.filter((product) => {
     const byList = itemsByProduct.get(product.id);
     return visibleLists.some((list) => !byList?.has(list.id));
-  }), [catalogProducts, itemsByProduct, visibleLists]);
+  }), [filteredCatalogProducts, itemsByProduct, visibleLists]);
   const missingPriceCount = useMemo(() => missingProducts.reduce((total, product) => {
     const byList = itemsByProduct.get(product.id);
     return total + visibleLists.filter((list) => !byList?.has(list.id)).length;
@@ -319,7 +320,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const displayedProductIds = useMemo(() => displayedProducts.map((product) => product.id), [displayedProducts]);
   const allDisplayedSelected = displayedProductIds.length > 0 && displayedProductIds.every((id) => selectedProductIds.has(id));
 
-  const loading = matrixQuery.isPending;
+  const loading = matrixQuery.isPending || matrixQuery.isFetching;
   const refreshMatrix = async () => {
     await queryClient.refetchQueries({ queryKey: ['sales', 'price-lists', 'matrix', tenantKey], type: 'active' });
   };
@@ -974,11 +975,12 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     </div>
 
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-tour="price-lists-kpis">
-      <SalesKpiCard title="Productos" value={catalogProducts.length} icon={Package} color="text-primary" bg="bg-primary/10" kind="indicator" />
-      <SalesKpiCard title="Listas visibles" value={visibleLists.length} icon={ListChecks} color="text-primary" bg="bg-primary/10" kind="indicator" />
-      <SalesKpiCard title="Precios cargados" value={Math.max(0, catalogProducts.length * visibleLists.length - missingPriceCount)} icon={CircleDollarSign} color="text-primary" bg="bg-primary/10" kind="indicator" />
-      <SalesKpiCard title="Productos con precios faltantes" value={missingProducts.length} icon={AlertTriangle} color="text-primary" bg="bg-primary/10" kind="filter" active={missingOpen} onClick={() => setMissingOpen(true)} />
+      <SalesKpiCard title="Productos" value={loading || matrixQuery.isError ? '—' : filteredCatalogProducts.length} icon={Package} color="text-primary" bg="bg-primary/10" kind="indicator" />
+      <SalesKpiCard title="Listas visibles" value={loading || matrixQuery.isError ? '—' : visibleLists.length} icon={ListChecks} color="text-primary" bg="bg-primary/10" kind="indicator" />
+      <SalesKpiCard title="Precios cargados" value={loading || matrixQuery.isError ? '—' : Math.max(0, filteredCatalogProducts.length * visibleLists.length - missingPriceCount)} icon={CircleDollarSign} color="text-primary" bg="bg-primary/10" kind="indicator" />
+      <SalesKpiCard title="Productos con precios faltantes" value={loading || matrixQuery.isError ? '—' : missingProducts.length} icon={AlertTriangle} color="text-primary" bg="bg-primary/10" kind="filter" active={missingOpen} onClick={() => setMissingOpen(true)} />
     </div>
+    <KpiSummaryNotice loading={loading} error={matrixQuery.isError} />
 
     <div className="flex min-w-0 flex-col gap-3" data-tour="price-lists-filters">
       <div className="relative w-full min-w-0" data-tour="price-lists-search"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Buscar producto, código o SKU..." aria-label="Buscar producto, código o SKU" className="h-10 w-full rounded-xl pl-9 pr-9" />{productSearch && <button type="button" onClick={() => setProductSearch('')} className="absolute right-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label="Limpiar búsqueda"><X className="size-4" /></button>}</div>

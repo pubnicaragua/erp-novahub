@@ -11,14 +11,16 @@ import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 interface ArchivosViewProps {
   data: FileModel[];
   loading: boolean;
+  error?: boolean;
   onRefresh: () => void;
 }
 
-export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRefresh }) => {
+export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, error = false, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { canPerform } = useAuth();
   const [uploading, setUploading] = useState(false);
@@ -56,22 +58,23 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRef
     }
   };
 
-  const kpis = [
-    { title: 'Total Archivos', value: data.length,                                                                    icon: HardDrive,   color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Documentos',     value: data.filter(f => f.type?.includes('pdf') || f.type?.includes('doc')).length,   icon: FileIcon,    color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Imágenes',       value: data.filter(f => f.type?.includes('image')).length,                            icon: ImageIcon,   color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
-    { title: 'Comprimidos',    value: data.filter(f => f.type?.includes('zip') || f.type?.includes('rar')).length,   icon: FileArchive, color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
-  ];
-
   const filtered = data.filter(f => f.name?.toLowerCase().includes(searchTerm.toLowerCase()) || f.category?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const kpiRows = loading || error ? [] : filtered;
+  const kpis = [
+    { title: 'Total Archivos', value: kpiRows.length,                                                                    icon: HardDrive,   color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: 'Documentos',     value: kpiRows.filter(f => f.type?.includes('pdf') || f.type?.includes('doc')).length,   icon: FileIcon,    color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Imágenes',       value: kpiRows.filter(f => f.type?.includes('image')).length,                            icon: ImageIcon,   color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
+    { title: 'Comprimidos',    value: kpiRows.filter(f => f.type?.includes('zip') || f.type?.includes('rar')).length,   icon: FileArchive, color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
+  ];
 
   return (
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, i) => (
-          <SalesKpiCard key={i} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
+          <SalesKpiCard key={i} title={kpi.title} value={loading || error ? '—' : kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={error} />
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">

@@ -19,6 +19,8 @@ import { toast } from '@/app/services/toast';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
@@ -40,6 +42,9 @@ import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 interface Props {
   data: PaymentMade[];
+  summaryData?: PaymentMade[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading: boolean;
   onRefresh: () => void;
   supplierInvoices?: SupplierInvoice[];
@@ -131,7 +136,7 @@ function groupMadePayments(rows: PaymentMade[], baseCurrency: string, globalRate
   });
 }
 
-export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange, selectedBranchId = '', targetId, onClearTargetId }: Props) {
+export function PagosRealizadosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange, selectedBranchId = '', targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -153,6 +158,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const [paymentEvidenceFiles, setPaymentEvidenceFiles] = useState<File[]>([]);
   const consumedInvoiceDraftRef = useRef<Partial<PaymentMade> | null>(null);
   const groupedPayments = useMemo(() => groupMadePayments(data, baseCurrency, globalRate, toBaseAmount), [data, baseCurrency, globalRate, toBaseAmount]);
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summaryGroupedPayments = useMemo(() => groupMadePayments(resolvedSummaryRows || [], baseCurrency, globalRate, toBaseAmount), [resolvedSummaryRows, baseCurrency, globalRate, toBaseAmount]);
 
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
   const paymentLine = (method: PurchasePaymentMethod, amount = 0, currency: 'NIO' | 'USD' = displayCurrency): PurchasePaymentLine => ({
@@ -298,6 +305,12 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     amount: (row: PaymentMade) => Number(row.amount || 0),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const summaryFilteredData = colFilters.applyTo(summaryGroupedPayments.filter((payment) => {
+    if (!normalizedSearchTerm) return true;
+    const linkedBill = bills.find((bill) => bill.id === payment.supplierInvoiceId);
+    const haystack = [payment.reference, payment.number, payment.supplier?.name, payment.supplier?.code, payment.notes, payment.displayReference, payment.date ? formatDateEs(payment.date) : '', payment.amount, Number(payment.amount || 0).toLocaleString(), getMethodLabel(payment.method), linkedBill?.number, linkedBill?.status].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(normalizedSearchTerm);
+  }), filterGetters);
 
   const linkedInvoiceForPayment = (payment: PaymentMade) =>
     payment.supplierInvoice || bills.find((bill) => bill.id === payment.supplierInvoiceId) || null;
@@ -960,31 +973,34 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const paidTotalInDisplayCurrency = groupedPayments.reduce(
+  const paidTotalInDisplayCurrency = summaryFilteredData.reduce(
     (acc, payment) => acc + toDisplayAmount(Number(payment.amount ?? payment.baseAmount ?? 0), payment.currency, payment.exchangeRate),
     0,
   );
   const originalPaidAmounts = summarizeAmountsByCurrency(
-    data.filter((payment) => payment.isActive !== false),
+    summaryFilteredData,
     (payment) => Number(payment.amount ?? payment.baseAmount ?? 0),
     (payment) => payment.currency,
     baseCurrency,
   );
 
   const kpis = [
-    { title: 'Transacciones',   value: groupedPayments.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-    { title: 'Conciliados',     value: groupedPayments.length,                   icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Transacciones', value: resolvedSummaryRows ? summaryFilteredData.length : '—', icon: Hash, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: 'Conciliados', value: resolvedSummaryRows ? summaryFilteredData.length : '—', icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
-        {displayMode === 'ORIGINAL'
+      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {!resolvedSummaryRows ? <PurchaseKpiCard title="Pagos Realizados" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" /> : displayMode === 'ORIGINAL'
           ? originalPaidAmounts.map((summary) => <PurchaseKpiCard key={`paid-${summary.currency}`} title={`Pagos Realizados (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />)
           : <PurchaseKpiCard title={`Pagos Realizados (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(paidTotalInDisplayCurrency, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />}
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="indicator" />
         ))}
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">

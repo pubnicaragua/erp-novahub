@@ -12,15 +12,17 @@ import { navigateToNotification } from '../../utils/notificationNavigation';
 import { enableBrowserNotifications, getBrowserNotificationStatus, isBrowserNotificationsEnabled, type BrowserNotificationStatus } from '../../utils/browserNotifications';
 import { NotificationTable } from './NotificationTable';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 interface PushViewProps {
   data: PushNotification[];
   loading: boolean;
+  summaryError?: boolean;
   onRefresh: () => void;
   onHelp: () => void;
 }
 
-export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh, onHelp }) => {
+export const PushView: React.FC<PushViewProps> = ({ data, loading, summaryError = false, onRefresh, onHelp }) => {
   const { canPerform } = useAuth();
   const { markAsRead } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
@@ -83,22 +85,23 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh, on
     }
   };
 
-  const kpis = [
-    { title: 'Registradas', value: data.length, icon: Send, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Pendientes', value: data.filter(p => !p.sent).length, icon: Wifi, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'No leídas', value: data.filter(p => !p.isRead).length, icon: BellRing, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-    { title: 'Lectura', value: data.length ? `${Math.round((data.filter(p => p.isRead).length / data.length) * 100)}%` : '0%', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10' },
-  ];
-
   const filtered = data.filter(p => p.title?.toLowerCase().includes(searchTerm.toLowerCase()) || p.content?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const kpiRows = loading || summaryError ? [] : filtered;
+  const kpis = [
+    { title: 'Registradas', value: kpiRows.length, icon: Send, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: 'Pendientes', value: kpiRows.filter(p => !p.sent).length, icon: Wifi, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: 'No leídas', value: kpiRows.filter(p => !p.isRead).length, icon: BellRing, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { title: 'Lectura', value: kpiRows.length ? `${Math.round((kpiRows.filter(p => p.isRead).length / kpiRows.length) * 100)}%` : '0%', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10' },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="notificaciones-push">
         {kpis.map((kpi, i) => (
-          <SalesKpiCard key={i} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
+          <SalesKpiCard key={i} title={kpi.title} value={loading || summaryError ? '—' : kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={summaryError} />
 
       <Card className="border-primary/20 bg-primary/[0.035] shadow-sm">
         <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">

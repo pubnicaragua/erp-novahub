@@ -15,14 +15,16 @@ import { useAuth } from '../../contexts/AuthContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 interface ContratosViewProps {
   data: Contract[];
   loading: boolean;
+  error?: boolean;
   onRefresh: () => void;
 }
 
-export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onRefresh }) => {
+export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, error = false, onRefresh }) => {
   const { baseCurrency, displayCurrency, displayMode, exchangeRate, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const { canPerform } = useAuth();
@@ -55,14 +57,16 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear'); }
   };
 
-  const totalValue = data.reduce(
+  const filtered = data.filter(c => c.title?.toLowerCase().includes(searchTerm.toLowerCase()) || c.number?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const kpiRows = loading || error ? [] : filtered;
+  const totalValue = kpiRows.reduce(
     (sum, contract) => sum + (valuationMode === 'CURRENT'
       ? convertCurrentAmount(Number(contract.value || 0), contract.currency || baseCurrency)
       : convertAmount(Number(contract.value || 0), contract.currency || baseCurrency, contract.exchangeRate)),
     0,
   );
-  const originalCurrencies = summarizeAmountsByCurrency(data, (contract) => Number(contract.value || 0), (contract) => contract.currency || baseCurrency).map((item) => item.currency);
-  const originalTotal = (currency: SupportedCurrency) => data
+  const originalCurrencies = summarizeAmountsByCurrency(kpiRows, (contract) => Number(contract.value || 0), (contract) => contract.currency || baseCurrency).map((item) => item.currency);
+  const originalTotal = (currency: SupportedCurrency) => kpiRows
     .filter((contract) => normalizeCurrency(contract.currency || baseCurrency) === currency)
     .reduce((sum, contract) => sum + (Number(contract.value || 0) || 0), 0);
   const amountKpis = displayMode === 'ORIGINAL'
@@ -70,21 +74,20 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
     : [{ title: `Valor Total (${displayCurrency}${valuationModeSuffix})`, value: formatExplicitAmount(totalValue, displayCurrency), icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' }];
 
   const kpis = [
-    { title: 'Total Contratos', value: data.length,                                                                    icon: Scale,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Activos',         value: data.filter(c => (c.status||'').toUpperCase() === 'ACTIVE').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Por Vencer',      value: data.filter(c => c.endDate && new Date(c.endDate) < new Date(Date.now() + 30*86400000) && (c.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: 'Total Contratos', value: kpiRows.length,                                                                    icon: Scale,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: 'Activos',         value: kpiRows.filter(c => (c.status||'').toUpperCase() === 'ACTIVE').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Por Vencer',      value: kpiRows.filter(c => c.endDate && new Date(c.endDate) < new Date(Date.now() + 30*86400000) && (c.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
     ...amountKpis,
   ];
-
-  const filtered = data.filter(c => c.title?.toLowerCase().includes(searchTerm.toLowerCase()) || c.number?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, i) => (
-          <SalesKpiCard key={i} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
+          <SalesKpiCard key={i} title={kpi.title} value={loading || error ? '—' : kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={error} />
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">

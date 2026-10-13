@@ -267,8 +267,9 @@ export function useColumnFilters() {
     return Boolean(cfg && (cfg.sort || (cfg.values && cfg.values.length > 0)));
   }, [state]);
 
-  const applyTo = useCallback(<T,>(rows: T[], getters: Record<string, (row: T) => string | number | null | undefined | { toString(): string }>): T[] => {
-    const filterKeys = Object.keys(state);
+  const applyTo = useCallback(<T,>(rows: T[], getters: Record<string, (row: T) => string | number | null | undefined | { toString(): string }>, excludedFilterKeys: string[] = []): T[] => {
+    const excludedKeys = new Set(excludedFilterKeys);
+    const filterKeys = Object.keys(state).filter((key) => !excludedKeys.has(key));
     if (filterKeys.length === 0) return rows;
 
     const compare = (a: string | number, b: string | number): number => {

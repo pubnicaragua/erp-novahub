@@ -1849,6 +1849,12 @@ export interface ChatMessage {
   sender: MessageParticipant;
   recipient: MessageParticipant;
   link?: string | null;
+  attachments?: Array<{
+    id: string;
+    fileName: string;
+    mimeType: string;
+    byteSize: number;
+  }>;
 }
 
 export interface Message {

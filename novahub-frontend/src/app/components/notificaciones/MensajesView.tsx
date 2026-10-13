@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   ArrowLeft,
   Bot,
@@ -15,8 +17,7 @@ import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { ChatMessage, Message, MessageParticipant } from '../../types';
 import { messagesService } from '../../services/notificaciones.service';
-import { supportConversationsService, type SupportConversation } from '../../services/support-conversations.service';
-import { subscribeToNotificationEvents } from '../../services/notifications.service';
+import { supportConversationsService, type SupportConversation, type SupportConversationAttachment } from '../../services/support-conversations.service';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
@@ -34,15 +35,19 @@ import { cn } from '../ui/utils';
 import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
+import { updateMessageThread, upsertMessageThread } from './message-thread-cache';
+import { SupportAttachmentComposer } from './SupportAttachmentComposer';
+import { SupportMessageAttachments } from './SupportMessageAttachments';
 
 interface MensajesViewProps {
   data: Message[];
   loading: boolean;
-  onRefresh: () => void | Promise<void>;
   onHelp: () => void;
 }
 
 type MessageFilter = 'all' | 'unread' | 'direct' | 'support';
+type AttachmentComposerState = { attachments: SupportConversationAttachment[]; uploading: boolean; hasError: boolean };
+const EMPTY_ATTACHMENT_STATE: AttachmentComposerState = { attachments: [], uploading: false, hasError: false };
 
 const initials = (name?: string) =>
   String(name || 'Sistema')
@@ -78,9 +83,16 @@ const ParticipantAvatar = ({ participant, system = false }: { participant?: Mess
   </Avatar>
 );
 
-export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRefresh, onHelp }) => {
+export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHelp }) => {
   const { canPerform, user } = useAuth();
+  const queryClient = useQueryClient();
+  const shouldReduceMotion = useReducedMotion();
   const { refresh: refreshInbox } = useNotifications();
+  const authUser = user as (typeof user & { clientTenantId?: string; tenantId?: string }) | null;
+  const tenantKey = authUser?.clientTenantId || authUser?.tenantId || 'current';
+  const userKey = user?.id || 'current';
+  const directMessagesCacheKey = useMemo(() => ['tenant-module', tenantKey, 'notifications', userKey, 'messages'] as const, [tenantKey, userKey]);
+  const supportConversationsCacheKey = useMemo(() => ['tenant-module', tenantKey, 'support-conversations', userKey, 'branch-inbox'] as const, [tenantKey, userKey]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<MessageFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -92,16 +104,22 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   const [composeError, setComposeError] = useState('');
   const [sending, setSending] = useState(false);
   const [reply, setReply] = useState('');
+  const [replyAttachmentState, setReplyAttachmentState] = useState<AttachmentComposerState>(EMPTY_ATTACHMENT_STATE);
+  const [replyAttachmentResetKey, setReplyAttachmentResetKey] = useState(0);
   const [replyError, setReplyError] = useState('');
   const [replying, setReplying] = useState(false);
   const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+  const onReplyAttachmentsChange = useCallback((state: AttachmentComposerState) => setReplyAttachmentState(state), []);
+  const messageBodyRef = useRef<HTMLDivElement>(null);
+  const messageEndRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const lastSelectedIdRef = useRef<string | null>(null);
   const supportConversationsQuery = useTenantQuery<SupportConversation[]>(
     ['support-conversations', user?.id || 'current', 'branch-inbox'],
     signal => supportConversationsService.getConversations(signal),
     {
-      enabled: Boolean(user?.id && user?.clientTenantId && !user.isPlatformSupportAgent && canPerform('NOTIFICATIONS_MESSAGES', 'read')),
-      refetchInterval: 15_000,
-      refetchIntervalInBackground: false,
+      enabled: Boolean(user?.id && user?.clientTenantId && !user.isPlatformSupportAgent && canPerform('NOTIFICATIONS_MESSAGES', 'view')),
+      refetchOnMount: 'always',
     },
   );
   const supportThreads = asList(supportConversationsQuery.data) as SupportConversation[];
@@ -114,12 +132,6 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   const recipients = asList(recipientsQuery.data) as MessageParticipant[];
   const recipientsLoading = recipientsQuery.isLoading || recipientsQuery.isFetching;
   const composeFeedbackError = composeError || (composeOpen && recipientsQuery.isError ? 'No pudimos cargar las personas de tu empresa.' : '');
-
-  useEffect(() => {
-    if (!user?.id || !user.clientTenantId || user.isPlatformSupportAgent) return undefined;
-    const identity = `${user.clientTenantId}:${user.id}`;
-    return subscribeToNotificationEvents(identity, () => { void supportConversationsQuery.refetch(); });
-  }, [user?.id, user?.clientTenantId, user?.isPlatformSupportAgent, supportConversationsQuery.refetch]);
 
   useEffect(() => {
     if (selectedId && !threads.some((thread) => thread.id === selectedId)) {
@@ -146,7 +158,15 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
       ? supportConversationsService.markRead(visibleThread.id)
       : messagesService.markRead(visibleThread.id);
     void markRead
-      .then(async () => { await refreshInbox(); await onRefresh(); await supportConversationsQuery.refetch(); })
+      .then(async () => {
+        const cacheKey = visibleThread.kind === 'SUPPORT' ? supportConversationsCacheKey : directMessagesCacheKey;
+        queryClient.setQueryData<Message[]>(cacheKey, (current) => updateMessageThread(current, visibleThread.id, (thread) => ({
+          ...thread,
+          unreadCount: 0,
+          messages: thread.messages.map((message) => ({ ...message, isRead: true })),
+        })));
+        await refreshInbox();
+      })
       .catch((e: any) => {
         if (active) toast.error(e?.response?.data?.message || 'No pudimos marcar la conversación como leída');
       })
@@ -157,48 +177,44 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     return () => {
       active = false;
     };
-  }, [threads, selectedId]);
+  }, [threads, selectedId, markingReadId, queryClient, directMessagesCacheKey, supportConversationsCacheKey, refreshInbox]);
 
   const selected = threads.find((thread) => thread.id === selectedId) || null;
-  const unreadTotal = threads.reduce((total, thread) => total + thread.unreadCount, 0);
-  const directTotal = threads.filter((thread) => thread.kind === 'DIRECT').length;
-  const supportTotal = threads.filter((thread) => thread.kind === 'SUPPORT').length;
-
-  const filtered = useMemo(() => {
+  const searchFiltered = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     return threads.filter((thread) => {
-      const matchesFilter = filter === 'all'
-        || (filter === 'unread' && thread.unreadCount > 0)
-        || (filter === 'direct' && thread.kind === 'DIRECT')
-        || (filter === 'support' && thread.kind === 'SUPPORT');
       const matchesSearch = !query || [thread.title, thread.preview, thread.participant?.name, thread.participant?.email]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
-      return matchesFilter && matchesSearch;
+      return matchesSearch;
     });
-  }, [threads, filter, searchTerm]);
+  }, [threads, searchTerm]);
+  const summaryThreads = loading ? [] : searchFiltered;
+  const unreadTotal = summaryThreads.reduce((total, thread) => total + thread.unreadCount, 0);
+  const directTotal = summaryThreads.filter((thread) => thread.kind === 'DIRECT').length;
+  const supportTotal = summaryThreads.filter((thread) => thread.kind === 'SUPPORT').length;
+  const filtered = useMemo(() => searchFiltered.filter((thread) => filter === 'all'
+    || (filter === 'unread' && thread.unreadCount > 0)
+    || (filter === 'direct' && thread.kind === 'DIRECT')
+    || (filter === 'support' && thread.kind === 'SUPPORT')),
+  [searchFiltered, filter]);
 
-  const refresh = async () => {
-    await Promise.all([Promise.resolve(onRefresh()), supportConversationsQuery.refetch()]);
-  };
+  useEffect(() => {
+    if (lastSelectedIdRef.current !== selectedId) {
+      shouldAutoScrollRef.current = true;
+      lastSelectedIdRef.current = selectedId;
+    }
+    if (!shouldAutoScrollRef.current) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      messageEndRef.current?.scrollIntoView({ behavior: shouldReduceMotion ? 'auto' : 'smooth', block: 'end' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedId, selected?.messages.length, shouldReduceMotion]);
 
-  const openThread = async (thread: Message) => {
+  const openThread = (thread: Message) => {
     setSelectedId(thread.id);
     setMobileThreadOpen(true);
     setReplyError('');
-    if (thread.unreadCount === 0 || markingReadId === thread.id) return;
-
-    setMarkingReadId(thread.id);
-    try {
-      if (thread.kind === 'SUPPORT') await supportConversationsService.markRead(thread.id);
-      else await messagesService.markRead(thread.id);
-      await refreshInbox();
-      await refresh();
-    } catch {
-      toast.error('No pudimos marcar la conversación como leída');
-    } finally {
-      setMarkingReadId(null);
-    }
   };
 
   const openComposer = async () => {
@@ -226,13 +242,11 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     setComposeError('');
     try {
       const created = await messagesService.create({ recipientId, title: cleanSubject, content: cleanContent });
+      queryClient.setQueryData<Message[]>(directMessagesCacheKey, (current) => upsertMessageThread(current, created));
       setSelectedId(created.id);
       setMobileThreadOpen(true);
       setComposeOpen(false);
       resetComposer();
-      await refresh();
-      setSelectedId(created.id);
-      setMobileThreadOpen(true);
       toast.success('Mensaje enviado');
     } catch (error: any) {
       setComposeError(error?.message || 'No pudimos enviar el mensaje.');
@@ -243,15 +257,22 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
 
   const sendReply = async (event?: React.FormEvent) => {
     event?.preventDefault();
-    if (!selected || !reply.trim()) return;
+    const attachments = selected?.kind === 'SUPPORT' ? replyAttachmentState.attachments : [];
+    if (!selected || (!reply.trim() && !attachments.length) || (selected.kind === 'SUPPORT' && (replyAttachmentState.uploading || replyAttachmentState.hasError))) return;
 
     setReplying(true);
     setReplyError('');
     try {
-      if (selected.kind === 'SUPPORT') await supportConversationsService.reply(selected.id, reply.trim());
-      else await messagesService.reply(selected.id, reply.trim());
+      const updated = selected.kind === 'SUPPORT'
+        ? await supportConversationsService.reply(selected.id, reply.trim(), attachments.map((attachment) => attachment.id))
+        : await messagesService.reply(selected.id, reply.trim());
+      const cacheKey = selected.kind === 'SUPPORT' ? supportConversationsCacheKey : directMessagesCacheKey;
+      queryClient.setQueryData<Message[]>(cacheKey, (current) => upsertMessageThread(current, updated));
       setReply('');
-      await refresh();
+      if (selected.kind === 'SUPPORT') {
+        setReplyAttachmentState(EMPTY_ATTACHMENT_STATE);
+        setReplyAttachmentResetKey((current) => current + 1);
+      }
     } catch (error: any) {
       setReplyError(error?.message || 'No pudimos enviar la respuesta.');
     } finally {
@@ -281,7 +302,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
               <div>
                 <h2 className="text-xl font-bold tracking-tight">Mensajes</h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {threads.length} conversaciones · {unreadTotal} sin leer
+                  {loading ? 'Calculando conversaciones…' : `${searchFiltered.length} conversaciones · ${unreadTotal} sin leer`}
                 </p>
               </div>
               {canPerform('NOTIFICATIONS_MESSAGES', 'create') && (
@@ -343,17 +364,23 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                 <p className="mt-1 text-sm text-muted-foreground">Probá otro filtro o iniciá un mensaje nuevo.</p>
               </div>
             ) : (
-              filtered.map((thread) => {
+              <AnimatePresence initial={false}>
+              {filtered.map((thread) => {
                 const active = selectedId === thread.id;
                 const system = thread.kind === 'SYSTEM';
                 const support = thread.kind === 'SUPPORT';
                 return (
-                  <button
+                  <motion.button
                     key={thread.id}
                     type="button"
                     role="listitem"
                     aria-current={active ? 'true' : undefined}
-                    onClick={() => void openThread(thread)}
+                    onClick={() => openThread(thread)}
+                    layout={!shouldReduceMotion}
+                    initial={shouldReduceMotion ? false : { opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
+                    transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.18, ease: 'easeOut' }}
                     className={cn(
                       'group flex w-full gap-3 border-b border-border/40 px-4 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                       active ? 'bg-primary/8' : 'hover:bg-muted/35',
@@ -382,9 +409,10 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                         )}
                       </span>
                     </span>
-                  </button>
+                  </motion.button>
                 );
-              })
+              })}
+              </AnimatePresence>
             )}
           </div>
         </aside>
@@ -426,14 +454,32 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                 {markingReadId === selected.id ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <CheckCheck className="size-4 text-muted-foreground/60" aria-label="Conversación leída" />}
               </header>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6" data-testid="message-thread-body" aria-live="polite">
+              <div
+                ref={messageBodyRef}
+                onScroll={(event) => {
+                  const element = event.currentTarget;
+                  shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
+                }}
+                className="min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6"
+                data-testid="message-thread-body"
+                aria-live="polite"
+              >
                 <div className="mx-auto flex max-w-3xl flex-col gap-3">
+                  <AnimatePresence initial={false}>
                   {(selected.messages || []).map((message) => {
                     const isSystem = selected.kind === 'SYSTEM';
                     const content = String(message.content || '');
                     const hasAction = isSystem && (content.startsWith('TAREA:') || content.startsWith('RECORDATORIO:'));
                     return (
-                      <div key={message.id} className={cn('flex', message.mine ? 'justify-end' : 'justify-start')}>
+                      <motion.div
+                        key={message.id}
+                        className={cn('flex', message.mine ? 'justify-end' : 'justify-start')}
+                        layout={!shouldReduceMotion}
+                        initial={shouldReduceMotion ? false : { opacity: 0, y: 9, scale: 0.985 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={shouldReduceMotion ? undefined : { opacity: 0, y: -3 }}
+                        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}
+                      >
                         <div className={cn(
                           'max-w-[88%] rounded-2xl px-4 py-3 sm:max-w-[72%]',
                           message.mine
@@ -447,7 +493,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                               {participantName(message.sender, isSystem ? 'Sistema' : participantName(selected.participant, 'Participante'))}
                             </p>
                           )}
-                          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</p>
+                          {(selected.kind !== 'SUPPORT' || content) && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</p>}
+                          {selected.kind === 'SUPPORT' && <SupportMessageAttachments conversationId={selected.id} attachments={message.attachments} mine={message.mine} />}
                           {hasAction && (
                             <Button
                               type="button"
@@ -463,9 +510,11 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                             {messageTime(message.createdAt)}
                           </p>
                         </div>
-                      </div>
+                      </motion.div>
                     );
                   })}
+                  </AnimatePresence>
+                  <div ref={messageEndRef} aria-hidden="true" />
                 </div>
               </div>
 
@@ -490,13 +539,23 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                         type="submit"
                         size="icon"
                         className="size-10 shrink-0 rounded-lg"
-                        disabled={replying || !reply.trim() || !canPerform('NOTIFICATIONS_MESSAGES', 'create')}
+                        disabled={replying || !canPerform('NOTIFICATIONS_MESSAGES', 'create') || (selected.kind === 'SUPPORT' ? (replyAttachmentState.uploading || replyAttachmentState.hasError || (!reply.trim() && !replyAttachmentState.attachments.length)) : !reply.trim())}
                         aria-label="Enviar respuesta"
                         data-testid="send-reply-button"
                       >
                         {replying ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                       </Button>
                     </div>
+                    {selected.kind === 'SUPPORT' && (
+                      <div className="mt-2">
+                        <SupportAttachmentComposer
+                          key={`branch-reply-${selected.id}-${replyAttachmentResetKey}`}
+                          conversationId={selected.id}
+                          disabled={replying || !canPerform('NOTIFICATIONS_MESSAGES', 'create')}
+                          onChange={onReplyAttachmentsChange}
+                        />
+                      </div>
+                    )}
                     <div className="mt-1.5 flex justify-between gap-3 px-1 text-[11px]">
                       <span className="text-destructive" role={replyError ? 'alert' : undefined}>{replyError}</span>
                       <span className="ml-auto text-muted-foreground">Ctrl + Enter para enviar</span>

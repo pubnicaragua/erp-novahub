@@ -1,6 +1,6 @@
 import { cn } from './ui/utils';
 import { useState, useMemo, useEffect } from 'react';
-import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -119,7 +119,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
   const hrQuery = useQuery({
     queryKey: ['hr', activeTab],
     queryFn: async ({ signal }) => {
-      const page = { page: 1, pageSize: 200 };
+      const reportFilters = { pageSize: 5000, report: true };
       switch (activeTab) {
         case 'dashboard': {
           const reportFilters = { pageSize: 5000, report: true };
@@ -134,7 +134,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
         }
         case 'empleados': {
           const [employees, departments, positions] = await Promise.all([
-            hrService.getEmployees(page, signal),
+            fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
             hrService.getDepartments(signal),
             hrService.getPositions(undefined, signal),
           ]);
@@ -143,15 +143,15 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
         case 'departamentos': {
           const [departments, employees, positions] = await Promise.all([
             hrService.getDepartments(signal),
-            hrService.getEmployees(page, signal),
+            fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
             hrService.getPositions(undefined, signal),
           ]);
           return { departments, employees, positions };
         }
         case 'nominas': {
           const [payrolls, employees] = await Promise.all([
-            hrService.getPayrolls(page, signal),
-            hrService.getEmployees(page, signal),
+            fetchAllReportPages((filters) => hrService.getPayrolls(filters, signal), reportFilters, signal),
+            fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
           ]);
           return { payrolls, employees };
         }
@@ -159,43 +159,43 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           return {};
         case 'asistencia': {
           const [attendance, employees] = await Promise.all([
-            hrService.getAttendanceRecords(page, signal),
-            hrService.getEmployees(page, signal),
+            fetchAllReportPages((filters) => hrService.getAttendanceRecords(filters, signal), reportFilters, signal),
+            fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
           ]);
           return { attendance, employees };
         }
         case 'ausencias': {
           const [leaveRequests, employees] = await Promise.all([
-            hrService.getLeaveRequests(page, signal),
-            hrService.getEmployees(page, signal),
+            fetchAllReportPages((filters) => hrService.getLeaveRequests(filters, signal), reportFilters, signal),
+            fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
           ]);
           return { leaveRequests, employees };
         }
         case 'evaluaciones': {
           const [reviews, employees] = await Promise.all([
-            hrService.getPerformanceReviews(undefined, signal, page),
-            hrService.getEmployees(page, signal),
+            fetchAllReportPages((filters) => hrService.getPerformanceReviews(undefined, signal, filters), reportFilters, signal),
+            fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
           ]);
           return { reviews, employees };
         }
         case 'capacitaciones': {
           const [trainings, employees] = await Promise.all([
-            hrService.getTrainings(page, signal),
-            hrService.getEmployees(page, signal),
+            fetchAllReportPages((filters) => hrService.getTrainings(filters, signal), reportFilters, signal),
+            fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
           ]);
           return { trainings, employees };
         }
         case 'beneficios': {
           const [benefits, employees] = await Promise.all([
-            hrService.getBenefits(page, signal),
-            hrService.getEmployees(page, signal),
+            fetchAllReportPages((filters) => hrService.getBenefits(filters, signal), reportFilters, signal),
+            fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
           ]);
           return { benefits, employees };
         }
         case 'kpi':
           {
             const [employees, departments] = await Promise.all([
-              hrService.getEmployees(page, signal),
+              fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
               hrService.getDepartments(signal),
             ]);
             return { employees, departments };
@@ -209,7 +209,6 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
-    placeholderData: keepPreviousData,
   });
 
   const list = (value: any) => Array.isArray(value) ? value : (value?.data || []);
@@ -226,7 +225,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     users: list(hrQuery.data?.users),
     stats: hrQuery.data?.stats || null,
   }), [hrQuery.data]);
-  const loading = activeTab !== 'comisiones' && hrQuery.isLoading;
+  const loading = activeTab !== 'comisiones' && (hrQuery.isLoading || hrQuery.isFetching);
   const queryError = hrQuery.error as any;
   const errorMessage = queryError?.response?.data?.message || queryError?.message || 'No se pudieron cargar los datos de Recursos Humanos.';
   const activeExportTarget = HR_EXPORT_TARGETS[activeTab];
@@ -487,7 +486,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           transition={{ delay: 0.1 }}
           className="mt-0 min-h-[600px]"
         >
-          {loading && !hrQuery.data ? (
+          {loading ? (
             <div className="flex items-center justify-center h-96">
               <div className="flex flex-col items-center gap-4">
                 <div className="relative">
@@ -497,7 +496,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                 <p className="text-sm font-bold text-muted-foreground tracking-wide">Cargando datos de RH...</p>
               </div>
             </div>
-          ) : hrQuery.isError && !hrQuery.data ? (
+          ) : hrQuery.isError ? (
             <div className="mx-auto flex min-h-[380px] max-w-2xl items-center justify-center px-4">
               <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
                 <AlertTriangle className="size-4" />

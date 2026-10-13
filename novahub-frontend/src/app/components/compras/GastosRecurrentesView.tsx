@@ -18,6 +18,8 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
@@ -30,7 +32,7 @@ import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalIn
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 
-interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface Props { data: RecurringExpense[]; summaryData?: RecurringExpense[]; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
 const freqOpts = [
   { label: 'Semanal',    value: 'weekly' },  
@@ -45,7 +47,7 @@ const statusOpts = [
   { label: 'Finalizado', value: 'CANCELLED', color: 'bg-primary/10 text-primary' },
 ];
 
-export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
+export function GastosRecurrentesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -89,6 +91,13 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
     if (statusFilter !== 'ALL' && status !== statusFilter) return false;
     return (e.description||'').toLowerCase().includes(searchTerm.toLowerCase());
   });
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((expense) => {
+    const search = searchTerm.toLowerCase();
+    return String(expense.name || expense.description || '').toLowerCase().includes(search)
+      || String(expense.supplier?.name || '').toLowerCase().includes(search);
+  });
+  const summaryFilteredRows = summarySearchRows.filter((expense) => statusFilter === 'ALL' || String(expense.status || '').toUpperCase() === statusFilter);
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     const exportToastId = toast.loading('Generando reporte de gastos recurrentes...');
@@ -416,30 +425,33 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const monthly = data
+  const monthly = summaryFilteredRows
     .filter(e => (e.frequency || '').toUpperCase() === 'MONTHLY')
     .reduce((acc, e) => acc + toDisplayAmount(Number(e.amount ?? e.baseAmount ?? 0), e.currency, e.exchangeRate), 0);
   const originalMonthlyAmounts = summarizeAmountsByCurrency(
-    data.filter(e => (e.frequency || '').toUpperCase() === 'MONTHLY'),
+    summaryFilteredRows.filter(e => (e.frequency || '').toUpperCase() === 'MONTHLY'),
     (expense) => Number(expense.amount ?? expense.baseAmount ?? 0),
     (expense) => expense.currency,
     baseCurrency,
   );
   const kpis = [
-    { title: 'Total Recurrentes', value: data.length,                                                            icon: CalendarClock, color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Activos',           value: data.filter(e => (e.status||'').toUpperCase() === 'ACTIVE').length,     icon: RotateCcw,     color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
-    { title: 'Pausados',        value: data.filter(e => (e.status||'').toUpperCase() === 'PAUSED').length,     icon: Clock,         color: 'text-primary',  bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PAUSED' as const },
+    { title: 'Total Recurrentes', value: resolvedSummaryRows ? summaryFilteredRows.length : '—', icon: CalendarClock, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Activos', value: resolvedSummaryRows ? summarySearchRows.filter(e => (e.status||'').toUpperCase() === 'ACTIVE').length : '—', icon: RotateCcw, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
+    { title: 'Pausados', value: resolvedSummaryRows ? summarySearchRows.filter(e => (e.status||'').toUpperCase() === 'PAUSED').length : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PAUSED' as const },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
-        {displayMode === 'ORIGINAL'
+      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {!resolvedSummaryRows ? <PurchaseKpiCard title="Est. Mensual" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" /> : displayMode === 'ORIGINAL'
           ? originalMonthlyAmounts.map((summary) => <PurchaseKpiCard key={`monthly-${summary.currency}`} title={`Est. Mensual (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />)
           : <PurchaseKpiCard title={`Est. Mensual (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(monthly, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />}
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">

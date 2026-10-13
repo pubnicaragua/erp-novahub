@@ -19,6 +19,7 @@ import {
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
 const CATEGORIES = [
   { id: 'ALL', label: 'Todos', icon: LifeBuoy },
@@ -131,6 +132,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
     const matchCategory = activeCategory === 'ALL' || t.category === activeCategory;
     return matchSearch && matchCategory;
   });
+  const kpiRows = ticketsQuery.isLoading || ticketsQuery.isFetching || ticketsQuery.isError ? [] : filtered;
 
   const getPriorityBadge = (priority: string) => {
     const p = PRIORITY_OPTIONS.find(o => o.id === priority) || PRIORITY_OPTIONS[1];
@@ -148,17 +150,18 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total', value: tickets.length, gradient: 'from-primary/10' },
-          { label: 'Abiertos', value: tickets.filter(t => t.status === 'OPEN').length, gradient: 'from-blue-500/10' },
-          { label: 'En Progreso', value: tickets.filter(t => t.status === 'IN_PROGRESS').length, gradient: 'from-amber-500/10' },
-          { label: 'Resueltos', value: tickets.filter(t => t.status === 'RESOLVED').length, gradient: 'from-emerald-500/10' },
+          { label: 'Total', value: kpiRows.length, gradient: 'from-primary/10' },
+          { label: 'Abiertos', value: kpiRows.filter(t => t.status === 'OPEN').length, gradient: 'from-blue-500/10' },
+          { label: 'En Progreso', value: kpiRows.filter(t => t.status === 'IN_PROGRESS').length, gradient: 'from-amber-500/10' },
+          { label: 'Resueltos', value: kpiRows.filter(t => t.status === 'RESOLVED').length, gradient: 'from-emerald-500/10' },
         ].map(s => (
           <div key={s.label} className={cn("bg-gradient-to-br to-transparent p-4 rounded-3xl border border-border/30 shadow-sm", s.gradient)}>
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">{s.label}</p>
-            <p className="text-3xl font-black tracking-tighter italic">{s.value}</p>
+            <p className="text-3xl font-black tracking-tighter italic">{loading || ticketsQuery.isError ? '—' : s.value}</p>
           </div>
         ))}
       </div>
+      <KpiSummaryNotice loading={loading} error={ticketsQuery.isError} />
 
       {/* Search & Filters */}
       <div className="flex flex-col md:flex-row gap-4 items-center bg-muted/30 p-2 rounded-3xl border border-border/40 backdrop-blur-md">

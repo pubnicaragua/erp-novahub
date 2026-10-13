@@ -25,6 +25,8 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -152,6 +154,9 @@ const returnTotalsFor = (items: any[], invoice?: Invoice | null, selectedCharges
 
 interface DevolucionesViewProps {
   data: SalesReturn[];
+  summaryData?: SalesReturn[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading: boolean;
   onRefresh: () => void;
   customers?: Customer[];
@@ -173,7 +178,7 @@ const statusOptions = [
   { label: 'Rechazada',  value: 'REJECTED',  color: SALES_STATUS_COLORS.REJECTED },
 ];
 
-export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: DevolucionesViewProps) {
+export function DevolucionesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], invoices = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: DevolucionesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -277,6 +282,13 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     status: (row: SalesReturn) => String(row.status || '').toUpperCase(),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((salesReturn) => {
+    const search = searchTerm.toLowerCase();
+    return String(salesReturn.number || '').toLowerCase().includes(search) || (salesReturn.customer?.name || '').toLowerCase().includes(search);
+  });
+  const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
+  const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((salesReturn) => statusFilter === 'ALL' || String(salesReturn.status || '').toUpperCase() === statusFilter), filterGetters);
   const distinctCustomers = [...new Map(filtered.map((r) => [r.customer?.name || 'Cliente', r.customer?.name || 'Cliente'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((r) => (r.customer?.name || 'Cliente') === label).length }));
   const statusOptionsForFilter = statusOptions.map((option) => ({ value: option.value, label: option.label, count: filtered.filter((r) => String(r.status || '').toUpperCase() === option.value).length }));
@@ -480,13 +492,13 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     { key: 'isPartial', header: 'Tipo', width: '95px', render: (_, row) => <Badge variant="outline" className={cn('border-none text-[9px] font-black uppercase', isReturnPartial(row) ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary')}>{isReturnPartial(row) ? 'Parcial' : 'Total'}</Badge> },
   ];
 
-  const totalReturnedInDisplayCurrency = data.reduce(
+  const totalReturnedInDisplayCurrency = summaryFilteredData.reduce(
     (acc, salesReturn) => acc + ((salesReturn as any).baseTotal !== null && (salesReturn as any).baseTotal !== undefined
       ? Number((salesReturn as any).baseTotal)
       : toBaseAmount(salesReturn.total || 0, (salesReturn as any).currency, (salesReturn as any).exchangeRate || globalRate)),
     0,
   );
-  const originalReturnedAmounts = summarizeAmountsByCurrency(data, (salesReturn) => Number((salesReturn as any).total || 0), (salesReturn) => (salesReturn as any).currency, baseCurrency);
+  const originalReturnedAmounts = summarizeAmountsByCurrency(summaryFilteredData, (salesReturn) => Number((salesReturn as any).total || 0), (salesReturn) => (salesReturn as any).currency, baseCurrency);
 
   // ─── INLINE FORM ────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
@@ -654,13 +666,18 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        {displayMode === 'ORIGINAL'
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {!resolvedSummaryRows
+          ? <SalesKpiCard title="Saldo a favor generado" value="—" icon={FileOutput} color="text-primary" bg="bg-primary/10" />
+          : displayMode === 'ORIGINAL'
           ? originalReturnedAmounts.map((summary) => <SalesKpiCard key={`returned-${summary.currency}`} title={`Saldo a favor generado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileOutput} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Saldo a favor generado (${displayCurrency})`} value={formatConvertedAmount(totalReturnedInDisplayCurrency, baseCurrency)} icon={FileOutput} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Pendientes" value={data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PENDING'} onClick={() => setStatusFilter(statusFilter === 'PENDING' ? 'ALL' : 'PENDING')} />
-        <SalesKpiCard title="Aprobadas" value={data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
-        <SalesKpiCard title="Rechazadas" value={data.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length} icon={XCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'REJECTED'} onClick={() => setStatusFilter(statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED')} />
+        <SalesKpiCard title="Pendientes" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'PENDING').length : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PENDING'} onClick={() => setStatusFilter(statusFilter === 'PENDING' ? 'ALL' : 'PENDING')} />
+        <SalesKpiCard title="Aprobadas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="Rechazadas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length : '—'} icon={XCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'REJECTED'} onClick={() => setStatusFilter(statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED')} />
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

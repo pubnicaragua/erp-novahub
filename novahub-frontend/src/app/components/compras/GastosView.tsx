@@ -25,6 +25,8 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -48,7 +50,7 @@ import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { VoiceExpenseComposer } from './VoiceExpenseComposer';
 import type { VoiceExpenseDraft } from '../../utils/voice-expense-parser';
 
-interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
+interface Props { data: Expense[]; summaryData?: Expense[]; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
 type DateFilterPreset = 'all' | 'month' | 'year' | 'range';
 const paymentSourceOptions = ['CASH', 'CARD', 'TRANSFER', 'CHECK'] as const;
@@ -77,7 +79,7 @@ const statusOpts = [
   { label: 'Pagado',    value: 'PAID',     color: 'bg-primary/10 text-primary' },
 ];
 
-export function GastosView({ data, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId }: Props) {
+export function GastosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
@@ -172,7 +174,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     return () => clearTimeout(timer);
   }, [editingId, data, globalRate, displayCurrency]);
 
-  const uniqueCategories = Array.from(new Set(data.map(g => String(g.category || '').toUpperCase()).filter(Boolean)));
+  const uniqueCategories = Array.from(new Set((summaryData ?? data).map(g => String(g.category || '').toUpperCase()).filter(Boolean)));
 
   const filtered = data.filter(g => {
     const matchesSearch =
@@ -194,6 +196,18 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     amount: (row: Expense) => Number(row.amount || 0),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((expense) =>
+    (expense.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+    || (expense.category || '').toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+  const summaryRowsWithoutQuickFilter = colFilters.applyTo(summarySearchRows, filterGetters);
+  const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((expense) => {
+    if (activeKpiFilter.type === 'draft') return String(expense.status || '').toUpperCase() === 'DRAFT';
+    if (activeKpiFilter.type === 'pending') return String(expense.status || '').toUpperCase() === 'PENDING';
+    if (activeKpiFilter.type === 'category') return String(expense.category || '').toUpperCase() === activeKpiFilter.category;
+    return true;
+  }), filterGetters);
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     const exportToastId = toast.loading('Generando reporte de gastos...');
@@ -899,21 +913,21 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const monthlyTotalInDisplayCurrency = data
+  const monthlyTotalInDisplayCurrency = summaryFilteredData
     .filter(g => new Date(g.date).getMonth() === new Date().getMonth())
     .reduce((acc, g) => acc + toDisplayAmount(Number(g.amount ?? g.baseAmount ?? 0), g.currency, g.exchangeRate), 0);
   const originalMonthlyAmounts = summarizeAmountsByCurrency(
-    data.filter(g => new Date(g.date).getMonth() === new Date().getMonth()),
+    summaryFilteredData.filter(g => new Date(g.date).getMonth() === new Date().getMonth()),
     (expense) => Number(expense.amount ?? expense.baseAmount ?? 0),
     (expense) => expense.currency,
     baseCurrency,
   );
 
   const kpis = [
-    { key: 'all', title: 'Gastos Operativos',  value: data.length,                                                                         icon: Wallet,       color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-    { key: 'draft', title: 'Borradores', value: data.filter(g => (g.status || '').toUpperCase() === 'DRAFT').length, icon: FileText, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
-    { key: 'pending', title: 'Pendientes', value: data.filter(g => (g.status || '').toUpperCase() === 'PENDING').length, icon: Clock, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
-    { key: 'category', title: 'Por Categoría', value: uniqueCategories.length, icon: Tag, color: 'text-purple-500', bg: 'bg-purple-500/10', interactive: true },
+    { key: 'all', title: 'Gastos Operativos', value: resolvedSummaryRows ? summaryRowsWithoutQuickFilter.length : '—', icon: Wallet, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { key: 'draft', title: 'Borradores', value: resolvedSummaryRows ? summaryRowsWithoutQuickFilter.filter(g => (g.status || '').toUpperCase() === 'DRAFT').length : '—', icon: FileText, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
+    { key: 'pending', title: 'Pendientes', value: resolvedSummaryRows ? summaryRowsWithoutQuickFilter.filter(g => (g.status || '').toUpperCase() === 'PENDING').length : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
+    { key: 'category', title: 'Por Categoría', value: resolvedSummaryRows ? Array.from(new Set(summaryRowsWithoutQuickFilter.map(g => String(g.category || '').toUpperCase()).filter(Boolean))).length : '—', icon: Tag, color: 'text-purple-500', bg: 'bg-purple-500/10', interactive: true },
   ];
 
   const detailExpense = selectedExpenseDetail ? data.find((x) => x.id === selectedExpenseDetail.id) || selectedExpenseDetail : null;
@@ -943,8 +957,10 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5" data-tour="purchases-list-kpis">
-        {displayMode === 'ORIGINAL'
+      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {!resolvedSummaryRows ? <PurchaseKpiCard title="Total del Mes" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" /> : displayMode === 'ORIGINAL'
           ? originalMonthlyAmounts.map((summary) => <PurchaseKpiCard key={`month-${summary.currency}`} title={`Total del Mes (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" />)
           : <PurchaseKpiCard title={`Total del Mes (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(monthlyTotalInDisplayCurrency, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" />}
         {kpis.map((k, i) => {
@@ -983,6 +999,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             } : undefined}
           />
         )})}
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">

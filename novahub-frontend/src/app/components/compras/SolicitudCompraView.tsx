@@ -19,6 +19,8 @@ import { cn } from '../ui/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { PromptDialog } from '../ui/PromptDialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
@@ -86,6 +88,9 @@ function normalizeRequestStatus(status?: string): 'PENDING_APPROVAL' | 'APPROVED
 
 interface SolicitudCompraViewProps {
   data: PurchaseRequest[];
+  summaryData?: PurchaseRequest[];
+  summaryLoading?: boolean;
+  summaryError?: boolean;
   loading?: boolean;
   onRefresh: () => void;
   pagination?: SalesPaginationControls;
@@ -100,7 +105,7 @@ interface SolicitudCompraViewProps {
   supplierCatalogError?: boolean;
 }
 
-export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog: _warehouseCatalog, supplierCatalog = [], selectedBranchId = '', supplierCatalogLoading = false, supplierCatalogError = false }: SolicitudCompraViewProps) {
+export function SolicitudCompraView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog: _warehouseCatalog, supplierCatalog = [], selectedBranchId = '', supplierCatalogLoading = false, supplierCatalogError = false }: SolicitudCompraViewProps) {
   const { user, canPerform } = useAuth();
   const canExportRequests = canPerform('PURCHASES_REQUESTS', 'export');
   const canApproveRequests = canPerform('PURCHASES_REQUESTS', 'approve');
@@ -152,6 +157,19 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         || (r.management?.[0]?.supplier?.name?.toLowerCase().includes(s));
     });
   }, [data, search, statusFilter]);
+  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
+  const summarySearchRows = (resolvedSummaryRows || []).filter((request) => {
+    if (!search) return true;
+    const value = search.toLowerCase();
+    return (request.number || '').toLowerCase().includes(value)
+      || Boolean(request.requestedBy?.firstName?.toLowerCase().includes(value))
+      || Boolean(request.requestedBy?.lastName?.toLowerCase().includes(value))
+      || Boolean(request.warehouse?.name?.toLowerCase().includes(value))
+      || Boolean(request.supplier?.name?.toLowerCase().includes(value))
+      || Boolean(request.management?.[0]?.supplier?.name?.toLowerCase().includes(value));
+  });
+  const summaryRowsWithoutStatusFilter = summarySearchRows;
+  const summaryFilteredRows = summarySearchRows.filter((request) => statusFilter === 'all' || normalizeRequestStatus(request.status) === statusFilter);
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page', exportFilter = 'all') => {
     const exportToastId = toast.loading('Generando reporte de solicitudes...');
@@ -521,15 +539,17 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   };
 
   const requestKpis = [
-    { title: 'Solicitudes', value: data.length, icon: ClipboardList, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Pendientes', value: data.filter(r => normalizeRequestStatus(r.status) === 'PENDING_APPROVAL').length, icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PENDING_APPROVAL' },
-    { title: 'Aprobadas', value: data.filter(r => normalizeRequestStatus(r.status) === 'APPROVED').length, icon: CheckCircle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'APPROVED' },
-    { title: 'Anuladas', value: data.filter(r => normalizeRequestStatus(r.status) === 'CANCELLED').length, icon: Ban, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'CANCELLED' },
+    { title: 'Solicitudes', value: resolvedSummaryRows ? summaryFilteredRows.length : '—', icon: ClipboardList, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Pendientes', value: resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => normalizeRequestStatus(r.status) === 'PENDING_APPROVAL').length : '—', icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PENDING_APPROVAL' },
+    { title: 'Aprobadas', value: resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => normalizeRequestStatus(r.status) === 'APPROVED').length : '—', icon: CheckCircle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'APPROVED' },
+    { title: 'Anuladas', value: resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => normalizeRequestStatus(r.status) === 'CANCELLED').length : '—', icon: Ban, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'CANCELLED' },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
+      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
+        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {requestKpis.map((k) => (
           <PurchaseKpiCard
             key={k.title}
@@ -547,6 +567,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
             } : undefined}
           />
         ))}
+        </div>
       </div>
       <div className="flex flex-col gap-4">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
