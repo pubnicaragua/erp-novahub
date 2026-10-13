@@ -41,6 +41,9 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
   const [emailUser, setEmailUser] = useState<any>(null);
   const [newEmail, setNewEmail] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
+  const [nameUser, setNameUser] = useState<any>(null);
+  const [newName, setNewName] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -167,6 +170,27 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
     }
   };
 
+  const saveName = async () => {
+    const name = safeTrim(newName);
+    if (!nameUser?.id || !name) {
+      toast.error('Escribe el nombre completo');
+      return;
+    }
+    try {
+      setSavingName(true);
+      const updated = await tenantsService.updateUser(branch.id, nameUser.id, { name });
+      setUsers((current) => current.map((user) => user.id === nameUser.id ? { ...user, name: updated?.name || name } : user));
+      toast.success('Nombre actualizado correctamente');
+      setNameUser(null);
+      setNewName('');
+      onChanged?.();
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo actualizar el nombre');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   return (
     <>
       <Button variant="outline" size="sm" className="h-8 shrink-0 rounded-lg px-2.5" onClick={() => setOpen(true)}>
@@ -244,6 +268,9 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
                     <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-primary/70">{getBranchUserIdentityLabel(item)}</p>
                   </div>
                   <div className="flex flex-wrap gap-2 sm:shrink-0">
+                    <Button variant="outline" className="rounded-xl" onClick={() => { setNameUser(item); setNewName(item.name || ''); }}>
+                      <Pencil className="size-4" /> Cambiar nombre
+                    </Button>
                     <Button variant="outline" className="rounded-xl" onClick={() => { setEmailUser(item); setNewEmail(item.email || ''); }}>
                       <Mail className="size-4" /> Cambiar correo
                     </Button>
@@ -292,6 +319,23 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" onClick={() => setEmailUser(null)} disabled={savingEmail}>Cancelar</Button>
             <Button className="rounded-xl" disabled={savingEmail || !isValidEmail(newEmail)} onClick={saveEmail}>{savingEmail ? 'Guardando…' : 'Guardar correo'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!nameUser} onOpenChange={(nextOpen) => { if (!nextOpen) { setNameUser(null); setNewName(''); } }}>
+        <DialogContent className="w-[min(92vw,32rem)] max-w-none">
+          <DialogHeader>
+            <DialogTitle className="font-black uppercase italic tracking-tight">Cambiar nombre</DialogTitle>
+            <DialogDescription>Actualiza el nombre visible de {nameUser?.email || 'este usuario'} en la sucursal.</DialogDescription>
+          </DialogHeader>
+          <label className="space-y-2 text-xs font-bold text-muted-foreground">
+            Nombre completo
+            <input autoFocus type="text" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Nombre y apellido" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
+          </label>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setNameUser(null)} disabled={savingName}>Cancelar</Button>
+            <Button className="rounded-xl" disabled={savingName || !safeTrim(newName)} onClick={saveName}>{savingName ? 'Guardando…' : 'Guardar nombre'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

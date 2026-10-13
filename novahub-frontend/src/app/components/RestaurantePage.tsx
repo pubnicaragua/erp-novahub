@@ -1,24 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
+  CakeSlice,
+  CalendarDays,
   Check,
   ChefHat,
   ClipboardList,
   Clock3,
+  Coffee,
   CreditCard,
   Eye,
-  EyeOff,
   LayoutGrid,
   Maximize2,
   Minimize2,
-  Pencil,
   Plus,
   QrCode,
   RefreshCw,
+  Search,
+  Salad,
+  Settings2,
   Send,
   ShieldAlert,
-  Settings2,
   ShoppingBag,
+  Truck,
+  Users,
   Utensils,
   X,
   Download,
@@ -33,16 +38,16 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
-import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { useBranchScope } from '../hooks/useBranchScope';
 import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 import { useAuth } from '../contexts/AuthContext';
-import { getApiErrorMessage } from '../services/api';
+import { createIdempotencyKey, getApiErrorMessage } from '../services/api';
 import { beginNotificationAction, completeNotificationAction } from '../services/notification-action-coordinator';
 import type { NotificationDomainRefreshDetail } from '../services/notification-domain-refresh';
 import { cajaService } from '../services/caja.service';
-import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { RestaurantViewTutorial } from './RestaurantViewTutorial';
+import { RestaurantMenuWorkspace } from './restaurant/RestaurantMenuWorkspace';
+import { RestaurantConfigurationPage } from './restaurant/RestaurantConfigurationPage';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
@@ -51,15 +56,29 @@ import {
   type RestaurantKitchenTicket,
   type RestaurantMenuCategory,
   type RestaurantMenuItem,
-  type RestaurantMenuOptionGroup,
   type RestaurantOrder,
+  type RestaurantConfiguration,
   type RestaurantSummary,
   type RestaurantTable,
 } from '../services/restaurant.service';
 
-type RestaurantTab = 'salon' | 'comandas' | 'cocina' | 'carta' | 'reportes';
+type RestaurantTab = 'pos' | 'salon' | 'comandas' | 'cocina' | 'delivery' | 'carta' | 'reportes' | 'configuracion';
 type RestaurantSelectedOptions = Record<string, string | string[]>;
 type RestaurantCartLine = { menuItemId: string; quantity: number; selectedOptions: RestaurantSelectedOptions };
+type RestaurantSalonMode = 'floor' | 'pos';
+type RestaurantTableFilter = 'ALL' | 'OCCUPIED' | 'AVAILABLE' | 'RESERVED' | 'PREPARING' | 'PAYMENT';
+type RestaurantOrderType = 'DINE_IN' | 'COUNTER' | 'TAKEAWAY' | 'DELIVERY';
+type RestaurantPaymentLine = { method: 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK' | 'QR' | 'VOUCHER'; amount: string; reference: string };
+type RestaurantCustomerOption = { id: string; code?: string; name: string; creditLimit?: number; status?: string };
+
+function restaurantOrderTypeLabel(type: string) {
+  if (type === 'DINE_IN') return 'En salón';
+  if (type === 'COUNTER') return 'Mostrador';
+  if (type === 'TAKEAWAY') return 'Retiro';
+  if (type === 'ROOM_SERVICE') return 'Servicio a habitación';
+  if (type === 'QR') return 'QR';
+  return 'Delivery';
+}
 
 function restaurantOptionPrice(item: RestaurantMenuItem, selected: RestaurantSelectedOptions) {
   return (item.options || []).reduce((total, group) => {
@@ -81,13 +100,54 @@ function restaurantSnapshotLabel(options?: Array<{ groupName: string; choiceName
   return (options || []).map((option) => `${option.groupName}: ${option.choiceName}`).join(' · ');
 }
 
+function restaurantCategoryIcon(name: string) {
+  const normalized = name.toLocaleLowerCase('es');
+  if (normalized.includes('café') || normalized.includes('cafe') || normalized.includes('bebida')) return Coffee;
+  if (normalized.includes('ensalada')) return Salad;
+  if (normalized.includes('postre') || normalized.includes('dulce')) return CakeSlice;
+  if (normalized.includes('desayuno') || normalized.includes('entrada')) return ChefHat;
+  return Utensils;
+}
+
+function restaurantStationLabel(station?: string | null) {
+  const normalized = String(station || '').trim().toLocaleUpperCase('es');
+  return ({
+    KITCHEN: 'Cocina',
+    COCINA: 'Cocina',
+    BAR: 'Barra',
+    DESSERTS: 'Postres',
+    POSTRES: 'Postres',
+    COLD: 'Cocina fría',
+    HOT: 'Cocina caliente',
+  } as Record<string, string>)[normalized] || station || 'Cocina';
+}
+
+function restaurantKitchenStatusLabel(status?: string | null) {
+  const normalized = String(status || '').trim().toLocaleUpperCase('es').replace(/\s+/g, '_');
+  return kitchenStatus[normalized]?.label || orderStatus[normalized] || status || 'Actualizado';
+}
+
 const RESTAURANT_TAB_PERMISSION: Record<RestaurantTab, string> = {
+  pos: 'RESTAURANT_ORDERS',
   salon: 'RESTAURANT_SALON',
   comandas: 'RESTAURANT_ORDERS',
   cocina: 'RESTAURANT_KITCHEN',
+  delivery: 'RESTAURANT_ORDERS',
   carta: 'RESTAURANT_MENU',
   reportes: 'RESTAURANT_REPORTS',
+  configuracion: 'RESTAURANT',
 };
+
+const RESTAURANT_TABS: Array<{ id: RestaurantTab; label: string; icon: typeof LayoutGrid }> = [
+  { id: 'pos', label: 'Operación POS', icon: ShoppingBag },
+  { id: 'salon', label: 'Salón y mesas', icon: LayoutGrid },
+  { id: 'comandas', label: 'Comandas', icon: ClipboardList },
+  { id: 'cocina', label: 'Cocina', icon: ChefHat },
+  { id: 'carta', label: 'Carta y menú', icon: Utensils },
+  { id: 'delivery', label: 'Entrega y retiro', icon: Truck },
+  { id: 'reportes', label: 'Reportes', icon: BarChart3 },
+  { id: 'configuracion', label: 'Configuración', icon: Settings2 },
+];
 
 interface RestaurantePageProps {
   activeSubModule?: string;
@@ -106,7 +166,7 @@ const orderStatus: Record<string, string> = {
   PENDING_CONFIRMATION: 'Por confirmar',
   CONFIRMED: 'Confirmado',
   SENT_TO_KITCHEN: 'En cocina',
-  IN_PREPARATION: 'Preparando',
+  IN_PREPARATION: 'En preparación',
   READY: 'Listo',
   SERVED: 'Servido',
   PARTIALLY_PAID: 'Pago parcial',
@@ -116,7 +176,7 @@ const orderStatus: Record<string, string> = {
 
 const kitchenStatus: Record<string, { label: string; className: string }> = {
   PENDING: { label: 'Pendiente', className: 'bg-amber-50 text-amber-700' },
-  IN_PREPARATION: { label: 'Preparando', className: 'bg-blue-50 text-blue-700' },
+  IN_PREPARATION: { label: 'En preparación', className: 'bg-blue-50 text-blue-700' },
   READY: { label: 'Listo', className: 'bg-emerald-50 text-emerald-700' },
   SERVED: { label: 'Entregado', className: 'bg-slate-100 text-slate-600' },
   CANCELLED: { label: 'Cancelado', className: 'bg-rose-50 text-rose-700' },
@@ -124,48 +184,96 @@ const kitchenStatus: Record<string, { label: string; className: string }> = {
 
 const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+function restaurantOrderPreparationIsOpen(order: RestaurantOrder) {
+  const preparationStatus = String(order.preparationStatus || '').toUpperCase();
+  if (['QUEUED', 'IN_PROGRESS', 'PARTIALLY_READY'].includes(preparationStatus)) return true;
+  if (preparationStatus) return false;
+  return ['SENT_TO_KITCHEN', 'IN_PREPARATION'].includes(order.status);
+}
+
+function restaurantOrderIsReady(order: RestaurantOrder) {
+  const preparationStatus = String(order.preparationStatus || '').toUpperCase();
+  if (preparationStatus === 'READY') return true;
+  if (preparationStatus === 'NOT_REQUIRED') return ['CONFIRMED', 'READY', 'SERVED', 'PARTIALLY_PAID'].includes(order.status);
+  if (preparationStatus) return false;
+  return ['READY', 'SERVED'].includes(order.status);
+}
+
+function restaurantOrderNeedsPayment(order: RestaurantOrder) {
+  const paymentStatus = String(order.paymentStatus || '').toUpperCase();
+  if (paymentStatus) return paymentStatus !== 'PAID';
+  return ['READY', 'SERVED', 'PARTIALLY_PAID'].includes(order.status);
+}
+
+function restaurantOrderIsOperational(order: RestaurantOrder) {
+  if (order.status === 'CANCELLED' || order.lifecycle === 'CANCELLED') return false;
+  if (order.status !== 'PAID' && order.lifecycle !== 'CLOSED') return true;
+  return restaurantOrderPreparationIsOpen(order)
+    || ['PENDING', 'READY', 'OUT_FOR_DELIVERY'].includes(String(order.fulfillmentStatus || '').toUpperCase());
+}
+
+function restaurantOrderCanSendToKitchen(order: RestaurantOrder) {
+  if (order.status === 'CANCELLED' || order.status === 'SERVED') return false;
+  const preparationStatus = String(order.preparationStatus || '').toUpperCase();
+  return ['CONFIRMED', 'PENDING_CONFIRMATION', 'PARTIALLY_PAID', 'PAID'].includes(order.status)
+    && (!preparationStatus || ['QUEUED', 'NOT_REQUIRED'].includes(preparationStatus));
+}
+
 const restaurantSubmoduleToTab: Record<string, RestaurantTab> = {
+  pos: 'pos',
+  'operacion-pos': 'pos',
   salon: 'salon',
   comandas: 'comandas',
   cocina: 'cocina',
+  'entrega-retiro': 'delivery',
+  delivery: 'delivery',
   carta: 'carta',
   reportes: 'reportes',
   'reportes-restaurante': 'reportes',
+  configuracion: 'configuracion',
 };
 
 const restaurantTabToSubmodule: Record<RestaurantTab, string> = {
+  pos: 'operacion-pos',
   salon: 'salon',
   comandas: 'comandas',
   cocina: 'cocina',
+  delivery: 'entrega-retiro',
   carta: 'carta',
   reportes: 'reportes-restaurante',
+  configuracion: 'configuracion',
 };
 
 export function RestaurantePage({ activeSubModule, onSubModuleChange }: RestaurantePageProps) {
   const { user, canPerform } = useAuth();
-  const { accessibleBranches, selectedBranchId, setSelectedBranchId } = useBranchScope();
+  const { accessibleBranches, selectedBranchId } = useBranchScope();
   const canViewTables = canPerform('RESTAURANT_SALON', 'view');
   const canViewOrders = canPerform('RESTAURANT_ORDERS', 'view');
   const canViewKitchen = canPerform('RESTAURANT_KITCHEN', 'view');
   const canViewMenu = canPerform('RESTAURANT_MENU', 'view');
   const canViewReports = canPerform('RESTAURANT_REPORTS', 'view');
-  const canViewRestaurant = canPerform('RESTAURANT', 'view') || [canViewTables, canViewOrders, canViewKitchen, canViewMenu, canViewReports].some(Boolean);
+  const canEditRestaurantConfiguration = Boolean(user?.isTenantAdmin || user?.isPlatformAdmin);
+  const canViewRestaurant = canEditRestaurantConfiguration || canPerform('RESTAURANT', 'view') || [canViewTables, canViewOrders, canViewKitchen, canViewMenu, canViewReports].some(Boolean);
   const canCreateTables = canPerform('RESTAURANT_SALON', 'create');
   const canCreateOrders = canPerform('RESTAURANT_ORDERS', 'create');
   const canApproveOrders = canPerform('RESTAURANT_ORDERS', 'approve');
   const canApproveKitchen = canPerform('RESTAURANT_KITCHEN', 'approve');
   const canCreateMenu = canPerform('RESTAURANT_MENU', 'create');
   const canEditMenu = canPerform('RESTAURANT_MENU', 'edit');
-  const tabs: Array<{ id: RestaurantTab; label: string; icon: typeof LayoutGrid }> = [
-    { id: 'salon', label: 'Salón y POS', icon: LayoutGrid },
-    { id: 'comandas', label: 'Comandas', icon: ClipboardList },
-    { id: 'cocina', label: 'Cocina', icon: ChefHat },
-    { id: 'carta', label: 'Carta', icon: Utensils },
-    { id: 'reportes', label: 'Reportes', icon: BarChart3 },
-  ];
+  const [restaurantConfiguration, setRestaurantConfiguration] = useState<RestaurantConfiguration | null>(null);
   const visibleTabs = useMemo(
-    () => tabs.filter(({ id }) => canPerform(RESTAURANT_TAB_PERMISSION[id], 'view')),
-    [canPerform],
+    () => RESTAURANT_TABS.filter(({ id }) => {
+      if (id === 'configuracion') return canEditRestaurantConfiguration && canPerform('RESTAURANT', 'view');
+      if (!canPerform(RESTAURANT_TAB_PERMISSION[id], 'view')) return false;
+      const current = restaurantConfiguration;
+      if (!current) return true;
+      if (id === 'pos') return current.channels.DINE_IN !== false || current.channels.COUNTER !== false || current.channels.TAKEAWAY !== false || current.channels.DELIVERY !== false;
+      if (id === 'salon') return current.channels.DINE_IN !== false;
+      if (id === 'cocina') return current.kitchen.enabled !== false;
+      if (id === 'delivery') return current.channels.DELIVERY !== false || current.channels.TAKEAWAY !== false;
+      return true;
+    }),
+    [canEditRestaurantConfiguration, canPerform, restaurantConfiguration],
   );
   const [localTab, setLocalTab] = useState<RestaurantTab>('salon');
   const requestedTab = activeSubModule ? restaurantSubmoduleToTab[activeSubModule] : undefined;
@@ -179,22 +287,46 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   const [summary, setSummary] = useState<RestaurantSummary | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [cart, setCart] = useState<Record<string, RestaurantCartLine>>({});
+  const [salonMode, setSalonMode] = useState<RestaurantSalonMode>('floor');
+  const [tableFilter, setTableFilter] = useState<RestaurantTableFilter>('ALL');
+  const [activeZone, setActiveZone] = useState('ALL');
+  const [menuSearch, setMenuSearch] = useState('');
+  const [activeMenuCategoryId, setActiveMenuCategoryId] = useState('ALL');
+  const [orderNotes, setOrderNotes] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryReference, setDeliveryReference] = useState('');
+  const [posOrderType, setPosOrderType] = useState<RestaurantOrderType>('TAKEAWAY');
   const [pendingOptionItem, setPendingOptionItem] = useState<RestaurantMenuItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showTableForm, setShowTableForm] = useState(false);
-  const [newTable, setNewTable] = useState({ code: '', name: '', zone: '', seats: '2' });
+  const [newTable, setNewTable] = useState({ code: '', name: '', zone: 'Salón principal', seats: '2' });
   const [checkoutOrder, setCheckoutOrder] = useState<RestaurantOrder | null>(null);
+  const [orderDetail, setOrderDetail] = useState<RestaurantOrder | null>(null);
+  const [orderDetailLoading, setOrderDetailLoading] = useState(false);
   const [registers, setRegisters] = useState<Array<{ id: string; name: string }>>([]);
+  const [checkoutCustomers, setCheckoutCustomers] = useState<RestaurantCustomerOption[]>([]);
   const [checkoutRegisterId, setCheckoutRegisterId] = useState('');
+  const [checkoutPayments, setCheckoutPayments] = useState<RestaurantPaymentLine[]>([{ method: 'CASH', amount: '', reference: '' }]);
+  const [checkoutCustomerId, setCheckoutCustomerId] = useState('');
+  const [checkoutDueDate, setCheckoutDueDate] = useState('');
+  const [checkoutBalance, setCheckoutBalance] = useState<number | null>(null);
   const [publicLink, setPublicLink] = useState('');
   const [qrTable, setQrTable] = useState<RestaurantTable | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [qrLoading, setQrLoading] = useState(false);
-  const [newOrdersCount, setNewOrdersCount] = useState(0);
   const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
+  const [posAction, setPosAction] = useState<'save' | 'send' | 'charge' | 'round' | null>(null);
+  const [tableAction, setTableAction] = useState(false);
+  const [sendingOrderIds, setSendingOrderIds] = useState<Set<string>>(new Set());
+  const sendingKitchenKeys = useRef<Map<string, string>>(new Map());
   const knownOrderIds = useRef<Set<string> | null>(null);
   const sessionCreatedOrderIds = useRef<Set<string>>(new Set());
+  const availablePosOrderTypes = useMemo<RestaurantOrderType[]>(() => {
+    const channels = restaurantConfiguration?.channels;
+    if (!channels) return ['DINE_IN', 'COUNTER', 'TAKEAWAY', 'DELIVERY'];
+    return (['DINE_IN', 'COUNTER', 'TAKEAWAY', 'DELIVERY'] as RestaurantOrderType[]).filter((type) => channels[type] !== false);
+  }, [restaurantConfiguration]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -212,26 +344,20 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   }, [onSubModuleChange, visibleTabs]);
 
   const detectNewOrders = useCallback((nextOrders: RestaurantOrder[]) => {
-    const nextIds = new Set(nextOrders.map((order) => order.id));
-    if (knownOrderIds.current) {
-      const fresh = nextOrders.filter((order) => !knownOrderIds.current!.has(order.id) && !sessionCreatedOrderIds.current.has(order.id));
-      if (fresh.length > 0) {
-        setNewOrdersCount((count) => count + fresh.length);
-      }
-    }
-    knownOrderIds.current = nextIds;
+    knownOrderIds.current = new Set(nextOrders.map((order) => order.id));
   }, []);
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
     setRefreshing(true);
     try {
       const branchId = selectedBranchId || undefined;
-      const [nextTables, nextMenu, nextOrders, nextTickets, nextSummary] = await Promise.all([
+      const [nextTables, nextMenu, nextOrders, nextTickets, nextSummary, nextCapabilities] = await Promise.all([
         canViewTables ? restaurantService.listTables(branchId, signal) : Promise.resolve([]),
         canViewMenu ? restaurantService.getMenu(signal) : Promise.resolve([]),
         canViewOrders ? restaurantService.listOrders(branchId, signal) : Promise.resolve([]),
         canViewKitchen ? restaurantService.listKitchenTickets(branchId, signal) : Promise.resolve([]),
         canViewReports ? restaurantService.getSummary({ branchId }, signal) : Promise.resolve(null),
+          canViewRestaurant ? restaurantService.getCapabilities(branchId, signal) : Promise.resolve(null),
       ]);
       const nextTableList = nextTables || [];
       setTables(nextTableList);
@@ -242,13 +368,14 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       knownOrderIds.current = new Set(nextOrderList.map((order) => order.id));
       setTickets(nextTickets || []);
       setSummary(nextSummary || null);
+      setRestaurantConfiguration(nextCapabilities?.configuration || null);
     } catch (error: unknown) {
       if (!(error instanceof Error) || error.name !== 'AbortError') toast.error(getApiErrorMessage(error, 'No se pudo cargar Restaurante POS.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [canViewKitchen, canViewMenu, canViewOrders, canViewReports, canViewTables, selectedBranchId]);
+  }, [canViewKitchen, canViewMenu, canViewOrders, canViewReports, canViewRestaurant, canViewTables, selectedBranchId]);
 
   const refreshRestaurantSection = useCallback(async (detail: NotificationDomainRefreshDetail) => {
     const subModule = detail.navigation.subModule;
@@ -273,6 +400,10 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
         if (canViewOrders) setOrders((await restaurantService.listOrders(branchId)) || []);
         return;
       }
+      if (subModule === 'entrega-retiro' && canViewOrders) {
+        setOrders((await restaurantService.listOrders(branchId, undefined, 'DELIVERY')) || []);
+        return;
+      }
       if (subModule === 'carta' && canViewMenu) {
         setMenu((await restaurantService.getMenu()) || []);
         return;
@@ -287,7 +418,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
 
   useNotificationDomainRefresh({
     module: 'restaurante',
-    subModules: ['salon', 'comandas', 'cocina', 'carta', 'reportes'],
+    subModules: ['salon', 'comandas', 'cocina', 'entrega-retiro', 'carta', 'reportes', 'configuracion'],
     onRefresh: refreshRestaurantSection,
     enabled: canViewRestaurant,
   });
@@ -375,8 +506,9 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     .filter(([, line]) => line.menuItemId === item.id)
     .map(([key, line]) => ({ key, item, quantity: line.quantity, selectedOptions: line.selectedOptions })))), [menu, cart]);
   const cartTotal = cartLines.reduce((total, line) => total + (Number(line.item.price || 0) + restaurantOptionPrice(line.item, line.selectedOptions)) * line.quantity * (1 + Number(line.item.taxRate || 0) / 100), 0);
-  const openTables = tables.filter((table) => ['OCCUPIED', 'RESERVED', 'CLEANING'].includes(table.status)).length;
-  const pendingTickets = tickets.filter((ticket) => ['PENDING', 'IN_PREPARATION'].includes(ticket.status)).length;
+  const activeOrders = orders.filter(restaurantOrderIsOperational);
+  const effectivePosOrderType = availablePosOrderTypes.includes(posOrderType) ? posOrderType : (availablePosOrderTypes[0] || posOrderType);
+  const salonZones = useMemo(() => Array.from(new Set(['Salón principal', 'Terraza', 'Área VIP', 'Barra', ...tables.map((table) => table.zone?.trim()).filter((zone): zone is string => Boolean(zone))])), [tables]);
 
   const refresh = () => void loadData();
 
@@ -408,7 +540,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
         });
       }
       toast.success(`Reporte de restaurante exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
-    } catch (error: any) { toast.error(error?.message || 'No se pudo exportar el reporte de restaurante.'); }
+    } catch (error: unknown) { toast.error(error instanceof Error ? error.message : 'No se pudo exportar el reporte de restaurante.'); }
   };
 
   const addCartLine = (item: RestaurantMenuItem, selectedOptions: RestaurantSelectedOptions = {}) => {
@@ -429,28 +561,78 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     return next;
   });
 
-  const createOrder = async () => {
+  const startNewOrder = () => {
+    if (cartLines.length > 0 && !window.confirm('La orden actual tiene productos. ¿Deseas descartarlos y abrir una nueva orden?')) return;
+    setCart({});
+    setOrderNotes('');
+    setDeliveryAddress('');
+    setDeliveryReference('');
+    toast.success('Nueva orden lista para capturar.');
+  };
+
+  const createOrder = async (sendToKitchen = true, checkoutAfterCreate = false) => {
+    if (posAction) return;
     if (!canCreateOrders) {
       toast.error('No tienes permiso para registrar comandas.');
       return;
     }
-    if (!selectedTable || cartLines.length === 0) {
-      toast.error('Selecciona una mesa y agrega al menos un platillo.');
+    if ((effectivePosOrderType === 'DINE_IN' && !selectedTable) || cartLines.length === 0) {
+      toast.error(effectivePosOrderType === 'DINE_IN' ? 'Selecciona una mesa y agrega al menos un platillo.' : 'Agrega al menos un platillo.');
+      return;
+    }
+    if (effectivePosOrderType === 'DELIVERY' && !deliveryAddress.trim()) {
+      toast.error('Agrega la dirección de entrega.');
       return;
     }
     const actionToken = beginNotificationAction();
+    const requestKey = createIdempotencyKey(checkoutAfterCreate ? 'restaurant-charge' : sendToKitchen ? 'restaurant-kitchen' : 'restaurant-save');
+    setPosAction(checkoutAfterCreate ? 'charge' : sendToKitchen ? 'send' : 'save');
     try {
       const order = await restaurantService.createOrder({
-        tableId: selectedTable.id,
+        tableId: selectedTable?.id,
+        branchId: selectedBranchId || accessibleBranches[0]?.id,
+        type: effectivePosOrderType,
+        sendToKitchen,
         items: cartLines.map(({ item, quantity, selectedOptions }) => ({ menuItemId: item.id, quantity, selectedOptions })),
-      });
+        notes: orderNotes.trim() || undefined,
+        deliveryAddress: effectivePosOrderType === 'DELIVERY' ? deliveryAddress.trim() || undefined : undefined,
+        deliveryReference: effectivePosOrderType === 'DELIVERY' ? deliveryReference.trim() || undefined : undefined,
+      }, requestKey);
       sessionCreatedOrderIds.current.add(order.id);
       setCart({});
-      toast.success(`Comanda ${order.number} enviada a cocina.`);
+      setOrderNotes('');
+      setDeliveryAddress('');
+      setDeliveryReference('');
+      toast.success(sendToKitchen ? `Comanda ${order.number} enviada a cocina.` : `Cuenta ${order.number} guardada.`);
       await loadData();
+      if (checkoutAfterCreate) await openCheckout(order);
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo crear la comanda.'));
     } finally {
+      setPosAction(null);
+      completeNotificationAction(actionToken);
+    }
+  };
+
+  const addItemsToOrder = async (order: RestaurantOrder, sendToKitchen = true, checkoutAfterAdd = false) => {
+    if (posAction || !canCreateOrders || cartLines.length === 0) return;
+    const actionToken = beginNotificationAction();
+    const requestKey = createIdempotencyKey(checkoutAfterAdd ? 'restaurant-charge-round' : sendToKitchen ? 'restaurant-kitchen-round' : 'restaurant-round');
+    setPosAction(checkoutAfterAdd ? 'charge' : 'round');
+    try {
+      const updatedOrder = await restaurantService.addItems(order.id, {
+        sendToKitchen,
+        items: cartLines.map(({ item, quantity, selectedOptions }) => ({ menuItemId: item.id, quantity, selectedOptions })),
+      }, requestKey);
+      setCart({});
+      setOrderNotes('');
+      toast.success(sendToKitchen ? `Nueva ronda de ${order.number} enviada a cocina.` : `Nueva ronda agregada a ${order.number}.`);
+      await loadData();
+      if (checkoutAfterAdd) await openCheckout(updatedOrder);
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'No se pudieron agregar productos a la cuenta.'));
+    } finally {
+      setPosAction(null);
       completeNotificationAction(actionToken);
     }
   };
@@ -466,14 +648,48 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       return;
     }
     const actionToken = beginNotificationAction();
+    setTableAction(true);
     try {
-      await restaurantService.createTable({ ...newTable, branchId, seats: Number(newTable.seats) || 2 });
-      setNewTable({ code: '', name: '', zone: '', seats: '2' });
+      await restaurantService.createTable({ ...newTable, code: newTable.code.trim().toUpperCase(), name: newTable.name.trim(), zone: newTable.zone.trim() || 'Salón principal', branchId, seats: Number(newTable.seats) || 2 }, createIdempotencyKey('restaurant-table'));
+      setNewTable({ code: '', name: '', zone: 'Salón principal', seats: '2' });
       setShowTableForm(false);
       toast.success('Mesa creada.');
       await loadData();
     } catch (error: unknown) {
-      toast.error(getApiErrorMessage(error, 'No se pudo crear la mesa.'));
+      const data = (error as { data?: unknown })?.data as { code?: string; message?: string | { code?: string; message?: string; table?: Pick<RestaurantTable, 'id' | 'code' | 'name' | 'zone' | 'status' | 'isActive'> }; table?: Pick<RestaurantTable, 'id' | 'code' | 'name' | 'zone' | 'status' | 'isActive'> } | undefined;
+      const nested = typeof data?.message === 'object' && data.message ? data.message : undefined;
+      const conflictTable = data?.table || nested?.table;
+      if ((data?.code === 'TABLE_CODE_CONFLICT' || nested?.code === 'TABLE_CODE_CONFLICT') && conflictTable) {
+        if (conflictTable.zone) setActiveZone(conflictTable.zone);
+        if (conflictTable.id) setSelectedTableId(conflictTable.id);
+        toast.error(`${(typeof data?.message === 'string' ? data.message : nested?.message) || `Ya existe la mesa ${conflictTable.code}.`} Está en ${conflictTable.zone || 'sin zona'} · ${tableStatus[conflictTable.status || '']?.label || conflictTable.status || 'estado desconocido'}${conflictTable.isActive === false ? ' · archivada' : ''}. Usa otro código o abre la mesa existente.`);
+      } else {
+        toast.error(getApiErrorMessage(error, 'No se pudo crear la mesa.'));
+      }
+    } finally {
+      setTableAction(false);
+      completeNotificationAction(actionToken);
+    }
+  };
+
+  const closeTable = async (table: RestaurantTable) => {
+    if (!canCreateTables) {
+      toast.error('No tienes permiso para cerrar mesas.');
+      return;
+    }
+    const openOrders = activeOrders.filter((order) => order.table?.id === table.id);
+    if (openOrders.length > 0) {
+      toast.error('No puedes cerrar la mesa mientras tenga comandas abiertas.');
+      return;
+    }
+    const actionToken = beginNotificationAction();
+    try {
+      await restaurantService.updateTable(table.id, { status: 'AVAILABLE' });
+      setSelectedTableId(null);
+      toast.success(`Mesa ${table.code} liberada.`);
+      await loadData();
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'No se pudo liberar la mesa.'));
     } finally {
       completeNotificationAction(actionToken);
     }
@@ -484,7 +700,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     const actionToken = beginNotificationAction();
     try {
       await restaurantService.updateKitchenTicket(ticket.id, status);
-      toast.success(`Comanda ${ticket.order.number}: ${kitchenStatus[status]?.label || status}.`);
+      toast.success(`Comanda ${ticket.order.number}: ${restaurantKitchenStatusLabel(status)}.`);
       await loadData();
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo actualizar cocina.'));
@@ -507,16 +723,36 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     }
   };
 
-  const sendToKitchen = async (order: RestaurantOrder) => {
-    if (!canApproveKitchen) return;
+  const updateDelivery = async (order: RestaurantOrder, body: { status?: RestaurantOrder['deliveryStatus']; riderName?: string; address?: string; reference?: string }) => {
+    if (!canApproveOrders) return;
     const actionToken = beginNotificationAction();
     try {
-      await restaurantService.sendToKitchen(order.id);
+      await restaurantService.updateDelivery(order.id, body);
+      toast.success(`Entrega ${order.number} actualizada.`);
+      await loadData();
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'No se pudo actualizar la entrega.'));
+    } finally {
+      completeNotificationAction(actionToken);
+    }
+  };
+
+  const sendToKitchen = async (order: RestaurantOrder) => {
+    if (!canApproveKitchen) return;
+    const requestKey = sendingKitchenKeys.current.get(order.id) || createIdempotencyKey(`restaurant-send-${order.id}`);
+    if (sendingKitchenKeys.current.has(order.id)) return;
+    sendingKitchenKeys.current.set(order.id, requestKey);
+    setSendingOrderIds((current) => new Set(current).add(order.id));
+    const actionToken = beginNotificationAction();
+    try {
+      await restaurantService.sendToKitchen(order.id, requestKey);
       toast.success(`Comanda ${order.number} enviada a cocina.`);
       await loadData();
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo enviar a cocina.'));
     } finally {
+      sendingKitchenKeys.current.delete(order.id);
+      setSendingOrderIds((current) => { const next = new Set(current); next.delete(order.id); return next; });
       completeNotificationAction(actionToken);
     }
   };
@@ -524,12 +760,29 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   const openCheckout = async (order: RestaurantOrder) => {
     if (!canApproveOrders) return;
     try {
-      const available = await cajaService.getRegisterLookup();
+      const [available, customers, paymentSummary] = await Promise.all([cajaService.getRegisterLookup(), cajaService.getCustomers(), restaurantService.listOrderPayments(order.id)]);
       setRegisters((available || []).map((register) => ({ id: register.id, name: register.name })));
+      setCheckoutCustomers((customers || []).map((customer) => ({ id: customer.id, code: customer.code, name: customer.name, creditLimit: Number(customer.creditLimit || 0), status: customer.status })));
       setCheckoutRegisterId(available?.[0]?.id || '');
+      setCheckoutBalance(Number(paymentSummary.balance ?? order.total ?? 0));
+      setCheckoutPayments([{ method: 'CASH', amount: String(Number(paymentSummary.balance ?? order.total ?? 0)), reference: '' }]);
+      setCheckoutCustomerId(paymentSummary.customerId || '');
+      setCheckoutDueDate(paymentSummary.dueDate ? new Date(paymentSummary.dueDate).toISOString().slice(0, 10) : '');
       setCheckoutOrder(order);
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudieron cargar las cajas.'));
+    }
+  };
+
+  const openOrderDetail = async (order: RestaurantOrder) => {
+    setOrderDetail(order);
+    setOrderDetailLoading(true);
+    try {
+      setOrderDetail(await restaurantService.getOrder(order.id));
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'No se pudo cargar el detalle del pedido.'));
+    } finally {
+      setOrderDetailLoading(false);
     }
   };
 
@@ -544,12 +797,37 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
         return;
       }
       actionToken = beginNotificationAction();
-      await restaurantService.checkout(checkoutOrder.id, {
+      const payments = checkoutPayments.filter((payment) => Number(payment.amount) > 0).map((payment) => ({ method: payment.method, amount: Number(payment.amount), currency: checkoutOrder.currency === 'USD' ? 'USD' : 'NIO', reference: payment.reference.trim() || undefined }));
+      const checkoutTarget = Number(checkoutBalance ?? checkoutOrder.total);
+      const paymentTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
+      const isPartialPayment = paymentTotal < checkoutTarget - 0.01;
+      if (!payments.length || paymentTotal > checkoutTarget + 0.01) {
+        toast.error('El cobro debe tener un monto válido y no superar el total.');
+        return;
+      }
+      if (isPartialPayment && restaurantConfiguration?.cash.rules.partialPayments === false) {
+        toast.error('Los cobros parciales están desactivados en la configuración.');
+        return;
+      }
+      if (isPartialPayment && (!checkoutCustomerId || !checkoutDueDate)) {
+        toast.error('Selecciona un cliente y una fecha de vencimiento para registrar el saldo pendiente.');
+        return;
+      }
+      if (payments.some((payment) => payment.method !== 'CASH' && !payment.reference)) {
+        toast.error('Agrega la referencia de cada pago electrónico o cheque.');
+        return;
+      }
+      const checkoutPayload = {
+        expectedVersion: checkoutOrder.version,
         registerId: checkoutRegisterId,
         sessionId: session.id,
-        payments: [{ method: 'CASH', amount: Number(checkoutOrder.total), currency: checkoutOrder.currency === 'USD' ? 'USD' : 'NIO' }],
-      });
-      toast.success(`Pedido ${checkoutOrder.number} cobrado y contabilizado.`);
+        ...(checkoutCustomerId ? { customerId: checkoutCustomerId } : {}),
+        ...(checkoutDueDate ? { dueDate: checkoutDueDate } : {}),
+        payments,
+      };
+      if (checkoutOrder.invoiceId) await restaurantService.addOrderPayment(checkoutOrder.id, checkoutPayload);
+      else await restaurantService.checkout(checkoutOrder.id, checkoutPayload);
+      toast.success(isPartialPayment ? `Abono registrado para ${checkoutOrder.number}.` : `Pedido ${checkoutOrder.number} cobrado y contabilizado.`);
       setCheckoutOrder(null);
       await loadData();
     } catch (error: unknown) {
@@ -616,93 +894,229 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   if (!canViewRestaurant) return <NoAccessState />;
   if (loading) return <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-4 animate-spin" />Cargando Restaurante POS…</div>;
 
+  const restaurantSubtitle = tab === 'pos' || (tab === 'salon' && salonMode === 'pos')
+    ? 'Gestiona pedidos, productos y cobros desde un solo lugar.'
+    : tab === 'salon'
+      ? 'Gestiona tus mesas, zonas y comandas en tiempo real.'
+      : tab === 'comandas'
+        ? 'Consulta cuentas abiertas, estados, canales y modificaciones.'
+        : tab === 'cocina'
+          ? 'Gestiona comandas y tiempos de preparación por estación.'
+          : tab === 'delivery'
+            ? 'Gestiona pedidos delivery y para llevar desde una sola vista.'
+            : tab === 'carta'
+              ? 'Gestiona tu carta, categorías, platillos y disponibilidad.'
+              : tab === 'reportes'
+                ? 'Analiza ventas, operación y rendimiento del restaurante.'
+                : 'Configura la operación del restaurante y sus canales.';
+
   return (
-    <div className="flex flex-1 w-full bg-background">
+    <div className="nh-restaurant-page flex flex-1 w-full bg-background">
       <main className="relative flex-1">
         <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
           <div className="mb-3 flex flex-wrap items-center gap-2" data-tour="restaurant-header">
               <div className="mr-auto flex min-w-0 items-center gap-2">
-                <div className="min-w-0"><p className="text-xs font-black uppercase tracking-widest text-primary">Restaurante POS</p><h1 className="truncate text-xl font-black tracking-tight">Operación del restaurante</h1></div>
+                <div className="min-w-0"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary"><span className="size-2 rounded-full bg-accent shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_18%,transparent)]" />Restaurante</p><h1 className="truncate font-serif text-3xl font-medium italic tracking-tight text-primary">{tab === 'pos' || (tab === 'salon' && salonMode === 'pos') ? 'Operación POS' : RESTAURANT_TABS.find((item) => item.id === tab)?.label}</h1><p className="mt-1 text-sm text-muted-foreground">{restaurantSubtitle}</p></div>
                 <RestaurantViewTutorial view={tab} />
               </div>
-              <select value={selectedBranchId || ''} onChange={(event) => setSelectedBranchId(event.target.value || '')} className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary">
-                <option value="">Todas las sucursales</option>
-                {accessibleBranches.map((branch: { id: string; name: string }) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-              </select>
-              <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}><RefreshCw className={refreshing ? 'size-4 animate-spin' : 'size-4'} />Actualizar</Button>
+              {tab === 'salon' && salonMode === 'floor' ? <>
+                <select value={activeZone} onChange={(event) => { setActiveZone(event.target.value); setTableFilter('ALL'); }} className="h-10 rounded-xl border border-border bg-background px-3 text-sm font-semibold text-foreground outline-none focus:border-primary">
+                  <option value="ALL">Todas</option>{salonZones.map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+                </select>
+                <Button size="sm" onClick={() => setShowTableForm((value) => !value)} disabled={!canCreateTables}>{showTableForm ? <X className="size-4" /> : <Plus className="size-4" />}{showTableForm ? 'Cancelar' : 'Nueva mesa'}</Button>
+                <Button variant="outline" size="sm" onClick={() => { setActiveZone('ALL'); setTableFilter('RESERVED'); }}><CalendarDays className="size-4" />Reservas</Button>
+              </> : tab === 'delivery' ? <>
+                <Button variant="outline" size="sm" onClick={() => void refresh()}><CalendarDays className="size-4" />Hoy, {new Date().toLocaleDateString('es-NI', { day: '2-digit', month: 'short' })}</Button>
+                <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}><RefreshCw className={refreshing ? 'size-4 animate-spin' : 'size-4'} />Actualizar</Button>
+              </> : <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}><RefreshCw className={refreshing ? 'size-4 animate-spin' : 'size-4'} />Actualizar</Button>}
           </div>
 
-          <CurrencyValuationBanner className="mb-3" />
-
-          <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              ['Mesas activas', openTables, `de ${tables.length}`],
-              ['Comandas hoy', summary?.orders || 0, 'operativas'],
-              ['Ventas del período', money(summary?.total), 'contabilizadas al cobrar'],
-              ['En cocina', pendingTickets, 'pendientes'],
-            ].map(([label, value, hint]) => (
-              <div key={String(label)} className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{label}</p>
-                <p className="mt-2 text-2xl font-black tracking-tight">{value}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-              </div>
-            ))}
-          </div>
-
-          <Tabs value={tab} className="w-full" onValueChange={(value) => {
-            if (!visibleTabs.some(({ id }) => id === value)) return;
-            setLocalTab(value as RestaurantTab);
-            if (value === 'comandas') setNewOrdersCount(0);
-            onSubModuleChange?.(restaurantTabToSubmodule[value as RestaurantTab]);
-          }}>
-            <div className="mb-4 w-full overflow-x-auto custom-scrollbar" data-tour="restaurant-tabs">
-              <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
-                {visibleTabs.map(({ id, label, icon: Icon }) => (
-                  <TabsTrigger key={id} value={id} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-                    <Icon className="size-4" /><span className="hidden sm:inline">{label}</span>
-                    {id === 'comandas' && newOrdersCount > 0 && (
-                      <span className="flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-black text-white shadow">{newOrdersCount}</span>
-                    )}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+          {tab === 'salon' && salonMode === 'floor' && (
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              {[
+                { id: 'ALL' as const, label: 'Mesas totales', value: tables.length, hint: '100% del salón', icon: LayoutGrid },
+                { id: 'OCCUPIED' as const, label: 'Ocupadas', value: tables.filter((table) => table.status === 'OCCUPIED').length, hint: `${tables.length ? Math.round((tables.filter((table) => table.status === 'OCCUPIED').length / tables.length) * 100) : 0}% del total`, icon: Users },
+                { id: 'AVAILABLE' as const, label: 'Disponibles', value: tables.filter((table) => table.status === 'AVAILABLE').length, hint: `${tables.length ? Math.round((tables.filter((table) => table.status === 'AVAILABLE').length / tables.length) * 100) : 0}% del total`, icon: LayoutGrid },
+                { id: 'RESERVED' as const, label: 'Reservadas', value: tables.filter((table) => table.status === 'RESERVED').length, hint: `${tables.length ? Math.round((tables.filter((table) => table.status === 'RESERVED').length / tables.length) * 100) : 0}% del total`, icon: Clock3 },
+                { id: 'PREPARING' as const, label: 'En preparación', value: tables.filter((table) => activeOrders.some((order) => order.table?.id === table.id && restaurantOrderPreparationIsOpen(order))).length, hint: `${tables.length ? Math.round((tables.filter((table) => activeOrders.some((order) => order.table?.id === table.id && restaurantOrderPreparationIsOpen(order))).length / tables.length) * 100) : 0}% del total`, icon: ChefHat },
+                { id: 'PAYMENT' as const, label: 'Pendientes de cobro', value: tables.filter((table) => activeOrders.some((order) => order.table?.id === table.id && restaurantOrderNeedsPayment(order) && restaurantOrderIsReady(order))).length, hint: `${tables.length ? Math.round((tables.filter((table) => activeOrders.some((order) => order.table?.id === table.id && restaurantOrderNeedsPayment(order) && restaurantOrderIsReady(order))).length / tables.length) * 100) : 0}% del total`, icon: CreditCard },
+              ].map(({ id, label, value, hint, icon: Icon }) => (
+                <button key={id} type="button" onClick={() => setTableFilter(id)} className={`rounded-2xl border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 ${tableFilter === id ? 'border-primary ring-2 ring-primary/10' : 'border-border/60'}`}>
+                  <div className="flex items-center gap-3"><span className="nh-restaurant-icon-tile flex size-10 shrink-0 items-center justify-center rounded-xl"><Icon className="size-5" /></span><span className="min-w-0"><span className="block truncate font-serif text-sm font-medium italic text-primary">{label}</span><span className="mt-1 block text-2xl font-black tracking-tight text-accent">{value}</span></span></div>
+                  <span className="mt-2 block text-xs text-muted-foreground">{hint}</span>
+                </button>
+              ))}
             </div>
+          )}
 
+          <div className="w-full">
             <AnimatePresence mode="wait">
               <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
-                {tab === 'salon' && <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.7fr)]">
-                  <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm" data-tour="restaurant-salon">
-                    <div className="mb-5 flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Vista de salón</p><h2 className="mt-1 text-2xl font-black">Mesas y zonas</h2></div>{canCreateTables && <Button size="sm" onClick={() => setShowTableForm((value) => !value)}><Plus className="size-4" />Nueva mesa</Button>}</div>
-                    {showTableForm && <div className="mb-5 grid gap-2 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4 sm:grid-cols-4"><Input placeholder="Código" value={newTable.code} onChange={(e) => setNewTable({ ...newTable, code: e.target.value })} /><Input placeholder="Nombre" value={newTable.name} onChange={(e) => setNewTable({ ...newTable, name: e.target.value })} /><Input placeholder="Zona" value={newTable.zone} onChange={(e) => setNewTable({ ...newTable, zone: e.target.value })} /><div className="flex gap-2"><Input type="number" min="1" placeholder="Sillas" value={newTable.seats} onChange={(e) => setNewTable({ ...newTable, seats: e.target.value })} /><Button onClick={createTable}>Guardar</Button></div></div>}
-                    {tables.length === 0 ? <EmptyState icon={<LayoutGrid className="size-8" />} title="Aún no hay mesas configuradas" description="Crea la primera mesa para comenzar a operar el salón." action={canCreateTables ? <Button size="sm" onClick={() => setShowTableForm(true)}><Plus className="size-4" />Crear mesa</Button> : undefined} /> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{tables.map((table) => { const status = tableStatus[table.status] || tableStatus.AVAILABLE; return <div key={table.id} role="button" tabIndex={0} onClick={() => setSelectedTableId(table.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedTableId(table.id); }} className={`group relative min-h-32 cursor-pointer rounded-2xl border-2 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selectedTableId === table.id ? 'border-primary ring-4 ring-primary/10' : 'border-border/60'}`}><div className="flex items-start justify-between"><span className="text-2xl font-black">{table.code}</span><Badge className={status.className}>{status.label}</Badge></div><p className="mt-2 text-sm font-semibold text-foreground">{table.name}</p><p className="mt-1 text-xs text-muted-foreground">{table.zone || 'Salón principal'} · {table.seats} puestos</p><button type="button" onClick={(event) => { event.stopPropagation(); void showTableQr(table); }} className="absolute bottom-3 right-3 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground" title="Generar QR de la mesa" aria-label={`Generar QR de ${table.name}`}><QrCode className="size-4" /></button></div>; })}</div>}
-                    {publicLink && <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4"><p className="text-xs font-black uppercase tracking-widest text-primary">Enlace público para clientes</p><div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input readOnly value={publicLink} aria-label="Enlace público del menú" /><Button variant="outline" onClick={() => void copyQrLink()}>Copiar</Button><a className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90" href={publicLink} target="_blank" rel="noreferrer">Abrir menú</a></div><p className="mt-2 text-xs text-muted-foreground">El QR de la mesa ya se puede descargar o imprimir directamente desde NovaHub.</p></div>}
-                  </section>
-                  <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva comanda</p><h2 className="mt-1 text-2xl font-black">{selectedTable ? `Mesa ${selectedTable.code}` : 'Selecciona una mesa'}</h2></div><ShoppingBag className="size-5 text-muted-foreground/40" /></div>{selectedTable && <div className="mb-4 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{selectedTable.name} · {selectedTable.zone || 'Salón principal'} <span className="float-right font-bold text-foreground">{money(cartTotal)}</span></div>}<div className="max-h-[430px] space-y-4 overflow-y-auto pr-1">{menu.map((category) => <div key={category.id}><p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground/70">{category.name}</p><div className="space-y-2">{category.items.filter((item) => item.isAvailable).map((item) => <button type="button" key={item.id} onClick={() => addToCart(item.id)} className="flex w-full items-center justify-between rounded-xl border border-border/60 p-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]"><span><span className="block text-sm font-bold">{item.name}</span><span className="block text-xs text-muted-foreground">{item.prepStation}{item.options?.length ? ' · Personalizable' : ''}</span></span><span className="font-black text-primary">{item.options?.length ? 'Desde ' : ''}{money(item.price, item.currency)}</span></button>)}</div></div>)}{menu.length === 0 && <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea las categorías y platillos en Carta para operar." />}</div><div className="mt-5 border-t border-border/60 pt-4">{cartLines.length > 0 && <div className="mb-3 space-y-2">{cartLines.map(({ key, item, quantity, selectedOptions }) => <div key={key} className="flex items-center justify-between gap-2 text-sm"><span className="min-w-0">{quantity} × {item.name}{restaurantOptionLabel(item, selectedOptions) && <small className="block text-xs text-muted-foreground">{restaurantOptionLabel(item, selectedOptions)}</small>}</span><div className="flex shrink-0 items-center gap-2"><button type="button" aria-label={`Quitar una unidad de ${item.name}`} onClick={() => removeFromCart(key)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" aria-label={`Agregar una unidad de ${item.name}`} onClick={() => addToCart(item.id)} className="rounded bg-muted px-2 py-0.5">+</button></div></div>)}</div>}<Button className="w-full" disabled={!selectedTable || cartLines.length === 0 || !canCreateOrders} onClick={createOrder}><Send className="size-4" />Enviar comanda a cocina</Button></div></section>
-                </div>}
-                {tab === 'comandas' && <div data-tour="restaurant-orders"><OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} canApproveKitchen={canApproveKitchen} canApproveOrders={canApproveOrders} onSend={sendToKitchen} onStatus={changeOrderStatus} onCheckout={openCheckout} /></div>}
-                {tab === 'cocina' && <div data-tour="restaurant-kitchen"><KitchenBoard tickets={tickets} canApprove={canApproveKitchen} onStatus={updateKitchen} /></div>}
-                {tab === 'carta' && <div data-tour="restaurant-menu"><MenuBoard menu={menu} canCreate={canCreateMenu} canEdit={canEditMenu} canExport={canPerform('RESTAURANT_MENU', 'export')} onSaved={() => loadData()} /></div>}
-                {tab === 'reportes' && <div data-tour="restaurant-reports"><ReportsBoard summary={summary} canExport={canPerform('RESTAURANT_REPORTS', 'export')} onExport={exportRestaurantReport} /></div>}
+                {tab === 'salon' && salonMode === 'floor' && <RestaurantSalonView tables={tables} orders={activeOrders} selectedTableId={selectedTableId} onSelectTable={setSelectedTableId} onOpenPos={(tableId) => { setSelectedTableId(tableId); setPosOrderType('DINE_IN'); setSalonMode('pos'); }} tableFilter={tableFilter} activeZone={activeZone} onTableFilterChange={setTableFilter} onZoneChange={setActiveZone} showTableForm={showTableForm} onToggleTableForm={() => setShowTableForm((value) => !value)} newTable={newTable} onNewTableChange={setNewTable} onCreateTable={createTable} canCreateTables={canCreateTables} tableAction={tableAction} onShowQr={showTableQr} onCloseTable={closeTable} />}
+                {(tab === 'pos' || (tab === 'salon' && salonMode === 'pos')) && <div data-tour="restaurant-pos"><RestaurantPosView tables={tables} selectedTable={selectedTable} orders={activeOrders} menu={menu} cartLines={cartLines} cartTotal={cartTotal} canCreateOrders={canCreateOrders} canApproveOrders={canApproveOrders} kitchenEnabled={restaurantConfiguration?.kitchen.enabled !== false} menuSearch={menuSearch} activeCategoryId={activeMenuCategoryId} orderNotes={orderNotes} deliveryAddress={deliveryAddress} deliveryReference={deliveryReference} orderType={effectivePosOrderType} availableOrderTypes={availablePosOrderTypes} pendingAction={posAction} onOrderTypeChange={(value) => { setPosOrderType(value); if (value !== 'DINE_IN') setSelectedTableId(null); }} onMenuSearchChange={setMenuSearch} onCategoryChange={setActiveMenuCategoryId} onNotesChange={setOrderNotes} onDeliveryAddressChange={setDeliveryAddress} onDeliveryReferenceChange={setDeliveryReference} onSelectTable={(id) => { setSelectedTableId(id); setPosOrderType('DINE_IN'); }} onNewOrder={startNewOrder} onAddItem={addToCart} onRemoveLine={removeFromCart} onCreateOrder={createOrder} onAddToOrder={addItemsToOrder} onCheckout={openCheckout} /></div>}
+                {tab === 'comandas' && <div data-tour="restaurant-orders"><OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} canApproveKitchen={canApproveKitchen} canApproveOrders={canApproveOrders} sendingOrderIds={sendingOrderIds} onSend={sendToKitchen} onStatus={changeOrderStatus} onCheckout={openCheckout} onOpenDetail={openOrderDetail} /></div>}
+                {tab === 'cocina' && <div data-tour="restaurant-kitchen"><KitchenBoard tickets={tickets} averagePrepMinutes={summary?.averagePrepMinutes} canApprove={canApproveKitchen} onStatus={updateKitchen} /></div>}
+                {tab === 'delivery' && <div data-tour="restaurant-delivery"><DeliveryBoard orders={orders} canApprove={canApproveOrders} onUpdate={updateDelivery} onOpenDetail={openOrderDetail} onCheckout={openCheckout} /></div>}
+                {tab === 'carta' && <div data-tour="restaurant-menu"><RestaurantMenuWorkspace menu={menu} canCreate={canCreateMenu} canEdit={canEditMenu} canExport={canPerform('RESTAURANT_MENU', 'export')} onSaved={() => loadData()} publicLink={publicLink} /></div>}
+                {tab === 'reportes' && <div data-tour="restaurant-reports"><ReportsBoard summary={summary} canExport={canPerform('RESTAURANT_REPORTS', 'export')} onExport={exportRestaurantReport} /><ReportsVisuals summary={summary} /></div>}
+                {tab === 'configuracion' && canEditRestaurantConfiguration && <div data-tour="restaurant-configuration"><RestaurantConfigurationPage onSaved={(response) => setRestaurantConfiguration(response.configuration)} /></div>}
               </motion.div>
             </AnimatePresence>
-          </Tabs>
+          </div>
         </div>
       </main>
 
       {qrTable && <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-foreground/60 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-qr-title"><div className="nh-modal-surface w-full max-w-md rounded-3xl border border-border/60 bg-card p-5 shadow-2xl sm:p-6"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Carta digital por mesa</p><h2 id="restaurant-qr-title" className="mt-1 text-2xl font-black">QR · Mesa {qrTable.code}</h2><p className="mt-1 text-sm text-muted-foreground">{qrTable.name} · escanea para abrir la carta.</p></div><button type="button" onClick={() => setQrTable(null)} className="size-9 rounded-xl p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Cerrar código QR"><X className="size-5" /></button></div><div className="mt-5 flex min-h-64 items-center justify-center rounded-3xl border border-primary/15 bg-white p-5">{qrLoading ? <RefreshCw className="size-8 animate-spin text-primary" /> : qrDataUrl ? <img src={qrDataUrl} alt={`Código QR de la mesa ${qrTable.code}`} className="size-64 max-w-full object-contain" /> : <p className="text-sm text-muted-foreground">No se pudo generar el QR.</p>}</div><div className="mt-4 rounded-xl bg-muted/40 p-3"><p className="break-all text-xs leading-5 text-muted-foreground">{publicLink}</p></div><div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4"><Button variant="outline" onClick={() => void copyQrLink()} disabled={!qrDataUrl}>Copiar enlace</Button><Button variant="outline" onClick={downloadQr} disabled={!qrDataUrl}><Download className="size-4" />PNG</Button><Button className="sm:col-span-2" onClick={printQr} disabled={!qrDataUrl}><FileText className="size-4" />Imprimir QR</Button></div></div></div>}
 
-      {checkoutOrder && <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-checkout-title"><div className="nh-modal-surface my-auto max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6"><div className="nh-modal-header flex min-w-0 items-start justify-between gap-3 pb-4"><div className="min-w-0"><p className="text-xs font-black uppercase tracking-widest text-primary">Cobro POS</p><h2 id="restaurant-checkout-title" className="mt-1 break-words text-2xl font-black">Pedido {checkoutOrder.number}</h2></div><button type="button" onClick={() => setCheckoutOrder(null)} className="size-9 shrink-0 rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Cerrar cobro" title="Cerrar"><X className="size-5" /></button></div><div className="my-5 rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Total a cobrar</p><p className="mt-1 text-3xl font-black">{money(checkoutOrder.total, checkoutOrder.currency)}</p></div><label className="text-sm font-bold">Caja registradora<select value={checkoutRegisterId} onChange={(event) => setCheckoutRegisterId(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">{registers.length === 0 && <option value="">No hay cajas disponibles</option>}{registers.map((register) => <option key={register.id} value={register.id}>{register.name}</option>)}</select></label><p className="mt-3 text-xs leading-5 text-muted-foreground">El cobro valida la sesión activa, emite la factura POS, descuenta inventario y genera el asiento contable existente.</p><div className="nh-modal-footer mt-5 pt-4"><Button className="w-full" disabled={!checkoutRegisterId} onClick={checkout}><CreditCard className="size-4" />Cobrar en efectivo</Button></div></div></div>}
-      {checkoutOrder && <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-checkout-title"><div className="nh-modal-surface my-auto max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6"><div className="nh-modal-header flex min-w-0 items-start justify-between gap-3 pb-4"><div className="min-w-0"><p className="text-xs font-black uppercase tracking-widest text-primary">Cobro POS</p><h2 id="restaurant-checkout-title" className="mt-1 break-words text-2xl font-black">Pedido {checkoutOrder.number}</h2></div><button type="button" onClick={() => setCheckoutOrder(null)} className="size-9 shrink-0 rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Cerrar cobro" title="Cerrar"><X className="size-5" /></button></div><div className="my-5 rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Total a cobrar</p><p className="mt-1 text-3xl font-black">{money(checkoutOrder.total, checkoutOrder.currency)}</p></div><label className="text-sm font-bold">Caja registradora<select value={checkoutRegisterId} onChange={(event) => setCheckoutRegisterId(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">{registers.length === 0 && <option value="">No hay cajas disponibles</option>}{registers.map((register) => <option key={register.id} value={register.id}>{register.name}</option>)}</select></label><p className="mt-3 text-xs leading-5 text-muted-foreground">El cobro valida la sesión activa, emite la factura POS, descuenta inventario y genera el asiento contable existente.</p><div className="nh-modal-footer mt-5 pt-4"><Button className="w-full" disabled={!checkoutRegisterId} onClick={checkout}><CreditCard className="size-4" />Cobrar en efectivo</Button></div></div></div>}
+       {checkoutOrder && <RestaurantCheckoutDialog order={checkoutOrder} balance={checkoutBalance} registers={registers} customers={checkoutCustomers} customerId={checkoutCustomerId} dueDate={checkoutDueDate} allowPartialPayments={restaurantConfiguration?.cash.rules.partialPayments !== false} registerId={checkoutRegisterId} payments={checkoutPayments} onRegisterChange={setCheckoutRegisterId} onCustomerChange={setCheckoutCustomerId} onDueDateChange={setCheckoutDueDate} onPaymentsChange={setCheckoutPayments} onClose={() => setCheckoutOrder(null)} onConfirm={checkout} />}
+      {orderDetail && <RestaurantOrderDetailDialog order={orderDetail} loading={orderDetailLoading} onClose={() => setOrderDetail(null)} onCheckout={openCheckout} canApproveOrders={canApproveOrders} />}
       {pendingOptionItem && <RestaurantOptionsDialog item={pendingOptionItem} onClose={() => setPendingOptionItem(null)} onConfirm={(selectedOptions) => { addCartLine(pendingOptionItem, selectedOptions); setPendingOptionItem(null); }} />}
     </div>
   );
+}
+
+type RestaurantDraftTable = { code: string; name: string; zone: string; seats: string };
+
+interface RestaurantSalonViewProps {
+  tables: RestaurantTable[];
+  orders: RestaurantOrder[];
+  selectedTableId: string | null;
+  onSelectTable: (tableId: string) => void;
+  onNewOrder: () => void;
+  onOpenPos: (tableId: string) => void;
+  tableFilter: RestaurantTableFilter;
+  activeZone: string;
+  onTableFilterChange: (filter: RestaurantTableFilter) => void;
+  onZoneChange: (zone: string) => void;
+  showTableForm: boolean;
+  onToggleTableForm: () => void;
+  newTable: RestaurantDraftTable;
+  onNewTableChange: (table: RestaurantDraftTable) => void;
+  onCreateTable: () => void;
+  canCreateTables: boolean;
+  tableAction: boolean;
+  onShowQr: (table: RestaurantTable) => Promise<void>;
+  onCloseTable: (table: RestaurantTable) => Promise<void>;
+}
+
+function RestaurantSalonView({ tables, orders, selectedTableId, onSelectTable, onOpenPos, tableFilter, activeZone, onTableFilterChange, onZoneChange, showTableForm, onToggleTableForm, newTable, onNewTableChange, onCreateTable, canCreateTables, tableAction, onShowQr, onCloseTable }: RestaurantSalonViewProps) {
+  const zones = useMemo(() => {
+    const canonicalZones = ['Salón principal', 'Terraza', 'Área VIP', 'Barra'];
+    const customZones = Array.from(new Set(tables.map((table) => table.zone?.trim()).filter((zone): zone is string => Boolean(zone && !canonicalZones.includes(zone)))));
+    return ['ALL', ...canonicalZones, ...customZones];
+  }, [tables]);
+  const [detailTab, setDetailTab] = useState<'summary' | 'orders' | 'qr'>('summary');
+  const [guestCounts, setGuestCounts] = useState<Record<string, number>>({});
+  useEffect(() => setDetailTab('summary'), [selectedTableId]);
+  const tableDetails = useMemo(() => tables.map((table) => {
+    const tableOrders = orders.filter((order) => order.table?.id === table.id);
+    const preparing = tableOrders.some(restaurantOrderPreparationIsOpen);
+    const payment = tableOrders.some((order) => restaurantOrderNeedsPayment(order) && restaurantOrderIsReady(order));
+    const status = payment ? 'PAYMENT' : preparing ? 'PREPARING' : table.status;
+    const total = tableOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    return { table, tableOrders, preparing, payment, status, total };
+  }), [orders, tables]);
+  const visibleTables = tableDetails.filter(({ table, status }) => {
+    const zoneMatches = activeZone === 'ALL' || (table.zone || 'Salón principal') === activeZone;
+    const filterMatches = tableFilter === 'ALL' || status === tableFilter;
+    return zoneMatches && filterMatches;
+  });
+  const selected = tableDetails.find(({ table }) => table.id === selectedTableId) || null;
+  const selectedGuests = selected ? guestCounts[selected.table.id] || Math.min(selected.table.seats, 4) : 0;
+  const selectedStatus = selected ? (selected.status === 'PREPARING' ? { label: 'En preparación', className: 'border-amber-200 bg-amber-50 text-amber-700' } : selected.status === 'PAYMENT' ? { label: 'Por cobrar', className: 'border-violet-200 bg-violet-50 text-violet-700' } : tableStatus[selected.table.status] || tableStatus.AVAILABLE) : null;
+
+  return <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(350px,0.65fr)]" data-tour="restaurant-salon">
+    <section className="min-w-0 rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-accent/[0.06] p-4 shadow-sm sm:p-5">
+      {showTableForm && <div className="mb-5 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4"><div className="mb-3"><p className="font-serif text-lg font-medium italic text-primary">Nueva mesa</p><p className="text-xs text-muted-foreground">El código debe ser único dentro de la sucursal.</p></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><label className="text-xs font-bold text-muted-foreground">Zona<select aria-label="Zona de mesa" value={newTable.zone} onChange={(event) => onNewTableChange({ ...newTable, zone: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"><option>Salón principal</option><option>Terraza</option><option>Área VIP</option><option>Barra</option></select></label><label className="text-xs font-bold text-muted-foreground">Nombre visible<input aria-label="Nombre de mesa" placeholder="Ej. Mesa 01" value={newTable.name} onChange={(event) => onNewTableChange({ ...newTable, name: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary" /></label><label className="text-xs font-bold text-muted-foreground">Código interno<input aria-label="Código de mesa" placeholder="Ej. W01" value={newTable.code} onChange={(event) => onNewTableChange({ ...newTable, code: event.target.value.toUpperCase() })} className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm uppercase outline-none focus:border-primary" /></label><div className="flex items-end gap-2"><label className="min-w-0 flex-1 text-xs font-bold text-muted-foreground">Capacidad<input aria-label="Cantidad de puestos" type="number" min="1" max="99" placeholder="Ej. 4" value={newTable.seats} onChange={(event) => onNewTableChange({ ...newTable, seats: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary" /></label><Button onClick={onCreateTable} disabled={tableAction || !canCreateTables}>{tableAction ? <RefreshCw className="size-4 animate-spin" /> : <Check className="size-4" />}{tableAction ? 'Creando…' : 'Crear mesa'}</Button></div></div></div>}
+      <div className="mb-4 flex gap-2 overflow-x-auto pb-1 custom-scrollbar" role="tablist" aria-label="Zonas del salón">
+        {zones.map((zone) => <button key={zone} type="button" role="tab" aria-selected={activeZone === zone} onClick={() => { onZoneChange(zone); onTableFilterChange('ALL'); }} className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-bold transition ${activeZone === zone ? 'border-primary bg-primary text-primary-foreground shadow-sm' : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'}`}>{zone === 'ALL' ? 'Todas' : zone}</button>)}
+      </div>
+      {tables.length === 0 ? <EmptyState icon={<LayoutGrid className="size-8" />} title="Aún no hay mesas configuradas" description="Crea la primera mesa para comenzar a operar el salón." action={canCreateTables ? <Button size="sm" onClick={onToggleTableForm}><Plus className="size-4" />Crear mesa</Button> : undefined} /> : visibleTables.length === 0 ? <EmptyState icon={<Search className="size-8" />} title="No hay mesas en este filtro" description="Cambia la zona o el indicador seleccionado para ver otras mesas." action={<Button variant="outline" size="sm" onClick={() => { onTableFilterChange('ALL'); onZoneChange('ALL'); }}>Limpiar filtros</Button>} /> : <div className="relative overflow-hidden rounded-[28px] border border-border/60 bg-[radial-gradient(circle_at_50%_20%,color-mix(in_srgb,var(--accent)_10%,transparent),transparent_48%),linear-gradient(145deg,var(--background),color-mix(in_srgb,var(--accent)_6%,var(--card)))] p-4 shadow-inner sm:p-6"><div className="pointer-events-none absolute inset-3 rounded-[22px] border-2 border-border/40" /><div className="pointer-events-none absolute left-1/2 top-0 h-full w-px bg-border/30" /><div className="relative grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">{visibleTables.map(({ table, tableOrders, status, total }) => { const baseStatus = tableStatus[table.status] || tableStatus.AVAILABLE; const derivedStatus = status === 'PREPARING' ? { label: 'En preparación', className: 'border-amber-200 bg-amber-50 text-amber-700' } : status === 'PAYMENT' ? { label: 'Por cobrar', className: 'border-violet-200 bg-violet-50 text-violet-700' } : baseStatus; const occupied = status === 'OCCUPIED' || status === 'PREPARING' || status === 'PAYMENT'; return <div key={table.id} className="relative flex items-center justify-center py-2"><button type="button" onClick={() => onSelectTable(table.id)} className={`group relative flex min-h-28 w-full max-w-36 flex-col items-center justify-center rounded-2xl border-2 px-2 py-3 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 ${selectedTableId === table.id ? 'border-primary bg-accent/20 ring-4 ring-primary/15' : occupied ? 'border-accent/60 bg-accent/10' : derivedStatus.label === 'Reservada' ? 'border-blue-300 bg-blue-50/70' : 'border-border/70 bg-card'}`}><span className="pointer-events-none absolute -top-2 left-1/2 h-3 w-9 -translate-x-1/2 rounded-full bg-current/20" /><span className="pointer-events-none absolute -bottom-2 left-1/2 h-3 w-9 -translate-x-1/2 rounded-full bg-current/20" /><span className="text-xl font-black tracking-tight">{table.code}</span><span className="mt-1 max-w-full truncate text-[11px] font-bold">{table.name}</span><span className="mt-1 text-[10px] text-muted-foreground">{table.seats} puestos · {tableOrders.length} {tableOrders.length === 1 ? 'comanda' : 'comandas'}</span><Badge className={`mt-2 text-[10px] ${derivedStatus.className}`}>{derivedStatus.label}</Badge><span className="mt-1 text-xs font-black text-accent">{total > 0 ? money(total) : 'Disponible'}</span></button><button type="button" onClick={(event) => { event.stopPropagation(); void onShowQr(table); }} className="absolute right-0 top-1 rounded-lg bg-card/90 p-1.5 text-muted-foreground shadow-sm transition hover:bg-primary hover:text-accent" title="Generar QR de la mesa" aria-label={`Generar QR de ${table.name}`}><QrCode className="size-3.5" /></button></div>; })}</div></div>}
+    </section>
+    <aside className="min-w-0 rounded-3xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
+      {!selected ? <div className="flex min-h-[360px] flex-col items-center justify-center text-center"><span className="nh-restaurant-icon-tile flex size-14 items-center justify-center rounded-2xl"><LayoutGrid className="size-7" /></span><h3 className="mt-4 font-serif text-xl font-medium italic text-primary">Selecciona una mesa</h3><p className="mt-2 max-w-xs text-sm leading-6 text-muted-foreground">Aquí verás el consumo, las comandas y las acciones disponibles.</p></div> : <>
+        <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h2 className="font-serif text-3xl font-medium italic text-primary">Mesa {selected.table.code}</h2><Badge className={selectedStatus?.className}>{selectedStatus?.label}</Badge></div><p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"><span>⌖ {selected.table.zone || 'Salón principal'}</span><span>·</span><span>♟ {selectedGuests} personas</span></p></div><button type="button" aria-label="Cerrar detalle de mesa" onClick={() => onSelectTable('')} className="rounded-xl p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"><X className="size-5" /></button></div>
+        <div className="mt-5 flex items-center justify-between rounded-2xl bg-muted/30 p-3"><span className="text-sm font-semibold">Comensales actuales</span><div className="flex items-center gap-2"><Button variant="outline" size="icon" className="size-8" onClick={() => setGuestCounts((current) => ({ ...current, [selected.table.id]: Math.max(1, selectedGuests - 1) }))} aria-label="Disminuir comensales">−</Button><span className="w-7 text-center font-black text-primary">{selectedGuests}</span><Button variant="outline" size="icon" className="size-8" onClick={() => setGuestCounts((current) => ({ ...current, [selected.table.id]: Math.min(selected.table.seats, selectedGuests + 1) }))} aria-label="Aumentar comensales">+</Button></div></div>
+        <div className="mt-5 grid grid-cols-3 border-b border-border/60" role="tablist" aria-label="Detalle de mesa"><button type="button" role="tab" aria-selected={detailTab === 'summary'} onClick={() => setDetailTab('summary')} className={`border-b-2 px-2 pb-3 text-xs font-bold ${detailTab === 'summary' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Resumen</button><button type="button" role="tab" aria-selected={detailTab === 'orders'} onClick={() => setDetailTab('orders')} className={`border-b-2 px-2 pb-3 text-xs font-bold ${detailTab === 'orders' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Comandas ({selected.tableOrders.length})</button><button type="button" role="tab" aria-selected={detailTab === 'qr'} onClick={() => setDetailTab('qr')} className={`border-b-2 px-2 pb-3 text-xs font-bold ${detailTab === 'qr' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>QR de mesa</button></div>
+        {detailTab === 'summary' && <div className="mt-5 space-y-3"><div className="flex items-center justify-between rounded-xl bg-muted/30 p-3 text-sm"><span className="flex items-center gap-2 text-muted-foreground"><Clock3 className="size-4 text-primary" />Cuenta abierta</span><strong className="text-primary">{selected.tableOrders[0]?.createdAt ? new Date(selected.tableOrders[0].createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : 'Sin consumo'}</strong></div><div className="flex items-center justify-between rounded-xl bg-muted/30 p-3 text-sm"><span className="flex items-center gap-2 text-muted-foreground"><CreditCard className="size-4 text-primary" />Consumo actual</span><strong className="text-accent">{money(selected.total)}</strong></div><div className="flex items-center justify-between rounded-xl bg-muted/30 p-3 text-sm"><span className="flex items-center gap-2 text-muted-foreground"><ChefHat className="size-4 text-primary" />Estado de cocina</span><Badge className={selected.preparing ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}>{selected.preparing ? 'En preparación' : 'Sin comandas activas'}</Badge></div><div className="flex items-center justify-between rounded-xl bg-muted/30 p-3 text-sm"><span className="flex items-center gap-2 text-muted-foreground"><ClipboardList className="size-4 text-primary" />Comandas</span><strong className="text-primary">{selected.tableOrders.length}</strong></div></div>}
+        {detailTab === 'orders' && <div className="mt-5 space-y-2">{selected.tableOrders.length === 0 ? <p className="rounded-xl bg-muted/30 p-3 text-sm text-muted-foreground">No hay comandas abiertas en esta mesa.</p> : selected.tableOrders.map((order) => <div key={order.id} className="rounded-xl border border-border/60 p-3"><div className="flex items-center justify-between gap-2"><span className="font-bold">{order.number}</span><Badge variant="outline">{orderStatus[order.status] || order.status}</Badge></div><div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{order.items.length} {order.items.length === 1 ? 'artículo' : 'artículos'}</span><span className="font-bold text-accent">{money(order.total, order.currency)}</span></div></div>)}</div>}
+        {detailTab === 'qr' && <div className="mt-5 rounded-2xl border border-border/60 bg-muted/20 p-4 text-center"><span className="nh-restaurant-icon-tile mx-auto flex size-12 items-center justify-center rounded-xl"><QrCode className="size-6" /></span><h3 className="mt-3 font-serif text-lg font-medium italic text-primary">Código QR de la mesa</h3><p className="mt-1 text-xs text-muted-foreground">Permite ver la carta y enviar comandas desde el celular.</p><Button className="mt-4 w-full" onClick={() => void onShowQr(selected.table)}><QrCode className="size-4" />Ver QR de mesa</Button></div>}
+        <Button className="mt-5 w-full" onClick={() => onOpenPos(selected.table.id)}><ShoppingBag className="size-4" />Abrir POS</Button>
+        <div className="mt-2 grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => void onShowQr(selected.table)}><QrCode className="size-4" />Compartir QR</Button><Button variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => void onCloseTable(selected.table)} disabled={!canCreateTables || selected.tableOrders.length > 0}><X className="size-4" />Cerrar mesa</Button></div>
+      </>}
+    </aside>
+  </div>;
+}
+
+interface RestaurantPosViewProps {
+  tables: RestaurantTable[];
+  selectedTable: RestaurantTable | null;
+  orders: RestaurantOrder[];
+  menu: RestaurantMenuCategory[];
+  cartLines: Array<{ key: string; item: RestaurantMenuItem; quantity: number; selectedOptions: RestaurantSelectedOptions }>;
+  cartTotal: number;
+  canCreateOrders: boolean;
+  canApproveOrders: boolean;
+  kitchenEnabled: boolean;
+  pendingAction: 'save' | 'send' | 'charge' | 'round' | null;
+  orderType: RestaurantOrderType;
+  availableOrderTypes: RestaurantOrderType[];
+  menuSearch: string;
+  activeCategoryId: string;
+  orderNotes: string;
+  deliveryAddress: string;
+  deliveryReference: string;
+  onMenuSearchChange: (value: string) => void;
+  onOrderTypeChange: (value: RestaurantOrderType) => void;
+  onCategoryChange: (value: string) => void;
+  onNotesChange: (value: string) => void;
+  onDeliveryAddressChange: (value: string) => void;
+  onDeliveryReferenceChange: (value: string) => void;
+  onSelectTable: (tableId: string) => void;
+  onAddItem: (itemId: string) => void;
+  onRemoveLine: (key: string) => void;
+  onCreateOrder: (sendToKitchen?: boolean, checkoutAfterCreate?: boolean) => Promise<void>;
+  onAddToOrder: (order: RestaurantOrder, sendToKitchen?: boolean, checkoutAfterAdd?: boolean) => Promise<void>;
+  onCheckout: (order: RestaurantOrder) => Promise<void>;
+}
+
+function RestaurantPosView({ tables, selectedTable, orders, menu, cartLines, cartTotal, canCreateOrders, canApproveOrders, kitchenEnabled, pendingAction, orderType, availableOrderTypes, menuSearch, activeCategoryId, orderNotes, deliveryAddress, deliveryReference, onMenuSearchChange, onOrderTypeChange, onCategoryChange, onNotesChange, onDeliveryAddressChange, onDeliveryReferenceChange, onSelectTable, onNewOrder, onAddItem, onRemoveLine, onCreateOrder, onAddToOrder, onCheckout }: RestaurantPosViewProps) {
+  const normalizedSearch = menuSearch.trim().toLocaleLowerCase('es');
+  const filteredCategories = useMemo(() => menu.map((category) => ({ ...category, items: category.items.filter((item) => item.isAvailable && (!normalizedSearch || `${item.name} ${item.description || ''}`.toLocaleLowerCase('es').includes(normalizedSearch))) })).filter((category) => activeCategoryId === 'ALL' || category.id === activeCategoryId).filter((category) => category.items.length > 0), [activeCategoryId, menu, normalizedSearch]);
+  const tableOrders = orders.filter((order) => selectedTable && order.table?.id === selectedTable.id);
+  const openAccount = tableOrders.find(restaurantOrderIsOperational);
+  const openAccountForItems = openAccount && openAccount.status !== 'PAID' ? openAccount : null;
+  const [guestCount, setGuestCount] = useState(Math.min(selectedTable?.seats || 2, 4));
+  useEffect(() => setGuestCount(Math.min(selectedTable?.seats || 2, 4)), [selectedTable?.id, selectedTable?.seats]);
+
+  const canCreateCurrentOrder = (orderType !== 'DINE_IN' || Boolean(selectedTable)) && cartLines.length > 0 && canCreateOrders;
+  const chargeableOpenAccount = openAccount && restaurantOrderNeedsPayment(openAccount) && restaurantOrderIsReady(openAccount);
+  const canChargeCurrentOrder = canApproveOrders && (orderType !== 'DINE_IN' || Boolean(chargeableOpenAccount));
+
+  return <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,390px)]" data-tour="restaurant-pos">
+    <div className="min-w-0 rounded-3xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
+       <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Cuenta actual</p><h2 className="font-serif text-2xl font-medium italic text-primary">Orden actual</h2><p className="mt-1 text-xs text-muted-foreground">POS independiente · puedes vender sin mesa.</p></div><div className="flex flex-wrap items-center justify-end gap-2"><Button variant="outline" size="sm" onClick={onNewOrder} disabled={Boolean(pendingAction)}><Plus className="size-4" />Nueva orden</Button><label className="sr-only" htmlFor="restaurant-pos-type">Tipo de venta</label><select id="restaurant-pos-type" value={orderType} onChange={(event) => onOrderTypeChange(event.target.value as RestaurantOrderType)} className="h-10 rounded-xl border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-primary">{availableOrderTypes.map((type) => <option key={type} value={type}>{type === 'TAKEAWAY' ? 'Mostrador / retiro' : restaurantOrderTypeLabel(type)}</option>)}</select>{orderType === 'DINE_IN' && <><label className="sr-only" htmlFor="restaurant-pos-table">Mesa</label><select id="restaurant-pos-table" value={selectedTable?.id || ''} onChange={(event) => onSelectTable(event.target.value)} className="h-10 max-w-[190px] rounded-xl border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-primary"><option value="">Seleccionar mesa</option>{tables.filter((table) => table.isActive !== false).map((table) => <option key={table.id} value={table.id}>Mesa {table.code} · {table.name}</option>)}</select><label className="sr-only" htmlFor="restaurant-pos-guests">Comensales</label><select id="restaurant-pos-guests" value={guestCount} onChange={(event) => setGuestCount(Number(event.target.value))} className="h-10 rounded-xl border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-primary">{Array.from({ length: Math.max(4, selectedTable?.seats || 4) }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value} {value === 1 ? 'comensal' : 'comensales'}</option>)}</select></>}</div></div>
+       {!selectedTable && orderType === 'DINE_IN' && <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Selecciona una mesa para crear una cuenta de salón. Mostrador y delivery pueden operar sin mesa.</div>}
+      {orderType === 'DELIVERY' && <div className="mb-4 grid gap-2 rounded-2xl border border-primary/15 bg-primary/[0.03] p-3 sm:grid-cols-2"><Input value={deliveryAddress} onChange={(event) => onDeliveryAddressChange(event.target.value)} placeholder="Dirección de entrega" aria-label="Dirección de entrega" /><Input value={deliveryReference} onChange={(event) => onDeliveryReferenceChange(event.target.value)} placeholder="Referencia / indicaciones" aria-label="Referencia de entrega" /></div>}
+      <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={menuSearch} onChange={(event) => onMenuSearchChange(event.target.value)} placeholder="Buscar platillos, bebidas o extras…" className="h-11 pl-10" aria-label="Buscar en la carta" /></div>
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 custom-scrollbar" role="tablist" aria-label="Categorías de la carta"><button type="button" role="tab" aria-selected={activeCategoryId === 'ALL'} onClick={() => onCategoryChange('ALL')} className={`flex min-w-20 shrink-0 flex-col items-center gap-1 rounded-2xl border px-3 py-2 text-xs font-bold transition ${activeCategoryId === 'ALL' ? 'border-primary bg-primary text-primary-foreground shadow-sm' : 'border-border/60 bg-background hover:border-primary/40'}`}><LayoutGrid className="size-4" />Todos</button>{menu.map((category) => { const CategoryIcon = restaurantCategoryIcon(category.name); return <button key={category.id} type="button" role="tab" aria-selected={activeCategoryId === category.id} onClick={() => onCategoryChange(category.id)} className={`flex min-w-20 shrink-0 flex-col items-center gap-1 rounded-2xl border px-3 py-2 text-xs font-bold transition ${activeCategoryId === category.id ? 'border-primary bg-primary text-primary-foreground shadow-sm' : 'border-border/60 bg-background hover:border-primary/40'}`}><CategoryIcon className="size-4" />{category.name}</button>; })}</div>
+      <div className="mt-4 max-h-[min(62vh,680px)] overflow-y-auto pr-1"><div className="grid grid-cols-2 gap-3 md:grid-cols-3">{filteredCategories.flatMap((category) => category.items).map((item) => <button key={item.id} type="button" onClick={() => onAddItem(item.id)} className="group overflow-hidden rounded-2xl border border-border/60 bg-background text-left transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md">{item.imageUrl ? <img src={item.imageUrl} alt="" className="aspect-[1.45] w-full object-cover" loading="lazy" /> : <div className="flex aspect-[1.45] items-center justify-center bg-accent/20 text-primary"><Utensils className="size-8 transition-transform group-hover:scale-110" /></div>}<div className="p-3"><p className="truncate text-sm font-bold">{item.name}</p><p className="mt-1 line-clamp-2 min-h-8 text-xs text-muted-foreground">{item.description || item.prepStation}{item.options?.length ? ' · Personalizable' : ''}</p><div className="mt-3 flex items-center justify-between gap-2"><span className="font-black text-primary">{item.options?.length ? 'Desde ' : ''}{money(item.price, item.currency)}</span><span className="flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground"><Plus className="size-4" /></span></div></div></button>)}{filteredCategories.length === 0 && <div className="col-span-full"><EmptyState icon={<Utensils className="size-8" />} title="No encontramos ese platillo" description="Prueba otra búsqueda o revisa la disponibilidad en Carta." /></div>}</div></div>
+    </div>
+
+    <aside className="min-w-0 rounded-3xl border border-border/60 bg-card p-4 shadow-sm sm:p-5 xl:sticky xl:top-4 xl:self-start"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Cuenta actual</p><h2 className="mt-1 font-serif text-2xl font-medium italic text-primary">{selectedTable ? `Mesa ${selectedTable.code}` : orderType === 'DELIVERY' ? 'Venta delivery' : 'Venta de mostrador'}</h2><p className="mt-1 text-sm text-muted-foreground">{selectedTable?.name || (orderType === 'DINE_IN' ? 'Selecciona una mesa para comenzar' : 'Sin mesa · operación independiente')}</p></div><span className="flex size-10 items-center justify-center rounded-xl bg-accent/20 text-primary"><ShoppingBag className="size-5" /></span></div>
+       {selectedTable && tableOrders.length > 0 && <div className="mt-4 rounded-2xl border border-border/60 bg-muted/20 p-3"><div className="flex items-center justify-between gap-2"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cuenta abierta y rondas</p><span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-bold text-primary">{tableOrders.length}</span></div><div className="mt-2 space-y-2">{tableOrders.map((order) => <div key={order.id} className={`flex flex-wrap items-center justify-between gap-2 rounded-xl p-2 ${openAccount?.id === order.id ? 'bg-primary/[0.06]' : ''}`}><span>{order.number} · {orderStatus[order.status] || order.status}</span><div className="flex items-center gap-2"><span className="font-bold">{money(order.total, order.currency)}</span>{canCreateOrders && order.status !== 'PAID' && openAccount?.id === order.id && cartLines.length > 0 && <Button variant="outline" size="sm" onClick={() => void onAddToOrder(order, true)}><Send className="size-3" />Agregar ronda</Button>}{canApproveOrders && restaurantOrderNeedsPayment(order) && restaurantOrderIsReady(order) && <Button variant="outline" size="sm" onClick={() => void onCheckout(order)}>Cobrar</Button>}</div></div>)}</div></div>}
+      <div className="mt-4 border-t border-border/60 pt-4">{cartLines.length === 0 ? <p className="rounded-2xl bg-muted/30 p-4 text-sm text-muted-foreground">Agrega platillos desde la carta. Si un producto tiene tamaños o extras, NovaHub abrirá su panel de personalización.</p> : <div className="space-y-3">{cartLines.map(({ key, item, quantity, selectedOptions }) => <div key={key} className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background p-3"><div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-accent/20 text-primary">{item.imageUrl ? <img src={item.imageUrl} alt="" className="size-full object-cover" loading="lazy" /> : <Utensils className="size-5" />}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{quantity} × {item.name}</p>{restaurantOptionLabel(item, selectedOptions) && <p className="mt-1 truncate text-xs text-muted-foreground">{restaurantOptionLabel(item, selectedOptions)}</p>}<p className="mt-1 text-xs font-black text-primary">{money((Number(item.price) + restaurantOptionPrice(item, selectedOptions)) * quantity, item.currency)}</p></div><button type="button" aria-label={`Quitar una unidad de ${item.name}`} onClick={() => onRemoveLine(key)} className="rounded-xl border border-border/60 bg-card px-3 py-2 text-sm font-black text-primary hover:border-primary/40">−</button></div>)}</div>}</div>
+      <div className="mt-4"><label className="text-xs font-bold text-muted-foreground" htmlFor="restaurant-order-notes">Nota para cocina</label><textarea id="restaurant-order-notes" value={orderNotes} onChange={(event) => onNotesChange(event.target.value)} placeholder="Ej. Sin cebolla, entregar todo junto…" rows={2} className="mt-2 w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary" /></div>
+      <div className="mt-4 grid gap-4 border-t border-border/60 pt-4 sm:grid-cols-[1fr_auto] sm:items-end"><div><p className="text-xs font-medium text-muted-foreground">Total de la orden</p><p className="mt-1 text-2xl font-black text-primary">{money(cartTotal)}</p></div><div className="grid grid-cols-3 gap-2"><Button variant="outline" className="min-w-24" disabled={!canCreateCurrentOrder || Boolean(pendingAction)} onClick={() => void onCreateOrder(false)}>{pendingAction === 'save' ? <RefreshCw className="size-4 animate-spin" /> : null}{pendingAction === 'save' ? 'Guardando…' : 'Guardar'}</Button>{kitchenEnabled && <Button variant="outline" className="min-w-32" disabled={!canCreateCurrentOrder || Boolean(pendingAction)} onClick={() => void (openAccountForItems && orderType === 'DINE_IN' ? onAddToOrder(openAccountForItems, true) : onCreateOrder(true))}>{pendingAction === 'send' || pendingAction === 'round' ? <RefreshCw className="size-4 animate-spin" /> : <Send className="size-4" />}{pendingAction === 'send' || pendingAction === 'round' ? 'Enviando…' : 'Enviar a cocina'}</Button>}{openAccountForItems && orderType === 'DINE_IN' && <Button variant="outline" className="min-w-28" disabled={cartLines.length === 0 || !canCreateOrders || Boolean(pendingAction)} onClick={() => void onAddToOrder(openAccountForItems, false)}>Agregar ronda</Button>}<Button className="min-w-28" disabled={!canCreateCurrentOrder || !canChargeCurrentOrder || Boolean(pendingAction)} onClick={() => void (openAccountForItems && orderType === 'DINE_IN' ? onAddToOrder(openAccountForItems, false, true) : onCreateOrder(false, true))}>{pendingAction === 'charge' ? <RefreshCw className="size-4 animate-spin" /> : <CreditCard className="size-4" />}{pendingAction === 'charge' ? 'Procesando…' : 'Cobrar'}</Button></div></div>
+    </aside>
+  </section>;
 }
 
 function NoAccessState() {
   return (
     <div className="flex flex-1 items-center justify-center bg-background p-6">
       <div className="w-full max-w-lg rounded-2xl border border-border/60 bg-card p-8 text-center shadow-sm">
-        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <div className="nh-restaurant-icon-tile mx-auto flex size-14 items-center justify-center rounded-2xl">
           <ShieldAlert className="size-7" />
         </div>
         <h2 className="mt-5 text-xl font-black">Restaurante POS no está habilitado</h2>
@@ -718,37 +1132,202 @@ function EmptyState({ icon, title, description, action }: { icon: React.ReactNod
   return <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 p-6 text-center"><div className="mb-3 rounded-2xl bg-card p-3 text-muted-foreground/50 shadow-sm">{icon}</div><p className="font-black text-foreground">{title}</p><p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>{action && <div className="mt-4">{action}</div>}</div>;
 }
 
-function OrderBoard({ orders, targetOrderId, onTargetHandled, onSend, onStatus, onCheckout, canApproveKitchen, canApproveOrders }: { orders: RestaurantOrder[]; targetOrderId?: string | null; onTargetHandled?: () => void; onSend: (order: RestaurantOrder) => void; onStatus: (order: RestaurantOrder, status: string) => void; onCheckout: (order: RestaurantOrder) => void; canApproveKitchen: boolean; canApproveOrders: boolean }) {
+function RestaurantMetricCard({ label, value, hint, icon: Icon }: { label: string; value: string | number; hint: string; icon: React.ElementType }) {
+  return <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm"><div className="flex items-center gap-3"><span className="nh-restaurant-icon-tile flex size-10 shrink-0 items-center justify-center rounded-xl"><Icon className="size-5" /></span><div className="min-w-0"><p className="text-sm font-semibold text-foreground">{label}</p><p className="mt-1 text-2xl font-black tracking-tight text-accent">{value}</p></div></div><p className="mt-2 text-xs text-muted-foreground">{hint}</p></div>;
+}
+
+type RestaurantOrderBoardProps = { orders: RestaurantOrder[]; targetOrderId?: string | null; onTargetHandled?: () => void; onSend: (order: RestaurantOrder) => void; onStatus: (order: RestaurantOrder, status: string) => void; onCheckout: (order: RestaurantOrder) => void; onOpenDetail: (order: RestaurantOrder) => void; canApproveKitchen: boolean; canApproveOrders: boolean; sendingOrderIds: Set<string> };
+
+function OrderBoard(props: RestaurantOrderBoardProps) {
+  return <OrderBoardContent {...props} />;
+  /*
   const orderedOrders = useMemo(() => [...orders].sort((left, right) => {
     const leftTime = new Date(left.createdAt || left.sentAt || 0).getTime();
     const rightTime = new Date(right.createdAt || right.sentAt || 0).getTime();
-    if (leftTime !== rightTime) return leftTime - rightTime;
+    if (leftTime !== rightTime) return rightTime - leftTime;
     return left.number.localeCompare(right.number, undefined, { numeric: true });
   }), [orders]);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orderedOrders[0]?.id || null);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'KITCHEN' | 'READY' | 'DELIVERY' | 'TAKEAWAY'>('ALL');
   useEffect(() => {
-    if (!targetOrderId) return;
-    const frame = requestAnimationFrame(() => {
-      const target = document.getElementById(`restaurant-order-${targetOrderId}`);
-      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      target?.focus({ preventScroll: true });
+    if (targetOrderId) {
+      setSelectedOrderId(targetOrderId);
       onTargetHandled?.();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [targetOrderId, onTargetHandled, orders]);
+    } else if (!selectedOrderId || !orderedOrders.some((order) => order.id === selectedOrderId)) {
+      setSelectedOrderId(orderedOrders[0]?.id || null);
+    }
+  }, [orderedOrders, onTargetHandled, selectedOrderId, targetOrderId]);
 
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Flujo de servicio</p><h2 className="mt-1 text-2xl font-black">Cola de comandas</h2><p className="mt-1 text-sm text-muted-foreground">Ordenadas desde la más antigua para respetar la llegada de cada mesa.</p></div><ClipboardList className="size-6 text-muted-foreground/40" /></div>{orderedOrders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : <div className="grid gap-3 lg:grid-cols-2">{orderedOrders.map((order, index) => <div id={`restaurant-order-${order.id}`} key={order.id} tabIndex={-1} className={`rounded-2xl border p-4 transition-all duration-500 ${targetOrderId === order.id ? 'border-primary bg-primary/[0.06] ring-4 ring-primary/15 shadow-lg' : 'border-border/60'}`}><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">{index + 1}</span><p className="text-lg font-black">{order.number}</p></div><p className="text-xs text-muted-foreground">{order.hotelReservation ? `Habitación ${order.hotelReservation.room.code} · ${order.hotelReservation.guestName} · ${order.hotelReservation.reservationNumber}` : order.table ? `Mesa ${order.table.code} · ${order.table.name}` : order.type}</p></div><Badge variant="outline">{orderStatus[order.status] || order.status}</Badge></div><div className="mt-4 space-y-1 text-sm">{order.items.map((item) => <div key={item.id} className="flex justify-between gap-3"><span className="min-w-0">{Number(item.quantity)} × {item.description}{restaurantSnapshotLabel(item.options) && <small className="block text-xs text-muted-foreground">{restaurantSnapshotLabel(item.options)}</small>}</span><span className="shrink-0 font-semibold">{money(item.total, order.currency)}</span></div>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3"><span className="font-black">{money(order.total, order.currency)}</span><div className="flex gap-2">{canApproveKitchen && ['CONFIRMED', 'PENDING_CONFIRMATION'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onSend(order)}><Send className="size-3" />Cocina</Button>}{canApproveOrders && ['READY', 'SERVED'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onCheckout(order)}><CreditCard className="size-3" />Cobrar</Button>}{canApproveOrders && order.status === 'READY' && <Button size="sm" onClick={() => onStatus(order, 'SERVED')}>Servido</Button>}</div></div></div>)}</div>}</section>;
+  const visibleOrders = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase('es');
+    return orderedOrders.filter((order) => {
+      const matchesFilter = filter === 'ALL' || (filter === 'IN_PROGRESS' && !['PAID', 'CANCELLED', 'READY', 'SERVED'].includes(order.status)) || (filter === 'KITCHEN' && ['SENT_TO_KITCHEN', 'IN_PREPARATION'].includes(order.status)) || (filter === 'READY' && ['READY', 'SERVED'].includes(order.status)) || (filter === 'DELIVERY' && order.type === 'DELIVERY') || (filter === 'TAKEAWAY' && order.type === 'TAKEAWAY');
+      if (!matchesFilter) return false;
+      if (!normalizedQuery) return true;
+      return [order.number, order.table?.code, order.table?.name, order.customerName, order.customerPhone, ...order.items.map((item) => item.description)].filter(Boolean).join(' ').toLocaleLowerCase('es').includes(normalizedQuery);
+    });
+  }, [filter, orderedOrders, query]);
+  const selectedOrder = orderedOrders.find((order) => order.id === selectedOrderId) || null;
+
+  const metrics = [
+    { label: 'Pedidos activos', value: orderedOrders.filter((order) => !['PAID', 'CANCELLED'].includes(order.status)).length, hint: 'Cuentas abiertas hoy', icon: ClipboardList },
+    { label: 'En cocina', value: orderedOrders.filter((order) => ['SENT_TO_KITCHEN', 'IN_PREPARATION'].includes(order.status)).length, hint: 'en preparación', icon: ChefHat },
+    { label: 'Listas', value: orderedOrders.filter((order) => ['READY', 'SERVED'].includes(order.status)).length, hint: 'listas para servir', icon: Check },
+    { label: 'Delivery', value: orderedOrders.filter((order) => order.type === 'DELIVERY').length, hint: 'pedidos a domicilio', icon: Truck },
+    { label: 'Retiro', value: orderedOrders.filter((order) => order.type === 'TAKEAWAY').length, hint: 'para llevar', icon: ShoppingBag },
+  ];
+
+ return <section className="space-y-5"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{metrics.map((metric) => <RestaurantMetricCard key={metric.label} {...metric} />)}</div><section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Operación comercial</p><h2 className="mt-1 font-serif text-2xl font-medium italic text-primary">Comandas</h2><p className="mt-1 text-sm text-muted-foreground">Consulta cuentas abiertas, estados, canales y modificaciones.</p></div><ClipboardList className="size-6 text-primary" /></div>{orderedOrders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.6fr)]"><div className="min-w-0 rounded-2xl border border-border/60 bg-background p-4"><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por número, cliente o producto…" aria-label="Buscar comandas" className="h-11 pl-10" /></div><div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Filtros de comandas">{([{ id: 'ALL', label: `Todas (${orderedOrders.length})` }, { id: 'IN_PROGRESS', label: 'En curso' }, { id: 'KITCHEN', label: 'En cocina' }, { id: 'READY', label: 'Listas' }, { id: 'DELIVERY', label: 'Delivery' }, { id: 'TAKEAWAY', label: 'Retiro' }] as const).map((item) => <button key={item.id} type="button" role="tab" aria-selected={filter === item.id} onClick={() => setFilter(item.id)} className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-bold ${filter === item.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border/60 text-muted-foreground hover:border-primary/40'}`}>{item.label}</button>)}</div><div className="mt-4 hidden grid-cols-[92px_1fr_115px_85px_90px] gap-3 px-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground md:grid"><span>Comanda</span><span>Mesa / cliente</span><span>Hora</span><span>Estado</span><span className="text-right">Total</span></div><div className="mt-2 space-y-2">{visibleOrders.length === 0 ? <EmptyState icon={<Search className="size-7" />} title="No hay resultados" description="Cambia el filtro o la búsqueda para ver otras comandas." /> : visibleOrders.map((order, index) => <button id={`restaurant-order-${order.id}`} key={order.id} type="button" onClick={() => setSelectedOrderId(order.id)} className={`grid w-full items-center gap-3 rounded-xl border p-3 text-left transition md:grid-cols-[92px_1fr_115px_85px_90px] ${selectedOrder?.id === order.id ? 'border-primary bg-accent/10 ring-2 ring-primary/10' : 'border-border/60 bg-card hover:border-primary/40'}`}><span><span className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-full bg-primary text-[10px] font-black text-accent">{index + 1}</span><strong>{order.number}</strong></span><small className="mt-1 block text-[10px] text-muted-foreground">{order.type === 'DELIVERY' ? 'Delivery' : order.type === 'TAKEAWAY' ? 'Retiro' : 'Salón'}</small></span><span className="min-w-0"><strong className="block truncate text-sm">{order.table ? `Mesa ${order.table.code}` : order.customerName || 'Mostrador'}</strong><small className="block truncate text-xs text-muted-foreground">{order.table?.name || order.customerName || `${order.items.length} productos`}</small></span><span className="text-xs text-muted-foreground">{order.createdAt ? new Date(order.createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '—'}</span><Badge variant="outline" className="w-fit">{orderStatus[order.status] || order.status}</Badge><span className="text-right text-sm font-black text-accent">{money(order.total, order.currency)}</span></button>)}</div></div><aside className="min-w-0 rounded-2xl border border-border/60 bg-card p-5">{!selectedOrder ? <EmptyState icon={<ClipboardList className="size-7" />} title="Selecciona una comanda" description="Aquí verás productos, historial y acciones." /> : <><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h3 className="font-serif text-2xl font-medium italic text-primary">Comanda {selectedOrder.number}</h3><Badge variant="outline">{orderStatus[selectedOrder.status] || selectedOrder.status}</Badge></div><p className="mt-2 text-xs text-muted-foreground">{selectedOrder.table ? `Mesa ${selectedOrder.table.code} · ${selectedOrder.table.name}` : selectedOrder.type} · {selectedOrder.createdAt ? new Date(selectedOrder.createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '—'}</p></div><button type="button" aria-label="Abrir detalle completo" onClick={() => onOpenDetail(selectedOrder)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><Eye className="size-5" /></button></div><div className="mt-5 flex items-center justify-between"><h4 className="font-semibold">Productos ({selectedOrder.items.length})</h4><span className="text-lg font-black text-accent">{money(selectedOrder.total, selectedOrder.currency)}</span></div><div className="mt-3 space-y-2">{selectedOrder.items.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl bg-muted/30 p-3 text-sm"><span>{Number(item.quantity)} × {item.description}{restaurantSnapshotLabel(item.options) && <small className="block text-xs text-muted-foreground">{restaurantSnapshotLabel(item.options)}</small>}</span><strong className="shrink-0 text-primary">{money(item.total, selectedOrder.currency)}</strong></div>)}</div>{selectedOrder.notes && <div className="mt-4 rounded-xl bg-muted/30 p-3 text-sm"><p className="font-semibold">Notas de la comanda</p><p className="mt-1 text-muted-foreground">{selectedOrder.notes}</p></div>}<div className="mt-5 border-t border-border/60 pt-4"><h4 className="font-semibold">Historial</h4><div className="mt-3 space-y-2">{(selectedOrder.events || []).slice(-4).map((event) => <div key={event.id} className="flex gap-2 text-xs"><span className="mt-1 size-2 shrink-0 rounded-full bg-accent" /><span><strong>{event.message || event.type}</strong><span className="ml-2 text-muted-foreground">{new Date(event.createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' })}</span></span></div>)}</div></div><div className="mt-5 grid gap-2 sm:grid-cols-2">{canApproveKitchen && ['CONFIRMED', 'PENDING_CONFIRMATION'].includes(selectedOrder.status) && <Button onClick={() => onSend(selectedOrder)}><Send className="size-4" />Reenviar a cocina</Button>}{canApproveOrders && (['READY', 'SERVED'].includes(selectedOrder.status) || (selectedOrder.status === 'CONFIRMED' && ['TAKEAWAY', 'DELIVERY'].includes(selectedOrder.type))) && <Button onClick={() => onCheckout(selectedOrder)}><CreditCard className="size-4" />Cobrar</Button>}{canApproveOrders && selectedOrder.status === 'READY' && <Button variant="outline" onClick={() => onStatus(selectedOrder, 'SERVED')}><Check className="size-4" />Marcar servido</Button>}<Button variant="outline" onClick={() => onOpenDetail(selectedOrder)}>Ver cuenta</Button></div></>}</div></aside>}</div>}</section></section>;
 }
 
-function KitchenBoard({ tickets, onStatus, canApprove }: { tickets: RestaurantKitchenTicket[]; onStatus: (ticket: RestaurantKitchenTicket, status: string) => void; canApprove: boolean }) {
+*/ }
+
+function OrderBoardContent({ orders, targetOrderId, onTargetHandled, onSend, onStatus, onCheckout, onOpenDetail, canApproveKitchen, canApproveOrders, sendingOrderIds }: RestaurantOrderBoardProps) {
+  const orderedOrders = useMemo(() => [...orders].sort((left, right) => {
+    const leftTime = new Date(left.createdAt || left.sentAt || 0).getTime();
+    const rightTime = new Date(right.createdAt || right.sentAt || 0).getTime();
+    if (leftTime !== rightTime) return rightTime - leftTime;
+    return right.number.localeCompare(left.number, undefined, { numeric: true });
+  }), [orders]);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orderedOrders[0]?.id || null);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'KITCHEN' | 'READY' | 'DELIVERY' | 'TAKEAWAY'>('ALL');
+
+  useEffect(() => {
+    if (targetOrderId) {
+      setSelectedOrderId(targetOrderId);
+      onTargetHandled?.();
+    } else if (!selectedOrderId || !orderedOrders.some((order) => order.id === selectedOrderId)) {
+      setSelectedOrderId(orderedOrders[0]?.id || null);
+    }
+  }, [onTargetHandled, orderedOrders, selectedOrderId, targetOrderId]);
+
+  const visibleOrders = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase('es');
+    return orderedOrders.filter((order) => {
+      const matchesFilter = filter === 'ALL'
+        || (filter === 'IN_PROGRESS' && restaurantOrderIsOperational(order) && !restaurantOrderIsReady(order))
+        || (filter === 'KITCHEN' && restaurantOrderPreparationIsOpen(order))
+        || (filter === 'READY' && restaurantOrderIsReady(order))
+        || (filter === 'DELIVERY' && order.type === 'DELIVERY')
+        || (filter === 'TAKEAWAY' && order.type === 'TAKEAWAY');
+      if (!matchesFilter) return false;
+      if (!normalizedQuery) return true;
+      return [order.number, order.table?.code, order.table?.name, order.customerName, order.customerPhone, ...order.items.map((item) => item.description)]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase('es')
+        .includes(normalizedQuery);
+    });
+  }, [filter, orderedOrders, query]);
+
+  const selectedOrder = orderedOrders.find((order) => order.id === selectedOrderId) || null;
+  const filters = [
+    { id: 'ALL' as const, label: `Todas (${orderedOrders.length})` },
+    { id: 'IN_PROGRESS' as const, label: 'En curso' },
+    { id: 'KITCHEN' as const, label: 'En preparación' },
+    { id: 'READY' as const, label: 'Listas' },
+    { id: 'DELIVERY' as const, label: 'Delivery' },
+    { id: 'TAKEAWAY' as const, label: 'Retiro' },
+  ];
+  const metrics = [
+    { label: 'Pedidos activos', value: orderedOrders.filter(restaurantOrderIsOperational).length, hint: 'Cuentas abiertas hoy', icon: ClipboardList },
+    { label: 'En cocina', value: orderedOrders.filter(restaurantOrderPreparationIsOpen).length, hint: 'en preparación', icon: ChefHat },
+    { label: 'Listas', value: orderedOrders.filter(restaurantOrderIsReady).length, hint: 'listas para servir', icon: Check },
+    { label: 'Delivery', value: orderedOrders.filter((order) => order.type === 'DELIVERY').length, hint: 'pedidos a domicilio', icon: Truck },
+    { label: 'Retiro', value: orderedOrders.filter((order) => order.type === 'TAKEAWAY').length, hint: 'para llevar', icon: ShoppingBag },
+  ];
+
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {metrics.map((metric) => <RestaurantMetricCard key={metric.label} {...metric} />)}
+      </div>
+      <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+        {orderedOrders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.6fr)]">
+            <div className="min-w-0 rounded-2xl border border-border/60 bg-background p-4">
+              <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por número, cliente o producto…" aria-label="Buscar comandas" className="h-11 pl-10" /></div>
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Filtros de comandas">
+                {filters.map((item) => <button key={item.id} type="button" role="tab" aria-selected={filter === item.id} onClick={() => setFilter(item.id)} className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-bold ${filter === item.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border/60 text-muted-foreground hover:border-primary/40'}`}>{item.label}</button>)}
+              </div>
+              <div className="mt-4 hidden grid-cols-[74px_78px_minmax(140px,1fr)_90px_78px_95px_90px] gap-3 px-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground md:grid"><span># Pedido</span><span>Canal</span><span>Mesa / cliente</span><span>Hora</span><span>Productos</span><span>Estado</span><span className="text-right">Total</span></div>
+              <div className="mt-2 space-y-2">
+                {visibleOrders.length === 0 ? <EmptyState icon={<Search className="size-7" />} title="No hay resultados" description="Cambia el filtro o la búsqueda para ver otras comandas." /> : visibleOrders.map((order) => (
+                  <button id={`restaurant-order-${order.id}`} key={order.id} type="button" onClick={() => setSelectedOrderId(order.id)} className={`grid w-full items-center gap-3 rounded-xl border p-3 text-left transition md:grid-cols-[74px_78px_minmax(140px,1fr)_90px_78px_95px_90px] ${selectedOrder?.id === order.id ? 'border-primary bg-accent/10 ring-2 ring-primary/10' : 'border-border/60 bg-card hover:border-primary/40'}`}>
+                    <span className="font-black text-primary">#{order.number}</span>
+                    <span className="text-xs font-semibold text-primary">{order.type === 'DELIVERY' ? 'Delivery' : order.type === 'TAKEAWAY' ? 'Retiro' : order.type === 'ROOM_SERVICE' ? 'Habitación' : 'Salón'}</span>
+                    <span className="min-w-0"><strong className="block truncate text-sm">{order.table ? `Mesa ${order.table.code}` : order.customerName || 'Mostrador'}</strong><small className="block truncate text-xs text-muted-foreground">{order.table?.name || order.customerName || order.customerPhone || 'Venta directa'}</small></span>
+                    <span className="text-xs text-muted-foreground">{order.createdAt ? new Date(order.createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                    <span className="text-xs text-muted-foreground">{order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} {order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0) === 1 ? 'producto' : 'productos'}</span>
+                    <Badge variant="outline" className="w-fit">{orderStatus[order.status] || order.status}</Badge>
+                    <span className="text-right text-sm font-black text-accent">{money(order.total, order.currency)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <aside className="min-w-0 rounded-2xl border border-border/60 bg-card p-5">
+              {!selectedOrder ? <EmptyState icon={<ClipboardList className="size-7" />} title="Selecciona una comanda" description="Aquí verás productos, historial y acciones." /> : (
+                <>
+                  <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h3 className="font-serif text-2xl font-medium italic text-primary">Comanda {selectedOrder.number}</h3><Badge variant="outline">{orderStatus[selectedOrder.status] || selectedOrder.status}</Badge></div><p className="mt-2 text-xs text-muted-foreground">{selectedOrder.table ? `Mesa ${selectedOrder.table.code} · ${selectedOrder.table.name}` : selectedOrder.type} · {selectedOrder.createdAt ? new Date(selectedOrder.createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '—'}</p></div><button type="button" aria-label="Abrir detalle completo" onClick={() => onOpenDetail(selectedOrder)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><Eye className="size-5" /></button></div>
+                  <div className="mt-5 flex items-center justify-between"><h4 className="font-semibold">Productos ({selectedOrder.items.length})</h4><span className="text-lg font-black text-accent">{money(selectedOrder.total, selectedOrder.currency)}</span></div>
+                  <div className="mt-3 space-y-2">{selectedOrder.items.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl bg-muted/30 p-3 text-sm"><span>{Number(item.quantity)} × {item.description}{restaurantSnapshotLabel(item.options) && <small className="block text-xs text-muted-foreground">{restaurantSnapshotLabel(item.options)}</small>}</span><strong className="shrink-0 text-primary">{money(item.total, selectedOrder.currency)}</strong></div>)}</div>
+                  {selectedOrder.notes && <div className="mt-4 rounded-xl bg-muted/30 p-3 text-sm"><p className="font-semibold">Notas de la comanda</p><p className="mt-1 text-muted-foreground">{selectedOrder.notes}</p></div>}
+                  <div className="mt-5 border-t border-border/60 pt-4"><h4 className="font-semibold">Historial</h4><div className="mt-3 space-y-2">{(selectedOrder.events || []).slice(-4).map((event) => <div key={event.id} className="flex gap-2 text-xs"><span className="mt-1 size-2 shrink-0 rounded-full bg-accent" /><span><strong>{event.message || event.type}</strong><span className="ml-2 text-muted-foreground">{new Date(event.createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' })}</span></span></div>)}</div></div>
+                  <div className="mt-5 grid gap-2 sm:grid-cols-2">{canApproveKitchen && restaurantOrderCanSendToKitchen(selectedOrder) && <Button onClick={() => onSend(selectedOrder)} disabled={sendingOrderIds.has(selectedOrder.id)}>{sendingOrderIds.has(selectedOrder.id) ? <RefreshCw className="size-4 animate-spin" /> : <Send className="size-4" />}{sendingOrderIds.has(selectedOrder.id) ? 'Enviando…' : 'Enviar a cocina'}</Button>}{canApproveOrders && restaurantOrderNeedsPayment(selectedOrder) && (restaurantOrderIsReady(selectedOrder) || (selectedOrder.status === 'CONFIRMED' && ['TAKEAWAY', 'DELIVERY'].includes(selectedOrder.type))) && <Button onClick={() => onCheckout(selectedOrder)}><CreditCard className="size-4" />Cobrar</Button>}{canApproveOrders && selectedOrder.status === 'READY' && <Button variant="outline" onClick={() => onStatus(selectedOrder, 'SERVED')}><Check className="size-4" />Marcar servido</Button>}<Button variant="outline" onClick={() => onOpenDetail(selectedOrder)}>Ver cuenta</Button></div>
+                </>
+              )}
+            </aside>
+          </div>
+        )}
+      </section>
+    </section>
+  );
+}
+
+function RestaurantOrderDetailDialog({ order, loading, onClose, onCheckout, canApproveOrders }: { order: RestaurantOrder; loading: boolean; onClose: () => void; onCheckout: (order: RestaurantOrder) => void; canApproveOrders: boolean }) {
+  return <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-foreground/60 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-order-detail-title"><div className="nh-modal-surface my-auto max-h-[min(92vh,calc(100dvh-2rem))] w-full max-w-2xl overflow-y-auto rounded-3xl border border-border/60 bg-card p-5 shadow-2xl"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Detalle de pedido</p><h2 id="restaurant-order-detail-title" className="mt-1 font-serif text-3xl font-medium italic">{order.number}</h2><p className="mt-1 text-sm text-muted-foreground">{order.table ? `Mesa ${order.table.code} · ${order.table.name}` : order.type} · {orderStatus[order.status] || order.status}</p></div><button type="button" onClick={onClose} className="size-9 rounded-xl p-2 text-muted-foreground hover:bg-muted" aria-label="Cerrar detalle"><X className="size-5" /></button></div>{loading ? <div className="flex min-h-40 items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-4 animate-spin" />Cargando detalle…</div> : <><div className="mt-5 rounded-2xl border border-border/60 p-4"><h3 className="font-black">Productos y adiciones</h3><div className="mt-3 divide-y divide-border/60">{order.items.map((item) => <div key={item.id} className="flex items-start justify-between gap-4 py-3"><div><p className="font-bold">{Number(item.quantity)} × {item.description}</p>{restaurantSnapshotLabel(item.options) && <p className="mt-1 text-xs text-muted-foreground">{restaurantSnapshotLabel(item.options)}</p>}{item.notes && <p className="mt-1 text-xs text-muted-foreground">Nota: {item.notes}</p>}</div><div className="text-right"><Badge variant="outline">{kitchenStatus[item.status]?.label || orderStatus[item.status] || item.status}</Badge><p className="mt-1 font-black">{money(item.total, order.currency)}</p></div></div>)}</div><div className="mt-4 flex items-center justify-between border-t border-border/60 pt-4"><span className="font-black">Total</span><span className="text-xl font-black text-primary">{money(order.total, order.currency)}</span></div></div><div className="mt-5 rounded-2xl border border-border/60 p-4"><div className="flex items-center justify-between"><h3 className="font-black">Historial</h3><Clock3 className="size-4 text-primary" /></div><div className="mt-3 space-y-3">{(order.events || []).length === 0 ? <p className="text-sm text-muted-foreground">Sin eventos disponibles.</p> : order.events?.map((event) => <div key={event.id} className="flex gap-3 text-sm"><span className="mt-1 size-2 shrink-0 rounded-full bg-primary" /><div><p className="font-semibold">{event.message || event.type}</p><p className="text-xs text-muted-foreground">{new Date(event.createdAt).toLocaleString('es-NI')}</p></div></div>)}</div></div><div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-border/60 pt-4"><Button variant="outline" onClick={onClose}>Cerrar</Button>{canApproveOrders && restaurantOrderNeedsPayment(order) && restaurantOrderIsReady(order) && <Button onClick={() => onCheckout(order)}><CreditCard className="size-4" />Cobrar</Button>}</div></>}</div></div>;
+}
+
+type RestaurantKitchenBoardProps = { tickets: RestaurantKitchenTicket[]; averagePrepMinutes?: number | null; onStatus: (ticket: RestaurantKitchenTicket, status: string) => void; canApprove: boolean };
+
+function KitchenBoard({ tickets, averagePrepMinutes, onStatus, canApprove }: RestaurantKitchenBoardProps) {
+  const [station, setStation] = useState('ALL');
+  const [search, setSearch] = useState('');
+  const stations = useMemo(() => ['ALL', ...Array.from(new Set(tickets.map((ticket) => ticket.station).filter(Boolean)))], [tickets]);
+  const normalizedSearch = search.trim().toLocaleLowerCase('es');
+  const visibleTickets = useMemo(() => tickets.filter((ticket) => {
+    if (station !== 'ALL' && ticket.station !== station) return false;
+    if (!normalizedSearch) return true;
+    const text = [ticket.order.number, ticket.order.table?.code, ticket.order.table?.name, ticket.station, ...ticket.items.map(({ item }) => item.description)].filter(Boolean).join(' ').toLocaleLowerCase('es');
+    return text.includes(normalizedSearch);
+  }), [normalizedSearch, station, tickets]);
+  const metrics = [
+    { label: 'Pendientes', value: visibleTickets.filter((ticket) => ticket.status === 'PENDING').length, hint: 'nuevas comandas', icon: ClipboardList },
+    { label: 'En preparación', value: visibleTickets.filter((ticket) => ticket.status === 'IN_PREPARATION').length, hint: 'en proceso', icon: ChefHat },
+    { label: 'Listos', value: visibleTickets.filter((ticket) => ticket.status === 'READY').length, hint: 'para entregar', icon: Check },
+    { label: 'Tiempo promedio', value: averagePrepMinutes == null ? '—' : `${Math.round(averagePrepMinutes)} min`, hint: 'Por comanda', icon: Clock3 },
+  ];
+  return <div className="space-y-5"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map((metric) => <RestaurantMetricCard key={metric.label} {...metric} />)}</div><div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar" role="tablist" aria-label="Estaciones de cocina">{stations.map((item) => <button key={item} type="button" role="tab" aria-selected={station === item} onClick={() => setStation(item)} className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-medium transition ${station === item ? 'border-primary bg-primary text-primary-foreground' : 'border-border/60 text-muted-foreground hover:border-primary/40'}`}>{item === 'ALL' ? 'Todas' : restaurantStationLabel(item)}</button>)}</div><div className="relative w-full sm:max-w-xs"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar comanda, mesa o platillo…" aria-label="Buscar en cocina" className="h-10 pl-9" /></div></div><KitchenBoardCanvas tickets={visibleTickets} onStatus={onStatus} canApprove={canApprove} /></div>;
+}
+
+function KitchenBoardCanvas({ tickets, onStatus, canApprove }: RestaurantKitchenBoardProps) {
   const columns = ['PENDING', 'IN_PREPARATION', 'READY'];
   const boardRef = useRef<HTMLElement | null>(null);
   const [tvMode, setTvMode] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const orderedTickets = useMemo(() => [...tickets].sort((left, right) => new Date(left.sentAt || 0).getTime() - new Date(right.sentAt || 0).getTime()), [tickets]);
   useEffect(() => {
     const onFullscreenChange = () => setTvMode(document.fullscreenElement === boardRef.current);
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const elapsedMinutes = (sentAt: string) => Math.max(0, Math.floor((now - new Date(sentAt).getTime()) / 60000));
   const toggleTvMode = async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -757,204 +1336,7 @@ function KitchenBoard({ tickets, onStatus, canApprove }: { tickets: RestaurantKi
       setTvMode((current) => !current);
     }
   };
-  return <section ref={boardRef} className={`rounded-2xl border border-border/60 bg-card p-5 shadow-sm ${tvMode ? 'overflow-y-auto bg-slate-950 p-8 text-white' : ''}`}><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Kitchen display</p><h2 className="mt-1 text-2xl font-black">Centro de preparación</h2><p className={`mt-1 text-sm ${tvMode ? 'text-slate-300' : 'text-muted-foreground'}`}>Las comandas se ordenan por hora de llegada para que cocina atienda primero lo más antiguo.</p></div><Button type="button" variant={tvMode ? 'secondary' : 'outline'} size="sm" className="gap-2 rounded-xl" onClick={() => void toggleTvMode}>{tvMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}{tvMode ? 'Salir de pantalla TV' : 'Modo TV'}</Button></div><div className="grid gap-4 lg:grid-cols-3">{columns.map((column) => { const columnTickets = orderedTickets.filter((ticket) => ticket.status === column); return <div key={column} className={`min-h-64 rounded-2xl border p-3 ${tvMode ? 'border-white/15 bg-white/5' : 'border-border/50 bg-muted/20'}`}><div className="mb-3 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-widest opacity-80">{kitchenStatus[column].label}</span><Badge variant="outline" className={tvMode ? 'border-white/30 text-white' : ''}>{columnTickets.length}</Badge></div><div className="space-y-3">{columnTickets.map((ticket, index) => <div key={ticket.id} className={`rounded-2xl border p-4 shadow-sm ${tvMode ? 'border-white/15 bg-slate-900' : 'border-border/60 bg-card'}`}><div className="flex items-start justify-between gap-3"><div><span className="text-lg font-black">{ticket.order.number}</span><p className="mt-1 text-xs opacity-70">#{index + 1} en cola · {ticket.station}</p></div><span className="text-xs opacity-70">{ticket.order.hotelReservation ? `Hab. ${ticket.order.hotelReservation.room.code}` : ticket.order.table?.code || '—'}</span></div><div className="mt-3 space-y-1 text-sm">{ticket.items.map(({ item }) => <div key={item.description}><p>{Number(item.quantity)} × {item.description}</p>{restaurantSnapshotLabel(item.options) && <p className="ml-4 text-xs text-amber-700 dark:text-amber-300">{restaurantSnapshotLabel(item.options)}</p>}{item.notes && <p className="ml-4 text-xs opacity-70">Nota: {item.notes}</p>}</div>)}</div>{canApprove && column === 'PENDING' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'IN_PREPARATION')}><Clock3 className="size-3" />Iniciar</Button>}{canApprove && column === 'IN_PREPARATION' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'READY')}>Marcar listo</Button>}{canApprove && column === 'READY' && <Button className="mt-4 w-full" size="sm" variant="secondary" onClick={() => onStatus(ticket, 'SERVED')}>Entregar</Button>}</div>)}</div></div>; })}</div></section>;
-}
-
-function MenuBoard({ menu, onSaved, canCreate, canEdit, canExport }: { menu: RestaurantMenuCategory[]; onSaved: () => Promise<void>; canCreate: boolean; canEdit: boolean; canExport: boolean }) {
-  const { user } = useAuth();
-  const emptyForm = { categoryId: '', name: '', description: '', price: '', taxRate: '15', prepStation: 'KITCHEN', options: [] as RestaurantMenuOptionGroup[] };
-  const [categoryName, setCategoryName] = useState('');
-  const [categoryDescription, setCategoryDescription] = useState('');
-  const [itemForm, setItemForm] = useState(emptyForm);
-  const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [theme, setTheme] = useState<'modern' | 'classic' | 'elegant' | 'rustic' | 'neon' | 'tropical' | 'editorial' | 'retro'>('modern');
-  const [showImages, setShowImages] = useState(true);
-  const [savingTheme, setSavingTheme] = useState(false);
-  const categoryId = itemForm.categoryId || menu[0]?.id || '';
-
-  useEffect(() => {
-    const controller = new AbortController();
-    restaurantService.getMenuSettings(controller.signal).then((settings) => {
-      if (settings?.theme) setTheme(settings.theme);
-      if (typeof settings?.showImages === 'boolean') setShowImages(settings.showImages);
-    }).catch(() => undefined);
-    return () => controller.abort();
-  }, []);
-
-  const saveSettings = async (nextTheme?: 'modern' | 'classic' | 'elegant' | 'rustic' | 'neon' | 'tropical' | 'editorial' | 'retro', nextShowImages?: boolean) => {
-    setSavingTheme(true);
-    const actionToken = beginNotificationAction();
-    try {
-      await restaurantService.updateMenuSettings({ theme: nextTheme ?? theme, showImages: nextShowImages ?? showImages });
-      if (nextTheme) setTheme(nextTheme);
-      if (typeof nextShowImages === 'boolean') setShowImages(nextShowImages);
-      toast.success('Diseño de la carta actualizado.');
-    } catch (error: unknown) {
-      toast.error(getApiErrorMessage(error, 'No se pudo guardar el diseño.'));
-    } finally {
-      completeNotificationAction(actionToken);
-      setSavingTheme(false);
-    }
-  };
-
-  const themeCards: Array<{ id: 'modern' | 'classic' | 'elegant' | 'rustic' | 'neon' | 'tropical' | 'editorial' | 'retro'; label: string; description: string; preview: string; header: string }> = [
-    { id: 'modern', label: 'Moderno', description: 'Fresco, verde y con degradados suaves.', preview: 'bg-[#f2faf5]', header: 'bg-gradient-to-br from-[#064e3b] to-[#10b981]' },
-    { id: 'classic', label: 'Clásico', description: 'Blanco y crema, elegancia de bistró.', preview: 'bg-[#faf7f0]', header: 'bg-[#3a3a3a]' },
-    { id: 'elegant', label: 'Elegante', description: 'Oscuro y sofisticado, estilo gourmet.', preview: 'bg-[#0f0f13]', header: 'bg-[#16161d]' },
-    { id: 'rustic', label: 'Rústico', description: 'Madera y papel, sabor casero.', preview: 'bg-[#f5efe4]', header: 'bg-[#3e2f1f]' },
-    { id: 'neon', label: 'Neón urbano', description: 'Contraste nocturno para bares y conceptos modernos.', preview: 'bg-[#0b1020]', header: 'bg-[#111827]' },
-    { id: 'tropical', label: 'Tropical', description: 'Color, frescura y energía para cafeterías y playa.', preview: 'bg-[#fff8e7]', header: 'bg-[#0f766e]' },
-    { id: 'editorial', label: 'Editorial', description: 'Composición tipo revista para una carta premium.', preview: 'bg-[#f5f2eb]', header: 'bg-[#7c2d12]' },
-    { id: 'retro', label: 'Retro diner', description: 'Inspiración fast food clásica con alto impacto visual.', preview: 'bg-[#f9edcf]', header: 'bg-[#9f1239]' },
-  ];
-
-  const exportMenu = async (format: 'pdf' | 'xlsx') => {
-    if (!canExport) return;
-    const rows = menu.flatMap((category) => category.items.map((item) => ({
-      Categoría: category.name,
-      Platillo: item.name,
-      Descripción: item.description || '',
-      Precio: Number(item.price || 0),
-      Moneda: item.currency || 'NIO',
-      Impuesto: Number(item.taxRate || 0),
-      Estación: item.prepStation,
-      Opciones: (item.options || []).map((group) => `${group.name}${group.required ? ' *' : ''}: ${group.choices.map((choice) => `${choice.name}${Number(choice.priceAdjustment) ? ` (+${money(choice.priceAdjustment, item.currency)})` : ''}`).join(', ')}`).join(' | '),
-      Estado: item.isAvailable ? 'Publicado' : 'Oculto',
-    })));
-    if (!rows.length) { toast.error('Agrega platillos antes de exportar la carta.'); return; }
-    try {
-      if (format === 'xlsx') {
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Carta');
-        XLSX.writeFile(workbook, buildDatedDownloadFileName(['carta_restaurante'], 'xlsx'));
-      } else {
-        await generateConfiguredReportSectionsPDF({
-          targetKey: 'restaurante.menu', title: 'Carta de Restaurante', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
-          sections: menu.map((category) => ({
-            id: `menu-${category.id}`, title: category.name,
-            headers: ['Platillo', 'Descripción', 'Precio', 'Opciones'],
-            rows: category.items.map((item) => [item.name, item.description || '', money(item.price, item.currency), (item.options || []).map((group) => `${group.name}: ${group.choices.map((choice) => `${choice.name}${Number(choice.priceAdjustment) ? ` (+${money(choice.priceAdjustment, item.currency)})` : ''}`).join(', ')}`).join(' | ') || '—']),
-          })),
-          fileName: buildDatedDownloadFileName(['carta_restaurante'], 'pdf'), forceNative: true,
-        });
-      }
-      toast.success(`Carta exportada en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
-    } catch (error: any) { toast.error(error?.message || 'No se pudo exportar la carta.'); }
-  };
-
-  const saveCategory = async () => {
-    if (!categoryName.trim()) { toast.error('Escribe el nombre de la categoría.'); return; }
-    setSaving(true);
-    const actionToken = beginNotificationAction();
-    try {
-      await restaurantService.createCategory({ name: categoryName.trim(), description: categoryDescription.trim() || undefined });
-      setCategoryName(''); setCategoryDescription('');
-      toast.success('Categoría creada.'); await onSaved();
-    } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo crear la categoría.')); }
-    finally { completeNotificationAction(actionToken); setSaving(false); }
-  };
-
-  const saveItem = async () => {
-    const price = Number(itemForm.price);
-    if (!categoryId || !itemForm.name.trim() || !Number.isFinite(price) || price < 0) {
-      toast.error('Completa categoría, nombre y un precio válido.'); return;
-    }
-    const invalidGroup = itemForm.options.find((group) => !group.name.trim() || !group.choices.length || group.choices.some((choice) => !choice.name.trim() || !Number.isFinite(Number(choice.priceAdjustment)) || Number(choice.priceAdjustment) < 0));
-    if (invalidGroup) { toast.error('Completa el nombre del grupo y sus opciones con precios adicionales válidos.'); return; }
-    setSaving(true);
-    const actionToken = beginNotificationAction();
-    try {
-      if (editingItemId) {
-        await restaurantService.updateMenuItem(editingItemId, { name: itemForm.name.trim(), description: itemForm.description.trim() || null, price, taxRate: Number(itemForm.taxRate) || 0, prepStation: itemForm.prepStation, options: itemForm.options });
-        toast.success('Platillo actualizado.');
-      } else {
-        await restaurantService.createMenuItem({ categoryId, name: itemForm.name.trim(), description: itemForm.description.trim() || undefined, price, taxRate: Number(itemForm.taxRate) || 0, prepStation: itemForm.prepStation, options: itemForm.options });
-        toast.success('Platillo agregado a la carta.');
-      }
-      setItemForm({ ...emptyForm, categoryId }); setEditingItemId(null); await onSaved();
-    } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo guardar el platillo.')); }
-    finally { completeNotificationAction(actionToken); setSaving(false); }
-  };
-
-  const editItem = (categoryId: string, item: RestaurantMenuItem) => {
-    setEditingItemId(item.id);
-    setItemForm({ categoryId, name: item.name, description: item.description || '', price: String(item.price), taxRate: String(item.taxRate || 0), prepStation: item.prepStation || 'KITCHEN', options: item.options || [] });
-  };
-
-  const updateOptionGroup = (groupId: string, patch: Partial<RestaurantMenuOptionGroup>) => setItemForm((current) => ({
-    ...current, options: current.options.map((group) => group.id === groupId ? { ...group, ...patch } : group),
-  }));
-  const addOptionGroup = () => setItemForm((current) => ({
-    ...current,
-    options: [...current.options, { id: `group-${crypto.randomUUID()}`, name: '', required: false, multiple: false, choices: [{ id: `choice-${crypto.randomUUID()}`, name: '', priceAdjustment: 0 }] }],
-  }));
-
-  const toggleItem = async (item: RestaurantMenuItem) => {
-    setSaving(true);
-    const actionToken = beginNotificationAction();
-    try { await restaurantService.updateMenuItem(item.id, { isAvailable: !item.isAvailable }); toast.success(item.isAvailable ? 'Platillo ocultado del menú público.' : 'Platillo publicado en el menú.'); await onSaved(); }
-    catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo cambiar la disponibilidad.')); }
-    finally { completeNotificationAction(actionToken); setSaving(false); }
-  };
-
-  return <section className="space-y-5">
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Administración de carta</p><h2 className="mt-1 text-2xl font-black">Menú, precios y estaciones</h2><p className="mt-1 text-sm text-muted-foreground">Los platillos disponibles también aparecen en el enlace público de cada mesa.</p></div><div className="flex items-center gap-2">{canExport && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" disabled={!menu.some((category) => category.items.length)}><Download className="size-4" />Exportar carta<ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => void exportMenu('pdf')}><FileText className="mr-2 size-4 text-rose-600" />PDF</DropdownMenuItem><DropdownMenuItem onClick={() => void exportMenu('xlsx')}><FileSpreadsheet className="mr-2 size-4 text-emerald-600" />Excel</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}<Settings2 className="size-6 text-muted-foreground/40" /></div></div>
-    <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div><p className="text-xs font-black uppercase tracking-widest text-primary">Diseño de la carta pública</p><h3 className="mt-1 text-lg font-black">Elige el estilo que verán tus clientes</h3></div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm font-bold">
-          <button type="button" role="switch" aria-checked={showImages} disabled={!canEdit} onClick={() => void saveSettings(undefined, !showImages)} className={`relative h-6 w-11 rounded-full transition-colors ${showImages ? 'bg-primary' : 'bg-muted'}`}>
-            <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${showImages ? 'left-[22px]' : 'left-0.5'}`} />
-          </button>
-          Mostrar fotos de platillos
-        </label>
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {themeCards.map((card) => (
-          <button key={card.id} type="button" disabled={savingTheme || !canEdit} onClick={() => void saveSettings(card.id, undefined)} className={`group overflow-hidden rounded-2xl border-2 text-left transition ${theme === card.id ? 'border-primary ring-4 ring-primary/10' : 'border-border/60 hover:border-primary/40'}`}>
-            <div className={`h-14 ${card.header} flex items-center px-3`}><span className="text-xs font-black uppercase tracking-wider text-white">{card.label}</span>{theme === card.id && <span className="ml-auto rounded-full bg-white/20 px-2 py-0.5 text-[9px] font-black text-white">Activo</span>}</div>
-            <div className={`p-3 ${card.preview}`}>
-              <div className="flex items-center gap-2">
-                <div className="size-7 rounded-lg bg-white shadow-sm" />
-                <div className="flex-1 space-y-1"><div className="h-1.5 w-3/4 rounded bg-current opacity-20" /><div className="h-1.5 w-1/2 rounded bg-current opacity-15" /></div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-1.5">
-                <div className="h-8 rounded-lg bg-white/80 shadow-sm" />
-                <div className="h-8 rounded-lg bg-white/80 shadow-sm" />
-              </div>
-            </div>
-            <div className="border-t border-border/60 p-3">
-              <p className="text-xs font-black">{card.label}</p>
-              <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{card.description}</p>
-            </div>
-          </button>
-        ))}
-      </div>
-      <p className="mt-3 text-xs text-muted-foreground">El diseño se aplica de inmediato en todos los enlaces QR de las mesas. El logo y colores provienen de la identidad de tu empresa.</p>
-    </div>
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-      <div className="space-y-5 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
-        <div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva categoría</p><h3 className="mt-1 text-lg font-black">Organiza tu carta</h3></div>
-        <Input placeholder="Ej. Postres" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} />
-        <Input placeholder="Descripción (opcional)" value={categoryDescription} onChange={(event) => setCategoryDescription(event.target.value)} />
-        <Button className="w-full" onClick={saveCategory} disabled={saving || !canCreate}><Plus className="size-4" />Crear categoría</Button>
-        <div className="border-t border-border/60 pt-4"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Categorías activas</p><div className="mt-3 flex flex-wrap gap-2">{menu.map((category) => <Badge key={category.id} variant="outline" className="rounded-md">{category.name} · {category.items.length}</Badge>)}{!menu.length && <span className="text-sm text-muted-foreground">Aún no hay categorías.</span>}</div></div>
-      </div>
-      <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
-        <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">{editingItemId ? 'Editar platillo' : 'Nuevo platillo'}</p><h3 className="mt-1 text-lg font-black">Contenido del menú</h3></div>{editingItemId && <Button variant="ghost" size="sm" onClick={() => { setEditingItemId(null); setItemForm({ ...emptyForm, categoryId: itemForm.categoryId }); }}>Cancelar</Button>}</div>
-        <div className="grid gap-3 sm:grid-cols-2"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={categoryId} onChange={(event) => setItemForm({ ...itemForm, categoryId: event.target.value })}><option value="">Selecciona categoría</option>{menu.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Input placeholder="Nombre del platillo" value={itemForm.name} onChange={(event) => setItemForm({ ...itemForm, name: event.target.value })} /><Input placeholder="Descripción" value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} /><Input type="number" min="0" step="0.01" placeholder="Precio NIO" value={itemForm.price} onChange={(event) => setItemForm({ ...itemForm, price: event.target.value })} /><Input type="number" min="0" max="100" step="0.01" placeholder="Impuesto %" value={itemForm.taxRate} onChange={(event) => setItemForm({ ...itemForm, taxRate: event.target.value })} /><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={itemForm.prepStation} onChange={(event) => setItemForm({ ...itemForm, prepStation: event.target.value })}><option value="KITCHEN">Cocina</option><option value="GRILL">Parrilla</option><option value="FRYER">Freidora</option><option value="BAR">Bar</option></select></div>
-        <fieldset disabled={saving || (editingItemId ? !canEdit : !canCreate)} className="mt-5 space-y-3 border-t border-border/60 pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="font-black">Opciones del platillo</h4><p className="text-xs text-muted-foreground">Configura tamaño, acompañamientos u otros adicionales con su precio.</p></div><Button type="button" variant="outline" size="sm" onClick={addOptionGroup}><Plus className="size-4" />Agregar grupo</Button></div>
-          {itemForm.options.map((group) => <div key={group.id} className="rounded-xl border border-border/60 bg-muted/20 p-3"><div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]"><Input aria-label="Nombre del grupo de opciones" placeholder="Ej. Tamaño" value={group.name} onChange={(event) => updateOptionGroup(group.id, { name: event.target.value })} /><label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={Boolean(group.required)} onChange={(event) => updateOptionGroup(group.id, { required: event.target.checked })} />Obligatorio</label><label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={Boolean(group.multiple)} onChange={(event) => updateOptionGroup(group.id, { multiple: event.target.checked })} />Múltiple</label><Button type="button" variant="ghost" size="icon" aria-label="Quitar grupo" onClick={() => setItemForm((current) => ({ ...current, options: current.options.filter((item) => item.id !== group.id) }))}><X className="size-4" /></Button></div>
-            <div className="mt-3 space-y-2">{group.choices.map((choice) => <div key={choice.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]"><Input aria-label="Nombre de la opción" placeholder="Ej. Individual" value={choice.name} onChange={(event) => updateOptionGroup(group.id, { choices: group.choices.map((item) => item.id === choice.id ? { ...item, name: event.target.value } : item) })} /><Input aria-label="Precio adicional de la opción" type="number" min="0" step="0.01" placeholder="Adicional C$" value={choice.priceAdjustment} onChange={(event) => updateOptionGroup(group.id, { choices: group.choices.map((item) => item.id === choice.id ? { ...item, priceAdjustment: Number(event.target.value) || 0 } : item) })} /><Button type="button" variant="ghost" size="icon" aria-label="Quitar opción" disabled={group.choices.length <= 1} onClick={() => updateOptionGroup(group.id, { choices: group.choices.filter((item) => item.id !== choice.id) })}><X className="size-4" /></Button></div>)}<Button type="button" size="sm" variant="ghost" onClick={() => updateOptionGroup(group.id, { choices: [...group.choices, { id: `choice-${crypto.randomUUID()}`, name: '', priceAdjustment: 0 }] })}><Plus className="size-3.5" />Agregar opción</Button></div>
-          </div>)}
-        </fieldset>
-        <Button className="mt-4" onClick={saveItem} disabled={saving || !menu.length || (editingItemId ? !canEdit : !canCreate)}><Check className="size-4" />{editingItemId ? 'Guardar cambios' : 'Agregar platillo'}</Button>
-      </div>
-    </div>
-    {!menu.length ? <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea una categoría y luego agrega tus primeros platillos." /> : <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{menu.map((category) => <div key={category.id} className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{category.name}</h3><p className="mt-1 text-xs text-muted-foreground">{category.description || 'Sin descripción'}</p></div><Badge variant="outline">{category.items.length}</Badge></div><div className="mt-4 space-y-2">{category.items.map((item) => <div key={item.id} className="rounded-xl border border-border/50 bg-muted/20 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-bold">{item.name}</p><p className="mt-1 text-xs text-muted-foreground">{item.prepStation} · {item.productId ? 'Inventario vinculado' : 'Sin inventario vinculado'}</p></div><span className="shrink-0 font-black text-primary">{money(item.price, item.currency)}</span></div><div className="mt-3 flex items-center justify-between gap-2"><Badge className={item.isAvailable ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-muted-foreground'}>{item.isAvailable ? 'Publicado' : 'Oculto'}</Badge><div className="flex gap-1"><Button variant="ghost" size="icon" className="size-8" onClick={() => editItem(category.id, item)} aria-label={`Editar ${item.name}`}><Pencil className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-8" onClick={() => void toggleItem(item)} disabled={saving} aria-label={item.isAvailable ? `Ocultar ${item.name}` : `Publicar ${item.name}`}>{item.isAvailable ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}</Button></div></div></div>)}</div></div>)}</div>}
-  </section>;
+  return <section ref={boardRef} className={`rounded-2xl border border-border/60 bg-card p-5 shadow-sm ${tvMode ? 'overflow-y-auto bg-slate-950 p-8 text-white' : ''}`}><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Operación de cocina</p><h2 className="mt-1 font-serif text-2xl font-medium italic">Preparación por estación</h2><p className={`mt-1 text-sm ${tvMode ? 'text-slate-300' : 'text-muted-foreground'}`}>Las comandas se ordenan por hora de llegada para que cocina atienda primero lo más antiguo.</p></div><Button type="button" variant={tvMode ? 'secondary' : 'outline'} size="sm" className="gap-2 rounded-xl" onClick={() => void toggleTvMode}>{tvMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}{tvMode ? 'Salir de pantalla TV' : 'Modo TV'}</Button></div><div className="grid gap-4 lg:grid-cols-3">{columns.map((column) => { const columnTickets = orderedTickets.filter((ticket) => ticket.status === column); const tone = column === 'PENDING' ? 'border-rose-200 bg-rose-50/70' : column === 'IN_PREPARATION' ? 'border-amber-200 bg-amber-50/70' : 'border-emerald-200 bg-emerald-50/70'; const title = column === 'PENDING' ? 'Pendiente' : column === 'IN_PREPARATION' ? 'Preparando' : 'Listo'; const timeClass = column === 'PENDING' ? 'text-rose-600' : column === 'IN_PREPARATION' ? 'text-amber-600' : 'text-emerald-600'; return <div key={column} className={`min-h-64 rounded-2xl border p-3 ${tvMode ? 'border-white/15 bg-white/5' : tone}`}><div className="mb-3 flex items-center justify-between"><span className="font-serif text-sm font-medium italic opacity-90">{title}</span><Badge variant="outline" className={tvMode ? 'border-white/30 text-white' : ''}>{columnTickets.length}</Badge></div><div className="space-y-3">{columnTickets.map((ticket, index) => <div key={ticket.id} className={`rounded-2xl border p-4 shadow-sm ${tvMode ? 'border-white/15 bg-slate-900' : 'border-border/60 bg-card'}`}><div className="flex items-start justify-between gap-3"><div><span className="text-lg font-black">#{ticket.order.number} <span className="font-medium text-muted-foreground">· {ticket.order.hotelReservation ? `Hab. ${ticket.order.hotelReservation.room.code}` : ticket.order.table ? `Mesa ${ticket.order.table.code}` : 'Para llevar'}</span></span><p className="mt-1 text-xs opacity-70">#{index + 1} en cola · {restaurantStationLabel(ticket.station)}</p></div><span className={`shrink-0 text-xs font-black ${tvMode ? 'text-white' : timeClass}`}>{column === 'PENDING' ? `Hace ${elapsedMinutes(ticket.sentAt)} min` : `${elapsedMinutes(ticket.sentAt)} min`}</span></div><div className="mt-3 space-y-1 text-sm">{ticket.items.map(({ item }) => <div key={item.description}><p>{Number(item.quantity)} × {item.description}</p>{restaurantSnapshotLabel(item.options) && <p className="ml-4 text-xs text-amber-700 dark:text-amber-300">{restaurantSnapshotLabel(item.options)}</p>}{item.notes && <p className="ml-4 text-xs opacity-70">Nota: {item.notes}</p>}</div>)}</div>{canApprove && column === 'PENDING' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'IN_PREPARATION')}><Clock3 className="size-3" />Iniciar preparación</Button>}{canApprove && column === 'IN_PREPARATION' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'READY')}>Marcar listo</Button>}{canApprove && column === 'READY' && <Button className="mt-4 w-full" size="sm" variant="secondary" onClick={() => onStatus(ticket, 'SERVED')}>Servido</Button>}</div>)}</div></div>; })}</div></section>;
 }
 
 function RestaurantOptionsDialog({ item, onClose, onConfirm }: { item: RestaurantMenuItem; onClose: () => void; onConfirm: (selected: RestaurantSelectedOptions) => void }) {
@@ -963,8 +1345,126 @@ function RestaurantOptionsDialog({ item, onClose, onConfirm }: { item: Restauran
   return <div className="nh-modal-root fixed inset-0 z-[70] flex items-center justify-center bg-foreground/50 p-3" role="dialog" aria-modal="true" aria-labelledby="restaurant-options-title"><div className="nh-modal-surface my-auto max-h-[min(92vh,calc(100dvh-1.5rem))] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-card p-5 shadow-2xl"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Opciones del platillo</p><h2 id="restaurant-options-title" className="mt-1 text-xl font-black">{item.name}</h2></div><button type="button" aria-label="Cerrar opciones" onClick={onClose} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="size-5" /></button></div><div className="mt-4 space-y-4">{(item.options || []).map((group) => <fieldset key={group.id}><legend className="text-sm font-black">{group.name}{group.required && <span className="ml-1 text-rose-600">*</span>}<span className="ml-2 text-xs font-medium text-muted-foreground">{group.multiple ? 'Puedes elegir varios' : 'Elige uno'}</span></legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{group.choices.map((choice) => { const value = selected[group.id]; const active = Array.isArray(value) ? value.includes(choice.id) : value === choice.id; return <button key={choice.id} type="button" aria-pressed={active} onClick={() => setSelected((current) => { const currentValue = current[group.id]; if (!group.multiple) return { ...current, [group.id]: active ? '' : choice.id }; const currentIds = Array.isArray(currentValue) ? currentValue : currentValue ? [currentValue] : []; return { ...current, [group.id]: currentIds.includes(choice.id) ? currentIds.filter((id) => id !== choice.id) : [...currentIds, choice.id] }; })} className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-3 text-left text-sm transition ${active ? 'border-primary bg-primary/10 ring-2 ring-primary/15' : 'border-border/60 hover:border-primary/40'}`}><span className="font-semibold">{choice.name}</span><span className="shrink-0 font-bold">{Number(choice.priceAdjustment) > 0 ? `+${money(choice.priceAdjustment, item.currency)}` : 'Incluido'}{active && <Check className="ml-1 inline size-4 text-primary" />}</span></button>; })}</div></fieldset>)}</div><div className="mt-5 flex flex-col-reverse gap-2 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm">Precio estimado: <strong>{money(Number(item.price) + restaurantOptionPrice(item, selected), item.currency)}</strong></p><div className="flex gap-2"><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={() => onConfirm(selected)} disabled={Boolean(missing)}><Check className="size-4" />Agregar a comanda</Button></div></div></div></div>;
 }
 
+function RestaurantCheckoutDialog({ order, balance, registers, customers, customerId, dueDate, allowPartialPayments, registerId, payments, onRegisterChange, onCustomerChange, onDueDateChange, onPaymentsChange, onClose, onConfirm }: { order: RestaurantOrder; balance: number | null; registers: Array<{ id: string; name: string }>; customers: RestaurantCustomerOption[]; customerId: string; dueDate: string; allowPartialPayments: boolean; registerId: string; payments: RestaurantPaymentLine[]; onRegisterChange: (value: string) => void; onCustomerChange: (value: string) => void; onDueDateChange: (value: string) => void; onPaymentsChange: (value: RestaurantPaymentLine[]) => void; onClose: () => void; onConfirm: () => Promise<void> }) {
+  const total = Number(balance ?? order.total ?? 0);
+  const paid = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+  const remainder = total - paid;
+  const updatePayment = (index: number, patch: Partial<RestaurantPaymentLine>) => onPaymentsChange(payments.map((payment, paymentIndex) => paymentIndex === index ? { ...payment, ...patch } : payment));
+  return <div className="nh-modal-root fixed inset-0 z-[60] flex items-center justify-center bg-foreground/60 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-checkout-title"><div className="nh-modal-surface my-auto max-h-[min(92vh,calc(100dvh-2rem))] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Caja global · cobro contextual</p><h2 id="restaurant-checkout-title" className="mt-1 font-serif text-2xl font-medium italic">Pedido {order.number}</h2><p className="mt-1 text-sm text-muted-foreground">La factura, inventario y contabilidad se procesan en Caja.</p></div><button type="button" onClick={onClose} className="size-9 rounded-xl p-2 text-muted-foreground hover:bg-muted" aria-label="Cerrar cobro"><X className="size-5" /></button></div><div className="mt-5 flex items-end justify-between rounded-2xl bg-primary p-5 text-primary-foreground"><div><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Total de la cuenta</p><p className="mt-1 text-3xl font-black">{money(total, order.currency)}</p></div><CreditCard className="size-8 opacity-80" /></div><label className="mt-5 block text-sm font-bold">Caja registradora<select value={registerId} onChange={(event) => onRegisterChange(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">{registers.length === 0 && <option value="">No hay cajas disponibles</option>}{registers.map((register) => <option key={register.id} value={register.id}>{register.name}</option>)}</select></label>{allowPartialPayments && <div className="mt-4 grid gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 sm:grid-cols-2"><label className="text-sm font-bold text-amber-950">Cliente para saldo<select value={customerId} onChange={(event) => onCustomerChange(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm font-normal"><option value="">Seleccionar cliente solo si dejas saldo</option>{customers.filter((customer) => customer.status !== 'INACTIVE').map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.code ? ` · ${customer.code}` : ''}</option>)}</select></label><label className="text-sm font-bold text-amber-950">Vencimiento<input type="date" value={dueDate} onChange={(event) => onDueDateChange(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm font-normal" /></label><p className="sm:col-span-2 text-xs font-medium text-amber-900">Solo se utiliza cuando el monto abonado es menor al total. El saldo queda en Ventas para su seguimiento.</p></div>}<div className="mt-5"><div className="flex items-center justify-between"><h3 className="font-black">Dividir el cobro</h3><Button variant="outline" size="sm" onClick={() => onPaymentsChange([...payments, { method: 'CARD', amount: '', reference: '' }])}><Plus className="size-3.5" />Medio de pago</Button></div><div className="mt-3 space-y-2">{payments.map((payment, index) => <div key={`${payment.method}-${index}`} className="grid gap-2 rounded-2xl border border-border/60 p-3 sm:grid-cols-[1fr_125px_auto]"><select aria-label={`Medio de pago ${index + 1}`} value={payment.method} onChange={(event) => updatePayment(index, { method: event.target.value as RestaurantPaymentLine['method'] })} className="h-10 rounded-xl border border-border bg-background px-3 text-sm"><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="TRANSFER">Transferencia</option><option value="CHECK">Cheque</option><option value="QR">Pago QR</option><option value="VOUCHER">Vale / consumo interno</option></select><Input aria-label={`Monto de pago ${index + 1}`} type="number" min="0" step="0.01" value={payment.amount} onChange={(event) => updatePayment(index, { amount: event.target.value })} placeholder="Monto" />{payments.length > 1 ? <Button variant="ghost" size="icon" onClick={() => onPaymentsChange(payments.filter((_, paymentIndex) => paymentIndex !== index))} aria-label="Quitar medio de pago"><X className="size-4" /></Button> : <span />}{['CARD', 'TRANSFER', 'CHECK', 'QR', 'VOUCHER'].includes(payment.method) && <Input aria-label={`Referencia de pago ${index + 1}`} className="sm:col-span-3" value={payment.reference} onChange={(event) => updatePayment(index, { reference: event.target.value })} placeholder="Referencia (opcional)" />}</div>)}</div></div><div className={`mt-4 flex items-center justify-between rounded-xl px-3 py-3 text-sm font-bold ${Math.abs(remainder) < 0.01 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}><span>{Math.abs(remainder) < 0.01 ? 'Distribución completa' : remainder > 0 ? 'Pendiente por distribuir' : 'El pago supera el total'}</span><span>{money(Math.abs(remainder), order.currency)}</span></div><div className="mt-5 flex flex-col-reverse gap-2 border-t border-border/60 pt-4 sm:flex-row sm:justify-end"><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={!registerId || remainder < -0.01 || (remainder > 0.01 && (!customerId || !dueDate))} onClick={() => void onConfirm()}><CreditCard className="size-4" />{remainder > 0.01 ? 'Registrar abono' : 'Emitir factura y cobrar'}</Button></div></div></div>;
+}
+
+type DeliveryBoardProps = {
+  orders: RestaurantOrder[];
+  canApprove: boolean;
+  onUpdate: (order: RestaurantOrder, body: { status?: RestaurantOrder['deliveryStatus']; riderName?: string; address?: string; reference?: string }) => Promise<void>;
+  onOpenDetail: (order: RestaurantOrder) => void;
+  onCheckout: (order: RestaurantOrder) => void;
+};
+
+const deliveryStatusLabel: Record<string, string> = {
+  PENDING: 'Por preparar',
+  PREPARING: 'En preparación',
+  READY: 'Listo',
+  OUT_FOR_DELIVERY: 'En ruta',
+  DELIVERED: 'Entregado',
+  CANCELLED: 'Cancelado',
+};
+
+function resolvedDeliveryStatus(order: RestaurantOrder) {
+  if (order.deliveryStatus) return order.deliveryStatus;
+  const fulfillmentStatus = String(order.fulfillmentStatus || '').toUpperCase();
+  if (fulfillmentStatus === 'DELIVERED') return 'DELIVERED';
+  if (fulfillmentStatus === 'OUT_FOR_DELIVERY') return 'OUT_FOR_DELIVERY';
+  if (fulfillmentStatus === 'READY') return 'READY';
+  if (['READY', 'SERVED'].includes(order.status)) return 'READY';
+  if (restaurantOrderPreparationIsOpen(order)) return 'PREPARING';
+  return 'PENDING';
+}
+
+function DeliveryBoard({ orders, canApprove, onUpdate, onOpenDetail, onCheckout }: DeliveryBoardProps) {
+  const deliveryOrders = useMemo(() => orders.filter((order) => ['DELIVERY', 'TAKEAWAY'].includes(order.type)), [orders]);
+  const [selectedId, setSelectedId] = useState<string | null>(deliveryOrders[0]?.id || null);
+  const [riderName, setRiderName] = useState('');
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<'ALL' | 'DELIVERY' | 'TAKEAWAY' | 'PREPARING' | 'READY' | 'OUT_FOR_DELIVERY'>('ALL');
+  const selected = deliveryOrders.find((order) => order.id === selectedId) || deliveryOrders[0] || null;
+  const visibleOrders = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase('es');
+    return deliveryOrders.filter((order) => {
+      const status = resolvedDeliveryStatus(order);
+      const matchesFilter = filter === 'ALL' || filter === order.type || filter === status;
+      if (!matchesFilter) return false;
+      if (!normalizedQuery) return true;
+      return [order.number, order.customerName, order.customerPhone, order.deliveryAddress, order.deliveryReference, ...order.items.map((item) => item.description)].filter(Boolean).join(' ').toLocaleLowerCase('es').includes(normalizedQuery);
+    });
+  }, [deliveryOrders, filter, query]);
+  useEffect(() => {
+    if (!selectedId || !deliveryOrders.some((order) => order.id === selectedId)) setSelectedId(deliveryOrders[0]?.id || null);
+  }, [deliveryOrders, selectedId]);
+  const counts = {
+    active: deliveryOrders.filter((order) => !['DELIVERED', 'CANCELLED'].includes(resolvedDeliveryStatus(order))).length,
+    pending: deliveryOrders.filter((order) => ['PENDING', 'PREPARING'].includes(resolvedDeliveryStatus(order))).length,
+    ready: deliveryOrders.filter((order) => resolvedDeliveryStatus(order) === 'READY').length,
+    delivered: deliveryOrders.filter((order) => resolvedDeliveryStatus(order) === 'DELIVERED').length,
+  };
+
+  const advance = async (status: NonNullable<RestaurantOrder['deliveryStatus']>) => {
+    if (!selected) return;
+    await onUpdate(selected, { status, riderName: riderName.trim() || undefined });
+  };
+
+  return <section className="space-y-5">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {[
+        { label: 'Delivery activos', value: counts.active, hint: 'en preparación o ruta', icon: Truck },
+        { label: 'Retiro pendientes', value: counts.pending, hint: 'por preparar', icon: ClipboardList },
+        { label: 'Listos para entrega', value: counts.ready, hint: 'esperando cliente o repartidor', icon: Check },
+        { label: 'Entregados hoy', value: counts.delivered, hint: '+20% vs. ayer', icon: CreditCard },
+      ].map((metric) => <RestaurantMetricCard key={metric.label} {...metric} />)}
+    </div>
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+      <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Pedidos por entregar y retirar</p><Truck className="size-6 text-primary" /></div>
+        <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por número, cliente o teléfono…" aria-label="Buscar entregas y retiros" className="h-11 pl-10" /></div>
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Filtros de entrega y retiro">{([{ id: 'ALL', label: `Todos (${deliveryOrders.length})` }, { id: 'DELIVERY', label: 'Delivery' }, { id: 'TAKEAWAY', label: 'Retiro' }, { id: 'PREPARING', label: 'En preparación' }, { id: 'READY', label: 'Listos' }, { id: 'OUT_FOR_DELIVERY', label: 'En ruta' }] as const).map((item) => <button key={item.id} type="button" role="tab" aria-selected={filter === item.id} onClick={() => setFilter(item.id)} className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-bold ${filter === item.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border/60 text-muted-foreground hover:border-primary/40'}`}>{item.label}</button>)}</div>
+        <div className="mt-4 space-y-2">{deliveryOrders.length === 0 ? <EmptyState icon={<Truck className="size-8" />} title="No hay pedidos para entregar" description="Los pedidos creados desde POS o la carta pública con modalidad delivery o retiro aparecerán aquí." /> : visibleOrders.length === 0 ? <EmptyState icon={<Search className="size-7" />} title="No hay resultados" description="Cambia el filtro o la búsqueda para ver otras órdenes." /> : visibleOrders.map((order) => { const status = resolvedDeliveryStatus(order); const isPickup = order.type === 'TAKEAWAY'; return <button key={order.id} type="button" onClick={() => { setSelectedId(order.id); setRiderName(order.assignedRiderName || ''); }} className={`grid w-full gap-2 rounded-xl border p-3 text-left transition sm:grid-cols-[120px_minmax(0,1fr)_120px_95px] sm:items-center ${selected?.id === order.id ? 'border-primary bg-accent/10 ring-2 ring-primary/10' : 'border-border/60 hover:border-primary/40'}`}><div><p className="font-black">{order.number}</p><p className="mt-1 text-xs text-muted-foreground">{order.createdAt ? new Date(order.createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '—'}</p></div><div className="min-w-0"><div className="flex items-center gap-2"><Badge variant="outline" className={isPickup ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}>{isPickup ? 'Retiro' : 'Delivery'}</Badge><p className="truncate text-sm font-bold">{order.customerName || 'Cliente sin nombre'}</p></div><p className="truncate text-xs text-muted-foreground">{order.deliveryAddress || order.deliveryReference || order.customerPhone || 'Retiro / dirección pendiente'}</p></div><Badge variant="outline" className={status === 'DELIVERED' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : status === 'OUT_FOR_DELIVERY' ? 'border-blue-200 bg-blue-50 text-blue-700' : status === 'READY' ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-amber-200 bg-amber-50 text-amber-700'}>{deliveryStatusLabel[status] || status}</Badge><span className="text-right text-sm font-black text-accent">{money(order.total, order.currency)}</span></button>; })}</div>
+      </div>
+      {selected ? <aside className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Detalle de {selected.type === 'TAKEAWAY' ? 'retiro' : 'delivery'}</p><h3 className="mt-1 font-serif text-2xl font-medium italic text-primary">{selected.number}</h3><p className="mt-1 text-sm text-muted-foreground">{selected.customerName || 'Cliente sin nombre'} · {selected.customerPhone || 'sin teléfono'}</p></div><Badge variant="outline">{deliveryStatusLabel[resolvedDeliveryStatus(selected)] || resolvedDeliveryStatus(selected)}</Badge></div><div className="mt-5 space-y-3 text-sm"><div className="rounded-xl bg-muted/30 p-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{selected.type === 'TAKEAWAY' ? 'Lugar de retiro' : 'Dirección de entrega'}</p><p className="mt-1 font-semibold">{selected.deliveryAddress || 'Retiro en restaurante'}</p>{selected.deliveryReference && <p className="mt-1 text-xs text-muted-foreground">Referencia: {selected.deliveryReference}</p>}</div><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos ({selected.items.length})</p><div className="mt-2 space-y-1">{selected.items.slice(0, 5).map((item) => <div key={item.id} className="flex justify-between gap-3"><span>{Number(item.quantity)} × {item.description}</span><span className="font-bold text-primary">{money(item.total, selected.currency)}</span></div>)}</div></div><label className="block text-xs font-bold text-muted-foreground">Responsable / repartidor<Input className="mt-1" value={riderName} onChange={(event) => setRiderName(event.target.value)} placeholder="Nombre del responsable" /></label></div><div className="mt-5 border-t border-border/60 pt-4"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Seguimiento</p><div className="mt-3 space-y-2">{['PENDING', 'PREPARING', 'READY', ...(selected.type === 'DELIVERY' ? ['OUT_FOR_DELIVERY', 'DELIVERED'] : ['DELIVERED'])].map((step) => <div key={step} className="flex items-center gap-2 text-xs"><span className={`size-2 rounded-full ${resolvedDeliveryStatus(selected) === step ? 'bg-accent ring-4 ring-accent/20' : 'bg-border'}`} /><span className={resolvedDeliveryStatus(selected) === step ? 'font-bold text-primary' : 'text-muted-foreground'}>{deliveryStatusLabel[step]}</span></div>)}</div></div><div className="mt-5 grid gap-2 sm:grid-cols-2">{canApprove && ['PENDING', 'PREPARING'].includes(resolvedDeliveryStatus(selected)) && <Button onClick={() => void advance('READY')}><Check className="size-4" />Marcar listo</Button>}{canApprove && resolvedDeliveryStatus(selected) === 'READY' && selected.type === 'DELIVERY' && <Button onClick={() => void advance('OUT_FOR_DELIVERY')} disabled={!riderName.trim()}><Truck className="size-4" />Enviar en ruta</Button>}{canApprove && (resolvedDeliveryStatus(selected) === 'OUT_FOR_DELIVERY' || (resolvedDeliveryStatus(selected) === 'READY' && selected.type === 'TAKEAWAY')) && <Button onClick={() => void advance('DELIVERED')}><Check className="size-4" />Marcar entregado</Button>}<Button variant="outline" onClick={() => onOpenDetail(selected)}>Ver comanda</Button>{canApprove && ['READY', 'DELIVERED'].includes(resolvedDeliveryStatus(selected)) && selected.status !== 'PAID' && <Button variant="outline" onClick={() => onCheckout(selected)}><CreditCard className="size-4" />Cobrar</Button>}</div></aside> : <EmptyState icon={<Truck className="size-8" />} title="Selecciona un pedido" description="Aquí aparecerán los datos de entrega, productos y acciones del pedido." />}
+    </div>
+  </section>;
+}
+
+function ReportsVisuals({ summary }: { summary: RestaurantSummary | null }) {
+  if (!summary) return null;
+  const channels = summary.byChannel || [];
+  const hourly = summary.hourlySales || [];
+  const maxHour = Math.max(...hourly.map((entry) => entry.total), 1);
+  const maxChannel = Math.max(...channels.map((entry) => entry.total), 1);
+  const prep = summary.averagePrepMinutes == null ? '—' : `${Math.round(summary.averagePrepMinutes)} min`;
+  return <section className="mt-5 space-y-5">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {[
+        { label: 'Ventas totales', value: money(summary.total), hint: `${summary.orders} pedidos` },
+        { label: 'Ticket promedio', value: money(summary.orders ? summary.total / summary.orders : 0), hint: 'por pedido' },
+        { label: 'Pedidos del período', value: String(summary.orders), hint: 'no cancelados' },
+        { label: 'Preparación promedio', value: prep, hint: 'desde envío a cocina' },
+        { label: 'Margen estimado', value: summary.marginEstimated == null ? 'Pendiente' : `${summary.marginEstimated.toFixed(1)}%`, hint: summary.marginEstimated == null ? 'requiere recetas y costos' : 'según configuración' },
+      ].map((card, index) => <RestaurantMetricCard key={card.label} label={card.label} value={card.value} hint={card.hint} icon={[CreditCard, BarChart3, ClipboardList, Clock3, Check][index]} />)}
+    </div>
+    <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
+      <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h3 className="font-serif text-xl font-medium italic">Ventas por hora</h3><p className="mt-1 text-xs text-muted-foreground">Distribución de ventas según la hora de creación.</p></div><BarChart3 className="size-5 text-primary" /></div><div className="mt-5 flex h-44 items-end gap-1 border-b border-border/60 px-1">{hourly.map((entry) => <div key={entry.hour} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`${entry.hour}:00 · ${money(entry.total)}`}><div className="w-full max-w-5 rounded-t-md bg-primary/70 transition group-hover:bg-primary" style={{ height: `${Math.max(4, (entry.total / maxHour) * 100)}%` }} /><span className="text-[9px] text-muted-foreground">{entry.hour % 3 === 0 ? `${entry.hour}h` : ''}</span></div>)}</div></div>
+      <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><h3 className="font-serif text-xl font-medium italic">Ventas por canal</h3><p className="mt-1 text-xs text-muted-foreground">Qué modalidad genera el ingreso.</p><div className="mt-5 space-y-4">{channels.length ? channels.map((channel) => <div key={channel.type}><div className="flex justify-between gap-2 text-sm"><span className="font-semibold">{channel.type === 'DINE_IN' ? 'Salón' : channel.type === 'TAKEAWAY' ? 'Retiro' : channel.type === 'DELIVERY' ? 'Delivery' : channel.type === 'QR' ? 'QR' : channel.type}</span><span className="font-black">{money(channel.total)}</span></div><div className="mt-1 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${(channel.total / maxChannel) * 100}%` }} /></div><p className="mt-1 text-[11px] text-muted-foreground">{channel.orders} pedidos</p></div>) : <p className="text-sm text-muted-foreground">Sin canales registrados.</p>}</div></div>
+    </div>
+    <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+      <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><h3 className="font-serif text-xl font-medium italic">Productos más vendidos</h3><div className="mt-4 space-y-3">{summary.topItems?.slice(0, 5).map((item) => <div key={item.description} className="flex items-center gap-3"><span className="w-32 truncate text-sm font-semibold">{item.description}</span><div className="h-2 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary/75" style={{ width: `${Math.min(100, Number(item._sum.quantity || 0) / Math.max(1, Number(summary.topItems?.[0]?._sum.quantity || 1)) * 100)}%` }} /></div><span className="text-xs font-black text-muted-foreground">{Number(item._sum.quantity || 0)} uds.</span></div>)}</div></div>
+      <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><h3 className="font-serif text-xl font-medium italic">Rendimiento operativo</h3><div className="mt-4 divide-y divide-border/60">{[{ label: 'Descuentos aplicados', value: money(summary.discounts || 0) }, { label: 'Tiempo de preparación', value: prep }, { label: 'Margen', value: summary.marginEstimated == null ? 'No calculable sin recetas' : `${summary.marginEstimated.toFixed(1)}%` }].map((item) => <div key={item.label} className="flex items-center justify-between gap-3 py-3 text-sm"><span className="text-muted-foreground">{item.label}</span><strong>{item.value}</strong></div>)}</div></div>
+    </div>
+    {summary.waiters?.length ? <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><h3 className="font-serif text-xl font-medium italic">Responsables destacados</h3><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{summary.waiters.slice(0, 6).map((waiter, index) => <div key={waiter.userId} className="flex items-center justify-between rounded-xl bg-muted/30 px-3 py-3 text-sm"><span><strong className="mr-2 text-primary">{index + 1}</strong>{waiter.name}</span><span className="text-right"><strong className="block">{money(waiter.total)}</strong><small className="text-muted-foreground">{waiter.orders} pedidos</small></span></div>)}</div></div> : null}
+  </section>;
+}
+
 function ReportsBoard({ summary, canExport, onExport }: { summary: RestaurantSummary | null; canExport: boolean; onExport: (format: 'pdf' | 'xlsx') => void }) {
   const averageTicket = summary && summary.orders > 0 ? summary.total / summary.orders : 0;
   const bestSeller = summary?.topItems?.[0]?.description || 'Sin datos';
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Rendimiento de restaurante</p><h2 className="mt-1 text-2xl font-black">Ventas y productos destacados</h2><p className="mt-1 text-sm text-muted-foreground">Lectura rápida del período operativo actual.</p></div>{canExport && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="gap-2"><Download className="size-4" />Exportar<ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="rounded-xl"><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('pdf')}><FileText className="size-3.5 text-rose-600" />Exportar PDF</DropdownMenuItem><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" />Exportar Excel</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}</div>{!summary ? <EmptyState icon={<BarChart3 className="size-8" />} title="Sin datos todavía" description="El resumen aparecerá cuando se registren comandas." /> : <><div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ticket promedio</p><p className="mt-2 text-2xl font-black">{money(averageTicket)}</p><p className="mt-1 text-xs text-muted-foreground">Por comanda operativa</p></div><div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Impuestos</p><p className="mt-2 text-2xl font-black">{money(summary.tax)}</p><p className="mt-1 text-xs text-muted-foreground">Incluidos en el período</p></div><div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Más vendido</p><p className="mt-2 truncate text-lg font-black">{bestSeller}</p><p className="mt-1 text-xs text-muted-foreground">Según total acumulado</p></div></div><div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><div className="rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Ventas operativas</p><p className="mt-2 text-4xl font-black">{money(summary.total)}</p><p className="mt-2 text-sm text-primary-foreground/70">{summary.orders} comandas no canceladas</p><div className="mt-6 space-y-3 text-sm"><div className="flex justify-between"><span>Subtotal</span><span>{money(summary.subtotal)}</span></div><div className="flex justify-between"><span>Impuestos</span><span>{money(summary.tax)}</span></div></div></div><div><h3 className="font-black">Top de platillos</h3><div className="mt-3 space-y-2">{summary.topItems?.map((item) => <div key={item.description} className="flex items-center justify-between rounded-xl border border-border/60 p-3"><span className="text-sm font-semibold">{item.description}</span><span className="text-sm font-black">{money(item._sum.total)}</span></div>)}</div></div></div></>}</section>;
+  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Rendimiento de restaurante</p><h2 className="mt-1 font-serif text-2xl font-medium italic">Ventas y productos destacados</h2><p className="mt-1 text-sm text-muted-foreground">Lectura rápida del período operativo actual.</p></div>{canExport && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="gap-2"><Download className="size-4" />Exportar<ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="rounded-xl"><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('pdf')}><FileText className="size-3.5 text-rose-600" />Exportar PDF</DropdownMenuItem><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" />Exportar Excel</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}</div>{!summary ? <EmptyState icon={<BarChart3 className="size-8" />} title="Sin datos todavía" description="El resumen aparecerá cuando se registren comandas." /> : <><div className="mb-5 grid gap-3 sm:grid-cols-3"><RestaurantMetricCard label="Ticket promedio" value={money(averageTicket)} hint="Por comanda operativa" icon={CreditCard} /><RestaurantMetricCard label="Impuestos" value={money(summary.tax)} hint="Incluidos en el período" icon={BarChart3} /><RestaurantMetricCard label="Más vendido" value={bestSeller} hint="Según total acumulado" icon={Check} /></div><div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><div className="rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Ventas operativas</p><p className="mt-2 text-4xl font-black">{money(summary.total)}</p><p className="mt-2 text-sm text-primary-foreground/70">{summary.orders} comandas no canceladas</p><div className="mt-6 space-y-3 text-sm"><div className="flex justify-between"><span>Subtotal</span><span>{money(summary.subtotal)}</span></div><div className="flex justify-between"><span>Impuestos</span><span>{money(summary.tax)}</span></div></div></div><div><h3 className="font-serif text-xl font-medium italic">Top de platillos</h3><div className="mt-3 space-y-2">{summary.topItems?.map((item) => <div key={item.description} className="flex items-center justify-between rounded-xl border border-border/60 p-3"><span className="text-sm font-semibold">{item.description}</span><span className="text-sm font-black text-primary">{money(item._sum.total)}</span></div>)}</div></div></div></>}</section>;
 }

@@ -158,6 +158,9 @@ function DashboardLayout() {
   const isAuthorizedSubmodule = (module: string | undefined, subModule: string | undefined) => {
     if (!module || !subModule) return true;
     if (HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subModule)) return false;
+    if (module === 'restaurante' && subModule === 'configuracion') {
+      return Boolean(user?.isTenantAdmin || user?.isPlatformAdmin) && canPerform('RESTAURANT', 'view');
+    }
     const requiredModules = SIDEBAR_SUBMENU_MODULE_REQUIREMENTS[`${module}:${subModule}`]
       || SIDEBAR_SUBMENU_MODULE_REQUIREMENTS[subModule];
     // Internal tabs and one-off context values are validated by their own

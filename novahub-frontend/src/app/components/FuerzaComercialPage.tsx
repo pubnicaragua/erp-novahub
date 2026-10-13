@@ -9,12 +9,13 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const isSuperAdmin = user?.role === 'superadmin';
-  const isAuthorizedCollaborator = user?.userType === 'collaborator' && hasAccess('fuerza-comercial');
+  const isAuthorizedUser = Boolean(user) && hasAccess('fuerza-comercial');
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
   const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const googleMapsMapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
+  const tenantLogo = user?.clientTenant?.logo || user?.sessionBranding?.logo || isotipoUrl;
   const view = activeSubModule === 'fuerza-comercial-kanban' ? 'kanban' : activeSubModule === 'fuerza-comercial-historial' ? 'history' : 'map';
-  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(isotipoUrl)}&view=${view}&userId=${encodeURIComponent(user?.id || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&mapId=${encodeURIComponent(googleMapsMapId)}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
+  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(tenantLogo)}&companyLogo=${encodeURIComponent(tenantLogo)}&view=${view}&userId=${encodeURIComponent(user?.id || '')}&tenantId=${encodeURIComponent(user?.clientTenantId || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&mapId=${encodeURIComponent(googleMapsMapId)}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
 
   useEffect(() => {
     const onMapMessage = (event: MessageEvent) => {
@@ -30,14 +31,14 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     setMapFullscreen(false);
   }, [activeSubModule]);
 
-  if (!isSuperAdmin && !isAuthorizedCollaborator) {
+  if (!isSuperAdmin && !isAuthorizedUser) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background p-6">
         <div className="max-w-md rounded-3xl border border-border/60 bg-card p-8 text-center shadow-xl">
           <ShieldAlert className="mx-auto mb-4 size-10 text-destructive" />
           <h1 className="text-2xl font-black tracking-tight">Acceso restringido</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Fuerza Comercial está disponible únicamente para Super Admin y colaboradores autorizados.
+            Fuerza Comercial no está habilitada para tu empresa o tu rol actual.
           </p>
         </div>
       </div>

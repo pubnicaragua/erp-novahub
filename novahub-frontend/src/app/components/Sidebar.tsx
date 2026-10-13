@@ -164,11 +164,14 @@ const menuItems: MenuItem[] = [
     icon: <ChefHat className="size-5" />,
     section: 'Operaciones',
     submenu: [
+      { id: 'operacion-pos', label: 'Operación POS', icon: <ShoppingBag className="size-4" /> },
       { id: 'salon', label: 'Salón y mesas', icon: <LayoutDashboard className="size-4" /> },
       { id: 'comandas', label: 'Comandas', icon: <ClipboardList className="size-4" /> },
       { id: 'cocina', label: 'Cocina', icon: <ChefHat className="size-4" /> },
-      { id: 'carta', label: 'Carta', icon: <ShoppingBag className="size-4" /> },
+      { id: 'carta', label: 'Carta y menú', icon: <ShoppingBag className="size-4" /> },
+      { id: 'entrega-retiro', label: 'Entrega y retiro', icon: <Truck className="size-4" /> },
       { id: 'reportes-restaurante', label: 'Reportes', icon: <BarChart3 className="size-4" /> },
+      { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
     ],
   },
   {
@@ -321,6 +324,17 @@ const menuItems: MenuItem[] = [
       { id: 'calendario', label: 'Calendario', icon: <CalendarDays className="size-4" /> },
       { id: 'reuniones', label: 'Reuniones', icon: <Users className="size-4" /> },
     ]
+  },
+  {
+    id: 'fuerza-comercial',
+    label: 'Fuerza Comercial',
+    icon: <MapPinned className="size-5" />,
+    section: 'Operaciones',
+    submenu: [
+      { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
+      { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
+      { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: <History className="size-4" /> },
+    ],
   },
   {
     id: 'asana',
@@ -648,6 +662,15 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
+    // Operación POS is the restaurant's main entry point. Keep it visible when
+    // the order permission is available even if an older module-view policy
+    // has not yet persisted this newly introduced view id.
+    if (parentId === 'restaurante' && subId === 'operacion-pos') {
+      return canPerform('RESTAURANT_ORDERS', 'view') || canPerform('RESTAURANT', 'view');
+    }
+    if (parentId === 'restaurante' && subId === 'configuracion') {
+      return Boolean(user.isTenantAdmin || user.isPlatformAdmin) && canPerform('RESTAURANT', 'view');
+    }
     if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, subId)) return false;
     const parentMod = PARENT_MODULE_MAP[parentId] || (parentId === 'inventario' ? 'INVENTORY' : null);
     const isForceSalesPlatformUser = parentId === 'fuerza-comercial'

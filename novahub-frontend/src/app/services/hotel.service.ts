@@ -69,5 +69,5 @@ export const hotelService = {
   issueGuestLink: (id: string) => api.idempotentPost<{ token: string; reservationNumber: string }>(`/hotel/reservations/${id}/guest-link`, {}),
   revokeGuestLink: (id: string) => api.idempotentPost<{ success: boolean }>(`/hotel/reservations/${id}/guest-link/revoke`, {}),
   getGuestMenu: (token: string, signal?: AbortSignal) => api.get<{ table: { name: string; code: string }; categories: RestaurantMenuCategory[]; branding: RestaurantPublicBranding }>(`/hotel/public/${encodeURIComponent(token)}/menu`, { signal }),
-  createGuestOrder: (token: string, body: { items: Array<{ menuItemId: string; quantity: number; selectedOptions?: Record<string, string | string[]> }>; notes?: string }) => api.idempotentPost<any>(`/hotel/public/${encodeURIComponent(token)}/orders`, body),
+  createGuestOrder: (token: string, body: { items: Array<{ menuItemId: string; quantity: number; selectedOptions?: Record<string, string | string[]> }>; notes?: string; paymentMethod?: 'CASH' | 'CARD'; splitRequested?: boolean }) => api.idempotentPost<any>(`/hotel/public/${encodeURIComponent(token)}/orders`, body),
 };

@@ -832,15 +832,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return false;
     if (!user.isPlatformAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
 
-    // Fuerza Comercial es una superficie cerrada: solo Super Admin y
-    // colaboradores expresamente habilitados pueden verla.
+    // En tenant, Fuerza Comercial es un módulo comercial normal: la
+    // suscripción y la matriz de Roles/Permisos determinan su acceso. La
+    // excepción de plataforma se conserva para la consola interna de NovaHub.
     if (module === 'fuerza-comercial') {
       if (user.isPlatformAdmin) {
         return user.role === 'superadmin'
           || (user.role === 'platform_quote_user'
             && (user.platformPermissions.includes('PLATFORM_QUOTES') || user.platformPermissions.includes('PLATFORM_FORCE_SALES')));
       }
-      if (user.userType !== 'collaborator') return false;
     }
 
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
