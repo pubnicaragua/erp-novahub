@@ -626,11 +626,26 @@ function AccountMappingQuickSetupDialog({
 }) {
   const fields = useMemo(() => modules.flatMap(module => module.fields.map(field => ({ module, field }))), [modules])
   const fieldId = (moduleId: string, fieldKey: string) => `${moduleId}.${fieldKey}`
-  const matchesFor = (moduleId: string, fieldKey: string) => suggestions?.[moduleId]?.[fieldKey]?.matches || []
-  const uniqueSuggestionFor = (moduleId: string, fieldKey: string) => {
-    const matches = matchesFor(moduleId, fieldKey)
-    const first = matches[0]
-    return first && matches.filter(match => match.score === first.score).length === 1 ? first : null
+  const matchesFor = (moduleId: string, fieldKey: string) =>
+    [...(suggestions?.[moduleId]?.[fieldKey]?.matches || [])]
+      .sort((left, right) => right.score - left.score || left.code.localeCompare(right.code))
+  const fallbackAccountsFor = (moduleId: string, field: ModuleField) => {
+    const ignoredWords = new Set(['a', 'al', 'con', 'cuenta', 'cuentas', 'de', 'del', 'el', 'en', 'la', 'las', 'los', 'para', 'por', 'un', 'una'])
+    const fieldTerms = new Set(
+      normalizeText(`${field.label} ${field.defaultName}`).split(' ').filter(term => term.length > 2 && !ignoredWords.has(term)),
+    )
+    const scoreName = (account: AccountInfo) => normalizeText(`${account.name} ${account.detailType || ''} ${account.subtype || ''}`)
+      .split(' ')
+      .filter(term => fieldTerms.has(term)).length
+
+    return Array.from(accountsByCode.values())
+      .filter(account => !getAccountOptionState(account, field, moduleId).disabled)
+      .sort((left, right) => scoreName(right) - scoreName(left) || left.code.localeCompare(right.code))
+  }
+  const bestCandidateCodeFor = (moduleId: string, field: ModuleField) => {
+    const bestMatch = matchesFor(moduleId, field.key)[0]
+    if (bestMatch) return bestMatch.code
+    return fallbackAccountsFor(moduleId, field)[0]?.code || ''
   }
   const buildInitialSelection = () => {
     const nextCodes: Record<string, string> = {}
@@ -639,8 +654,7 @@ function AccountMappingQuickSetupDialog({
       const currentCode = accountMappings[module.id]?.[field.key] || field.defaultCode
       const currentAccount = accountsByCode.get(currentCode)
       const currentIsValid = Boolean(currentAccount && !getAccountOptionState(currentAccount, field, module.id).disabled)
-      const uniqueSuggestion = uniqueSuggestionFor(module.id, field.key)
-      nextCodes[id] = !currentIsValid && uniqueSuggestion ? uniqueSuggestion.code : ''
+      nextCodes[id] = currentIsValid ? '' : bestCandidateCodeFor(module.id, field)
     }
     return nextCodes
   }
@@ -663,12 +677,11 @@ function AccountMappingQuickSetupDialog({
       : []
   })
 
-  const selectUniqueSuggestions = () => {
+  const completeWithBestOptions = () => {
     const nextCodes = { ...selectedCodes }
     for (const { module, field } of fields) {
       const id = fieldId(module.id, field.key)
-      const uniqueSuggestion = uniqueSuggestionFor(module.id, field.key)
-      nextCodes[id] = uniqueSuggestion?.code || ''
+      nextCodes[id] = bestCandidateCodeFor(module.id, field)
     }
     setSelectedCodes(nextCodes)
   }
@@ -681,7 +694,7 @@ function AccountMappingQuickSetupDialog({
             <Sparkles className="size-4 shrink-0 text-primary" /> Configuración rápida por asociación
           </DialogTitle>
           <DialogDescription>
-            Elige una cuenta en cada campo que quieras cambiar. Las selecciones distintas de la cuenta actual se incluirán al aplicar; las demás quedan sin cambios.
+            Elige la cuenta que se usará en cada campo. Las coincidencias ambiguas o provisionales muestran un aviso para que las revises antes de aplicar el lote.
           </DialogDescription>
         </DialogHeader>
 
@@ -691,8 +704,8 @@ function AccountMappingQuickSetupDialog({
             <Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar módulo o campo..." className="h-9 pl-9 text-xs" aria-label="Buscar campo contable" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={selectUniqueSuggestions} disabled={loading || saving}>
-              <Check className="size-3.5" /> Usar recomendaciones únicas
+            <Button type="button" size="sm" variant="outline" onClick={completeWithBestOptions} disabled={loading || saving}>
+              <Check className="size-3.5" /> Completar con mejores opciones
             </Button>
             <span className="self-center text-[10px] font-bold text-muted-foreground" aria-live="polite">
               {patches.length} cambio{patches.length === 1 ? '' : 's'} por aplicar
@@ -722,15 +735,24 @@ function AccountMappingQuickSetupDialog({
                       const currentAccount = accountsByCode.get(currentCode)
                       const currentState = currentAccount ? getAccountOptionState(currentAccount, field, module.id) : null
                       const matches = matchesFor(module.id, field.key)
+                      const fallbackAccounts = matches.length === 0 ? fallbackAccountsFor(module.id, field) : []
+                      const selectedCode = selectedCodes[id] || ''
                       const topScore = matches[0]?.score
                       const tiedTopMatches = topScore === undefined ? [] : matches.filter(match => match.score === topScore)
                       const isTie = tiedTopMatches.length > 1
-                      const options = matches.map(match => ({
-                        value: match.code,
-                        label: `${match.code} · ${match.name}`,
-                        description: `${match.reason} · puntaje ${match.score}`,
-                        disabled: false,
-                      }))
+                      const options = matches.length > 0
+                        ? matches.map(match => ({
+                            value: match.code,
+                            label: `${match.code} · ${match.name}`,
+                            description: `${match.reason} · puntaje ${match.score}`,
+                            disabled: false,
+                          }))
+                        : fallbackAccounts.map(account => ({
+                            value: account.code,
+                            label: `${account.code} · ${account.name}`,
+                            description: 'Opción provisional compatible por tipo; revisa antes de aplicar.',
+                            disabled: false,
+                          }))
                       if (currentCode && !options.some(option => option.value === currentCode)) {
                         options.push({
                           value: currentCode,
@@ -739,7 +761,8 @@ function AccountMappingQuickSetupDialog({
                           disabled: !currentAccount || Boolean(currentState?.disabled),
                         })
                       }
-                      const selectedCode = selectedCodes[id] || ''
+                      const selectedAccount = accountsByCode.get(selectedCode)
+                      const selectedMatch = matches.find(match => match.code === selectedCode)
                       return (
                         <article key={field.key} className="min-w-0 rounded-xl border border-border/50 bg-card p-3">
                           <div className="min-w-0">
@@ -755,7 +778,13 @@ function AccountMappingQuickSetupDialog({
                             {matches.length > 0 ? (
                               <div className="mt-1 space-y-0.5 text-[10px]">
                                 {isTie ? (
-                                  <p className="font-semibold text-amber-600">Empate entre las mejores opciones (puntaje {topScore}); selecciona una manualmente.</p>
+                                  <p className="font-semibold text-amber-600">
+                                    Empate entre las mejores opciones (puntaje {topScore}).
+                                    {selectedCode && selectedCode !== currentCode
+                                      ? ` Se eligió provisionalmente ${selectedCode} · ${selectedAccount?.name || 'cuenta seleccionada'}; revisa si corresponde.`
+                                      : ' Revisa cuál corresponde antes de aplicar.'}
+                                    {' '}Si ninguna es adecuada, crea la cuenta correcta o selecciona otra.
+                                  </p>
                                 ) : (
                                   <p className="font-semibold text-emerald-600">Recomendada: {matches[0].code} · {matches[0].name}</p>
                                 )}
@@ -764,9 +793,17 @@ function AccountMappingQuickSetupDialog({
                                 ))}
                               </div>
                             ) : (
-                              <p className="mt-1 text-[10px] text-muted-foreground">Sin coincidencias aptas por nombre y tipo contable.</p>
+                              <p className="mt-1 text-[10px] font-semibold text-amber-600">
+                                {fallbackAccounts.length === 0
+                                  ? 'No encontramos una cuenta activa y contabilizable del tipo esperado. Crea la cuenta adecuada en el plan o elige otra compatible antes de configurar este campo.'
+                                  : selectedCode && selectedCode !== currentCode
+                                    ? `No encontramos coincidencia clara por nombre. Se eligió ${selectedCode} · ${selectedAccount?.name || 'una cuenta compatible'} como opción provisional; revisa si corresponde. Puede que necesites crear la cuenta adecuada o seleccionar otra.`
+                                    : currentState && !currentState.disabled
+                                      ? 'No encontramos coincidencia clara por nombre. La cuenta actual se conserva; si quieres cambiarla, revisa las opciones compatibles. Puede que necesites crear la cuenta adecuada o seleccionar otra.'
+                                      : 'No encontramos coincidencia clara por nombre. Elige una opción compatible y revísala; puede que necesites crear la cuenta adecuada o seleccionar otra.'}
+                              </p>
                             )}
-                            <div className="mt-2 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center">
+                            <div className="mt-2 flex min-w-0 flex-col gap-1.5">
                               <Combobox
                                 options={options}
                                 value={selectedCode}
@@ -775,11 +812,13 @@ function AccountMappingQuickSetupDialog({
                                 placeholder="Elegir cuenta recomendada"
                                 searchPlaceholder="Buscar recomendación..."
                                 ariaLabel={`Cuenta recomendada para ${module.label}: ${field.label}`}
-                                emptyMessage="No hay recomendaciones para este campo."
-                                className="h-8 text-[10px]"
+                                emptyMessage="No hay cuentas compatibles por tipo; crea una cuenta o elige otra del plan."
+                                className="h-8 w-full min-w-0 text-[10px]"
                               />
                               {selectedCode && selectedCode !== currentCode && (
-                                <span className="shrink-0 text-[9px] font-bold text-primary">Incluida en el lote</span>
+                                <p className="w-full min-w-0 break-words rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-[10px] font-semibold text-primary">
+                                  Se aplicará: {selectedCode} · {selectedAccount?.name || selectedMatch?.name || 'Cuenta seleccionada'}
+                                </p>
                               )}
                             </div>
                           </div>
