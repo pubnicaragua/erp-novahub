@@ -145,6 +145,13 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     ],
   },
   {
+    id: 'openingBalance', label: 'Saldos de apertura', icon: BookOpen,
+    description: 'Contrapartida patrimonial para reconocer las cuentas por cobrar y por pagar heredadas',
+    fields: [
+      { key: 'equity', label: 'Patrimonio de apertura', side: 'credit', description: 'Contrapartida de los saldos pendientes de clientes y proveedores. Debe ser una cuenta patrimonial de detalle.', defaultCode: '', defaultName: 'Patrimonio de apertura', defaultType: 'EQUITY' },
+    ],
+  },
+  {
     id: 'payroll', label: 'Nóminas', icon: Users,
     description: 'Un solo asiento al pagar la nómina: costos laborales, obligaciones y salida del neto',
     fields: [
@@ -247,6 +254,8 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     fields: [
       { key: 'unrealizedGain', label: 'Ganancia cambiaria no realizada', side: 'credit', description: 'Se acredita cuando la revaluación incrementa el valor económico', defaultCode: '4200', defaultName: 'Ganancia Cambiaria No Realizada', defaultType: 'INCOME' },
       { key: 'unrealizedLoss', label: 'Pérdida cambiaria no realizada', side: 'debit', description: 'Se debita cuando la revaluación reduce el valor económico', defaultCode: '5400', defaultName: 'Pérdida Cambiaria No Realizada', defaultType: 'EXPENSE' },
+      { key: 'realizedGain', label: 'Ganancia cambiaria realizada', side: 'credit', description: 'Diferencia cambiaria al aplicar un abono a un saldo histórico en moneda extranjera', defaultCode: '4200', defaultName: 'Ganancia Cambiaria', defaultType: 'INCOME' },
+      { key: 'realizedLoss', label: 'Pérdida cambiaria realizada', side: 'debit', description: 'Diferencia cambiaria al aplicar un abono a un saldo histórico en moneda extranjera', defaultCode: '5400', defaultName: 'Pérdida Cambiaria', defaultType: 'EXPENSE' },
     ],
   },
   {
@@ -315,7 +324,7 @@ const ACCOUNTING_MODULE_GROUPS = [
     label: 'Cuentas contables de Inventario y operaciones',
     description: 'Cuenta control de inventario, ajustes, cierre de caja y diferencias cambiarias.',
     icon: Link2,
-    moduleIds: ['inventory', 'inventoryAdjustment', 'cashRegister', 'currencyRevaluation'],
+    moduleIds: ['inventory', 'inventoryAdjustment', 'cashRegister', 'currencyRevaluation', 'openingBalance'],
   },
   {
     id: 'other',
@@ -834,6 +843,8 @@ export function ConfiguracionContableView() {
   const canEditAccounting = canPerform('ACCOUNTING_CONFIG', 'edit')
   const canImportAccounting = canPerform('ACCOUNTING_CONFIG', 'import')
   const canExportAccounting = canPerform('ACCOUNTING_CONFIG', 'export')
+  const canReadAccountingJournals = canPerform('ACCOUNTING_JOURNAL', 'read')
+  const canCreateAccountingJournals = canPerform('ACCOUNTING_JOURNAL', 'create')
   const [saving, setSaving] = useState(false)
   const [seeding, setSeeding] = useState(false)
 
@@ -853,6 +864,11 @@ export function ConfiguracionContableView() {
     ['suggested-accounts'],
     async signal => contabilidadService.getSuggestedAccounts(signal),
     { enabled: Boolean(configQuery.data), staleTime: 30_000 },
+  )
+  const openingBalancePreviewQuery = useAccountingQuery<any>(
+    ['opening-balance-accounting-preview'],
+    async signal => contabilidadService.getOpeningBalanceAccountingPreview(signal),
+    { enabled: canReadAccountingJournals, staleTime: 30_000 },
   )
   const loading = configQuery.isLoading
   const connections = connectionsQuery.data
@@ -883,6 +899,12 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   const [salesExpanded, setSalesExpanded] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [activityExpanded, setActivityExpanded] = useState(false)
+  const [openingCutoffDate, setOpeningCutoffDate] = useState(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  })
+  const [openingPostConfirmOpen, setOpeningPostConfirmOpen] = useState(false)
+  const [postingOpeningBalances, setPostingOpeningBalances] = useState(false)
 
   useEffect(() => {
     const res = configQuery.data
@@ -934,6 +956,23 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   const loadConfig = () => configQuery.refetch()
   const loadAccounts = () => accountsQuery.refetch()
   const loadConnections = () => connectionsQuery.refetch()
+
+  const postOpeningBalanceAccounting = async () => {
+    if (!canCreateAccountingJournals || !openingCutoffDate) return
+    setPostingOpeningBalances(true)
+    try {
+      const result = await contabilidadService.postOpeningBalanceAccounting(openingCutoffDate)
+      const posted = Number(result?.customerOpeningsPosted || 0) + Number(result?.supplierOpeningsPosted || 0)
+        + Number(result?.customerPaymentsPosted || 0) + Number(result?.supplierPaymentsPosted || 0)
+      toast.success(`Regularización completada: ${posted} asientos creados; ${Number(result?.skippedExisting || 0)} ya existían.`)
+      setOpeningPostConfirmOpen(false)
+      await openingBalancePreviewQuery.refetch()
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudieron regularizar los saldos iniciales')
+    } finally {
+      setPostingOpeningBalances(false)
+    }
+  }
 
   const handleSave = async () => {
     if (!canEditAccounting) return
@@ -1475,6 +1514,17 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   const visibleModuleIds = useMemo(() => new Set(allModuleDefs.map(module => module.id)), [allModuleDefs])
   const okCount = connections?.modules?.filter((m: any) => visibleModuleIds.has(m.id) && m.status === 'connected')?.length ?? 0
   const totalMods = allModuleDefs.length
+  const openingAccountingPreview = openingBalancePreviewQuery.data
+  const pendingOpeningCount = Number(openingAccountingPreview?.customers?.openingsToPost || 0)
+    + Number(openingAccountingPreview?.suppliers?.openingsToPost || 0)
+  const pendingOpeningPayments = Number(openingAccountingPreview?.customers?.paymentsToPost || 0)
+    + Number(openingAccountingPreview?.suppliers?.paymentsToPost || 0)
+  const openingEquityMissing = pendingOpeningCount > 0 && openingAccountingPreview?.openingEquityConfigured === false
+  const openingCutoffDateMissing = Boolean(openingAccountingPreview?.cutoffDateRequired && !openingCutoffDate)
+  const hasOpeningAccountingWork = pendingOpeningCount + pendingOpeningPayments > 0
+  const formatOpeningAmount = (amount: number) => new Intl.NumberFormat('es-NI', {
+    style: 'currency', currency: openingAccountingPreview?.baseCurrency || 'NIO',
+  }).format(Number(amount || 0))
 
   if (loading) {
     return (
@@ -1617,6 +1667,71 @@ const [mappingsSearch, setMappingsSearch] = useState('')
           </div>
         </CardContent>
       </Card>
+
+      {canReadAccountingJournals && <Card className="border-primary/25 bg-gradient-to-br from-card via-card to-primary/[0.04] shadow-sm">
+        <CardHeader className="border-b border-border/30 px-5 pb-4 pt-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><BookOpen className="size-5" /></div>
+              <div className="min-w-0">
+                <CardTitle className="text-sm font-black uppercase tracking-tight">Regularización de saldos iniciales y abonos</CardTitle>
+                <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">Revisa los saldos pendientes y abonos generales que todavía no tienen asiento. La vista previa excluye registros ya contabilizados.</p>
+              </div>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => void openingBalancePreviewQuery.refetch()} disabled={openingBalancePreviewQuery.isFetching}>
+              <RefreshCw className={`mr-2 size-3.5 ${openingBalancePreviewQuery.isFetching ? 'animate-spin' : ''}`} />Actualizar vista previa
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 p-5">
+          {openingBalancePreviewQuery.error && <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{openingBalancePreviewQuery.error.message || 'No se pudo cargar la vista previa.'}</p>}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: 'Aperturas de clientes', count: openingAccountingPreview?.customers?.openingsToPost, amount: openingAccountingPreview?.customers?.openingAmountBase },
+              { label: 'Abonos de clientes', count: openingAccountingPreview?.customers?.paymentsToPost, amount: openingAccountingPreview?.customers?.paymentAmountBase },
+              { label: 'Aperturas de proveedores', count: openingAccountingPreview?.suppliers?.openingsToPost, amount: openingAccountingPreview?.suppliers?.openingAmountBase },
+              { label: 'Abonos de proveedores', count: openingAccountingPreview?.suppliers?.paymentsToPost, amount: openingAccountingPreview?.suppliers?.paymentAmountBase },
+            ].map(metric => <div key={metric.label} className="min-w-0 rounded-xl border border-border/50 bg-background/60 p-3">
+              <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">{metric.label}</p>
+              <p className="mt-1 text-xl font-black text-foreground">{Number(metric.count || 0)}</p>
+              <p className="text-xs text-muted-foreground">{formatOpeningAmount(Number(metric.amount || 0))}</p>
+            </div>)}
+          </div>
+          {openingAccountingPreview?.cutoffDateRequired && <label className="block max-w-xs space-y-1 text-xs font-bold text-foreground">
+            <span>Fecha de corte para aperturas sin fecha *</span>
+            <Input type="date" value={openingCutoffDate} onChange={event => setOpeningCutoffDate(event.target.value)} className="h-9 rounded-lg" />
+          </label>}
+          {openingAccountingPreview?.autoGenerationEnabled === false && <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">La generación automática de asientos está desactivada. Actívala para contabilizar estas aperturas y abonos.</p>}
+          {openingEquityMissing && <p role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">Configura una cuenta patrimonial de detalle en “Saldos de apertura” antes de contabilizar aperturas.</p>}
+          {openingBalancePreviewQuery.data && !hasOpeningAccountingWork && <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-300">No hay aperturas ni abonos generales pendientes de contabilizar.</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-4">
+            <p className="max-w-3xl text-xs text-muted-foreground">La regularización es idempotente: los asientos existentes se conservan y no se duplican.</p>
+            {canCreateAccountingJournals && <Button type="button" onClick={() => setOpeningPostConfirmOpen(true)} disabled={openingBalancePreviewQuery.isLoading || !hasOpeningAccountingWork || openingAccountingPreview?.autoGenerationEnabled === false || openingEquityMissing || openingCutoffDateMissing}>
+              <CheckCircle2 className="mr-2 size-4" />Revisar y contabilizar pendientes
+            </Button>}
+          </div>
+        </CardContent>
+        <Dialog open={openingPostConfirmOpen} onOpenChange={setOpeningPostConfirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirmar regularización contable</DialogTitle>
+              <DialogDescription>Se crearán asientos para los saldos y abonos que siguen pendientes. Los registros con asiento existente se omiten.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 rounded-xl border bg-muted/20 p-3 text-xs">
+              <p>Clientes: {Number(openingAccountingPreview?.customers?.openingsToPost || 0)} aperturas · {formatOpeningAmount(Number(openingAccountingPreview?.customers?.openingAmountBase || 0))}; {Number(openingAccountingPreview?.customers?.paymentsToPost || 0)} abonos · {formatOpeningAmount(Number(openingAccountingPreview?.customers?.paymentAmountBase || 0))}.</p>
+              <p>Proveedores: {Number(openingAccountingPreview?.suppliers?.openingsToPost || 0)} aperturas · {formatOpeningAmount(Number(openingAccountingPreview?.suppliers?.openingAmountBase || 0))}; {Number(openingAccountingPreview?.suppliers?.paymentsToPost || 0)} abonos · {formatOpeningAmount(Number(openingAccountingPreview?.suppliers?.paymentAmountBase || 0))}.</p>
+              <p>Fecha de corte aplicada solo a aperturas sin fecha: <strong>{openingCutoffDate || 'Sin fecha'}</strong>.</p>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpeningPostConfirmOpen(false)} disabled={postingOpeningBalances}>Cancelar</Button>
+              <Button type="button" onClick={() => void postOpeningBalanceAccounting()} disabled={postingOpeningBalances}>
+                {postingOpeningBalances && <Loader2 className="mr-2 size-4 animate-spin" />}
+                Contabilizar pendientes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </Card>}
 
       {/* Configuración de cuentas para asientos contables */}
       <Card id="configuracion-cuentas-asientos" className="border-primary/25 bg-gradient-to-br from-card via-card to-primary/[0.04] shadow-sm">

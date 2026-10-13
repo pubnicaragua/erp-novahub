@@ -152,6 +152,8 @@ export const contabilidadService = {
   getConfig: (signal?: AbortSignal) => api.get<any>('/accounting/config', { signal }),
   updateConfig: (data: AccountingConfigUpdate) => api.put<any>('/accounting/config', data),
   seedConfig: () => api.post<any>('/accounting/config/seed', {}),
+  getOpeningBalanceAccountingPreview: (signal?: AbortSignal) => api.get<any>('/accounting/opening-balances/preview', { signal }),
+  postOpeningBalanceAccounting: (cutoffDate: string) => api.post<any>('/accounting/opening-balances/post', { cutoffDate }),
 
   // Cuentas sugeridas por tipo de documento
   getSuggestedAccounts: (signal?: AbortSignal) => api.get<{

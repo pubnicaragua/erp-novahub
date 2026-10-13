@@ -264,7 +264,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     }, 260);
   };
 
-  const executeImport = async () => {
+  const executeImport = async (openingBalanceDate?: string) => {
     const validRows = importRows.filter((row) => !row.error);
     if (!validRows.length) return;
     setImporting(true);
@@ -272,6 +272,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     setImportResult(null);
     try {
       const result = await suppliersService.importMassive({
+        openingBalanceDate,
         rows: validRows.map(({ error: _error, warning: _warning, ...row }) => ({ ...row, type: row.type || undefined, companyName: row.type === 'INDIVIDUAL' ? undefined : row.companyName || undefined, openingBalanceType: row.openingBalanceType || undefined, code: row.code || undefined, ruc: row.taxId || undefined })),
       });
       setImportProgress(90);

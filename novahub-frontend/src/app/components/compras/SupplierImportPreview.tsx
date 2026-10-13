@@ -53,7 +53,7 @@ interface SupplierImportPreviewProps {
   result: SupplierImportResult | null;
   onRowUpdate: (index: number, field: keyof SupplierImportRow, value: string) => void;
   onBack: () => void;
-  onConfirm: () => void;
+  onConfirm: (openingBalanceDate?: string) => void;
   onDone: () => void;
 }
 
@@ -72,6 +72,10 @@ export function SupplierImportPreview({
   useImportPreviewLayout();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const [openingBalanceDate, setOpeningBalanceDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const gridTemplate = '70px 140px 240px 135px 180px 200px 180px 200px 145px 240px 130px 130px 200px 260px 135px 145px 90px 130px 240px';
@@ -79,6 +83,7 @@ export function SupplierImportPreview({
   const validRows = rows.filter((row) => !row.error).length;
   const errorRows = rows.filter((row) => row.error).length;
   const warningRows = rows.filter((row) => !row.error && row.warning).length;
+  const hasPendingOpeningBalance = rows.some((row) => row.openingBalanceType === 'PENDING' && Number(row.openingBalanceAmount) > 0);
 
   useEffect(() => {
     if (!result) return;
@@ -134,6 +139,13 @@ export function SupplierImportPreview({
         </div>
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="proveedores" />
+        {hasPendingOpeningBalance && <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
+          <label className="min-w-48 space-y-1 text-xs font-bold text-foreground">
+            <span className="block">Fecha de corte de saldos pendientes *</span>
+            <Input type="date" value={openingBalanceDate} onChange={(event) => setOpeningBalanceDate(event.target.value)} disabled={importing} required className="h-9 w-full rounded-lg" />
+          </label>
+          <p className="max-w-2xl text-xs text-muted-foreground">Esta fecha se usará para los asientos de apertura de los proveedores con saldo pendiente. Los saldos a favor no se contabilizan en este proceso.</p>
+        </div>}
 
         <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex" data-tour="supplier-import-data">
         <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="h-full" tableClassName="scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
@@ -217,7 +229,7 @@ export function SupplierImportPreview({
           <div data-tour="supplier-import-confirm-data">
           <Input value={confirmText} onChange={(event) => setConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
           </div>
-          <DialogFooter data-tour="supplier-import-confirm-actions"><Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button><Button onClick={() => { setConfirmOpen(false); onConfirm(); }} disabled={confirmText !== 'IMPORTAR'}>Confirmar importación</Button></DialogFooter>
+          <DialogFooter data-tour="supplier-import-confirm-actions"><Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button><Button onClick={() => { setConfirmOpen(false); onConfirm(hasPendingOpeningBalance ? openingBalanceDate : undefined); }} disabled={confirmText !== 'IMPORTAR' || (hasPendingOpeningBalance && !openingBalanceDate)}>Confirmar importación</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

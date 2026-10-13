@@ -374,7 +374,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     }, 260);
   };
 
-  const executeImport = async () => {
+  const executeImport = async (openingBalanceDate?: string) => {
     const validRows = importRows.filter((row) => !row.error);
     if (!validRows.length) return;
     setImporting(true);
@@ -382,6 +382,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     setImportResult(null);
     try {
       const result = await customersService.importMassive({
+        openingBalanceDate,
         rows: validRows.map(({ error: _error, warning: _warning, creditLimitCurrencyError: _currencyError, openingBalanceCurrencyError: _openingCurrencyError, openingBalanceTypeError: _openingTypeError, ...row }) => ({
           ...row,
           type: row.type === 'COMPANY' ? 'company' : 'individual',
