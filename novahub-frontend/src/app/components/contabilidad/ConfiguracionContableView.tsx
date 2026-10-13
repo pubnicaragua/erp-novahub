@@ -18,6 +18,8 @@ import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { Combobox } from '../ui/Combobox'
+import { Checkbox } from '../ui/checkbox'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { cn } from '../ui/utils'
 import { toast } from '@/app/services/toast'
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator'
@@ -25,7 +27,7 @@ import { ChevronDown, ChevronUp, ChevronsLeft, ChevronLeft, ChevronRight, Chevro
 import { BankAccountsView } from './BankAccountsView'
 import { TaxCatalogView } from './TaxCatalogView'
 import { ActividadModulosView } from './ActividadModulosView'
-import { contabilidadService } from '../../services/contabilidad.service'
+import { contabilidadService, type AccountMappingPatch } from '../../services/contabilidad.service'
 import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv'
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
 import { useAuth } from '../../contexts/AuthContext'
@@ -75,6 +77,11 @@ type ModuleField = {
   defaultCode: string
   defaultName: string
   defaultType: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE'
+}
+
+type AccountSuggestion = { accountId: string; code: string; name: string; score: number; reason: string }
+type SuggestedAccountsResponse = {
+  mappings?: Record<string, Record<string, { matches?: AccountSuggestion[] } | null>>
 }
 
 const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; description: string; fields: ModuleField[] }[] = [
@@ -405,83 +412,6 @@ function isSalesVatPayableAccount(account: Pick<AccountInfo, 'name'>) {
   return identifiesVat && !isWithholding
 }
 
-// Palabras clave por rol funcional (espejo del backend) para recomendar
-// cuentas por nombre cuando el código semilla no existe en el plan.
-const FIELD_RECOMMENDATION_KEYWORDS: Record<string, string[]> = {
-  income: ['venta', 'ingreso', 'servicio', 'honorario', 'producto'],
-  cogs: ['costo', 'coste', 'mercaderia', 'mercaderia vendida', 'venta'],
-  returns: ['devolucion', 'descuento', 'venta'],
-  ivaPayable: ['iva', 'impuesto', 'por pagar'],
-  ivaCreditable: ['iva', 'acreditable', 'impuesto'],
-  ivaWithholdingPayable: ['iva', 'retencion'],
-  irWithholdingPayable: ['retencion', 'renta', 'ir '],
-  otherWithholdingPayable: ['retencion', 'otra'],
-  cash: ['caja', 'efectivo', 'banco', 'bancos'],
-  card: ['tarjeta', 'tarjetas'],
-  transfer: ['transferencia', 'banco', 'bancos'],
-  other: ['otro', 'otros', 'varios'],
-  receivable: ['cobrar', 'cliente', 'clientes', 'deuda'],
-  customerBalance: ['saldo', 'favor', 'cliente', 'cobrar'],
-  payable: ['pagar', 'proveedor', 'proveedores', 'acreedor', 'acreedores'],
-  inventory: ['inventario', 'mercancia', 'mercaderia', 'existencias', 'almacen', 'productos'],
-  inTransit: ['transito', 'inventario', 'mercancia'],
-  control: ['inventario', 'mercancia', 'existencias'],
-  expense: ['gasto', 'operativo', 'administrativo', 'financiero'],
-  adjustment: ['ajuste', 'perdida', 'ganancia'],
-  shortage: ['faltante', 'faltantes', 'caja'],
-  surplus: ['sobrante', 'sobrantes', 'caja'],
-  unrealizedGain: ['ganancia', 'cambiaria', 'diferencia'],
-  unrealizedLoss: ['perdida', 'cambiaria', 'diferencia'],
-  salaryExpense: ['salario', 'sueldo', 'nomina'],
-  bonusesExpense: ['bonificacion', 'bono'],
-  overtimeExpense: ['horas extra', 'extra'],
-  commissionsExpense: ['comision'],
-  inssPatronalExpense: ['inss', 'patronal'],
-  inatecExpense: ['inatec'],
-  thirteenthExpense: ['aguinaldo', 'decimo', 'treceavo'],
-  vacationExpense: ['vacacion', 'vacaciones'],
-  indemnityExpense: ['indemnizacion', 'cesantia'],
-  inssLaboralPayable: ['inss', 'laboral'],
-  inssPatronalPayable: ['inss', 'patronal'],
-  inatecPayable: ['inatec'],
-  irPayable: ['ir ', 'renta', 'retencion'],
-  otherDeductionsPayable: ['deduccion', 'otra'],
-  netPayable: ['neto', 'salario', 'nomina'],
-  thirteenthPayable: ['aguinaldo', 'decimo'],
-  vacationPayable: ['vacacion'],
-  indemnityPayable: ['indemnizacion'],
-  asset: ['activo', 'mobiliario', 'equipo', 'vehiculo', 'maquinaria', 'propiedad', 'inmueble', 'edificio', 'terreno'],
-  depreciationExpense: ['depreciacion', 'gasto'],
-  accumulatedDepreciation: ['depreciacion', 'acumulada'],
-  bankFees: ['bancario', 'comision', 'cargo', 'gasto'],
-  interestIncome: ['interes', 'intereses', 'ingreso', 'financiero'],
-}
-
-const TYPE_RECOMMENDATION_KEYWORDS: Record<string, string[]> = {
-  ASSET: ['caja', 'bancos', 'inventario', 'cobrar', 'proveedor'],
-  LIABILITY: ['pagar', 'iva', 'retencion', 'impuesto'],
-  INCOME: ['ingreso', 'venta', 'interes'],
-  EXPENSE: ['gasto', 'depreciacion', 'bancario'],
-}
-
-function getRecommendedAccounts(field: ModuleField, accountOptions: AccountOption[]): { option: AccountOption; hits: string[] }[] {
-  const keywords = [
-    ...(FIELD_RECOMMENDATION_KEYWORDS[field.key] || []),
-    ...(TYPE_RECOMMENDATION_KEYWORDS[field.defaultType] || []),
-  ]
-  return accountOptions
-    .filter(option => !option.disabled)
-    .map(option => {
-      const name = normalizeText(option.name)
-      const code = normalizeText(option.code)
-      const hits = keywords.filter(keyword => name.includes(keyword) || code.includes(keyword))
-      return { option, hits, score: hits.length }
-    })
-    .filter(row => row.score > 0)
-    .sort((a, b) => b.score - a.score || a.option.code.localeCompare(b.option.code))
-    .slice(0, 3)
-}
-
 const SUBTYPE_LABELS: Record<string, string> = {
   MAIN_GROUP: 'Grupo principal',
   GROUP: 'Grupo',
@@ -508,12 +438,13 @@ function ModuleStatusBadge({ status }: { status: { total: number; defined: numbe
   )
 }
 
-function AccountCodeInput({ code, field, moduleId, account, accountOptions, onChange }: {
+function AccountCodeInput({ code, field, moduleId, account, accountOptions, suggestions, onChange }: {
   code: string
   field: ModuleField
   moduleId?: string
   account?: AccountInfo
   accountOptions: AccountOption[]
+  suggestions: AccountSuggestion[]
   onChange: (val: string) => void
 }) {
   const accountState = account ? getAccountOptionState(account, field, moduleId) : null
@@ -524,7 +455,10 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, onCh
     const optionState = getAccountOptionState(accountOption, field, moduleId)
     return { ...accountOption, disabled: optionState.disabled, optionState }
   }), [accountOptions, field, moduleId])
-  const recommended = useMemo(() => getRecommendedAccounts(field, effectiveAccountOptions), [field, effectiveAccountOptions])
+  const recommended = useMemo(() => suggestions.flatMap(suggestion => {
+    const option = effectiveAccountOptions.find(item => item.code === suggestion.code && !item.disabled)
+    return option ? [{ option, suggestion }] : []
+  }), [effectiveAccountOptions, suggestions])
   const recommendedCodes = useMemo(() => new Set(recommended.map(entry => entry.option.code)), [recommended])
   const topRecommendation = recommended[0]?.option
   const [subtypeFilter, setSubtypeFilter] = useState('ALL')
@@ -545,7 +479,7 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, onCh
         value: accountOption.code,
         label: `${accountOption.code} · ${accountOption.name}`,
         description: recommendation
-          ? `★ Recomendada · coincide con ${recommendation.hits.map(hit => `"${hit}"`).join(', ')} · ${accountTypeLabel(accountOption.type)} · ${subtype}`
+          ? `★ Recomendada · ${recommendation.suggestion.reason} · puntaje ${recommendation.suggestion.score} · ${accountTypeLabel(accountOption.type)} · ${subtype}`
           : baseDescription,
         disabled: accountOption.disabled,
         subtype: String(accountOption.subtype || '').toUpperCase(),
@@ -657,6 +591,237 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, onCh
   )
 }
 
+type QuickSetupModule = { id: string; label: string; fields: ModuleField[] }
+
+function AccountMappingQuickSetupDialog({
+  open,
+  onOpenChange,
+  modules,
+  accountMappings,
+  accountsByCode,
+  suggestions,
+  loading,
+  error,
+  saving,
+  onApply,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  modules: QuickSetupModule[]
+  accountMappings: Record<string, Record<string, string>>
+  accountsByCode: Map<string, AccountInfo>
+  suggestions: SuggestedAccountsResponse['mappings']
+  loading: boolean
+  error?: string
+  saving: boolean
+  onApply: (patches: AccountMappingPatch[]) => void
+}) {
+  const fields = useMemo(() => modules.flatMap(module => module.fields.map(field => ({ module, field }))), [modules])
+  const fieldId = (moduleId: string, fieldKey: string) => `${moduleId}.${fieldKey}`
+  const matchesFor = (moduleId: string, fieldKey: string) => suggestions?.[moduleId]?.[fieldKey]?.matches || []
+  const uniqueSuggestionFor = (moduleId: string, fieldKey: string) => {
+    const matches = matchesFor(moduleId, fieldKey)
+    const first = matches[0]
+    return first && matches.filter(match => match.score === first.score).length === 1 ? first : null
+  }
+  const buildInitialSelection = () => {
+    const nextCodes: Record<string, string> = {}
+    const nextChecked: Record<string, boolean> = {}
+    for (const { module, field } of fields) {
+      const id = fieldId(module.id, field.key)
+      const currentCode = accountMappings[module.id]?.[field.key] || field.defaultCode
+      const currentAccount = accountsByCode.get(currentCode)
+      const currentIsValid = Boolean(currentAccount && !getAccountOptionState(currentAccount, field, module.id).disabled)
+      const uniqueSuggestion = uniqueSuggestionFor(module.id, field.key)
+      nextCodes[id] = !currentIsValid && uniqueSuggestion ? uniqueSuggestion.code : ''
+      nextChecked[id] = !currentIsValid && Boolean(uniqueSuggestion)
+    }
+    return { selectedCodes: nextCodes, checkedFields: nextChecked }
+  }
+  const [initialSelection] = useState(buildInitialSelection)
+  const [selectedCodes, setSelectedCodes] = useState(initialSelection.selectedCodes)
+  const [checkedFields, setCheckedFields] = useState(initialSelection.checkedFields)
+  const [search, setSearch] = useState('')
+
+  const filteredFields = useMemo(() => {
+    const query = normalizeText(search)
+    if (!query) return fields
+    return fields.filter(({ module, field }) => normalizeText(`${module.label} ${field.label} ${field.key}`).includes(query))
+  }, [fields, search])
+
+  const getCurrentCode = (moduleId: string, field: ModuleField) => accountMappings[moduleId]?.[field.key] || field.defaultCode
+  const patches = fields.flatMap(({ module, field }) => {
+    const id = fieldId(module.id, field.key)
+    const currentCode = getCurrentCode(module.id, field)
+    const selectedCode = selectedCodes[id]
+    return checkedFields[id] && selectedCode && selectedCode !== currentCode
+      ? [{ moduleId: module.id, fieldKey: field.key, value: selectedCode }]
+      : []
+  })
+
+  const selectUniqueSuggestions = () => {
+    const nextCodes = { ...selectedCodes }
+    const nextChecked = { ...checkedFields }
+    for (const { module, field } of fields) {
+      const id = fieldId(module.id, field.key)
+      const uniqueSuggestion = uniqueSuggestionFor(module.id, field.key)
+      if (uniqueSuggestion) {
+        nextCodes[id] = uniqueSuggestion.code
+        nextChecked[id] = uniqueSuggestion.code !== getCurrentCode(module.id, field)
+      } else {
+        nextCodes[id] = ''
+        nextChecked[id] = false
+      }
+    }
+    setSelectedCodes(nextCodes)
+    setCheckedFields(nextChecked)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[calc(100%-1rem)] !max-w-[min(96vw,1180px)] max-h-[92dvh] gap-4 overflow-hidden p-4 sm:p-6">
+        <DialogHeader className="pr-8 text-left">
+          <DialogTitle className="flex items-center gap-2 text-base font-black">
+            <Sparkles className="size-4 shrink-0 text-primary" /> Configuración rápida por asociación
+          </DialogTitle>
+          <DialogDescription>
+            Revisa las recomendaciones por nombre y tipo. Las cuentas actuales válidas se conservan al abrir; solo se guardan los campos marcados.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar módulo o campo..." className="h-9 pl-9 text-xs" aria-label="Buscar campo contable" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={selectUniqueSuggestions} disabled={loading || saving}>
+              <Check className="size-3.5" /> Seleccionar recomendaciones únicas
+            </Button>
+            <span className="self-center text-[10px] font-bold text-muted-foreground" aria-live="polite">
+              {patches.length} cambio{patches.length === 1 ? '' : 's'} listo{patches.length === 1 ? '' : 's'}
+            </span>
+          </div>
+        </div>
+
+        {loading && (
+          <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/20 p-4 text-xs text-muted-foreground" role="status">
+            <Loader2 className="size-4 animate-spin" /> Analizando el plan de cuentas...
+          </div>
+        )}
+        {error && !loading && <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive" role="alert">{error}</p>}
+        {!loading && !error && fields.length > 0 && (
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
+            {filteredFields.length === 0 && <p className="rounded-xl border border-border/40 p-4 text-center text-xs text-muted-foreground">No hay campos que coincidan con la búsqueda.</p>}
+            {modules.map(module => {
+              const moduleFields = filteredFields.filter(entry => entry.module.id === module.id)
+              if (moduleFields.length === 0) return null
+              return (
+                <section key={module.id} className="space-y-2" aria-labelledby={`quick-setup-${module.id}`}>
+                  <h3 id={`quick-setup-${module.id}`} className="sticky top-0 z-10 rounded-lg bg-background/95 py-1 text-xs font-black uppercase tracking-wide text-primary backdrop-blur">{module.label}</h3>
+                  <div className="grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-2">
+                    {moduleFields.map(({ field }) => {
+                      const id = fieldId(module.id, field.key)
+                      const currentCode = getCurrentCode(module.id, field)
+                      const currentAccount = accountsByCode.get(currentCode)
+                      const currentState = currentAccount ? getAccountOptionState(currentAccount, field, module.id) : null
+                      const matches = matchesFor(module.id, field.key)
+                      const topScore = matches[0]?.score
+                      const tiedTopMatches = topScore === undefined ? [] : matches.filter(match => match.score === topScore)
+                      const isTie = tiedTopMatches.length > 1
+                      const options = matches.map(match => ({
+                        value: match.code,
+                        label: `${match.code} · ${match.name}`,
+                        description: `${match.reason} · puntaje ${match.score}`,
+                        disabled: false,
+                      }))
+                      if (currentCode && !options.some(option => option.value === currentCode)) {
+                        options.push({
+                          value: currentCode,
+                          label: `${currentCode} · ${currentAccount?.name || 'Cuenta actual'}`,
+                          description: currentAccount ? `Cuenta actual · ${currentState?.label || 'Revisar disponibilidad'}` : 'Cuenta actual no encontrada en el plan',
+                          disabled: !currentAccount || Boolean(currentState?.disabled),
+                        })
+                      }
+                      const selectedCode = selectedCodes[id] || ''
+                      const selectedSuggestion = matches.find(match => match.code === selectedCode)
+                      return (
+                        <article key={field.key} className="min-w-0 rounded-xl border border-border/50 bg-card p-3">
+                          <div className="flex min-w-0 items-start gap-2">
+                            <Checkbox
+                              id={`quick-check-${id}`}
+                              checked={Boolean(checkedFields[id])}
+                              disabled={loading || saving}
+                              onCheckedChange={checked => setCheckedFields(value => ({ ...value, [id]: checked === true }))}
+                              aria-label={`Aplicar cuenta para ${module.label}: ${field.label}`}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <label htmlFor={`quick-check-${id}`} className="cursor-pointer text-xs font-bold">{field.label}</label>
+                                <Badge variant="outline" className="text-[9px]">{field.side === 'debit' ? 'Debe' : 'Haber'}</Badge>
+                                <Badge variant="outline" className="text-[9px]">{accountTypeLabel(field.defaultType)}</Badge>
+                              </div>
+                              <p className="mt-1 break-words text-[10px] text-muted-foreground">
+                                Actual: {currentCode ? `${currentCode} · ${currentAccount?.name || 'No está en el plan'}` : 'Sin cuenta'}
+                                {currentState ? ` · ${currentState.disabled ? currentState.label : 'Válida'}` : ''}
+                              </p>
+                              {matches.length > 0 ? (
+                                <div className="mt-1 space-y-0.5 text-[10px]">
+                                  {isTie ? (
+                                    <p className="font-semibold text-amber-600">Empate entre las mejores opciones (puntaje {topScore}); selecciona una manualmente.</p>
+                                  ) : (
+                                    <p className="font-semibold text-emerald-600">Recomendada: {matches[0].code} · {matches[0].name}</p>
+                                  )}
+                                  {(isTie ? tiedTopMatches : matches.slice(0, 1)).map(match => (
+                                    <p key={match.code} className="break-words text-muted-foreground">{match.reason} · puntaje {match.score}</p>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mt-1 text-[10px] text-muted-foreground">Sin coincidencias aptas por nombre y tipo contable.</p>
+                              )}
+                              <div className="mt-2 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center">
+                                <Combobox
+                                  options={options}
+                                  value={selectedCode}
+                                  onChange={value => {
+                                    setSelectedCodes(current => ({ ...current, [id]: value }))
+                                    setCheckedFields(current => ({ ...current, [id]: Boolean(value) }))
+                                  }}
+                                  disabled={saving || options.length === 0}
+                                  placeholder="Elegir cuenta recomendada"
+                                  searchPlaceholder="Buscar recomendación..."
+                                  ariaLabel={`Cuenta recomendada para ${module.label}: ${field.label}`}
+                                  emptyMessage="No hay recomendaciones para este campo."
+                                  className="h-8 text-[10px]"
+                                />
+                                {checkedFields[id] && selectedCode !== currentCode && selectedSuggestion && (
+                                  <span className="shrink-0 text-[9px] font-bold text-primary">Se aplicará</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
+        )}
+
+        <DialogFooter className="border-t border-border/30 pt-3">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
+          <Button type="button" onClick={() => onApply(patches)} disabled={loading || Boolean(error) || saving || patches.length === 0}>
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            Aplicar {patches.length} asociación{patches.length === 1 ? '' : 'es'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 type ConnectionModule = {
   id: string
   label: string
@@ -680,9 +845,15 @@ export function ConfiguracionContableView() {
   const accountMappingsRef = useRef<Record<string, any>>({})
   const accountMappingSaveQueueRef = useRef<Promise<void>>(Promise.resolve())
   const [customModules, setCustomModules] = useState<ConnectionModule[]>([])
+  const [quickSetupOpen, setQuickSetupOpen] = useState(false)
   const configQuery = useAccountingQuery<any>(['config'], async (signal) => contabilidadService.getConfig(signal))
   const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)))
   const connectionsQuery = useAccountingQuery<any>(['connections'], async (signal) => contabilidadService.testConnections(signal), { enabled: false, staleTime: 30_000 })
+  const suggestedAccountsQuery = useAccountingQuery<SuggestedAccountsResponse>(
+    ['suggested-accounts'],
+    async signal => contabilidadService.getSuggestedAccounts(signal),
+    { enabled: Boolean(configQuery.data), staleTime: 30_000 },
+  )
   const loading = configQuery.isLoading
   const connections = connectionsQuery.data
   const connectionsLoading = connectionsQuery.isFetching
@@ -967,6 +1138,47 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     }))
     return [...builtins, ...customs]
   }, [customModules])
+  const standardModuleDefs = allModuleDefs.filter(module => module.isBuiltin)
+  const suggestionsForField = (moduleId: string, fieldKey: string) =>
+    suggestedAccountsQuery.data?.mappings?.[moduleId]?.[fieldKey]?.matches || []
+  const openQuickSetup = async () => {
+    if (!canEditAccounting || allAccounts.length === 0) return
+    setAccountMappingsExpanded(true)
+    await Promise.all([accountsQuery.refetch(), suggestedAccountsQuery.refetch()])
+    setQuickSetupOpen(true)
+  }
+  const applyQuickSetupPatches = async (patches: AccountMappingPatch[]) => {
+    if (!canEditAccounting || patches.length === 0) return
+    const saveTask = accountMappingSaveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const actionToken = beginNotificationAction()
+        setSaving(true)
+        try {
+          await contabilidadService.updateConfig({ accountMappingPatches: patches })
+          const nextMappings = { ...accountMappingsRef.current }
+          for (const patch of patches) {
+            nextMappings[patch.moduleId] = {
+              ...(nextMappings[patch.moduleId] || {}),
+              [patch.fieldKey]: patch.value,
+            }
+          }
+          accountMappingsRef.current = nextMappings
+          setAccountMappings(nextMappings)
+          toast.success(`${patches.length} asociación${patches.length === 1 ? '' : 'es'} contable${patches.length === 1 ? '' : 's'} guardada${patches.length === 1 ? '' : 's'}`)
+          completeNotificationAction(actionToken)
+          setQuickSetupOpen(false)
+          await Promise.all([configQuery.refetch(), suggestedAccountsQuery.refetch()])
+        } catch (error: any) {
+          toast.error(error?.response?.data?.message || error?.message || 'No se pudieron guardar las asociaciones contables')
+          failNotificationAction(actionToken)
+        } finally {
+          setSaving(false)
+        }
+      })
+    accountMappingSaveQueueRef.current = saveTask
+    await saveTask
+  }
 
   const accountsByCode = useMemo(() => new Map(allAccounts.map(account => [account.code, account])), [allAccounts])
   const accountOptionsByType = useMemo(() => {
@@ -1082,6 +1294,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 moduleId={mod.id}
                 account={accountsByCode.get(modMapping[field.key] || field.defaultCode)}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
+                suggestions={suggestionsForField(mod.id, field.key)}
                 onChange={value => updateMapping(mod.id, field.key, value)}
               />
             ))}
@@ -1200,6 +1413,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 moduleId={module.id}
                 account={accountsByCode.get(code)}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
+                suggestions={suggestionsForField(module.id, field.key)}
                 onChange={value => updateMapping(module.id, field.key, value)}
               />
             )
@@ -1237,6 +1451,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 moduleId={mod.id}
                 account={accountsByCode.get(code)}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
+                suggestions={suggestionsForField(mod.id, field.key)}
                 onChange={value => updateMapping(mod.id, field.key, value)}
               />
             )
@@ -1470,14 +1685,32 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                   Cada proceso del ERP usa <strong>varias cuentas a la vez</strong> (ej. una venta toca: ingreso, IVA, caja o banco e inventario). Elegí <strong>una cuenta por campo</strong>; podés filtrar por subtipo (auxiliares, detalle, grupos) para encontrarla más rápido. Cada selección se guarda automáticamente.
                 </p>
               </div>
-              <div className="relative w-full shrink-0 md:w-72">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={mappingsSearch}
-                  onChange={(e) => setMappingsSearch(e.target.value)}
-                  placeholder="Buscar módulo o proceso (ej: venta, nómina, caja)..."
-                  className="h-10 rounded-xl pl-9 text-xs"
-                />
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row md:w-72 md:flex-col xl:w-auto xl:flex-row">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={mappingsSearch}
+                    onChange={(e) => setMappingsSearch(e.target.value)}
+                    placeholder="Buscar módulo o proceso (ej: venta, nómina, caja)..."
+                    className="h-10 rounded-xl pl-9 text-xs"
+                  />
+                </div>
+                {canEditAccounting && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-10 max-w-full shrink-0 whitespace-normal rounded-xl px-3 text-[10px] font-bold leading-tight"
+                    onClick={openQuickSetup}
+                    disabled={accountsQuery.isLoading || accountsQuery.isFetching || suggestedAccountsQuery.isFetching || allAccounts.length === 0}
+                    title={allAccounts.length === 0 ? 'Carga primero un plan de cuentas con cuentas activas' : 'Revisar asociaciones recomendadas para módulos contables estándar'}
+                  >
+                    {accountsQuery.isFetching || suggestedAccountsQuery.isFetching
+                      ? <Loader2 className="size-3.5 animate-spin" />
+                      : <Sparkles className="size-3.5" />}
+                    Configuración rápida por asociación
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -1860,6 +2093,21 @@ const [mappingsSearch, setMappingsSearch] = useState('')
           </div>
         </CardContent>
       </Card>
+
+      {quickSetupOpen && (
+        <AccountMappingQuickSetupDialog
+          open={true}
+          onOpenChange={setQuickSetupOpen}
+          modules={standardModuleDefs}
+          accountMappings={accountMappings}
+          accountsByCode={accountsByCode}
+          suggestions={suggestedAccountsQuery.data?.mappings}
+          loading={accountsQuery.isFetching || suggestedAccountsQuery.isFetching}
+          error={accountsQuery.error?.message || suggestedAccountsQuery.error?.message}
+          saving={saving}
+          onApply={applyQuickSetupPatches}
+        />
+      )}
 
       <BankAccountsView />
 

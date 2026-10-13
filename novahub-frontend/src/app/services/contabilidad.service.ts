@@ -1,6 +1,19 @@
 import { api } from './api';
 import type { ChartAccount, ChartAccountCsvRow } from '../types/accounting';
 
+export type AccountMappingPatch = { moduleId: string; fieldKey: string; value: string }
+export type AccountingConfigUpdate = Record<string, any> & {
+  accountMappingPatch?: AccountMappingPatch
+  accountMappingPatches?: AccountMappingPatch[]
+}
+export type SuggestedAccountMatch = {
+  accountId: string
+  code: string
+  name: string
+  score: number
+  reason: string
+}
+
 export const contabilidadService = {
   // Plan de Cuentas
   getChartOfAccounts: (refresh = false, signal?: AbortSignal) => api.get<ChartAccount[]>(`/accounting/accounts${refresh ? `?refresh=true&_t=${Date.now()}` : ''}`, { signal }),
@@ -137,11 +150,14 @@ export const contabilidadService = {
 
   // Configuración Contable
   getConfig: (signal?: AbortSignal) => api.get<any>('/accounting/config', { signal }),
-  updateConfig: (data: any) => api.put<any>('/accounting/config', data),
+  updateConfig: (data: AccountingConfigUpdate) => api.put<any>('/accounting/config', data),
   seedConfig: () => api.post<any>('/accounting/config/seed', {}),
 
   // Cuentas sugeridas por tipo de documento
-  getSuggestedAccounts: (signal?: AbortSignal) => api.get<any>('/accounting/suggested-accounts', { signal }),
+  getSuggestedAccounts: (signal?: AbortSignal) => api.get<{
+    mappings: Record<string, Record<string, { accountId: string | null; code: string | null; name: string | null; suggested: boolean; matches: SuggestedAccountMatch[] } | null>>
+    accounts: Array<{ id: string; code: string; name: string; type: string; subtype?: string; isActive?: boolean; acceptsPostings?: boolean }>
+  }>('/accounting/suggested-accounts', { signal }),
 
   // Importar catálogo completo por industria con jerarquía
   importDefaultsWithHierarchy: (industry: string) => api.post<any>(`/accounting/import-defaults/${industry}`, {}),
