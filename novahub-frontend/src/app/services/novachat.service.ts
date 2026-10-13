@@ -69,6 +69,13 @@ export interface ChatDashboard {
   recentMessages: ChatRecentMessage[];
 }
 
+export interface WhatsAppLink {
+  id: string;
+  phoneE164: string;
+  linkedAt: string;
+  lastUsedAt?: string | null;
+}
+
 export interface SeedDemoResponse {
   message: string;
   channels?: number;
@@ -117,6 +124,12 @@ export const novachatService = {
 
   getDashboard: (signal?: AbortSignal) =>
     api.get<ChatDashboard>('/novachat/dashboard', { signal }),
+
+  getWhatsAppLink: (signal?: AbortSignal) =>
+    api.get<WhatsAppLink | null>('/novachat/whatsapp/link', { signal }),
+
+  linkWhatsApp: (phone: string) =>
+    api.post<WhatsAppLink>('/novachat/whatsapp/link', { phone }),
 
   seedDemo: () =>
     api.post<SeedDemoResponse>('/novachat/seed', {}),

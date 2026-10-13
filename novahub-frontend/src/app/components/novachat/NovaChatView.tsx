@@ -17,6 +17,7 @@ import {
   type ChatChannel,
   type ChatConversation,
   type ChatMessage,
+  type WhatsAppLink,
 } from '../../services/novachat.service';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
@@ -69,6 +70,9 @@ export function NovaChatView() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showMobileChat, setShowMobileChat] = useState(false);
+  const [whatsappLink, setWhatsappLink] = useState<WhatsAppLink | null>(null);
+  const [whatsappPhone, setWhatsappPhone] = useState('');
+  const [linkingWhatsApp, setLinkingWhatsApp] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inboxQuery = useTenantQuery<{ channels: ChatChannel[]; conversations: ChatConversation[] }>(
     ['novachat', 'inbox'],
@@ -99,6 +103,13 @@ export function NovaChatView() {
     && selectedConversation.channel.type === 'WHATSAPP'
     && !messages.some((message) => message.direction === 'INCOMING' && Date.now() - new Date(message.sentAt).getTime() < 24 * 60 * 60 * 1000),
   );
+
+  useEffect(() => {
+    if (!NOVACHAT_ENABLED) return;
+    void novachatService.getWhatsAppLink()
+      .then((link) => setWhatsappLink(link || null))
+      .catch(() => undefined);
+  }, []);
 
   useNotificationDomainRefresh({
     module: 'novachat',
@@ -167,6 +178,21 @@ export function NovaChatView() {
     }
   };
 
+  const handleLinkWhatsApp = async () => {
+    if (!whatsappPhone.trim()) return;
+    setLinkingWhatsApp(true);
+    try {
+      const link = await novachatService.linkWhatsApp(whatsappPhone.trim());
+      setWhatsappLink(link);
+      setWhatsappPhone('');
+      toast.success('WhatsApp vinculado correctamente');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No fue posible vincular WhatsApp');
+    } finally {
+      setLinkingWhatsApp(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -176,7 +202,42 @@ export function NovaChatView() {
   }
 
   return (
-    <div className="flex min-h-[min(760px,calc(100dvh-8rem))] h-[calc(100dvh-8rem)] max-h-[calc(100dvh-5rem)] flex-col overflow-hidden rounded-2xl border border-border/50 bg-card lg:flex-row">
+    <div className="flex min-h-[min(760px,calc(100dvh-8rem))] h-[calc(100dvh-8rem)] max-h-[calc(100dvh-5rem)] flex-col overflow-hidden rounded-2xl border border-border/50 bg-card">
+      <div className="flex flex-wrap items-center gap-3 border-b border-border/30 bg-primary/[0.03] px-4 py-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Phone className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-black text-foreground">Operaciones ERP por WhatsApp</p>
+          <p className="text-[11px] text-muted-foreground">
+            {whatsappLink
+              ? `Número vinculado: +${whatsappLink.phoneE164}`
+              : 'Vincula tu número para registrar ventas, gastos y tareas desde el chat.'}
+          </p>
+        </div>
+        {!whatsappLink && (
+          <div className="flex w-full gap-2 sm:w-auto">
+            <Input
+              value={whatsappPhone}
+              onChange={(event) => setWhatsappPhone(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter') void handleLinkWhatsApp(); }}
+              placeholder="+505 8888-1234"
+              aria-label="Número de WhatsApp"
+              className="h-9 w-full rounded-lg text-xs sm:w-44"
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 rounded-lg px-3 text-xs"
+              onClick={() => void handleLinkWhatsApp()}
+              disabled={linkingWhatsApp || !whatsappPhone.trim()}
+            >
+              {linkingWhatsApp ? <Loader2 className="size-3.5 animate-spin" /> : 'Vincular'}
+            </Button>
+          </div>
+        )}
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       <div className="w-64 border-r border-border/30 flex flex-col bg-muted/10 shrink-0">
         <div className="flex items-center justify-between gap-2 border-b border-border/30 p-4">
           <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Bandejas de Entrada</h3>
@@ -483,6 +544,7 @@ export function NovaChatView() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

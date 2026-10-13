@@ -93,7 +93,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   DASHBOARD: ['read', 'export'],
   FINANCING: ['read', 'create', 'edit', 'approve', 'export'],
   SALES: ['read'],
-  RESTAURANT: ['read', 'export'],
+  RESTAURANT: ['read', 'edit', 'export'],
   HOTEL: ['read'],
   TRACKING: ['read', 'export'],
   PURCHASES: ['read', 'create', 'delete'],

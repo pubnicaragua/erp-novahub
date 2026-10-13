@@ -3,11 +3,19 @@ import { CircleHelp } from 'lucide-react';
 import { Button } from './ui/button';
 import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
 
-export type RestaurantTutorialView = 'salon' | 'comandas' | 'cocina' | 'carta' | 'reportes';
+export type RestaurantTutorialView = 'pos' | 'salon' | 'comandas' | 'cocina' | 'delivery' | 'carta' | 'reportes' | 'configuracion';
 
 type RestaurantTutorial = { label: string; title: string; steps: GuidedTourStep[] };
 
 const TUTORIALS: Record<RestaurantTutorialView, RestaurantTutorial> = {
+  pos: {
+    label: 'Cómo usar Operación POS',
+    title: 'Operación POS · paso a paso',
+    steps: [
+      { target: '[data-tour="restaurant-pos"]', title: 'Venta y cuenta', description: 'Selecciona productos, aplica variantes y extras, abre la cuenta y envíala a cocina o cobra desde el mismo flujo.', placement: 'bottom' },
+      { target: '[data-tour="restaurant-header"]', title: 'Sucursal y actualización', description: 'Selecciona la sucursal activa y actualiza los datos operativos cuando lo necesites.', placement: 'bottom' },
+    ],
+  },
   salon: {
     label: 'Cómo usar Salón y POS',
     title: 'Salón y POS · paso a paso',
@@ -32,6 +40,14 @@ const TUTORIALS: Record<RestaurantTutorialView, RestaurantTutorial> = {
       { target: '[data-tour="restaurant-header"]', title: 'Actualizar tickets', description: 'Actualiza la vista para recibir las nuevas comandas enviadas a cocina.', placement: 'bottom' },
     ],
   },
+  delivery: {
+    label: 'Cómo usar Entrega y retiro',
+    title: 'Entrega y retiro · paso a paso',
+    steps: [
+      { target: '[data-tour="restaurant-delivery"]', title: 'Pedidos de entrega', description: 'Filtra pedidos, registra al responsable y avanza cada entrega o retiro hasta completarlo.', placement: 'bottom' },
+      { target: '[data-tour="restaurant-header"]', title: 'Actualizar operación', description: 'Actualiza para recibir los cambios más recientes de delivery y retiro.', placement: 'bottom' },
+    ],
+  },
   carta: {
     label: 'Cómo usar Carta',
     title: 'Carta · paso a paso',
@@ -48,11 +64,19 @@ const TUTORIALS: Record<RestaurantTutorialView, RestaurantTutorial> = {
       { target: '[data-tour="restaurant-header"]', title: 'Actualizar reportes', description: 'Actualiza para recalcular los indicadores con las operaciones más recientes.', placement: 'bottom' },
     ],
   },
+  configuracion: {
+    label: 'Cómo configurar Restaurante',
+    title: 'Configuración de Restaurante · paso a paso',
+    steps: [
+      { target: '[data-tour="restaurant-configuration"]', title: 'Configuración central', description: 'Administra el perfil, canales, inventario, cocina, pedidos, cobros y permisos desde la configuración del restaurante.', placement: 'bottom' },
+      { target: '[data-tour="restaurant-header"]', title: 'Guardar cambios', description: 'Revisa la sucursal activa y guarda la configuración para aplicar las reglas a la operación.', placement: 'bottom' },
+    ],
+  },
 };
 
 export function RestaurantViewTutorial({ view, className = '' }: { view: RestaurantTutorialView; className?: string }) {
   const [open, setOpen] = useState(false);
-  const tutorial = TUTORIALS[view];
+  const tutorial = TUTORIALS[view] || TUTORIALS.salon;
 
   return (
     <>

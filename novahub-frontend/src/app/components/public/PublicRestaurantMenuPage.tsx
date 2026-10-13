@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChefHat, Loader2, Minus, Plus, Send, ShoppingBag, Star, X } from 'lucide-react';
+import { ArrowLeft, Check, ChefHat, CreditCard, Globe2, Loader2, Minus, Plus, Send, ShoppingBag, Star, X } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -13,10 +13,16 @@ type MenuTheme = RestaurantPublicBranding['theme'];
 const DEFAULT_BRANDING: RestaurantPublicBranding = {
   name: 'Restaurante',
   logo: null,
+  coverImage: null,
   primaryColor: '#10b981',
   accentColor: '#064e3b',
   theme: 'modern',
   showImages: true,
+  showDescriptions: true,
+  showPrices: true,
+  showAllergens: false,
+  showFooter: true,
+  language: 'BOTH',
   whiteLabel: false,
 };
 
@@ -118,6 +124,14 @@ function themeStyles(theme: MenuTheme, _primary: string, _accent: string) {
 type SelectedOptions = Record<string, string | string[]>;
 type GuestCartLine = { itemId: string; quantity: number; selectedOptions: SelectedOptions };
 
+function localizedItemName(item: RestaurantMenuItem, language: 'es' | 'en') {
+  return language === 'en' && item.metadata?.nameEn ? item.metadata.nameEn : item.name;
+}
+
+function localizedItemDescription(item: RestaurantMenuItem, language: 'es' | 'en') {
+  return language === 'en' && item.metadata?.descriptionEn ? item.metadata.descriptionEn : item.description || 'Preparado al momento.';
+}
+
 export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToken?: string; hotelToken?: string }) {
   const isHotelStay = Boolean(hotelToken);
   const [table, setTable] = useState<{ name: string; code: string } | null>(null);
@@ -132,7 +146,18 @@ export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToke
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [sentNumber, setSentNumber] = useState('');
-  const [showCart, setShowCart] = useState(false);
+  const [sentOrderId, setSentOrderId] = useState('');
+  const [sentStatus, setSentStatus] = useState('PENDING_CONFIRMATION');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
+  const [splitRequested, setSplitRequested] = useState(false);
+  const [language, setLanguage] = useState<'es' | 'en'>('es');
+  const [publicView, setPublicView] = useState<'menu' | 'checkout'>('menu');
+
+  const copy = language === 'en' ? {
+    menu: 'Menu', order: 'Your order', add: 'Add', choose: 'Choose options', continue: 'Continue to payment', send: 'Place order', total: 'Total', payment: 'Payment', cash: 'Pay on site', card: 'Card on site', split: 'Request split bill', back: 'Back to menu', received: 'Order received', tracking: 'Order tracking', another: 'Place another order', preparing: 'Preparing', ready: 'Ready', pending: 'Waiting for confirmation', notes: 'Notes for the kitchen', name: 'Your name (optional)', phone: 'Phone (optional)',
+  } : {
+    menu: 'Carta', order: 'Tu pedido', add: 'Agregar', choose: 'Elegir opciones', continue: 'Continuar al pago', send: 'Confirmar pedido', total: 'Total', payment: 'Forma de pago', cash: 'Pagar en el local', card: 'Tarjeta al entregar', split: 'Solicitar división de cuenta', back: 'Volver a la carta', received: 'Pedido recibido', tracking: 'Seguimiento del pedido', another: 'Hacer otro pedido', preparing: 'Preparando', ready: 'Listo', pending: 'Esperando confirmación', notes: 'Notas para la cocina', name: 'Tu nombre (opcional)', phone: 'Teléfono (opcional)',
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -142,12 +167,23 @@ export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToke
     request.then((result) => {
       setTable(result.table);
       setCategories(result.categories || []);
-      if (result.branding) setBranding({ ...DEFAULT_BRANDING, ...result.branding });
+      if (result.branding) { setBranding({ ...DEFAULT_BRANDING, ...result.branding }); if (result.branding.language === 'EN') setLanguage('en'); }
     }).catch((error: unknown) => {
       if (!(error instanceof Error) || error.name !== 'AbortError') toast.error(getApiErrorMessage(error, 'Esta carta no está disponible.'));
     }).finally(() => setLoading(false));
     return () => controller.abort();
   }, [hotelToken, tableToken]);
+
+  useEffect(() => {
+    if (!sentOrderId || !tableToken || isHotelStay) return;
+    let stopped = false;
+    const refreshStatus = () => restaurantService.getPublicOrder(tableToken, sentOrderId).then((order) => {
+      if (!stopped) setSentStatus(order.status);
+    }).catch(() => undefined);
+    const intervalId = window.setInterval(refreshStatus, 10_000);
+    refreshStatus();
+    return () => { stopped = true; window.clearInterval(intervalId); };
+  }, [isHotelStay, sentOrderId, tableToken]);
 
   const t = themeStyles(branding.theme, branding.primaryColor, branding.accentColor);
   const isDark = branding.theme === 'elegant';
@@ -208,13 +244,15 @@ export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToke
     if (!lines.length) return;
     setSending(true);
     try {
-      const payload = { items: lines.map(({ item, quantity, selectedOptions }) => ({ menuItemId: item.id, quantity, selectedOptions })), ...(notes.trim() ? { notes: notes.trim() } : {}) };
+      const payload = { items: lines.map(({ item, quantity, selectedOptions }) => ({ menuItemId: item.id, quantity, selectedOptions })), ...(notes.trim() ? { notes: notes.trim() } : {}), paymentMethod, splitRequested };
       const order = isHotelStay
         ? await hotelService.createGuestOrder(hotelToken!, payload)
         : await restaurantService.createPublicOrder(tableToken!, { ...payload, customerName: name || undefined, customerPhone: phone || undefined });
       setSentNumber(order.number);
+      setSentOrderId(order.id);
+      setSentStatus(order.status || 'PENDING_CONFIRMATION');
       setCart({});
-      setShowCart(false);
+      setPublicView('menu');
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo enviar el pedido.'));
     } finally {
@@ -228,7 +266,10 @@ export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToke
 
   return <main className={`min-h-screen px-4 pb-28 pt-6 text-slate-900 sm:px-6 ${t.page}`}>
     <div className="mx-auto max-w-5xl">
-      <header className={`relative overflow-hidden rounded-3xl p-6 shadow-xl sm:p-8 ${t.header}`} style={{ background: `linear-gradient(135deg, ${branding.accentColor}, ${branding.primaryColor})`, color: headerForeground }}>
+      <header className={`relative overflow-hidden rounded-3xl shadow-xl ${t.header}`} style={{ color: headerForeground, background: `linear-gradient(135deg, ${branding.accentColor}, ${branding.primaryColor})` }}>
+        {branding.coverImage && <img src={branding.coverImage} alt="Portada del restaurante" className="absolute inset-0 size-full object-cover opacity-45" />}
+        <div className="absolute inset-0 bg-gradient-to-br from-black/25 via-transparent to-black/30" />
+        <div className="relative p-6 sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             {branding.logo ? <img src={branding.logo} alt={branding.name} className="size-14 rounded-2xl border border-white/20 object-cover shadow-lg" /> : <div className="flex size-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur"><ChefHat className="size-7" /></div>}
@@ -242,16 +283,32 @@ export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToke
               <Star className="size-3.5 fill-amber-300 text-amber-300" /> Recomendados de la casa
             </div>
           )}
+          <button type="button" onClick={() => setLanguage((current) => current === 'es' ? 'en' : 'es')} className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs font-black backdrop-blur" style={{ color: headerForeground }} aria-label="Cambiar idioma">
+            <Globe2 className="size-3.5" /> {language === 'es' ? 'EN' : 'ES'}
+          </button>
+        </div>
         </div>
       </header>
 
       {sentNumber ? (
         <div className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50 p-8 text-center">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-600 text-white"><Send className="size-6" /></div>
-          <h2 className="mt-4 text-2xl font-black text-emerald-900">Pedido recibido</h2>
-          <p className="mt-2 text-emerald-800">Tu comanda <strong>{sentNumber}</strong> fue enviada al restaurante.</p>
-          <Button className="mt-5" style={{ background: branding.primaryColor, color: primaryForeground }} onClick={() => setSentNumber('')}>Hacer otro pedido</Button>
+          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-600 text-white"><Check className="size-6" /></div>
+          <h2 className="mt-4 text-2xl font-black text-emerald-900">{copy.received}</h2>
+          <p className="mt-2 text-emerald-800">{language === 'en' ? 'Your order' : 'Tu comanda'} <strong>{sentNumber}</strong> {language === 'en' ? 'was sent to the restaurant.' : 'fue enviada al restaurante.'}</p>
+          <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-emerald-200 bg-white/70 p-4 text-left"><div className="flex items-center justify-between text-sm font-bold"><span>{copy.tracking}</span><span className="text-emerald-700">{sentStatus === 'PENDING_CONFIRMATION' ? copy.pending : sentStatus === 'READY' ? copy.ready : copy.preparing}</span></div><div className="mt-4 flex items-center gap-2"><span className="size-3 rounded-full bg-emerald-600" /><span className="h-1 flex-1 rounded-full bg-emerald-200" /><span className={`size-3 rounded-full ${['IN_PREPARATION', 'READY', 'SERVED', 'PAID'].includes(sentStatus) ? 'bg-emerald-600' : 'bg-emerald-200'}`} /><span className="h-1 flex-1 rounded-full bg-emerald-200" /><span className={`size-3 rounded-full ${['READY', 'SERVED', 'PAID'].includes(sentStatus) ? 'bg-emerald-600' : 'bg-emerald-200'}`} /></div><p className="mt-3 text-xs text-emerald-800">{language === 'en' ? 'This status updates automatically while the restaurant processes your order.' : 'El estado se actualiza automáticamente mientras el restaurante procesa tu pedido.'}</p></div>
+          <Button className="mt-5" style={{ background: branding.primaryColor, color: primaryForeground }} onClick={() => { setSentNumber(''); setSentOrderId(''); }}>{copy.another}</Button>
         </div>
+      ) : publicView === 'checkout' ? (
+        <section className={`mx-auto mt-6 max-w-2xl rounded-3xl p-5 shadow-lg sm:p-8 ${t.card}`}>
+          <button type="button" onClick={() => setPublicView('menu')} className="flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />{copy.back}</button>
+          <div className="mt-5 flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest" style={{ color: branding.primaryColor }}>{copy.payment}</p><h2 className="mt-1 font-serif text-3xl font-medium italic">{copy.order}</h2></div><CreditCard className="size-6" style={{ color: branding.primaryColor }} /></div>
+          <div className="mt-5 divide-y divide-border/60 rounded-2xl border border-border/60">{lines.map(({ key, item, quantity, selectedOptions }) => <div key={key} className="flex items-center justify-between gap-3 p-3 text-sm"><span><strong>{quantity}×</strong> {localizedItemName(item, language)}{optionNames(item, selectedOptions) && <small className="block text-xs text-muted-foreground">{optionNames(item, selectedOptions)}</small>}</span><span className="font-black">{money(lineTotal(item, selectedOptions, quantity))}</span></div>)}<div className="flex items-center justify-between p-4 text-lg font-black"><span>{copy.total}</span><span style={{ color: branding.primaryColor }}>{money(total)}</span></div></div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setPaymentMethod('CASH')} className={`rounded-2xl border p-4 text-left ${paymentMethod === 'CASH' ? 'border-primary bg-primary/10 ring-2 ring-primary/15' : 'border-border/60'}`}><p className="font-black">{copy.cash}</p><p className="mt-1 text-xs text-muted-foreground">{language === 'en' ? 'The staff will collect it at the table or counter.' : 'El personal lo cobra en mesa o mostrador.'}</p></button><button type="button" onClick={() => setPaymentMethod('CARD')} className={`rounded-2xl border p-4 text-left ${paymentMethod === 'CARD' ? 'border-primary bg-primary/10 ring-2 ring-primary/15' : 'border-border/60'}`}><p className="font-black">{copy.card}</p><p className="mt-1 text-xs text-muted-foreground">{language === 'en' ? 'No card data is stored in this public menu.' : 'No se almacenan datos de tarjeta en esta carta pública.'}</p></button></div>
+          <label className="mt-4 flex items-center gap-3 rounded-xl border border-border/60 p-3 text-sm font-semibold"><input type="checkbox" checked={splitRequested} onChange={(event) => setSplitRequested(event.target.checked)} />{copy.split}</label>
+          {!isHotelStay && <div className="mt-4 grid gap-2 sm:grid-cols-2"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder={copy.name} /><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={copy.phone} /></div>}
+          <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={copy.notes} className="mt-2" />
+          <Button className="mt-5 h-12 w-full rounded-xl font-black uppercase tracking-wide" disabled={!lines.length || sending} style={{ background: branding.primaryColor, color: primaryForeground }} onClick={sendOrder}>{sending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}{copy.send}</Button>
+        </section>
       ) : (
         <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_320px]">
           <section className="space-y-5">
@@ -272,18 +329,19 @@ export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToke
                         <div className="flex justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <p className={t.itemName}>{item.name}</p>
+                              <p className={t.itemName}>{localizedItemName(item, language)}</p>
                               {item.isFeatured && <Star className="size-3 shrink-0 fill-amber-400 text-amber-400" />}
                             </div>
-                            <p className={`mt-1 text-xs leading-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{item.description || 'Preparado al momento.'}</p>
+                            {branding.showDescriptions !== false && <p className={`mt-1 text-xs leading-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{localizedItemDescription(item, language)}</p>}
+                            {branding.showAllergens === true && Array.isArray(item.metadata?.allergens) && item.metadata.allergens.length > 0 && <p className="mt-1 text-[10px] font-semibold opacity-70">Alérgenos: {item.metadata.allergens.join(', ')}</p>}
                           </div>
                           {branding.showImages && item.imageUrl ? (
-                            <img src={item.imageUrl} alt={item.name} className="size-16 shrink-0 rounded-xl object-cover" />
-                          ) : (
+                            <img src={item.imageUrl} alt={localizedItemName(item, language)} className="size-16 shrink-0 rounded-xl object-cover" />
+                          ) : branding.showPrices !== false ? (
                             <span className={`shrink-0 ${t.price}`} style={{ color: branding.primaryColor }}>{item.options?.length ? `Desde ${money(item.price)}` : money(item.price)}</span>
-                          )}
+                          ) : null}
                         </div>
-                        {branding.showImages && item.imageUrl && <p className={`mt-2 text-right ${t.price}`} style={{ color: branding.primaryColor }}>{item.options?.length ? `Desde ${money(item.price)}` : money(item.price)}</p>}
+                        {branding.showPrices !== false && branding.showImages && item.imageUrl && <p className={`mt-2 text-right ${t.price}`} style={{ color: branding.primaryColor }}>{item.options?.length ? `Desde ${money(item.price)}` : money(item.price)}</p>}
                         <div className="mt-3 flex items-center justify-end gap-2">
                           {qty > 0 && !item.options?.length ? (
                             <div className="flex items-center gap-2">
@@ -321,8 +379,8 @@ export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToke
                 <div className="mt-4 space-y-2">
                   {lines.map(({ key, item, quantity, selectedOptions }) => (
                     <div key={key} className="flex items-start justify-between gap-2 text-sm">
-                      <span className="min-w-0"><strong>{quantity}×</strong> {item.name}{optionNames(item, selectedOptions) && <small className="block text-xs text-muted-foreground">{optionNames(item, selectedOptions)}</small>}</span>
-                      <span className="flex shrink-0 items-center gap-1"><strong>{money(lineTotal(item, selectedOptions, quantity))}</strong><button type="button" aria-label={`Quitar una unidad de ${item.name}`} onClick={() => change(key, -1)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" aria-label={`Agregar una unidad de ${item.name}`} onClick={() => change(key, 1)} className="rounded bg-muted px-2 py-0.5">+</button></span>
+                      <span className="min-w-0"><strong>{quantity}×</strong> {localizedItemName(item, language)}{optionNames(item, selectedOptions) && <small className="block text-xs text-muted-foreground">{optionNames(item, selectedOptions)}</small>}</span>
+                      <span className="flex shrink-0 items-center gap-1"><strong>{money(lineTotal(item, selectedOptions, quantity))}</strong><button type="button" aria-label={`Quitar una unidad de ${localizedItemName(item, language)}`} onClick={() => change(key, -1)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" aria-label={`Agregar una unidad de ${localizedItemName(item, language)}`} onClick={() => change(key, 1)} className="rounded bg-muted px-2 py-0.5">+</button></span>
                     </div>
                   ))}
                   <div className="mt-3 border-t pt-3">
@@ -333,8 +391,8 @@ export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToke
               <div className="mt-4 space-y-2">
                 {!isHotelStay && <><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre (opcional)" className="h-10 rounded-xl text-sm" /><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Teléfono (opcional)" className="h-10 rounded-xl text-sm" /></>}
                 <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas para la cocina" className="h-10 rounded-xl text-sm" />
-                <Button className="w-full h-11 rounded-xl font-black uppercase tracking-wide" disabled={!lines.length || sending} style={{ background: branding.primaryColor, color: primaryForeground }} onClick={sendOrder}>
-                  {sending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />} Enviar pedido
+                <Button className="w-full h-11 rounded-xl font-black uppercase tracking-wide" disabled={!lines.length} style={{ background: branding.primaryColor, color: primaryForeground }} onClick={() => setPublicView('checkout')}>
+                  <CreditCard className="mr-2 size-4" /> {copy.continue}
                 </Button>
               </div>
             </div>
@@ -346,29 +404,13 @@ export function PublicRestaurantMenuPage({ tableToken, hotelToken }: { tableToke
     {/* Carrito móvil flotante */}
     {!sentNumber && lines.length > 0 && (
       <div className="fixed inset-x-4 bottom-4 z-40 lg:hidden">
-        <button type="button" onClick={() => setShowCart(!showCart)} className="flex w-full items-center justify-between rounded-2xl px-5 py-4 shadow-2xl" style={{ background: branding.accentColor, color: accentForeground }}>
+        <button type="button" onClick={() => setPublicView('checkout')} className="flex w-full items-center justify-between rounded-2xl px-5 py-4 shadow-2xl" style={{ background: branding.accentColor, color: accentForeground }}>
           <span className="flex items-center gap-2 text-sm font-black"><ShoppingBag className="size-4" /> {lines.length} platillo{lines.length === 1 ? '' : 's'} · {money(total)}</span>
-          <span className="text-xs font-bold uppercase tracking-wide">Ver pedido</span>
+          <span className="text-xs font-bold uppercase tracking-wide">{copy.continue}</span>
         </button>
-        {showCart && (
-          <div className={`mt-2 max-h-72 overflow-y-auto rounded-2xl p-4 shadow-2xl ${t.card}`}>
-            {lines.map(({ key, item, quantity, selectedOptions }) => (
-              <div key={key} className="flex items-start justify-between gap-2 py-1.5 text-sm">
-                <span className="min-w-0"><strong>{quantity}×</strong> {item.name}{optionNames(item, selectedOptions) && <small className="block text-xs text-muted-foreground">{optionNames(item, selectedOptions)}</small>}</span>
-                <span className="flex shrink-0 items-center gap-1"><strong>{money(lineTotal(item, selectedOptions, quantity))}</strong><button type="button" aria-label={`Quitar una unidad de ${item.name}`} onClick={() => change(key, -1)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" aria-label={`Agregar una unidad de ${item.name}`} onClick={() => change(key, 1)} className="rounded bg-muted px-2 py-0.5">+</button></span>
-              </div>
-            ))}
-            <div className="mt-2 space-y-2 border-t pt-3">
-              {!isHotelStay && <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre (opcional)" className="h-10 rounded-xl text-sm" />}
-              <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas para la cocina" className="h-10 rounded-xl text-sm" />
-              <Button className="w-full h-11 rounded-xl font-black uppercase" disabled={sending} style={{ background: branding.primaryColor, color: primaryForeground }} onClick={sendOrder}>
-                {sending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />} Enviar pedido
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
     )}
+    {branding.showFooter !== false && <footer className="mx-auto mt-10 max-w-5xl border-t border-current/10 pt-5 text-center text-xs font-semibold opacity-70">Powered by NovaHub</footer>}
     {selectingItem && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3" role="dialog" aria-modal="true" aria-labelledby="guest-options-title"><div className={`max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-3xl p-5 shadow-2xl ${t.card}`}><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest" style={{ color: branding.primaryColor }}>Personaliza tu platillo</p><h2 id="guest-options-title" className="mt-1 text-xl font-black">{selectingItem.name}</h2></div><button type="button" aria-label="Cerrar opciones" onClick={() => setSelectingItem(null)} className="rounded-lg p-2 hover:bg-black/5"><X className="size-5" /></button></div><div className="mt-4 space-y-4">{(selectingItem.options || []).map((group: RestaurantMenuOptionGroup) => <fieldset key={group.id}><legend className="text-sm font-black">{group.name}{group.required && <span className="ml-1 text-rose-600">*</span>}<span className="ml-2 text-xs font-medium text-muted-foreground">{group.multiple ? 'Puedes elegir varios' : 'Elige uno'}</span></legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{group.choices.map((choice) => { const value = selectionDraft[group.id]; const active = Array.isArray(value) ? value.includes(choice.id) : value === choice.id; return <button key={choice.id} type="button" aria-pressed={active} onClick={() => setSelectionDraft((current) => ({ ...current, [group.id]: group.multiple ? (Array.isArray(current[group.id]) ? (current[group.id] as string[]).includes(choice.id) ? (current[group.id] as string[]).filter((id) => id !== choice.id) : [...(current[group.id] as string[]), choice.id] : [choice.id]) : choice.id }))} className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition ${active ? 'border-primary bg-primary/10 ring-2 ring-primary/15' : 'border-border/60 hover:border-primary/40'}`}><span className="font-semibold">{choice.name}</span><span className="flex items-center gap-2 font-bold">{Number(choice.priceAdjustment) > 0 ? `+${money(choice.priceAdjustment)}` : 'Incluido'}{active && <Check className="size-4 text-primary" />}</span></button>; })}</div></fieldset>)}</div><div className="mt-5 flex flex-col-reverse gap-2 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-semibold">Precio estimado: <strong>{money(Number(selectingItem.price) + optionPrice(selectingItem, selectionDraft))}</strong></p><div className="flex gap-2"><Button variant="outline" onClick={() => setSelectingItem(null)}>Cancelar</Button><Button onClick={confirmOptions} style={{ background: branding.primaryColor, color: primaryForeground }}>Agregar al pedido</Button></div></div></div></div>}
   </main>;
 }
