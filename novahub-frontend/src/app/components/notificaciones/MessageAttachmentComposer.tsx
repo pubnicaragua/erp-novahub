@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { FileText, Loader2, Paperclip, RotateCcw, X } from 'lucide-react';
-import { supportConversationsService, type SupportConversationAttachment } from '../../services/support-conversations.service';
+import { messagesService } from '../../services/notificaciones.service';
+import { supportConversationsService } from '../../services/support-conversations.service';
+import type { MessageAttachment } from '../../types';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
 
@@ -14,25 +16,27 @@ interface ComposerFile {
   file: File;
   progress: number;
   status: 'uploading' | 'ready' | 'error';
-  attachment?: SupportConversationAttachment;
+  attachment?: MessageAttachment;
   error?: string;
 }
 
-interface SupportAttachmentComposerProps {
+interface MessageAttachmentComposerProps {
   conversationId?: string;
+  kind?: 'SUPPORT' | 'DIRECT';
   disabled?: boolean;
   onChange: (state: {
-    attachments: SupportConversationAttachment[];
+    attachments: MessageAttachment[];
     uploading: boolean;
     hasError: boolean;
   }) => void;
 }
 
-export function SupportAttachmentComposer({
+export function MessageAttachmentComposer({
   conversationId,
+  kind = 'SUPPORT',
   disabled = false,
   onChange,
-}: SupportAttachmentComposerProps) {
+}: MessageAttachmentComposerProps) {
   const [files, setFiles] = useState<ComposerFile[]>([]);
   const [selectionError, setSelectionError] = useState('');
 
@@ -51,10 +55,10 @@ export function SupportAttachmentComposer({
   const upload = async (item: ComposerFile) => {
     setFile(item.key, (current) => ({ ...current, status: 'uploading', progress: 0, error: undefined }));
     try {
-      const attachment = await supportConversationsService.uploadAttachment(item.file, {
-        conversationId,
-        onProgress: (progress) => setFile(item.key, (current) => ({ ...current, progress })),
-      });
+      const onProgress = (progress: number) => setFile(item.key, (current) => ({ ...current, progress }));
+      const attachment = kind === 'DIRECT'
+        ? await messagesService.uploadAttachment(item.file, { onProgress })
+        : await supportConversationsService.uploadAttachment(item.file, { conversationId, onProgress });
       setFile(item.key, (current) => ({ ...current, attachment, status: 'ready', progress: 100 }));
     } catch (error: unknown) {
       const failure = error as { response?: { data?: { message?: string } }; message?: string };

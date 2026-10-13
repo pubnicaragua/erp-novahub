@@ -15,9 +15,9 @@ import {
 } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { ChatMessage, Message, MessageParticipant } from '../../types';
+import type { ChatMessage, Message, MessageAttachment, MessageParticipant } from '../../types';
 import { messagesService } from '../../services/notificaciones.service';
-import { supportConversationsService, type SupportConversation, type SupportConversationAttachment } from '../../services/support-conversations.service';
+import { supportConversationsService, type SupportConversation } from '../../services/support-conversations.service';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
@@ -36,8 +36,8 @@ import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
 import { updateMessageThread, upsertMessageThread } from './message-thread-cache';
-import { SupportAttachmentComposer } from './SupportAttachmentComposer';
-import { SupportMessageAttachments } from './SupportMessageAttachments';
+import { MessageAttachmentComposer } from './MessageAttachmentComposer';
+import { MessageAttachments } from './MessageAttachments';
 
 interface MensajesViewProps {
   data: Message[];
@@ -46,7 +46,7 @@ interface MensajesViewProps {
 }
 
 type MessageFilter = 'all' | 'unread' | 'direct' | 'support';
-type AttachmentComposerState = { attachments: SupportConversationAttachment[]; uploading: boolean; hasError: boolean };
+type AttachmentComposerState = { attachments: MessageAttachment[]; uploading: boolean; hasError: boolean };
 const EMPTY_ATTACHMENT_STATE: AttachmentComposerState = { attachments: [], uploading: false, hasError: false };
 
 const initials = (name?: string) =>
@@ -101,6 +101,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   const [recipientId, setRecipientId] = useState('');
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
+  const [composeAttachmentState, setComposeAttachmentState] = useState<AttachmentComposerState>(EMPTY_ATTACHMENT_STATE);
+  const [composeAttachmentResetKey, setComposeAttachmentResetKey] = useState(0);
   const [composeError, setComposeError] = useState('');
   const [sending, setSending] = useState(false);
   const [reply, setReply] = useState('');
@@ -110,6 +112,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   const [replying, setReplying] = useState(false);
   const [markingReadId, setMarkingReadId] = useState<string | null>(null);
   const onReplyAttachmentsChange = useCallback((state: AttachmentComposerState) => setReplyAttachmentState(state), []);
+  const onComposeAttachmentsChange = useCallback((state: AttachmentComposerState) => setComposeAttachmentState(state), []);
   const messageBodyRef = useRef<HTMLDivElement>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -212,12 +215,16 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   }, [selectedId, selected?.messages.length, shouldReduceMotion]);
 
   const openThread = (thread: Message) => {
+    setReplyAttachmentState(EMPTY_ATTACHMENT_STATE);
+    setReplyAttachmentResetKey((current) => current + 1);
     setSelectedId(thread.id);
     setMobileThreadOpen(true);
     setReplyError('');
   };
 
   const openComposer = async () => {
+    setComposeAttachmentState(EMPTY_ATTACHMENT_STATE);
+    setComposeAttachmentResetKey((current) => current + 1);
     setComposeOpen(true);
     setComposeError('');
   };
@@ -226,6 +233,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
     setRecipientId('');
     setSubject('');
     setContent('');
+    setComposeAttachmentState(EMPTY_ATTACHMENT_STATE);
+    setComposeAttachmentResetKey((current) => current + 1);
     setComposeError('');
   };
 
@@ -233,15 +242,21 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
     event.preventDefault();
     const cleanSubject = subject.trim();
     const cleanContent = content.trim();
-    if (!recipientId || !cleanSubject || !cleanContent) {
-      setComposeError('Elegí un destinatario y completá el asunto y el mensaje.');
+    if (!recipientId || !cleanSubject || (!cleanContent && !composeAttachmentState.attachments.length)) {
+      setComposeError('Elegí un destinatario, completá el asunto y escribe un mensaje o adjunta un archivo.');
       return;
     }
+    if (composeAttachmentState.uploading || composeAttachmentState.hasError) return;
 
     setSending(true);
     setComposeError('');
     try {
-      const created = await messagesService.create({ recipientId, title: cleanSubject, content: cleanContent });
+      const created = await messagesService.create({
+        recipientId,
+        title: cleanSubject,
+        content: cleanContent,
+        attachmentUploadIds: composeAttachmentState.attachments.map((attachment) => attachment.id),
+      });
       queryClient.setQueryData<Message[]>(directMessagesCacheKey, (current) => upsertMessageThread(current, created));
       setSelectedId(created.id);
       setMobileThreadOpen(true);
@@ -257,19 +272,19 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
 
   const sendReply = async (event?: React.FormEvent) => {
     event?.preventDefault();
-    const attachments = selected?.kind === 'SUPPORT' ? replyAttachmentState.attachments : [];
-    if (!selected || (!reply.trim() && !attachments.length) || (selected.kind === 'SUPPORT' && (replyAttachmentState.uploading || replyAttachmentState.hasError))) return;
+    const attachments = selected && selected.kind !== 'SYSTEM' ? replyAttachmentState.attachments : [];
+    if (!selected || (!reply.trim() && !attachments.length) || (selected.kind !== 'SYSTEM' && (replyAttachmentState.uploading || replyAttachmentState.hasError))) return;
 
     setReplying(true);
     setReplyError('');
     try {
       const updated = selected.kind === 'SUPPORT'
         ? await supportConversationsService.reply(selected.id, reply.trim(), attachments.map((attachment) => attachment.id))
-        : await messagesService.reply(selected.id, reply.trim());
+        : await messagesService.reply(selected.id, reply.trim(), attachments.map((attachment) => attachment.id));
       const cacheKey = selected.kind === 'SUPPORT' ? supportConversationsCacheKey : directMessagesCacheKey;
       queryClient.setQueryData<Message[]>(cacheKey, (current) => upsertMessageThread(current, updated));
       setReply('');
-      if (selected.kind === 'SUPPORT') {
+      if (selected.kind !== 'SYSTEM') {
         setReplyAttachmentState(EMPTY_ATTACHMENT_STATE);
         setReplyAttachmentResetKey((current) => current + 1);
       }
@@ -493,8 +508,15 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                               {participantName(message.sender, isSystem ? 'Sistema' : participantName(selected.participant, 'Participante'))}
                             </p>
                           )}
-                          {(selected.kind !== 'SUPPORT' || content) && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</p>}
-                          {selected.kind === 'SUPPORT' && <SupportMessageAttachments conversationId={selected.id} attachments={message.attachments} mine={message.mine} />}
+                          {content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</p>}
+                          {(selected.kind === 'SUPPORT' || selected.kind === 'DIRECT') && (
+                            <MessageAttachments
+                              threadId={selected.id}
+                              kind={selected.kind}
+                              attachments={message.attachments}
+                              mine={message.mine}
+                            />
+                          )}
                           {hasAction && (
                             <Button
                               type="button"
@@ -539,18 +561,19 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                         type="submit"
                         size="icon"
                         className="size-10 shrink-0 rounded-lg"
-                        disabled={replying || !canPerform('NOTIFICATIONS_MESSAGES', 'create') || (selected.kind === 'SUPPORT' ? (replyAttachmentState.uploading || replyAttachmentState.hasError || (!reply.trim() && !replyAttachmentState.attachments.length)) : !reply.trim())}
+                        disabled={replying || !canPerform('NOTIFICATIONS_MESSAGES', 'create') || replyAttachmentState.uploading || replyAttachmentState.hasError || (!reply.trim() && !replyAttachmentState.attachments.length)}
                         aria-label="Enviar respuesta"
                         data-testid="send-reply-button"
                       >
                         {replying ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                       </Button>
                     </div>
-                    {selected.kind === 'SUPPORT' && (
+                    {selected.kind !== 'SYSTEM' && (
                       <div className="mt-2">
-                        <SupportAttachmentComposer
+                        <MessageAttachmentComposer
                           key={`branch-reply-${selected.id}-${replyAttachmentResetKey}`}
                           conversationId={selected.id}
+                          kind={selected.kind}
                           disabled={replying || !canPerform('NOTIFICATIONS_MESSAGES', 'create')}
                           onChange={onReplyAttachmentsChange}
                         />
@@ -579,7 +602,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
           if (!open && !sending) resetComposer();
         }}
       >
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
           <form onSubmit={sendNewMessage} className="space-y-5" data-testid="new-message-form">
             <DialogHeader>
               <DialogTitle>Nuevo mensaje</DialogTitle>
@@ -633,11 +656,23 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
               <p className="text-right text-[11px] text-muted-foreground">{content.length}/4000</p>
             </div>
 
+            <MessageAttachmentComposer
+              key={`new-message-${composeAttachmentResetKey}`}
+              kind="DIRECT"
+              disabled={sending}
+              onChange={onComposeAttachmentsChange}
+            />
+
             {composeFeedbackError && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{composeFeedbackError}</p>}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setComposeOpen(false)} disabled={sending}>Cancelar</Button>
-              <Button type="submit" disabled={sending || recipientsLoading || recipients.length === 0} className="gap-2" data-testid="send-new-message-button">
+              <Button
+                type="submit"
+                disabled={sending || recipientsLoading || recipients.length === 0 || composeAttachmentState.uploading || composeAttachmentState.hasError || (!content.trim() && !composeAttachmentState.attachments.length)}
+                className="gap-2"
+                data-testid="send-new-message-button"
+              >
                 {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                 Enviar mensaje
               </Button>

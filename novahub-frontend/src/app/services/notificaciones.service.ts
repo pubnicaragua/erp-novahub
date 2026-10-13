@@ -1,6 +1,6 @@
 import { api } from './api';
 import { dedupeNotificationRecords } from './notifications.service';
-import type { ChatMessage, Message, MessageParticipant } from '../types';
+import type { ChatMessage, Message, MessageAttachment, MessageParticipant } from '../types';
 
 const SYSTEM_PARTICIPANT: MessageParticipant = { id: 'system', name: 'Sistema' };
 
@@ -29,6 +29,60 @@ const currentUserId = (): string => {
   }
 };
 
+interface PreparedDirectMessageAttachmentUpload {
+  uploadId: string;
+  signedUrl: string;
+}
+
+const DIRECT_MESSAGE_ATTACHMENT_MIME_BY_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  csv: 'text/csv',
+};
+
+function getDirectMessageAttachmentMimeType(file: File) {
+  const extension = file.name.split('.').pop()?.toLowerCase() || '';
+  const expected = DIRECT_MESSAGE_ATTACHMENT_MIME_BY_EXTENSION[extension];
+  if (!expected) throw new Error('Formato no permitido. Adjunta JPG, PNG, WebP, PDF, DOCX, XLSX o CSV.');
+  const aliases = extension === 'csv' ? ['application/csv', 'application/vnd.ms-excel'] : [];
+  if (file.type && file.type !== 'application/octet-stream' && file.type !== expected && !aliases.includes(file.type)) {
+    throw new Error('La extensión y el tipo de archivo no coinciden.');
+  }
+  return expected;
+}
+
+function uploadDirectMessageAttachmentToSignedUrl(
+  prepared: PreparedDirectMessageAttachmentUpload,
+  file: File,
+  contentType: string,
+  onProgress: (progress: number) => void,
+) {
+  return new Promise<void>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('PUT', prepared.signedUrl);
+    request.setRequestHeader('x-upsert', 'false');
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+    };
+    request.onerror = () => reject(new Error('No pudimos conectar con el almacenamiento.'));
+    request.onabort = () => reject(new Error('La carga fue cancelada.'));
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) {
+        onProgress(100);
+        resolve();
+        return;
+      }
+      reject(new Error(`No se pudo cargar el archivo (${request.status}).`));
+    };
+    const body = new FormData();
+    body.append('cacheControl', '3600');
+    body.append('', new Blob([file], { type: contentType }), file.name);
+    request.send(body);
+  });
+}
+
 const normalizeParticipant = (value: any, fallback: MessageParticipant = SYSTEM_PARTICIPANT): MessageParticipant => ({
   id: String(value?.id || fallback.id),
   name: String(value?.name || fallback.name),
@@ -54,6 +108,17 @@ const metadataParticipant = (metadata: Record<string, any>, side: 'sender' | 're
 
 const normalizeChatMessage = (value: any, userId: string): ChatMessage => {
   const metadata = metadataObject(value?.metadata);
+  const attachments: MessageAttachment[] = Array.isArray(value?.attachments)
+    ? value.attachments.flatMap((attachment: any) => {
+      const id = String(attachment?.id || '').trim();
+      const fileName = String(attachment?.fileName || '').trim();
+      const mimeType = String(attachment?.mimeType || '').trim();
+      const byteSize = Number(attachment?.byteSize);
+      return id && fileName && mimeType && Number.isFinite(byteSize) && byteSize > 0
+        ? [{ id, fileName, mimeType, byteSize }]
+        : [];
+    })
+    : [];
   return {
     id: String(value?.id || `${Date.now()}-${Math.random()}`),
     content: String(value?.content || value?.message || ''),
@@ -63,6 +128,7 @@ const normalizeChatMessage = (value: any, userId: string): ChatMessage => {
     sender: normalizeParticipant(value?.sender, metadataParticipant(metadata, 'sender')),
     recipient: normalizeParticipant(value?.recipient, metadataParticipant(metadata, 'recipient')),
     link: value?.link || null,
+    ...(attachments.length ? { attachments } : {}),
   };
 };
 
@@ -80,6 +146,11 @@ const normalizeMessageThread = (value: any, userId: string): Message => {
   const latest = messages[messages.length - 1];
   const counterpart = rootMetadata.senderId === userId ? recipient : sender;
   const threadParticipant = normalizeParticipant(value?.participant, isDirect ? counterpart : SYSTEM_PARTICIPANT);
+  const attachmentPreview = latest?.attachments?.length === 1
+    ? `📎 ${latest.attachments[0].fileName}`
+    : latest?.attachments?.length
+      ? `📎 ${latest.attachments.length} archivos adjuntos`
+      : '';
   const unreadCount = Number.isFinite(Number(value?.unreadCount))
     ? Number(value.unreadCount)
     : legacyItems.filter((item: any) => item?.userId === userId && !item?.isRead).length;
@@ -89,7 +160,7 @@ const normalizeMessageThread = (value: any, userId: string): Message => {
     title: String(value?.title || 'Mensaje'),
     kind: isDirect ? 'DIRECT' : 'SYSTEM',
     participant: threadParticipant,
-    preview: String(value?.preview || latest?.content || value?.content || ''),
+    preview: String(value?.preview || latest?.content || attachmentPreview || value?.content || ''),
     lastMessageAt: String(value?.lastMessageAt || latest?.createdAt || value?.createdAt || new Date().toISOString()),
     unreadCount,
     canReply: Boolean(value?.canReply ?? (isDirect && threadParticipant.id && threadParticipant.id !== 'system')),
@@ -134,10 +205,26 @@ export const alertsService = createCrudService<any>('/notifications/alerts', { d
 export const messagesService = {
   getAll: async (signal?: AbortSignal) => normalizeMessageThreads(await api.get<unknown>('/notifications/messages', { signal })),
   getRecipients: (signal?: AbortSignal) => api.get<MessageParticipant[]>('/notifications/messages/recipients', { signal }),
-  create: (payload: { recipientId: string; title: string; content: string }) =>
+  create: (payload: { recipientId: string; title: string; content: string; attachmentUploadIds?: string[] }) =>
     api.post<Message>('/notifications/messages', payload),
-  reply: (threadId: string, content: string) =>
-    api.post<Message>(`/notifications/messages/${threadId}/replies`, { content }),
+  reply: (threadId: string, content: string, attachmentUploadIds: string[] = []) =>
+    api.post<Message>(`/notifications/messages/${encodeURIComponent(threadId)}/replies`, { content, attachmentUploadIds }),
+  async uploadAttachment(file: File, options: { onProgress?: (progress: number) => void } = {}) {
+    const mimeType = getDirectMessageAttachmentMimeType(file);
+    const prepared = await api.post<PreparedDirectMessageAttachmentUpload>('/notifications/messages/attachments/uploads', {
+      fileName: file.name,
+      mimeType,
+      size: file.size,
+    });
+    await uploadDirectMessageAttachmentToSignedUrl(prepared, file, mimeType, options.onProgress || (() => undefined));
+    return api.post<MessageAttachment>(
+      `/notifications/messages/attachments/uploads/${encodeURIComponent(prepared.uploadId)}/complete`,
+      {},
+    );
+  },
+  getAttachmentUrl: (threadId: string, attachmentId: string, download = false) => api.get<{
+    url: string; fileName: string; mimeType: string; byteSize: number; expiresIn: number;
+  }>(`/notifications/messages/${encodeURIComponent(threadId)}/attachments/${encodeURIComponent(attachmentId)}/url${download ? '?download=1' : ''}`),
   markRead: (threadId: string) =>
     api.patch<{ success: true }>(`/notifications/messages/${threadId}/read`, {}),
 };

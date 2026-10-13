@@ -1,25 +1,30 @@
 import { useEffect, useState } from 'react';
 import { Download, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
-import { supportConversationsService, type SupportConversationAttachment } from '../../services/support-conversations.service';
+import { messagesService } from '../../services/notificaciones.service';
+import { supportConversationsService } from '../../services/support-conversations.service';
+import type { MessageAttachment } from '../../types';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
 
-export function SupportMessageAttachments({
-  conversationId,
+export function MessageAttachments({
+  threadId,
+  kind,
   attachments,
   mine,
 }: {
-  conversationId: string;
-  attachments?: SupportConversationAttachment[];
+  threadId: string;
+  kind: 'SUPPORT' | 'DIRECT';
+  attachments?: MessageAttachment[];
   mine: boolean;
 }) {
   if (!attachments?.length) return null;
   return (
     <div className="mt-2 grid gap-2" aria-label="Archivos del mensaje">
       {attachments.map((attachment) => (
-        <SupportMessageAttachmentItem
+        <MessageAttachmentItem
           key={attachment.id}
-          conversationId={conversationId}
+          threadId={threadId}
+          kind={kind}
           attachment={attachment}
           mine={mine}
         />
@@ -28,17 +33,19 @@ export function SupportMessageAttachments({
   );
 }
 
-function SupportMessageAttachmentItem({
-  conversationId,
+function MessageAttachmentItem({
+  threadId,
+  kind,
   attachment,
   mine,
 }: {
-  conversationId: string;
-  attachment: SupportConversationAttachment;
+  threadId: string;
+  kind: 'SUPPORT' | 'DIRECT';
+  attachment: MessageAttachment;
   mine: boolean;
 }) {
   const isImage = attachment.mimeType.startsWith('image/');
-  const previewKey = `${conversationId}:${attachment.id}`;
+  const previewKey = `${kind}:${threadId}:${attachment.id}`;
   const [previewResult, setPreviewResult] = useState<{ key: string; url: string; error: string } | null>(null);
   const [downloadError, setDownloadError] = useState('');
   const previewUrl = previewResult?.key === previewKey ? previewResult.url : '';
@@ -48,18 +55,23 @@ function SupportMessageAttachmentItem({
   useEffect(() => {
     if (!isImage) return undefined;
     let active = true;
-    void supportConversationsService.getAttachmentUrl(conversationId, attachment.id)
+    const request = kind === 'DIRECT'
+      ? messagesService.getAttachmentUrl(threadId, attachment.id)
+      : supportConversationsService.getAttachmentUrl(threadId, attachment.id);
+    void request
       .then((result) => { if (active) setPreviewResult({ key: previewKey, url: result.url, error: '' }); })
       .catch(() => { if (active) setPreviewResult({ key: previewKey, url: '', error: 'Vista previa no disponible' }); });
     return () => { active = false; };
-  }, [attachment.id, conversationId, isImage, previewKey]);
+  }, [attachment.id, kind, threadId, isImage, previewKey]);
 
   const download = async () => {
     setDownloadError('');
     const newTab = window.open('about:blank', '_blank');
     if (newTab) newTab.opener = null;
     try {
-      const result = await supportConversationsService.getAttachmentUrl(conversationId, attachment.id, true);
+      const result = kind === 'DIRECT'
+        ? await messagesService.getAttachmentUrl(threadId, attachment.id, true)
+        : await supportConversationsService.getAttachmentUrl(threadId, attachment.id, true);
       if (newTab) newTab.location.href = result.url;
       else window.location.assign(result.url);
     } catch {
