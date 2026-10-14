@@ -1,23 +1,22 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import * as XLSX from 'xlsx';
 import { useManagerShellNavigation } from '../ManagerShell';
-import { useTenantQuery } from '../../hooks/useTenantQuery';
+import { fetchAllReportPages, useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type ManagerFinanceModuleResponse } from '../../services/enterprise-groups.service';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Banknote, BarChart3, CalendarDays, ChevronLeft, ChevronRight, Download, LayoutDashboard, LayoutGrid, Landmark, List, Loader2, RefreshCw, Search, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { Banknote, BarChart3, CalendarDays, ChevronLeft, ChevronRight, LayoutDashboard, LayoutGrid, Landmark, List, RefreshCw, Search, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
 import { MANAGER_FINANCE_VIEWS, type ManagerFinanceView } from './manager-finance.types';
-import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { managerStatusLabel as statusLabel } from '../../utils/managerLabels';
 import { ExportMenu } from '../ui/ExportMenu';
-import { generateManagerTablePDF } from '../../utils/managerReportPdf';
+import { exportManagerReportExcel, exportManagerReportPdf } from '../../utils/managerReportExport';
+import { buildManagerReportFilterSummary, buildManagerReportScopeSummary } from '../../utils/managerReportModel';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -70,21 +69,30 @@ export function ManagerFinanceModule({ view, onViewChange, groupId, businessUnit
     if (!canExport) return;
     setExporting(true);
     try {
-      const report = await enterpriseGroupsService.getFinanceModule(groupId, { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, reportCurrency, page: 1, pageSize: 5000, report: true, export: true });
-      const exportRows = (report.data || []).map((row: any) => {
+      const filters = { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, reportCurrency, page: 1, pageSize: 5000, report: true, export: true };
+      const report = await enterpriseGroupsService.getFinanceModule(groupId, filters);
+      const rows = await fetchAllReportPages((pageFilters) => enterpriseGroupsService.getFinanceModule(groupId, { ...filters, ...pageFilters }), filters, undefined, report);
+      const exportRows = rows.map((row: any) => {
         const original = row.amount ?? row.total ?? row.balance ?? (view === 'analysis' ? row.net : undefined);
         const equivalent = row.reportAmount ?? row.reportTotal ?? row.reportBalance ?? (view === 'analysis' ? row.net : undefined);
         const originalCurrency = row.currency || (view === 'analysis' ? reportCurrency : 'NIO');
         const amount = displayMode === 'ORIGINAL' || equivalent == null ? formatMoney(original, originalCurrency) : formatMoney(equivalent, reportCurrency);
         return { Sucursal: row.branchName || 'Sucursal no identificada', Vista: labels[view], Identificador: row.number || row.name || row.id, Fecha: formatDate(row.date || row.createdAt || row.nextExecutionDate), Descripción: row.description || row.source || row.category || '', Estado: statusLabel(row.status), Monto: amount, 'Tasa aplicada': row.reportRateLabel || '', Rubro: row.businessUnitName || '' };
       });
-      if (format === 'pdf') {
-        await generateManagerTablePDF({ title: `Finanzas consolidadas · ${labels[view]}`, rows: exportRows, fileName: buildDateFilteredDownloadFileName(['reporte_finanzas', labels[view]], 'pdf', dateFrom, dateTo) });
-        return;
-      }
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows.length ? exportRows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]), 'Finanzas');
-      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_finanzas', labels[view]], 'xlsx', dateFrom, dateTo));
+      const options = {
+        title: `Finanzas consolidadas · ${labels[view]}`,
+        fileBase: `reporte_finanzas_${labels[view]}`,
+        tenantName: branches.length === 1 ? branches[0].name : 'Grupo empresarial',
+        scopeSummary: buildManagerReportScopeSummary({ groupName: branches.length === 1 ? branches[0].name : 'Grupo empresarial', branches, businessUnitId, branchId }),
+        filterSummary: buildManagerReportFilterSummary(filters),
+        dateFrom,
+        dateTo,
+        currency: displayMode === 'ORIGINAL' ? 'Monedas originales' : reportCurrency,
+        metrics: report.metrics,
+        rows: exportRows,
+      };
+      if (format === 'pdf') await exportManagerReportPdf(options);
+      else await exportManagerReportExcel(options);
     } finally { setExporting(false); }
   };
   const Icon = icons[view] || BarChart3;

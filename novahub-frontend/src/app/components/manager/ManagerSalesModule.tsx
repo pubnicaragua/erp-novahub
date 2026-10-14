@@ -21,8 +21,9 @@ import { useCurrency, type CurrencyDisplayMode } from '../../contexts/CurrencyCo
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateSalesTransactionPDF } from '../../utils/pdfGenerator';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
-import { exportManagerQuotesExcel, exportManagerQuotesPdf } from '../../utils/managerQuotesExport';
-import { exportManagerSalesExcel, exportManagerSalesPdf } from '../../utils/managerSalesExport';
+import { exportManagerSalesPdf } from '../../utils/managerSalesExport';
+import { exportManagerReportExcel, exportManagerReportPdf } from '../../utils/managerReportExport';
+import { buildManagerReportFilterSummary, buildManagerReportScopeSummary } from '../../utils/managerReportModel';
 import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
 import { formatCurrencyAmount, formatCurrencyDescriptor, getCurrencyMetadata } from '../../utils/currency';
 import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
@@ -259,6 +260,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
     branchId,
     search: search || undefined,
     status: status || undefined,
+    customerType: customerType || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
     reportCurrency: reportCurrency || undefined,
@@ -267,7 +269,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
     report: true,
   };
 
-  const fetchGlobalSalesReport = async (params: Record<string, any>) => {
+  const fetchGlobalSalesReport = async (params: Parameters<typeof enterpriseGroupsService.getSalesModule>[1]) => {
     const pageSize = 5000;
     const firstReport = await enterpriseGroupsService.getSalesModule(groupId, {
       ...params,
@@ -304,52 +306,53 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
     branchId ? `sucursal: ${branches.find((branch) => branch.id === branchId)?.name || 'seleccionada'}` : '',
   ].filter(Boolean).join(' · ');
 
-  const exportReport = async () => {
+  const exportReport = async (format: 'xlsx' | 'pdf' | PdfDownloadFormat = 'xlsx') => {
     if (!canExport) return;
     setExporting(true);
     try {
-      if (view === 'quotes') {
-        const report = await fetchGlobalSalesReport(quoteReportParams);
-        await exportManagerQuotesExcel({
-          rows: report.data,
-          tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
-          primaryColor: themeConfig?.colors?.primary,
-          filterSummary: quoteFilterSummary,
-          dateFrom,
-          dateTo,
-          metrics: report.metrics,
-          displayMode,
-        });
-        return;
-      }
-      const report = await fetchGlobalSalesReport({ view, businessUnitId, branchId, search: search || undefined, status: status || undefined, customerType: customerType || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, registerId: registerId || undefined, deliveryBranchId: deliveryBranchId || undefined, paymentStatus: paymentStatus || undefined, priceListMode: view === 'pricelists' ? priceListMode : undefined, reportCurrency: reportCurrency || undefined });
-      const data = (report.data || []).map((row: any) => exportRow(view, row, reportCurrency || report.metrics?.amountCurrency || 'NIO', displayMode));
-      const options = { rows: data, tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: viewLabels[view], fileBase: `reporte_ventas_${viewLabels[view]}`, reportCurrency: reportCurrency || report.metrics?.amountCurrency || 'NIO', filterSummary: quoteFilterSummary, dateFrom, dateTo, metrics: report.metrics, extraSheets: view === 'cash' ? [{ name: 'Resumen por caja', rows: (report.metrics?.registerSummary || []).map((row: any) => cashSummaryExportRow(row, reportCurrency || report.metrics?.amountCurrency || 'NIO', displayMode)) }] : undefined };
-      await exportManagerSalesExcel(options);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const exportQuotesPdf = async () => {
-    if (!canExport) return;
-    setExporting(true);
-    try {
-      const report = await fetchGlobalSalesReport(quoteReportParams);
-      await exportManagerQuotesPdf({
-        rows: report.data,
-        tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
+      const filters = view === 'quotes' ? quoteReportParams : {
+        view,
+        businessUnitId,
+        branchId,
+        search: search || undefined,
+        status: status || undefined,
+        customerType: customerType || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        registerId: registerId || undefined,
+        deliveryBranchId: deliveryBranchId || undefined,
+        paymentStatus: paymentStatus || undefined,
+        priceListMode: view === 'pricelists' ? priceListMode : undefined,
+        reportCurrency: reportCurrency || undefined,
+        page: 1,
+        pageSize: 5000,
+        report: true,
+      };
+      const report = await fetchGlobalSalesReport(filters);
+      const amountCurrency = reportCurrency || report.metrics?.amountCurrency || 'NIO';
+      const exportRows = (report.data || []).map((row: any) => exportRow(view, row, amountCurrency, displayMode));
+      const tenantName = themeConfig?.tenantName || user?.tenantName || 'Empresa';
+      const options = {
+        rows: exportRows,
+        tenantName,
         tenantLogo: themeConfig?.logo,
         primaryColor: themeConfig?.colors?.primary,
-        filterSummary: quoteFilterSummary,
+        title: viewLabels[view],
+        fileBase: `reporte_ventas_${viewLabels[view]}`,
+        currency: displayMode === 'ORIGINAL' ? 'Monedas originales' : formatCurrencyDescriptor(amountCurrency),
+        scopeSummary: buildManagerReportScopeSummary({ groupName: tenantName, branches, businessUnitId, branchId }),
+        filterSummary: buildManagerReportFilterSummary(filters),
+        dateFrom,
+        dateTo,
         metrics: report.metrics,
-        displayMode,
-      });
+        extraSheets: view === 'cash' ? [{ name: 'Resumen por caja', rows: (report.metrics?.registerSummary || []).map((row: any) => cashSummaryExportRow(row, amountCurrency, displayMode)) }] : undefined,
+      };
+      if (format === 'xlsx') await exportManagerReportExcel(options);
+      else await exportManagerReportPdf({ ...options, pdfFormat: format === 'pdf' ? 'configured' : format });
     } finally {
       setExporting(false);
     }
   };
-
   const downloadQuotePdf = async (format: PdfDownloadFormat) => {
     const quote = quoteDetail?.quote || selectedQuote;
     if (!quote) return;
@@ -459,20 +462,13 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52 rounded-2xl p-1.5">
             <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={() => void exportReport()}><FileSpreadsheet className="size-4 text-primary" /> Excel (.xlsx)</DropdownMenuItem>
-            <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={() => void exportQuotesPdf()}><FileText className="size-4 text-primary" /> PDF (.pdf)</DropdownMenuItem>
+            <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={() => void exportReport('pdf')}><FileText className="size-4 text-primary" /> PDF (.pdf)</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu> : <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="outline" className="rounded-xl" disabled={exporting}>{exporting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}Exportar</Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52 rounded-2xl p-1.5">
             <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={() => void exportReport()}><FileSpreadsheet className="size-4 text-primary" /> Excel (.xlsx)</DropdownMenuItem>
-            <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={async () => {
-              setExporting(true);
-              try {
-      const report = await fetchGlobalSalesReport({ view, businessUnitId, branchId, search: search || undefined, status: status || undefined, customerType: customerType || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, registerId: registerId || undefined, deliveryBranchId: deliveryBranchId || undefined, paymentStatus: paymentStatus || undefined, priceListMode: view === 'pricelists' ? priceListMode : undefined, reportCurrency: reportCurrency || undefined });
-                const data = (report.data || []).map((row: any) => exportRow(view, row, reportCurrency || report.metrics?.amountCurrency || 'NIO', displayMode));
-                await exportManagerSalesPdf({ rows: data, tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: viewLabels[view], fileBase: `reporte_ventas_${viewLabels[view]}`, reportCurrency: reportCurrency || report.metrics?.amountCurrency || 'NIO', filterSummary: quoteFilterSummary, dateFrom, dateTo, metrics: report.metrics });
-              } finally { setExporting(false); }
-            }}><FileText className="size-4 text-primary" /> PDF (.pdf)</DropdownMenuItem>
+            <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={() => void exportReport('pdf')}><FileText className="size-4 text-primary" /> PDF (.pdf)</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>)}
       </div>

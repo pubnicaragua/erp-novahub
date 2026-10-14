@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { useQuery, type QueryClient, type QueryKey, type UseQueryOptions } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
-import { runWithReportRequestLimit } from '../utils/report-request-limiter';
 
 /** Shared tenant-scoped query policy for support and activities modules. */
 export function useTenantQuery<TData>(
@@ -44,29 +43,4 @@ export const asList = (response: any): any[] =>
 export const invalidateTenantQueries = (client: QueryClient) =>
   client.invalidateQueries({ queryKey: ['tenant-module'] });
 
-/**
- * Carga todas las páginas de un listado usado por un reporte.
- * Las pantallas operativas conservan su paginación; los reportes necesitan
- * consolidar el total de registros antes de construir sus tablas y métricas.
- */
-export async function fetchAllReportPages<T = any>(
-  fetchPage: (filters: Record<string, any>) => Promise<any>,
-  filters: Record<string, any> = {},
-  signal?: AbortSignal,
-): Promise<T[]> {
-  const firstResponse = await runWithReportRequestLimit(() => fetchPage({ ...filters, page: 1 }), signal);
-  const firstRows = asList(firstResponse);
-  const meta = firstResponse?.meta || firstResponse?.data?.meta || firstResponse?.data?.data?.meta || {};
-  const pageSize = Math.max(1, Number(meta.pageSize || filters.pageSize || firstRows.length || 1));
-  const total = Math.max(firstRows.length, Number(meta.total || firstRows.length));
-  const totalPages = Math.max(1, Number(meta.totalPages) || Math.ceil(total / pageSize));
-
-  if (totalPages === 1) return firstRows as T[];
-
-  const remaining = await Promise.all(
-    Array.from({ length: totalPages - 1 }, (_, index) =>
-      runWithReportRequestLimit(() => fetchPage({ ...filters, page: index + 2 }), signal),
-    ),
-  );
-  return firstRows.concat(remaining.flatMap(asList)) as T[];
-}
+export { fetchAllReportPages } from '../utils/reportPagination.ts';

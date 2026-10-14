@@ -40,6 +40,7 @@ import { parseSpreadsheetInWorker } from '../utils/import-spreadsheet';
 import { VirtualizedImportList } from './ui/VirtualizedImportList';
 import { Input } from './ui/input';
 import { buildDownloadFileName } from '../utils/exportFileNames';
+import { buildManagerCsv } from '../utils/managerReportModel';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { getPasswordError } from '../utils/accountValidation';
 import { PasswordRequirements } from './PasswordRequirements';
@@ -152,14 +153,13 @@ const MANAGER_OPERATION_PERMISSION: Record<ManagerOperationsModule, string> = {
 
 function downloadCsv(name: string, rows: Array<Record<string, unknown>>) {
   if (!rows.length) return toast.info('No hay datos para exportar');
-  const keys = Object.keys(rows[0]);
-  const csv = [keys.join(';'), ...rows.map((row) => keys.map((key) => JSON.stringify(row[key] ?? '')).join(';'))].join('\n');
+  const csv = buildManagerCsv(rows, ';');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url;
   link.download = name;
   link.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function readSpreadsheet(file: File) {
@@ -545,7 +545,7 @@ export function ManagerPage() {
       <div className="min-w-0 space-y-6">
         {section !== 'inventory' && section !== 'sales' && section !== 'purchases' && section !== 'finances' && section !== 'accounting' && section !== 'reports' && section !== 'hr' && !MANAGER_OPERATION_BY_SECTION[section] && <div className="flex min-w-0 justify-end">
           <div className="hidden min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2></div>
-          {canExportOverview && <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(buildDownloadFileName(['resumen', activeTitle || section], 'csv'), (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>}
+          {canExportOverview && <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(buildDownloadFileName(['resumen', activeTitle || section], 'csv'), (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar CSV</Button>}
         </div>}
 
         {loading && <div className="flex min-h-[240px] items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-5 animate-spin" /> Cargando consolidado...</div>}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Banknote, Building2, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, CreditCard, Download, LayoutGrid, List, Loader2, PackageCheck, Receipt, RefreshCw, Search, Truck, Users, WalletCards } from 'lucide-react';
+import { Banknote, Building2, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, CreditCard, LayoutGrid, List, Loader2, PackageCheck, Receipt, RefreshCw, Search, Truck, Users, WalletCards } from 'lucide-react';
 import { useManagerShellNavigation } from '../ManagerShell';
-import { useTenantQuery } from '../../hooks/useTenantQuery';
+import { fetchAllReportPages, useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type ManagerPurchasesDocumentDetailResponse, type ManagerPurchasesModuleResponse } from '../../services/enterprise-groups.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -17,7 +17,8 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { ColumnFilterMenu, type ColumnSort, type ColumnSortType } from '../ui/ColumnFilterMenu';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
 import { formatCurrencyAmount, formatCurrencyDescriptor, getCurrencyMetadata } from '../../utils/currency';
-import { exportManagerSalesExcel, exportManagerSalesPdf } from '../../utils/managerSalesExport';
+import { exportManagerReportExcel, exportManagerReportPdf } from '../../utils/managerReportExport';
+import { buildManagerReportScopeSummary } from '../../utils/managerReportModel';
 import { generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
@@ -132,9 +133,25 @@ export function ManagerPurchasesModule({ view, onViewChange, groupId, businessUn
     setExporting(true);
     try {
       const report = await enterpriseGroupsService.getPurchasesModule(groupId, filters);
-      const exportRows = (report.data || []).map((row: any) => exportRow(view, row, activeReportCurrency, displayMode));
-      const options = { rows: exportRows, tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: `Compras · ${viewLabels[view]}`, fileBase: `reporte_compras_${viewLabels[view]}`, reportCurrency: activeReportCurrency, filterSummary, dateFrom, dateTo, metrics: report.metrics };
-      if (format === 'xlsx') await exportManagerSalesExcel(options); else await exportManagerSalesPdf({ ...options, pdfFormat: format });
+      const rows = await fetchAllReportPages((pageFilters) => enterpriseGroupsService.getPurchasesModule(groupId, { ...filters, ...pageFilters }), filters, undefined, report);
+      const exportRows = rows.map((row: any) => exportRow(view, row, activeReportCurrency, displayMode));
+      const tenantName = themeConfig?.tenantName || user?.tenantName || 'Empresa';
+      const options = {
+        rows: exportRows,
+        tenantName,
+        tenantLogo: themeConfig?.logo,
+        primaryColor: themeConfig?.colors?.primary,
+        title: `Compras · ${viewLabels[view]}`,
+        fileBase: `reporte_compras_${viewLabels[view]}`,
+        currency: displayMode === 'ORIGINAL' ? 'Monedas originales' : formatCurrencyDescriptor(activeReportCurrency),
+        scopeSummary: buildManagerReportScopeSummary({ groupName: tenantName, branches, businessUnitId, branchId }),
+        filterSummary,
+        dateFrom,
+        dateTo,
+        metrics: report.metrics,
+      };
+      if (format === 'xlsx') await exportManagerReportExcel(options);
+      else await exportManagerReportPdf({ ...options, pdfFormat: format });
       toast.success(format === 'xlsx' ? 'Excel generado con los filtros aplicados' : 'PDF generado con el tamaño seleccionado');
     } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo generar el reporte'); } finally { setExporting(false); }
   };

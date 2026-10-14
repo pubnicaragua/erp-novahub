@@ -1,22 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
 import { useManagerShellNavigation } from '../ManagerShell';
-import { useTenantQuery } from '../../hooks/useTenantQuery';
+import { fetchAllReportPages, useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type ManagerReportsModuleResponse } from '../../services/enterprise-groups.service';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { BarChart3, ChevronLeft, ChevronRight, Download, FileBarChart, LayoutDashboard, LayoutGrid, List, Loader2, RefreshCw, Search, Users } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight, FileBarChart, LayoutDashboard, LayoutGrid, List, RefreshCw, Search, Users } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
 import { MANAGER_REPORTS_VIEWS, type ManagerReportsView } from './manager-reports.types';
-import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { managerStatusLabel as statusLabel } from '../../utils/managerLabels';
 import { ExportMenu } from '../ui/ExportMenu';
-import { generateManagerTablePDF } from '../../utils/managerReportPdf';
+import { exportManagerReportExcel, exportManagerReportPdf } from '../../utils/managerReportExport';
+import { buildManagerReportFilterSummary, buildManagerReportScopeSummary } from '../../utils/managerReportModel';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -54,15 +53,24 @@ export function ManagerReportsModule({ view, onViewChange, groupId, businessUnit
     if (!canExport) return;
     setExporting(true);
     try {
-      const report = await enterpriseGroupsService.getReportsModule(groupId, { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, page: 1, pageSize: 5000, report: true, export: true });
-      const exportRows = (report.data || []).map((row: any) => ({ Sucursal: row.branchName || 'Sucursal no identificada', Vista: labels[view], Registro: row.number || row.name || row.productName || row.employeeName || row.id, Fecha: formatDate(row.date || row.createdAt || row.periodEnd), Estado: statusLabel(row.status || row.kind), Monto: row.total ?? row.amount ?? row.balance ?? row.netPay ?? '', Rubro: row.businessUnitName || '' }));
-      if (format === 'pdf') {
-        await generateManagerTablePDF({ title: `Reporte consolidado · ${labels[view]}`, rows: exportRows, fileName: buildDateFilteredDownloadFileName(['reporte_consolidado', labels[view]], 'pdf', dateFrom, dateTo) });
-        return;
-      }
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows.length ? exportRows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]), 'Reportes');
-      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_consolidado', labels[view]], 'xlsx', dateFrom, dateTo));
+      const filters = { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, page: 1, pageSize: 5000, report: true, export: true };
+      const report = await enterpriseGroupsService.getReportsModule(groupId, filters);
+      const rows = await fetchAllReportPages((pageFilters) => enterpriseGroupsService.getReportsModule(groupId, { ...filters, ...pageFilters }), filters, undefined, report);
+      const exportRows = rows.map((row: any) => ({ Sucursal: row.branchName || 'Sucursal no identificada', Vista: labels[view], Registro: row.number || row.name || row.productName || row.employeeName || row.id, Fecha: formatDate(row.date || row.createdAt || row.periodEnd), Estado: statusLabel(row.status || row.kind), Monto: row.total ?? row.amount ?? row.balance ?? row.netPay ?? '', Rubro: row.businessUnitName || '' }));
+      const scopeGroupName = branches.length === 1 ? branches[0].name : 'Grupo empresarial';
+      const options = {
+        title: `Reporte consolidado · ${labels[view]}`,
+        fileBase: `reporte_consolidado_${labels[view]}`,
+        tenantName: scopeGroupName,
+        scopeSummary: buildManagerReportScopeSummary({ groupName: scopeGroupName, branches, businessUnitId, branchId }),
+        filterSummary: buildManagerReportFilterSummary(filters),
+        dateFrom,
+        dateTo,
+        metrics: report.metrics,
+        rows: exportRows,
+      };
+      if (format === 'pdf') await exportManagerReportPdf(options);
+      else await exportManagerReportExcel(options);
     } finally { setExporting(false); }
   };
   const Icon = useMemo(() => view === 'overview' ? LayoutDashboard : FileBarChart, [view]);

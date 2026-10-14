@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
-import { CalendarDays, CheckCircle2, ClipboardCheck, Clock3, Download, Eye, FileDown, Loader2, Package, Search, Scale, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ClipboardCheck, Clock3, Eye, Loader2, Package, Search, Scale, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { toast } from '@/app/services/toast';
-import { useTenantQuery } from '../../hooks/useTenantQuery';
+import { fetchAllReportPages, useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type ManagerInventoryAdjustmentsResponse } from '../../services/enterprise-groups.service';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -12,10 +11,11 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import type { ManagerInventoryView } from './manager-inventory.types';
-import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { managerStatusLabel } from '../../utils/managerLabels';
 import { ExportMenu } from '../ui/ExportMenu';
+import { exportManagerReportExcel, exportManagerReportPdf } from '../../utils/managerReportExport';
+import { buildManagerReportFilterSummary, buildManagerReportScopeSummary } from '../../utils/managerReportModel';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type WarehouseOption = { id: string; name: string; scopeType: string; clientTenantId: string | null; businessUnitId?: string | null; authorizedBranchIds?: string[] };
@@ -69,7 +69,7 @@ export function ManagerInventorySubnav({ value, onChange }: { value: ManagerInve
   );
 }
 
-export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branchId, warehouses, canViewInventoryCost, canExport = true, onDetail, embedded = false, refreshKey = 0 }: {
+export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branchId, branches, warehouses, canViewInventoryCost, canExport = true, onDetail, embedded = false, refreshKey = 0 }: {
   groupId: string;
   businessUnitId?: string;
   branchId?: string;
@@ -114,12 +114,14 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
   const resetPage = () => setPage(1);
   const updateFilter = (setter: (value: string) => void, value: string) => { setter(value); resetPage(); };
 
-  const exportReport = async () => {
+  const exportReport = async (format: 'xlsx' | 'pdf' = 'xlsx') => {
     if (!canExport) return;
     setExporting(true);
     try {
-      const report = await enterpriseGroupsService.getAdjustments(groupId, { businessUnitId, branchId, warehouseId, status, reason, search, dateFrom, dateTo, page: 1, pageSize: 5000, report: true, export: true });
-      const exportRows = report.data.map((row) => ({
+      const filters = { businessUnitId, branchId, warehouseId, status, reason, search, dateFrom, dateTo, page: 1, pageSize: 5000, report: true, export: true };
+      const report = await enterpriseGroupsService.getAdjustments(groupId, filters);
+      const rows = await fetchAllReportPages((pageFilters) => enterpriseGroupsService.getAdjustments(groupId, { ...filters, ...pageFilters }), filters, undefined, report);
+      const exportRows = rows.map((row) => ({
         Sucursal: row.branchName || '—',
         Ajuste: row.number,
         Fecha: formatDate(row.date),
@@ -132,29 +134,25 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
         ...(canViewInventoryCost ? { 'Impacto monetario': row.impactAmount } : {}),
         Estado: statusLabel(row.status),
       }));
-      if (!exportRows.length) return;
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows), 'Ajustes');
-      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_ajustes_inventario'], 'xlsx', dateFrom, dateTo));
+      const scopeGroupName = branches.length === 1 ? branches[0].name : 'Grupo empresarial';
+      const options = {
+        title: 'Ajustes de inventario',
+        fileBase: 'reporte_ajustes_inventario',
+        tenantName: scopeGroupName,
+        scopeSummary: buildManagerReportScopeSummary({ groupName: scopeGroupName, branches, businessUnitId, branchId }),
+        filterSummary: buildManagerReportFilterSummary(filters),
+        dateFrom,
+        dateTo,
+        metrics: report.metrics,
+        rows: exportRows,
+      };
+      if (format === 'pdf') await exportManagerReportPdf(options);
+      else await exportManagerReportExcel(options);
     } finally {
       setExporting(false);
     }
   };
-
   const refresh = () => { void queryClient.invalidateQueries({ queryKey: ['manager-inventory-adjustments'] }); };
-
-  const printReport = () => {
-    const previousTitle = document.title;
-    const printFileName = buildDateFilteredDownloadFileName(['reporte_ajustes_inventario'], 'pdf', dateFrom, dateTo);
-    const restoreTitle = () => {
-      document.title = previousTitle;
-      window.removeEventListener('afterprint', restoreTitle);
-    };
-    document.title = printFileName;
-    window.addEventListener('afterprint', restoreTitle, { once: true });
-    window.print();
-    window.setTimeout(restoreTitle, 60_000);
-  };
 
   const approveAuditAdjustment = async () => {
     if (!pendingApproval) return;
@@ -181,7 +179,7 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
           <h3 className="truncate text-2xl font-black uppercase italic tracking-tight sm:text-3xl">Ajustes</h3>
         </div>
         <div className="flex flex-wrap gap-2">
-          <ExportMenu disabled={exporting || query.isLoading} onPdf={printReport} onExcel={() => void exportReport()} pdfDescription="Vista imprimible del consolidado" excelDescription="Todos los ajustes filtrados" />
+          <ExportMenu disabled={exporting || query.isLoading} onPdf={() => void exportReport('pdf')} onExcel={() => void exportReport('xlsx')} pdfDescription="PDF del consolidado de ajustes" excelDescription="Todos los ajustes filtrados" />
         </div>
       </div>}
 
@@ -251,7 +249,8 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
 }
 
 function MetricCard({ label, value, icon: Icon, tone = 'text-primary bg-primary/10' }: { label: string; value: unknown; icon: typeof ClipboardCheck; tone?: string }) {
-  return <Card className="rounded-2xl border-border/60 shadow-sm"><CardContent className="flex min-w-0 items-center gap-3 p-4"><div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon className="size-5" /></div><div className="min-w-0"><p className="truncate text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className="mt-1 truncate text-xl font-black tracking-tight">{value === undefined ? '—' : typeof value === 'number' ? formatNumber(value) : value}</p></div></CardContent></Card>;
+  const displayValue = value == null ? '—' : typeof value === 'number' ? formatNumber(value) : String(value);
+  return <Card className="rounded-2xl border-border/60 shadow-sm"><CardContent className="flex min-w-0 items-center gap-3 p-4"><div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon className="size-5" /></div><div className="min-w-0"><p className="truncate text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className="mt-1 truncate text-xl font-black tracking-tight">{displayValue}</p></div></CardContent></Card>;
 }
 
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {

@@ -1,21 +1,20 @@
 import { useEffect, useState } from 'react';
-import * as XLSX from 'xlsx';
-import { useTenantQuery } from '../../hooks/useTenantQuery';
+import { fetchAllReportPages, useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type ManagerOperationsModule as OperationsModule, type ManagerOperationsModuleResponse } from '../../services/enterprise-groups.service';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { CalendarDays, ChevronLeft, ChevronRight, Download, Eye, LayoutDashboard, ListChecks, Loader2, RefreshCw, Search, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Eye, LayoutDashboard, ListChecks, RefreshCw, Search, X } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
-import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { managerStatusLabel } from '../../utils/managerLabels';
 import { useManagerShellNavigation } from '../ManagerShell';
 import { MANAGER_OPERATION_DEFINITIONS } from './manager-operations.types';
 import { ExportMenu } from '../ui/ExportMenu';
-import { generateManagerTablePDF } from '../../utils/managerReportPdf';
+import { exportManagerReportExcel, exportManagerReportPdf } from '../../utils/managerReportExport';
+import { buildManagerReportFilterSummary, buildManagerReportScopeSummary } from '../../utils/managerReportModel';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 
@@ -110,15 +109,24 @@ export function ManagerOperationsModule({ module, view: requestedView, onViewCha
     if (!canExport) return;
     setExporting(true);
     try {
-      const report = await enterpriseGroupsService.getOperationsModule(groupId, { module: definition.id, view: activeView, businessUnitId, branchId, search: search || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, page: 1, pageSize: 5000, report: true, export: true });
-      const exportRows = (report.data || []).map((row: any) => ({ Sucursal: branchNameOf(row, branches), Registro: primaryOf(row), Detalle: formatDetail(detailOf(row)), Fecha: formatDate(dateOf(row)), Estado: formatStatus(row.status), Valor: amountOf(row) == null ? '' : formatValue(amountOf(row)), Rubro: row.businessUnitName || '' }));
-      if (format === 'pdf') {
-        await generateManagerTablePDF({ title: `Operaciones consolidadas · ${definition.label} · ${activeView}`, rows: exportRows, fileName: buildDateFilteredDownloadFileName(['manager', module, activeView], 'pdf', dateFrom, dateTo) });
-        return;
-      }
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows.length ? exportRows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]), 'Operaciones');
-      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['manager', module, activeView], 'xlsx', dateFrom, dateTo));
+      const filters = { module: definition.id, view: activeView, businessUnitId, branchId, search: search || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, page: 1, pageSize: 5000, report: true, export: true };
+      const report = await enterpriseGroupsService.getOperationsModule(groupId, filters);
+      const rows = await fetchAllReportPages((pageFilters) => enterpriseGroupsService.getOperationsModule(groupId, { ...filters, ...pageFilters }), filters, undefined, report);
+      const exportRows = rows.map((row: any) => ({ Sucursal: branchNameOf(row, branches), Registro: primaryOf(row), Detalle: formatDetail(detailOf(row)), Fecha: formatDate(dateOf(row)), Estado: formatStatus(row.status), Valor: amountOf(row) == null ? '' : formatValue(amountOf(row)), Rubro: row.businessUnitName || '' }));
+      const scopeGroupName = branches.length === 1 ? branches[0].name : 'Grupo empresarial';
+      const options = {
+        title: `Operaciones consolidadas · ${definition.label} · ${activeView}`,
+        fileBase: `manager_${module}_${activeView}`,
+        tenantName: scopeGroupName,
+        scopeSummary: buildManagerReportScopeSummary({ groupName: scopeGroupName, branches, businessUnitId, branchId }),
+        filterSummary: buildManagerReportFilterSummary(filters),
+        dateFrom,
+        dateTo,
+        metrics: report.metrics,
+        rows: exportRows,
+      };
+      if (format === 'pdf') await exportManagerReportPdf(options);
+      else await exportManagerReportExcel(options);
     } finally { setExporting(false); }
   };
   const overviewEntries = Object.entries(metrics).filter(([key, value]) => !['branchCount', 'total'].includes(key) && typeof value === 'number');

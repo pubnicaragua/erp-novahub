@@ -1,22 +1,21 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import * as XLSX from 'xlsx';
 import { useManagerShellNavigation } from '../ManagerShell';
-import { useTenantQuery } from '../../hooks/useTenantQuery';
+import { fetchAllReportPages, useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type ManagerHrModuleResponse } from '../../services/enterprise-groups.service';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { ChevronLeft, ChevronRight, Download, GraduationCap, LayoutGrid, List, Loader2, RefreshCw, Search, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, GraduationCap, LayoutGrid, List, RefreshCw, Search, Users } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
 import { MANAGER_HR_VIEWS, type ManagerHrView } from './manager-hr.types';
-import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { managerStatusLabel as statusLabel } from '../../utils/managerLabels';
 import { ExportMenu } from '../ui/ExportMenu';
-import { generateManagerTablePDF } from '../../utils/managerReportPdf';
+import { exportManagerReportExcel, exportManagerReportPdf } from '../../utils/managerReportExport';
+import { buildManagerReportFilterSummary, buildManagerReportScopeSummary } from '../../utils/managerReportModel';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -54,15 +53,24 @@ export function ManagerHRModule({ view, onViewChange, groupId, businessUnitId, b
     if (!canExport) return;
     setExporting(true);
     try {
-      const report = await enterpriseGroupsService.getHrModule(groupId, { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, page: 1, pageSize: 5000, report: true, export: true });
-      const exportRows = (report.data || []).map((row: any) => ({ Sucursal: row.branchName || 'Sucursal no identificada', Vista: labels[view], Registro: row.employeeName || row.name || row.employeeNumber || row.id, Fecha: formatDate(row.date || row.createdAt || row.periodEnd || row.startDate), Estado: statusLabel(row.status || row.employmentStatus || row.paymentStatus), Valor: row.netPay ?? row.amount ?? row.salary ?? row.cost ?? row.days ?? '', Rubro: row.businessUnitName || '' }));
-      if (format === 'pdf') {
-        await generateManagerTablePDF({ title: `RR. HH. consolidado · ${labels[view]}`, rows: exportRows, fileName: buildDateFilteredDownloadFileName(['reporte_recursos_humanos', labels[view]], 'pdf', dateFrom, dateTo) });
-        return;
-      }
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows.length ? exportRows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]), 'Recursos Humanos');
-      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_recursos_humanos', labels[view]], 'xlsx', dateFrom, dateTo));
+      const filters = { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, page: 1, pageSize: 5000, report: true, export: true };
+      const report = await enterpriseGroupsService.getHrModule(groupId, filters);
+      const rows = await fetchAllReportPages((pageFilters) => enterpriseGroupsService.getHrModule(groupId, { ...filters, ...pageFilters }), filters, undefined, report);
+      const exportRows = rows.map((row: any) => ({ Sucursal: row.branchName || 'Sucursal no identificada', Vista: labels[view], Registro: row.employeeName || row.name || row.employeeNumber || row.id, Fecha: formatDate(row.date || row.createdAt || row.periodEnd || row.startDate), Estado: statusLabel(row.status || row.employmentStatus || row.paymentStatus), Valor: row.netPay ?? row.amount ?? row.salary ?? row.cost ?? row.days ?? '', Rubro: row.businessUnitName || '' }));
+      const scopeGroupName = branches.length === 1 ? branches[0].name : 'Grupo empresarial';
+      const options = {
+        title: `RR. HH. consolidado · ${labels[view]}`,
+        fileBase: `reporte_recursos_humanos_${labels[view]}`,
+        tenantName: scopeGroupName,
+        scopeSummary: buildManagerReportScopeSummary({ groupName: scopeGroupName, branches, businessUnitId, branchId }),
+        filterSummary: buildManagerReportFilterSummary(filters),
+        dateFrom,
+        dateTo,
+        metrics: report.metrics,
+        rows: exportRows,
+      };
+      if (format === 'pdf') await exportManagerReportPdf(options);
+      else await exportManagerReportExcel(options);
     } finally { setExporting(false); }
   };
   return <div className="manager-hr-module min-w-0 space-y-5 overflow-x-hidden p-4 sm:p-6 md:p-8">

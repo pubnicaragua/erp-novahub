@@ -1,9 +1,8 @@
 import { Fragment, createElement, useMemo, useState, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
 import { toast } from '@/app/services/toast';
 import { ArrowRight, ArrowUpRight, Boxes, Building2, CalendarDays, ChevronRight, ClipboardCheck, Download, Eye, FileUp, History, Landmark, Package, Plus, RefreshCw, Search, Scale, ShieldCheck, Tags, TrendingDown, TrendingUp, Warehouse, Wrench } from 'lucide-react';
-import { useTenantQuery } from '../../hooks/useTenantQuery';
+import { fetchAllReportPages, useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type ManagerInventoryModuleResponse } from '../../services/enterprise-groups.service';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -18,7 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { ManagerInventoryAdjustmentsView } from './ManagerInventoryAdjustmentsView';
 import { ManagerInventoryImportView } from './ManagerInventoryImportDialog';
 import { MANAGER_INVENTORY_VIEWS, type ManagerInventoryView } from './manager-inventory.types';
-import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { exportManagerReportExcel } from '../../utils/managerReportExport';
+import { buildManagerReportFilterSummary, buildManagerReportScopeSummary } from '../../utils/managerReportModel';
 import { useManagerShellNavigation } from '../ManagerShell';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { managerStatusLabel } from '../../utils/managerLabels';
@@ -184,12 +184,23 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
     if (!canExport) return;
     setExporting(true);
     try {
-      const report = await enterpriseGroupsService.getInventoryModule(groupId, { view, businessUnitId, branchId: selectedBranchId || undefined, warehouseId: warehouseId || undefined, warehouseType: effectiveWarehouseType || undefined, status: status || undefined, type: movementType || undefined, search, dateFrom, dateTo, report: true, export: true, page: 1, pageSize: 5000 });
-      const exportRows = report.data.map((row: any) => exportRow(view, row, canViewInventoryCost));
-      if (!exportRows.length) { toast.info('No hay datos para exportar'); return; }
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows), viewLabels[view].slice(0, 31));
-      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_inventario', viewLabels[view]], 'xlsx', dateFrom, dateTo));
+      const filters = { view, businessUnitId, branchId: selectedBranchId || undefined, warehouseId: warehouseId || undefined, warehouseType: effectiveWarehouseType || undefined, status: status || undefined, type: movementType || undefined, search, dateFrom, dateTo, report: true, export: true, page: 1, pageSize: 5000 };
+      const report = await enterpriseGroupsService.getInventoryModule(groupId, filters);
+      const rows = await fetchAllReportPages((pageFilters) => enterpriseGroupsService.getInventoryModule(groupId, { ...filters, ...pageFilters }), filters, undefined, report);
+      const exportRows = rows.map((row: any) => exportRow(view, row, canViewInventoryCost));
+      const scopeGroupName = branches.length === 1 ? branches[0].name : 'Grupo empresarial';
+      await exportManagerReportExcel({
+        title: viewLabels[view],
+        fileBase: `reporte_inventario_${viewLabels[view]}`,
+        tenantName: scopeGroupName,
+        scopeSummary: buildManagerReportScopeSummary({ groupName: scopeGroupName, branches, businessUnitId, branchId: selectedBranchId || branchId }),
+        filterSummary: buildManagerReportFilterSummary(filters),
+        dateFrom,
+        dateTo,
+        currency: String(report.metrics?.amountCurrency || ''),
+        metrics: report.metrics,
+        rows: exportRows,
+      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo generar el reporte');
     } finally {
