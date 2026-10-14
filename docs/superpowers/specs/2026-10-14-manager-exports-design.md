@@ -35,6 +35,8 @@ La lista concreta de vistas se obtendrá de las definiciones actuales `MANAGER_*
 
 Se revisarán las exportaciones de informes y listados. Las facturas, cotizaciones y demás documentos transaccionales conservan sus plantillas propias; solo entrarán en cambios si la auditoría confirma que la misma falla de datos afecta también esas acciones.
 
+También se revisará el CSV de actividad de usuarios de Manager. Su alcance seguirá siendo la página actual, como indica la acción “Exportar página”; se verificará que conserve los filtros activos y que el CSV se abra correctamente con caracteres en español.
+
 ## Diseño funcional
 
 ### Resúmenes
@@ -58,6 +60,7 @@ Se revisarán las exportaciones de informes y listados. Las facturas, cotizacion
 - **PDF:** salida de informe de Manager con título, nombre de empresa/grupo, alcance, filtros, periodo, fecha de generación, KPI disponibles y detalle cuando exista. Las tablas llevarán encabezados legibles y número de página.
 - **Excel (.xlsx):** hoja `Resumen` con alcance, filtros y KPI; hoja de detalle solo cuando haya filas. Columnas con títulos, tipos y formatos útiles para revisión.
 - **CSV:** cuando la acción produzca CSV, su etiqueta y extensión dirán CSV. No se anunciará Excel si se descarga CSV.
+- No se añadirán nuevos botones o formatos a vistas que hoy no los ofrezcan; se corregirán los formatos existentes.
 - La exportación PDF de ajustes de inventario incluirá el conjunto completo de ajustes filtrados y no dependerá de las filas que estén actualmente montadas en pantalla.
 
 ## Arquitectura propuesta
@@ -113,6 +116,7 @@ No se propone crear rutas nuevas, modificar el esquema Prisma ni agregar migraci
 - Las exportaciones de detalle contienen todas las páginas filtradas disponibles según el contrato y no se limitan silenciosamente a la página visible o a 5.000 filas.
 - El PDF de ajustes incluye todos los ajustes filtrados.
 - Las extensiones, nombres de archivo y etiquetas coinciden con el formato descargado.
+- Los CSV usan UTF-8 con BOM y conservan correctamente separadores, comillas, saltos de línea y caracteres en español.
 - La exportación conserva autorización, tenant y alcance existentes.
 - Los cambios se verifican con build del frontend y, si se toca el backend, build y comprobaciones relacionadas. La revisión visual del PDF/Excel se reportará aparte de esas comprobaciones.
 
