@@ -49,9 +49,22 @@ export interface TenantBillingHistory {
   history?: TenantBillingInvoice[];
 }
 
+export interface DefaultSalesCustomerOption {
+  id: string;
+  code: string;
+  name: string;
+  companyName?: string | null;
+  status: string;
+}
+
 export const tenantsService = {
   getAll: (filters?: Record<string, any>, signal?: AbortSignal) => api.get<any[]>('/tenants', { params: filters, signal }),
   getOne: (id: string, signal?: AbortSignal) => api.get<any>(`/tenants/${id}`, { signal }),
+  getDefaultSalesCustomerOptions: (tenantId: string, search: string, selectedId?: string, signal?: AbortSignal) =>
+    api.get<DefaultSalesCustomerOption[]>(`/tenants/${tenantId}/default-sales-customers`, {
+      params: { search: search || undefined, selectedId: selectedId || undefined },
+      signal,
+    }),
   getBillingHistory: (tenantId: string, signal?: AbortSignal) =>
     api.get<TenantBillingHistory>(`/tenants/${tenantId}/billing`, { signal }),
   create: (data: CreateTenantDto) => api.post<any>('/tenants', data),

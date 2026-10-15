@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  AlertCircle, Coins, Settings2, Store, MapPin, BellRing, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, Download, FileText,
+  AlertCircle, Coins, Settings2, Store, MapPin, BellRing, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, Download, FileText, Upload,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -75,6 +75,7 @@ import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChang
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 import { VoiceSaleComposer } from './VoiceSaleComposer';
+import { SalesImportWizard } from './importacion/SalesImportWizard';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -453,6 +454,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const queryClient = useQueryClient();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [manageCajasOpen, setManageCajasOpen] = useState(false);
+  const [salesImportOpen, setSalesImportOpen] = useState(false);
   const [registerAvailability, setRegisterAvailability] = useState<CashRegisterAvailability | null>(null);
   const [warehouseOptions, setWarehouseOptions] = useState<PosWarehouseOption[]>([]);
   const [products, setProducts] = useState<PosProduct[]>([]);
@@ -2182,6 +2184,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
               <Badge className="border-none bg-primary/15 text-primary">{cashQueue.length}</Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {canCreatePosInvoice && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 border-primary/30 text-xs font-bold text-primary" onClick={() => setSalesImportOpen(true)}>
+                <Upload className="size-3.5" /> Importar Excel
+              </Button>}
               <Button
                 type="button"
                 variant="ghost"
@@ -3648,6 +3653,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         viewModule="RETAIL_POS"
         open={Boolean(otherLocationsProduct)}
         onOpenChange={(open) => { if (!open) setOtherLocationsProduct(null); }}
+      />
+      <SalesImportWizard
+        open={salesImportOpen}
+        onOpenChange={setSalesImportOpen}
+        kind="POS"
+        tenantId={user?.clientTenantId || user?.tenantId || ''}
+        register={selectedRegister}
+        session={activeSession}
+        onFinished={() => { if (selectedRegisterId) void loadRecentInvoices(selectedRegisterId); }}
       />
       <AdministrarCajasModal
         open={manageCajasOpen}

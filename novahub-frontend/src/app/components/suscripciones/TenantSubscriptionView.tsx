@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  ArrowRight, Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck, Warehouse
+  ArrowRight, Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck, Warehouse, Search
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -155,6 +155,10 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [companyName, setCompanyName] = useState('');
   const [companySlug, setCompanySlug] = useState('');
   const [companyIndustry, setCompanyIndustry] = useState('OTHER');
+  const [defaultSalesCustomerId, setDefaultSalesCustomerId] = useState('');
+  const [defaultSalesCustomerTouched, setDefaultSalesCustomerTouched] = useState(false);
+  const [defaultSalesCustomerSearch, setDefaultSalesCustomerSearch] = useState('');
+  const [debouncedDefaultSalesCustomerSearch, setDebouncedDefaultSalesCustomerSearch] = useState('');
   const [industryOptions, setIndustryOptions] = useState<{ id?: string; code: string; name: string; isDefault: boolean }[]>([]);
   const [newIndustryName, setNewIndustryName] = useState('');
   const [showAddIndustry, setShowAddIndustry] = useState(false);
@@ -213,11 +217,29 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
     },
   );
 
+  const { data: defaultSalesCustomerOptions = [], isLoading: loadingDefaultSalesCustomerOptions } = useTenantQuery(
+    ['default-sales-customer-options', tenant?.id || 'none', debouncedDefaultSalesCustomerSearch, defaultSalesCustomerId],
+    (signal) => tenantsService.getDefaultSalesCustomerOptions(
+      tenant.id,
+      debouncedDefaultSalesCustomerSearch,
+      defaultSalesCustomerId || undefined,
+      signal,
+    ),
+    { enabled: Boolean(tenant?.id && canViewCompany), staleTime: 30_000 },
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedDefaultSalesCustomerSearch(defaultSalesCustomerSearch.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [defaultSalesCustomerSearch]);
+
   useEffect(() => {
     if (!tenant) return;
     setCompanyName(tenantData?.branding?.companyName || tenant.name || '');
     setCompanySlug(tenant.slug || '');
     setCompanyIndustry(tenantData?.branding?.industry || tenant.industry || 'OTHER');
+    setDefaultSalesCustomerId(tenant.defaultSalesCustomerId || '');
+    setDefaultSalesCustomerTouched(false);
     if (!tenantData) return;
     setUsers(tenantData.users);
     setEmployees(tenantData.employees || []);
@@ -345,8 +367,13 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
       setSavingCompany(true);
       await Promise.all([
         brandingService.update({ companyName: companyName.trim(), industry: companyIndustry }),
-        tenantsService.update(tenant.id, { name: companyName.trim(), slug: companySlug.trim() }),
+        tenantsService.update(tenant.id, {
+          name: companyName.trim(),
+          slug: companySlug.trim(),
+          ...(defaultSalesCustomerTouched ? { defaultSalesCustomerId: defaultSalesCustomerId || null } : {}),
+        }),
       ]);
+      setDefaultSalesCustomerTouched(false);
       updateConfig({ tenantName: companyName.trim() });
       toast.success('Información general actualizada');
       onRefresh();
@@ -716,6 +743,43 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                     <Button size="sm" onClick={() => void handleAddIndustry()} className="h-9 rounded-xl text-xs font-bold">Agregar</Button>
                     <Button size="sm" variant="ghost" onClick={() => { setShowAddIndustry(false); setNewIndustryName(''); }} className="h-9 text-xs">Cancelar</Button>
                   </div> : <button onClick={() => setShowAddIndustry(true)} className="flex items-center gap-1.5 text-xs font-bold text-primary transition-colors hover:text-primary/80"><Plus className="size-3.5" />Agregar nueva industria</button>)}
+                </div>
+                <div className="space-y-2 rounded-xl border border-border/40 bg-muted/10 p-4">
+                  <Label htmlFor="default-sales-customer-search" className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cliente General para importaciones</Label>
+                  <div className="relative">
+                    <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="default-sales-customer-search"
+                      value={defaultSalesCustomerSearch}
+                      onChange={(event) => setDefaultSalesCustomerSearch(event.target.value)}
+                      disabled={!canEditCompany}
+                      placeholder="Buscar por código o nombre"
+                      className="h-10 rounded-xl pl-9"
+                    />
+                  </div>
+                  <Select
+                    value={defaultSalesCustomerId || '__NONE__'}
+                    onValueChange={(value) => {
+                      setDefaultSalesCustomerId(value === '__NONE__' ? '' : value);
+                      setDefaultSalesCustomerTouched(true);
+                    }}
+                    disabled={!canEditCompany || loadingDefaultSalesCustomerOptions}
+                  >
+                    <SelectTrigger aria-label="Cliente General" className="h-11 w-full rounded-xl">
+                      <SelectValue placeholder="Sin Cliente General configurado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__NONE__">Sin configurar</SelectItem>
+                      {defaultSalesCustomerOptions.map((customer: any) => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.code} · {customer.companyName || customer.name}{customer.status !== 'ACTIVE' ? ' (inactivo; seleccionar otro)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Si una fila de importación deja vacío el código de cliente, se usará este cliente de esta sucursal. Debe estar activo; la carga se bloqueará si no hay uno configurado.
+                  </p>
                 </div>
                 {canEditCompany && <Button onClick={() => void handleSaveCompanyInfo()} disabled={savingCompany} className="h-11 w-full gap-2 rounded-xl font-bold">
                   {savingCompany ? 'Guardando...' : 'Guardar información'}

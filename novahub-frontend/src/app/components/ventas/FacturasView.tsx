@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Link2, Smartphone
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Link2, Smartphone, Upload
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -60,6 +60,7 @@ import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashB
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { VoiceSaleComposer } from './VoiceSaleComposer';
 import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-parser';
+import { SalesImportWizard } from './importacion/SalesImportWizard';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -223,6 +224,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const [creditDueDate, setCreditDueDate] = useState('');
   const [creditLoading, setCreditLoading] = useState(false);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
+  const [salesImportOpen, setSalesImportOpen] = useState(false);
   const [paylinkInvoice, setPaylinkInvoice] = useState<Invoice | null>(null);
   const [poketAppInvoice, setPoketAppInvoice] = useState<Invoice | null>(null);
   const localDocRef = useRef<any>(null);
@@ -2263,6 +2265,11 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             </div>
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_INVOICES', 'create') && (
+              <Button type="button" variant="outline" onClick={() => setSalesImportOpen(true)} className="h-10 gap-2 rounded-xl border-primary/30 text-primary">
+                <Upload className="size-4" /> Importar Excel
+              </Button>
+            )}
+            {canPerform('SALES_INVOICES', 'create') && (
               <Button onClick={startNewInvoice} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Factura
               </Button>
@@ -2371,6 +2378,14 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           )}
         />
       </div>
+
+      <SalesImportWizard
+        open={salesImportOpen}
+        onOpenChange={setSalesImportOpen}
+        kind="INVOICE"
+        tenantId={user?.clientTenantId || user?.tenantId || ''}
+        onFinished={() => { void onRefresh?.(); }}
+      />
 
       <InvoiceDetailSheet
         key={detailInvoice?.id || 'invoice-detail'}

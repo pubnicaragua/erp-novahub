@@ -9,6 +9,7 @@
     "test:support-target-selection": "node --experimental-strip-types e2e/scripts/test-support-target-selection.mjs",
     "test:support-agent-password": "node --experimental-strip-types e2e/scripts/test-support-agent-password.mjs",
     "test:pdf-templates": "node scripts/test-pdf-templates.mjs",
+    "test:sales-import-templates": "node --experimental-strip-types scripts/test-sales-import-templates.mjs",
     "test:sales-stock": "node --experimental-strip-types e2e/scripts/test-sales-stock.mjs",
     "architecture:check": "depcruise --config .dependency-cruiser.cjs src",
     "architecture:graph": "depcruise --config .dependency-cruiser.cjs --output-type mermaid src",
