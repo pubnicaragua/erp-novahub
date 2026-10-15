@@ -665,6 +665,7 @@ function managerAccessAllowsAction(access: ManagerOverview['group']['managerAcce
 function managerAccessCanViewInventoryCost(access: ManagerOverview['group']['managerAccess']) {
   if (!access || access.isOwner) return true;
   const permissions = Array.isArray(access.permissions) ? access.permissions as Array<Record<string, unknown>> : [];
+  if (access.id && managerPermissionGranted(permissions, 'MANAGER_INVENTORY')) return true;
   const explicit = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === 'MANAGER_INVENTORY_COST');
   return explicit?.read === true;
 }

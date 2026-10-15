@@ -197,6 +197,8 @@ export interface User {
   isTenantAdmin: boolean;
   /** Sesión temporal de trabajo de un Manager dentro de una sucursal. */
   managerMode?: boolean;
+  /** Acceso a costos de inventario en la sucursal validada del grupo. */
+  managerCanViewInventoryCost?: boolean;
   managerCanEdit?: boolean;
   branchIds?: string[];
   /** Registro laboral vinculado a la cuenta, cuando existe. */
@@ -665,6 +667,7 @@ const createUserObject = (apiPayload: any): User => {
     isTenantUser: !isPlatformAdmin && !isPlatformSupportAgent,
     isTenantAdmin: userType === 'admin' && role === 'admin' && !isPlatformAdmin,
     managerMode: Boolean(apiUser.managerMode),
+    managerCanViewInventoryCost: apiUser.managerCanViewInventoryCost === true,
     managerCanEdit: Boolean(apiUser.managerCanEdit),
     branchIds: apiUser.branchIds || apiUser.branchAccess?.map((b: any) => b.id) || undefined,
     employee: apiUser.employee
@@ -1054,7 +1057,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canPerform = useCallback((module: string, action: PermissionAction): boolean => {
     if (!user) return false;
     if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, module)) return false;
-    if (user.managerMode && action !== 'viewCost') return tenantAdminHasModuleEnabled(user, module);
+    if (user.managerMode) {
+      if (action !== 'viewCost') return tenantAdminHasModuleEnabled(user, module);
+      const inventoryCostModules = new Set([
+        'INVENTORY',
+        'INVENTORY_PRODUCTS',
+        'INVENTORY_SERVICES',
+        'INVENTORY_MOVEMENTS',
+        'INVENTORY_ASSETS',
+        'INVENTORY_LOSSES',
+        'INVENTORY_ADJUSTMENTS',
+      ]);
+      return user.managerCanViewInventoryCost === true
+        && inventoryCostModules.has(String(module || '').toUpperCase())
+        && tenantAdminHasModuleEnabled(user, module);
+    }
     // El administrador de la empresa tiene todas las acciones de los módulos
     // habilitados, incluidos permisos de flujo nuevos.
     if (user.isTenantAdmin) return tenantAdminHasModuleEnabled(user, module);

@@ -26,6 +26,7 @@ export interface ManagerGroup {
     enabledModules?: string[];
   }>;
   managerAccess?: {
+    id?: string;
     isOwner: boolean;
     canManageManagers: boolean;
     canEdit: boolean;
