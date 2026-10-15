@@ -32,8 +32,10 @@ export interface SalesImportDocument {
       sourceRowNumber?: number;
       productCode?: string;
       description?: string;
+      itemType?: string;
       quantity?: number;
       unitPrice?: number;
+      priceListName?: string | null;
       taxRate?: number;
       discount?: number;
       warehouseName?: string | null;

@@ -698,10 +698,11 @@ export function SalesImportWizard({
                             </span>
                           </div>
                           <div className="overflow-x-auto rounded-xl border border-border/50">
-                            <table className="w-full min-w-[720px] text-left text-xs">
+                            <table className="w-full min-w-[840px] text-left text-xs">
                               <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
                                 <tr>
                                   <th className="p-2">Producto / SKU</th>
+                                  <th className="p-2">Lista de precios</th>
                                   <th className="p-2">Cantidad</th>
                                   <th className="p-2">Precio</th>
                                   <th className="p-2">Desc.</th>
@@ -723,6 +724,11 @@ export function SalesImportWizard({
                                       <span className="block text-[10px] text-muted-foreground">
                                         {item.productCode}
                                       </span>
+                                    </td>
+                                    <td className="max-w-[180px] break-words p-2">
+                                      {item.itemType?.toUpperCase() === "SERVICE"
+                                        ? "Catálogo"
+                                        : item.priceListName || "Predeterminada"}
                                     </td>
                                     <td className="p-2">{item.quantity}</td>
                                     <td className="p-2">
