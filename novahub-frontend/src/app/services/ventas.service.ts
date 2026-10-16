@@ -133,10 +133,11 @@ export const recurringInvoicesService = {
 
 // ---- Payments Received ----
 export const paymentsService = {
+  getIntegrationPolicy: () => api.get<{ financeEnabled: boolean; accountingEnabled: boolean }>('/sales/integration-policy'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentReceived>>('/sales/payments', { params: filters as any, signal }),
   getById: (id: string) => api.get<PaymentReceived>(`/sales/payments/${id}`),
   create: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string }, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),
-  createMixed: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string; payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; reference?: string; notes?: string }> }, idempotencyKey?: string) =>
+  createMixed: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string; payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; cardCommissionPercent?: number; reference?: string; notes?: string }> }, idempotencyKey?: string) =>
     api.idempotentPost<PaymentReceived & { payments?: PaymentReceived[] }>('/sales/payments/mixed', data, idempotencyKey),
   update: (id: string, data: Partial<PaymentReceived>) => api.patch<PaymentReceived>(`/sales/payments/${id}`, data),
   checkNumber: (number: string, excludeId?: string) =>

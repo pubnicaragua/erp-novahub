@@ -257,6 +257,7 @@ export interface PosPaymentLine {
   bankAccountId?: string;
   cardCommissionPercent?: number;
   cardCommissionAmount?: number;
+  cardCommissionBaseAmount?: number;
   cardCommissionAccountId?: string;
 }
 

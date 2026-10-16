@@ -376,6 +376,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
               <p className="font-mono text-xs font-black text-primary">{child.number || 'Ingreso'}</p>
               <p className="mt-1 text-xs font-semibold text-foreground">{child.description || 'Ingreso automático'}</p>
               <p className="mt-1 text-[10px] text-muted-foreground">{child.createdAt || child.date ? new Date(child.createdAt || child.date).toLocaleString('es-NI') : 'Sin fecha'}{child.notes ? ` · ${child.notes}` : ''}</p>
+              {child.sourcePaymentId && !child.accountId && <p className="mt-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Sin cuenta contable · Ventas→Contabilidad desconectada</p>}
             </div>
             <CurrencyValuationAmount amount={Number(child.amount || 0)} sourceCurrency={child.currency} sourceExchangeRate={child.exchangeRate} className="shrink-0 font-black text-emerald-600" />
           </div>
@@ -398,6 +399,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         <div className="mt-3 border-t border-border/30 pt-2 text-[10px] text-muted-foreground">
           <span className="font-bold text-foreground">Categoría:</span> {financeCategoryLabel(item.category)}
         </div>
+        {item.sourcePaymentId && !item.accountId && <p className="mt-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Sin cuenta contable · Ventas→Contabilidad desconectada</p>}
       </div>
     </div>
   );
