@@ -94,6 +94,7 @@ export interface SalesImportPreviewResponse {
   batchId?: string;
   kind?: SalesImportKind;
   status?: string;
+  globalErrors?: Array<{ rowNumber?: number; message: string }>;
   summary?: SalesImportBatch["summary"];
   page?: SalesImportBatch["page"];
   documents?: SalesImportDocument[];

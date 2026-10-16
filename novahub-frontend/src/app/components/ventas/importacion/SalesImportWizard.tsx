@@ -41,6 +41,7 @@ import {
 } from "../../../services/sales-import.service";
 import { toast } from "@/app/services/toast";
 import { getApiErrorMessage } from "../../../services/api";
+import { shouldRestoreSalesImportBatch } from "./sales-import-preview-state";
 
 const NO_REGISTER = "__no_cash_session__";
 const BATCH_STORAGE_PREFIX = "novahub-sales-import-batch:";
@@ -192,12 +193,24 @@ export function SalesImportWizard({
       .getBatch(kind, lastBatchId, 1)
       .then((loaded) => {
         if (!cancelled) {
+          if (!shouldRestoreSalesImportBatch(loaded)) {
+            localStorage.removeItem(storageKey);
+            setBatch(null);
+            setPage(1);
+            setLoadError(null);
+            return;
+          }
           setBatch(loaded);
           setPage(1);
         }
       })
       .catch(() => {
-        if (!cancelled) localStorage.removeItem(storageKey);
+        if (!cancelled) {
+          localStorage.removeItem(storageKey);
+          setBatch(null);
+          setPage(1);
+          setLoadError(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -230,8 +243,11 @@ export function SalesImportWizard({
       return;
     }
     setBusy(true);
+    setBatch(null);
+    setPage(1);
     setLoadError(null);
     setDuplicatePrompt(false);
+    localStorage.removeItem(storageKey);
     try {
       const response = await salesImportService.preview(kind, file, {
         ...currentContext,
@@ -239,6 +255,13 @@ export function SalesImportWizard({
       });
       if (response.requiresDuplicateConfirmation) {
         setDuplicatePrompt(true);
+        return;
+      }
+      if (!shouldRestoreSalesImportBatch(response)) {
+        setLoadError(
+          response.globalErrors?.[0]?.message ||
+            "La vista previa falló. Corrige el archivo e inténtalo de nuevo.",
+        );
         return;
       }
       if (!response.batchId || !response.summary || !response.documents) {
@@ -383,7 +406,11 @@ export function SalesImportWizard({
                 className="block w-full min-w-0 cursor-pointer rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-xs file:font-bold file:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 onChange={(event) => {
                   setFile(event.target.files?.[0] || null);
+                  setBatch(null);
+                  setPage(1);
+                  setLoadError(null);
                   setDuplicatePrompt(false);
+                  localStorage.removeItem(storageKey);
                 }}
                 disabled={busy || workingBlock !== null}
               />
