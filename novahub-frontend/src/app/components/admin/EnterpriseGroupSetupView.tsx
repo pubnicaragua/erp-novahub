@@ -22,6 +22,7 @@ import {
   Warehouse,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
+import { useAuth } from "../../contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -134,15 +135,13 @@ export function EnterpriseGroupSetupView({
   onBack: () => void;
   onChanged: () => void;
 }) {
+  const { user } = useAuth();
+  const canManageIntegrationPolicies = user?.role === "superadmin";
   const [step, setStep] = useState<SetupStep>("identity");
   const [editDetailOpen, setEditDetailOpen] = useState(mode === "edit");
   const [activeEditTab, setActiveEditTab] = useState<EditTab>("identity");
   const [pendingModuleSelection, setPendingModuleSelection] = useState<string[] | null>(null);
   const [moduleConfirmationOpen, setModuleConfirmationOpen] = useState(false);
-  const [salesIntegrationTouched, setSalesIntegrationTouched] = useState({
-    finance: mode === "edit" || typeof initialGroup?.salesFinanceIntegrationEnabled === "boolean",
-    accounting: mode === "edit" || typeof initialGroup?.salesAccountingIntegrationEnabled === "boolean",
-  });
   const [group, setGroup] = useState<any>(initialGroup || null);
   const [loadingGroup, setLoadingGroup] = useState(Boolean(initialGroup?.id));
   const [groupForm, setGroupForm] = useState({
@@ -157,16 +156,6 @@ export function EnterpriseGroupSetupView({
         ? initialGroup.enabledModules
         : [...DEFAULT_ENTERPRISE_MODULES],
     modulePolicies: initialGroup?.modulePolicies || {},
-    salesFinanceIntegrationEnabled: typeof initialGroup?.salesFinanceIntegrationEnabled === "boolean"
-      ? initialGroup.salesFinanceIntegrationEnabled
-      : mode === "create"
-        ? (initialGroup?.enabledModules || DEFAULT_ENTERPRISE_MODULES).includes("FINANCIAL")
-        : true,
-    salesAccountingIntegrationEnabled: typeof initialGroup?.salesAccountingIntegrationEnabled === "boolean"
-      ? initialGroup.salesAccountingIntegrationEnabled
-      : mode === "create"
-        ? (initialGroup?.enabledModules || DEFAULT_ENTERPRISE_MODULES).includes("ACCOUNTING")
-        : true,
   });
   const [managerForm, setManagerForm] = useState({
     name: "",
@@ -272,8 +261,6 @@ export function EnterpriseGroupSetupView({
             Array.isArray(result.enabledModules) && result.enabledModules.length
               ? result.enabledModules
               : current.enabledModules,
-          salesFinanceIntegrationEnabled: typeof result.salesFinanceIntegrationEnabled === "boolean" ? result.salesFinanceIntegrationEnabled : true,
-          salesAccountingIntegrationEnabled: typeof result.salesAccountingIntegrationEnabled === "boolean" ? result.salesAccountingIntegrationEnabled : true,
         }));
       })
       .catch((error: any) =>
@@ -296,8 +283,6 @@ export function EnterpriseGroupSetupView({
         Array.isArray(group.enabledModules) && group.enabledModules.length
           ? group.enabledModules
           : current.enabledModules,
-      salesFinanceIntegrationEnabled: typeof group.salesFinanceIntegrationEnabled === "boolean" ? group.salesFinanceIntegrationEnabled : true,
-      salesAccountingIntegrationEnabled: typeof group.salesAccountingIntegrationEnabled === "boolean" ? group.salesAccountingIntegrationEnabled : true,
     }));
   }, [group]);
 
@@ -371,8 +356,6 @@ export function EnterpriseGroupSetupView({
       consolidationCurrency: groupForm.consolidationCurrency,
       enabledModules: groupForm.enabledModules,
       modulePolicies: groupForm.modulePolicies,
-      salesFinanceIntegrationEnabled: groupForm.salesFinanceIntegrationEnabled,
-      salesAccountingIntegrationEnabled: groupForm.salesAccountingIntegrationEnabled,
       businessUnits: current?.businessUnits || [],
       warehouses: current?.warehouses || [],
       branches: current?.branches || [],
@@ -391,8 +374,6 @@ export function EnterpriseGroupSetupView({
         consolidationCurrency: groupForm.consolidationCurrency,
         enabledModules: enabledModules ?? groupForm.enabledModules,
         modulePolicies: groupForm.modulePolicies,
-        salesFinanceIntegrationEnabled: groupForm.salesFinanceIntegrationEnabled,
-        salesAccountingIntegrationEnabled: groupForm.salesAccountingIntegrationEnabled,
       }),
     onSuccess: (updated) => {
       setGroup(updated);
@@ -422,6 +403,17 @@ export function EnterpriseGroupSetupView({
     setModuleConfirmationOpen(false);
   };
 
+  const integrationPolicyMutation = useMutation({
+    mutationFn: (policies: Record<string, "AUTO" | "ENABLED" | "DISABLED">) =>
+      enterpriseGroupsService.updatePlatformIntegrationPolicies(group.id, policies),
+    onSuccess: (updated) => {
+      setGroup(updated);
+      onChanged();
+      toast.success("Conexión entre módulos actualizada");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const managerMutation = useMutation({
     mutationFn: () =>
       enterpriseGroupsService.createPlatformManager(group.id, {
@@ -449,8 +441,6 @@ export function EnterpriseGroupSetupView({
         description: unitForm.description.trim() || undefined,
         enabledModules: unitForm.enabledModules,
         moduleViewOverrides: unitForm.moduleViewOverrides,
-        salesFinanceIntegrationOverride: unitForm.salesFinanceIntegrationOverride,
-        salesAccountingIntegrationOverride: unitForm.salesAccountingIntegrationOverride,
       }),
     onSuccess: async () => {
       setUnitForm({
@@ -469,8 +459,21 @@ export function EnterpriseGroupSetupView({
   });
 
   const updateUnitMutation = useMutation({
-    mutationFn: ({ unitId, body }: { unitId: string; body: any }) =>
-      enterpriseGroupsService.updatePlatformBusinessUnit(group.id, unitId, body),
+    mutationFn: async ({ unitId, body }: { unitId: string; body: any }) => {
+      const {
+        salesFinanceIntegrationOverride,
+        salesAccountingIntegrationOverride,
+        ...businessUnitBody
+      } = body;
+      const updated = await enterpriseGroupsService.updatePlatformBusinessUnit(group.id, unitId, businessUnitBody);
+      if (canManageIntegrationPolicies && salesFinanceIntegrationOverride !== undefined && salesAccountingIntegrationOverride !== undefined) {
+        return enterpriseGroupsService.updatePlatformBusinessUnitIntegrationPolicies(group.id, unitId, {
+          SALES_TO_FINANCE: salesFinanceIntegrationOverride,
+          SALES_TO_ACCOUNTING: salesAccountingIntegrationOverride,
+        });
+      }
+      return updated;
+    },
     onSuccess: async () => {
       await refreshGroup();
       setEditingUnitId(null);
@@ -538,8 +541,6 @@ export function EnterpriseGroupSetupView({
         moduleMode: branchForm.moduleMode,
         enabledModules: branchForm.enabledModules,
         moduleViewOverrides: branchForm.moduleViewOverrides,
-        salesFinanceIntegrationOverride: branchForm.salesFinanceIntegrationOverride,
-        salesAccountingIntegrationOverride: branchForm.salesAccountingIntegrationOverride,
       }),
     onSuccess: async () => {
       setBranchForm({
@@ -566,13 +567,26 @@ export function EnterpriseGroupSetupView({
   });
 
   const updateBranchMutation = useMutation({
-    mutationFn: async ({ branchId, body }: { branchId: string; body: any }) =>
-      enterpriseGroupsService.updatePlatformBranch(group.id, branchId, {
-        ...body,
+    mutationFn: async ({ branchId, body }: { branchId: string; body: any }) => {
+      const {
+        salesFinanceIntegrationOverride,
+        salesAccountingIntegrationOverride,
+        ...branchBody
+      } = body;
+      const updated = await enterpriseGroupsService.updatePlatformBranch(group.id, branchId, {
+        ...branchBody,
         ...(body.logo !== undefined
           ? { logo: await persistLogo(body.logo, "branches", `branch-${branchId}.png`) || null }
           : {}),
-      }),
+      });
+      if (canManageIntegrationPolicies && salesFinanceIntegrationOverride !== undefined && salesAccountingIntegrationOverride !== undefined) {
+        return enterpriseGroupsService.updatePlatformBranchIntegrationPolicies(group.id, branchId, {
+          SALES_TO_FINANCE: salesFinanceIntegrationOverride,
+          SALES_TO_ACCOUNTING: salesAccountingIntegrationOverride,
+        });
+      }
+      return updated;
+    },
     onSuccess: async () => {
       await refreshGroup();
       setEditingBranchId(null);
@@ -689,8 +703,8 @@ export function EnterpriseGroupSetupView({
           ? unit.enabledModules
           : [...DEFAULT_ENTERPRISE_MODULES],
       moduleViewOverrides: unit.moduleViewOverrides || {},
-      salesFinanceIntegrationOverride: unit.salesFinanceIntegrationOverride || "INHERIT",
-      salesAccountingIntegrationOverride: unit.salesAccountingIntegrationOverride || "INHERIT",
+      salesFinanceIntegrationOverride: unit.integrationPolicyOverrides?.SALES_TO_FINANCE || unit.salesFinanceIntegrationOverride || "INHERIT",
+      salesAccountingIntegrationOverride: unit.integrationPolicyOverrides?.SALES_TO_ACCOUNTING || unit.salesAccountingIntegrationOverride || "INHERIT",
     });
   };
 
@@ -842,8 +856,8 @@ export function EnterpriseGroupSetupView({
         ? branch.enabledModules
         : [],
       moduleViewOverrides: branch.moduleViewOverrides || {},
-      salesFinanceIntegrationOverride: branch.salesFinanceIntegrationOverride || "INHERIT",
-      salesAccountingIntegrationOverride: branch.salesAccountingIntegrationOverride || "INHERIT",
+      salesFinanceIntegrationOverride: branch.integrationPolicyOverrides?.SALES_TO_FINANCE || branch.salesFinanceIntegrationOverride || "INHERIT",
+      salesAccountingIntegrationOverride: branch.integrationPolicyOverrides?.SALES_TO_ACCOUNTING || branch.salesAccountingIntegrationOverride || "INHERIT",
     });
     setBranchAdminEmailStatus("idle");
   };
@@ -968,10 +982,8 @@ export function EnterpriseGroupSetupView({
           description: groupForm.description.trim() || undefined,
           logo: groupLogo || undefined,
           consolidationCurrency: groupForm.consolidationCurrency,
-        enabledModules: groupForm.enabledModules,
-        modulePolicies: groupForm.modulePolicies,
-          salesFinanceIntegrationEnabled: groupForm.salesFinanceIntegrationEnabled,
-          salesAccountingIntegrationEnabled: groupForm.salesAccountingIntegrationEnabled,
+          enabledModules: groupForm.enabledModules,
+          modulePolicies: groupForm.modulePolicies,
         },
         manager: {
           name: managerForm.name.trim(),
@@ -982,8 +994,6 @@ export function EnterpriseGroupSetupView({
           name: unit.name,
           description: unit.description || undefined,
           enabledModules: unit.enabledModules || DEFAULT_ENTERPRISE_MODULES,
-          salesFinanceIntegrationOverride: unit.salesFinanceIntegrationOverride || "INHERIT",
-          salesAccountingIntegrationOverride: unit.salesAccountingIntegrationOverride || "INHERIT",
         })),
         warehouses: warehouses.map((warehouse: any) => ({
           name: warehouse.name,
@@ -1012,8 +1022,6 @@ export function EnterpriseGroupSetupView({
           enabledModules:
             branch.moduleMode === "CUSTOM" ? branch.enabledModules : undefined,
           moduleViewOverrides: branch.moduleViewOverrides || {},
-          salesFinanceIntegrationOverride: branch.salesFinanceIntegrationOverride || "INHERIT",
-          salesAccountingIntegrationOverride: branch.salesAccountingIntegrationOverride || "INHERIT",
         })),
       });
     },
@@ -1126,7 +1134,8 @@ export function EnterpriseGroupSetupView({
         group={group}
         groupForm={groupForm}
         setGroupForm={setGroupForm}
-        salesIntegrationTouched={salesIntegrationTouched}
+        onIntegrationPolicyChange={(route: string, value: string) => integrationPolicyMutation.mutate({ [route]: value })}
+        integrationPolicySaving={integrationPolicyMutation.isPending}
         units={units}
         branches={branches}
         warehouses={warehouses}
@@ -1284,8 +1293,8 @@ export function EnterpriseGroupSetupView({
                 group={group}
                 groupForm={groupForm}
                 setGroupForm={setGroupForm}
-                salesIntegrationTouched={salesIntegrationTouched}
-                setSalesIntegrationTouched={setSalesIntegrationTouched}
+                onIntegrationPolicyChange={(route: string, value: string) => integrationPolicyMutation.mutate({ [route]: value })}
+                integrationPolicySaving={integrationPolicyMutation.isPending}
                 manager={mode === "create" ? null : manager}
                 managerForm={managerForm}
                 setManagerForm={setManagerForm}
@@ -1674,7 +1683,8 @@ function GroupConfigurationView({
   group,
   groupForm,
   setGroupForm,
-  salesIntegrationTouched,
+  onIntegrationPolicyChange,
+  integrationPolicySaving,
   units,
   branches,
   warehouses,
@@ -1818,8 +1828,6 @@ function GroupConfigurationView({
                   setGroupForm((current: any) => ({
                     ...current,
                     enabledModules,
-                    ...(salesIntegrationTouched.finance ? {} : { salesFinanceIntegrationEnabled: enabledModules.some((module) => String(module).toUpperCase() === "FINANCIAL") }),
-                    ...(salesIntegrationTouched.accounting ? {} : { salesAccountingIntegrationEnabled: enabledModules.some((module) => String(module).toUpperCase() === "ACCOUNTING") }),
                   }))
                 }
               />
@@ -1838,6 +1846,12 @@ function GroupConfigurationView({
             </CardContent>
           </Card>
         </div>
+        <IntegrationPoliciesCard
+          group={group}
+          enabledModules={groupForm.enabledModules}
+          onChange={onIntegrationPolicyChange}
+          saving={integrationPolicySaving}
+        />
         <div className="grid min-w-0 gap-6 lg:grid-cols-3">
           <StructureCard
             icon={GitBranch}
@@ -2097,8 +2111,8 @@ function IdentityStep({
   group,
   groupForm,
   setGroupForm,
-  salesIntegrationTouched,
-  setSalesIntegrationTouched,
+  onIntegrationPolicyChange,
+  integrationPolicySaving,
   manager,
   managerForm,
   setManagerForm,
@@ -2200,8 +2214,6 @@ function IdentityStep({
               setGroupForm((current: any) => ({
                 ...current,
                 enabledModules,
-                ...(salesIntegrationTouched.finance ? {} : { salesFinanceIntegrationEnabled: enabledModules.some((module) => String(module).toUpperCase() === "FINANCIAL") }),
-                ...(salesIntegrationTouched.accounting ? {} : { salesAccountingIntegrationEnabled: enabledModules.some((module) => String(module).toUpperCase() === "ACCOUNTING") }),
               }))
             }
           />
@@ -2219,22 +2231,12 @@ function IdentityStep({
           </p>
         </CardContent>
       </Card>
-      <Card className="rounded-3xl border-primary/20 bg-primary/[0.03]">
-        <CardHeader>
-          <CardTitle className="text-lg font-black uppercase">Conexiones de Ventas</CardTitle>
-          <p className="text-sm text-muted-foreground">Estas opciones controlan los registros automáticos que Ventas envía a cada módulo. No habilitan el módulo ni conceden permisos de acceso.</p>
-        </CardHeader>
-        <CardContent className="grid gap-3 p-6 sm:grid-cols-2">
-          <label className="flex min-w-0 items-start gap-3 rounded-2xl border border-border/60 bg-background/60 p-4">
-            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary" checked={Boolean(groupForm.salesFinanceIntegrationEnabled)} onChange={(event) => { setSalesIntegrationTouched((current) => ({ ...current, finance: true })); setGroupForm((current: any) => ({ ...current, salesFinanceIntegrationEnabled: event.target.checked })); }} />
-            <span><span className="block font-bold">Ventas → Finanzas</span><span className="mt-1 block text-xs text-muted-foreground">Registra ingresos, comisiones y movimientos bancarios auxiliares.</span></span>
-          </label>
-          <label className="flex min-w-0 items-start gap-3 rounded-2xl border border-border/60 bg-background/60 p-4">
-            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary" checked={Boolean(groupForm.salesAccountingIntegrationEnabled)} onChange={(event) => { setSalesIntegrationTouched((current) => ({ ...current, accounting: true })); setGroupForm((current: any) => ({ ...current, salesAccountingIntegrationEnabled: event.target.checked })); }} />
-            <span><span className="block font-bold">Ventas → Contabilidad</span><span className="mt-1 block text-xs text-muted-foreground">Solicita cuentas para caja y bancos, y permite generar asientos según la configuración contable global.</span></span>
-          </label>
-        </CardContent>
-      </Card>
+      <IntegrationPoliciesCard
+        group={group}
+        enabledModules={groupForm.enabledModules}
+        onChange={onIntegrationPolicyChange}
+        saving={integrationPolicySaving}
+      />
       <Card className="rounded-3xl border-primary/20 bg-primary/[0.03]">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg font-black uppercase">
@@ -2510,10 +2512,12 @@ function UnitsStep({
               value={unitForm.moduleViewOverrides || {}}
               onChange={(moduleViewOverrides) => setUnitForm((current: any) => ({ ...current, moduleViewOverrides }))}
             />
-            <SalesIntegrationOverrideFields
+            <IntegrationPolicyOverrideFields
               value={unitForm}
               onChange={(changes) => setUnitForm((current: any) => ({ ...current, ...changes }))}
               parentLabel="la política del grupo"
+              editable={editMode}
+              moduleScope={unitForm.enabledModules}
             />
             <div className="flex gap-2">
               <Button
@@ -3057,10 +3061,12 @@ function BranchesStep({
             <div className="mt-3"><ModuleViewOverrideEditor modules={form.moduleMode === "CUSTOM" ? (form.enabledModules || []) : (selectedUnit?.enabledModules || availableModules)} groupPolicies={groupPolicies || {}} parentViewOverrides={selectedUnit?.moduleViewOverrides || {}} value={form.moduleViewOverrides || {}} onChange={(moduleViewOverrides) => setForm((current: any) => ({ ...current, moduleViewOverrides }))} /></div>
           </div>
           <div className="sm:col-span-2">
-            <SalesIntegrationOverrideFields
+            <IntegrationPolicyOverrideFields
               value={form}
               onChange={(changes) => setForm((current: any) => ({ ...current, ...changes }))}
               parentLabel={`el rubro ${selectedUnit?.name || "seleccionado"}`}
+              editable={editMode}
+              moduleScope={form.moduleMode === "CUSTOM" ? form.enabledModules : selectedUnit?.enabledModules || availableModules}
             />
           </div>
           <div className="sm:col-span-2 flex justify-end gap-2">
@@ -3099,28 +3105,125 @@ function BranchesStep({
   );
 }
 
-function SalesIntegrationOverrideFields({ value, onChange, parentLabel }: { value: any; onChange: (changes: any) => void; parentLabel: string }) {
-  const options = [
-    { value: "INHERIT", label: `Heredar de ${parentLabel}` },
-    { value: "ENABLED", label: "Activada" },
-    { value: "DISABLED", label: "Desactivada" },
+function IntegrationPoliciesCard({ group, enabledModules, onChange, saving }: {
+  group: any;
+  enabledModules: string[];
+  onChange: (route: string, value: "AUTO" | "ENABLED" | "DISABLED") => void;
+  saving: boolean;
+}) {
+  const { user } = useAuth();
+  if (user?.role !== "superadmin") return null;
+
+  const groupModules = new Set((enabledModules || []).map((module) => String(module).toUpperCase()));
+  const sourceAvailable = [...groupModules].some((module) => module === "SALES" || module.startsWith("SALES_") || ["RETAIL_POS", "SALES_POS"].includes(module));
+  const getPolicy = (route: string, legacyKey: string): "AUTO" | "ENABLED" | "DISABLED" => {
+    const saved = group?.integrationPolicies?.[route];
+    if (saved === "AUTO" || saved === "ENABLED" || saved === "DISABLED") return saved;
+    const legacy = group?.[legacyKey];
+    if (typeof legacy === "boolean") return legacy ? "ENABLED" : "DISABLED";
+    return "AUTO";
+  };
+  const destinations = [
+    {
+      id: "SALES_TO_ACCOUNTING",
+      title: "Contabilidad",
+      description: "Ventas envía la información contable y puede generar asientos según la configuración global.",
+      legacyKey: "salesAccountingIntegrationEnabled",
+      available: [...groupModules].some((module) => module === "ACCOUNTING" || module.startsWith("ACCOUNTING_")),
+    },
+    {
+      id: "SALES_TO_FINANCE",
+      title: "Finanzas",
+      description: "Ventas registra ingresos y comisiones, además de movimientos bancarios auxiliares.",
+      legacyKey: "salesFinanceIntegrationEnabled",
+      available: [...groupModules].some((module) => module === "FINANCIAL" || module.startsWith("FINANCIAL_")),
+    },
+  ];
+  const editable = Boolean(group?.id && !group?.__draft);
+
+  return (
+    <Card className="rounded-3xl border-primary/20 bg-primary/[0.03]">
+      <CardHeader>
+        <CardTitle className="text-lg font-black uppercase">Conexiones entre módulos</CardTitle>
+        <p className="text-sm text-muted-foreground">Las conexiones se activan automáticamente cuando Ventas y el módulo destino están disponibles. Super Admin puede crear una excepción para todo el grupo; la disponibilidad y los permisos de entrada se configuran por separado.</p>
+      </CardHeader>
+      <CardContent className="grid min-w-0 gap-3 p-6 sm:grid-cols-2">
+        {destinations.map((destination) => {
+          const policy = getPolicy(destination.id, destination.legacyKey);
+          const unavailable = !sourceAvailable || !destination.available;
+          const missing = !sourceAvailable ? "Falta habilitar Ventas para el grupo." : `Falta habilitar ${destination.title} para el grupo.`;
+          return (
+            <div key={destination.id} className="min-w-0 space-y-3 rounded-2xl border border-border/60 bg-background/60 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-black">{destination.title}</p>
+                <Badge variant={unavailable ? "outline" : "secondary"}>{unavailable ? "No disponible" : "Destino habilitado"}</Badge>
+              </div>
+              <p className="text-sm font-semibold">Ventas → {destination.title}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{destination.description}</p>
+              {unavailable && <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">{missing} La conexión no tendrá efecto hasta habilitar ambos módulos.</p>}
+              <label className={labelClass}>
+                Política del grupo
+                <select
+                  className={inputClass}
+                  value={policy}
+                  disabled={!editable || saving}
+                  onChange={(event) => onChange(destination.id, event.target.value as "AUTO" | "ENABLED" | "DISABLED")}
+                >
+                  <option value="AUTO">Automática según módulos habilitados</option>
+                  <option value="ENABLED" disabled={unavailable}>Forzar conexión</option>
+                  <option value="DISABLED">Desconectar</option>
+                </select>
+              </label>
+            </div>
+          );
+        })}
+        {!editable && <p className="text-xs text-muted-foreground sm:col-span-2">Al crear el grupo, las conexiones quedan automáticas. Después podrás establecer excepciones desde su configuración.</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function IntegrationPolicyOverrideFields({ value, onChange, parentLabel, editable, moduleScope }: { value: any; onChange: (changes: any) => void; parentLabel: string; editable: boolean; moduleScope: string[] }) {
+  const { user } = useAuth();
+  if (user?.role !== "superadmin" || !editable) return null;
+  const modules = new Set((moduleScope || []).map((module) => String(module).toUpperCase()));
+  const salesAvailable = hasEnabledModuleFamily(modules, "SALES");
+  const financeAvailable = hasEnabledModuleFamily(modules, "FINANCIAL");
+  const accountingAvailable = hasEnabledModuleFamily(modules, "ACCOUNTING");
+  const missingFinanceModules = [!salesAvailable ? "Ventas" : null, !financeAvailable ? "Finanzas" : null].filter(Boolean);
+  const missingAccountingModules = [!salesAvailable ? "Ventas" : null, !accountingAvailable ? "Contabilidad" : null].filter(Boolean);
+  const optionsFor = (canForce: boolean) => [
+    { value: "INHERIT", label: `Heredar de ${parentLabel}`, disabled: false },
+    { value: "ENABLED", label: "Forzar conexión", disabled: !canForce },
+    { value: "DISABLED", label: "Desconectar", disabled: false },
   ];
   return (
-    <div className="grid gap-3 rounded-2xl border border-border/60 bg-background/50 p-4 sm:grid-cols-2">
+    <div className="grid min-w-0 gap-3 rounded-2xl border border-border/60 bg-background/50 p-4 sm:grid-cols-2">
+      <p className="text-xs font-black uppercase text-foreground sm:col-span-2">Conexiones entre módulos</p>
       <label className={labelClass}>
-        Ventas → Finanzas
+        Destino: Finanzas · Ventas → Finanzas
         <select className={inputClass} value={value.salesFinanceIntegrationOverride || "INHERIT"} onChange={(event) => onChange({ salesFinanceIntegrationOverride: event.target.value })}>
-          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          {optionsFor(salesAvailable && financeAvailable).map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
         </select>
       </label>
       <label className={labelClass}>
-        Ventas → Contabilidad
+        Destino: Contabilidad · Ventas → Contabilidad
         <select className={inputClass} value={value.salesAccountingIntegrationOverride || "INHERIT"} onChange={(event) => onChange({ salesAccountingIntegrationOverride: event.target.value })}>
-          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          {optionsFor(salesAvailable && accountingAvailable).map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
         </select>
       </label>
-      <p className="text-[11px] leading-relaxed text-muted-foreground sm:col-span-2">La opción heredada sigue la configuración del grupo o del rubro superior. Esto no cambia los módulos habilitados ni los permisos.</p>
+      {missingFinanceModules.length > 0 && <p className="text-[11px] text-amber-700 dark:text-amber-300">Falta habilitar {missingFinanceModules.join(" y ")} en este alcance; no se puede forzar esta conexión.</p>}
+      {missingAccountingModules.length > 0 && <p className="text-[11px] text-amber-700 dark:text-amber-300">Falta habilitar {missingAccountingModules.join(" y ")} en este alcance; no se puede forzar esta conexión.</p>}
+      <p className="text-[11px] leading-relaxed text-muted-foreground sm:col-span-2">La conexión también requiere que los módulos estén disponibles en este nivel y en la sucursal. Cambiarla no altera módulos ni permisos.</p>
     </div>
+  );
+}
+
+function hasEnabledModuleFamily(modules: Set<string>, family: string) {
+  return [...modules].some((module) =>
+    module === family
+    || module.startsWith(`${family}_`)
+    || (family === "SALES" && ["RETAIL_POS", "SALES_POS"].includes(module)),
   );
 }
 

@@ -649,6 +649,12 @@ export const enterpriseGroupsService = {
     ),
   updatePlatformGroup: (groupId: string, body: any) =>
     api.idempotentPatch(`/enterprise-groups/platform/${groupId}`, body),
+  updatePlatformIntegrationPolicies: (groupId: string, policies: Record<string, 'AUTO' | 'ENABLED' | 'DISABLED'>) =>
+    api.idempotentPatch(`/enterprise-groups/platform/${groupId}/integration-policies`, { policies }),
+  updatePlatformBusinessUnitIntegrationPolicies: (groupId: string, unitId: string, overrides: Record<string, 'INHERIT' | 'ENABLED' | 'DISABLED'>) =>
+    api.idempotentPatch(`/enterprise-groups/platform/${groupId}/business-units/${unitId}/integration-policies`, { overrides }),
+  updatePlatformBranchIntegrationPolicies: (groupId: string, branchId: string, overrides: Record<string, 'INHERIT' | 'ENABLED' | 'DISABLED'>) =>
+    api.idempotentPatch(`/enterprise-groups/platform/${groupId}/branches/${branchId}/integration-policies`, { overrides }),
   getManagerGroups: (signal?: AbortSignal) =>
     api.get<ManagerGroup[]>("/enterprise-groups/manager", { signal }),
   getOverview: (groupId: string, branchId?: string, businessUnitId?: string, signal?: AbortSignal) =>
