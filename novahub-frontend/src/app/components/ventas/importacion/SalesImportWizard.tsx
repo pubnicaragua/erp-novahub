@@ -37,7 +37,10 @@ import {
 import {
   salesImportService,
   type SalesImportBatch,
+  type SalesImportInvoicePreviewDocument,
+  type SalesImportInvoicePreviewResponse,
   type SalesImportKind,
+  type SalesImportPreviewResponse,
 } from "../../../services/sales-import.service";
 import { toast } from "@/app/services/toast";
 import { getApiErrorMessage } from "../../../services/api";
@@ -45,6 +48,17 @@ import { shouldRestoreSalesImportBatch } from "./sales-import-preview-state";
 
 const NO_REGISTER = "__no_cash_session__";
 const BATCH_STORAGE_PREFIX = "novahub-sales-import-batch:";
+
+function clearLegacyInvoiceBatchPointers() {
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index);
+    if (
+      key?.startsWith(BATCH_STORAGE_PREFIX) &&
+      key.endsWith(":INVOICE")
+    )
+      localStorage.removeItem(key);
+  }
+}
 
 interface SalesImportWizardProps {
   open: boolean;
@@ -66,6 +80,8 @@ function statusLabel(status?: string) {
       return "Confirmado";
     case "FAILED":
       return "Falló";
+    case "PROCESSING":
+      return "Procesando";
     default:
       return status || "—";
   }
@@ -89,6 +105,200 @@ function currencyLabel(currency?: string) {
   return currency === "USD" ? "US$" : "C$";
 }
 
+function InvoiceImportPreviewSection({
+  preview,
+  confirming,
+  progress,
+  onConfirm,
+}: {
+  preview: SalesImportInvoicePreviewResponse;
+  confirming: boolean;
+  progress: { current: number; total: number } | null;
+  onConfirm: () => void;
+}) {
+  const readyCount = preview.documents.filter((document) =>
+    ["READY", "FAILED"].includes(document.status),
+  ).length;
+  const confirmedCount = preview.documents.filter(
+    (document) => document.status === "CONFIRMED",
+  ).length;
+  const errorCount = preview.documents.filter(
+    (document) => document.status === "BLOCKED" || document.status === "FAILED",
+  ).length;
+
+  return (
+    <section className="min-w-0 space-y-4" aria-live="polite">
+      <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-sm font-black">3. Vista previa y confirmación</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {preview.summary.total} factura(s) · {readyCount} lista(s) · {errorCount} con errores · {confirmedCount} confirmada(s)
+          </p>
+          {progress && (
+            <p className="mt-1 text-xs font-semibold text-primary" role="status">
+              Confirmando factura {progress.current} de {progress.total}…
+            </p>
+          )}
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          className="shrink-0 gap-2 rounded-xl"
+          disabled={confirming || readyCount === 0}
+          onClick={onConfirm}
+        >
+          {confirming ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <CheckCircle2 className="size-4" />
+          )}
+          {confirming ? "Confirmando…" : `Confirmar ${readyCount} factura(s)`}
+        </Button>
+      </div>
+
+      {Boolean(preview.globalErrors.length) && (
+        <div
+          className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+          role="alert"
+        >
+          {preview.globalErrors.map((issue, index) => (
+            <p key={`${issue.rowNumber || "global"}-${index}`}>
+              {issue.rowNumber ? `Fila ${issue.rowNumber}: ` : ""}
+              {issue.message}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {preview.documents.map((document) => (
+          <InvoiceImportDocumentCard key={document.sourceRowNumber} document={document} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function InvoiceImportDocumentCard({
+  document,
+}: {
+  document: SalesImportInvoicePreviewDocument;
+}) {
+  const data = document.preview;
+  return (
+    <details className="group min-w-0 rounded-2xl border border-border/60 bg-card p-4 open:border-primary/30">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <span className="min-w-0 flex-1 break-all text-sm font-black">
+          {document.reference}
+        </span>
+        <span className="text-[11px] text-muted-foreground">
+          {document.lineCount} línea(s)
+        </span>
+        <Badge variant="outline" className={statusClass(document.status)}>
+          {statusLabel(document.status)}
+        </Badge>
+        {document.result?.invoiceNumber && (
+          <Badge variant="outline" className="font-mono text-[10px]">
+            {document.result.invoiceNumber}
+          </Badge>
+        )}
+        {data?.totals?.total !== undefined && (
+          <span className="w-full text-right text-sm font-black text-primary sm:w-auto">
+            {currencyLabel(data.currency)}{" "}
+            {Number(data.totals.total).toLocaleString("es-NI", {
+              minimumFractionDigits: 2,
+            })}
+          </span>
+        )}
+      </summary>
+      <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(240px,0.55fr)]">
+        <div className="min-w-0 space-y-3">
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+            <span>Cliente: <strong className="text-foreground">{data?.customerName || "—"}</strong></span>
+            <span>Fecha: <strong className="text-foreground">{data?.date || "—"}</strong></span>
+            <span>Pago: <strong className="text-foreground">Efectivo</strong></span>
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-border/50">
+            <table className="w-full min-w-[840px] text-left text-xs">
+              <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="p-2">Producto / SKU</th>
+                  <th className="p-2">Lista de precios</th>
+                  <th className="p-2">Cantidad</th>
+                  <th className="p-2">Precio</th>
+                  <th className="p-2">Desc.</th>
+                  <th className="p-2">IVA</th>
+                  <th className="p-2">Bodega</th>
+                  <th className="p-2">Disponible al prever</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.items?.map((item, index) => (
+                  <tr key={`${item.sourceRowNumber || index}-${item.productCode}`} className="border-t border-border/50">
+                    <td className="max-w-[240px] break-words p-2">
+                      <span className="font-semibold">{item.description || "Producto"}</span>
+                      <span className="block text-[10px] text-muted-foreground">{item.productCode}</span>
+                    </td>
+                    <td className="max-w-[180px] break-words p-2">
+                      {item.itemType?.toUpperCase() === "SERVICE" ? "Catálogo" : item.priceListName || "Predeterminada"}
+                    </td>
+                    <td className="p-2">{item.quantity}</td>
+                    <td className="p-2">{currencyLabel(data.currency)} {Number(item.unitPrice || 0).toLocaleString("es-NI", { minimumFractionDigits: 2 })}</td>
+                    <td className="p-2">{Number(item.discount || 0)}%</td>
+                    <td className="p-2">{Number(item.taxRate || 0)}%</td>
+                    <td className="p-2">{item.warehouseName || "Servicio"}</td>
+                    <td className="p-2">
+                      {item.availableStock === null || !item.warehouseName
+                        ? "—"
+                        : item.availableStock === undefined
+                          ? "No disponible"
+                          : Number(item.availableStock).toLocaleString("es-NI")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="min-w-0 space-y-2">
+          {document.error && (
+            <div role="alert" className="rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive">
+              <strong>{document.status === "FAILED" ? "Error al confirmar" : "Debe corregirse"}</strong>
+              <p className="mt-1 whitespace-pre-wrap">{document.error}</p>
+            </div>
+          )}
+          {document.result?.postCommitWarning && (
+            <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-foreground">
+              <strong>La factura quedó registrada; falta completar un proceso posterior.</strong>
+              <p className="mt-1 whitespace-pre-wrap">{document.result.postCommitWarning}</p>
+              <p className="mt-1 text-muted-foreground">La factura no se volverá a crear al reintentar el mismo intento.</p>
+            </div>
+          )}
+          {data?.errors?.map((issue, index) => (
+            <div key={`error-${index}`} className="rounded-lg bg-destructive/5 p-2 text-xs text-destructive">
+              <strong>{issue.field || "Error"}{issue.rowNumber ? ` · fila ${issue.rowNumber}` : ""}:</strong> {issue.message}
+            </div>
+          ))}
+          {data?.warnings?.map((warning, index) => (
+            <div key={`warning-${index}`} className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-foreground">
+              <p className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                <span><strong>{warning.field || "Aviso"}:</strong> {warning.message}</span>
+              </p>
+            </div>
+          ))}
+          {document.status === "CONFIRMED" && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="size-4 shrink-0" />
+              Factura registrada como pagada.
+            </div>
+          )}
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export function SalesImportWizard({
   open,
   onOpenChange,
@@ -100,9 +310,17 @@ export function SalesImportWizard({
 }: SalesImportWizardProps) {
   const [file, setFile] = useState<File | null>(null);
   const [batch, setBatch] = useState<SalesImportBatch | null>(null);
+  const [invoicePreview, setInvoicePreview] =
+    useState<SalesImportInvoicePreviewResponse | null>(null);
+  const [invoiceAttemptId, setInvoiceAttemptId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [workingBlock, setWorkingBlock] = useState<number | null>(null);
+  const [confirmingInvoices, setConfirmingInvoices] = useState(false);
+  const [invoiceProgress, setInvoiceProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [duplicatePrompt, setDuplicatePrompt] = useState(false);
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [invoiceRegisterId, setInvoiceRegisterId] = useState(NO_REGISTER);
@@ -185,7 +403,7 @@ export function SalesImportWizard({
   }, [open, kind, invoiceRegisterId]);
 
   useEffect(() => {
-    if (!open || !tenantId) return;
+    if (!open || kind !== "POS" || !tenantId) return;
     let cancelled = false;
     const lastBatchId = localStorage.getItem(storageKey);
     if (!lastBatchId) return;
@@ -217,7 +435,22 @@ export function SalesImportWizard({
     };
   }, [open, tenantId, kind, storageKey]);
 
+  useEffect(() => {
+    if (kind !== "INVOICE") return;
+    // Remove the legacy invoice pointer once; new invoice state is never stored.
+    clearLegacyInvoiceBatchPointers();
+    setBatch(null);
+    setPage(1);
+    setInvoicePreview(null);
+    setInvoiceAttemptId(null);
+    setInvoiceProgress(null);
+    setLoadError(null);
+    setDuplicatePrompt(false);
+    setFile(null);
+  }, [open, kind, tenantId, storageKey]);
+
   const setBatchAndPersist = (next: SalesImportBatch) => {
+    if (kind !== "POS") return;
     setBatch(next);
     setPage(next.page?.page || 1);
     localStorage.setItem(storageKey, next.batchId);
@@ -244,35 +477,54 @@ export function SalesImportWizard({
     }
     setBusy(true);
     setBatch(null);
+    setInvoicePreview(null);
     setPage(1);
     setLoadError(null);
     setDuplicatePrompt(false);
-    localStorage.removeItem(storageKey);
+    if (kind === "POS") localStorage.removeItem(storageKey);
     try {
       const response = await salesImportService.preview(kind, file, {
         ...currentContext,
-        allowDuplicateContent,
+        ...(kind === "POS" ? { allowDuplicateContent } : {}),
       });
-      if (response.requiresDuplicateConfirmation) {
+      if (kind === "INVOICE") {
+        if (!("kind" in response) || response.kind !== "INVOICE") {
+          setLoadError("El servidor no devolvió una vista previa de facturas válida.");
+          return;
+        }
+        const invoiceResponse = response as SalesImportInvoicePreviewResponse;
+        setInvoicePreview(invoiceResponse);
+        setInvoiceAttemptId(crypto.randomUUID());
+        toast.success(
+          `Vista previa lista: ${invoiceResponse.summary.total} documento(s).`,
+        );
+        return;
+      }
+      const legacyResponse = response as SalesImportPreviewResponse;
+      if (legacyResponse.requiresDuplicateConfirmation) {
         setDuplicatePrompt(true);
         return;
       }
-      if (!shouldRestoreSalesImportBatch(response)) {
+      if (!shouldRestoreSalesImportBatch(legacyResponse)) {
         setLoadError(
-          response.globalErrors?.[0]?.message ||
+          legacyResponse.globalErrors?.[0]?.message ||
             "La vista previa falló. Corrige el archivo e inténtalo de nuevo.",
         );
         return;
       }
-      if (!response.batchId || !response.summary || !response.documents) {
+      if (
+        !legacyResponse.batchId ||
+        !legacyResponse.summary ||
+        !legacyResponse.documents
+      ) {
         setLoadError(
           "El servidor no devolvió una vista previa de lote válida.",
         );
         return;
       }
-      setBatchAndPersist(response as SalesImportBatch);
+      setBatchAndPersist(legacyResponse as SalesImportBatch);
       toast.success(
-        `Vista previa lista: ${response.summary.total} documento(s).`,
+        `Vista previa lista: ${legacyResponse.summary.total} documento(s).`,
       );
     } catch (error) {
       setLoadError(
@@ -309,6 +561,7 @@ export function SalesImportWizard({
   };
 
   const confirmBlock = async (blockNumber: number) => {
+    if (kind !== "POS") return;
     if (!batch || workingBlock !== null) return;
     setWorkingBlock(blockNumber);
     try {
@@ -337,6 +590,96 @@ export function SalesImportWizard({
     }
   };
 
+  const confirmInvoices = async () => {
+    if (kind !== "INVOICE" || !invoicePreview || !invoiceAttemptId || confirmingInvoices)
+      return;
+    const readyDocuments = invoicePreview.documents.filter((document) =>
+      ["READY", "FAILED"].includes(document.status),
+    );
+    if (!readyDocuments.length) {
+      toast.error("No hay facturas listas para confirmar.");
+      return;
+    }
+    setConfirmingInvoices(true);
+    setInvoiceProgress({ current: 0, total: readyDocuments.length });
+    let succeeded = 0;
+    for (const [index, document] of readyDocuments.entries()) {
+      setInvoiceProgress({ current: index + 1, total: readyDocuments.length });
+      setInvoicePreview((current) =>
+        current
+          ? {
+              ...current,
+              documents: current.documents.map((item) =>
+                item.sourceRowNumber === document.sourceRowNumber
+                  ? { ...item, status: "PROCESSING", error: null }
+                  : item,
+              ),
+            }
+          : current,
+      );
+      try {
+        const result = await salesImportService.confirmInvoiceDocument(
+          invoiceAttemptId,
+          document.source,
+          currentContext,
+        );
+        succeeded += 1;
+        setInvoicePreview((current) =>
+          current
+            ? {
+                ...current,
+                documents: current.documents.map((item) =>
+                  item.sourceRowNumber === document.sourceRowNumber
+                    ? {
+                        ...item,
+                        status: "CONFIRMED",
+                        error: null,
+                        result: {
+                          invoiceNumber: result.invoiceNumber,
+                          total: result.total,
+                          currency: result.currency,
+                          postCommitWarning: result.postCommitWarning,
+                        },
+                      }
+                    : item,
+                ),
+              }
+            : current,
+        );
+      } catch (error) {
+        setInvoicePreview((current) =>
+          current
+            ? {
+                ...current,
+                documents: current.documents.map((item) =>
+                  item.sourceRowNumber === document.sourceRowNumber
+                    ? {
+                        ...item,
+                        status: "FAILED",
+                        error: getApiErrorMessage(
+                          error,
+                          "No se pudo confirmar esta factura.",
+                        ),
+                      }
+                    : item,
+                ),
+              }
+            : current,
+        );
+      }
+    }
+    setConfirmingInvoices(false);
+    setInvoiceProgress(null);
+    if (succeeded) {
+      toast.success(`${succeeded} factura(s) confirmada(s).`);
+      onFinished?.();
+    }
+    if (succeeded < readyDocuments.length)
+      toast.error(
+        `${readyDocuments.length - succeeded} factura(s) fallaron. Revisa cada resultado y vuelve a intentar si corresponde.`,
+      );
+  };
+
   const downloadTemplate = async () => {
     try {
       const { downloadSalesImportTemplate } =
@@ -358,7 +701,16 @@ export function SalesImportWizard({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!busy && workingBlock === null) onOpenChange(nextOpen);
+        if (!busy && workingBlock === null && !confirmingInvoices) {
+          if (!nextOpen && kind === "INVOICE") {
+            setFile(null);
+            setInvoicePreview(null);
+            setInvoiceAttemptId(null);
+            setInvoiceProgress(null);
+            setLoadError(null);
+          }
+          onOpenChange(nextOpen);
+        }
       }}
     >
       <DialogContent className="!max-h-[min(92dvh,980px)] w-[calc(100%-1rem)] !max-w-6xl gap-0 overflow-hidden p-0 sm:w-[calc(100%-2rem)]">
@@ -371,7 +723,7 @@ export function SalesImportWizard({
               </DialogTitle>
               <DialogDescription className="mt-2 max-w-3xl">
                 Carga la plantilla, revisa los precios y existencias, y confirma
-                cada bloque. Cada documento se registra como pagado en efectivo.
+                {kind === "INVOICE" ? " cada factura." : " cada bloque."} Cada documento se registra como pagado en efectivo.
               </DialogDescription>
             </div>
             <Button
@@ -407,12 +759,15 @@ export function SalesImportWizard({
                 onChange={(event) => {
                   setFile(event.target.files?.[0] || null);
                   setBatch(null);
+                  setInvoicePreview(null);
+                  setInvoiceAttemptId(null);
+                  setInvoiceProgress(null);
                   setPage(1);
                   setLoadError(null);
                   setDuplicatePrompt(false);
-                  localStorage.removeItem(storageKey);
+                  if (kind === "POS") localStorage.removeItem(storageKey);
                 }}
-                disabled={busy || workingBlock !== null}
+                disabled={busy || workingBlock !== null || confirmingInvoices}
               />
               {file && (
                 <p className="break-all text-xs text-muted-foreground">
@@ -423,7 +778,7 @@ export function SalesImportWizard({
                 type="button"
                 className="w-full gap-2 rounded-xl font-bold sm:w-auto"
                 onClick={() => void runPreview()}
-                disabled={busy || !file || !contextReady}
+                disabled={busy || confirmingInvoices || !file || !contextReady}
               >
                 {busy ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -432,7 +787,7 @@ export function SalesImportWizard({
                 )}
                 {busy ? "Cargando y analizando…" : "Cargar y ver vista previa"}
               </Button>
-              {duplicatePrompt && (
+              {kind === "POS" && duplicatePrompt && (
                 <div
                   className="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3"
                   role="alert"
@@ -492,7 +847,7 @@ export function SalesImportWizard({
                   <Select
                     value={invoiceRegisterId}
                     onValueChange={setInvoiceRegisterId}
-                    disabled={busy || workingBlock !== null}
+                    disabled={busy || workingBlock !== null || confirmingInvoices}
                   >
                     <SelectTrigger
                       id="sales-import-cash-session"
@@ -548,7 +903,16 @@ export function SalesImportWizard({
             </section>
           </div>
 
-          {batch && (
+          {kind === "INVOICE" && invoicePreview && (
+            <InvoiceImportPreviewSection
+              preview={invoicePreview}
+              confirming={confirmingInvoices}
+              progress={invoiceProgress}
+              onConfirm={() => void confirmInvoices()}
+            />
+          )}
+
+          {kind === "POS" && batch && (
             <section className="min-w-0 space-y-4" aria-live="polite">
               <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
@@ -925,7 +1289,7 @@ export function SalesImportWizard({
               variant="outline"
               className="rounded-xl"
               onClick={() => onOpenChange(false)}
-              disabled={busy || workingBlock !== null}
+              disabled={busy || workingBlock !== null || confirmingInvoices}
             >
               Cerrar
             </Button>
