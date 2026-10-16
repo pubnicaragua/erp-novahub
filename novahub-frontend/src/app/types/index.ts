@@ -589,8 +589,8 @@ export interface PaymentReceived {
   currency: Currency;
   exchangeRate?: number;
   baseAmount?: number;
-  accountId?: string;
-  bankAccountId?: string;
+  accountId?: string | null;
+  bankAccountId?: string | null;
   bankAccount?: { id: string; bankName: string; accountNumber: string; currency?: string; cardCommissionPercent?: number };
   method: PaymentMethod | 'MIXED';
   reference?: string;
@@ -604,6 +604,8 @@ export interface PaymentReceived {
   isGroupedPayment?: boolean;
   cardCommissionPercent?: number | null;
   cardCommissionAmount?: number | null;
+  cardCommissionBaseAmount?: number | null;
+  salesAccountingEnabledAtCreation?: boolean | null;
   cardCommissionAccountId?: string | null;
 }
 
@@ -1206,7 +1208,7 @@ export interface Income {
   id: string;
   tenantId: string;
   number: string;
-  accountId: string;
+  accountId?: string | null;
   account?: Account;
   customerId?: string;
   customer?: Customer;
@@ -1219,6 +1221,7 @@ export interface Income {
   description: string;
   reference?: string;
   source?: string;
+  sourcePaymentId?: string | null;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -1229,7 +1232,7 @@ export interface Expense {
   id: string;
   tenantId: string;
   number: string;
-  accountId?: string;
+  accountId?: string | null;
   account?: Account;
   supplierId?: string;
   supplier?: Supplier;
@@ -1251,13 +1254,14 @@ export interface Expense {
   description: string;
   paidTo?: string;
   paymentSource?: 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK' | 'OTHER' | 'EFECTIVO' | 'BAC' | 'LAFISE' | 'ATLANTIDA' | 'FICOHSA' | 'BANPRO' | 'BDF' | 'AVANZ';
-  bankAccountId?: string;
+  bankAccountId?: string | null;
   evidenceFileName?: string;
   evidenceFileType?: string;
   evidenceFileSize?: number;
   evidenceFileUrl?: string;
   reference?: string;
   source?: string;
+  sourcePaymentId?: string | null;
   notes?: string;
   status: ExpenseStatus;
   createdAt: string;
