@@ -22,6 +22,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePurchasesIntegrationPolicy } from '../../hooks/usePurchasesIntegrationPolicy';
 import { generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
@@ -74,6 +75,8 @@ function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: 
 
 export function FacturasProveedorView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
+  const integrationPolicyQuery = usePurchasesIntegrationPolicy();
+  const accountingConnectionEnabled = integrationPolicyQuery.data?.accountingEnabled ?? true;
   const {
     exchangeRate: globalRate,
     displayCurrency,
@@ -662,12 +665,12 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
                 <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
                   <div className="flex items-center gap-2">
                     <Info className="size-3.5 shrink-0 text-primary" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Contabilización al pagar</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-foreground">{accountingConnectionEnabled ? 'Contabilización al pagar' : 'Compra operativa'}</p>
                   </div>
-                  <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                  {accountingConnectionEnabled ? <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
                     El total bruto es subtotal + IVA. El IR no se suma al efectivo: se retiene al proveedor y queda como obligación fiscal. Al liquidarla, el asiento queda Debe bruto = Haber pago neto + IR retenido.
-                  </p>
-                  <p className="mt-1 text-[9px] font-semibold text-primary">Las cuentas y los medios de pago se configuran en Contabilidad → Configuración → Compras.</p>
+                  </p> : <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">La conexión Compras → Contabilidad está desactivada. La factura y sus pagos se conservan en Compras y no generarán asientos automáticos.</p>}
+                  {accountingConnectionEnabled && <p className="mt-1 text-[9px] font-semibold text-primary">Las cuentas y los medios de pago se configuran en Contabilidad → Configuración → Compras.</p>}
                 </div>
               </div>
             </CardContent>

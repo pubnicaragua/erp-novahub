@@ -201,7 +201,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
       setSelectedTransfer(transfer);
     }
   });
-  const [accountingPreflight, setAccountingPreflight] = useState<{ ready: boolean; errors: string[]; accountingMode?: 'OPERATIONAL_ONLY' | 'BRANCH_TO_BRANCH'; warehouses: any[] } | null>(null);
+  const [accountingPreflight, setAccountingPreflight] = useState<{ ready: boolean; errors: string[]; accountingConnected?: boolean; autoGenerationEnabled?: boolean; accountingMode?: 'OPERATIONAL_ONLY' | 'BRANCH_TO_BRANCH'; warehouses: any[] } | null>(null);
   const [accountingPreflightLoading, setAccountingPreflightLoading] = useState(false);
   const [corporateWarehouses, setCorporateWarehouses] = useState<any[]>([]);
   const [transferBranchWarehouses, setTransferBranchWarehouses] = useState<TransferLocation[]>([]);
@@ -603,7 +603,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
       );
       setAccountingPreflight(finalAccountingPreflight);
       if (!finalAccountingPreflight.ready) {
-        toast.error(finalAccountingPreflight.errors?.join(' ') || 'La transferencia no está lista para contabilizarse');
+      toast.error(finalAccountingPreflight.errors?.join(' ') || 'La transferencia no está lista para completarse');
         return;
       }
 
@@ -693,7 +693,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         <div className={`mb-4 flex items-start gap-2 rounded-xl border p-3 text-xs ${accountingPreflightLoading || accountingPreflight?.ready ? 'border-success/20 bg-success/5 text-success' : 'border-warning/25 bg-warning/5 text-warning'}`}>
           {accountingPreflightLoading ? <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" /> : accountingPreflight?.ready ? <Check className="mt-0.5 size-4 shrink-0" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0" />}
           <div>
-            <p className="font-bold">{accountingPreflightLoading ? 'Validando configuración contable…' : accountingPreflight?.ready ? accountingPreflight.accountingMode === 'OPERATIONAL_ONLY' ? 'Movimiento listo; no requiere cuenta del almacén corporativo' : 'Origen y destino listos para contabilizar' : 'Configuración contable pendiente'}</p>
+            <p className="font-bold">{accountingPreflightLoading ? 'Validando la transferencia…' : accountingPreflight?.ready ? accountingPreflight.accountingConnected === false ? 'Transferencia operativa lista; conexión contable desactivada' : accountingPreflight.autoGenerationEnabled === false ? 'Transferencia operativa lista; generación global de asientos desactivada' : accountingPreflight.accountingMode === 'OPERATIONAL_ONLY' ? 'Movimiento listo; no requiere cuenta del almacén corporativo' : 'Origen y destino listos para contabilizar' : 'Transferencia no lista'}</p>
             {!accountingPreflightLoading && !accountingPreflight?.ready && <p className="mt-1 leading-5">{accountingPreflight?.errors?.join(' ') || 'Configura una cuenta de Inventario activa y posteable en el origen y el destino desde Inventario → Configuración.'}</p>}
           </div>
         </div>

@@ -18,6 +18,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { toast } from '@/app/services/toast';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePurchasesIntegrationPolicy } from '../../hooks/usePurchasesIntegrationPolicy';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { getKpiSummaryRows } from '../../utils/kpiSummary';
@@ -138,6 +139,9 @@ function groupMadePayments(rows: PaymentMade[], baseCurrency: string, globalRate
 
 export function PagosRealizadosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange, selectedBranchId = '', targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
+  const integrationPolicyQuery = usePurchasesIntegrationPolicy();
+  const accountingConnectionEnabled = integrationPolicyQuery.data?.accountingEnabled ?? true;
+  const financeConnectionEnabled = integrationPolicyQuery.data?.financeEnabled ?? true;
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-payments-layout', 'table', 24 * 365);
@@ -541,7 +545,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
     if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) {
       return toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque');
     }
-    if (effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
+    if (accountingConnectionEnabled && effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
       return toast.error('Seleccione el banco de cada pago con tarjeta, transferencia o cheque');
     }
     const effectivePaymentBase = effectiveLines.reduce((sum, line) => sum + toBaseAmount(
@@ -716,7 +720,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                 </Button>
              )}
             {((isNew && canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve')) || (!isNew && canPerform('PURCHASES_PAYMENTS', 'edit'))) && (
-              <Button onClick={handleSaveDoc} disabled={paymentOverInvoiceBalance || paymentOverGeneralBalance || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+              <Button onClick={handleSaveDoc} disabled={paymentOverInvoiceBalance || paymentOverGeneralBalance || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (accountingConnectionEnabled && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Pago
               </Button>
             )}
@@ -881,7 +885,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                             <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                           </div>
                           {selectedInvoice && line.currency !== selectedInvoiceCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatExplicitAmount(getPaymentLineDocumentAmount(line, selectedInvoiceCurrency, selectedInvoiceRate, baseCurrency, convertBetweenCurrencies), selectedInvoiceCurrency)}</p>}
-                          {isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
+                          {isBankPaymentMethod(line.method, true) && (accountingConnectionEnabled || financeConnectionEnabled) && <BankAccountSelect currency={line.currency} className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label={accountingConnectionEnabled ? "Banco del pago" : "Banco opcional para el movimiento financiero"} />}
                           {hasPaymentReferenceField(line.method) && <div className="mt-2">
                             <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
                             <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} />

@@ -32,6 +32,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { formatExchangeRate } from '../../utils/currency';
 import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
+import { usePurchasesIntegrationPolicy } from '../../hooks/usePurchasesIntegrationPolicy';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
@@ -367,7 +368,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
     if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) {
       return toast.error('Ingresa la referencia para cada pago con tarjeta, transferencia o cheque.');
     }
-    if (effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
+    if (accountingConnectionEnabled && effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
       return toast.error('Selecciona el banco de cada pago con tarjeta, transferencia o cheque.');
     }
     if (files.length === 0) return toast.error('Adjunte al menos una evidencia del pago.');
@@ -417,7 +418,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
         evidenceError = error?.response?.data?.message || error?.message || 'no se pudieron adjuntar todas las evidencias';
       }
 
-      toast.success('Pago registrado en Pagos realizados, Finanzas y Contabilidad.', { id: saveToastId });
+      toast.success(`Pago registrado${financeConnectionEnabled ? ' en Finanzas' : ''}${accountingConnectionEnabled ? ' y Contabilidad' : ''}.`, { id: saveToastId });
       if (evidenceError) toast.error(`El pago quedó registrado, pero ${evidenceError.toLowerCase()}`);
       onSaved();
       onClose();
@@ -518,7 +519,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
                           <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1 || saving} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                           </div>
                         {draft && line.currency !== draftCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatExplicitAmount(getPaymentLineDocumentAmount(line, draftCurrency, draftRate, baseCurrency, convertBetweenCurrencies), draftCurrency)}</p>}
-                        {isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
+                        {isBankPaymentMethod(line.method, true) && (accountingConnectionEnabled || financeConnectionEnabled) && <BankAccountSelect currency={line.currency} className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label={accountingConnectionEnabled ? "Banco del pago" : "Banco opcional para el movimiento financiero"} />}
                         {hasPaymentReferenceField(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} disabled={saving} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} className="h-10 font-mono" /></div>}
                       </div>
                     ))}
@@ -536,7 +537,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
         </div>
         <DialogFooter className="border-t border-border/60 bg-muted/[0.12] px-6 py-4" data-tour="purchases-payment-actions">
           <Button variant="outline" onClick={onClose} disabled={saving || invoiceSaving} className="rounded-xl font-black uppercase tracking-widest">Cancelar</Button>
-          {invoiceId && !draft?.invoiceOnly && <Button onClick={handleSubmit} disabled={saving || !draft || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId) || paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0) > toBaseAmount(Number(draft?.amount || 0), draft?.currency, Number(draft?.exchangeRate || globalRate || 1)) + 0.01} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
+          {invoiceId && !draft?.invoiceOnly && <Button onClick={handleSubmit} disabled={saving || !draft || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (accountingConnectionEnabled && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) || paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0) > toBaseAmount(Number(draft?.amount || 0), draft?.currency, Number(draft?.exchangeRate || globalRate || 1)) + 0.01} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -545,6 +546,9 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
 
 export function RecepcionesCompraView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], selectedBranchId = '', pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
+  const integrationPolicyQuery = usePurchasesIntegrationPolicy();
+  const accountingConnectionEnabled = integrationPolicyQuery.data?.accountingEnabled ?? true;
+  const financeConnectionEnabled = integrationPolicyQuery.data?.financeEnabled ?? true;
   const { baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');

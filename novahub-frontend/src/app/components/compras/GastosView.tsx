@@ -23,6 +23,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePurchasesIntegrationPolicy } from '../../hooks/usePurchasesIntegrationPolicy';
 import { storageService } from '../../services/storage.service';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
@@ -81,6 +82,9 @@ const statusOpts = [
 
 export function GastosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
+  const integrationPolicyQuery = usePurchasesIntegrationPolicy();
+  const accountingConnectionEnabled = integrationPolicyQuery.data?.accountingEnabled ?? true;
+  const financeConnectionEnabled = integrationPolicyQuery.data?.financeEnabled ?? true;
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
   useEffect(() => { setExpenseCategories(expenseCategoryCatalog); }, [expenseCategoryCatalog]);
@@ -546,7 +550,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque');
       return;
     }
-    if (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId) {
+    if (accountingConnectionEnabled && isBankPaymentMethod(paymentMethod) && !paymentBankAccountId) {
       toast.error('Selecciona la cuenta bancaria global que realizará el pago');
       return;
     }
@@ -559,7 +563,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         bankAccountId: isBankPaymentMethod(paymentMethod) ? paymentBankAccountId : undefined,
         reference: paymentReference.trim() || undefined,
       } as any);
-      toast.success('Gasto pagado y enviado a Finanzas', { id: paymentToastId });
+      toast.success(`Gasto pagado${financeConnectionEnabled ? ' y enviado a Finanzas' : ''}${accountingConnectionEnabled ? ' y contabilizado' : ''}.`, { id: paymentToastId });
       setPaymentExpense(null);
       onRefresh();
     } catch (e: any) {
@@ -1185,7 +1189,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                       <SelectContent>{paymentMethodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  {isBankPaymentMethod(paymentMethod) && <BankAccountSelect currency={paymentExpense.currency} value={paymentBankAccountId} onChange={setPaymentBankAccountId} label="Cuenta bancaria que realiza el pago" className="sm:col-span-2" />}
+                  {isBankPaymentMethod(paymentMethod) && (accountingConnectionEnabled || financeConnectionEnabled) && <BankAccountSelect currency={paymentExpense.currency} value={paymentBankAccountId} onChange={setPaymentBankAccountId} label={accountingConnectionEnabled ? "Cuenta bancaria que realiza el pago" : "Banco opcional para el movimiento financiero"} className="sm:col-span-2" />}
                   {hasPaymentReferenceField(paymentMethod) && <div>
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
                     <Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Recibo, transferencia..." required={requiresPaymentReference(paymentMethod)} className="h-10 text-xs" />
@@ -1195,7 +1199,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
             )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setPaymentExpense(null)} disabled={paymentLoading}>Cancelar</Button>
-              <Button onClick={() => void handlePayment()} disabled={paymentLoading || (requiresPaymentReference(paymentMethod) && !paymentReference.trim()) || (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId)} className="bg-primary font-black uppercase tracking-widest">
+              <Button onClick={() => void handlePayment()} disabled={paymentLoading || (requiresPaymentReference(paymentMethod) && !paymentReference.trim()) || (accountingConnectionEnabled && isBankPaymentMethod(paymentMethod) && !paymentBankAccountId)} className="bg-primary font-black uppercase tracking-widest">
                 {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
               </Button>
             </DialogFooter>

@@ -174,6 +174,9 @@ export function EnterpriseGroupSetupView({
     moduleViewOverrides: {} as Record<string, string[]>,
     salesFinanceIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
     salesAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
+    inventoryAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
+    purchasesAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
+    purchasesFinanceIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
   });
   const [warehouseForm, setWarehouseForm] = useState({
     name: "",
@@ -197,6 +200,9 @@ export function EnterpriseGroupSetupView({
     moduleViewOverrides: {} as Record<string, string[]>,
     salesFinanceIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
     salesAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
+    inventoryAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
+    purchasesAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
+    purchasesFinanceIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
   });
   const [branchAdminEmailStatus, setBranchAdminEmailStatus] = useState<
     "idle" | "checking" | "available" | "taken" | "error"
@@ -451,6 +457,9 @@ export function EnterpriseGroupSetupView({
         moduleViewOverrides: {},
         salesFinanceIntegrationOverride: "INHERIT",
         salesAccountingIntegrationOverride: "INHERIT",
+        inventoryAccountingIntegrationOverride: "INHERIT",
+        purchasesAccountingIntegrationOverride: "INHERIT",
+        purchasesFinanceIntegrationOverride: "INHERIT",
       });
       await refreshGroup();
       toast.success("Rubro agregado");
@@ -463,14 +472,23 @@ export function EnterpriseGroupSetupView({
       const {
         salesFinanceIntegrationOverride,
         salesAccountingIntegrationOverride,
+        inventoryAccountingIntegrationOverride,
+        purchasesAccountingIntegrationOverride,
+        purchasesFinanceIntegrationOverride,
         ...businessUnitBody
       } = body;
       const updated = await enterpriseGroupsService.updatePlatformBusinessUnit(group.id, unitId, businessUnitBody);
-      if (canManageIntegrationPolicies && salesFinanceIntegrationOverride !== undefined && salesAccountingIntegrationOverride !== undefined) {
+      const policyEntries = [
+        ["SALES_TO_FINANCE", salesFinanceIntegrationOverride],
+        ["SALES_TO_ACCOUNTING", salesAccountingIntegrationOverride],
+        ["INVENTORY_TO_ACCOUNTING", inventoryAccountingIntegrationOverride],
+        ["PURCHASES_TO_ACCOUNTING", purchasesAccountingIntegrationOverride],
+        ["PURCHASES_TO_FINANCE", purchasesFinanceIntegrationOverride],
+      ].filter(([, value]) => value !== undefined);
+      if (canManageIntegrationPolicies && policyEntries.length) {
         return enterpriseGroupsService.updatePlatformBusinessUnitIntegrationPolicies(group.id, unitId, {
-          SALES_TO_FINANCE: salesFinanceIntegrationOverride,
-          SALES_TO_ACCOUNTING: salesAccountingIntegrationOverride,
-        });
+          ...Object.fromEntries(policyEntries),
+        } as any);
       }
       return updated;
     },
@@ -559,6 +577,9 @@ export function EnterpriseGroupSetupView({
         moduleViewOverrides: {},
         salesFinanceIntegrationOverride: "INHERIT",
         salesAccountingIntegrationOverride: "INHERIT",
+        inventoryAccountingIntegrationOverride: "INHERIT",
+        purchasesAccountingIntegrationOverride: "INHERIT",
+        purchasesFinanceIntegrationOverride: "INHERIT",
       });
       await refreshGroup();
       toast.success("Sucursal agregada");
@@ -571,6 +592,9 @@ export function EnterpriseGroupSetupView({
       const {
         salesFinanceIntegrationOverride,
         salesAccountingIntegrationOverride,
+        inventoryAccountingIntegrationOverride,
+        purchasesAccountingIntegrationOverride,
+        purchasesFinanceIntegrationOverride,
         ...branchBody
       } = body;
       const updated = await enterpriseGroupsService.updatePlatformBranch(group.id, branchId, {
@@ -579,11 +603,17 @@ export function EnterpriseGroupSetupView({
           ? { logo: await persistLogo(body.logo, "branches", `branch-${branchId}.png`) || null }
           : {}),
       });
-      if (canManageIntegrationPolicies && salesFinanceIntegrationOverride !== undefined && salesAccountingIntegrationOverride !== undefined) {
+      const policyEntries = [
+        ["SALES_TO_FINANCE", salesFinanceIntegrationOverride],
+        ["SALES_TO_ACCOUNTING", salesAccountingIntegrationOverride],
+        ["INVENTORY_TO_ACCOUNTING", inventoryAccountingIntegrationOverride],
+        ["PURCHASES_TO_ACCOUNTING", purchasesAccountingIntegrationOverride],
+        ["PURCHASES_TO_FINANCE", purchasesFinanceIntegrationOverride],
+      ].filter(([, value]) => value !== undefined);
+      if (canManageIntegrationPolicies && policyEntries.length) {
         return enterpriseGroupsService.updatePlatformBranchIntegrationPolicies(group.id, branchId, {
-          SALES_TO_FINANCE: salesFinanceIntegrationOverride,
-          SALES_TO_ACCOUNTING: salesAccountingIntegrationOverride,
-        });
+          ...Object.fromEntries(policyEntries),
+        } as any);
       }
       return updated;
     },
@@ -605,6 +635,9 @@ export function EnterpriseGroupSetupView({
       moduleViewOverrides: unitForm.moduleViewOverrides,
       salesFinanceIntegrationOverride: unitForm.salesFinanceIntegrationOverride,
       salesAccountingIntegrationOverride: unitForm.salesAccountingIntegrationOverride,
+      inventoryAccountingIntegrationOverride: unitForm.inventoryAccountingIntegrationOverride,
+      purchasesAccountingIntegrationOverride: unitForm.purchasesAccountingIntegrationOverride,
+      purchasesFinanceIntegrationOverride: unitForm.purchasesFinanceIntegrationOverride,
       isActive: true,
       __draft: true,
     };
@@ -620,6 +653,9 @@ export function EnterpriseGroupSetupView({
       moduleViewOverrides: {},
       salesFinanceIntegrationOverride: "INHERIT",
       salesAccountingIntegrationOverride: "INHERIT",
+      inventoryAccountingIntegrationOverride: "INHERIT",
+      purchasesAccountingIntegrationOverride: "INHERIT",
+      purchasesFinanceIntegrationOverride: "INHERIT",
     });
     toast.success("Rubro agregado");
   };
@@ -664,6 +700,9 @@ export function EnterpriseGroupSetupView({
       moduleViewOverrides: branchForm.moduleViewOverrides,
       salesFinanceIntegrationOverride: branchForm.salesFinanceIntegrationOverride,
       salesAccountingIntegrationOverride: branchForm.salesAccountingIntegrationOverride,
+      inventoryAccountingIntegrationOverride: branchForm.inventoryAccountingIntegrationOverride,
+      purchasesAccountingIntegrationOverride: branchForm.purchasesAccountingIntegrationOverride,
+      purchasesFinanceIntegrationOverride: branchForm.purchasesFinanceIntegrationOverride,
       _count: { users: 1, warehouses: 0 },
       __draft: true,
     };
@@ -687,6 +726,9 @@ export function EnterpriseGroupSetupView({
       moduleViewOverrides: {},
       salesFinanceIntegrationOverride: "INHERIT",
       salesAccountingIntegrationOverride: "INHERIT",
+      inventoryAccountingIntegrationOverride: "INHERIT",
+      purchasesAccountingIntegrationOverride: "INHERIT",
+      purchasesFinanceIntegrationOverride: "INHERIT",
     });
     setBranchAdminEmailStatus("idle");
     toast.success("Sucursal agregada");
@@ -705,6 +747,9 @@ export function EnterpriseGroupSetupView({
       moduleViewOverrides: unit.moduleViewOverrides || {},
       salesFinanceIntegrationOverride: unit.integrationPolicyOverrides?.SALES_TO_FINANCE || unit.salesFinanceIntegrationOverride || "INHERIT",
       salesAccountingIntegrationOverride: unit.integrationPolicyOverrides?.SALES_TO_ACCOUNTING || unit.salesAccountingIntegrationOverride || "INHERIT",
+      inventoryAccountingIntegrationOverride: unit.integrationPolicyOverrides?.INVENTORY_TO_ACCOUNTING || "INHERIT",
+      purchasesAccountingIntegrationOverride: unit.integrationPolicyOverrides?.PURCHASES_TO_ACCOUNTING || "INHERIT",
+      purchasesFinanceIntegrationOverride: unit.integrationPolicyOverrides?.PURCHASES_TO_FINANCE || "INHERIT",
     });
   };
 
@@ -722,6 +767,9 @@ export function EnterpriseGroupSetupView({
               moduleViewOverrides: unitForm.moduleViewOverrides,
               salesFinanceIntegrationOverride: unitForm.salesFinanceIntegrationOverride,
               salesAccountingIntegrationOverride: unitForm.salesAccountingIntegrationOverride,
+              inventoryAccountingIntegrationOverride: unitForm.inventoryAccountingIntegrationOverride,
+              purchasesAccountingIntegrationOverride: unitForm.purchasesAccountingIntegrationOverride,
+              purchasesFinanceIntegrationOverride: unitForm.purchasesFinanceIntegrationOverride,
             }
           : unit,
       ),
@@ -735,6 +783,9 @@ export function EnterpriseGroupSetupView({
       moduleViewOverrides: {},
       salesFinanceIntegrationOverride: "INHERIT",
       salesAccountingIntegrationOverride: "INHERIT",
+      inventoryAccountingIntegrationOverride: "INHERIT",
+      purchasesAccountingIntegrationOverride: "INHERIT",
+      purchasesFinanceIntegrationOverride: "INHERIT",
     });
     toast.success("Rubro actualizado");
   };
@@ -751,6 +802,9 @@ export function EnterpriseGroupSetupView({
         moduleViewOverrides: unitForm.moduleViewOverrides,
         salesFinanceIntegrationOverride: unitForm.salesFinanceIntegrationOverride,
         salesAccountingIntegrationOverride: unitForm.salesAccountingIntegrationOverride,
+        inventoryAccountingIntegrationOverride: unitForm.inventoryAccountingIntegrationOverride,
+        purchasesAccountingIntegrationOverride: unitForm.purchasesAccountingIntegrationOverride,
+        purchasesFinanceIntegrationOverride: unitForm.purchasesFinanceIntegrationOverride,
       },
     });
   };
@@ -858,6 +912,9 @@ export function EnterpriseGroupSetupView({
       moduleViewOverrides: branch.moduleViewOverrides || {},
       salesFinanceIntegrationOverride: branch.integrationPolicyOverrides?.SALES_TO_FINANCE || branch.salesFinanceIntegrationOverride || "INHERIT",
       salesAccountingIntegrationOverride: branch.integrationPolicyOverrides?.SALES_TO_ACCOUNTING || branch.salesAccountingIntegrationOverride || "INHERIT",
+      inventoryAccountingIntegrationOverride: branch.integrationPolicyOverrides?.INVENTORY_TO_ACCOUNTING || "INHERIT",
+      purchasesAccountingIntegrationOverride: branch.integrationPolicyOverrides?.PURCHASES_TO_ACCOUNTING || "INHERIT",
+      purchasesFinanceIntegrationOverride: branch.integrationPolicyOverrides?.PURCHASES_TO_FINANCE || "INHERIT",
     });
     setBranchAdminEmailStatus("idle");
   };
@@ -884,6 +941,9 @@ export function EnterpriseGroupSetupView({
               moduleViewOverrides: branchForm.moduleViewOverrides,
               salesFinanceIntegrationOverride: branchForm.salesFinanceIntegrationOverride,
               salesAccountingIntegrationOverride: branchForm.salesAccountingIntegrationOverride,
+              inventoryAccountingIntegrationOverride: branchForm.inventoryAccountingIntegrationOverride,
+              purchasesAccountingIntegrationOverride: branchForm.purchasesAccountingIntegrationOverride,
+              purchasesFinanceIntegrationOverride: branchForm.purchasesFinanceIntegrationOverride,
             }
           : branch,
       ),
@@ -905,6 +965,9 @@ export function EnterpriseGroupSetupView({
       moduleViewOverrides: {},
       salesFinanceIntegrationOverride: "INHERIT",
       salesAccountingIntegrationOverride: "INHERIT",
+      inventoryAccountingIntegrationOverride: "INHERIT",
+      purchasesAccountingIntegrationOverride: "INHERIT",
+      purchasesFinanceIntegrationOverride: "INHERIT",
     });
     setBranchAdminEmailStatus("idle");
     toast.success("Sucursal actualizada");
@@ -927,6 +990,9 @@ export function EnterpriseGroupSetupView({
         moduleViewOverrides: branchForm.moduleViewOverrides,
         salesFinanceIntegrationOverride: branchForm.salesFinanceIntegrationOverride,
         salesAccountingIntegrationOverride: branchForm.salesAccountingIntegrationOverride,
+        inventoryAccountingIntegrationOverride: branchForm.inventoryAccountingIntegrationOverride,
+        purchasesAccountingIntegrationOverride: branchForm.purchasesAccountingIntegrationOverride,
+        purchasesFinanceIntegrationOverride: branchForm.purchasesFinanceIntegrationOverride,
       },
     });
   };
@@ -1341,6 +1407,9 @@ export function EnterpriseGroupSetupView({
                     moduleViewOverrides: {},
                     salesFinanceIntegrationOverride: "INHERIT",
                     salesAccountingIntegrationOverride: "INHERIT",
+                    inventoryAccountingIntegrationOverride: "INHERIT",
+                    purchasesAccountingIntegrationOverride: "INHERIT",
+                    purchasesFinanceIntegrationOverride: "INHERIT",
                   });
                 }}
                 onNext={() => setStep("branches")}
@@ -1389,6 +1458,9 @@ export function EnterpriseGroupSetupView({
                     moduleViewOverrides: {},
                     salesFinanceIntegrationOverride: "INHERIT",
                     salesAccountingIntegrationOverride: "INHERIT",
+                    inventoryAccountingIntegrationOverride: "INHERIT",
+                    purchasesAccountingIntegrationOverride: "INHERIT",
+                    purchasesFinanceIntegrationOverride: "INHERIT",
                   });
                 }}
                 onNext={() => setStep("warehouses")}
@@ -3115,7 +3187,9 @@ function IntegrationPoliciesCard({ group, enabledModules, onChange, saving }: {
   if (user?.role !== "superadmin") return null;
 
   const groupModules = new Set((enabledModules || []).map((module) => String(module).toUpperCase()));
-  const sourceAvailable = [...groupModules].some((module) => module === "SALES" || module.startsWith("SALES_") || ["RETAIL_POS", "SALES_POS"].includes(module));
+  const hasFamily = (family: string) => [...groupModules].some((module) =>
+    module === family || module.startsWith(`${family}_`) || (family === "SALES" && ["RETAIL_POS", "SALES_POS"].includes(module)),
+  );
   const getPolicy = (route: string, legacyKey: string): "AUTO" | "ENABLED" | "DISABLED" => {
     const saved = group?.integrationPolicies?.[route];
     if (saved === "AUTO" || saved === "ENABLED" || saved === "DISABLED") return saved;
@@ -3125,18 +3199,19 @@ function IntegrationPoliciesCard({ group, enabledModules, onChange, saving }: {
   };
   const destinations = [
     {
-      id: "SALES_TO_ACCOUNTING",
       title: "Contabilidad",
-      description: "Ventas envía la información contable y puede generar asientos según la configuración global.",
-      legacyKey: "salesAccountingIntegrationEnabled",
-      available: [...groupModules].some((module) => module === "ACCOUNTING" || module.startsWith("ACCOUNTING_")),
+      routes: [
+        { id: "SALES_TO_ACCOUNTING", source: "SALES", sourceLabel: "Ventas", legacyKey: "salesAccountingIntegrationEnabled", description: "Información contable y asientos de Ventas." },
+        { id: "INVENTORY_TO_ACCOUNTING", source: "INVENTORY", sourceLabel: "Inventario", legacyKey: "", description: "Asientos de existencias iniciales, ajustes y traslados." },
+        { id: "PURCHASES_TO_ACCOUNTING", source: "PURCHASES", sourceLabel: "Compras", legacyKey: "", description: "Asientos de recepciones, facturas, pagos y gastos." },
+      ],
     },
     {
-      id: "SALES_TO_FINANCE",
       title: "Finanzas",
-      description: "Ventas registra ingresos y comisiones, además de movimientos bancarios auxiliares.",
-      legacyKey: "salesFinanceIntegrationEnabled",
-      available: [...groupModules].some((module) => module === "FINANCIAL" || module.startsWith("FINANCIAL_")),
+      routes: [
+        { id: "SALES_TO_FINANCE", source: "SALES", sourceLabel: "Ventas", legacyKey: "salesFinanceIntegrationEnabled", description: "Ingresos, comisiones y movimientos bancarios auxiliares." },
+        { id: "PURCHASES_TO_FINANCE", source: "PURCHASES", sourceLabel: "Compras", legacyKey: "", description: "Gastos espejo y movimientos bancarios auxiliares." },
+      ],
     },
   ];
   const editable = Boolean(group?.id && !group?.__draft);
@@ -3145,39 +3220,46 @@ function IntegrationPoliciesCard({ group, enabledModules, onChange, saving }: {
     <Card className="rounded-3xl border-primary/20 bg-primary/[0.03]">
       <CardHeader>
         <CardTitle className="text-lg font-black uppercase">Conexiones entre módulos</CardTitle>
-        <p className="text-sm text-muted-foreground">Las conexiones se activan automáticamente cuando Ventas y el módulo destino están disponibles. Super Admin puede crear una excepción para todo el grupo; la disponibilidad y los permisos de entrada se configuran por separado.</p>
+        <p className="text-sm text-muted-foreground">Cada conexión se activa automáticamente cuando el módulo de origen y el destino están habilitados. Super Admin puede crear excepciones para todo el grupo; esto no cambia el acceso ni los permisos de los módulos.</p>
       </CardHeader>
-      <CardContent className="grid min-w-0 gap-3 p-6 sm:grid-cols-2">
-        {destinations.map((destination) => {
-          const policy = getPolicy(destination.id, destination.legacyKey);
-          const unavailable = !sourceAvailable || !destination.available;
-          const missing = !sourceAvailable ? "Falta habilitar Ventas para el grupo." : `Falta habilitar ${destination.title} para el grupo.`;
-          return (
-            <div key={destination.id} className="min-w-0 space-y-3 rounded-2xl border border-border/60 bg-background/60 p-4">
+      <CardContent className="grid min-w-0 gap-4 p-6 lg:grid-cols-2">
+        {destinations.map((destination) => (
+          <div key={destination.title} className="min-w-0 space-y-4 rounded-2xl border border-border/60 bg-background/60 p-4">
+            <p className="font-black">{destination.title}</p>
+            {destination.routes.map((route) => {
+              const policy = getPolicy(route.id, route.legacyKey);
+              const sourceAvailable = hasFamily(route.source);
+              const destinationFamily = destination.title === "Finanzas" ? "FINANCIAL" : "ACCOUNTING";
+              const destinationAvailable = hasFamily(destinationFamily);
+              const unavailable = !sourceAvailable || !destinationAvailable;
+              const missing = !sourceAvailable ? `Falta habilitar ${route.sourceLabel} para el grupo.` : `Falta habilitar ${destination.title} para el grupo.`;
+              return (
+                <div key={route.id} className="space-y-2 rounded-xl border border-border/50 bg-background p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-black">{destination.title}</p>
-                <Badge variant={unavailable ? "outline" : "secondary"}>{unavailable ? "No disponible" : "Destino habilitado"}</Badge>
+                    <p className="font-semibold">{route.sourceLabel} → {destination.title}</p>
+                    <Badge variant={unavailable ? "outline" : "secondary"}>{unavailable ? "No disponible" : "Módulos habilitados"}</Badge>
               </div>
-              <p className="text-sm font-semibold">Ventas → {destination.title}</p>
-              <p className="text-xs leading-relaxed text-muted-foreground">{destination.description}</p>
-              {unavailable && <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">{missing} La conexión no tendrá efecto hasta habilitar ambos módulos.</p>}
+                  <p className="text-xs leading-relaxed text-muted-foreground">{route.description}</p>
+                  {unavailable && <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">{missing} La conexión se habilitará automáticamente cuando ambos módulos estén disponibles.</p>}
               <label className={labelClass}>
                 Política del grupo
                 <select
                   className={inputClass}
                   value={policy}
                   disabled={!editable || saving}
-                  onChange={(event) => onChange(destination.id, event.target.value as "AUTO" | "ENABLED" | "DISABLED")}
+                      onChange={(event) => onChange(route.id, event.target.value as "AUTO" | "ENABLED" | "DISABLED")}
                 >
                   <option value="AUTO">Automática según módulos habilitados</option>
                   <option value="ENABLED" disabled={unavailable}>Forzar conexión</option>
                   <option value="DISABLED">Desconectar</option>
                 </select>
               </label>
-            </div>
-          );
-        })}
-        {!editable && <p className="text-xs text-muted-foreground sm:col-span-2">Al crear el grupo, las conexiones quedan automáticas. Después podrás establecer excepciones desde su configuración.</p>}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        {!editable && <p className="text-xs text-muted-foreground lg:col-span-2">Al crear el grupo, las conexiones quedan automáticas. Después podrás establecer excepciones desde su configuración.</p>}
       </CardContent>
     </Card>
   );
@@ -3187,11 +3269,15 @@ function IntegrationPolicyOverrideFields({ value, onChange, parentLabel, editabl
   const { user } = useAuth();
   if (user?.role !== "superadmin" || !editable) return null;
   const modules = new Set((moduleScope || []).map((module) => String(module).toUpperCase()));
-  const salesAvailable = hasEnabledModuleFamily(modules, "SALES");
   const financeAvailable = hasEnabledModuleFamily(modules, "FINANCIAL");
   const accountingAvailable = hasEnabledModuleFamily(modules, "ACCOUNTING");
-  const missingFinanceModules = [!salesAvailable ? "Ventas" : null, !financeAvailable ? "Finanzas" : null].filter(Boolean);
-  const missingAccountingModules = [!salesAvailable ? "Ventas" : null, !accountingAvailable ? "Contabilidad" : null].filter(Boolean);
+  const routes = [
+    { id: "SALES_TO_ACCOUNTING", key: "salesAccountingIntegrationOverride", source: "SALES", sourceLabel: "Ventas", destination: "Contabilidad", destinationAvailable: accountingAvailable },
+    { id: "INVENTORY_TO_ACCOUNTING", key: "inventoryAccountingIntegrationOverride", source: "INVENTORY", sourceLabel: "Inventario", destination: "Contabilidad", destinationAvailable: accountingAvailable },
+    { id: "PURCHASES_TO_ACCOUNTING", key: "purchasesAccountingIntegrationOverride", source: "PURCHASES", sourceLabel: "Compras", destination: "Contabilidad", destinationAvailable: accountingAvailable },
+    { id: "SALES_TO_FINANCE", key: "salesFinanceIntegrationOverride", source: "SALES", sourceLabel: "Ventas", destination: "Finanzas", destinationAvailable: financeAvailable },
+    { id: "PURCHASES_TO_FINANCE", key: "purchasesFinanceIntegrationOverride", source: "PURCHASES", sourceLabel: "Compras", destination: "Finanzas", destinationAvailable: financeAvailable },
+  ];
   const optionsFor = (canForce: boolean) => [
     { value: "INHERIT", label: `Heredar de ${parentLabel}`, disabled: false },
     { value: "ENABLED", label: "Forzar conexión", disabled: !canForce },
@@ -3200,20 +3286,19 @@ function IntegrationPolicyOverrideFields({ value, onChange, parentLabel, editabl
   return (
     <div className="grid min-w-0 gap-3 rounded-2xl border border-border/60 bg-background/50 p-4 sm:grid-cols-2">
       <p className="text-xs font-black uppercase text-foreground sm:col-span-2">Conexiones entre módulos</p>
-      <label className={labelClass}>
-        Destino: Finanzas · Ventas → Finanzas
-        <select className={inputClass} value={value.salesFinanceIntegrationOverride || "INHERIT"} onChange={(event) => onChange({ salesFinanceIntegrationOverride: event.target.value })}>
-          {optionsFor(salesAvailable && financeAvailable).map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
-        </select>
-      </label>
-      <label className={labelClass}>
-        Destino: Contabilidad · Ventas → Contabilidad
-        <select className={inputClass} value={value.salesAccountingIntegrationOverride || "INHERIT"} onChange={(event) => onChange({ salesAccountingIntegrationOverride: event.target.value })}>
-          {optionsFor(salesAvailable && accountingAvailable).map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
-        </select>
-      </label>
-      {missingFinanceModules.length > 0 && <p className="text-[11px] text-amber-700 dark:text-amber-300">Falta habilitar {missingFinanceModules.join(" y ")} en este alcance; no se puede forzar esta conexión.</p>}
-      {missingAccountingModules.length > 0 && <p className="text-[11px] text-amber-700 dark:text-amber-300">Falta habilitar {missingAccountingModules.join(" y ")} en este alcance; no se puede forzar esta conexión.</p>}
+      {routes.map((route) => {
+        const sourceAvailable = hasEnabledModuleFamily(modules, route.source);
+        const canForce = sourceAvailable && route.destinationAvailable;
+        return (
+          <label key={route.id} className={labelClass}>
+            {route.sourceLabel} → {route.destination}
+            <select className={inputClass} value={value[route.key] || "INHERIT"} onChange={(event) => onChange({ [route.key]: event.target.value })}>
+              {optionsFor(canForce).map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
+            </select>
+            {!canForce && <span className="text-[11px] text-amber-700 dark:text-amber-300">No se puede forzar: falta habilitar {sourceAvailable ? route.destination : route.sourceLabel} en este alcance.</span>}
+          </label>
+        );
+      })}
       <p className="text-[11px] leading-relaxed text-muted-foreground sm:col-span-2">La conexión también requiere que los módulos estén disponibles en este nivel y en la sucursal. Cambiarla no altera módulos ni permisos.</p>
     </div>
   );

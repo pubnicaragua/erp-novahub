@@ -55,6 +55,7 @@ export interface SimilarityResolution {
 }
 
 export const inventoryService = {
+  getIntegrationPolicy: () => api.get<{ accountingEnabled: boolean; routes: Record<string, any> }>('/inventory/integration-policy'),
   // ==================== PRODUCTS ====================
   getBrandCustomerMappings: (signal?: AbortSignal) => api.get<{ brands: any[]; customers: Array<{ id: string; name: string; code?: string | null }> }>('/inventory/brands/customer-mappings', { signal }),
   assignBrandCustomer: (brandId: string, customerId: string | null) => api.patch<any>(`/inventory/brands/${brandId}/customer`, { customerId }),
@@ -100,7 +101,7 @@ export const inventoryService = {
     variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; minStock?: number; maxStock?: number; prices?: Record<string, number | string> }>;
   }) => api.post<Product>('/inventory/products', data),
   previewProductStockAccounting: (warehouseIds: string[]) =>
-    api.post<{ ready: boolean; errors: string[]; warnings?: string[]; autoGenerationEnabled: boolean; warehouses: any[] }>('/inventory/products/accounting-preflight', { warehouseIds }),
+    api.post<{ ready: boolean; errors: string[]; warnings?: string[]; autoGenerationEnabled: boolean; accountingConnected?: boolean; warehouses: any[] }>('/inventory/products/accounting-preflight', { warehouseIds }),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
   getBrands: (filters?: ApiFilters & { customerId?: string; unassigned?: boolean }, signal?: AbortSignal) =>
     api.get<PaginatedResponse<any>>('/inventory/brands', { params: filters as any, signal }),
@@ -160,8 +161,8 @@ export const inventoryService = {
     toId: string,
     options?: { items?: Array<{ variantId: string; quantity: number }>; date?: string; activeBranchId?: string },
   ) => options?.items
-    ? api.post<{ ready: boolean; errors: string[]; autoGenerationEnabled: boolean; accountingMode?: 'OPERATIONAL_ONLY' | 'BRANCH_TO_BRANCH'; warehouses: any[] }>('/inventory/transfers/accounting-preflight', { fromId, toId, ...options })
-    : api.get<{ ready: boolean; errors: string[]; autoGenerationEnabled: boolean; accountingMode?: 'OPERATIONAL_ONLY' | 'BRANCH_TO_BRANCH'; warehouses: any[] }>('/inventory/transfers/accounting-preflight', { params: { fromId, toId, activeBranchId: options?.activeBranchId } }),
+    ? api.post<{ ready: boolean; errors: string[]; autoGenerationEnabled: boolean; accountingConnected?: boolean; accountingMode?: 'OPERATIONAL_ONLY' | 'BRANCH_TO_BRANCH'; warehouses: any[] }>('/inventory/transfers/accounting-preflight', { fromId, toId, ...options })
+    : api.get<{ ready: boolean; errors: string[]; autoGenerationEnabled: boolean; accountingConnected?: boolean; accountingMode?: 'OPERATIONAL_ONLY' | 'BRANCH_TO_BRANCH'; warehouses: any[] }>('/inventory/transfers/accounting-preflight', { params: { fromId, toId, activeBranchId: options?.activeBranchId } }),
   getTransfer: (id: string, activeBranchId?: string) => api.get<any>(`/inventory/transfers/${id}`, { params: { activeBranchId } }),
   createTransfer: (data: { fromId: string; toId: string; carrier?: string; activeBranchId?: string; destinationClientTenantId?: string; businessUnitId?: string; reference?: string; items: { variantId: string; quantity: number }[] }) =>
     api.post<any>('/inventory/transfers', data),
