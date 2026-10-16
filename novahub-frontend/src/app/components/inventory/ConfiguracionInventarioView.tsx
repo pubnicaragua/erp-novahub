@@ -21,6 +21,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { toast } from '@/app/services/toast'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh'
+import { useInventoryIntegrationPolicy } from '../../hooks/useInventoryIntegrationPolicy'
 import { inventoryService } from '../../services/inventario.service'
 import { contabilidadService } from '../../services/contabilidad.service'
 import { tenantsService } from '../../services/tenants.service'
@@ -46,6 +47,7 @@ const STATUS_META: Record<string, { label: string; tone: 'success' | 'warn' | 'd
   CUENTA_INACTIVA: { label: 'Cuenta inactiva', tone: 'danger', description: 'La cuenta vinculada está inactiva. Vincula una cuenta activa.' },
   CUENTA_NO_POSTEABLE: { label: 'No posteable', tone: 'danger', description: 'La cuenta vinculada no acepta movimientos. Debe ser una cuenta de detalle que acepte posteos.' },
 }
+const ACCOUNTING_ONLY_TABS = ['general', 'contable', 'estado', 'costos']
 
 function StatusBadge({ status }: { status?: string }) {
   const meta = STATUS_META[status || 'PENDIENTE'] || STATUS_META.PENDIENTE
@@ -116,12 +118,29 @@ const CONFIG_INVENTORY_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
+const OPERATIONAL_INVENTORY_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="config-header"]',
+    title: 'Configuración de Inventario',
+    description: 'Administra las bodegas que utiliza esta sucursal para controlar sus existencias.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="config-tab-almacenes"]',
+    title: 'Bodegas',
+    description: 'Crea y administra bodegas para organizar físicamente tus productos.',
+    placement: 'bottom',
+  },
+];
+
 interface ConfiguracionInventarioViewProps {
   isSidebarCollapsed?: boolean
 }
 
 export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewProps) {
   const { user, canPerform } = useAuth()
+  const tenantId = user?.tenantId
+  const integrationPolicyQuery = useInventoryIntegrationPolicy()
   const canViewInventory = canPerform('INVENTORY_CONFIG', 'view')
   const canEditInventoryConfig = canPerform('INVENTORY_CONFIG', 'edit')
   const canViewAccounting = canPerform('ACCOUNTING', 'view')
@@ -164,6 +183,10 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const [unlinkSaving, setUnlinkSaving] = useState(false)
 
   const isManufacturing = tenantIndustry === 'MANUFACTURING'
+  const accountingConnectionEnabled = !integrationPolicyQuery.isError && integrationPolicyQuery.data?.accountingEnabled === true
+  const canLoadAccountingSettings = accountingConnectionEnabled && canViewAccounting
+  const integrationPolicyUnavailable = integrationPolicyQuery.isError || (!integrationPolicyQuery.isLoading && !integrationPolicyQuery.data)
+  const visibleActiveTab = !accountingConnectionEnabled && ACCOUNTING_ONLY_TABS.includes(activeTab) ? 'almacenes' : activeTab
 
   const fetchAll = useCallback(async (silent = false) => {
     try {
@@ -171,8 +194,8 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       const [whRes, branchRes, accRes, cfgRes] = await Promise.all([
         canViewInventory ? inventoryService.getWarehouses() : Promise.resolve([]),
         canViewInventory ? api.get<any[]>('/sucursales') : Promise.resolve([]),
-        canViewAccounting ? contabilidadService.getChartOfAccounts(false) : Promise.resolve([]),
-        canViewAccounting ? contabilidadService.getConfig() : Promise.resolve({}),
+        canLoadAccountingSettings ? contabilidadService.getChartOfAccounts(false) : Promise.resolve([]),
+        canLoadAccountingSettings ? contabilidadService.getConfig() : Promise.resolve({}),
       ])
       setWarehouses(Array.isArray(whRes) ? whRes : [])
       const branchList = Array.isArray(branchRes) ? branchRes : (branchRes as any)?.data || []
@@ -183,9 +206,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       setControlAccountId(cfg.accountMappings?.inventory?.control || '')
       setRequiresPerWarehouse(!!cfg.inventory?.requiresAccountPerWarehouse)
 
-      if (user?.tenantId && canViewCompany) {
+      if (tenantId && canViewCompany) {
         try {
-          const tenant = await tenantsService.getOne(user.tenantId)
+          const tenant = await tenantsService.getOne(tenantId)
           setTenantIndustry(tenant?.industry || '')
         } catch { /* ignorar */ }
       }
@@ -194,7 +217,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     } finally {
       setLoading(false)
     }
-  }, [user?.tenantId, canViewInventory, canViewAccounting, canViewCompany])
+  }, [tenantId, canViewInventory, canLoadAccountingSettings, canViewCompany])
 
   useEffect(() => { void fetchAll() }, [fetchAll])
 
@@ -205,11 +228,11 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   })
 
   useEffect(() => {
-    if (!isManufacturing || !canViewAccounting) return
+    if (!isManufacturing || !canLoadAccountingSettings) return
     api.get<any>('/accounting/cost-centers').then((res) => {
       setCostCenters(Array.isArray(res) ? res : (res as any)?.data || [])
     }).catch(() => setCostCenters([]))
-  }, [isManufacturing, canViewAccounting])
+  }, [isManufacturing, canLoadAccountingSettings])
 
   const refresh = async () => {
     setRefreshing(true)
@@ -271,7 +294,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   }, [activeAccounts, flatAccounts, controlAccountId]);
 
   const saveControlAccount = async () => {
-    if (!canEditAccounting) {
+    if (!accountingConnectionEnabled || !canEditAccounting) {
       toast.error('No tienes permiso para editar la configuración contable')
       return
     }
@@ -316,7 +339,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   }
 
   const openConfig = (wh: any, branch?: any) => {
-    if (!canEditInventoryConfig) return
+    if (!accountingConnectionEnabled || !canEditInventoryConfig) return
     const info = linkInfo(wh)
     setConfigTarget(wh)
     setConfigBranch(null)
@@ -360,7 +383,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   const runConfigure = async () => {
     if (!configTarget) return
-    if (!canEditInventoryConfig) {
+    if (!accountingConnectionEnabled || !canEditInventoryConfig) {
       toast.error('No tienes permiso para configurar las cuentas de las bodegas')
       return
     }
@@ -392,7 +415,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   const runUnlink = async () => {
     if (!unlinkTarget) return
-    if (!canEditInventoryConfig) {
+    if (!accountingConnectionEnabled || !canEditInventoryConfig) {
       toast.error('No tienes permiso para desvincular cuentas de las bodegas')
       return
     }
@@ -439,7 +462,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     return groups.sort((a, b) => a.branch.name.localeCompare(b.branch.name))
   }, [warehouses, branchForWarehouse])
 
-  if (loading) {
+  if (loading || integrationPolicyQuery.isLoading) {
     return (
       <div className="flex min-h-96 items-center justify-center">
         <Loader2 className="size-6 animate-spin text-primary" />
@@ -452,10 +475,14 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between" data-tour="config-header">
         <div className="min-w-0">
           <h3 className="flex items-start gap-2 text-base font-black uppercase leading-tight tracking-tight italic sm:text-lg">
-            <Settings2 className="size-5 text-primary" /> Configuración contable de Inventario
+            <Settings2 className="size-5 text-primary" /> {accountingConnectionEnabled ? 'Configuración contable de Inventario' : 'Configuración de Inventario'}
           </h3>
           <p className="mt-1 text-[10px] font-bold uppercase leading-relaxed tracking-widest text-muted-foreground">
-            Conecta sucursales y bodegas con el Plan de Cuentas para registrar los movimientos en Contabilidad
+            {accountingConnectionEnabled
+              ? 'Conecta sucursales y bodegas con el Plan de Cuentas para registrar los movimientos en Contabilidad'
+              : integrationPolicyUnavailable
+                ? 'Administra tus bodegas; la configuración contable está temporalmente oculta'
+                : 'Administra las bodegas y existencias de esta sucursal'}
           </p>
         </div>
         <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
@@ -468,17 +495,37 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      {integrationPolicyUnavailable ? (
+        <Card className="flex flex-col gap-3 border-warning/30 bg-warning/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex items-start gap-2 text-xs text-muted-foreground">
+            <Info className="mt-0.5 size-4 shrink-0 text-warning" />
+            No se pudo verificar la conexión con Contabilidad. Puedes continuar administrando bodegas; las opciones contables se mostrarán cuando el estado esté disponible.
+          </p>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => void integrationPolicyQuery.refetch()} disabled={integrationPolicyQuery.isFetching}>
+            {integrationPolicyQuery.isFetching && <Loader2 className="mr-2 size-3.5 animate-spin" />}
+            Reintentar
+          </Button>
+        </Card>
+      ) : !accountingConnectionEnabled ? (
+        <Card className="flex items-start gap-2 border-primary/15 bg-primary/5 p-4 text-xs text-muted-foreground">
+          <Info className="mt-0.5 size-4 shrink-0 text-primary" />
+          Inventario→Contabilidad está desconectado. Puedes crear y usar bodegas sin configurar cuentas contables.
+        </Card>
+      ) : null}
+
+      <Tabs value={visibleActiveTab} onValueChange={setActiveTab}>
         <TabsList className="flex h-auto w-full max-w-full flex-nowrap justify-start gap-1.5 overflow-x-auto rounded-2xl border border-border/40 bg-muted/40 p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="general" data-tour="config-tab-general"><Building2 className="size-4 mr-1.5" /> General</TabsTrigger>
+          {accountingConnectionEnabled && <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="general" data-tour="config-tab-general"><Building2 className="size-4 mr-1.5" /> General</TabsTrigger>}
           <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="almacenes" data-tour="config-tab-almacenes"><Link2 className="size-4 mr-1.5" /> Bodegas</TabsTrigger>
-          <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="contable" data-tour="config-tab-contable"><Settings2 className="size-4 mr-1.5" /> Configuración Contable</TabsTrigger>
-          <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="estado" data-tour="config-tab-estado"><Activity className="size-4 mr-1.5" /> Estado de Vinculación</TabsTrigger>
-          {isManufacturing && <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="costos"><Factory className="size-4 mr-1.5" /> Centros de Costos</TabsTrigger>}
+          {accountingConnectionEnabled && <>
+            <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="contable" data-tour="config-tab-contable"><Settings2 className="size-4 mr-1.5" /> Configuración Contable</TabsTrigger>
+            <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="estado" data-tour="config-tab-estado"><Activity className="size-4 mr-1.5" /> Estado de Vinculación</TabsTrigger>
+            {isManufacturing && <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="costos"><Factory className="size-4 mr-1.5" /> Centros de Costos</TabsTrigger>}
+          </>}
         </TabsList>
 
         {/* General */}
-        <TabsContent value="general" className="m-0 mt-4">
+        {accountingConnectionEnabled && <TabsContent value="general" className="m-0 mt-4">
           <div className="grid gap-4 lg:grid-cols-5">
             {/* Columna izquierda: formulario de cuenta control */}
             <Card className="p-5 lg:col-span-2">
@@ -613,20 +660,24 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               </Card>
             </div>
           </div>
-        </TabsContent>
+        </TabsContent>}
 
         {/* Bodegas */}
         <TabsContent value="almacenes" className="m-0 mt-4">
           <p className="mb-3 text-xs text-muted-foreground">
-            Crea y administra tus bodegas. Cada bodega creada aquí podrá vincularse a una cuenta contable desde la pestaña <span className="font-semibold text-foreground">Configuración Contable</span>.
+            {accountingConnectionEnabled
+              ? <>Crea y administra tus bodegas. Cada bodega podrá vincularse a una cuenta contable desde <span className="font-semibold text-foreground">Configuración Contable</span>.</>
+              : integrationPolicyUnavailable
+                ? 'Crea y administra tus bodegas. Las opciones de configuración contable se muestran cuando se puede verificar la conexión.'
+                : 'Crea y administra tus bodegas. No necesitas configurar una cuenta contable para usarlas mientras la conexión esté desactivada.'}
           </p>
           <Card className="p-4">
-            <AlmacenesView warehouses={warehouses} onRefresh={refresh} />
+            <AlmacenesView warehouses={warehouses} onRefresh={refresh} accountingConnectionEnabled={accountingConnectionEnabled} />
           </Card>
         </TabsContent>
 
         {/* Configuración Contable */}
-        <TabsContent value="contable" className="m-0 mt-4">
+        {accountingConnectionEnabled && <TabsContent value="contable" className="m-0 mt-4">
           <p className="mb-3 text-xs text-muted-foreground">
             Cada bodega necesita una cuenta contable de inventario para registrar sus movimientos. Usa <span className="font-semibold text-foreground">Configurar</span> para crearla automáticamente (sucursal + bodega) o vincular una existente. Las cuentas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
           </p>
@@ -806,10 +857,10 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
             </Table>
             </div>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
         {/* Estado de Vinculación */}
-        <TabsContent value="estado" className="m-0 mt-4">
+        {accountingConnectionEnabled && <TabsContent value="estado" className="m-0 mt-4">
           <p className="mb-3 text-xs text-muted-foreground">
             Resumen del vínculo entre bodegas y sus cuentas contables. Pasa el cursor sobre cada estado para ver su significado.
           </p>
@@ -869,10 +920,10 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               </TableBody>
             </Table>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
         {/* Centros de Costos */}
-        {isManufacturing && (
+        {accountingConnectionEnabled && isManufacturing && (
           <TabsContent value="costos" className="m-0 mt-4">
             <CostCentersView costCenters={costCenters} onChange={setCostCenters} />
           </TabsContent>
@@ -880,7 +931,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       </Tabs>
 
       {/* Dialog de configuración */}
-      <Dialog open={!!configTarget} onOpenChange={(open) => { if (!open) { setConfigTarget(null); setConfigBranch(null); } }}>
+      <Dialog open={accountingConnectionEnabled && !!configTarget} onOpenChange={(open) => { if (!open) { setConfigTarget(null); setConfigBranch(null); } }}>
         <DialogContent className="!w-[calc(100vw-2rem)] !max-w-[min(94vw,720px)] max-h-[min(88vh,calc(100dvh-3rem))] overflow-y-auto rounded-3xl p-5 sm:p-6">
           <DialogHeader data-tour="inventory-config-modal-title">
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar {configTarget?.name}</DialogTitle>
@@ -1023,7 +1074,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       </Dialog>
 
       <ConfirmDialog
-        open={!!unlinkTarget}
+        open={accountingConnectionEnabled && !!unlinkTarget}
         onOpenChange={(open) => { if (!open && !unlinkSaving) setUnlinkTarget(null) }}
         title="¿Desvincular cuenta contable?"
         description={(() => {
@@ -1037,7 +1088,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         onConfirm={runUnlink}
       />
 
-      {showTutorial && <GuidedTour steps={CONFIG_INVENTORY_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Configuración de Inventario" allowTargetInteraction />}
+      {showTutorial && <GuidedTour steps={accountingConnectionEnabled ? CONFIG_INVENTORY_TOUR_STEPS : OPERATIONAL_INVENTORY_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Configuración de Inventario" allowTargetInteraction />}
     </div>
   )
 }

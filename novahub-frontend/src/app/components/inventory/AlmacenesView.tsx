@@ -24,6 +24,7 @@ import { beginNotificationAction, completeNotificationAction, failNotificationAc
 interface AlmacenesViewProps {
   warehouses: any[];
   onRefresh: () => void;
+  accountingConnectionEnabled: boolean;
 }
 
 interface EditingWarehouse {
@@ -45,14 +46,14 @@ const ALMACEN_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="almacenes-title"]',
     title: 'Bodegas de la sucursal',
-    description: 'Gestiona las bodegas operativas de esta sucursal. Cada bodega conserva su inventario y puede tener su propia cuenta contable.',
+    description: 'Gestiona las bodegas operativas de esta sucursal. Cada bodega conserva su propio inventario.',
     tip: 'Las bodegas corporativas se administran desde la vista Manager.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="almacenes-add-btn"]',
     title: 'Agregar Bodega',
-    description: 'Crea una bodega operativa de esta sucursal. La bodega conserva su inventario y cuenta contable de forma independiente.',
+    description: 'Crea una bodega operativa de esta sucursal indicando su nombre, ubicación y tipo.',
     placement: 'bottom',
   },
   {
@@ -63,7 +64,7 @@ const ALMACEN_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
-export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
+export function AlmacenesView({ warehouses, onRefresh, accountingConnectionEnabled }: AlmacenesViewProps) {
   const { canPerform } = useAuth();
   const canCreateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'create');
   const canEditWarehouse = canPerform('INVENTORY_WAREHOUSES', 'edit');
@@ -342,7 +343,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             </SelectContent>
           </Select>
         </TableCell>
-        <TableCell>
+        {accountingConnectionEnabled && <TableCell>
           {warehouse.isNew ? (
             <span className="text-[10px] text-muted-foreground">Se configura para la bodega</span>
           ) : (
@@ -355,7 +356,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               );
             })()
           )}
-        </TableCell>
+        </TableCell>}
         <TableCell className="text-right">
           {warehouse.isNew ? (
             <span className="text-[10px] font-medium tabular-nums text-muted-foreground">0</span>
@@ -410,7 +411,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <div className="space-y-1 sm:col-span-2"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Nombre</p><Input value={draft.name} onChange={(e) => handleUpdateField(draft.id, 'name', e.target.value)} placeholder="Nombre de la bodega" disabled={isSaving} autoFocus={draft.isNew} /></div>
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ubicación</p><Input value={draft.location} onChange={(e) => handleUpdateField(draft.id, 'location', e.target.value)} placeholder="Ubicación" disabled={isSaving} /></div>
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tipo</p><Select value={draft.type} onValueChange={(value) => handleUpdateField(draft.id, 'type', value)} disabled={isSaving}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{WAREHOUSE_TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1">
+            {accountingConnectionEnabled && <div className="space-y-1">
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta contable</p>
               {draft.isNew ? (
                 <p className="text-xs text-muted-foreground">Se configura para la bodega</p>
@@ -424,7 +425,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                   );
                 })()
               )}
-            </div>
+            </div>}
           </div>
         </Card>
       );
@@ -440,8 +441,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           </div>
           <Badge variant="outline" className="shrink-0 text-[9px]">{WAREHOUSE_TYPES.find((type) => type.value === warehouse.type)?.label || warehouse.type}</Badge>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-3">
-          <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</p><p className="truncate font-medium">{warehouse.inventoryAccount?.code || 'Sin asignar'}</p></div>
+        <div className={`mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs ${accountingConnectionEnabled ? 'sm:grid-cols-3' : ''}`}>
+          {accountingConnectionEnabled && <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</p><p className="truncate font-medium">{warehouse.inventoryAccount?.code || 'Sin asignar'}</p></div>}
           <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Stock</p><p className="font-bold tabular-nums">{stockCount}</p></div>
         </div>
         <div className="mt-3 flex justify-end gap-1 border-t border-border/40 pt-3">
@@ -495,7 +496,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Nombre</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Ubicación</TableHead>
                <TableHead className="font-black text-[10px] uppercase tracking-widest whitespace-nowrap">Tipo</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest whitespace-nowrap">Cuenta contable</TableHead>
+              {accountingConnectionEnabled && <TableHead className="font-black text-[10px] uppercase tracking-widest whitespace-nowrap">Cuenta contable</TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right whitespace-nowrap">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right whitespace-nowrap">Acciones</TableHead>
             </TableRow>
@@ -507,7 +508,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             
             {warehouses.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-              <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+              <TableCell colSpan={accountingConnectionEnabled ? 6 : 5} className="text-center py-12 text-muted-foreground">
                   <Warehouse className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">No hay bodegas</p>
                   <p className="text-sm">Haz clic en "Agregar Bodega" para comenzar</p>
@@ -544,13 +545,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                         {WAREHOUSE_TYPES.find(t => t.value === wh.type)?.label || wh.type}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs truncate max-w-[160px]">
+                    {accountingConnectionEnabled && <TableCell className="text-xs truncate max-w-[160px]">
                       {wh.inventoryAccount ? (
                         <Badge variant="outline" className="text-[9px] font-mono whitespace-nowrap">{wh.inventoryAccount.code} - {wh.inventoryAccount.name}</Badge>
                       ) : (
                         <span className="text-[10px] text-muted-foreground">No asignada</span>
                       )}
-                    </TableCell>
+                    </TableCell>}
                     <TableCell className="text-right font-medium tabular-nums">{stockCount}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1 transition-opacity">
@@ -611,13 +612,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                     <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.location || '—'}</p>
                   </div>
                 </div>
-                <div>
+                {accountingConnectionEnabled && <div>
                   <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cuenta contable de la bodega</p>
                   <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                     <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cuenta contable</p>
                     <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.inventoryAccount?.code ? `${detailWarehouse.inventoryAccount.code} - ${detailWarehouse.inventoryAccount.name}` : 'Sin asignar'}</p>
                   </div>
-                </div>
+                </div>}
                 <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                   <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos con stock</p>
                   <p className="mt-1 text-2xl font-black tabular-nums">{getStockCount(detailWarehouse)}</p>
