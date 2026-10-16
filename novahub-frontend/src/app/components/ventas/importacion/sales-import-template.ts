@@ -39,7 +39,7 @@ export async function downloadSalesImportTemplate(kind: SalesImportKind) {
     ['Código/SKU', 'Usa el código del producto sin variantes o el SKU exacto de la variante. Si el producto tiene variantes, no uses el código padre.'],
     ['Lista de precios', 'Escribe el nombre visible y exacto de la lista en cada producto. Puedes combinar listas en una factura. Este campo es obligatorio para productos; los servicios usan el precio de su catálogo. No escribas el código.'],
     ['Precio', 'No se captura en Excel. NovaHub consulta el precio vigente del producto en la lista indicada y lo muestra en la vista previa.'],
-    ['IVA', 'Deja vacío para usar el IVA configurado en el producto. Puedes escribir GRAVADO o EXENTO. Los servicios no llevan IVA.'],
+    ['IVA', 'Deja vacío o escribe EXENTO para no aplicar IVA. Escribe GRAVADO para aplicar la tasa configurada en el producto. Los servicios no llevan IVA.'],
     ['Descuento', 'Porcentaje entre 0 y 100. Si queda vacío, se interpreta como 0 %.'],
     ['Bodega', 'Escribe el nombre exacto de la bodega por línea. Los servicios pueden dejarla vacía.'],
     ['Pago', 'En esta versión solo se admite EFECTIVO. No incluyas importe ni referencia; el sistema registra el total calculado.'],
@@ -78,9 +78,8 @@ export async function downloadSalesImportTemplate(kind: SalesImportKind) {
   detail.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF17365D' } };
   detail.getRow(1).alignment = { wrapText: true, vertical: 'middle' };
   detail.getRow(1).height = 34;
-  detail.getColumn(3).numFmt = '0.####';
-  detail.getColumn(5).numFmt = '0.##';
-  detail.getColumn(6).eachCell((cell, rowNumber) => {
+  detail.getColumn(6).numFmt = '0.##';
+  detail.getColumn(7).eachCell((cell, rowNumber) => {
     if (rowNumber > 1) cell.dataValidation = { type: 'list', allowBlank: true, formulae: ['"GRAVADO,EXENTO"'] };
   });
 

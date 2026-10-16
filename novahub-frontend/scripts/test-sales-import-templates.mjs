@@ -34,33 +34,37 @@ for (const [kind, expectedFilename, documentTitle] of [
   await workbook.xlsx.load(Buffer.from(await download.blob.arrayBuffer()));
   assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ['Guía', 'Documentos', 'Detalle']);
   assert.match(String(workbook.getWorksheet('Guía').getCell('B1').value), new RegExp(documentTitle));
+  assert.equal(
+    workbook.getWorksheet('Guía').getCell('B8').value,
+    'Deja vacío o escribe EXENTO para no aplicar IVA. Escribe GRAVADO para aplicar la tasa configurada en el producto. Los servicios no llevan IVA.',
+  );
 
   const documents = workbook.getWorksheet('Documentos');
   assert.deepEqual(documents.getRow(1).values.slice(1), [
     'Referencia de factura',
     'Fecha',
     'Código de cliente',
-    'Código de lista de precios',
     'Moneda',
     'Método de pago',
     'Observación',
   ]);
-  assert.equal(documents.getCell('F2').value, 'EFECTIVO');
+  assert.equal(documents.getCell('E2').value, 'EFECTIVO');
   assert.equal(documents.getCell('C2').value, '');
-  assert.deepEqual(documents.getCell('F2').dataValidation.formulae, ['"EFECTIVO"']);
+  assert.deepEqual(documents.getCell('E2').dataValidation.formulae, ['"EFECTIVO"']);
 
   const detail = workbook.getWorksheet('Detalle');
   assert.deepEqual(detail.getRow(1).values.slice(1), [
     'Referencia de factura',
     'Código/SKU del producto o variante',
+    'Nombre de lista de precios',
     'Cantidad',
     'Nombre exacto de bodega',
     'Descuento (%)',
     'IVA',
   ]);
   assert.equal(detail.getCell('B2').value, 'SKU-EJEMPLO');
-  assert.equal(detail.getCell('C2').value, 1);
-  assert.deepEqual(detail.getCell('F2').dataValidation.formulae, ['"GRAVADO,EXENTO"']);
+  assert.equal(detail.getCell('D2').value, 1);
+  assert.deepEqual(detail.getCell('G2').dataValidation.formulae, ['"GRAVADO,EXENTO"']);
 }
 
 console.log('Las dos plantillas conservan las hojas, encabezados, ejemplos y validaciones acordados.');
