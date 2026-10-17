@@ -76,7 +76,8 @@ function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: 
 export function FacturasProveedorView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const integrationPolicyQuery = usePurchasesIntegrationPolicy();
-  const accountingConnectionEnabled = integrationPolicyQuery.data?.accountingRequired === true;
+  const integrationPolicyReady = !integrationPolicyQuery.isFetching && !integrationPolicyQuery.isError && Boolean(integrationPolicyQuery.data);
+  const accountingConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingRequired === true;
   const {
     exchangeRate: globalRate,
     displayCurrency,
