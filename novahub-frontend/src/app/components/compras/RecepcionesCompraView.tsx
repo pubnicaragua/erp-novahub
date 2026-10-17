@@ -292,7 +292,7 @@ async function uploadReceiptPaymentEvidence(files: File[], invoiceId: string, pa
   }
 }
 
-function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { draft: ReceiptPaymentDraft | null; onClose: () => void; onSaved: () => void; onRegisterInvoice: (payload: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => Promise<any> }) {
+function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, accountingConnectionEnabled, financeConnectionEnabled }: { draft: ReceiptPaymentDraft | null; onClose: () => void; onSaved: () => void; onRegisterInvoice: (payload: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => Promise<any>; accountingConnectionEnabled: boolean; financeConnectionEnabled: boolean }) {
   const { displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount, formatConvertedAmount, formatExplicitAmount } = useCurrency();
   const [paymentLines, setPaymentLines] = useState<ReceiptPaymentLine[]>([]);
   const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
@@ -1301,7 +1301,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
 
   const currentAvailableOrders = orders.filter(o => o.supplierId === localDoc?.supplierId && ['APPROVED'].includes((o.status||'').toUpperCase()) && !(o.receipts || []).some((receipt: any) => String(receipt.status || '').toUpperCase() === 'PENDING'));
 
-  const paymentDialog = <ReceiptPaymentDialog draft={paymentDraft} onClose={() => setPaymentDraft(null)} onSaved={() => { onRefresh(); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); }} onRegisterInvoice={registerInvoiceFromPaymentModal} />;
+  const paymentDialog = <ReceiptPaymentDialog draft={paymentDraft} onClose={() => setPaymentDraft(null)} onSaved={() => { onRefresh(); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); }} onRegisterInvoice={registerInvoiceFromPaymentModal} accountingConnectionEnabled={accountingConnectionEnabled} financeConnectionEnabled={financeConnectionEnabled} />;
   const creditDialog = (
     <Dialog open={Boolean(creditDraft)} onOpenChange={(open) => { if (!open && !creditLoading) { setCreditDraft(null); setCreditReason(''); setCreditQuantities({}); } }}>
       <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
