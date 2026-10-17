@@ -184,6 +184,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   const isManufacturing = tenantIndustry === 'MANUFACTURING'
   const accountingConnectionEnabled = !integrationPolicyQuery.isError && integrationPolicyQuery.data?.accountingEnabled === true
+  const accountingGenerationRequired = !integrationPolicyQuery.isError && integrationPolicyQuery.data?.accountingRequired === true
   const canLoadAccountingSettings = accountingConnectionEnabled && canViewAccounting
   const integrationPolicyUnavailable = integrationPolicyQuery.isError || (!integrationPolicyQuery.isLoading && !integrationPolicyQuery.data)
   const visibleActiveTab = !accountingConnectionEnabled && ACCOUNTING_ONLY_TABS.includes(activeTab) ? 'almacenes' : activeTab
@@ -679,7 +680,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         {/* Configuración Contable */}
         {accountingConnectionEnabled && <TabsContent value="contable" className="m-0 mt-4">
           <p className="mb-3 text-xs text-muted-foreground">
-            Cada bodega necesita una cuenta contable de inventario para registrar sus movimientos. Usa <span className="font-semibold text-foreground">Configurar</span> para crearla automáticamente (sucursal + bodega) o vincular una existente. Las cuentas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
+            {accountingGenerationRequired
+              ? <>Cada bodega necesita una cuenta contable de inventario para generar sus asientos. Usa <span className="font-semibold text-foreground">Configurar</span> para crearla automáticamente (sucursal + bodega) o vincular una existente. Las cuentas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.</>
+              : <>La generación automática de asientos está desactivada. Vincular cuentas aquí es opcional y no impedirá operar el inventario; se usarán cuando se habilite la generación automática. Las cuentas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.</>}
           </p>
           <Card className="p-3 sm:p-4">
             <div className="space-y-3 lg:hidden">

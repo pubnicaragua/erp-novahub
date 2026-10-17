@@ -55,7 +55,7 @@ export interface SimilarityResolution {
 }
 
 export const inventoryService = {
-  getIntegrationPolicy: () => api.get<{ accountingEnabled: boolean; routes: Record<string, any> }>('/inventory/integration-policy'),
+  getIntegrationPolicy: () => api.get<{ accountingEnabled: boolean; accountingRequired: boolean; routes: Record<string, any> }>('/inventory/integration-policy'),
   // ==================== PRODUCTS ====================
   getBrandCustomerMappings: (signal?: AbortSignal) => api.get<{ brands: any[]; customers: Array<{ id: string; name: string; code?: string | null }> }>('/inventory/brands/customer-mappings', { signal }),
   assignBrandCustomer: (brandId: string, customerId: string | null) => api.patch<any>(`/inventory/brands/${brandId}/customer`, { customerId }),
