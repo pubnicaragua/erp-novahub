@@ -87,7 +87,7 @@ type PurchaseMixedPaymentInput = Omit<Partial<PaymentMade>, 'payments'> & {
 };
 
 export const paymentsMadeService = {
-  getIntegrationPolicy: () => api.get<{ accountingEnabled: boolean; financeEnabled: boolean; routes: Record<string, any> }>('/purchases/integration-policy'),
+  getIntegrationPolicy: () => api.get<{ accountingEnabled: boolean; accountingRequired: boolean; autoGenEnabled: boolean; financeEnabled: boolean; routes: Record<string, any> }>('/purchases/integration-policy'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentMade>>('/purchases/payments', { params: filters as any, signal }),
   create: (data: Partial<PaymentMade>) => api.post<PaymentMade>('/purchases/payments', data),
   createMixed: (data: PurchaseMixedPaymentInput) => api.post<PaymentMade>('/purchases/payments/mixed', data),

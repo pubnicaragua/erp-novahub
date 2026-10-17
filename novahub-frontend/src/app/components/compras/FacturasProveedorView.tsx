@@ -76,7 +76,7 @@ function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: 
 export function FacturasProveedorView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const integrationPolicyQuery = usePurchasesIntegrationPolicy();
-  const accountingConnectionEnabled = integrationPolicyQuery.data?.accountingEnabled ?? true;
+  const accountingConnectionEnabled = integrationPolicyQuery.data?.accountingRequired === true;
   const {
     exchangeRate: globalRate,
     displayCurrency,
@@ -669,7 +669,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
                   </div>
                   {accountingConnectionEnabled ? <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
                     El total bruto es subtotal + IVA. El IR no se suma al efectivo: se retiene al proveedor y queda como obligación fiscal. Al liquidarla, el asiento queda Debe bruto = Haber pago neto + IR retenido.
-                  </p> : <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">La conexión Compras → Contabilidad está desactivada. La factura y sus pagos se conservan en Compras y no generarán asientos automáticos.</p>}
+                  </p> : <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Con la configuración actual, la factura y sus pagos se conservan en Compras sin generar asientos automáticos.</p>}
                   {accountingConnectionEnabled && <p className="mt-1 text-[9px] font-semibold text-primary">Las cuentas y los medios de pago se configuran en Contabilidad → Configuración → Compras.</p>}
                 </div>
               </div>

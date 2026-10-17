@@ -140,8 +140,8 @@ function groupMadePayments(rows: PaymentMade[], baseCurrency: string, globalRate
 export function PagosRealizadosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange, selectedBranchId = '', targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const integrationPolicyQuery = usePurchasesIntegrationPolicy();
-  const accountingConnectionEnabled = integrationPolicyQuery.data?.accountingEnabled ?? true;
-  const financeConnectionEnabled = integrationPolicyQuery.data?.financeEnabled ?? true;
+  const accountingConnectionEnabled = integrationPolicyQuery.data?.accountingRequired === true;
+  const financeConnectionEnabled = integrationPolicyQuery.data?.financeEnabled === true;
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-payments-layout', 'table', 24 * 365);
