@@ -417,7 +417,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         title: 'Créditos del proveedor',
         rows: colFilters.applyTo(exportFiltered, filterGetters),
         subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, `Estado: ${statusFilter}`, selectedBranchId ? `Sucursal: ${selectedBranchId}` : ''].filter(Boolean).join(' · '),
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.supplier-credit',
@@ -636,7 +636,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     const exportToastId = toast.loading('Generando PDF del crédito...');
     try {
       await generatePurchaseRecordPDF({
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.supplier-credit',

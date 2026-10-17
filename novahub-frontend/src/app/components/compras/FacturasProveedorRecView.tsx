@@ -218,7 +218,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
         title: 'Compras recurrentes',
         rows: exportRows,
         subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, `Estado: ${statusFilter}`].join(' · '),
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.recurring-supplier-invoice',
@@ -260,7 +260,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
     const exportToastId = toast.loading('Generando PDF de la compra recurrente...');
     try {
       await generatePurchaseRecordPDF({
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.recurring-supplier-invoice',

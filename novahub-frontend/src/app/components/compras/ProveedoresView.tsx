@@ -350,7 +350,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         title: 'Proveedores',
         rows: exportRows,
         subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, `Estado: ${statusFilter}`, exportFilter === 'active' ? 'Solo activos' : exportFilter === 'inactive' ? 'Solo inactivos' : ''].filter(Boolean).join(' · '),
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.supplier',

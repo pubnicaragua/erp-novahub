@@ -93,7 +93,7 @@ export function ProveedoresPage() {
         XLSX.writeFile(workbook, buildDatedDownloadFileName(['reporte_proveedores'], 'xlsx'));
       } else {
         await generateConfiguredReportSectionsPDF({
-          targetKey: 'compras.supplier', title: 'Listado de proveedores', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
+          targetKey: 'compras.supplier', title: 'Listado de proveedores', tenantName: user?.tenantName || '', tenantLogo: user?.sessionBranding?.logo || '',
           periodLabel: `Registros filtrados: ${rows.length}`,
           sections: [{ id: 'purchase-suppliers', title: 'Proveedores', headers: Object.keys(rows[0]), rows: rows.map((row) => Object.values(row)) }],
           fileName: buildDatedDownloadFileName(['reporte_proveedores'], 'pdf'),

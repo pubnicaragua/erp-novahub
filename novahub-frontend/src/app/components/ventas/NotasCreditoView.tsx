@@ -606,7 +606,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const handleExportPDF = async (row: CreditNote, format: PdfDownloadFormat = 'configured') => {
     const previewToastId = toast.loading('Preparando la previsualización del crédito...');
     try {
-      await previewSalesTransactionPDF({ document: { ...row, customer: row.customer || customerFor(row.customerId) }, tenantName: user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'credit-note', format });
+      await previewSalesTransactionPDF({ document: { ...row, customer: row.customer || customerFor(row.customerId) }, tenantName: user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'credit', format });
       toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir la previsualización', { id: previewToastId });

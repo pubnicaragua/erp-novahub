@@ -122,27 +122,25 @@ export async function exportCustomerTransactionsPdf(options: CustomerTransaction
   const amountHeader = originalOnly ? 'Monto original' : outputCurrency ? `Monto (${outputCurrency})` : 'Monto';
   await generateConfiguredHistoryPDF({
     targetKey: 'ventas.customer-history',
-    title: 'Historial de transacciones',
-    subtitle: [options.branchName || 'Sucursal no identificada', outputCurrency ? `Moneda: ${outputCurrency}` : ''].filter(Boolean).join(' · '),
+    title: 'HISTORIAL DEL CLIENTE',
+    subtitle: [options.branchName, outputCurrency ? `Moneda: ${outputCurrency}` : ''].filter(Boolean).join(' · '),
     subjectLabel: 'Cliente',
-    subjectName: options.customerName || 'Cliente',
+    subjectName: options.customerName || '',
     subjectData: options.customerData,
-    tenantName: options.tenantName || 'NovaHub',
+    tenantName: options.tenantName || '',
     tenantLogo: options.tenantLogo,
     format: options.pdfFormat || 'configured',
     designOverride: options.pdfDesign || undefined,
     rows,
     fileName: fileStem(options.customerName),
     columns: [
-      { header: 'Tipo', value: (row) => row.kind || 'Transacción' },
-      { header: 'Número', value: (row) => row.number || '—' },
-      { header: 'Fecha', align: 'center', value: (row) => formatDate(row.date) },
-      { header: 'Estado', value: (row) => pdfStatusLabel(row.status) },
-      { header: amountHeader, align: 'right', value: (row) => originalOnly || row.reportAmount == null
+      { header: 'Documento', width: 22, value: (row) => [row.kind || 'Transacción', row.number].filter(Boolean).join(' ') },
+      { header: 'Fecha', width: 13, align: 'left', value: (row) => formatDate(row.date) },
+      { header: 'Estado', width: 13, value: (row) => pdfStatusLabel(row.status) },
+      { header: amountHeader, width: 16, align: 'right', value: (row) => originalOnly || row.reportAmount == null
         ? formatMoney(row.amount, row.currency, originalOnly || !outputCurrency)
         : formatMoney(row.reportAmount, row.reportCurrency, !outputCurrency) },
-      { header: 'Tasa aplicada', value: (row) => row.reportRateLabel || '—' },
-      { header: 'Descripción / sucursal', value: (row) => `${row.description || '—'} · ${row.branchName || options.branchName || 'Sucursal'}` },
+      { header: 'Descripción / sucursal / tasa', width: 36, value: (row) => [row.description, row.branchName || options.branchName, row.reportRateLabel ? `Tasa: ${row.reportRateLabel}` : ''].filter(Boolean).join(' · ') || '—' },
     ],
   });
 }

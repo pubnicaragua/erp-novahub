@@ -346,6 +346,7 @@ export async function generateNovaHubFormatReport<T = any>({
       fontSize: 8,
       cellPadding: { top: 3.2, bottom: 3.2, left: 3, right: 3 },
       halign: 'left',
+      valign: 'middle',
     },
     bodyStyles: {
       textColor: [51, 65, 85], // slate-700
@@ -353,7 +354,9 @@ export async function generateNovaHubFormatReport<T = any>({
       cellPadding: { top: 2.8, bottom: 2.8, left: 3, right: 3 },
       lineColor: [241, 245, 249], // slate-100
       lineWidth: 0.2,
+      valign: 'middle',
     },
+    styles: { valign: 'middle' },
     alternateRowStyles: {
       fillColor: [248, 250, 252], // slate-50
     },

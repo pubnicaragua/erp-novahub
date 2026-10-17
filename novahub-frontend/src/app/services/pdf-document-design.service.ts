@@ -31,9 +31,22 @@ export interface PdfDocumentDesignFolder {
   _count?: { designs: number };
 }
 
+export interface PdfCompanyProfile {
+  name: string;
+  slogan: string;
+  fiscalInfo: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+  logo: string;
+}
+
 export const pdfDocumentDesignService = {
   list: () => api.get<PdfDocumentDesignRecord[]>('/pdf-document-designs'),
   listFolders: () => api.get<PdfDocumentDesignFolder[]>('/pdf-document-designs/folders'),
+  getCompanyProfile: () => api.get<PdfCompanyProfile | null>('/pdf-document-designs/company-profile'),
+  updateCompanyProfile: (data: PdfCompanyProfile) => api.patch<PdfCompanyProfile>('/pdf-document-designs/company-profile', data),
   createFolder: (data: { name: string; color?: string }) => api.post<PdfDocumentDesignFolder>('/pdf-document-designs/folders', data),
   updateFolder: (id: string, data: { name?: string; color?: string }) => api.patch<PdfDocumentDesignFolder>(`/pdf-document-designs/folders/${id}`, data),
   removeFolder: (id: string) => api.delete(`/pdf-document-designs/folders/${id}`),

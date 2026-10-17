@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { AlignCenter, AlignLeft, AlignRight, Barcode, Building2, Calculator, Copy, GripVertical, ImagePlus, Italic, Minus, Move, Palette, PanelBottom, PanelTop, Plus, Redo2, RotateCcw, RotateCw, Save, Settings2, Square, Strikethrough, Table2, Trash2, Type, Underline, Undo2 } from 'lucide-react';
+import { AlignCenter, AlignLeft, AlignRight, Barcode, BarChart3, Building2, Calculator, Copy, GripVertical, ImagePlus, Italic, Minus, Move, Palette, PanelTop, Plus, Redo2, RotateCcw, RotateCw, Save, Settings2, Square, Strikethrough, Table2, Trash2, Type, Underline, Undo2 } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -8,6 +8,7 @@ import { FastColorInput } from '../ui/FastColorInput';
 import { cn } from '../ui/utils';
 import { getPdfTemplateTarget } from '../../services/pdf-document-catalog';
 import { createPdfTemplateSampleData, getTemplateTokenSample, PDF_DEFAULT_FONT_SCALE, pdfTemplateImageShapeStyles, resolveTemplateToken, TEMPLATE_TOKENS, type PdfTemplateChart, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateNodeType, type PdfTemplateReportSection, type PdfTemplateReportSectionStyle } from '../../services/pdf-template-definition';
+import { getPdfTableCellBorders, getPdfTableHeaderCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfStyleConfigV1, type PdfTableStyle } from '../../services/pdf-document-style';
 
 type CanvasSettings = {
   paperSize: string;
@@ -20,6 +21,7 @@ type CanvasSettings = {
   headerLayout?: string;
   footerLayout?: string;
   tableLayout?: string;
+  pdfTableStyle?: PdfTableStyle;
   fontFamily?: string;
   fontSize?: number;
   logoUrl?: string;
@@ -61,6 +63,8 @@ interface PdfTemplateCanvasEditorProps {
   onSave?: () => void;
   logo?: string | null;
   readOnly?: boolean;
+  previewOnly?: boolean;
+  styleConfig?: PdfStyleConfigV1 | null;
 }
 
 type DragState = { id: string; mode: 'move' | 'resize' | 'rotate'; startX: number; startY: number; x: number; y: number; width: number; height: number; rect: DOMRect; centerX?: number; centerY?: number; startAngle?: number; initialRotation?: number };
@@ -84,6 +88,7 @@ function pageAspect(settings: CanvasSettings) {
 
 function nodeText(node: PdfTemplateNode, data: PdfTemplateData) {
   if (node.type === 'field' || node.type === 'barcode') {
+    if (node.id === 'footer-contact' && typeof data.company?.footerText === 'string') return data.company.footerText;
     if (!node.token) return node.text || node.sample || '';
     const fallback = node.token.startsWith('company.') ? '' : node.sample || getTemplateTokenSample(node.token);
     const value = resolveTemplateToken(node.token, data, fallback);
@@ -102,6 +107,7 @@ const COMPANY_TOKEN_SETTINGS: Record<string, keyof CanvasSettings> = {
   'company.phone': 'phone',
   'company.email': 'email',
   'company.website': 'website',
+  'company.footerText': 'footerText',
 };
 
 function isInlineTextEditable(node: PdfTemplateNode) {
@@ -167,21 +173,25 @@ function logoPreviewStyle(node: PdfTemplateNode, settings: CanvasSettings): CSSP
 function nodeStyle(node: PdfTemplateNode, settings: CanvasSettings) {
   const { borderRadius, clipPath } = nodeShapeStyles(node);
   const isImage = node.type === 'image';
+  const logoScale = node.id === 'company-logo' ? Math.max(0.53, Math.min(1.5, (Number(settings.logoSize) || 34) / 34)) : 1;
   const padding = Math.max(0, Number(node.padding ?? 1.5) || 0);
   const borderStyle = node.borderStyle || (node.type === 'table' || node.type === 'report-sections' || node.type === 'divider' ? 'solid' : 'none');
+  const isSplitFooterAccent = node.id === 'footer-accent' && node.type === 'section' && node.shape !== 'pill' && Number(node.width || 0) <= 30 && Number(node.height || 0) >= 3;
+  const displayWidth = node.id === 'footer-contact' ? Math.max(60, Number(node.width || 0)) : isSplitFooterAccent ? 65 : Number(node.width || 0) * logoScale;
+  const isDocumentTitle = node.id === 'document-title';
   return {
-    left: `${node.x}%`, top: `${node.y}%`, width: `${node.width}%`, height: `${node.height}%`,
+    left: `${node.id === 'footer-contact' ? 8 : node.x}%`, top: `${node.y}%`, width: `${displayWidth}%`, height: `${node.height * logoScale}%`,
     color: node.color || settings.textColor || '#334155', backgroundColor: isImage ? 'transparent' : node.backgroundColor || 'transparent',
     borderColor: node.borderColor || settings.lineColor || '#e2e8f0', borderStyle: isImage ? 'none' : borderStyle, borderWidth: isImage ? '0px' : borderStyle === 'none' ? '0px' : borderStyle === 'double' ? '3px' : '1px', borderRadius: isImage ? '0px' : borderRadius,
     clipPath: isImage ? 'none' : clipPath, opacity: node.opacity ?? 1,
-    overflow: undefined,
     transform: node.rotation ? `rotateZ(${node.rotation}deg)` : undefined, transformOrigin: 'center center',
     fontSize: canvasFontSize(Number(node.fontSize || settings.fontSize || 9) || 9), fontFamily: canvasFontFamily(node.fontFamily || settings.fontFamily),
     textAlign: node.align || 'left', padding: `${Math.min(1.25, padding * 0.45)}% ${Math.min(2.2, padding)}%`, fontWeight: node.fontWeight || (node.bold ? 700 : 400), fontStyle: node.italic ? 'italic' : 'normal',
     textDecorationLine: [node.underline ? 'underline' : '', node.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ') || 'none',
     lineHeight: node.lineHeight || 1.25, letterSpacing: `${node.letterSpacing || 0}px`, textTransform: node.textTransform || 'none',
     display: ['text', 'field', 'section'].includes(node.type) ? 'flex' : 'block', alignItems: node.type === 'section' && node.id === 'party-section' ? 'flex-start' : 'center',
-    WebkitFontSmoothing: 'antialiased', textRendering: 'geometricPrecision', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
+    WebkitFontSmoothing: 'antialiased', textRendering: 'geometricPrecision', whiteSpace: isDocumentTitle ? 'nowrap' : 'pre-wrap', overflowWrap: isDocumentTitle ? 'normal' : 'anywhere',
+    overflow: isDocumentTitle ? 'hidden' : undefined, textOverflow: isDocumentTitle ? 'ellipsis' : undefined,
   } as const;
 }
 
@@ -207,18 +217,20 @@ function TablePreview({ node, settings, data, reportSection }: { node: PdfTempla
     ? reportSection.rows
     : data.items || data.rows || [{ description: 'Fila de muestra', quantity: '1', unitPrice: 'C$ 0.00', total: 'C$ 0.00' }];
   const compactTable = ['minimal', 'ledger'].includes(settings.tableLayout || '');
+  const tableStyle = settings.pdfTableStyle || 'light';
+  const presentation = getPdfTablePresentation(tableStyle);
   const defaultHeaderBackground = node.tableHeaderColor || (compactTable ? '#ffffff' : settings.primaryColor || '#10b981');
   const defaultHeaderColor = node.tableHeaderTextColor || (compactTable ? settings.textColor || '#334155' : '#ffffff');
   const rowTextColor = node.tableTextColor || node.color || settings.textColor || '#334155';
   const stripeColor = node.tableStripeColor || '#f8fafc';
 
-  return <div className="h-full overflow-hidden rounded-[inherit] border" style={{ borderColor: node.borderColor }}>
+  return <div className="h-full overflow-hidden rounded-[inherit] border" style={{ borderColor: presentation.outerBorderTone === 'accent' ? settings.primaryColor : node.borderColor, borderWidth: presentation.outerBorderWidth, borderRadius: presentation.roundedRows ? 7 : 0 }}>
     {reportSection && <div className="truncate border-b px-2 py-1 font-semibold text-slate-500" title={reportSection.title} style={{ fontSize: canvasFontSize(7.5) }}>{reportSection.title}</div>}
-    <div className="flex border-b px-2 py-1 font-bold uppercase tracking-wide" style={{ fontSize: canvasFontSize(Math.max(7, (Number(node.fontSize || settings.fontSize || 9) || 9) - 1.5)) }}>
-      {columns.map(column => <span key={column.id} className="min-w-0 break-words" style={{ width: `${column.width || 25}%`, textAlign: column.align || 'left', backgroundColor: column.backgroundColor || defaultHeaderBackground, color: column.color || defaultHeaderColor }}>{column.label}</span>)}
+    <div className="flex px-2 py-1 font-bold tracking-wide" style={{ fontSize: canvasFontSize(Math.max(7, (Number(node.fontSize || settings.fontSize || 9) || 9) - 1.5)), textTransform: presentation.headerTextTransform, borderBottom: `${presentation.headerRuleWidth}px solid ${presentation.headerRuleTone === 'accent' ? settings.primaryColor : node.borderColor}` }}>
+      {columns.map((column, columnIndex) => <span key={column.id} className="min-w-0 break-words" style={{ width: `${column.width || 25}%`, textAlign: column.align || 'left', backgroundColor: column.backgroundColor || defaultHeaderBackground, color: column.color || defaultHeaderColor, boxSizing: 'border-box', ...getPdfTableHeaderCellBorders(tableStyle, columnIndex, columns.length, node.borderColor || '#d9dce1', settings.primaryColor || '#10b981') }}>{column.label}</span>)}
     </div>
-    {rows.slice(0, 4).map((row, index) => <div key={index} className="flex border-b px-2 py-1 last:border-0" style={{ color: rowTextColor, fontSize: canvasFontSize(Math.max(7, (Number(node.fontSize || settings.fontSize || 9) || 9) - 1)), backgroundColor: node.tableRowColor || (index % 2 && ['standard', 'striped', 'accent'].includes(settings.tableLayout || '') ? stripeColor : 'transparent') }}>
-      {columns.map(column => <span key={column.id} className="min-w-0 break-words whitespace-pre-wrap" style={{ width: `${column.width || 25}%`, textAlign: column.align || 'left' }}>{String(row[column.token] ?? row[column.id] ?? '')}</span>)}
+    {rows.slice(0, 4).map((row, index) => <div key={index} className="flex px-2 py-1" style={{ color: rowTextColor, fontSize: canvasFontSize(Math.max(7, (Number(node.fontSize || settings.fontSize || 9) || 9) - 1)), backgroundColor: resolvePdfTableRowBackground(tableStyle, { tableRow: node.tableRowColor || '#ffffff', tableStripe: stripeColor }, index), marginTop: presentation.rowGap ? `${presentation.rowGap}px` : undefined }}>
+      {columns.map((column, columnIndex) => <span key={column.id} className="min-w-0 break-words whitespace-pre-wrap" style={{ width: `${column.width || 25}%`, textAlign: column.align || 'left', boxSizing: 'border-box', ...getPdfTableCellBorders(tableStyle, columnIndex, columns.length, node.borderColor || '#d9dce1', settings.primaryColor || '#10b981') }}>{String(row[column.token] ?? row[column.id] ?? '')}</span>)}
     </div>)}
     {reportSection && <div className="px-2 py-1 text-[8px] italic text-slate-400">Las demás secciones se generan en páginas consecutivas.</div>}
   </div>;
@@ -227,6 +239,8 @@ function TablePreview({ node, settings, data, reportSection }: { node: PdfTempla
 function ReportSectionsPreview({ node, settings, data, selectedSectionIndex, onSelectSection }: { node: PdfTemplateNode; settings: CanvasSettings; data: PdfTemplateData; selectedSectionIndex?: number | null; onSelectSection?: (sectionIndex: number) => void }) {
   const sections = data.reportSections || [];
   const compactTable = ['minimal', 'ledger'].includes(settings.tableLayout || '');
+  const tableStyle = settings.pdfTableStyle || 'light';
+  const presentation = getPdfTablePresentation(tableStyle);
   const defaultHeaderBackground = node.tableHeaderColor || (compactTable ? '#ffffff' : settings.primaryColor || '#10b981');
   const defaultHeaderColor = node.tableHeaderTextColor || (compactTable ? settings.textColor || '#334155' : '#ffffff');
   const stripeColor = node.tableStripeColor || '#f8fafc';
@@ -234,7 +248,7 @@ function ReportSectionsPreview({ node, settings, data, selectedSectionIndex, onS
   const previewSections = selectedSectionIndex === undefined || selectedSectionIndex === null
     ? visibleSections
     : visibleSections.filter(({ sectionIndex }) => sectionIndex === selectedSectionIndex);
-  return <div className="h-full overflow-hidden rounded-[inherit] border" style={{ borderColor: node.borderColor }}>
+  return <div className="h-full overflow-hidden rounded-[inherit] border" style={{ borderColor: presentation.outerBorderTone === 'accent' ? settings.primaryColor : node.borderColor, borderWidth: presentation.outerBorderWidth }}>
     <div role="region" aria-label={`Vista previa de ${visibleSections.length} secciones del reporte; el contenido que no cabe continúa en las páginas siguientes`} className="h-full overflow-x-hidden overflow-y-clip px-2 py-1.5">
     {previewSections.map(({ section, sectionIndex }, visibleIndex) => {
       const sectionStyle = node.reportSectionStyles?.[String(sectionIndex)] || {};
@@ -245,12 +259,12 @@ function ReportSectionsPreview({ node, settings, data, selectedSectionIndex, onS
       const sectionRowTextColor = sectionStyle.rowTextColor || node.tableTextColor || node.color || settings.textColor || '#334155';
       return <div key={section.id} className={cn('min-w-0 cursor-pointer rounded-md p-1 transition', visibleIndex > 0 && 'mt-2', selectedSectionIndex === sectionIndex && 'bg-emerald-50/40 ring-2 ring-emerald-400')} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); onSelectSection?.(sectionIndex); }}>
       <div className="mb-1 truncate font-bold text-slate-700" title={section.title} style={{ fontSize: canvasFontSize(8.5) }}>{section.title}</div>
-      <div className="overflow-hidden rounded-[2px] border" style={{ borderColor: node.borderColor }}>
-        <div className="flex border-b px-1.5 py-1 font-bold uppercase tracking-wide" style={{ fontSize: canvasFontSize(6.5), backgroundColor: sectionHeaderBackground, color: sectionHeaderColor }}>
-          {section.columns.map((column, columnIndex) => <span key={column.id} className="min-w-0 break-words" style={{ width: `${column.width || 25}%`, textAlign: column.align || 'left', backgroundColor: column.backgroundColor || sectionStyle.columnColors?.[String(columnIndex)] || node.columns?.[columnIndex]?.backgroundColor || 'transparent', color: column.color || sectionStyle.columnTextColors?.[String(columnIndex)] || node.columns?.[columnIndex]?.color || 'inherit' }}>{column.label}</span>)}
+      <div className="overflow-hidden rounded-[2px]" style={{ border: presentation.outerBorder ? `${presentation.outerBorderWidth}px solid ${presentation.outerBorderTone === 'accent' ? settings.primaryColor : node.borderColor}` : 'none' }}>
+        <div className="flex px-1.5 py-1 font-bold tracking-wide" style={{ fontSize: canvasFontSize(6.5), backgroundColor: sectionHeaderBackground, color: sectionHeaderColor, textTransform: presentation.headerTextTransform, borderBottom: `${presentation.headerRuleWidth}px solid ${presentation.headerRuleTone === 'accent' ? settings.primaryColor : node.borderColor}` }}>
+          {section.columns.map((column, columnIndex) => <span key={column.id} className="min-w-0 break-words" style={{ width: `${column.width || 25}%`, textAlign: column.align || 'left', boxSizing: 'border-box', backgroundColor: settings.pdfTableStyle ? sectionHeaderBackground : column.backgroundColor || sectionStyle.columnColors?.[String(columnIndex)] || node.columns?.[columnIndex]?.backgroundColor || 'transparent', color: settings.pdfTableStyle ? sectionHeaderColor : column.color || sectionStyle.columnTextColors?.[String(columnIndex)] || node.columns?.[columnIndex]?.color || 'inherit', ...getPdfTableHeaderCellBorders(tableStyle, columnIndex, section.columns.length, node.borderColor || '#d9dce1', settings.primaryColor || '#10b981') }}>{column.label}</span>)}
         </div>
-        {section.rows.slice(0, 3).map((row, rowIndex) => <div key={rowIndex} className="flex border-b px-1.5 py-1 last:border-0" style={{ color: sectionRowTextColor, fontSize: canvasFontSize(6.7), backgroundColor: sectionRowColor || (rowIndex % 2 && !compactTable ? sectionStripeColor : 'transparent') }}>
-          {section.columns.map(column => <span key={column.id} className="min-w-0 break-words whitespace-pre-wrap" style={{ width: `${column.width || 25}%`, textAlign: column.align || 'left' }}>{String(row[column.token] ?? row[column.id] ?? '')}</span>)}
+        {section.rows.slice(0, 3).map((row, rowIndex) => <div key={rowIndex} className="flex px-1.5 py-1" style={{ color: sectionRowTextColor, fontSize: canvasFontSize(6.7), backgroundColor: sectionRowColor || resolvePdfTableRowBackground(tableStyle, { tableRow: node.tableRowColor || '#ffffff', tableStripe: sectionStripeColor }, rowIndex), marginTop: presentation.rowGap ? `${presentation.rowGap}px` : undefined }}>
+          {section.columns.map((column, columnIndex) => <span key={column.id} className="min-w-0 break-words whitespace-pre-wrap" style={{ width: `${column.width || 25}%`, textAlign: column.align || 'left', boxSizing: 'border-box', ...getPdfTableCellBorders(tableStyle, columnIndex, section.columns.length, node.borderColor || '#d9dce1', settings.primaryColor || '#10b981') }}>{String(row[column.token] ?? row[column.id] ?? '')}</span>)}
         </div>)}
       </div>
     </div>;
@@ -370,7 +384,7 @@ function CanvasDocumentControls({ settings, target, onChange, readOnly = false }
   </div>;
 }
 
-export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data, onChange, onSettingsChange, onUploadLogo, onSave, logo, readOnly = false }: PdfTemplateCanvasEditorProps) {
+export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data, onChange, onSettingsChange, onUploadLogo, onSave, logo, readOnly = false, previewOnly = false, styleConfig }: PdfTemplateCanvasEditorProps) {
   const [selectedId, setSelectedId] = useState(definition.nodes.find(node => node.enabled !== false)?.id || null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [selectedReportSection, setSelectedReportSection] = useState<{ nodeId: string; index: number } | null>(null);
@@ -435,9 +449,11 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
   const selected = selectedNode ? { ...selectedNode, borderStyle: selectedNode.borderStyle || defaultCanvasBorderStyle(selectedNode.type) } : null;
   const activeNodes = useMemo(() => definition.nodes.filter(node => {
     if (node.enabled === false || (node.page || 1) !== 1 || (node.id === 'company-name' && settings.showCompanyName === false)) return false;
+    if (styleConfig?.htmlTemplate?.headerHtml.trim() && isPdfFrameHeaderNode(node)) return false;
+    if (styleConfig?.htmlTemplate?.footerHtml.trim() && isPdfFrameFooterNode(node)) return false;
     if (target.structure !== 'dashboard') return true;
     return isDashboardCanvasNodeVisible(node, dashboardCanvasPage);
-  }), [definition.nodes, dashboardCanvasPage, settings.showCompanyName, target.structure]);
+  }), [definition.nodes, dashboardCanvasPage, settings.showCompanyName, styleConfig, target.structure]);
 
   useEffect(() => {
     if (selectedId && !definition.nodes.some(node => node.id === selectedId)) setSelectedId(definition.nodes.find(node => node.enabled !== false)?.id || null);
@@ -650,8 +666,9 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
 
   return (
     <div ref={editorRootRef} className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-800 bg-[#101827] text-slate-100 shadow-2xl" data-testid="pdf-template-canvas-editor" aria-disabled={readOnly || undefined}>
-      {readOnly && <div className="border-b border-amber-400/20 bg-amber-400/10 px-4 py-2 text-xs text-amber-200">Vista de solo lectura: tu permiso permite revisar esta plantilla, pero no modificarla.</div>}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-[#0b1220] px-3 py-2">
+      {readOnly && !previewOnly && <div className="border-b border-amber-400/20 bg-amber-400/10 px-4 py-2 text-xs text-amber-200">Vista de solo lectura: tu permiso permite revisar esta plantilla, pero no modificarla.</div>}
+      {previewOnly && <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/30 px-3 py-2 text-xs"><span className="font-semibold">Vista previa del contenido existente</span><span>Distribución bloqueada · {zoom}%</span></div>}
+      <div className={cn('flex flex-wrap items-center gap-2 border-b border-slate-800 bg-[#0b1220] px-3 py-2', previewOnly && 'hidden')}>
         <div className="mr-2 flex min-w-0 items-center gap-2">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-400/15 text-emerald-300"><Move size={15} /></div>
           <div className="min-w-0"><p className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">Canvas de plantilla</p><p className="truncate text-[10px] text-slate-500">{target.label} · arrastra; doble clic para editar texto</p></div>
@@ -677,21 +694,32 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="Acercar" onClick={() => setZoom(value => Math.min(120, value + 8))}><Plus size={15} /></Button>
         </div>
       </div>
-      <CanvasDocumentControls settings={settings} target={target} onChange={patchSettings} readOnly={readOnly} />
-      {target.structure === 'dashboard' && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-[#0d1726] px-3 py-2">
+      {!previewOnly && <CanvasDocumentControls settings={settings} target={target} onChange={patchSettings} readOnly={readOnly} />}
+      {!previewOnly && target.structure === 'dashboard' && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-[#0d1726] px-3 py-2">
         <div role="group" aria-label="Página de vista previa del dashboard" className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-800 bg-[#0b1220] p-1">
           <button type="button" aria-pressed={dashboardCanvasPage === 'summary'} onClick={() => selectDashboardCanvasPage('summary')} className={cn('rounded-md border px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400', dashboardCanvasPage === 'summary' ? 'border-emerald-400/60 bg-emerald-400/10 text-emerald-200' : 'border-transparent text-slate-400 hover:text-white')}>Resumen · Página 1</button>
           <button type="button" aria-pressed={dashboardCanvasPage === 'details'} onClick={() => selectDashboardCanvasPage('details')} className={cn('rounded-md border px-3 py-1.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400', dashboardCanvasPage === 'details' ? 'border-emerald-400/60 bg-emerald-400/10 text-emerald-200' : 'border-transparent text-slate-400 hover:text-white')}>Tablas · páginas siguientes</button>
         </div>
         <p className="text-[10px] text-slate-500">La vista cambia para coincidir con la paginación del PDF.</p>
       </div>}
-      <div className="grid min-h-[580px] min-w-0 max-w-full grid-cols-1 gap-0 overflow-hidden xl:grid-cols-[minmax(0,1fr)_245px]">
+      <div className={cn('grid min-h-[580px] min-w-0 max-w-full grid-cols-1 gap-0 overflow-hidden', !previewOnly && 'xl:grid-cols-[minmax(0,1fr)_245px]')}>
         <div className="relative min-w-0 max-w-full overflow-x-auto overflow-y-hidden overscroll-contain bg-[radial-gradient(#243247_1px,transparent_1px)] [background-size:16px_16px] p-7 sm:p-10" onKeyDown={handleKeyDown} tabIndex={0}>
           <div className="mx-auto transition-transform duration-200" style={{ width: `${zoom}%`, maxWidth: 850, minWidth: 'min(340px, 100%)' }}>
             <div ref={canvasRef} className="relative w-full overflow-hidden rounded-sm bg-white shadow-[0_22px_70px_rgba(0,0,0,0.45)]" style={{ aspectRatio: pageAspect(settings), backgroundColor: settings.backgroundColor || definition.page.background || '#fff' }} onPointerDown={() => setSelectedId(null)}>
+              {styleConfig?.htmlTemplate && <>
+                <style>{sanitizePdfTemplateCss(styleConfig.htmlTemplate.css, styleConfig.fontFamily)}</style>
+                {(['header', 'footer'] as const).map(zone => {
+                  const source = zone === 'header' ? styleConfig.htmlTemplate?.headerHtml : styleConfig.htmlTemplate?.footerHtml;
+                  if (!source || typeof document === 'undefined') return null;
+                  const holder = document.createElement('div');
+                  holder.innerHTML = sanitizePdfHtmlFragment(source, zone, styleConfig.fontFamily);
+                  resolvePdfHtmlTokens(holder, { ...sampleData, page: { number: '1', index: 1, pages: 1 } } as Record<string, any>, styleConfig.fontFamily, logo || undefined);
+                  return <div key={zone} className={`pdf-${zone} pointer-events-none absolute z-20 overflow-hidden`} style={{ left: `${Math.max(2, (settings.margins || 8) / 4)}%`, right: `${Math.max(2, (settings.margins || 8) / 4)}%`, [zone === 'header' ? 'top' : 'bottom']: '1.5%', maxHeight: zone === 'header' ? '14%' : '8%', fontFamily: styleConfig.fontFamily, color: styleConfig.palette.text, fontSize: `${Math.min(styleConfig.fontSize, 16)}pt` }} dangerouslySetInnerHTML={{ __html: holder.innerHTML }} />;
+                })}
+              </>}
               {settings.watermark?.trim() && <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-[38%] z-[15] select-none overflow-hidden text-center text-[42px] font-extrabold tracking-wide" style={{ color: settings.primaryColor || '#10b981', opacity: (Number(settings.watermarkOpacity) || 12) / 100, transform: 'rotate(-28deg)' }}>{settings.watermark}</div>}
               {activeNodes.map(node => {
-                const isSelected = selectedId === node.id;
+                const isSelected = !previewOnly && selectedId === node.id;
                 const isEditingText = editingTextId === node.id;
                 const canInlineEditText = !readOnly && isInlineTextEditable(node);
                 const isInnerReportSectionSelected = node.type === 'report-sections' && selectedReportSectionIndex !== null && selectedReportSection?.nodeId === node.id;
@@ -707,14 +735,14 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-[10px] text-slate-500"><Square size={11} /> Papel {settings.paperSize === 'LABEL' ? 'Etiqueta' : settings.paperSize === 'ROLL-80' ? 'Rollo 80 mm' : 'Carta'} · {settings.paperSize === 'LABEL' ? 'Horizontal física' : 'Vertical'}{target.structure === 'dashboard' && ` · ${dashboardCanvasPage === 'summary' ? 'Resumen del dashboard' : 'Detalle de tablas'}`} · Usa las flechas para precisión</div>
         </div>
-        <aside className="min-w-0 border-t border-slate-800 bg-[#0d1726] p-4 xl:border-l xl:border-t-0">
+        <aside className={cn('min-w-0 border-t border-slate-800 bg-[#0d1726] p-4 xl:border-l xl:border-t-0', previewOnly && 'hidden')}>
           {selected ? <div className="space-y-4" key={selected.id}>
             <div className="flex items-start justify-between gap-2"><div><p className="text-[10px] uppercase tracking-[0.16em] text-emerald-300">{activeReportSection ? 'Tabla seleccionada' : 'Elemento seleccionado'}</p><p className="mt-1 text-sm font-semibold text-white">{activeReportSection?.title || selected.label}</p></div><Badge className="border-slate-700 bg-slate-800 text-[10px] text-slate-300">{activeReportSection ? 'tabla' : selected.type}</Badge></div>
             <ReportSectionInspector node={selected} data={sampleData} selectedSectionIndex={selectedReportSectionIndex} onSelectSection={index => selectReportSection(selected.id, index)} onSetVisibility={setReportSectionVisibility} onPatchStyle={patchReportSectionStyle} />
             {selected.type === 'chart' && <div><Label className="text-[10px] text-slate-400">Tipo de gráfica</Label><select value={selected.chartType || 'area'} onChange={event => selectedPatch({ chartType: event.target.value as PdfTemplateChart['type'] })} className="mt-1 h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white"><option value="area">Área</option><option value="bar">Barras</option><option value="donut">Dona</option></select><p className="mt-1 text-[10px] text-slate-500">La serie y sus etiquetas provienen del dashboard seleccionado.</p></div>}
             <div className="grid grid-cols-2 gap-2"><div><Label className="text-[10px] text-slate-400">X</Label><Input type="number" value={selected.x} onChange={event => selectedPatch({ x: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div><div><Label className="text-[10px] text-slate-400">Y</Label><Input type="number" value={selected.y} onChange={event => selectedPatch({ y: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div><div><Label className="text-[10px] text-slate-400">Ancho</Label><Input type="number" value={selected.width} onChange={event => selectedPatch({ width: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div><div><Label className="text-[10px] text-slate-400">Alto</Label><Input type="number" value={selected.height} onChange={event => selectedPatch({ height: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div></div>
             {selected.type === 'field' && <div><Label className="text-[10px] text-slate-400">Campo de datos</Label><select value={selected.token || ''} onChange={event => selectedPatch({ token: event.target.value, label: TEMPLATE_TOKENS.find(item => item.token === event.target.value)?.label || selected.label })} className="mt-1 h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white"><option value="">Selecciona un campo</option>{TEMPLATE_TOKENS.map(item => <option key={item.token} value={item.token}>{item.label}</option>)}</select><p className="mt-1 text-[10px] text-slate-500">Vista previa: {selected.token?.startsWith('company.') ? resolveTemplateToken(selected.token, sampleData, '') || 'Sin datos de empresa configurados' : getTemplateTokenSample(selected.token)}</p></div>}
-            {selected.type === 'field' && selected.token?.startsWith('company.') && <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-2 text-[10px] leading-relaxed text-slate-400">{selected.token === 'company.summary' ? 'Este bloque combina los datos de la empresa. Cambia cada dato con doble clic sobre su texto o en la sección ' : 'Este campo se alimenta de la empresa. Puedes cambiarlo con doble clic aquí o en la sección '}<span className="font-semibold text-emerald-200">Datos de empresa en este PDF</span> que está debajo del canvas. Si el valor queda vacío, el PDF usa el dato que entregue la sucursal.</div>}
+            {selected.type === 'field' && selected.token?.startsWith('company.') && <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-2 text-[10px] leading-relaxed text-slate-400">{selected.token === 'company.summary' ? 'Este bloque reúne los datos de la empresa. Edita cada valor en la sección ' : 'Este campo se alimenta de la empresa. Puedes editarlo en la sección '}<span className="font-semibold text-emerald-200">Datos de empresa en este PDF</span> que está debajo del canvas. Si el valor queda vacío, el PDF usa el dato que entregue la sucursal.</div>}
             {(selected.type === 'text' || selected.type === 'section') && <div><Label className="text-[10px] text-slate-400">Contenido</Label><Input value={selected.text || ''} onChange={event => selectedPatch({ text: event.target.value })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div>}
             <div><Label className="text-[10px] text-slate-400">Tipografía del componente</Label><select value={selected.fontFamily || settings.fontFamily || 'Arial'} onChange={event => selectedPatch({ fontFamily: event.target.value })} className="mt-1 h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white">{CANVAS_FONT_OPTIONS.map(font => <option key={font.value} value={font.value}>{font.label}</option>)}</select></div>
             <div className="grid grid-cols-3 gap-2"><div><Label className="text-[10px] text-slate-400">Tamaño</Label><Input type="number" min={5} max={72} value={selected.fontSize || 9} onChange={event => selectedPatch({ fontSize: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div><div><Label className="text-[10px] text-slate-400">Peso</Label><select value={selected.fontWeight || (selected.bold ? 700 : 400)} onChange={event => selectedPatch({ fontWeight: Number(event.target.value) as PdfTemplateNode['fontWeight'], bold: Number(event.target.value) >= 700 })} className="mt-1 h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-1 text-xs text-white"><option value="400">Normal</option><option value="500">Medio</option><option value="600">Semibold</option><option value="700">Negrita</option><option value="800">Fuerte</option></select></div><div><Label className="text-[10px] text-slate-400">Radio</Label><Input type="number" min={0} max={999} value={selected.borderRadius || 0} onChange={event => selectedPatch({ borderRadius: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div></div><div className="grid grid-cols-2 gap-2"><div><Label className="text-[10px] text-slate-400">Forma del componente</Label><select value={selected.shape || 'rectangle'} onChange={event => selectedPatch({ shape: event.target.value as PdfTemplateNode['shape'] })} className="mt-1 h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white"><option value="rectangle">Rectangular</option><option value="pill">Píldora</option><option value="wave">Ola superior</option><option value="wave-bottom">Ola inferior</option><option value="circle">Circular</option><option value="angled">Angular</option><option value="blob">Orgánica</option><option value="arc">Arco</option></select></div><div><Label className="text-[10px] text-slate-400">Tipo de borde</Label><select value={selected.borderStyle || 'solid'} onChange={event => selectedPatch({ borderStyle: event.target.value as PdfTemplateNode['borderStyle'] })} className="mt-1 h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white"><option value="solid">Continuo</option><option value="dashed">Segmentado</option><option value="dotted">Punteado</option><option value="double">Doble</option><option value="none">Sin borde</option></select></div></div><div className="grid grid-cols-2 gap-2"><div><Label className="text-[10px] text-slate-400">Giro</Label><Input type="number" min={-180} max={180} value={selected.rotation || 0} onChange={event => selectedPatch({ rotation: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div><div><Label className="text-[10px] text-slate-400">Opacidad <span className="text-slate-500">{Math.round((selected.opacity ?? 1) * 100)}%</span></Label><input type="range" min="0" max="100" value={Math.round((selected.opacity ?? 1) * 100)} onChange={event => selectedPatch({ opacity: Number(event.target.value) / 100 })} className="mt-3 w-full accent-emerald-400" /></div></div>
@@ -729,7 +757,7 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
           <div className="mt-5 border-t border-slate-800 pt-4"><div className="mb-2 flex items-center justify-between"><p className="text-[10px] uppercase tracking-[0.16em] text-emerald-300">Capas y componentes</p><span className="text-[10px] text-slate-500">{activeNodes.length}</span></div><div className="max-h-44 space-y-1 overflow-y-auto pr-1">{[...activeNodes].reverse().map(node => <button key={node.id} type="button" onClick={() => { setSelectedId(node.id); setSelectedReportSection(null); }} className={cn('flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-[11px] transition', selectedId === node.id ? 'border-emerald-400/70 bg-emerald-400/10 text-emerald-200' : 'border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200')}><span className="min-w-0 truncate">{node.label}</span><Badge className="shrink-0 border-slate-700 bg-slate-900 px-1.5 text-[9px] text-slate-500">{node.type}</Badge></button>)}</div></div>
         </aside>
       </div>
-      <section className="border-t border-slate-800 bg-[#0d1726] p-4 sm:p-5" data-testid="pdf-company-data-section" aria-labelledby="pdf-company-data-title">
+      <section className={cn('border-t border-slate-800 bg-[#0d1726] p-4 sm:p-5', previewOnly && 'hidden')} data-testid="pdf-company-data-section" aria-labelledby="pdf-company-data-title">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
           <div>
             <h3 id="pdf-company-data-title" className="flex items-center gap-2 text-sm font-semibold text-white"><Building2 size={15} className="text-emerald-300" />Datos de empresa en este PDF</h3>

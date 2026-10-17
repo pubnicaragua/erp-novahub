@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import jspdfAutoTable from 'jspdf-autotable';
 import { generateFastGlobalReportPDF, getGlobalReportSettings, getPdfDesign, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
 import { getPdfTemplatePartyConfig, getPdfTemplateTarget } from '../services/pdf-document-catalog';
@@ -11,6 +11,16 @@ import { formatPdfItemDescription } from './pdf-line-details';
 import { getBase64Image } from './reportExportUtils';
 
 type PdfRgb = [number, number, number];
+
+type PdfAutoTableOptions = NonNullable<Parameters<typeof jspdfAutoTable>[1]>;
+
+/** Conserva el centrado vertical del estándar también en la salida nativa de respaldo. */
+const autoTable = (doc: Parameters<typeof jspdfAutoTable>[0], options: PdfAutoTableOptions) => jspdfAutoTable(doc, {
+  ...options,
+  styles: { ...options.styles, valign: 'middle' },
+  headStyles: { ...options.headStyles, valign: 'middle' },
+  bodyStyles: { ...options.bodyStyles, valign: 'middle' },
+});
 
 export interface PurchasePdfField {
   label: string;
@@ -84,11 +94,11 @@ function renderRollPdf({ document, tenantName, format, settings }: { document: P
   const contentWidth = width - margin * 2;
   const probe = new jsPDF({ unit: 'mm', format: [width, 1000], orientation: 'portrait' });
   const lines = document.lines || [];
-  const fieldLines = (document.fields || []).reduce((sum, field) => sum + countLines(probe, `${field.label}: ${valueText(field.value)}`, 6.4, contentWidth), 0);
+  const printableFields = (document.fields || []).filter(field => !/notas?|observaciones?/i.test(field.label));
+  const fieldLines = printableFields.reduce((sum, field) => sum + countLines(probe, `${field.label}: ${valueText(field.value)}`, 6.4, contentWidth), 0);
   const itemLines = lines.reduce((sum, line) => sum + countLines(probe, purchaseLineDescription(line), 7.2, contentWidth) + 3, 0);
-  const notesLines = document.notes ? countLines(probe, `Notas: ${document.notes}`, 6.4, contentWidth) : 0;
   const totalRows = (document.totals || []).length + (document.total ? 2 : 0);
-  const pageHeight = Math.max(145, 62 + fieldLines * 3.2 + itemLines * 3.5 + totalRows * 4 + notesLines * 3.2);
+  const pageHeight = Math.max(145, 62 + fieldLines * 3.2 + itemLines * 3.5 + totalRows * 4);
   const doc = new jsPDF({ unit: 'mm', format: [width, pageHeight], orientation: 'portrait' });
   const black: PdfRgb = [0, 0, 0];
   const fontName = String(settings.fontFamily || '').toLowerCase().includes('mono') ? 'courier' : 'helvetica';
@@ -105,7 +115,8 @@ function renderRollPdf({ document, tenantName, format, settings }: { document: P
   doc.setTextColor(...black);
   doc.setFont(fontName, 'bold');
   doc.setFontSize(width === 58 ? 10 : 12);
-  doc.text(doc.splitTextToSize(String(settings.companyName || tenantName || 'Nuestra Empresa'), contentWidth), width / 2, y, { align: 'center' });
+  const companyName = String(settings.companyName || tenantName || '').trim();
+  if (companyName) doc.text(doc.splitTextToSize(companyName, contentWidth), width / 2, y, { align: 'center' });
   y += 6;
   if (settings.slogan) { doc.setFont(fontName, 'normal'); doc.setFontSize(6.2); doc.text(doc.splitTextToSize(String(settings.slogan), contentWidth), width / 2, y, { align: 'center' }); y += 4; }
   rule();
@@ -120,7 +131,7 @@ function renderRollPdf({ document, tenantName, format, settings }: { document: P
   doc.text(`Fecha ${document.date || 'Sin fecha'}`, width / 2, y, { align: 'center' });
   y += 5;
   if (document.supplier) { doc.setFont(fontName, 'bold'); doc.setFontSize(6.5); doc.text('PROVEEDOR', margin, y); y += 3.3; doc.setFont(fontName, 'normal'); doc.setFontSize(7.2); doc.text(doc.splitTextToSize(document.supplier, contentWidth), margin, y); y += countLines(doc, document.supplier, 7.2, contentWidth) * 3.3 + 2; }
-  for (const field of document.fields || []) moneyLine(field.label, valueText(field.value));
+  for (const field of printableFields) moneyLine(field.label, valueText(field.value));
   if (document.status) moneyLine('Estado', pdfStatusLabel(document.status), true);
   if (lines.length) {
     rule();
@@ -141,7 +152,6 @@ function renderRollPdf({ document, tenantName, format, settings }: { document: P
     for (const total of document.totals || []) moneyLine(total.label, valueText(total.value));
     if (document.total) moneyLine(document.totalLabel || 'Total', document.total, true);
   }
-  if (document.notes) { y += 2; doc.setFont(fontName, 'normal'); doc.setFontSize(6.4); doc.text(doc.splitTextToSize(`Notas: ${document.notes}`, contentWidth), margin, y); y += notesLines * 3.2; }
   y += 4; rule(); doc.setFont(fontName, 'normal'); doc.setFontSize(5.8); doc.text(doc.splitTextToSize(String(settings.footerText || `Documento generado por ${tenantName}`), contentWidth), width / 2, y, { align: 'center' });
   return doc;
 }
@@ -158,27 +168,48 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
     const fieldData = Object.fromEntries((document.fields || []).map(field => [field.label.toLowerCase().replace(/\s+/g, '_'), valueText(field.value)]));
     const totalsData = Object.fromEntries((document.totals || []).map(field => [field.label.toLowerCase().replace(/\s+/g, '_'), valueText(field.value)]));
     if (document.total) totalsData.total = document.total;
-    const fieldSummary = (document.fields || []).map(field => `${field.label}: ${valueText(field.value)}`).join(' · ');
-    const notes = [document.notes, fieldSummary].filter(Boolean).join(' · ');
+    const fieldSummary = (document.fields || [])
+      .filter(field => !/notas?|observaciones?/i.test(field.label) && valueText(field.value).trim())
+      .map(field => `${field.label}: ${valueText(field.value)}`)
+      .join(' · ');
     const supplier = { ...(document.supplierData || {}), name: document.supplier || document.supplierData?.name || '' };
     const requester = (document.fields || []).find(field => /solicitante|solicitado por|responsable/i.test(field.label));
     const party = targetKey === 'compras.purchase-request'
       ? { ...supplier, name: valueText(requester?.value || document.supplier || supplier.name) }
       : supplier;
+    const requestHasPricing = targetKey !== 'compras.purchase-request'
+      || (document.lines || []).some(line => Boolean(valueText(line.unitPrice).trim() || valueText(line.total).trim()));
+    const tableColumns = targetKey === 'compras.payment-made'
+      ? [
+        { id: 'description', label: 'Método / referencia', token: 'description', width: 70, align: 'left' as const },
+        { id: 'total', label: 'Monto', token: 'total', width: 30, align: 'right' as const },
+      ]
+      : (targetKey === 'compras.expense' || targetKey === 'compras.recurring-expense')
+        ? [
+          { id: 'description', label: 'Descripción', token: 'description', width: 50, align: 'left' as const },
+          { id: 'unitPrice', label: 'Categoría', token: 'unitPrice', width: 24, align: 'left' as const },
+          { id: 'total', label: 'Monto', token: 'total', width: 26, align: 'right' as const },
+        ]
+        : targetKey === 'compras.purchase-request' && !requestHasPricing
+          ? [
+            { id: 'description', label: 'Descripción', token: 'description', width: 76, align: 'left' as const },
+            { id: 'quantity', label: 'Cant.', token: 'quantity', width: 24, align: 'right' as const },
+          ]
+          : [
+            { id: 'description', label: 'Descripción', token: 'description', width: 52, align: 'left' as const },
+            { id: 'quantity', label: 'Cant.', token: 'quantity', width: 12, align: 'right' as const },
+            { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 18, align: 'right' as const },
+            { id: 'total', label: 'Total', token: 'total', width: 18, align: 'right' as const },
+          ];
     const data: PdfTemplateData = {
       company: { name: tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: resolvedLogo },
-      document: { title: document.title, number: document.number, date: document.date, status: document.status, notes },
+      document: { title: document.title, number: document.number, date: document.date, status: document.status, notes: document.notes || '', extra: fieldSummary },
       supplier,
       party,
       items: (document.lines || []).map(line => ({ description: purchaseLineDescription(line), quantity: line.quantity || '', unitPrice: line.unitPrice || '', total: line.total || '' })),
       rows: (document.lines || []).map(line => ({ description: purchaseLineDescription(line), quantity: line.quantity || '', unitPrice: line.unitPrice || '', total: line.total || '' })),
       totals: { subtotal: totalsData.subtotal || '', tax: totalsData.tax || totalsData.impuesto || totalsData.impuestos || '', discount: totalsData.discount || totalsData.descuento || '', total: totalsData.total || '' },
-      tableColumns: [
-        { id: 'description', label: 'Descripción', token: 'description', width: 48, align: 'left' },
-        { id: 'quantity', label: 'Cant.', token: 'quantity', width: 14, align: 'right' },
-        { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 19, align: 'right' },
-        { id: 'total', label: 'Total', token: 'total', width: 19, align: 'right' },
-      ],
+      tableColumns,
       ...fieldData,
     };
     const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data, fileName: buildLabeledPdfFileName(document.title, document.number, format), save: true });
@@ -200,7 +231,7 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
       try { doc.addImage(nativeLogo, 'PNG', margin, 11, 26, 16, undefined, 'FAST'); } catch { /* el reporte continúa sin logo */ }
     }
     const identityX = margin + (nativeLogo ? 32 : 0);
-    doc.setTextColor(...primary); doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.text(tenantName || 'Nova Hub', identityX, 22);
+    if (tenantName) { doc.setTextColor(...primary); doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.text(tenantName, identityX, 22); }
     doc.setTextColor(...text); doc.setFontSize(12); doc.text(document.title, margin, 30);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(`Nº: ${document.number || 'N/A'}`, pageWidth - margin, 22, { align: 'right' }); doc.text(`Fecha: ${document.date || 'N/A'}`, pageWidth - margin, 28, { align: 'right' });
     if (document.status) doc.text(`Estado: ${pdfStatusLabel(document.status)}`, pageWidth - margin, 34, { align: 'right' });
@@ -213,11 +244,12 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
     const fields = partyConfig.mode === 'none'
       ? [...(document.fields || [])]
       : [{ label: partyLabel, value: partyName }, ...(document.fields || [])];
-    const uniqueFields = fields.filter((field, index, all) => field.value !== undefined && (index === 0 || `${field.label}:${field.value}` !== `${all[index - 1].label}:${all[index - 1].value}`));
-    autoTable(doc, { startY: 45, head: [['Campo', 'Detalle']], body: uniqueFields.map((field) => [field.label, valueText(field.value)]), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold' }, bodyStyles: { textColor: text }, columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } }, styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' } });
+    const uniqueFields = fields.filter(field => !/notas?|observaciones?/i.test(field.label))
+      .filter((field, index, all) => field.value !== undefined && (index === 0 || `${field.label}:${field.value}` !== `${all[index - 1].label}:${all[index - 1].value}`));
+    autoTable(doc, { startY: 45, head: [['Campo', 'Detalle']], body: uniqueFields.map((field) => [field.label, valueText(field.value)]), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold' }, bodyStyles: { textColor: text }, columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } }, styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak', valign: 'middle' } });
     let currentY = ((doc as any).lastAutoTable?.finalY || 45) + 8;
     if (document.lines?.length) {
-      autoTable(doc, { startY: currentY, head: [['Descripción', 'Cant.', 'Precio U.', 'Total']], body: document.lines.map((line) => [purchaseLineDescription(line), valueText(line.quantity), line.unitPrice || '—', line.total || '—']), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', halign: 'center' }, bodyStyles: { textColor: text, fontSize: 8 }, columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 20, halign: 'right' }, 2: { cellWidth: 34, halign: 'right' }, 3: { cellWidth: 34, halign: 'right' } }, styles: { cellPadding: 3, overflow: 'linebreak' } });
+      autoTable(doc, { startY: currentY, head: [['Descripción', 'Cant.', 'Precio U.', 'Total']], body: document.lines.map((line) => [purchaseLineDescription(line), valueText(line.quantity), line.unitPrice || '—', line.total || '—']), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', halign: 'center' }, bodyStyles: { textColor: text, fontSize: 8 }, columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 20, halign: 'right' }, 2: { cellWidth: 34, halign: 'right' }, 3: { cellWidth: 34, halign: 'right' } }, styles: { cellPadding: 3, overflow: 'linebreak', valign: 'middle' } });
       currentY = ((doc as any).lastAutoTable?.finalY || currentY) + 8;
     }
     if ((document.totals || []).length || document.total) {
@@ -225,8 +257,7 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
       autoTable(doc, { startY: currentY, body: totalRows.map((field) => [field.label, valueText(field.value)]), theme: 'plain', columnStyles: { 0: { cellWidth: 65, fontStyle: 'bold', textColor: primary }, 1: { cellWidth: 'auto', halign: 'right', textColor: text, fontStyle: 'bold' } }, styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak' } });
       currentY = ((doc as any).lastAutoTable?.finalY || currentY) + 5;
     }
-    if (document.notes) { doc.setTextColor(...text); doc.setFontSize(8); doc.text(doc.splitTextToSize(`Notas: ${document.notes}`, pageWidth - margin * 2), margin, currentY); }
-    doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.text(`Generado por ${tenantName || 'Nova Hub'} - Módulo de Compras`, margin, pageHeight - 10);
+    if (tenantName) { doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.text(`Generado por ${tenantName} - Módulo de Compras`, margin, pageHeight - 10); }
   }
   doc.save(buildLabeledPdfFileName(document.title, document.number, format));
   return doc;

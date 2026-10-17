@@ -744,7 +744,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
         subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, `Estado: ${statusFilter}`, selectedBranchId ? `Sucursal: ${selectedBranchId}` : '', exportFilter === 'paid' ? 'Solo pagadas' : ''].filter(Boolean).join(' · '),
         summary: { label: 'Total general', value: formatConvertedAmount(totalBase, baseCurrency, 1), columnIndex: 4 },
         summaryPlacement: 'footer',
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.purchase-receipt',
@@ -792,7 +792,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
     try {
       const receiptTotals = calculateReceiptTotalsForForm(receipt.items || []);
       await generatePurchaseRecordPDF({
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.purchase-receipt',

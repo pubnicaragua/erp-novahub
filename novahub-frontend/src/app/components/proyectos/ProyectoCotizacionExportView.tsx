@@ -19,10 +19,13 @@ import {
 } from '../ui/table';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   compute6DCostingAndPricing,
   type Cost6DRow,
 } from '@/app/utils/pricingEngine';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { money, formatDate } from './shared';
 import { projectsService } from '../../services/projects.service';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
@@ -208,6 +211,7 @@ export function ProyectoCotizacionExportView({
   costsSummary: _costsSummary,
 }: ProyectoCotizacionExportViewProps) {
   const [copied, setCopied] = useState(false);
+  const { user } = useAuth();
 
   const projectId = project?.id;
   const costLinesQuery = useTenantQuery<any[]>(
@@ -374,8 +378,95 @@ Quedamos a su disposición para la formalización del contrato.`;
     }
   };
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    const sections = [
+      {
+        id: 'project-quote-summary',
+        title: 'Cliente y proyecto',
+        headers: ['Dato', 'Detalle'],
+        widths: [24, 76],
+        rows: [
+          ['Cliente', clientName],
+          ['Proyecto', [project?.name, project?.code ? `(${project.code})` : ''].filter(Boolean).join(' ') || ''],
+          ...(project?.branch?.name ? [['Ubicación / sucursal', project.branch.name] as Array<string>] : []),
+          ['Asesor comercial', advisorName],
+          ['Identificación del cliente', project?.customer?.taxId || ''],
+          ['Correo del cliente', project?.customer?.email || ''],
+          ['Teléfono del cliente', project?.customer?.phone || ''],
+          ['Fecha de emisión', fechaEmision],
+          ['Número de cotización', quoteNumber],
+          ['Validez de la oferta', `${quoteValidityDays} días hábiles`],
+          ['Moneda cotizada', currency],
+          ['Nivel contractual', tierInfo.label],
+        ].filter(([, value]) => String(value || '').trim()),
+      },
+      {
+        id: 'project-quote-items',
+        title: 'Partidas ofertadas',
+        headers: ['Ítem', 'Descripción de la partida', 'Unidad', 'Cantidad', `P. unitario (${currency})`, 'Subtotal sin IVA'],
+        widths: [7, 43, 10, 10, 15, 15],
+        rows: partidas.map((item) => [item.num, `${item.nombre}${item.descripcion ? `\n${item.descripcion}` : ''}`, item.unidad, item.cantidad, money(item.precioUnitario, currency), money(item.subtotal, currency)]),
+      },
+      {
+        id: 'project-quote-totals',
+        title: 'Resumen económico',
+        headers: ['Concepto', 'Monto'],
+        widths: [66, 34],
+        rows: [
+          ['Subtotal ofertado sin IVA', money(precioSinIVA, currency)],
+          [`IVA (${(ivaRate * 100).toLocaleString('es-NI')}%)`, money(iva, currency)],
+          ['Total general con IVA', money(precioConIVA, currency)],
+        ],
+      },
+      {
+        id: 'project-quote-payment',
+        title: `Condiciones de pago contractuales (${Math.round(advanceRate * 100)}% / ${Math.round(balanceRate * 100)}%)`,
+        headers: ['Etapa', 'Porcentaje', 'Montos', 'Condición'],
+        widths: [22, 13, 29, 36],
+        rows: [
+          ['Anticipo contractual', `${Math.round(advanceRate * 100)}%`, `${money(anticipo70ConIVA, currency)} con IVA\nBase sin IVA: ${money(anticipo70SinIVA, currency)}`, 'Requisito para emitir órdenes de compra, reservar materiales y habilitar cuadrillas.'],
+          ['Saldo final contra entrega', `${Math.round(balanceRate * 100)}%`, `${money(saldo30ConIVA, currency)} con IVA\nBase sin IVA: ${money(saldo30SinIVA, currency)}`, 'Exigible al culminar los trabajos, completar la inspección técnica y suscribir el Acta de Recepción Conforme.'],
+        ],
+      },
+      {
+        id: 'project-quote-terms',
+        title: 'Términos contractuales y garantías',
+        headers: ['Término', 'Detalle'],
+        widths: [27, 73],
+        rows: [
+          ['Clasificación', tierInfo.label],
+          ['Alcance y cobertura de garantía', tierInfo.garantia],
+          ['Protocolo de entrega y soporte', `${tierInfo.protocolo} ${tierInfo.condicionEntrega}`],
+          ['Validez y plazo de la oferta', tierInfo.validez],
+          ['Formas de pago acordadas', tierInfo.formasPago],
+          ...tierInfo.clausulas.map((clause, index) => [`Cláusula ${index + 1}`, clause]),
+        ],
+      },
+      {
+        id: 'project-quote-approval',
+        title: 'Aprobación y firmas',
+        headers: ['Parte', 'Responsable'],
+        widths: [38, 62],
+        rows: [
+          ['Cliente / representante legal', clientName],
+          ['Representante del proyecto', advisorName],
+        ],
+      },
+    ];
+
+    try {
+      await generateConfiguredReportSectionsPDF({
+        targetKey: 'proyectos.quote',
+        title: 'Cotización de proyecto',
+        tenantName: user?.tenantName || 'Mi Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
+        sections,
+        fileName: buildDatedDownloadFileName([`cotizacion_proyecto_${quoteNumber}`], 'pdf'),
+        save: true,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar la cotización en PDF.');
+    }
   };
 
   const fechaEmision = formatDate(new Date().toISOString());

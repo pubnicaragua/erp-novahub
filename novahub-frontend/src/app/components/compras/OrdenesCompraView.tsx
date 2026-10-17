@@ -2112,7 +2112,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
         title: 'Órdenes de compra',
         rows: exportRows,
         subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, `Estado: ${statusFilter}`, selectedBranchId ? `Sucursal: ${selectedBranchId}` : '', exportFilter === 'approved' ? 'Solo aprobadas' : ''].filter(Boolean).join(' · '),
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.purchase-order',
@@ -2294,7 +2294,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
           totalLabel: 'Total',
           notes: order.notes,
         },
-        tenantName: user?.tenantName || 'Nova Hub',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
       });
       toast.success('PDF descargado', { id: pdfToastId });

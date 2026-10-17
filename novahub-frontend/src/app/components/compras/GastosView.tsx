@@ -244,7 +244,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         title: 'Gastos',
         rows: exportRows,
         subtitle: [`Período: ${appliedRange?.from || 'Inicio abierto'} – ${appliedRange?.to || 'hoy'}`, `Búsqueda: ${searchTerm || 'Todas'}`, `Filtro: ${activeKpiFilter.type === 'none' ? 'Todos' : activeKpiFilter.type}`].join(' · '),
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.expense',
@@ -656,7 +656,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     const exportToastId = toast.loading('Generando PDF del gasto...');
     try {
       await generatePurchaseRecordPDF({
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.expense',

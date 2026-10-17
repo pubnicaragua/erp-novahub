@@ -213,7 +213,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         title: 'Solicitudes de compra',
         rows: exportRows,
         subtitle: [`Búsqueda: ${search || 'Todas'}`, `Estado: ${statusFilter}`, selectedBranchId ? `Sucursal: ${selectedBranchId}` : '', exportFilter === 'approved' ? 'Solo aprobadas' : ''].filter(Boolean).join(' · '),
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.purchase-request',
@@ -498,7 +498,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
           totalLabel: 'Total cotizado',
           notes: request.notes || request.justification,
         },
-        tenantName: user?.tenantName || 'Nova Hub',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
       });
       toast.success('PDF descargado', { id: pdfToastId });

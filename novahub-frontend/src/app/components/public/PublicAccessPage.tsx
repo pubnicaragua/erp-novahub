@@ -208,7 +208,62 @@ function AccessShell({ children, company }: { children: React.ReactNode; company
 
 function OtpForm({ token, mode, maskedTarget, onVerified }: { token: string; mode: 'document' | 'portal'; maskedTarget?: string | null; onVerified: (session: string) => void }) { const [challengeId, setChallengeId] = useState<string | null>(null); const [code, setCode] = useState(''); const [message, setMessage] = useState(''); const requestCode = async () => { try { const result = await publicRequest(`/public-access/${mode}/${token}/otp`, { method: 'POST' }); setChallengeId(result.challengeId); setMessage(result.devCode ? `Código de desarrollo: ${result.devCode}` : `Enviamos un código a ${result.maskedTarget}.`); } catch (error: any) { setMessage(error.message); } }; const verify = async () => { try { const result = await publicRequest(`/public-access/${mode}/${token}/verify`, { method: 'POST', body: JSON.stringify({ challengeId, code }) }); onVerified(result.sessionToken); } catch (error: any) { setMessage(error.message); } }; return <div className="mx-auto max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-7"><LockKeyhole className="mb-4 size-8 text-emerald-400" /><h1 className="text-xl font-semibold">Verifica tu acceso</h1><p className="mt-2 text-sm text-slate-400">Por seguridad necesitamos confirmar tu identidad{maskedTarget ? ` en ${maskedTarget}` : ''}.</p>{message && <p className="mt-4 rounded-lg bg-slate-800 p-3 text-sm text-emerald-300">{message}</p>}{!challengeId ? <button onClick={requestCode} className="mt-6 w-full rounded-xl bg-emerald-500 px-4 py-3 font-semibold text-slate-950">Enviar código</button> : <div className="mt-6 space-y-3"><input value={code} onChange={e => setCode(e.target.value)} inputMode="numeric" maxLength={6} placeholder="Código de 6 dígitos" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-[var(--portal-primary)]" /><button onClick={verify} className="w-full rounded-xl bg-emerald-500 px-4 py-3 font-semibold text-slate-950">Continuar</button></div>}</div>; }
 
-function DocumentView({ data, permissions }: { data: any; permissions: any }) { const { company, document, customer, items } = data; return <AccessShell company={company}><section className="rounded-2xl border border-slate-800 bg-white p-6 text-slate-900 shadow-2xl print:shadow-none"><div className="flex justify-between border-b border-slate-200 pb-5"><div><h1 className="text-2xl font-bold text-emerald-600">{company.name}</h1><p className="text-sm text-slate-500">{labelFor(data.type, documentTypeLabels, 'Documento')}</p></div><div className="text-right"><h2 className="text-xl font-bold uppercase">{document.number}</h2><p className="text-sm text-slate-500">Fecha: {formatDate(document.date)}</p><p className="text-sm text-slate-500">Estado: {labelFor(document.status, statusLabels, 'Emitido')}</p></div></div><div className="grid gap-4 py-5 sm:grid-cols-2"><div><p className="text-xs font-bold uppercase text-emerald-600">Datos del cliente</p><p className="font-semibold">{customer.name}</p><p className="text-sm text-slate-500">{customer.razonSocial || ''}</p><p className="text-sm text-slate-500">{customer.email || customer.phone || ''}</p><p className="text-sm text-slate-500">{customer.address || ''}{customer.city ? ` · ${customer.city}` : ''}</p></div><div className="text-left sm:text-right"><p className="text-xs font-bold uppercase text-slate-500">Información comercial</p><p className="text-sm">Código: {customer.code || '—'}</p><p className="text-sm">Identificación fiscal: {customer.ruc || customer.taxId || '—'}</p></div></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-emerald-500 text-white"><th className="p-3 text-left">Descripción</th><th className="p-3 text-right">Cantidad</th><th className="p-3 text-right">Precio unitario</th><th className="p-3 text-right">Total</th></tr></thead><tbody>{items.length ? items.map((item: any, index: number) => <tr key={index} className="border-b border-slate-200"><td className="p-3"><PublicItemDescription item={item} /></td><td className="p-3 text-right">{item.quantity}</td><td className="p-3 text-right">{formatAmount(item.unitPrice, document.currency)}</td><td className="p-3 text-right">{formatAmount(item.total, document.currency)}</td></tr>) : <tr><td colSpan={4} className="p-5 text-center text-slate-500">Sin líneas de detalle</td></tr>}</tbody></table></div><div className="mt-6 ml-auto max-w-xs space-y-2 text-right"><p>Subtotal: {formatAmount(document.subtotal, document.currency)}</p><p>Impuestos: {formatAmount(document.taxAmount, document.currency)}</p><AdditionalChargesSummary document={document} light /><p className="border-t border-slate-200 pt-2 text-lg font-bold text-emerald-600">Total: {formatAmount(document.total, document.currency)}</p></div><div className="mt-8 flex gap-3 print:hidden">{permissions.print && <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 font-semibold"><Printer className="size-4" /> Imprimir</button>}{permissions.download && <button onClick={() => window.print()} className="rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white">Descargar PDF</button>}</div></section></AccessShell>; }
+function DocumentView({ data, permissions }: { data: any; permissions: any }) {
+  const { company, document, customer, items = [] } = data;
+  const [pdfAction, setPdfAction] = useState<'print' | 'download' | null>(null);
+  const [pdfError, setPdfError] = useState('');
+
+  const exportDocument = async (action: 'print' | 'download') => {
+    const printWindow = action === 'print' ? window.open('', '_blank') : null;
+    if (action === 'print' && !printWindow) {
+      setPdfError('No se pudo abrir la vista de impresión. Habilita las ventanas emergentes para NovaHub.');
+      return;
+    }
+    setPdfError('');
+    setPdfAction(action);
+    try {
+      const { blob } = await generateEstimatePDF({
+        estimate: { ...document, customer, items },
+        tenantName: company?.name || 'Empresa',
+        tenantLogo: company?.logo || undefined,
+        formatAmount: (amount: number, currency = document.currency || 'NIO') => formatAmount(amount, currency),
+        documentType: portalPdfTypes[data.type] || 'invoice',
+        designOverride: data.pdfDesigns?.[portalDesignKeys[data.type]] || undefined,
+        save: action === 'download',
+      });
+      if (printWindow) {
+        const pdfUrl = URL.createObjectURL(blob);
+        printWindow.location.replace(pdfUrl);
+        window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 10 * 60 * 1000);
+      }
+    } catch (error: any) {
+      printWindow?.close();
+      setPdfError(error?.message || 'No se pudo generar el PDF.');
+    } finally {
+      setPdfAction(null);
+    }
+  };
+
+  return <AccessShell company={company}>
+    <section className="rounded-2xl border border-slate-800 bg-white p-6 text-slate-900 shadow-2xl print:shadow-none">
+      <div className="flex justify-between border-b border-slate-200 pb-5">
+        <div><h1 className="text-2xl font-bold text-emerald-600">{company.name}</h1><p className="text-sm text-slate-500">{labelFor(data.type, documentTypeLabels, 'Documento')}</p></div>
+        <div className="text-right"><h2 className="text-xl font-bold uppercase">{document.number}</h2><p className="text-sm text-slate-500">Fecha: {formatDate(document.date)}</p><p className="text-sm text-slate-500">Estado: {labelFor(document.status, statusLabels, 'Emitido')}</p></div>
+      </div>
+      <div className="grid gap-4 py-5 sm:grid-cols-2">
+        <div><p className="text-xs font-bold uppercase text-emerald-600">Datos del cliente</p><p className="font-semibold">{customer.name}</p><p className="text-sm text-slate-500">{customer.razonSocial || ''}</p><p className="text-sm text-slate-500">{customer.email || customer.phone || ''}</p><p className="text-sm text-slate-500">{customer.address || ''}{customer.city ? ` · ${customer.city}` : ''}</p></div>
+        <div className="text-left sm:text-right"><p className="text-xs font-bold uppercase text-slate-500">Información comercial</p><p className="text-sm">Código: {customer.code || '—'}</p><p className="text-sm">Identificación fiscal: {customer.ruc || customer.taxId || '—'}</p></div>
+      </div>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-emerald-500 text-white"><th className="p-3 text-left">Descripción</th><th className="p-3 text-right">Cantidad</th><th className="p-3 text-right">Precio unitario</th><th className="p-3 text-right">Total</th></tr></thead><tbody>{items.length ? items.map((item: any, index: number) => <tr key={index} className="border-b border-slate-200"><td className="p-3"><PublicItemDescription item={item} /></td><td className="p-3 text-right">{item.quantity}</td><td className="p-3 text-right">{formatAmount(item.unitPrice, document.currency)}</td><td className="p-3 text-right">{formatAmount(item.total, document.currency)}</td></tr>) : <tr><td colSpan={4} className="p-5 text-center text-slate-500">Sin líneas de detalle</td></tr>}</tbody></table></div>
+      <div className="mt-6 ml-auto max-w-xs space-y-2 text-right"><p>Subtotal: {formatAmount(document.subtotal, document.currency)}</p><p>Impuestos: {formatAmount(document.taxAmount, document.currency)}</p><AdditionalChargesSummary document={document} light /><p className="border-t border-slate-200 pt-2 text-lg font-bold text-emerald-600">Total: {formatAmount(document.total, document.currency)}</p></div>
+      {pdfError && <p role="alert" className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{pdfError}</p>}
+      <div className="mt-8 flex gap-3 print:hidden">
+        {permissions.print && <button disabled={pdfAction !== null} onClick={() => void exportDocument('print')} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 font-semibold disabled:opacity-60"><Printer className="size-4" /> {pdfAction === 'print' ? 'Preparando…' : 'Imprimir'}</button>}
+        {permissions.download && <button disabled={pdfAction !== null} onClick={() => void exportDocument('download')} className="rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white disabled:opacity-60">{pdfAction === 'download' ? 'Preparando…' : 'Descargar PDF'}</button>}
+      </div>
+    </section>
+  </AccessShell>;
+}
 
 function LegacyPortalView({ data }: { data: any }) {
   const customer = data.customer;
