@@ -423,7 +423,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
         title: 'Pagos realizados',
         rows: exportRows,
         subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, selectedBranchId ? `Sucursal: ${selectedBranchId}` : '', exportFilter !== 'all' ? `Método: ${exportFilter}` : 'Método: Todos'].filter(Boolean).join(' · '),
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.payment-made',
@@ -663,7 +663,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
     try {
       const paymentRows = payment.payments?.length ? payment.payments : [payment];
       await generatePurchaseRecordPDF({
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.payment-made',

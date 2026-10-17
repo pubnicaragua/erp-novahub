@@ -2,8 +2,6 @@ import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'r
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { subscriptionsService } from '../../services/subscriptions.service';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
 import { toast } from '@/app/services/toast';
 import { applyDashboardExcelTableStyle } from '../../utils/reportExportUtils';
@@ -11,18 +9,10 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, Scale, RefreshCw, UserMinus } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-
-function hexToRgb(hex: string): [number, number, number] {
-  const normalized = String(hex || '').trim().replace(/^#/, '');
-  const expanded = normalized.length === 3
-    ? normalized.split('').map((value) => `${value}${value}`).join('')
-    : normalized;
-  const value = Number.parseInt(expanded, 16);
-  if (!Number.isFinite(value) || expanded.length !== 6) return [16, 185, 129];
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
-}
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -147,19 +137,6 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
     exportPDF: async () => {
       toast.info("Generando PDF (Suscripciones)...");
       try {
-        const doc = new jsPDF();
-        const primaryColor = themeConfig.colors.primary || '#10b981';
-        const rgbPrimary = hexToRgb(primaryColor);
-        const primaryHex = '#' + rgbPrimary.map(x => x.toString(16).padStart(2, '0')).join('');
-        let currentY = 20;
-
-        doc.setFontSize(18);
-        doc.text("Reporte de Suscripciones SaaS", 14, currentY);
-        currentY += 10;
-        doc.setFontSize(10);
-        doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')} | Moneda: ${displayCurrency}`, 14, currentY);
-        currentY += 10;
-
         const metrics = [
           ['MRR (Ingreso Mensual)', formatConvertedAmount(mrr, 'NIO')],
           ['Suscripciones Activas', activeSubs.length.toString()],
@@ -167,16 +144,22 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
           ['LTV Proyectado', formatConvertedAmount(ltv, 'NIO')],
           ['Churn (Periodo)', churnedThisPeriod.toString()]
         ];
-        
-        autoTable(doc, {
-          startY: currentY,
-          head: [['Métrica', 'Valor']],
-          body: metrics,
-          theme: 'grid',
-          headStyles: { fillColor: primaryHex as any }
-        });
 
-        doc.save(`Suscripciones_${new Date().getTime()}.pdf`);
+        await generateConfiguredReportSectionsPDF({
+          targetKey: 'reportes.subscriptions',
+          title: 'Reporte de Suscripciones SaaS',
+          tenantName: themeConfig.tenantName || 'Mi Empresa',
+          tenantLogo: themeConfig.logo || null,
+          sections: [{
+            id: 'subscriptions-metrics',
+            title: 'Indicadores de suscripciones',
+            headers: ['Métrica', 'Valor'],
+            widths: [62, 38],
+            rows: metrics,
+          }],
+          fileName: buildDatedDownloadFileName(['reporte_suscripciones'], 'pdf'),
+          periodLabel: dateRange,
+        });
         toast.success("PDF Exportado");
       } catch (e) {
         toast.error("Error exportando PDF");

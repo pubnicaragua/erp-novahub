@@ -15,6 +15,7 @@ try {
   const catalog = await server.ssrLoadModule('/src/app/services/pdf-document-catalog.ts');
   const definitions = await server.ssrLoadModule('/src/app/services/pdf-template-definition.ts');
   const renderer = await server.ssrLoadModule('/src/app/utils/pdf-template-renderer.ts');
+  const styles = await server.ssrLoadModule('/src/app/services/pdf-document-style.ts');
   const generator = await server.ssrLoadModule('/src/app/utils/pdfGenerator.ts');
   const targets = catalog.PDF_TEMPLATE_TARGETS;
 
@@ -39,8 +40,72 @@ try {
   assert.equal(normalizedCompany.bankInfo, 'Cuenta real de la empresa', 'La normalización debe conservar los otros ajustes del diseño.');
   assert.equal(definitions.SYSTEM_DEFAULT_PDF_SETTINGS.email, '', 'Las plantillas nuevas deben dejar vacíos los datos de empresa no configurados.');
 
-  assert.equal(targets.length, 76, 'El catálogo debe incluir las 76 salidas activas montadas.');
+  assert.deepEqual(styles.PDF_STYLE_PRESETS.map(item => item.id), ['light', 'boxed', 'bold', 'striped', 'bubble', 'wave', 'folder'], 'El editor debe ofrecer los siete estilos del piloto.');
+  const styleSource = definitions.createDefaultTemplateDefinition('ventas.estimate', definitions.createSystemDefaultPdfDesign('ventas.estimate').settings);
+  const sourceTable = styleSource.nodes.find(node => node.type === 'table');
+  assert.ok(sourceTable, 'La cotización de ejemplo debe incluir su tabla.');
+  const styleConfig = styles.createDefaultPdfStyleConfig('ventas.estimate');
+  const stripedPreset = styles.PDF_STYLE_PRESETS.find(item => item.id === 'striped');
+  const styledDefinition = styles.applyPdfStyleToDefinition(styleSource, { ...styleConfig, presetId: 'striped', palette: stripedPreset.palette, fontFamily: 'Georgia', fontSize: 10 });
+  const styledTable = styledDefinition.nodes.find(node => node.id === sourceTable.id);
+  const styledHeaderRule = styledDefinition.nodes.find(node => node.id === 'header-accent');
+  assert.deepEqual(
+    styledDefinition.nodes.map(({ id, x, y, width, height, page }) => ({ id, x, y, width, height, page })),
+    styleSource.nodes.map(({ id, x, y, width, height, page }) => ({ id, x, y, width, height, page })),
+    'Aplicar un estilo no debe mover ni cambiar las dimensiones de los elementos.'
+  );
+  assert.deepEqual(
+    styledTable.columns.map(({ id, width, align }) => ({ id, width, align })),
+    sourceTable.columns.map(({ id, width, align }) => ({ id, width, align })),
+    'El estilo no debe cambiar el orden ni los anchos de las columnas.'
+  );
+  assert.equal(styledTable.tableStripeColor, stripedPreset.palette.tableStripe);
+  assert.equal(styledTable.fontFamily, 'Georgia', 'La fuente elegida se debe aplicar al contenido.');
+  assert.ok(styledHeaderRule, 'La composición predeterminada representa el encabezado con un divisor, no con una sección de fondo.');
+  assert.equal(styledHeaderRule.backgroundColor, undefined, 'El divisor del encabezado no debe convertirse en un bloque de fondo.');
+  assert.equal(styledHeaderRule.borderColor, stripedPreset.palette.primary, 'El estilo de encabezado debe aplicarse al divisor visible.');
+  assert.equal(styles.resolvePdfTableRowBackground('striped', stripedPreset.palette, 1), stripedPreset.palette.tableStripe, 'Las filas impares deben mostrar el color alterno del estilo.');
+  assert.equal(styles.resolvePdfTableRowBackground('striped', stripedPreset.palette, 0), stripedPreset.palette.tableRow, 'Las filas pares deben mantener el color base.');
+  assert.notEqual(styles.getPdfTablePresentation('boxed').rowGap, styles.getPdfTablePresentation('bubble').rowGap, 'Los estilos de tabla deben cambiar su presentación, no solo los colores.');
+  const ledgerSettings = definitions.createSystemDefaultPdfDesign('contabilidad.ledger').settings;
+  const ledgerDefinition = definitions.createDefaultTemplateDefinition('contabilidad.ledger', ledgerSettings);
+  const reportTable = { id: 'report-style-sample', type: 'report-sections', label: 'Muestra de reporte', x: 5, y: 20, width: 90, height: 50, reportSectionStyles: { '__test': { rowColor: '#ffffff' } } };
+  const reportStyleDefinition = { ...ledgerDefinition, nodes: [...ledgerDefinition.nodes, reportTable] };
+  const stripedReport = styles.applyPdfStyleToDefinition(reportStyleDefinition, { ...styleConfig, presetId: 'striped', tableStyle: 'striped', palette: stripedPreset.palette });
+  const styledReportTable = stripedReport.nodes.find(node => node.id === reportTable.id);
+  assert.ok(Object.values(styledReportTable.reportSectionStyles || {}).every(section => !section.rowColor), 'Los reportes deben permitir que el estilo de franjas pinte las filas alternas.');
+  assert.ok(styles.isPdfFrameHeaderNode({ id: 'company-logo' }));
+  assert.ok(styles.isPdfFrameHeaderNode({ id: 'header-band' }));
+  assert.ok(styles.isPdfFrameFooterNode({ id: 'footer-page' }));
+  assert.equal(styles.isPdfFrameHeaderNode({ id: 'items-table' }), false, 'El marco HTML no debe ocultar el contenido del ERP.');
+  assert.throws(() => styles.sanitizePdfTemplateCss('.pdf-header { background-image: url(https://example.com/x); }'), /recurso externo|CSS no permitido/i);
+  assert.match(styles.sanitizePdfTemplateCss('.pdf-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .pdf-header .company-brand { display: flex; align-items: center; gap: 10px; } .pdf-header .company-copy p { font-size: 9px; }'), /display: flex/i, 'El marco debe permitir una distribución segura del encabezado y sus componentes.');
+  assert.throws(() => styles.sanitizePdfTemplateCss('.pdf-content { display: flex; }'), /solo puede seleccionar el encabezado o el pie/i, 'El HTML importado no debe cambiar la distribución del cuerpo del ERP.');
+  assert.equal(styles.normalizePdfFontFamily('Mystery Font'), 'Arial', 'Las fuentes importadas fuera del catálogo deben asignarse a una fuente admitida.');
+  for (const maliciousHtml of [
+    '<script>alert(1)</script>',
+    '<iframe src="https://example.com"></iframe>',
+    '<img src="https://example.com/logo.png" onerror="alert(1)">',
+  ]) assert.throws(() => styles.parsePdfHtmlShell(maliciousHtml), /scripts|recursos remotos|etiquetas no admitidas/i, 'El importador debe rechazar scripts, iframes, eventos y recursos remotos.');
+
+  assert.equal(targets.length, 78, 'El catálogo debe incluir las 78 salidas PDF activas encontradas en los módulos.');
   assert.equal(new Set(targets.map(({ key }) => key)).size, targets.length, 'Las claves del catálogo deben ser únicas.');
+  assert.ok(targets.some(target => target.key === 'contabilidad.balance-sheet'), 'El balance general de Contabilidad debe tener un destino propio.');
+  assert.ok(targets.some(target => target.key === 'restaurante.menu'), 'La carta del Restaurante debe tener un destino propio.');
+  for (const target of targets) {
+    const fixed = target.templateMode === 'fixed';
+    assert.equal(definitions.isStandardPdfLayoutTarget(target.key), !fixed, `${target.key} debe heredar el patrón global salvo formatos físicos.`);
+    if (fixed) continue;
+    const settings = definitions.createSystemDefaultPdfDesign(target.key).settings;
+    const definition = definitions.createDefaultTemplateDefinition(target.key, settings);
+    const byId = new Map(definition.nodes.map(node => [node.id, node]));
+    assert.equal(byId.get('header-accent')?.y, 4, `${target.key} debe conservar la regla superior común.`);
+    assert.equal(byId.get('company-name')?.x, 5, `${target.key} debe alinear los datos de empresa al margen útil izquierdo.`);
+    assert.equal(byId.get('company-logo')?.x, 75, `${target.key} debe alinear el logo al margen útil derecho.`);
+    assert.ok(byId.get('document-title')?.y >= 20, `${target.key} debe ubicar el título después del bloque de identidad.`);
+    assert.equal(byId.get('footer-divider')?.y, 95.35, `${target.key} debe usar la franja de pie común.`);
+    assert.equal(byId.has('notes') || byId.has('document-notes'), false, `${target.key} no debe incluir el bloque de notas del documento.`);
+  }
   for (const key of ['contabilidad.journal', 'contabilidad.ledger', 'portal.customer-summary']) {
     assert.ok(targets.some(target => target.key === key), `Falta el destino ${key}.`);
   }
@@ -68,6 +133,10 @@ try {
     const settings = definitions.createSystemDefaultPdfDesign(target.key).settings;
     const definition = definitions.createDefaultTemplateDefinition(target.key, settings);
     assert.ok(definition.nodes.length > 0, `${target.key} necesita una estructura canvas inicial.`);
+    if (definitions.isStandardPdfLayoutTarget(target.key)) {
+      assert.ok(definitions.hasCurrentStandardPdfLayout(target.key, definition), `${target.key} debe usar la versión predeterminada vigente.`);
+      assert.equal(definition.nodes.some(node => ['notes', 'document-notes'].includes(node.id)), false, `${target.key} no debe imprimir el bloque de notas del documento.`);
+    }
     assert.ok(sample.document?.title, `${target.key} necesita un título de muestra.`);
     const hasRows = Boolean(sample.items?.length || sample.history?.length || sample.reportSections?.some(section => section.rows.length));
     const hasKpis = Boolean(sample.reportKpis?.length);
@@ -77,15 +146,42 @@ try {
       assert.ok(['LABEL', 'ROLL-80'].includes(settings.paperSize), `${target.key} debe conservar su papel físico.`);
     } else {
       assert.equal(settings.paperSize, 'LETTER', `${target.key} debe iniciar en Carta.`);
-      assert.equal(settings.orientation, 'portrait', `${target.key} debe iniciar en orientación vertical.`);
+      assert.equal(settings.orientation, target.key === 'ventas.customers' ? 'landscape' : 'portrait', `${target.key} debe iniciar en la orientación que conserva la lectura de sus columnas.`);
       const paper = generator.pdfDesignPaper({ paperSize: 'A4', orientation: 'landscape' });
       assert.equal(paper.format, 'letter', 'La política estándar debe normalizar A4 a Carta.');
       assert.equal(paper.orientation, 'portrait', 'La política estándar debe normalizar horizontal a vertical.');
+      const customerListPaper = generator.pdfDesignPaper({ paperSize: 'LETTER', orientation: 'landscape' }, 'ventas.customers');
+      assert.equal(customerListPaper.orientation, 'landscape', 'El listado de clientes debe conservar el formato horizontal incluso en la ruta rápida de exportación.');
       const pdf = new jsPDF(paper);
       assert.equal(Math.round(pdf.internal.pageSize.getWidth()), 216, 'Carta debe medir 216 mm de ancho.');
       assert.equal(Math.round(pdf.internal.pageSize.getHeight()), 279, 'Carta debe medir 279 mm de alto.');
     }
   }
+
+  const customerHistoryDefinition = definitions.createDefaultTemplateDefinition('ventas.customer-history', definitions.createSystemDefaultPdfDesign('ventas.customer-history').settings);
+  const customerHistoryTitle = customerHistoryDefinition.nodes.find(node => node.id === 'document-title');
+  const customerHistoryPartyName = customerHistoryDefinition.nodes.find(node => node.id === 'history-customer-name');
+  assert.equal(customerHistoryTitle.x, 55, 'El título del historial del cliente debe ocupar la banda derecha.');
+  assert.equal(customerHistoryTitle.align, 'right', 'El título del historial debe alinearse a la derecha, frente al nombre de la entidad.');
+  assert.equal(customerHistoryPartyName.x, 5, 'El nombre del cliente debe iniciar a la izquierda en la misma banda que el título.');
+
+  const customerListDefinition = definitions.createDefaultTemplateDefinition('ventas.customers', definitions.createSystemDefaultPdfDesign('ventas.customers').settings);
+  const customerListSections = customerListDefinition.nodes.find(node => node.id === 'report-sections');
+  assert.equal(customerListSections.x, 5, 'El listado de clientes debe usar el margen de la zona útil.');
+  assert.equal(customerListSections.width, 90, 'El listado de clientes debe ocupar todo el ancho útil.');
+  assert.equal(customerListSections.backgroundColor, 'transparent', 'El listado de clientes no debe usar una tarjeta exterior.');
+  assert.equal(customerListSections.borderColor, 'transparent', 'El listado de clientes no debe usar un recuadro exterior.');
+  assert.deepEqual(customerListSections.columns.map(column => column.width), [10, 18, 12, 16, 24, 12, 8], 'El listado de clientes debe reservar espacio suficiente para tipo y contacto.');
+
+  const purchaseListDefinition = definitions.createDefaultTemplateDefinition('compras.list', definitions.createSystemDefaultPdfDesign('compras.list').settings);
+  const purchaseListTable = purchaseListDefinition.nodes.find(node => node.id === 'items-table');
+  assert.equal(purchaseListTable.y, 27.5, 'El listado de compras debe acercar la tabla al título cuando no hay metadatos.');
+  assert.equal(purchaseListTable.width, 90, 'El listado de compras debe usar todo el ancho útil.');
+
+  const supplierHistoryDefinition = definitions.createDefaultTemplateDefinition('compras.supplier-history', definitions.createSystemDefaultPdfDesign('compras.supplier-history').settings);
+  assert.equal(supplierHistoryDefinition.nodes.find(node => node.id === 'document-title').x, 55, 'El título del historial de proveedor debe ocupar la banda derecha.');
+  assert.equal(supplierHistoryDefinition.nodes.find(node => node.id === 'party-name').x, 5, 'El nombre del proveedor debe ocupar el lado izquierdo de la banda del título.');
+  assert.equal(supplierHistoryDefinition.nodes.find(node => node.id === 'party-name').width, 44, 'El nombre del proveedor debe dejar libre la banda derecha para el título.');
 
   const dashboard = definitions.createPdfTemplateSampleData('dashboard.tenant-overview');
   const dashboardDefinition = definitions.createDefaultTemplateDefinition('dashboard.tenant-overview', definitions.createSystemDefaultPdfDesign('dashboard.tenant-overview').settings);

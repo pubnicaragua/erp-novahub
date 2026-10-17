@@ -288,7 +288,7 @@ export function SupplierDetailDrawer({
       await generateSupplierHistoryPDF({
         supplier,
         items: outputItems,
-        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Nuestra Empresa',
+        tenantName: user?.sessionBranding?.name || user?.tenantName || '',
         tenantLogo: themeConfig?.logo,
         // La moneda ya se identifica en el encabezado de las columnas.
         // En las celdas solo debe aparecer el símbolo (C$ o $), no el código

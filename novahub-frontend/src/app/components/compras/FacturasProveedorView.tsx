@@ -460,7 +460,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
       await generatePurchaseRecordPDF({
         format,
         targetKey: 'compras.supplier-invoice',
-        tenantName: user?.tenantName || 'Nova Hub',
+        tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
         document: {
           title: 'Factura de proveedor',

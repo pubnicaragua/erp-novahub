@@ -1046,6 +1046,7 @@ export async function generateNovaHubCommercialPDF({
       fontSize: 8.5,
       cellPadding: 4,
       halign: 'left',
+      valign: 'middle',
     },
     bodyStyles: {
       textColor: textColor,
@@ -1055,6 +1056,7 @@ export async function generateNovaHubCommercialPDF({
       lineWidth: 0.15,
       valign: 'middle',
     },
+    styles: { valign: 'middle' },
     columnStyles: tableColumnStyles,
     alternateRowStyles: {
       fillColor: [248, 250, 252],
@@ -1252,25 +1254,10 @@ export async function generateNovaHubCommercialPDF({
     }
   });
 
-  // Notas y Condiciones (Alineadas a la izquierda al lado de los totales)
+  // Las notas del documento se conservan en los datos, pero no se exportan en el diseño predeterminado.
   const notesWidth = contentWidth - totalsWidth - 6;
   const notesX = margin;
   let notesCursorY = finalY + 4;
-
-  if (estimate.notes && typeof estimate.notes === 'string' && estimate.notes.trim()) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-    doc.text('Notas y Observaciones:', notesX, notesCursorY);
-    notesCursorY += 5;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(mutedTextColor[0], mutedTextColor[1], mutedTextColor[2]);
-    const splitNotes = doc.splitTextToSize(estimate.notes.trim(), notesWidth);
-    doc.text(splitNotes, notesX, notesCursorY);
-    notesCursorY += splitNotes.length * 3.6 + 4;
-  }
 
   // Si hubo campos adicionales que se desbordaron o son muy extensos, listarlos completos aquí
   if (hasOverflowedCustomFields && customFieldsList.length > 0) {

@@ -456,10 +456,14 @@ export function CustomerDetailDrawer({
           ).toFixed(2)),
           currency: historyExportCurrency,
         })),
-        customerName: customer.name || 'Cliente',
-        customerData: customer,
+        customerName: customer.name || '',
+        customerData: customer ? {
+          ...customer,
+          balanceDue: customerDebt > 0 ? formatConvertedAmount(customerDebt, baseCurrency) : '',
+          balanceFavor: customerFavor > 0 ? formatConvertedAmount(customerFavor, baseCurrency) : '',
+        } : undefined,
         branchName: customer.branchName,
-        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Empresa',
+        tenantName: user?.sessionBranding?.name || user?.tenantName || '',
         tenantLogo: themeConfig?.logo,
         primaryColor: themeConfig?.colors?.primary,
         outputCurrency: historyExportCurrency,
@@ -1098,9 +1102,9 @@ function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName, 
     : transaction.kind === 'Orden de venta'
       ? 'order'
       : transaction.kind === 'Nota de crédito'
-        ? 'return'
+        ? 'credit-note'
         : transaction.kind === 'Crédito'
-          ? 'credit-note'
+          ? 'credit'
           : transaction.kind === 'Pago recibido'
             ? 'payment'
             : transaction.kind === 'Factura recurrente'

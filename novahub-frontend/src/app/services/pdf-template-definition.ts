@@ -85,6 +85,8 @@ export interface PdfTemplateNode {
   borderColor?: string;
   borderStyle?: 'solid' | 'dashed' | 'dotted' | 'double' | 'none';
   borderRadius?: number;
+  pdfHeaderDecoration?: 'rule' | 'box' | 'band' | 'soft' | 'wave' | 'tab';
+  pdfHeaderAccentColor?: string;
   shape?: 'rectangle' | 'pill' | 'wave' | 'wave-bottom' | 'circle' | 'angled' | 'blob' | 'arc';
   clipPath?: string;
   rotation?: number;
@@ -133,7 +135,84 @@ export interface PdfTemplateDefinition {
   version: 1;
   page: { paperSize: string; orientation: 'portrait' | 'landscape'; background: string };
   nodes: PdfTemplateNode[];
-  metadata?: { importedFrom?: 'html' | 'docx' | 'pdf'; importWarnings?: string[]; preset?: string };
+  metadata?: { importedFrom?: 'html' | 'docx' | 'pdf'; importWarnings?: string[]; preset?: string; pdfStyleConfig?: unknown; [key: string]: unknown };
+}
+
+export type PdfHeaderComposition = 'company-left-logo-right' | 'logo-left-company-right' | 'centered-stack';
+
+/**
+ * Marca la estructura empresarial compartida por los documentos de venta.
+ * Los diseños guardados antes de esta versión se reconstruyen con la base del
+ * ERP para que sus nodos de texto importados no sustituyan tablas o secciones.
+ */
+export const SALES_PDF_LAYOUT_VERSION = 'sales-document-v3';
+export const PURCHASE_PDF_LAYOUT_VERSION = 'purchase-document-v2';
+const SALES_PDF_REPORT_LAYOUT_VERSION = 'sales-report-v4';
+const SALES_PDF_REPORT_LAYOUT_VERSIONS_BY_TARGET: Record<string, string> = {
+  'ventas.cash-session': 'sales-report-v4',
+  'ventas.cash-historical-report': 'sales-report-v4',
+  'ventas.customer-history': 'sales-report-v4',
+  'ventas.customers': 'sales-report-v4',
+};
+
+const STANDARD_SALES_REPORT_TARGETS = [
+  'ventas.cash-session',
+  'ventas.cash-historical-report',
+  'ventas.customer-history',
+  'ventas.customers',
+];
+
+export function isSalesPdfLayoutTarget(targetKey: string) {
+  const target = getPdfTemplateTarget(targetKey);
+  return target.module === 'ventas'
+    && (target.structure === 'transaction'
+      || target.key === 'ventas.payment'
+      || ['ventas.cash-session', 'ventas.cash-historical-report', 'ventas.customer-history', 'ventas.customers'].includes(target.key));
+}
+
+export function isPurchasePdfLayoutTarget(targetKey: string) {
+  return getPdfTemplateTarget(targetKey).module === 'compras';
+}
+
+export function isStandardPdfLayoutTarget(targetKey: string) {
+  return !isPdfTemplateFixed(targetKey);
+}
+
+export function salesPdfLayoutVersionForTarget(targetKey: string) {
+  const target = getPdfTemplateTarget(targetKey);
+  return SALES_PDF_REPORT_LAYOUT_VERSIONS_BY_TARGET[target.key]
+    || (STANDARD_SALES_REPORT_TARGETS.includes(target.key) ? SALES_PDF_REPORT_LAYOUT_VERSION : SALES_PDF_LAYOUT_VERSION);
+}
+
+export function hasCurrentSalesPdfLayout(targetKey: string, definition: PdfTemplateDefinition | null | undefined) {
+  if (!isSalesPdfLayoutTarget(targetKey)) return true;
+  return definition?.metadata?.salesLayoutVersion === salesPdfLayoutVersionForTarget(targetKey);
+}
+
+export function hasCurrentStandardPdfLayout(targetKey: string, definition: PdfTemplateDefinition | null | undefined) {
+  if (isSalesPdfLayoutTarget(targetKey)) return hasCurrentSalesPdfLayout(targetKey, definition);
+  if (!isPurchasePdfLayoutTarget(targetKey)) return true;
+  return definition?.metadata?.purchaseLayoutVersion === PURCHASE_PDF_LAYOUT_VERSION;
+}
+
+/** Mantiene las tablas de ventas con rejilla completa en el patrón inicial. */
+export function applySalesPdfLayoutSettings<T extends Record<string, unknown>>(targetKey: string, settings: T): T {
+  return isSalesPdfLayoutTarget(targetKey)
+    ? { ...settings, tableLayout: 'boxed', pdfTableStyle: 'boxed' }
+    : settings;
+}
+
+export function applyStandardPdfLayoutSettings<T extends Record<string, unknown>>(targetKey: string, settings: T): T {
+  if (isSalesPdfLayoutTarget(targetKey)) return applySalesPdfLayoutSettings(targetKey, settings);
+  if (!isPurchasePdfLayoutTarget(targetKey)) return settings;
+  return {
+    ...settings,
+    tableLayout: 'boxed',
+    pdfTableStyle: 'boxed',
+    ...(getPdfTemplateTarget(targetKey).key === 'compras.supplier-history'
+      ? { paperSize: 'LETTER', orientation: 'landscape', fontSize: 9 }
+      : {}),
+  };
 }
 
 export interface PdfTemplateData {
@@ -162,7 +241,8 @@ export const TEMPLATE_TOKENS = [
   { token: 'company.phone', label: 'Teléfono', sample: '+505 2255-0000' },
   { token: 'company.email', label: 'Correo', sample: 'contacto@empresa.com' },
   { token: 'company.website', label: 'Sitio web', sample: 'www.empresa.com' },
-  { token: 'company.summary', label: 'Datos de la sucursal', sample: 'Soluciones simples para crecer · RUC J0310000000000 · Managua, Nicaragua · +505 2255-0000 · contacto@empresa.com · www.empresa.com' },
+  { token: 'company.footerText', label: 'Texto del pie', sample: 'Gracias por confiar en nosotros.' },
+  { token: 'company.summary', label: 'Datos de la sucursal', sample: 'Soluciones simples para crecer\nManagua, Nicaragua\nRUC J0310000000000 · +505 2255-0000 · contacto@empresa.com · www.empresa.com' },
   { token: 'document.title', label: 'Título del documento', sample: 'COTIZACIÓN' },
   { token: 'document.number', label: 'Número', sample: 'COT-000123' },
   { token: 'document.date', label: 'Fecha', sample: '29/08/2026' },
@@ -180,6 +260,7 @@ export const TEMPLATE_TOKENS = [
   { token: 'customer.address', label: 'Dirección del cliente', sample: 'Dirección del cliente' },
   { token: 'customer.phone', label: 'Teléfono del cliente', sample: '+505 8888-0000' },
   { token: 'customer.email', label: 'Correo del cliente', sample: 'cliente@empresa.com' },
+  { token: 'customer.balanceSummary', label: 'Saldo del cliente', sample: 'En contra: C$ 1,150.00' },
   { token: 'supplier.name', label: 'Proveedor', sample: 'Proveedor de ejemplo' },
   { token: 'supplier.taxId', label: 'Identificación del proveedor', sample: 'J0310000000000' },
   { token: 'supplier.address', label: 'Dirección del proveedor', sample: 'Managua, Nicaragua' },
@@ -227,7 +308,7 @@ export const SYSTEM_DEFAULT_PDF_SETTINGS: Record<string, unknown> = {
   showBarcode: false,
   watermark: '',
   watermarkOpacity: 12,
-  footerText: 'Gracias por confiar en nosotros.',
+  footerText: '',
   showPageNumber: true,
   pageNumberFormat: 'page-of',
   pageNumberCustom: 'Página {page} de {pages}',
@@ -249,13 +330,20 @@ export const SYSTEM_DEFAULT_PDF_SETTINGS: Record<string, unknown> = {
 /**
  * Política de papel para las salidas PDF del ERP.
  *
- * Los documentos semánticos se imprimen siempre en Carta vertical. Los
- * destinos físicos (tickets, rollos y etiquetas) conservan sus dimensiones
- * porque dependen de una impresora o material no estándar.
+ * Los documentos semánticos usan Carta vertical salvo el listado de clientes,
+ * cuyo ancho de columnas necesita Carta horizontal por defecto. Los destinos
+ * físicos (tickets, rollos y etiquetas) conservan sus dimensiones porque
+ * dependen de una impresora o material no estándar.
  */
 export function normalizePdfPaperSettings(targetKey: string, settings?: Record<string, unknown>) {
   const target = getPdfTemplateTarget(targetKey);
   const next = { ...(settings || {}) };
+  // El listado incluye datos de contacto y necesita la anchura de Carta
+  // horizontal para mostrar sus columnas completas en el predeterminado.
+  // Se respeta una orientación vertical elegida explícitamente en un diseño.
+  if (target.key === 'ventas.customers') {
+    return { ...next, paperSize: 'LETTER', orientation: next.orientation === 'landscape' ? 'landscape' as const : 'portrait' as const };
+  }
   if (!isPdfTemplateFixed(target)) return { ...next, paperSize: 'LETTER', orientation: 'portrait' as const };
   if (target.family === 'label' || target.key === 'inventario.product-labels') return { ...next, paperSize: 'LABEL', orientation: 'landscape' as const };
   if (target.family === 'cash-ticket' || target.structure === 'print') return { ...next, paperSize: 'ROLL-80', orientation: 'portrait' as const };
@@ -271,12 +359,168 @@ export function normalizePdfCompanySettings<T extends Record<string, unknown>>(s
     phone: ['+505 0000-0000', '+505 000-0000'],
     email: ['contacto@empresa.com'],
     website: ['www.empresa.com'],
+    footerText: ['Gracias por confiar en nosotros.'],
   };
   const normalized: Record<string, unknown> = { ...settings };
   Object.entries(legacySamples).forEach(([key, values]) => {
     if (values.includes(String(normalized[key] ?? '').trim())) normalized[key] = '';
   });
+  if ('headerComposition' in normalized) {
+    const headerComposition = String(normalized.headerComposition || '');
+    normalized.headerComposition = (['company-left-logo-right', 'logo-left-company-right', 'centered-stack'] as const).includes(headerComposition as PdfHeaderComposition)
+      ? headerComposition
+      : 'company-left-logo-right';
+  }
   return normalized as T;
+}
+
+/** Reubica únicamente los elementos semánticos del encabezado; el cuerpo conserva sus coordenadas. */
+export function applyPdfHeaderComposition<T extends PdfTemplateDefinition>(definition: T, composition: unknown, targetKey: string): T {
+  const selected = String(composition || '') as PdfHeaderComposition;
+  if (!(['company-left-logo-right', 'logo-left-company-right', 'centered-stack'] as string[]).includes(selected)) return definition;
+  if (isPdfTemplateFixed(getPdfTemplateTarget(targetKey))) return definition;
+
+  const hasLogo = definition.nodes.some(item => item.id === 'company-logo' && item.enabled !== false);
+  const metadataY = hasLogo ? 27.2 : 23.2;
+  const reportLikeSalesTarget = ['ventas.cash-session', 'ventas.cash-historical-report', 'ventas.customer-history', 'ventas.customers'].includes(getPdfTemplateTarget(targetKey).key);
+  const isCashSession = getPdfTemplateTarget(targetKey).key === 'ventas.cash-session';
+  const isCashHistoricalReport = getPdfTemplateTarget(targetKey).key === 'ventas.cash-historical-report';
+  const isCustomerHistory = getPdfTemplateTarget(targetKey).key === 'ventas.customer-history';
+  const isCustomerList = getPdfTemplateTarget(targetKey).key === 'ventas.customers';
+  const isPurchaseTarget = isPurchasePdfLayoutTarget(getPdfTemplateTarget(targetKey).key);
+  const cashSectionsY = isCashSession ? 46 : isCashHistoricalReport ? 35.3 : 34.8;
+  const centeredCashSectionsY = isCashSession ? 49.5 : isCashHistoricalReport ? 39.3 : 38.8;
+  const reportHeaderPlacements: Record<string, Partial<PdfTemplateNode>> = reportLikeSalesTarget
+    ? selected === 'centered-stack'
+      ? {
+        'document-title': { x: 55, y: 26, width: 40, height: isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
+        'document-number': { x: 55, y: isCustomerHistory ? 31 : 35.5, width: 40, height: 2.8, align: 'right' },
+        'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 34.2 : 38.8, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
+        'document-status': { x: isCustomerHistory ? 55 : 58, y: isCustomerHistory ? 37.4 : 38.8, width: isCustomerHistory ? 40 : 37, height: 2.8, align: 'right' },
+        'document-generated': { x: 67, y: isCashHistoricalReport ? 33.5 : isCustomerList ? 32.5 : 35.5, width: 28, height: 2.8, align: 'right' },
+        'report-meta': { x: 5, y: isCashHistoricalReport ? 33.5 : isCustomerList ? 32.5 : 35.5, width: 60, height: 2.8, align: 'left' },
+        'cash-report-sections': { x: 5, y: centeredCashSectionsY, width: 90, height: 96 - centeredCashSectionsY },
+        'report-sections': { x: 5, y: 56, width: 90, height: 39 },
+        'cashier-label': { x: 5, y: 43, width: 40, height: 2.6 },
+        'cashier-name': { x: 5, y: 45.5, width: 50, height: 3.2 },
+        ...(isCustomerHistory ? {
+          'history-customer-name': { x: 5, y: 26, width: 44, height: 4.5 },
+          'party-tax-id': { x: 5, y: 31.3, width: 44, height: 5.2 },
+          'party-address': { x: 5, y: 35, width: 44, height: 5.2 },
+          'party-phone': { x: 5, y: 38.7, width: 44, height: 5.2 },
+          'party-email': { x: 5, y: 42.4, width: 44, height: 5.2 },
+          'party-contact': { x: 5, y: 46.1, width: 44, height: 5.2 },
+          'party-balance-summary': { x: 5, y: 49.8, width: 44, height: 5.2 },
+          'items-table': { x: 5, y: 56, width: 90, height: 39 },
+        } : {}),
+      }
+      : {
+        'document-title': { x: 55, y: 22, width: 40, height: isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
+        'document-number': { x: 55, y: isCustomerHistory ? 27 : 31.5, width: 40, height: 2.8, align: 'right' },
+        'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 30.2 : 35, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
+        'document-status': { x: isCustomerHistory ? 55 : 58, y: isCustomerHistory ? 33.4 : 35, width: isCustomerHistory ? 40 : 37, height: 2.8, align: 'right' },
+        'document-generated': { x: 67, y: isCashHistoricalReport ? 29.5 : isCustomerList ? 27.5 : 31.5, width: 28, height: 2.8, align: 'right' },
+        'report-meta': { x: 5, y: isCashHistoricalReport ? 29.5 : isCustomerList ? 27.5 : 31.5, width: 60, height: 2.8, align: 'left' },
+        'cash-report-sections': { x: 5, y: cashSectionsY, width: 90, height: 96 - cashSectionsY },
+        'report-sections': { x: 5, y: 51, width: 90, height: 44 },
+        'cashier-label': { x: 5, y: 38.5, width: 40, height: 2.6 },
+        'cashier-name': { x: 5, y: 41, width: 50, height: 3.2 },
+        ...(isCustomerHistory ? {
+          'history-customer-name': { x: 5, y: 23, width: 44, height: 4.5 },
+          'party-tax-id': { x: 5, y: 28.3, width: 44, height: 5.2 },
+          'party-address': { x: 5, y: 32, width: 44, height: 5.2 },
+          'party-phone': { x: 5, y: 35.7, width: 44, height: 5.2 },
+          'party-email': { x: 5, y: 39.4, width: 44, height: 5.2 },
+          'party-contact': { x: 5, y: 43.1, width: 44, height: 5.2 },
+          'party-balance-summary': { x: 5, y: 46.8, width: 44, height: 5.2 },
+          'items-table': { x: 5, y: 53, width: 90, height: 42 },
+        } : {}),
+      }
+    : {};
+  const placements: Record<string, Partial<PdfTemplateNode>> = selected === 'company-left-logo-right'
+    ? {
+      'company-name': { x: 5, y: 6, width: 54, height: 5.5, align: 'left' },
+      'company-summary': { x: 5, y: 11, width: 54, height: 10, align: 'left' },
+      'company-logo': { x: 75, y: 4.5, width: 20, height: 9 },
+      'document-title': { x: 66, y: 20.2, width: 29, height: 4.8, align: 'right' },
+      'document-number': { x: 66, y: 25, width: 29, height: 3, align: 'right' },
+      'document-date': { x: 5, y: 29, width: 36, height: 2.4, align: 'left' },
+      'document-status': { x: 58, y: 29, width: 37, height: 2.4, align: 'right' },
+      'document-generated': { x: 67, y: 29, width: 28, height: 2.4, align: 'right' },
+      'report-meta': { x: 5, y: 29, width: 90, height: 2.4, align: 'left' },
+    }
+    : selected === 'logo-left-company-right'
+      ? {
+        'company-logo': { x: 5, y: 4.5, width: 20, height: 9 },
+        'company-name': { x: 41, y: 6, width: 54, height: 5.5, align: 'right' },
+        'company-summary': { x: 41, y: 11, width: 54, height: 10, align: 'right' },
+        'document-title': { x: 66, y: 20.2, width: 29, height: 4.8, align: 'right' },
+        'document-number': { x: 66, y: 25, width: 29, height: 3, align: 'right' },
+        'document-date': { x: 5, y: 29, width: 36, height: 2.4, align: 'left' },
+        'document-status': { x: 58, y: 29, width: 37, height: 2.4, align: 'right' },
+        'document-generated': { x: 67, y: 29, width: 28, height: 2.4, align: 'right' },
+        'report-meta': { x: 5, y: 29, width: 90, height: 2.4, align: 'left' },
+      }
+      : {
+        'company-logo': hasLogo ? { x: 40, y: 3.6, width: 20, height: 6.3 } : {},
+        'company-name': { x: 5, y: hasLogo ? 10.1 : 4.8, width: 90, height: 4.2, align: 'center' },
+        'company-summary': { x: 5, y: hasLogo ? 14.8 : 9.8, width: 90, height: 10, align: 'center' },
+        'document-title': { x: 5, y: hasLogo ? 19.1 : 14.1, width: 90, height: 4.2, align: 'center' },
+        'document-number': { x: 5, y: hasLogo ? 23.5 : 18.5, width: 90, height: 3, align: 'center' },
+        'document-date': { x: 5, y: metadataY, width: 36, height: 2.6, align: 'left' },
+        'document-status': { x: 58, y: metadataY, width: 37, height: 2.6, align: 'right' },
+        'document-generated': { x: 67, y: metadataY, width: 28, height: 2.6, align: 'right' },
+        'report-meta': { x: 5, y: metadataY, width: 90, height: 2.6, align: 'left' },
+      };
+
+  const customerKpiY = reportLikeSalesTarget && selected === 'centered-stack'
+    ? targetKey === 'ventas.customers' ? 37.5 : 41
+    : targetKey === 'ventas.customers' ? 31 : 36;
+  const customerKpiWidth = (90 - 4 * 1.2) / 5;
+  const customerKpiPlacements = targetKey === 'ventas.customers'
+    ? Object.fromEntries(Array.from({ length: 5 }, (_, index) => {
+      const x = 5 + index * (customerKpiWidth + 1.2);
+      const y = customerKpiY;
+      return [
+        [`report-kpi-card-${index}`, { x, y, width: customerKpiWidth, height: 12.5 }],
+        [`report-kpi-label-${index}`, { x: x + 0.8, y: y + 0.8, width: customerKpiWidth - 1.6, height: 3.1 }],
+        [`report-kpi-value-${index}`, { x: x + 0.8, y: y + 4.2, width: customerKpiWidth - 1.6, height: 4 }],
+        [`report-kpi-detail-${index}`, { x: x + 0.8, y: y + 8.6, width: customerKpiWidth - 1.6, height: 2.8 }],
+      ];
+    }).flat())
+    : {};
+  const customerReportSectionPlacement = targetKey === 'ventas.customers'
+    ? { x: 5, y: selected === 'centered-stack' ? 52.5 : 46, width: 90, height: selected === 'centered-stack' ? 42.5 : 49 }
+    : undefined;
+  const centeredPurchasePlacements: Record<string, Partial<PdfTemplateNode>> = isPurchaseTarget && selected === 'centered-stack'
+    ? {
+      'company-logo': { x: 40, y: 3.6, width: 20, height: 6.3 },
+      'company-name': { x: 5, y: 10.1, width: 90, height: 4.2, align: 'center' },
+      'company-summary': { x: 5, y: 14.8, width: 90, height: 8.5, align: 'center' },
+      'document-title': { x: 55, y: 26, width: 40, height: 5, align: 'right' },
+      'document-number': { x: 55, y: 31, width: 40, height: 2.8, align: 'right' },
+      'document-date': { x: 5, y: 34.5, width: 40, height: 2.8, align: 'left' },
+      'document-status': { x: 58, y: 34.5, width: 37, height: 2.8, align: 'right' },
+      'document-generated': { x: 67, y: 34.5, width: 28, height: 2.8, align: 'right' },
+      'document-extra': { x: 55, y: 38, width: 40, height: 5, align: 'right' },
+      'report-meta': { x: 5, y: 33, width: 60, height: 2.8, align: 'left' },
+      'items-table': { x: 5, y: 41, width: 90, height: 52 },
+      'report-sections': { x: 5, y: 41, width: 90, height: 52 },
+      'party-section': { x: 5, y: 26, width: 90, height: 18 },
+    }
+    : {};
+
+  return {
+    ...definition,
+    nodes: definition.nodes.map(item => {
+      const placement = customerKpiPlacements[item.id]
+        || (item.id === 'report-sections' && customerReportSectionPlacement)
+        || reportHeaderPlacements[item.id]
+        || centeredPurchasePlacements[item.id]
+        || placements[item.id];
+      return placement ? { ...item, ...placement } : item;
+    }),
+  };
 }
 
 export function createSystemDefaultPdfSettings(overrides?: Record<string, unknown>) {
@@ -297,7 +541,7 @@ export const PDF_DEFAULT_FONT_SCALE = 1.4;
 export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData {
   const target = getPdfTemplateTarget(targetKey);
   const partyConfig = getPdfTemplatePartyConfig(target.key);
-  const customer = { name: 'Cliente de ejemplo', taxId: 'J0310000000000', address: 'Carretera Norte, local 25', phone: '+505 8888-0000', email: 'cliente@empresa.com', contact: 'Contacto comercial' };
+  const customer = { name: 'Cliente de ejemplo', taxId: 'J0310000000000', address: 'Carretera Norte, local 25', phone: '+505 8888-0000', email: 'cliente@empresa.com', contact: 'Contacto comercial', balanceDue: 'C$ 1,150.00', balanceFavor: 'C$ 250.00', balanceSummary: 'En contra: C$ 1,150.00' };
   const supplier = { name: 'Proveedor de ejemplo', taxId: 'J0310000000000', address: 'Managua, Nicaragua', phone: '+505 2222-0000', email: 'proveedor@empresa.com', contact: 'Contacto de compras' };
   const requester = { name: 'Ana Martínez', address: 'Departamento de Ventas', phone: '+505 2255-0012', email: 'ana@empresa.com', contact: 'Responsable de la solicitud' };
   const payee = { name: 'Beneficiario de ejemplo', taxId: 'J0310000000000', address: 'Managua, Nicaragua', phone: '+505 2222-0000', email: 'beneficiario@empresa.com', contact: 'Contacto del pago' };
@@ -306,7 +550,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     { description: 'Servicio adicional', quantity: '1', unitPrice: 'C$ 150.00', total: 'C$ 150.00' },
   ];
   const base: PdfTemplateData = {
-    company: { name: 'NovaHub Comercial', slogan: 'Soluciones simples para crecer', fiscalInfo: 'RUC J0310000000000', address: 'Managua, Nicaragua', phone: '+505 2255-0000', email: 'contacto@empresa.com', logo: '' },
+    company: { name: '', slogan: '', fiscalInfo: '', address: '', phone: '', email: '', website: '', footerText: '', logo: '' },
     document: { title: target.label.toUpperCase(), number: 'DOC-000123', date: '29/08/2026', status: 'Pendiente', notes: 'Notas del documento', terms: 'Vigencia: 15 días' },
     customer,
     supplier,
@@ -320,6 +564,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     title: string,
     headers: string[],
     values: Array<Array<string | number>> = [],
+    columnWidths?: number[],
   ): PdfTemplateReportSection => {
     const sampleValue = (header: string, rowIndex: number) => {
       const label = header.toLocaleLowerCase('es-NI');
@@ -348,7 +593,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       id: `column-${index}`,
       label,
       token: `column-${index}`,
-      width: 100 / headers.length,
+      width: columnWidths?.[index] || 100 / headers.length,
       align: index === 0 ? 'left' : 'right',
     })),
     rows: rows.map((row) =>
@@ -365,11 +610,66 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
 
   if (target.key === 'ventas.customer-history') {
     const history = [
-      { description: 'Factura FAC-000124', quantity: 'Pagada', unitPrice: '15/08/2026', total: 'C$ 1,150.00' },
-      { description: 'Cotización COT-000118', quantity: 'Aceptada', unitPrice: '09/08/2026', total: 'C$ 850.00' },
-      { description: 'Pago REC-000099', quantity: 'Recibido', unitPrice: '05/08/2026', total: 'C$ 500.00' },
+      { description: 'Factura FAC-000124', date: '15/08/2026', status: 'Pagada', amount: 'C$ 1,150.00', detail: 'Venta de productos · Tienda 1' },
+      { description: 'Cotización COT-000118', date: '09/08/2026', status: 'Aceptada', amount: 'C$ 850.00', detail: 'Vigencia de 15 días · Tienda 1' },
+      { description: 'Pago REC-000099', date: '05/08/2026', status: 'Recibido', amount: 'C$ 500.00', detail: 'Abono a factura · Tienda 1' },
     ];
-    return { ...base, party: customer, document: { ...base.document, title: 'HISTORIAL DEL CLIENTE', number: 'CLI-000123', notes: 'Movimientos y documentos relacionados con el cliente.' }, items: history, history };
+    return { ...base, party: customer, customer, document: { ...base.document, title: 'HISTORIAL DEL CLIENTE', number: 'CLI-000123', date: '29/08/2026', status: '', notes: 'Movimientos y documentos relacionados con el cliente.' }, items: history, history };
+  }
+  if (target.key === 'ventas.customers') {
+    const customerRows = [
+      ['CLI-00124', 'Comercial La Colonia', 'Empresa', 'María López', 'maria@colonia.example', '+505 2222-0101', 'Activo'],
+      ['CLI-00123', 'Distribuidora Central', 'Empresa', 'Carlos Ruiz', 'carlos@central.example', '+505 2222-0102', 'Activo'],
+      ['CLI-00122', 'Ana Martínez', 'Particular', 'Ana Martínez', 'ana@example.com', '+505 8888-0103', 'Inactivo'],
+      ['CLI-00121', 'Luis Pérez', 'Particular', 'Luis Pérez', 'luis@example.com', '+505 8888-0104', 'Activo'],
+    ];
+    const customerList: PdfTemplateReportSection = {
+      id: 'sales-customers',
+      title: 'Clientes',
+      columns: [
+        { id: 'code', label: 'Código', token: 'column-0', width: 10, align: 'left' },
+        { id: 'name', label: 'Cliente', token: 'column-1', width: 18, align: 'left' },
+        { id: 'type', label: 'Tipo', token: 'column-2', width: 12, align: 'left' },
+        { id: 'contact', label: 'Contacto', token: 'column-3', width: 16, align: 'left' },
+        { id: 'email', label: 'Correo', token: 'column-4', width: 24, align: 'left' },
+        { id: 'phone', label: 'Teléfono', token: 'column-5', width: 12, align: 'left' },
+        { id: 'status', label: 'Estado', token: 'column-6', width: 8, align: 'center' },
+      ],
+      rows: customerRows.map(row => Object.fromEntries(row.map((value, index) => [`column-${index}`, value]))),
+    };
+    return {
+      ...base,
+      party: undefined,
+      document: { ...base.document, title: 'LISTADO DE CLIENTES', number: '', date: '', status: '', period: 'Alcance: todos los clientes de la sucursal', generated: 'Generado: 09/09/2026 10:30' },
+      reportKpis: [
+        { label: 'CLIENTES', value: '4', detail: 'En el listado' },
+        { label: 'ACTIVOS', value: '3', detail: 'Estado activo' },
+        { label: 'INACTIVOS', value: '1', detail: 'Estado inactivo' },
+        { label: 'PARTICULARES', value: '2', detail: 'Personas' },
+        { label: 'EMPRESAS', value: '2', detail: 'Organizaciones' },
+      ],
+      reportSections: [customerList],
+      items: customerList.rows,
+      rows: customerList.rows,
+    };
+  }
+  if (target.key === 'ventas.cash-session') {
+    const summary = reportSection('cash-session-summary', 'Resumen del turno', ['Concepto', 'Monto'], [
+      ['Fondo inicial', 'C$ 2,000.00'], ['Ventas', 'C$ 3,000.00'], ['Gastos', 'C$ 500.00'],
+      ['Saldo esperado', 'C$ 4,500.00'], ['Efectivo contado', 'C$ 4,450.00'], ['Diferencia', 'C$ -50.00'],
+    ]);
+    const movements = reportSection('cash-session-movements', 'Movimientos de caja', ['Referencia', 'Tipo', 'Descripción', 'Hora', 'Monto'], [
+      ['TKT-0124', 'Venta', 'Venta en efectivo', '10:30 a. m.', 'C$ 2,500.00'],
+      ['MOV-0081', 'Gasto', 'Compra de suministros', '11:15 a. m.', '-C$ 500.00'],
+    ]);
+    return {
+      ...base,
+      party: { name: 'Gabriel Tinoco' },
+      document: { ...base.document, title: 'RESUMEN DE SESIÓN DE CAJA', number: 'Caja 1', status: 'Cerrada', date: '08/09/2026 10:30' },
+      reportSections: [summary, movements],
+      items: movements.rows,
+      rows: movements.rows,
+    };
   }
   if (target.key === 'inventario.product-labels') {
     return { ...base, document: { ...base.document, title: 'ETIQUETA DE PRODUCTO', barcode: '7501234567890', date: '29/08/2026' }, product: { name: 'Producto de muestra', code: 'SKU-0001', barcode: '7501234567890', price: 'C$ 500.00' }, items: [] };
@@ -386,10 +686,10 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
         ['Efectivo', '12', 'C$ 12,000.00', '$ 0.00'],
         ['Tarjeta', '4', 'C$ 9,636.68', '$ 0.00'],
       ]),
-      reportSection('cash-sessions', 'Detalle de sesiones', ['Fecha', 'Sucursal', 'Caja', 'Cajero', 'Estado', 'Ventas', 'Ventas NIO', 'Ventas USD', 'Dif. NIO', 'Depósito NIO'], [
-        ['08/09/2026', 'Tienda 1', 'CJ-01 · Caja 1', 'Gabriel Tinoco', 'Cerrada', '17', 'C$ 21,636.68', '$ 0.00', 'C$ -9,654.93', 'C$ 5,000.00'],
-        ['07/09/2026', 'Tienda 1', 'CJ-02 · Caja 2', 'Ana Martínez', 'Cerrada', '12', 'C$ 8,500.00', '$ 0.00', 'C$ 250.00', 'C$ 2,000.00'],
-      ]),
+      reportSection('cash-sessions', 'Detalle de sesiones', ['Fecha', 'Caja', 'Cajero', 'N.º ventas', 'Ventas NIO / USD', 'Dif. NIO / depósito NIO'], [
+        ['08/09/2026', 'Caja 1', 'Gabriel Tinoco', '17', 'C$ 21,636.68\n$ 0.00', 'C$ -9,654.93\nC$ 5,000.00'],
+        ['07/09/2026', 'Caja 2', 'Ana Martínez', '12', 'C$ 8,500.00\n$ 0.00', 'C$ 250.00\nC$ 2,000.00'],
+      ], [15, 14, 14, 8, 24.5, 24.5]),
     ];
     return {
       ...base,
@@ -635,6 +935,15 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
         reportSection('hr-documentation', 'Documentación', ['Indicador', 'Cantidad', 'Detalle']),
         reportSection('hr-benefits', 'Beneficios', ['Indicador', 'Valor', 'Detalle']),
       ],
+      'reportes.subscriptions': [
+        reportSection('subscriptions-metrics', 'Indicadores de suscripciones', ['Métrica', 'Valor'], [
+          ['MRR (Ingreso Mensual)', 'C$ 12,500.00'],
+          ['Suscripciones Activas', '48'],
+          ['Tasa de Retención', '94%'],
+          ['LTV Proyectado', 'C$ 8,750.00'],
+          ['Churn (Período)', '3'],
+        ], [62, 38]),
+      ],
     };
 
     const reportSections = reportSectionsByTarget[target.key] || [
@@ -673,6 +982,31 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     return { ...base, party: undefined, document: { ...base.document, title: target.label.toUpperCase(), number: `ACT-${target.key.split('.').pop()?.toUpperCase() || '0001'}` }, reportSections: sections, items: sections.flatMap(section => section.rows), rows: sections.flatMap(section => section.rows) };
   }
   if (target.module === 'proyectos') {
+    if (target.key === 'proyectos.quote') {
+      const sections = [
+        reportSection('project-quote-summary', 'Cliente y proyecto', ['Dato', 'Detalle'], [
+          ['Cliente', 'Cliente de ejemplo'],
+          ['Proyecto', 'Proyecto de muestra · PROY-0001'],
+          ['Asesor', 'Ana Martínez'],
+          ['Fecha de emisión', '17/10/2026'],
+        ], [24, 76]),
+        reportSection('project-quote-items', 'Partidas ofertadas', ['Ítem', 'Descripción de la partida', 'Unidad', 'Cantidad', 'Precio unitario', 'Subtotal sin IVA'], [
+          ['01', 'Suministro e instalación de perfilería\nMaterial y mano de obra especializada', 'm²', '24', 'USD 85.00', 'USD 2,040.00'],
+          ['02', 'Instalación de acabado arquitectónico', 'Global', '1', 'USD 1,450.00', 'USD 1,450.00'],
+        ], [7, 43, 12, 10, 14, 14]),
+        reportSection('project-quote-payment', 'Condiciones de pago', ['Etapa', 'Porcentaje', 'Monto con IVA', 'Base sin IVA'], [
+          ['Anticipo contractual', '70%', 'USD 2,823.70', 'USD 2,455.00'],
+          ['Saldo contra entrega', '30%', 'USD 1,210.16', 'USD 1,052.14'],
+        ], [34, 16, 25, 25]),
+        reportSection('project-quote-terms', 'Términos y garantías', ['Término', 'Detalle'], [
+          ['Garantía', 'Garantía comercial según alcance del servicio.'],
+          ['Entrega', 'Cronograma acordado con el proyecto.'],
+          ['Validez', 'Oferta válida durante 15 días hábiles.'],
+          ['Cláusulas', 'Los términos específicos se incluyen en la cotización emitida.'],
+        ], [24, 76]),
+      ];
+      return { ...base, party: undefined, document: { ...base.document, title: 'COTIZACIÓN DE PROYECTO', number: 'COT-PROY-0001' }, reportSections: sections, items: sections.flatMap(section => section.rows), rows: sections.flatMap(section => section.rows) };
+    }
     const sections = [reportSection('projects-list', 'Proyectos', ['Código', 'Proyecto', 'Estado', 'Prioridad', 'Responsable', 'Inicio', 'Fin', 'Avance', 'Presupuesto', 'Ejecutado'])];
     return { ...base, party: undefined, document: { ...base.document, title: 'LISTADO DE PROYECTOS', number: 'PROY-0001' }, reportSections: sections, items: sections[0].rows, rows: sections[0].rows };
   }
@@ -809,9 +1143,10 @@ function defaultTableColumns(targetKey: string): PdfTemplateColumn[] {
     'inventario.products': ['Código', 'Nombre', 'Categoría', 'Unidad', 'Stock', 'Precio', 'Estado'],
     'inventario.services': ['Código', 'Nombre', 'Categoría', 'Unidad', 'Precio', 'Estado'],
     'inventario.assets': ['Código', 'Nombre', 'Categoría', 'Ubicación', 'Responsable', 'Costo', 'Estado'],
-    'ventas.customer-history': ['Movimiento', 'Estado', 'Fecha', 'Monto'],
-    'ventas.cash-historical-report': ['Fecha', 'Sucursal', 'Caja', 'Cajero', 'Estado', 'Ventas', 'Ventas NIO', 'Ventas USD', 'Dif. NIO', 'Depósito NIO'],
-    'ventas.cash-session': ['Referencia', 'Tipo', 'Descripción', 'Monto'],
+    'ventas.customer-history': ['Documento', 'Fecha', 'Estado', 'Monto', 'Descripción / sucursal'],
+    'ventas.customers': ['Código', 'Cliente', 'Tipo', 'Contacto', 'Correo', 'Teléfono', 'Estado'],
+    'ventas.cash-historical-report': ['Fecha', 'Caja', 'Cajero', 'N.º ventas', 'Ventas NIO / USD', 'Dif. NIO / depósito NIO'],
+    'ventas.cash-session': ['Referencia', 'Tipo', 'Descripción', 'Hora', 'Monto'],
     'compras.supplier-history': ['Movimiento', 'Estado', 'Fecha', 'Monto'],
     'compras.list': ['Documento', 'Proveedor', 'Fecha', 'Total'],
     'compras.supplier': ['Proveedor', 'Identificación', 'Contacto', 'Estado'],
@@ -854,7 +1189,7 @@ function defaultTableColumns(targetKey: string): PdfTemplateColumn[] {
     'reportes.providers': ['Indicador', 'Valor', 'Detalle'],
     'reportes.finance': ['Indicador', 'Monto', 'Participación'],
     'reportes.hr': ['Colaborador', 'Identificación', 'Cargo'],
-    'reportes.subscriptions': ['Cliente', 'Estado', 'Plan', 'Monto'],
+    'reportes.subscriptions': ['Métrica', 'Valor'],
     'dashboard.tenant-overview': ['Indicador', 'Valor', 'Detalle'],
   };
   if (targetKey === 'contabilidad.journal') {
@@ -862,6 +1197,64 @@ function defaultTableColumns(targetKey: string): PdfTemplateColumn[] {
   }
   if (targetKey === 'contabilidad.ledger') {
     return ['Fecha', 'Código', 'Cuenta', 'Tipo', 'Descripción', 'Referencia', 'Débito', 'Crédito', 'Saldo'].map((label, index) => ({ id: `column-${index}`, label, token: `column-${index}`, width: index === 4 ? 20 : 10, align: index === 4 ? 'left' : index < 4 ? 'left' : 'right' }));
+  }
+  if (targetKey === 'ventas.customer-history') {
+    return [
+      { id: 'description', label: 'Documento', token: 'description', width: 22, align: 'left' },
+      { id: 'date', label: 'Fecha', token: 'date', width: 13, align: 'center' },
+      { id: 'status', label: 'Estado', token: 'status', width: 13, align: 'left' },
+      { id: 'amount', label: 'Monto', token: 'amount', width: 16, align: 'right' },
+      { id: 'detail', label: 'Descripción / sucursal', token: 'detail', width: 36, align: 'left' },
+    ];
+  }
+  if (targetKey === 'ventas.customers') {
+    return [
+      { id: 'column-0', label: 'Código', token: 'column-0', width: 10, align: 'left' },
+      { id: 'column-1', label: 'Cliente', token: 'column-1', width: 18, align: 'left' },
+      { id: 'column-2', label: 'Tipo', token: 'column-2', width: 12, align: 'left' },
+      { id: 'column-3', label: 'Contacto', token: 'column-3', width: 16, align: 'left' },
+      { id: 'column-4', label: 'Correo', token: 'column-4', width: 24, align: 'left' },
+      { id: 'column-5', label: 'Teléfono', token: 'column-5', width: 12, align: 'left' },
+      { id: 'column-6', label: 'Estado', token: 'column-6', width: 8, align: 'center' },
+    ];
+  }
+  if (targetKey === 'ventas.cash-session') {
+    return [
+      { id: 'reference', label: 'Referencia', token: 'reference', width: 19, align: 'left' },
+      { id: 'type', label: 'Tipo', token: 'type', width: 15, align: 'left' },
+      { id: 'description', label: 'Descripción', token: 'description', width: 34, align: 'left' },
+      { id: 'time', label: 'Hora', token: 'time', width: 12, align: 'center' },
+      { id: 'amount', label: 'Monto', token: 'amount', width: 20, align: 'right' },
+    ];
+  }
+  if (targetKey === 'ventas.cash-historical-report') {
+    return [
+      { id: 'date', label: 'Fecha', token: 'date', width: 15, align: 'left' },
+      { id: 'register', label: 'Caja', token: 'register', width: 14, align: 'left' },
+      { id: 'cashier', label: 'Cajero', token: 'cashier', width: 14, align: 'left' },
+      { id: 'sales-count', label: 'N.º ventas', token: 'salesCount', width: 8, align: 'right' },
+      { id: 'sales-amounts', label: 'Ventas NIO / USD', token: 'salesAmounts', width: 24.5, align: 'right' },
+      { id: 'difference-deposit', label: 'Dif. NIO / depósito NIO', token: 'differenceDeposit', width: 24.5, align: 'right' },
+    ];
+  }
+  if (targetKey === 'compras.supplier-history') {
+    return [
+      { id: 'column-0', label: 'Fecha', token: 'column-0', width: 11, align: 'left' },
+      { id: 'column-1', label: 'Tipo', token: 'column-1', width: 10, align: 'left' },
+      { id: 'column-2', label: 'Documento', token: 'column-2', width: 14, align: 'left' },
+      { id: 'column-3', label: 'Descripción', token: 'column-3', width: 30, align: 'left' },
+      { id: 'column-4', label: 'Cant.', token: 'column-4', width: 8, align: 'right' },
+      { id: 'column-5', label: 'Precio U.', token: 'column-5', width: 13.5, align: 'right' },
+      { id: 'column-6', label: 'Total', token: 'column-6', width: 13.5, align: 'right' },
+    ];
+  }
+  if (targetKey === 'compras.purchase-request') {
+    return [
+      { id: 'description', label: 'Descripción', token: 'description', width: 52, align: 'left' },
+      { id: 'quantity', label: 'Cant.', token: 'quantity', width: 12, align: 'right' },
+      { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 18, align: 'right' },
+      { id: 'total', label: 'Total', token: 'total', width: 18, align: 'right' },
+    ];
   }
   if (targetKey === 'portal.customer-summary') {
     return ['Producto / código', 'Variante / SKU', 'Bodega', 'Disponibles', 'Valor disponible'].map((label, index) => ({ id: `column-${index}`, label, token: `column-${index}`, width: index < 2 ? 24 : 17.33, align: index < 3 ? 'left' : 'right' }));
@@ -891,7 +1284,7 @@ const DIAGONAL_CLIP_PATH = 'polygon(0 0,100% 0,78% 100%,0 100%)';
 const TICKET_CLIP_PATH = 'polygon(0 0,100% 0,100% 88%,96% 100%,92% 88%,88% 100%,84% 88%,80% 100%,76% 88%,72% 100%,68% 88%,64% 100%,60% 88%,56% 100%,52% 88%,48% 100%,44% 88%,40% 100%,36% 88%,32% 100%,28% 88%,24% 100%,20% 88%,16% 100%,12% 88%,8% 100%,4% 88%,0 100%)';
 const NOTCH_CLIP_PATH = 'polygon(0 0,100% 0,100% 72%,96% 100%,92% 72%,88% 100%,84% 72%,80% 100%,76% 72%,72% 100%,68% 72%,64% 100%,60% 72%,56% 100%,52% 72%,48% 100%,44% 72%,40% 100%,36% 72%,32% 100%,28% 72%,24% 100%,20% 72%,16% 100%,12% 72%,8% 100%,4% 72%,0 100%)';
 
-export function createDefaultTemplateDefinition(targetKey: string, requestedSettings?: Record<string, unknown>): PdfTemplateDefinition {
+function createBaseTemplateDefinition(targetKey: string, requestedSettings?: Record<string, unknown>): PdfTemplateDefinition {
   const settings = normalizePdfPaperSettings(targetKey, requestedSettings);
   const target = getPdfTemplateTarget(targetKey);
   const family = getFamily(target);
@@ -972,8 +1365,8 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
   } else if (headerLayout === 'topline') {
     headerNodes.push(node({ type: 'section', label: 'Línea de color', x: 5, y: 4, width: 90, height: 1.5, backgroundColor: primary, borderColor: primary }, 'header-accent'));
   } else if (headerLayout === 'sidebar') {
-    headerNodes.push(node({ type: 'section', label: 'Acento lateral', x: 5, y: 4, width: 7, height: 23, backgroundColor: primary, borderColor: primary, borderRadius: 4, clipPath: 'ellipse(100% 50% at 0% 50%)' }, 'header-accent'));
-    headerNodes.push(node({ type: 'section', label: 'Sombra lateral', x: 10, y: 6, width: 5, height: 21, backgroundColor: secondary, borderColor: secondary, borderRadius: 4, clipPath: 'ellipse(100% 50% at 0% 50%)', opacity: 0.28 }, 'header-sidebar-shadow'));
+    headerNodes.push(node({ type: 'section', label: 'Acento lateral', x: 5, y: 4, width: 2.4, height: 18, backgroundColor: primary, borderColor: primary, borderRadius: 4, clipPath: 'ellipse(100% 50% at 0% 50%)' }, 'header-accent'));
+    headerNodes.push(node({ type: 'section', label: 'Sombra lateral', x: 6.8, y: 6, width: 1.4, height: 14, backgroundColor: secondary, borderColor: secondary, borderRadius: 4, clipPath: 'ellipse(100% 50% at 0% 50%)', opacity: 0.28 }, 'header-sidebar-shadow'));
   } else if (headerLayout === 'centered') {
     headerNodes.push(node({ type: 'section', label: 'Píldora de marca', x: 32, y: 4, width: 36, height: 3, backgroundColor: primary, borderColor: primary, borderRadius: 4 }, 'header-accent'));
   } else if (headerLayout === 'corner') {
@@ -981,7 +1374,7 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
   } else if (headerLayout === 'editorial') {
     headerNodes.push(node({ type: 'divider', label: 'Regla editorial', x: 5, y: 4, width: 90, height: 1, borderColor: primary }, 'header-accent'));
   } else if (headerLayout === 'boxed') {
-    headerNodes.push(node({ type: 'section', label: 'Marco de cabecera', x: 5, y: 4, width: 90, height: 17, backgroundColor: '#ffffff', borderColor: primary, borderRadius: 2 }, 'header'));
+    headerNodes.push(node({ type: 'section', label: 'Marco de cabecera', x: 5, y: 4, width: 90, height: 17, backgroundColor: '#ffffff', borderColor: primary, borderRadius: 2, borderStyle: 'solid' }, 'header'));
   } else if (headerLayout === 'double-band') {
     headerNodes.push(node({ type: 'section', label: 'Banda superior', x: 5, y: 4, width: 90, height: 6, backgroundColor: primary, borderColor: primary, borderRadius: 0 }, 'header'));
     headerNodes.push(node({ type: 'section', label: 'Banda inferior', x: 5, y: 16, width: 90, height: 5, backgroundColor: primary, borderColor: primary, borderRadius: 0 }, 'header-band'));
@@ -1008,8 +1401,8 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
     headerNodes.push(node({ type: 'section', label: 'Plano diagonal', x: 5, y: 4, width: 90, height: 17, backgroundColor: primary, borderColor: primary, clipPath: DIAGONAL_CLIP_PATH }, 'header'));
     headerNodes.push(node({ type: 'section', label: 'Contraste diagonal', x: 5, y: 4, width: 90, height: 17, backgroundColor: secondary, borderColor: secondary, clipPath: 'polygon(24% 0,100% 0,100% 100%,0 100%)', opacity: 0.34 }, 'header-band'));
   } else if (headerLayout === 'portal') {
-    headerNodes.push(node({ type: 'section', label: 'Portal de marca', x: 5, y: 4, width: 27, height: 17, backgroundColor: primary, borderColor: primary, borderRadius: 999, shape: 'circle', opacity: 0.15 }, 'header-accent'));
-    headerNodes.push(node({ type: 'section', label: 'Marco portal', x: 29, y: 4, width: 66, height: 17, backgroundColor: '#f8fafc', borderColor: primary, borderRadius: 2 }, 'header'));
+    headerNodes.push(node({ type: 'section', label: 'Portal de marca', x: 5, y: 4, width: 20, height: 16, backgroundColor: '#ffffff', borderColor: primary, borderRadius: 999, borderStyle: 'solid', shape: 'circle' }, 'header-accent'));
+    headerNodes.push(node({ type: 'section', label: 'Marco portal', x: 26, y: 4, width: 69, height: 17, backgroundColor: '#f8fafc', borderColor: primary, borderRadius: 2, borderStyle: 'solid' }, 'header'));
   } else if (headerLayout === 'steps') {
     headerNodes.push(node({ type: 'section', label: 'Escalón uno', x: 5, y: 4, width: 53, height: 4, backgroundColor: primary, borderColor: primary, borderRadius: 3 }, 'header'));
     headerNodes.push(node({ type: 'section', label: 'Escalón dos', x: 18, y: 8, width: 77, height: 4, backgroundColor: primary, borderColor: primary, borderRadius: 3, opacity: 0.72 }, 'header-band'));
@@ -1019,7 +1412,7 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
     headerNodes.push(node({ type: 'section', label: 'Sombra de tinta', x: 5, y: 6, width: 90, height: 15, backgroundColor: secondary, borderColor: secondary, clipPath: 'ellipse(58% 100% at 72% 0%)', opacity: 0.3 }, 'header-band'));
     headerNodes.push(node({ type: 'section', label: 'Trazo', x: 9, y: 17, width: 28, height: 1.5, backgroundColor: '#ffffff', borderColor: '#ffffff', borderRadius: 999, shape: 'pill', opacity: 0.82 }, 'header-accent'));
   } else if (headerLayout === 'grid') {
-    headerNodes.push(node({ type: 'section', label: 'Retícula de cabecera', x: 5, y: 4, width: 90, height: 17, backgroundColor: '#f8fafc', borderColor: primary, borderRadius: 1 }, 'header'));
+    headerNodes.push(node({ type: 'section', label: 'Retícula de cabecera', x: 5, y: 4, width: 90, height: 17, backgroundColor: '#f8fafc', borderColor: primary, borderRadius: 1, borderStyle: 'solid' }, 'header'));
     headerNodes.push(node({ type: 'divider', label: 'Retícula vertical uno', x: 34, y: 4, width: 1, height: 17, borderColor: primary, opacity: 0.45 }, 'header-grid-one'));
     headerNodes.push(node({ type: 'divider', label: 'Retícula vertical dos', x: 67, y: 4, width: 1, height: 17, borderColor: primary, opacity: 0.45 }, 'header-grid-two'));
     headerNodes.push(node({ type: 'divider', label: 'Retícula horizontal', x: 5, y: 12, width: 90, height: 1, borderColor: primary, opacity: 0.3 }, 'header-grid-three'));
@@ -1134,31 +1527,31 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
   if (target.module !== 'reportes' && !isDashboard && !isPortalSummary && !isHistoricalCashReport) nodes.push(node({ type: 'field', label: 'Notas', token: 'document.notes', x: 5, y: 80, width: 46, height: 10, fontSize: 8, color: text }, 'notes'));
   const footerIsFilled = ['band', 'wave', 'layers', 'notch'].includes(footerLayout);
   if (footerLayout === 'band') {
-    nodes.push(node({ type: 'section', label: 'Banda inferior', x: 5, y: 93, width: 90, height: 5, backgroundColor: primary, borderColor: primary, borderRadius: 1 }, 'footer-band'));
+    nodes.push(node({ type: 'section', label: 'Banda inferior', x: 5, y: 95.2, width: 90, height: 3.1, backgroundColor: primary, borderColor: primary, borderRadius: 1 }, 'footer-band'));
   } else if (footerLayout === 'wave') {
-    nodes.push(node({ type: 'section', label: 'Ola inferior', x: 5, y: 93, width: 90, height: 5, backgroundColor: primary, borderColor: primary, borderRadius: 10, shape: 'wave' }, 'footer-band'));
-    nodes.push(node({ type: 'section', label: 'Contraste inferior', x: 5, y: 96, width: 90, height: 2, backgroundColor: secondary, borderColor: secondary, borderRadius: 10, shape: 'wave' }, 'footer-accent'));
+    nodes.push(node({ type: 'section', label: 'Ola inferior', x: 5, y: 95.2, width: 90, height: 3.1, backgroundColor: primary, borderColor: primary, borderRadius: 10, shape: 'wave' }, 'footer-band'));
+    nodes.push(node({ type: 'section', label: 'Contraste inferior', x: 5, y: 96.65, width: 90, height: 1.45, backgroundColor: secondary, borderColor: secondary, borderRadius: 10, shape: 'wave' }, 'footer-accent'));
   } else if (footerLayout === 'layers') {
-    nodes.push(node({ type: 'section', label: 'Capa orgánica inferior', x: 5, y: 93, width: 90, height: 5, backgroundColor: primary, borderColor: primary, borderRadius: 10, shape: 'wave' }, 'footer-band'));
-    nodes.push(node({ type: 'section', label: 'Capa secundaria', x: 5, y: 96, width: 90, height: 3, backgroundColor: secondary, borderColor: secondary, borderRadius: 10, shape: 'wave', opacity: 0.58 }, 'footer-layer'));
-    nodes.push(node({ type: 'section', label: 'Trazo inferior', x: 11, y: 94, width: 24, height: 1.2, backgroundColor: '#ffffff', borderColor: '#ffffff', borderRadius: 999, shape: 'pill', opacity: 0.86 }, 'footer-accent'));
+    nodes.push(node({ type: 'section', label: 'Capa orgánica inferior', x: 5, y: 95.2, width: 90, height: 3.1, backgroundColor: primary, borderColor: primary, borderRadius: 10, shape: 'wave' }, 'footer-band'));
+    nodes.push(node({ type: 'section', label: 'Capa secundaria', x: 5, y: 96.65, width: 90, height: 1.45, backgroundColor: secondary, borderColor: secondary, borderRadius: 10, shape: 'wave', opacity: 0.58 }, 'footer-layer'));
+    nodes.push(node({ type: 'section', label: 'Trazo inferior', x: 11, y: 96, width: 24, height: 0.55, backgroundColor: '#ffffff', borderColor: '#ffffff', borderRadius: 999, shape: 'pill', opacity: 0.86 }, 'footer-accent'));
   } else if (footerLayout === 'notch') {
-    nodes.push(node({ type: 'section', label: 'Pie dentado', x: 5, y: 93, width: 90, height: 5, backgroundColor: primary, borderColor: primary, clipPath: NOTCH_CLIP_PATH }, 'footer-band'));
+    nodes.push(node({ type: 'section', label: 'Pie dentado', x: 5, y: 95.2, width: 90, height: 3.1, backgroundColor: primary, borderColor: primary, clipPath: NOTCH_CLIP_PATH }, 'footer-band'));
   } else if (footerLayout === 'boxed') {
-    nodes.push(node({ type: 'section', label: 'Marco inferior', x: 5, y: 93, width: 90, height: 5, backgroundColor: '#ffffff', borderColor: primary, borderRadius: 2 }, 'footer-band'));
+    nodes.push(node({ type: 'section', label: 'Marco inferior', x: 5, y: 95.2, width: 90, height: 3.1, backgroundColor: '#ffffff', borderColor: primary, borderRadius: 2, borderStyle: 'solid' }, 'footer-band'));
   } else if (footerLayout === 'split') {
-    nodes.push(node({ type: 'section', label: 'Pie dividido', x: 5, y: 93, width: 90, height: 5, backgroundColor: '#f8fafc', borderColor: line, borderRadius: 1 }, 'footer-band'));
-    nodes.push(node({ type: 'section', label: 'Acento del pie', x: 5, y: 93, width: 28, height: 5, backgroundColor: primary, borderColor: primary, borderRadius: 1 }, 'footer-accent'));
+    nodes.push(node({ type: 'section', label: 'Pie dividido', x: 5, y: 95.2, width: 90, height: 3.1, backgroundColor: '#f8fafc', borderColor: line, borderRadius: 1 }, 'footer-band'));
+    nodes.push(node({ type: 'section', label: 'Acento del pie', x: 5, y: 95.2, width: 65, height: 3.1, backgroundColor: primary, borderColor: primary, borderRadius: 1 }, 'footer-accent'));
   } else if (footerLayout === 'minimal') {
-    nodes.push(node({ type: 'divider', label: 'Separador mínimo', x: 5, y: 94, width: 90, height: 1, borderColor: line }, 'footer-divider'));
+    nodes.push(node({ type: 'divider', label: 'Separador mínimo', x: 5, y: 95.35, width: 90, height: 0.35, borderColor: line }, 'footer-divider'));
   } else if (footerLayout === 'dots') {
-    nodes.push(node({ type: 'divider', label: 'Separador de puntos', x: 5, y: 94, width: 90, height: 1, borderColor: line }, 'footer-divider'));
-    [10, 14, 18].forEach((x, index) => nodes.push(node({ type: 'section', label: `Punto ${index + 1}`, x, y: 93.4, width: 1.6, height: 1.6, backgroundColor: primary, borderColor: primary, borderRadius: 999, shape: 'circle' }, `footer-dot-${index + 1}`)));
+    nodes.push(node({ type: 'divider', label: 'Separador de puntos', x: 5, y: 95.35, width: 90, height: 0.35, borderColor: line }, 'footer-divider'));
+    [10, 14, 18].forEach((x, index) => nodes.push(node({ type: 'section', label: `Punto ${index + 1}`, x, y: 95.1, width: 0.9, height: 0.9, backgroundColor: primary, borderColor: primary, borderRadius: 999, shape: 'circle' }, `footer-dot-${index + 1}`)));
   } else {
-    nodes.push(node({ type: 'divider', label: 'Separador', x: 5, y: 94, width: 90, height: 1, borderColor: line }, 'footer-divider'));
+    nodes.push(node({ type: 'divider', label: 'Separador', x: 5, y: 95.35, width: 90, height: 0.35, borderColor: line }, 'footer-divider'));
   }
-  nodes.push(node({ type: 'field', label: 'Pie', token: 'company.email', x: footerLayout === 'split' ? 8 : 5, y: 95, width: footerLayout === 'split' ? 21 : 65, height: 3, fontSize: 7, color: footerIsFilled || footerLayout === 'split' ? '#ffffff' : '#64748b' }, 'footer-contact'));
-  nodes.push(node({ type: 'field', label: 'Página', token: 'page.number', x: 72, y: 95, width: 23, height: 3, fontSize: 7, color: footerIsFilled ? '#ffffff' : '#64748b', align: 'right' }, 'footer-page'));
+  nodes.push(node({ type: 'field', label: 'Pie', token: 'company.footerText', x: 8, y: 95.45, width: footerLayout === 'split' ? 60 : 62, height: 3.1, fontSize: 7, lineHeight: 1.1, color: footerIsFilled || footerLayout === 'split' ? '#ffffff' : '#64748b' }, 'footer-contact'));
+  nodes.push(node({ type: 'field', label: 'Página', token: 'page.number', x: 72, y: 95.45, width: 23, height: 3.1, fontSize: 7, color: footerIsFilled ? '#ffffff' : '#64748b', align: 'right' }, 'footer-page'));
 
   const partyNodeIds = ['party-section', 'party-name', 'party-tax-id', 'party-address', 'party-phone', 'party-email', 'party-contact'];
   const nodesWithoutParty = party.mode === 'none' ? nodes.filter(item => !partyNodeIds.includes(item.id)) : nodes;
@@ -1168,6 +1561,324 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
     page: { paperSize: settingsValue(settings, 'paperSize', 'LETTER'), orientation: settings?.orientation === 'landscape' ? 'landscape' : 'portrait', background },
     nodes: reportWithoutParty,
     metadata: { preset: `${headerLayout}-${footerLayout}` },
+  };
+}
+
+/** Estructura común de reportes, historiales y vistas administrativas. */
+function createStandardModuleDefinition(targetKey: string, settings: Record<string, unknown>, base: PdfTemplateDefinition): PdfTemplateDefinition {
+  const primary = settingsValue(settings, 'primaryColor', '#01422c');
+  const text = settingsValue(settings, 'textColor', '#334155');
+  const line = settingsValue(settings, 'lineColor', '#d7dee7');
+  const target = getPdfTemplateTarget(targetKey);
+  const logoEnabled = Boolean(settings.logoUrl);
+  const hasReportKpis = base.nodes.some(item => item.id.startsWith('report-kpi-card-'));
+  const replacedHeaderIds = new Set([
+    'company-logo', 'company-name', 'company-summary', 'document-title', 'document-number',
+    'document-date', 'document-status', 'document-extra', 'document-generated', 'report-meta',
+  ]);
+  const bodyNodes = base.nodes
+    .filter(item => !item.id.startsWith('header') && !item.id.startsWith('footer-'))
+    .filter(item => !replacedHeaderIds.has(item.id))
+    .filter(item => !['notes', 'document-notes'].includes(item.id))
+    .map(item => {
+      const shifted = typeof item.y === 'number' && item.y >= 28 ? { ...item, y: item.y + 5.3 } : item;
+      if (shifted.type === 'report-sections') {
+        // Los reportes con KPI conservan el espacio para las tarjetas antes
+        // de sus tablas. En listados sin KPI, acercamos la primera tabla al
+        // título/metadatos para no dejar media página vacía.
+        const y = target.structure !== 'dashboard' && !hasReportKpis ? 35.3 : shifted.y;
+        return { ...shifted, x: 5, y, width: 90, backgroundColor: 'transparent', borderColor: 'transparent' };
+      }
+      if (shifted.type === 'table') return { ...shifted, x: 5, width: 90 };
+      return shifted;
+    });
+  const nodes: PdfTemplateNode[] = [
+    node({ type: 'divider', label: 'Separador del encabezado', x: 5, y: 4, width: 90, height: 0.5, borderColor: primary }, 'header-accent'),
+    node({ type: 'image', label: 'Logotipo', x: 75, y: 5.5, width: 20, height: 9, enabled: logoEnabled, borderStyle: 'none', backgroundColor: 'transparent' }, 'company-logo'),
+    node({ type: 'field', label: 'Empresa', token: 'company.name', x: 5, y: 6, width: 54, height: 5.5, fontSize: 14, color: text, bold: true, borderStyle: 'none', padding: 0.2, enabled: settings.showCompanyName !== false }, 'company-name'),
+    node({ type: 'field', label: 'Datos de empresa', token: 'company.summary', x: 5, y: 11, width: 54, height: 10, fontSize: 6.5, lineHeight: 1.2, color: text, borderStyle: 'none', padding: 0.2 }, 'company-summary'),
+    node({ type: 'field', label: 'Título del documento', token: 'document.title', x: 55, y: 22, width: 40, height: 4.8, fontSize: 10, color: primary, bold: true, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-title'),
+    node({ type: 'field', label: 'Período', token: 'document.period', x: 5, y: 29.5, width: 60, height: 2.8, fontSize: 7, color: text, borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+    node({ type: 'field', label: 'Generado', token: 'document.generated', x: 67, y: 29.5, width: 28, height: 2.8, fontSize: 6.5, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated'),
+    ...bodyNodes,
+  ];
+  nodes.push(
+    node({ type: 'divider', label: 'Separador del pie', x: 5, y: 95.35, width: 90, height: 0.35, borderColor: line }, 'footer-divider'),
+    node({ type: 'field', label: 'Pie', token: 'company.footerText', x: 8, y: 95.45, width: 62, height: 3.1, fontSize: 6.5, color: '#64748b', borderStyle: 'none', padding: 0.2 }, 'footer-contact'),
+    node({ type: 'field', label: 'Página', token: 'page.number', x: 72, y: 95.45, width: 23, height: 3.1, fontSize: 6.5, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'footer-page'),
+  );
+  return {
+    version: 1,
+    page: base.page,
+    nodes,
+    metadata: { ...(base.metadata || {}), preset: 'module-standard', standardLayoutVersion: 1 },
+  };
+}
+
+/**
+ * Estructura inicial común para los documentos de venta: encabezado de
+ * empresa/documento, tablas de cliente y documento, detalle cuadriculado,
+ * totales y pie. La opción de composición solo mueve la marca dentro de este
+ * patrón; el contenido y su orden se mantienen iguales en todos los tipos.
+ */
+function createStandardSalesReportDefinition(targetKey: string, settings: Record<string, unknown>, base: PdfTemplateDefinition): PdfTemplateDefinition {
+  const primary = settingsValue(settings, 'primaryColor', '#01422c');
+  const secondary = settingsValue(settings, 'secondaryColor', '#0f3b65');
+  const text = settingsValue(settings, 'textColor', '#334155');
+  const line = settingsValue(settings, 'lineColor', '#d7dee7');
+  const logoEnabled = Boolean(settings.logoUrl);
+  const isCustomerHistory = targetKey === 'ventas.customer-history';
+  const isCustomers = targetKey === 'ventas.customers';
+  const isCashSession = targetKey === 'ventas.cash-session';
+  const isCashHistory = targetKey === 'ventas.cash-historical-report';
+  const nodes: PdfTemplateNode[] = [
+    node({ type: 'divider', label: 'Separador del encabezado', x: 5, y: 4, width: 90, height: 0.5, borderColor: primary }, 'header-accent'),
+    node({ type: 'image', label: 'Logotipo', x: 75, y: 5.5, width: 20, height: 9, enabled: logoEnabled, borderStyle: 'none', backgroundColor: 'transparent' }, 'company-logo'),
+    node({ type: 'field', label: 'Empresa', token: 'company.name', x: 5, y: 6, width: 54, height: 5.5, fontSize: 14, color: text, bold: true, borderStyle: 'none', padding: 0.2, enabled: settings.showCompanyName !== false }, 'company-name'),
+    node({ type: 'field', label: 'Datos de empresa', token: 'company.summary', x: 5, y: 11, width: 54, height: 10, fontSize: 6.5, lineHeight: 1.2, color: text, borderStyle: 'none', padding: 0.2 }, 'company-summary'),
+      node({ type: 'field', label: 'Tipo de documento', token: 'document.title', x: 55, y: 22, width: 40, height: isCashHistory || isCustomerHistory || isCustomers ? 4.8 : 9, fontSize: 10, color: primary, bold: true, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-title'),
+  ];
+
+  if (isCustomerHistory) {
+    const party = getPdfTemplatePartyConfig(targetKey);
+    const partyToken = `${party.tokenPrefix}.`;
+    nodes.push(
+      node({ type: 'field', label: 'Código', token: 'document.number', x: 56, y: 27, width: 39, height: 2.8, fontSize: 8, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-number'),
+      node({ type: 'field', label: 'Fecha de generación', token: 'document.date', x: 56, y: 30.2, width: 39, height: 2.8, fontSize: 7.5, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-date'),
+      node({ type: 'field', label: 'Estado', token: 'document.status', x: 56, y: 33.4, width: 39, height: 2.8, fontSize: 7.5, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-status'),
+      node({ type: 'field', label: '', token: `${partyToken}name`, x: 5, y: 22, width: 44, height: 4.8, fontSize: 10, color: text, bold: true, borderStyle: 'none', padding: 0 }, 'history-customer-name'),
+      node({ type: 'field', label: party.labels.taxId, token: `${partyToken}taxId`, x: 5, y: 38, width: 42, height: 4, fontSize: 7.5, color: text, borderStyle: 'none' }, 'party-tax-id'),
+      node({ type: 'field', label: party.labels.address, token: `${partyToken}address`, x: 50, y: 38, width: 45, height: 4, fontSize: 7, color: text, borderStyle: 'none' }, 'party-address'),
+      node({ type: 'field', label: party.labels.phone, token: `${partyToken}phone`, x: 5, y: 42.5, width: 42, height: 4, fontSize: 7, color: text, borderStyle: 'none' }, 'party-phone'),
+      node({ type: 'field', label: party.labels.email, token: `${partyToken}email`, x: 50, y: 42.5, width: 45, height: 4, fontSize: 6.5, color: text, borderStyle: 'none' }, 'party-email'),
+      node({ type: 'field', label: party.labels.contact, token: `${partyToken}contact`, x: 5, y: 47, width: 42, height: 4, fontSize: 6.5, color: text, borderStyle: 'none' }, 'party-contact'),
+      node({ type: 'field', label: 'Saldo', token: `${partyToken}balanceSummary`, x: 50, y: 47, width: 45, height: 4, fontSize: 7, color: text, borderStyle: 'none' }, 'party-balance-summary'),
+    );
+    const table = base.nodes.find(item => item.id === 'items-table' && item.type === 'table');
+    if (table) nodes.push({ ...table, x: 5, y: 53.5, width: 90, height: 41.5, columns: defaultTableColumns(targetKey), backgroundColor: '#ffffff', borderColor: line, borderStyle: 'solid', tableHeaderColor: primary, tableHeaderTextColor: '#ffffff', tableTextColor: text, tableRowColor: '#ffffff', tableStripeColor: '#ffffff', repeatHeader: true });
+  } else if (isCashSession) {
+    nodes.push(
+      node({ type: 'field', label: 'Caja', token: 'document.number', x: 55, y: 31.5, width: 40, height: 2.8, fontSize: 8, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-number'),
+      node({ type: 'field', label: 'Apertura', token: 'document.date', x: 5, y: 35, width: 48, height: 2.8, fontSize: 7.5, color: text, borderStyle: 'none', padding: 0.2 }, 'document-date'),
+      node({ type: 'field', label: 'Estado', token: 'document.status', x: 58, y: 35, width: 37, height: 2.8, fontSize: 7.5, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-status'),
+      node({ type: 'field', label: 'Cajero', text: 'Cajero', x: 5, y: 38.5, width: 40, height: 2.6, fontSize: 5.8, color: '#64748b', bold: true, borderStyle: 'none', padding: 0.1 }, 'cashier-label'),
+      node({ type: 'field', label: 'Cajero', token: 'party.name', x: 5, y: 41, width: 50, height: 3.2, fontSize: 8, color: text, bold: true, borderStyle: 'none', padding: 0.1 }, 'cashier-name'),
+      node({ type: 'report-sections', label: 'Resumen y movimientos de caja', x: 5, y: 46, width: 90, height: 50, subsequentY: 8, subsequentHeight: 86, backgroundColor: '#ffffff', borderColor: line, color: text, columns: defaultTableColumns(targetKey), repeatHeader: true }, 'cash-report-sections'),
+    );
+  } else {
+    nodes.push(
+      ...(isCashHistory ? [
+        node({ type: 'field', label: 'Período', token: 'document.period', x: 5, y: 29.5, width: 60, height: 2.8, fontSize: 7, color: text, borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+        node({ type: 'field', label: 'Generado', token: 'document.generated', x: 67, y: 29.5, width: 28, height: 2.8, fontSize: 6.5, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated'),
+        node({ type: 'report-sections', label: 'Secciones del reporte', x: 5, y: 35.3, width: 90, height: 60.7, subsequentY: 23.5, subsequentHeight: 76.5, backgroundColor: '#ffffff', borderColor: line, color: text, columns: defaultTableColumns(targetKey), repeatHeader: true }, 'cash-report-sections'),
+      ] : [
+        node({ type: 'field', label: 'Alcance', token: 'document.period', x: 5, y: isCustomers ? 27.5 : 29.5, width: 60, height: 2.8, fontSize: 7, color: text, borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+        node({ type: 'field', label: 'Generado', token: 'document.generated', x: 67, y: isCustomers ? 27.5 : 29.5, width: 28, height: 2.8, fontSize: 6.5, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated'),
+        ...Array.from({ length: 5 }, (_, index) => {
+          const kpiWidth = (90 - 4 * 1.2) / 5;
+          const x = 5 + index * (kpiWidth + 1.2);
+          return [
+            node({ type: 'section', label: '', x, y: isCustomers ? 31 : 33.5, width: kpiWidth, height: 12.5, backgroundColor: index % 2 ? secondary : primary, borderColor: index % 2 ? secondary : primary, borderRadius: 2, firstPageOnly: true }, `report-kpi-card-${index}`),
+            node({ type: 'field', label: 'Indicador', token: `reportKpis.${index}.label`, x: x + 0.8, y: (isCustomers ? 31 : 33.5) + 0.8, width: kpiWidth - 1.6, height: 3.1, fontSize: 5, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-label-${index}`),
+            node({ type: 'field', label: 'Valor', token: `reportKpis.${index}.value`, x: x + 0.8, y: (isCustomers ? 31 : 33.5) + 4.2, width: kpiWidth - 1.6, height: 4, fontSize: 8.5, color: '#ffffff', bold: true, align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-value-${index}`),
+            node({ type: 'field', label: 'Detalle', token: `reportKpis.${index}.detail`, x: x + 0.8, y: (isCustomers ? 31 : 33.5) + 8.6, width: kpiWidth - 1.6, height: 2.8, fontSize: 4.8, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-detail-${index}`),
+          ];
+        }).flat(),
+        node({ type: 'report-sections', label: 'Lista de clientes', x: 5, y: 46, width: 90, height: 49, subsequentY: 8, subsequentHeight: 86, backgroundColor: 'transparent', borderColor: 'transparent', color: text, columns: defaultTableColumns(targetKey), repeatHeader: true }, 'report-sections'),
+      ]),
+    );
+  }
+
+  const footerNodes = base.nodes.filter(item => ['footer-divider', 'footer-contact', 'footer-page'].includes(item.id));
+  nodes.push(...footerNodes);
+  return {
+    version: 1,
+    page: base.page,
+    nodes,
+    metadata: { preset: 'sales-standard-report', salesLayoutVersion: salesPdfLayoutVersionForTarget(targetKey) },
+  };
+}
+
+/** Estructura predeterminada de Compras; el detalle conserva las columnas propias del destino. */
+function createStandardPurchaseDefinition(targetKey: string, settings: Record<string, unknown>, base: PdfTemplateDefinition): PdfTemplateDefinition {
+  const primary = settingsValue(settings, 'primaryColor', '#01422c');
+  const text = settingsValue(settings, 'textColor', '#334155');
+  const line = settingsValue(settings, 'lineColor', '#d7dee7');
+  const party = getPdfTemplatePartyConfig(targetKey);
+  const isSupplierList = targetKey === 'compras.supplier';
+  const isPurchaseList = targetKey === 'compras.list';
+  const isSupplierHistory = targetKey === 'compras.supplier-history';
+  const isList = isSupplierList || isPurchaseList;
+  const hasLogo = Boolean(settings.logoUrl);
+  const table = base.nodes.find(item => item.id === 'items-table' && item.type === 'table');
+  const tableColumns = isSupplierHistory || targetKey === 'compras.purchase-request'
+    ? defaultTableColumns(targetKey)
+    : table?.columns?.length ? table.columns : defaultTableColumns(targetKey);
+  const nodes: PdfTemplateNode[] = [
+    node({ type: 'divider', label: 'Separador del encabezado', x: 5, y: 4, width: 90, height: 0.5, borderColor: primary }, 'header-accent'),
+    node({ type: 'image', label: 'Logotipo', x: 75, y: 5.5, width: 20, height: 9, enabled: hasLogo, borderStyle: 'none', backgroundColor: 'transparent' }, 'company-logo'),
+    node({ type: 'field', label: 'Empresa', token: 'company.name', x: 5, y: 6, width: 54, height: 5.5, fontSize: 14, color: text, bold: true, borderStyle: 'none', padding: 0.2, enabled: settings.showCompanyName !== false }, 'company-name'),
+    node({ type: 'field', label: 'Datos de empresa', token: 'company.summary', x: 5, y: 11, width: 54, height: 10, fontSize: 6.5, lineHeight: 1.2, color: text, borderStyle: 'none', padding: 0.2 }, 'company-summary'),
+  ];
+
+  if (isList) {
+    nodes.push(
+      node({ type: 'field', label: 'Título del documento', token: 'document.title', x: 55, y: 22, width: 40, height: 5.5, fontSize: 10, color: primary, bold: true, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-title'),
+      node({ type: 'field', label: 'Alcance', token: 'document.meta', x: 5, y: 30, width: 60, height: 3.2, fontSize: 7.5, color: text, borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+      node({ type: 'field', label: 'Generado', token: 'document.generated', x: 67, y: 30, width: 28, height: 3.2, fontSize: 7, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated'),
+    );
+  } else if (isSupplierHistory) {
+    const prefix = `${party.tokenPrefix}.`;
+    nodes.push(
+      node({ type: 'field', label: 'Historial', token: 'document.title', x: 55, y: 22, width: 40, height: 4.8, fontSize: 10, color: primary, bold: true, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-title'),
+      node({ type: 'field', label: 'Código del proveedor', token: 'document.number', x: 56, y: 27, width: 39, height: 2.8, fontSize: 7.5, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-number'),
+      node({ type: 'field', label: 'Generado', token: 'document.generated', x: 56, y: 30.2, width: 39, height: 2.8, fontSize: 7, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated'),
+      node({ type: 'field', label: 'Detalle', token: 'document.meta', x: 56, y: 33.4, width: 39, height: 2.8, fontSize: 6.8, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+      node({ type: 'field', label: '', token: `${prefix}name`, x: 5, y: 22, width: 44, height: 4.8, fontSize: 10, color: text, bold: true, borderStyle: 'none', padding: 0 }, 'party-name'),
+      node({ type: 'field', label: party.labels.taxId, token: `${prefix}taxId`, x: 5, y: 38, width: 42, height: 4, fontSize: 7.5, color: text, borderStyle: 'none', padding: 0 }, 'party-tax-id'),
+      node({ type: 'field', label: party.labels.address, token: `${prefix}address`, x: 50, y: 38, width: 45, height: 4, fontSize: 7, color: text, borderStyle: 'none', padding: 0 }, 'party-address'),
+      node({ type: 'field', label: party.labels.phone, token: `${prefix}phone`, x: 5, y: 42.5, width: 42, height: 4, fontSize: 7, color: text, borderStyle: 'none', padding: 0 }, 'party-phone'),
+      node({ type: 'field', label: party.labels.email, token: `${prefix}email`, x: 50, y: 42.5, width: 45, height: 4, fontSize: 6.5, color: text, borderStyle: 'none', padding: 0 }, 'party-email'),
+      node({ type: 'field', label: party.labels.contact, token: `${prefix}contact`, x: 5, y: 47, width: 42, height: 4, fontSize: 6.5, color: text, borderStyle: 'none', padding: 0 }, 'party-contact'),
+      node({ type: 'field', label: 'Saldo', token: `${prefix}balanceSummary`, x: 50, y: 47, width: 45, height: 4, fontSize: 7, color: text, borderStyle: 'none', padding: 0 }, 'party-balance-summary'),
+    );
+  } else {
+    const prefix = `${party.tokenPrefix}.`;
+    nodes.push(
+      node({ type: 'field', label: 'Tipo de documento', token: 'document.title', x: 58, y: 22, width: 37, height: 5, fontSize: 10, color: primary, bold: true, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-title'),
+      node({ type: 'field', label: 'Número', token: 'document.number', x: 58, y: 27, width: 37, height: 2.8, fontSize: 7.5, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-number'),
+      node({ type: 'field', label: 'Fecha', token: 'document.date', x: 58, y: 30.5, width: 37, height: 2.8, fontSize: 7, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-date'),
+      node({ type: 'field', label: 'Estado', token: 'document.status', x: 58, y: 34, width: 37, height: 2.8, fontSize: 7, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-status'),
+      node({ type: 'field', label: 'Información', token: 'document.extra', x: targetKey === 'compras.purchase-request' ? 5 : 58, y: targetKey === 'compras.purchase-request' ? 49.5 : 37.5, width: targetKey === 'compras.purchase-request' ? 90 : 37, height: targetKey === 'compras.purchase-request' ? 5.5 : 5.5, fontSize: 6.8, color: text, align: targetKey === 'compras.purchase-request' ? 'left' : 'right', borderStyle: 'none', padding: 0.2 }, 'document-extra'),
+      node({ type: 'section', label: party.sectionLabel, x: 5, y: 22, width: 90, height: 19, backgroundColor: '#ffffff', borderColor: line, borderStyle: 'none', color: text }, 'party-section'),
+      node({ type: 'field', label: party.nameLabel, token: `${prefix}name`, x: 5, y: 23, width: 44, height: 4.5, fontSize: 9, color: text, bold: true, borderStyle: 'none', padding: 0 }, 'party-name'),
+      node({ type: 'field', label: party.labels.taxId, token: `${prefix}taxId`, x: 5, y: 28, width: 44, height: 4.2, fontSize: 7.3, color: text, borderStyle: 'none', padding: 0 }, 'party-tax-id'),
+      node({ type: 'field', label: party.labels.address, token: `${prefix}address`, x: 5, y: 32.2, width: 44, height: 4.2, fontSize: 7.1, color: text, borderStyle: 'none', padding: 0 }, 'party-address'),
+      node({ type: 'field', label: party.labels.phone, token: `${prefix}phone`, x: 5, y: 36.4, width: 44, height: 4.2, fontSize: 7, color: text, borderStyle: 'none', padding: 0 }, 'party-phone'),
+      node({ type: 'field', label: party.labels.email, token: `${prefix}email`, x: 5, y: 40.6, width: 44, height: 4.2, fontSize: 6.8, color: text, borderStyle: 'none', padding: 0 }, 'party-email'),
+      node({ type: 'field', label: party.labels.contact, token: `${prefix}contact`, x: 5, y: 44.8, width: 44, height: 4.2, fontSize: 6.8, color: text, borderStyle: 'none', padding: 0 }, 'party-contact'),
+    );
+  }
+
+  if (table) {
+    nodes.push({
+      ...table,
+      x: 5,
+      y: isList ? 27.5 : isSupplierHistory ? 53.5 : targetKey === 'compras.purchase-request' ? 57 : 54,
+      width: 90,
+      height: isList ? 62 : isSupplierHistory ? 41.5 : targetKey === 'compras.purchase-request' ? 37 : 40,
+      label: isSupplierHistory ? 'Historial de compras' : isList ? 'Registros' : 'Detalle',
+      columns: tableColumns,
+      backgroundColor: '#ffffff',
+      borderColor: line,
+      borderStyle: 'solid',
+      tableHeaderColor: primary,
+      tableHeaderTextColor: '#ffffff',
+      tableTextColor: text,
+      tableRowColor: '#ffffff',
+      tableStripeColor: '#ffffff',
+      repeatHeader: true,
+    });
+  }
+
+  if (!isList && !isSupplierHistory) {
+    nodes.push(node({ type: 'totals', label: 'Totales', x: 55, y: 80, width: 40, height: 13, fontSize: 8, color: text, backgroundColor: 'transparent', borderColor: 'transparent', borderStyle: 'none' }, 'totals'));
+  }
+
+  nodes.push(
+    node({ type: 'divider', label: 'Separador del pie', x: 5, y: 95.35, width: 90, height: 0.35, borderColor: line }, 'footer-divider'),
+    node({ type: 'field', label: 'Pie', token: 'company.footerText', x: 8, y: 95.45, width: 62, height: 3.1, fontSize: 6.5, color: '#64748b', borderStyle: 'none', padding: 0.2 }, 'footer-contact'),
+    node({ type: 'field', label: 'Página', token: 'page.number', x: 72, y: 95.45, width: 23, height: 3.1, fontSize: 6.5, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'footer-page'),
+  );
+
+  return {
+    version: 1,
+    page: { paperSize: settingsValue(settings, 'paperSize', 'LETTER'), orientation: settings.orientation === 'landscape' ? 'landscape' : 'portrait', background: settingsValue(settings, 'backgroundColor', '#ffffff') },
+    nodes,
+    metadata: { preset: 'purchase-standard', purchaseLayoutVersion: PURCHASE_PDF_LAYOUT_VERSION },
+  };
+}
+
+export function createDefaultTemplateDefinition(targetKey: string, requestedSettings?: Record<string, unknown>): PdfTemplateDefinition {
+  const target = getPdfTemplateTarget(targetKey);
+  if (!isStandardPdfLayoutTarget(target.key)) return createBaseTemplateDefinition(target.key, requestedSettings);
+
+  const settings = normalizePdfPaperSettings(target.key, applyStandardPdfLayoutSettings(target.key, requestedSettings || {}));
+  const base = createBaseTemplateDefinition(target.key, settings);
+  if (isPurchasePdfLayoutTarget(target.key)) return createStandardPurchaseDefinition(target.key, settings, base);
+  if (['ventas.cash-session', 'ventas.cash-historical-report', 'ventas.customer-history', 'ventas.customers'].includes(target.key)) {
+    return createStandardSalesReportDefinition(target.key, settings, base);
+  }
+  if (!isSalesPdfLayoutTarget(target.key)) return createStandardModuleDefinition(target.key, settings, base);
+  const party = getPdfTemplatePartyConfig(target.key);
+  const primary = settingsValue(settings, 'primaryColor', '#01422c');
+  const text = settingsValue(settings, 'textColor', '#334155');
+  const line = settingsValue(settings, 'lineColor', '#d7dee7');
+  const table = base.nodes.find(item => item.id === 'items-table' && item.type === 'table');
+  const columns = target.key === 'ventas.payment'
+    ? [
+      { id: 'description', label: 'Método', token: 'description', width: 32, align: 'left' as const },
+      { id: 'quantity', label: 'Moneda', token: 'quantity', width: 18, align: 'center' as const },
+      { id: 'unitPrice', label: 'Monto', token: 'unitPrice', width: 25, align: 'right' as const },
+      { id: 'total', label: 'Total', token: 'total', width: 25, align: 'right' as const },
+    ]
+    : table?.columns?.length ? table.columns : defaultTableColumns(target.key);
+  const hasLogo = Boolean(settings.logoUrl);
+  const nodes: PdfTemplateNode[] = [
+    node({ type: 'divider', label: 'Separador del encabezado', x: 5, y: 4, width: 90, height: 0.5, borderColor: primary }, 'header-accent'),
+    node({ type: 'image', label: 'Logotipo', x: 75, y: 5.5, width: 20, height: 9, enabled: hasLogo, borderStyle: 'none', backgroundColor: 'transparent' }, 'company-logo'),
+    node({ type: 'field', label: 'Empresa', token: 'company.name', x: 5, y: 6, width: 54, height: 5.5, fontSize: 14, color: text, bold: true, borderStyle: 'none', padding: 0.2, enabled: settings.showCompanyName !== false }, 'company-name'),
+    node({ type: 'field', label: 'Datos de empresa', token: 'company.summary', x: 5, y: 11, width: 54, height: 10, fontSize: 6.5, lineHeight: 1.2, color: text, borderStyle: 'none', padding: 0.2 }, 'company-summary'),
+    node({ type: 'field', label: 'Tipo de documento', token: 'document.title', x: 66, y: 20.2, width: 29, height: 4.8, fontSize: 11, color: primary, bold: true, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-title'),
+    node({ type: 'field', label: 'Número', token: 'document.number', x: 66, y: 25, width: 29, height: 3, fontSize: 8, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-number'),
+    node({ type: 'field', label: 'Fecha', token: 'document.date', x: 5, y: 29, width: 36, height: 2.5, fontSize: 7.5, color: text, borderStyle: 'none', padding: 0.2 }, 'document-date'),
+    node({ type: 'field', label: 'Estado', token: 'document.status', x: 58, y: 29, width: 37, height: 2.5, fontSize: 7.5, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-status'),
+    node({ type: 'field', label: 'Información adicional', token: 'document.extra', x: 58, y: 32, width: 37, height: 6, fontSize: 6.8, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-extra'),
+  ];
+
+  if (party.mode !== 'none') {
+    const partyToken = `${party.tokenPrefix}.`;
+    nodes.push(
+      node({ type: 'section', label: party.sectionLabel, x: 5, y: 22, width: 90, height: 18, backgroundColor: '#ffffff', borderColor: line, borderStyle: 'solid', color: text }, 'party-section'),
+      node({ type: 'field', label: party.nameLabel, token: `${partyToken}name`, x: 8, y: 35, width: 44, height: 5, fontSize: 8, color: text, bold: true, borderStyle: 'none' }, 'party-name'),
+      node({ type: 'field', label: party.labels.taxId, token: `${partyToken}taxId`, x: 54, y: 35, width: 38, height: 5, fontSize: 7.5, color: text, align: 'right', borderStyle: 'none' }, 'party-tax-id'),
+      node({ type: 'field', label: party.labels.address, token: `${partyToken}address`, x: 8, y: 41, width: 44, height: 4.5, fontSize: 7, color: text, borderStyle: 'none' }, 'party-address'),
+      node({ type: 'field', label: party.labels.phone, token: `${partyToken}phone`, x: 54, y: 41, width: 38, height: 4.5, fontSize: 7, color: text, align: 'right', borderStyle: 'none' }, 'party-phone'),
+      node({ type: 'field', label: party.labels.email, token: `${partyToken}email`, x: 8, y: 46, width: 44, height: 4, fontSize: 6.5, color: text, borderStyle: 'none' }, 'party-email'),
+      node({ type: 'field', label: party.labels.contact, token: `${partyToken}contact`, x: 54, y: 46, width: 38, height: 4, fontSize: 6.5, color: text, align: 'right', borderStyle: 'none' }, 'party-contact'),
+    );
+  }
+
+  if (table) {
+    nodes.push({
+      ...table,
+      x: 5, y: 55, width: 90, height: 39,
+      label: target.key === 'ventas.payment' ? 'Detalle de pagos' : 'Detalle de productos y servicios',
+      columns,
+      backgroundColor: '#ffffff', borderColor: line, borderStyle: 'solid',
+      tableHeaderColor: primary, tableHeaderTextColor: '#ffffff', tableTextColor: text,
+      tableRowColor: '#ffffff', tableStripeColor: '#ffffff',
+      repeatHeader: true,
+    });
+  }
+
+  nodes.push(node({ type: 'totals', label: 'Totales', x: 55, y: 80, width: 40, height: 13, fontSize: 8, color: text, backgroundColor: 'transparent', borderColor: 'transparent', borderStyle: 'none' }, 'totals'));
+  // En pagos recibidos, las notas son el método y referencia de liquidación;
+  // para los demás documentos las notas del diseño ya se habían retirado.
+  if (target.key === 'ventas.payment') {
+    nodes.push(node({ type: 'field', label: 'Detalles del pago', token: 'document.notes', x: 8, y: 80, width: 44, height: 13, fontSize: 7, color: text, borderStyle: 'none' }, 'payment-details'));
+  }
+  nodes.push(
+    node({ type: 'divider', label: 'Separador del pie', x: 5, y: 95.35, width: 90, height: 0.35, borderColor: line }, 'footer-divider'),
+    node({ type: 'field', label: 'Pie', token: 'company.footerText', x: 8, y: 95.45, width: 62, height: 3.1, fontSize: 6.5, color: '#64748b', borderStyle: 'none', padding: 0.2 }, 'footer-contact'),
+    node({ type: 'field', label: 'Página', token: 'page.number', x: 72, y: 95.45, width: 23, height: 3.1, fontSize: 6.5, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'footer-page'),
+  );
+
+  return {
+    version: 1,
+    page: base.page,
+    nodes,
+    metadata: { preset: 'sales-standard', salesLayoutVersion: SALES_PDF_LAYOUT_VERSION },
   };
 }
 
@@ -1189,11 +1900,14 @@ export function ensureDashboardChartNodes(definition: PdfTemplateDefinition, tar
  */
 export function createSystemDefaultPdfDesign(targetKey: string, overrides?: Record<string, unknown>) {
   const target = getPdfTemplateTarget(targetKey);
-  const settings = normalizePdfPaperSettings(target.key, createSystemDefaultPdfSettings({
+  const initialSettings = createSystemDefaultPdfSettings({
     ...(target.key === 'inventario.product-labels' ? { paperSize: 'LABEL', orientation: 'landscape', margins: 2, fontFamily: 'helvetica', fontSize: 8 } : {}),
+    ...(['ventas.cash-historical-report', 'ventas.customers', 'compras.supplier-history'].includes(target.key) ? { paperSize: 'LETTER', orientation: 'landscape', fontSize: 9 } : {}),
     ...(target.family === 'cash-ticket' ? { paperSize: 'ROLL-80', orientation: 'portrait', margins: 3, fontFamily: 'helvetica', fontSize: 8, primaryColor: '#000000', secondaryColor: '#000000', textColor: '#000000', lineColor: '#000000' } : {}),
     ...(overrides || {}),
-  }));
+  });
+  const settings = normalizePdfPaperSettings(target.key, applyStandardPdfLayoutSettings(target.key, initialSettings));
+  const defaultDefinition = createDefaultTemplateDefinition(target.key, settings);
   return {
     id: `system-default:${target.key}`,
     clientTenantId: undefined,
@@ -1211,8 +1925,8 @@ export function createSystemDefaultPdfDesign(targetKey: string, overrides?: Reco
     layoutZones: {
       status: 'system-default',
       definition: {
-        ...createDefaultTemplateDefinition(target.key, settings),
-        metadata: { preset: 'system-default' },
+        ...defaultDefinition,
+        metadata: { ...(defaultDefinition.metadata || {}), preset: 'system-default' },
       },
       fields: [],
     },
@@ -1455,7 +2169,7 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
     }
     return [sanitizedNode];
   });
-  const partyNodeIds = new Set(['party-section', 'party-name', 'party-tax-id', 'party-address', 'party-phone', 'party-email', 'party-contact']);
+  const partyNodeIds = new Set(['party-section', 'party-name', 'party-tax-id', 'party-address', 'party-phone', 'party-email', 'party-contact', 'party-balance-due', 'party-balance-favor', 'party-balance-summary']);
   const partyLabels: Record<string, string> = {
     'party-section': party.sectionLabel,
     'party-name': party.nameLabel,
@@ -1464,6 +2178,9 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
     'party-phone': party.labels.phone,
     'party-email': party.labels.email,
     'party-contact': party.labels.contact,
+    'party-balance-due': 'Saldo en contra',
+    'party-balance-favor': 'Saldo a favor',
+    'party-balance-summary': 'Saldo',
   };
   const normalizedNodes = nodes
     .filter(item => party.mode !== 'none' || (!partyNodeIds.has(item.id) && !String(item.token || '').startsWith('party.')))
@@ -1473,7 +2190,7 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
       const suffix = partyNodeIds.has(item.id)
         ? item.id.replace(/^party-/, '')
         : String(item.token || '').replace(/^party\./, '');
-      const tokenSuffix = suffix === 'name' ? 'name' : suffix === 'tax-id' ? 'taxId' : suffix === 'address' ? 'address' : suffix === 'phone' ? 'phone' : suffix === 'email' ? 'email' : 'contact';
+      const tokenSuffix = suffix === 'name' ? 'name' : suffix === 'tax-id' ? 'taxId' : suffix === 'address' ? 'address' : suffix === 'phone' ? 'phone' : suffix === 'email' ? 'email' : suffix === 'balance-due' ? 'balanceDue' : suffix === 'balance-favor' ? 'balanceFavor' : suffix === 'balance-summary' ? 'balanceSummary' : 'contact';
       const tokenLabels: Record<string, string> = {
         name: party.nameLabel,
         taxId: party.labels.taxId,
@@ -1481,6 +2198,9 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
         phone: party.labels.phone,
         email: party.labels.email,
         contact: party.labels.contact,
+        balanceDue: 'Saldo en contra',
+        balanceFavor: 'Saldo a favor',
+        balanceSummary: 'Saldo',
       };
       return {
         ...item,
@@ -1519,9 +2239,14 @@ export function resolveTemplateToken(token: string | undefined, data: PdfTemplat
   if (!token) return fallback;
   if (token === 'company.summary') {
     const company = data.company || {};
-    const summary = [company.slogan, company.fiscalInfo, company.address, company.phone, company.email, company.website]
-      .filter(value => typeof value === 'string' && value.trim())
+    const readCompanyValue = (value: unknown) => typeof value === 'string' ? value.trim() : '';
+    const contactLine = [company.fiscalInfo, company.phone, company.email, company.website]
+      .map(readCompanyValue)
+      .filter(Boolean)
       .join(' · ');
+    const summary = [readCompanyValue(company.slogan), readCompanyValue(company.address), contactLine]
+      .filter(Boolean)
+      .join('\n');
     return summary || fallback;
   }
   let value = readPath(data, token);

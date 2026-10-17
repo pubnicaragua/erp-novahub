@@ -332,7 +332,7 @@ export function SesionActivaStep({
         generateSessionSummaryPDF({
           session,
           logs,
-          tenantName: user?.sessionBranding?.name || user?.tenantName || 'Nuestra Empresa',
+          tenantName: user?.sessionBranding?.name || user?.tenantName || '',
           tenantLogo: themeConfig?.logo,
           displayCurrency,
           isUSD,

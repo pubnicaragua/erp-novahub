@@ -178,6 +178,7 @@ const SALES_DOCUMENT_LABELS: Record<string, string> = {
   recurring: 'factura_recurrente',
   payment: 'pago_recibido',
   return: 'devolucion',
+  credit: 'credito',
   'credit-note': 'nota_de_credito',
 };
 
@@ -189,6 +190,7 @@ export function buildSalesPdfFileName(documentType: string, number?: unknown, fo
     recurring: 'Factura recurrente',
     payment: 'Pago recibido',
     return: 'Devolución',
+    credit: 'Crédito',
     'credit-note': 'Nota de crédito',
   };
   return buildLabeledPdfFileName(labels[documentType] || SALES_DOCUMENT_LABELS[documentType] || documentType, number, format);

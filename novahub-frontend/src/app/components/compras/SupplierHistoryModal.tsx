@@ -112,7 +112,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
           currency: transaction.currency || 'NIO',
           exchangeRate: transaction.exchangeRate,
         })),
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.tenantName || '',
         tenantLogo: themeConfig?.logo,
         formatAmount: formatConvertedAmount,
         format,

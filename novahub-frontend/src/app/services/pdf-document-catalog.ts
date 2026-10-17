@@ -91,6 +91,7 @@ const BASE_PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'ventas.recurring', module: 'ventas', moduleLabel: 'Ventas', label: 'Facturas recurrentes', structure: 'transaction', legacyKeys: ['recurring'], source: 'generateRecurringInvoicePDF' },
   { key: 'ventas.payment', module: 'ventas', moduleLabel: 'Ventas', label: 'Pagos recibidos', structure: 'receipt', legacyKeys: ['payment'], source: 'generateEstimatePDF' },
   { key: 'ventas.return', module: 'ventas', moduleLabel: 'Ventas', label: 'Devoluciones', structure: 'transaction', legacyKeys: ['return'], source: 'generateEstimatePDF' },
+  { key: 'ventas.credit', module: 'ventas', moduleLabel: 'Ventas', label: 'Créditos', structure: 'transaction', legacyKeys: ['credit'], source: 'generateEstimatePDF' },
   { key: 'ventas.credit-note', module: 'ventas', moduleLabel: 'Ventas', label: 'Notas de crédito', structure: 'transaction', legacyKeys: ['credit-note'], source: 'generateEstimatePDF' },
   { key: 'ventas.cash-session', module: 'ventas', moduleLabel: 'Ventas', label: 'Resumen de sesión de caja', structure: 'receipt', source: 'generateSessionSummaryPDF' },
   { key: 'ventas.cash-ticket', module: 'ventas', moduleLabel: 'Ventas', label: 'Ticket de caja', structure: 'print', family: 'cash-ticket', source: 'printPosTicket' },
@@ -119,10 +120,11 @@ const BASE_PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'finanzas.balance', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Balance general', structure: 'report', source: 'FinanceBalanceView.exportPDF' },
   { key: 'finanzas.transactions', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Tabla financiera', structure: 'report', source: 'FinanceTableView.exportPDF' },
   { key: 'contabilidad.trial-balance', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Balance de comprobación', structure: 'report', source: 'BalanceComprobacionView.handlePrint' },
+  { key: 'contabilidad.balance-sheet', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Estado de situación financiera', structure: 'report', source: 'BalanceGeneralView.export' },
   { key: 'contabilidad.journal', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Libro Diario', structure: 'report', source: 'DiarioView.handleExportPDF' },
   { key: 'contabilidad.ledger', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Libro Mayor', structure: 'report', source: 'LibroMayorView.handleExportPDF' },
   { key: 'contabilidad.profit-loss', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Estado de resultados', structure: 'report', source: 'EstadoResultadosView.handleExportPDF' },
-  { key: 'contabilidad.chart', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Plan de cuentas', structure: 'administrative', source: 'PlanCuentasView.handleExportPdf' },
+  { key: 'contabilidad.chart', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Plan de cuentas', structure: 'report', source: 'PlanCuentasView.handleExportPdf' },
   { key: 'contabilidad.fixed-assets', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Activos fijos', structure: 'report', source: 'ActivosFijosView.export' },
   { key: 'recursos-humanos.payrolls', module: 'recursos-humanos', moduleLabel: 'Recursos Humanos', label: 'Reporte de nóminas', structure: 'report', source: 'NominasView.handleExportPDF' },
   { key: 'recursos-humanos.dashboard', module: 'recursos-humanos', moduleLabel: 'Recursos Humanos', label: 'Dashboard de RR. HH.', structure: 'dashboard', source: 'RecursosHumanosPage.export' },
@@ -143,6 +145,7 @@ const BASE_PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'reportes.providers', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de proveedores', structure: 'report', source: 'ProvidersReportTab.exportPDF' },
   { key: 'reportes.finance', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte financiero', structure: 'report', source: 'FinanceReportTab.exportPDF' },
   { key: 'reportes.hr', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de capital humano', structure: 'report', source: 'HRReportTab.exportPDF' },
+  { key: 'reportes.subscriptions', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de suscripciones', structure: 'report', source: 'SubscriptionsReportTab.exportPDF' },
   { key: 'dashboard.tenant-overview', module: 'dashboard', moduleLabel: 'Dashboard', label: 'Reporte del dashboard', structure: 'dashboard', source: 'ExecutiveTenantOverview.exportDashboard' },
   { key: 'portal.customer-summary', module: 'portal-clientes', moduleLabel: 'Portal de clientes', label: 'Resumen del portal de clientes', structure: 'report', source: 'exportCustomerPortalPdf' },
 
@@ -158,6 +161,7 @@ const BASE_PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'actividades.calendar', module: 'actividades', moduleLabel: 'Actividades', label: 'Calendario de actividades', structure: 'report', source: 'ActividadesPage.export' },
   { key: 'actividades.meetings', module: 'actividades', moduleLabel: 'Actividades', label: 'Reuniones', structure: 'report', source: 'ActividadesPage.export' },
   { key: 'proyectos.list', module: 'proyectos', moduleLabel: 'Proyectos', label: 'Listado de proyectos', structure: 'report', source: 'ProyectosListView.export' },
+  { key: 'proyectos.quote', module: 'proyectos', moduleLabel: 'Proyectos', label: 'Cotización de proyecto', structure: 'report', source: 'ProyectoCotizacionExportView.exportPDF' },
   { key: 'tracking.transit', module: 'tracking', moduleLabel: 'Tracking', label: 'Envíos en tránsito', structure: 'history', source: 'TrackingPage.export' },
   { key: 'tracking.batches', module: 'tracking', moduleLabel: 'Tracking', label: 'Referencias de recepción', structure: 'report', source: 'BatchReception.export' },
   { key: 'tracking.packages', module: 'tracking', moduleLabel: 'Tracking', label: 'Paquetes recibidos', structure: 'history', source: 'ReceivedPackages.export' },
@@ -165,8 +169,9 @@ const BASE_PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'tracking.billing', module: 'tracking', moduleLabel: 'Tracking', label: 'Paquetes disponibles para facturar', structure: 'report', source: 'Billing.export' },
   { key: 'tickets.list', module: 'tickets', moduleLabel: 'Tickets', label: 'Listado de tickets', structure: 'report', source: 'TicketsPage.export' },
   { key: 'tickets.knowledge', module: 'tickets', moduleLabel: 'Tickets', label: 'Base de conocimiento', structure: 'report', source: 'TicketsPage.export' },
-  { key: 'tickets.agents', module: 'tickets', moduleLabel: 'Tickets', label: 'Agentes de soporte', structure: 'administrative', source: 'TicketsPage.export' },
+  { key: 'tickets.agents', module: 'tickets', moduleLabel: 'Tickets', label: 'Agentes de soporte', structure: 'report', source: 'TicketsPage.export' },
   { key: 'financiamiento.applications', module: 'financiamiento', moduleLabel: 'Financiamiento', label: 'Solicitudes de financiamiento', structure: 'report', source: 'FinanciamientoPymePage.export' },
+  { key: 'restaurante.menu', module: 'restaurante', moduleLabel: 'Restaurante', label: 'Carta de restaurante', structure: 'report', source: 'RestaurantMenuWorkspace.exportMenu' },
 ];
 
 export const FIXED_PDF_TEMPLATE_KEYS = new Set<string>([
@@ -182,6 +187,7 @@ const REPORT_EXPORT_PERMISSIONS: Record<string, string> = {
   'reportes.providers': 'REPORTS_PROVIDERS',
   'reportes.finance': 'REPORTS_FINANCIAL',
   'reportes.hr': 'REPORTS_HR',
+  'reportes.subscriptions': 'SUBSCRIPTIONS',
   'dashboard.tenant-overview': 'DASHBOARD',
   'portal.customer-summary': 'SALES_CLIENTS',
   'finanzas.balance': 'FINANCIAL_BALANCE',
@@ -221,6 +227,7 @@ const REPORT_EXPORT_PERMISSIONS: Record<string, string> = {
   'actividades.calendar': 'ACTIVITIES_CALENDAR',
   'actividades.meetings': 'ACTIVITIES_MEETINGS',
   'proyectos.list': 'PROJECTS_LIST',
+  'proyectos.quote': 'PROJECTS_EXPENSES',
   'tracking.transit': 'TRACKING_TRANSIT',
   'tracking.batches': 'TRACKING_BATCHES',
   'tracking.packages': 'TRACKING_PACKAGES',
@@ -272,7 +279,7 @@ function decoratePdfTemplateTarget(target: PdfTemplateTarget): PdfExportTarget {
       editableCanvas: !fixed,
       importable: !fixed,
       repeatableTable: tabular,
-      exportPdf: adapter.pdfRenderer !== 'none',
+      exportPdf: true,
       exportExcel: adapter.excelRenderer !== 'none' && !fixed && tabular,
       paperSizes: fixed ? (target.family === 'label' ? ['LABEL'] : ['ROLL-80']) : ['LETTER'],
       ...(target.capabilities || {}),
@@ -355,6 +362,7 @@ const partyConfig = (mode: PdfTemplatePartyMode): PdfTemplatePartyConfig => {
 
 export function getPdfTemplatePartyConfig(key: string | null | undefined): PdfTemplatePartyConfig {
   const target = getPdfTemplateTarget(key);
+  if (target.key === 'ventas.customers') return partyConfig('none');
   if (target.module === 'ventas' && !['ventas.cash-session', 'ventas.cash-ticket', 'ventas.cash-historical-report'].includes(target.key)) return partyConfig('customer');
   if (target.module === 'compras') {
     if (target.key === 'compras.purchase-request') return partyConfig('requester');

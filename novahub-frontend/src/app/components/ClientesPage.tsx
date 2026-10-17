@@ -83,11 +83,15 @@ export function ClientesPage() {
       report: true,
       export: true,
     }));
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-    const matchingCustomers = exportCustomersRows.filter(customer => [customer.name, customer.contactName, customer.email].filter(Boolean).some(value => String(value).toLowerCase().includes(normalizedSearch)));
-    const rows = matchingCustomers.map((customer) => ({
+    const customers = exportCustomersRows;
+    const activeCount = customers.filter(customer => String(customer.status || '').toUpperCase() !== 'INACTIVE').length;
+    const inactiveCount = customers.length - activeCount;
+    const individualCount = customers.filter(customer => String(customer.type || '').toUpperCase() === 'INDIVIDUAL').length;
+    const companyCount = customers.filter(customer => String(customer.type || '').toUpperCase() === 'COMPANY').length;
+    const rows = customers.map((customer) => ({
       Código: customer.code || customer.id?.slice(0, 8) || '—',
       Cliente: customer.name || '—',
+      Tipo: String(customer.type || '').toUpperCase() === 'INDIVIDUAL' ? 'Particular' : 'Empresa',
       Contacto: customer.contactName || '—',
       Correo: customer.email || '—',
       Teléfono: customer.phone || '—',
@@ -100,8 +104,14 @@ export function ClientesPage() {
       } else {
         await generateConfiguredReportSectionsPDF({
           targetKey: 'ventas.customers', title: 'Listado de clientes', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
-          periodLabel: `Registros filtrados: ${rows.length}`,
-          sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), rows: rows.map((row) => Object.values(row)) }],
+          kpis: [
+            { label: 'CLIENTES', value: String(rows.length), detail: 'En este listado' },
+            { label: 'ACTIVOS', value: String(activeCount), detail: 'Estado activo' },
+            { label: 'INACTIVOS', value: String(inactiveCount), detail: 'Estado inactivo' },
+            { label: 'PARTICULARES', value: String(individualCount), detail: 'Personas' },
+            { label: 'EMPRESAS', value: String(companyCount), detail: 'Organizaciones' },
+          ],
+          sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: [10, 18, 12, 16, 24, 12, 8], rows: rows.map((row) => Object.values(row)) }],
           fileName: buildDatedDownloadFileName(['reporte_clientes'], 'pdf'),
         });
       }

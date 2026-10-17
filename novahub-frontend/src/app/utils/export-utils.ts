@@ -35,7 +35,9 @@ async function imageBlobAsPng(blob: Blob) {
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(sourceWidth * scale));
         canvas.height = Math.max(1, Math.round(sourceHeight * scale));
-        canvas.getContext('2d')?.drawImage(image, 0, 0);
+        // El canvas ya tiene las dimensiones reducidas. Indicar el destino evita
+        // que drawImage pinte al tamaño original y recorte logos/imágenes grandes.
+        canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
         resolve(canvas.toDataURL('image/png'));
       } catch {
         resolve(dataUrl);
