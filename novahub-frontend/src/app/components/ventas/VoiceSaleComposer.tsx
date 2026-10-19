@@ -236,19 +236,7 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
     stopRecognition();
   }, []);
 
-  if (!featureEnabled) {
-    return (
-      <Card className="rounded-3xl border-dashed border-border/70 bg-muted/20 shadow-none" data-tour="pos-voice-disabled">
-        <CardContent className="flex items-start gap-3 p-4 sm:p-5">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground"><NovaHubLogo size={23} /></span>
-          <div className="min-w-0">
-            <p className="text-sm font-black">Venta rápida por voz no habilitada</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">El Super Admin puede activarla para este negocio desde sus módulos operativos. La facturación completa continúa disponible sin cambios.</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (!featureEnabled) return null;
 
   return (
     <Card className="overflow-hidden rounded-3xl border-primary/20 bg-primary/[0.025] shadow-sm" data-tour="pos-voice">

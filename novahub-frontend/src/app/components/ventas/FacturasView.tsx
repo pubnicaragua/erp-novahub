@@ -1916,6 +1916,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           variantId={item.variantId}
                           catalogLoading={productsLoading}
                           catalogError={productsError}
+                          showSelectedVariant={false}
+                          showSelectedStock={false}
+                          className="h-8 rounded-md border border-input bg-background px-2"
                           open={salesProductPickerItemId === String(item.id || idx)}
                           onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || idx) : null)}
                           onChange={(val, pickedVariant) => {
@@ -1964,6 +1967,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                         className="sales-line-variant sales-quote-line-variant-column"
                         labelLayout="stacked"
                         showLabel={false}
+                        compactDisplay
                         placeholder="Seleccionar variante"
                         product={findProductForItem(item)}
                         warehouseId={getItemWarehouseId(item)}
@@ -2103,8 +2107,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   </div>
                   {pricingMode === 'individual' && (
                     <div className="col-span-2 mt-0 grid min-w-0 grid-cols-2 items-start gap-1.5 self-start text-[10px]">
-                      {resolveItemType(item) === 'SERVICE' ? <span className="flex h-8 items-center rounded-md bg-muted/30 px-2 text-xs font-bold text-muted-foreground">Exento</span> : <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
-                        <span className="flex h-8 w-full items-center gap-1.5 rounded-md bg-muted/30 px-2">
+                      {resolveItemType(item) === 'SERVICE' ? <span className="flex h-8 items-center rounded-md border border-input bg-background px-2 text-xs font-bold text-muted-foreground">Exento</span> : <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
+                        <span className="flex h-8 w-full items-center gap-1.5 rounded-md border border-input bg-background px-2">
                           <input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
                             const nextItems = [...(localDoc.items || [])];
                             nextItems[idx] = { ...nextItems[idx], taxRate: event.target.checked ? 15 : 0 };
@@ -2122,7 +2126,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           const recalculated = recalcTotals(nextItems, 0, 0);
                           setLocalDoc({ ...localDoc, ...recalculated });
                           if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
-                         }} className="w-full pr-6 text-left text-xs" disabled={isInvoiceLocked} />
+                        }} className="h-8 w-full rounded-md border border-input bg-background pr-6 text-left text-xs" disabled={isInvoiceLocked} />
                         <span className="pointer-events-none absolute right-2 text-[10px] text-muted-foreground">%</span>
                       </label>
                     </div>
@@ -2146,7 +2150,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
                           handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
                         }
-                       }} className="h-8 w-full text-xs text-right" disabled={Boolean(item.productId && isSerialTracked(findProductForItem(item))) || isInvoiceLocked} />
+                       }} className="h-8 w-full rounded-md border border-input bg-background text-xs text-right" disabled={Boolean(item.productId && isSerialTracked(findProductForItem(item))) || isInvoiceLocked} />
                   </div>
                   <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
                     <Input type="number" inputMode="decimal" min="0" step="any" value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice} placeholder="0"
@@ -2163,7 +2167,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
                           handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
                         }
-                       }} className="h-8 w-full text-xs text-right" disabled={isInvoiceLocked} />
+                       }} className="h-8 w-full rounded-md border border-input bg-background text-xs text-right" disabled={isInvoiceLocked} />
                   </div>
                   {pricingMode === 'individual' && (
                     <div className="col-span-2 flex items-center justify-end xl:col-span-1">
@@ -2171,7 +2175,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                         type="text"
                         readOnly
                         value={formatSalesAmount(((Number(item.quantity || 0) * Number(item.unitPrice || 0)) - (Number(item.quantity || 0) * Number(item.unitPrice || 0) * Number(item.discount || 0) / 100)) * Number(item.taxRate || 0) / 100)}
-                        className="h-8 w-16 border-none bg-transparent px-0 text-right text-xs font-black shadow-none focus-visible:ring-0 focus-visible:border-transparent"
+                        className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-right text-xs font-black shadow-none"
                       />
                     </div>
                   )}

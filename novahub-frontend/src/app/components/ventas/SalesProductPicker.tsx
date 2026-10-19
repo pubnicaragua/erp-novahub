@@ -55,6 +55,8 @@ type SalesProductPickerProps = {
   catalogError?: boolean;
   allowOutOfStockSelection?: boolean;
   otherLocationsPermissionModule: SalesOtherLocationsViewModule;
+  showSelectedVariant?: boolean;
+  showSelectedStock?: boolean;
   className?: string;
 };
 
@@ -120,6 +122,8 @@ export function SalesProductPicker({
   catalogError = false,
   allowOutOfStockSelection = false,
   otherLocationsPermissionModule,
+  showSelectedVariant = true,
+  showSelectedStock = true,
   className,
 }: SalesProductPickerProps) {
   const { canPerform } = useAuth();
@@ -197,7 +201,7 @@ export function SalesProductPicker({
       .map((warehouse) => `${warehouse.name}${warehouse.isActive === false ? ' (inactiva)' : ''}: ${warehouse.available === null ? 'no disponible' : formatSalesStock(warehouse.available)}`)
       .join(' · ');
 
-  const selectedStockLabel = selectedProduct
+  const selectedStockLabel = showSelectedStock && selectedProduct
     ? getSalesStockOptionLabel(selectedProduct, warehouseId, selectedVariantId)
     : null;
   const closeAndReset = (nextOpen: boolean) => {
@@ -358,10 +362,10 @@ export function SalesProductPicker({
         className={cn('h-9 w-full min-w-0 justify-between rounded-md text-left font-normal', className)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={selectedProduct ? `Cambiar ${itemType === 'SERVICE' ? 'servicio' : 'producto'}: ${selectedProduct.name}${selectedVariant ? `, variante ${getVariantName(selectedVariant)}` : ''}` : placeholder || `Seleccionar ${itemType === 'SERVICE' ? 'servicio' : 'producto'}`}
+        aria-label={selectedProduct ? `Cambiar ${itemType === 'SERVICE' ? 'servicio' : 'producto'}: ${selectedProduct.name}${showSelectedVariant && selectedVariant ? `, variante ${getVariantName(selectedVariant)}` : ''}` : placeholder || `Seleccionar ${itemType === 'SERVICE' ? 'servicio' : 'producto'}`}
       >
         <span className="min-w-0 truncate">
-          {selectedProduct ? `${selectedProduct.code ? `${selectedProduct.code} - ` : ''}${selectedProduct.name || 'Artículo'}${selectedVariant ? ` · ${getVariantName(selectedVariant)}` : ''}` : placeholder || `Seleccionar ${itemType === 'SERVICE' ? 'servicio...' : 'producto...'}`}
+          {selectedProduct ? `${selectedProduct.code ? `${selectedProduct.code} - ` : ''}${selectedProduct.name || 'Artículo'}${showSelectedVariant && selectedVariant ? ` · ${getVariantName(selectedVariant)}` : ''}` : placeholder || `Seleccionar ${itemType === 'SERVICE' ? 'servicio...' : 'producto...'}`}
         </span>
         {selectedStockLabel && <span className="ml-2 max-w-32 shrink-0 truncate text-[10px] text-muted-foreground" title={selectedStockLabel}>{selectedStockLabel}</span>}
       </Button>
