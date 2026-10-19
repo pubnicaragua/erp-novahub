@@ -111,11 +111,66 @@ export const supplierCreditsService = {
 export const expensesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Expense>>('/purchases/expenses', { params: filters as any, signal }),
   create: (data: Partial<Expense>) => api.post<Expense>('/purchases/expenses', data),
+  previewImport: (rows: ExpenseImportRow[]) => api.post<ExpenseImportPreviewResponse>('/purchases/expenses/import/preview', { rows }),
+  confirmImportBlock: (data: { attemptId: string; rows: ExpenseImportRow[] }) => api.post<ExpenseImportBlockResponse>('/purchases/expenses/import/confirm-block', data),
   bulkImport: (data: Partial<Expense>[]) => api.post<{ success: number; count: number; failed: number }>('/purchases/expenses/bulk-import', data),
   update: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}`, data),
   updateStatus: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}/status`, data),
   delete: (id: string) => api.delete<void>(`/purchases/expenses/${id}`),
 };
+
+export interface ExpenseImportRow {
+  sourceRowNumber: number;
+  date?: unknown;
+  description?: unknown;
+  category?: unknown;
+  categoryCustom?: unknown;
+  amount?: unknown;
+  currency?: unknown;
+  exchangeRate?: unknown;
+  status?: unknown;
+  paymentSource?: unknown;
+  paidTo?: unknown;
+  reference?: unknown;
+  bankAccountNumber?: unknown;
+}
+
+export interface ExpenseImportPreviewRow {
+  sourceRowNumber: number;
+  status: 'READY' | 'BLOCKED' | 'CONFIRMED' | 'FAILED' | string;
+  errors: string[];
+  effects: { expense: boolean; financeMirror: boolean; accountingJournal: boolean };
+  number?: string;
+  expenseId?: string;
+  financeMirrorCreated?: boolean;
+  accountingJournalGenerated?: boolean;
+}
+
+export interface ExpenseImportPreviewResponse {
+  summary: { total: number; ready: number; blocked: number };
+  integrations: {
+    financeEnabled: boolean;
+    accountingEnabled: boolean;
+    accountingConnectionEnabled: boolean;
+    autoGenerationEnabled: boolean;
+  };
+  rows: ExpenseImportPreviewRow[];
+}
+
+export interface ExpenseImportBlockResponse {
+  total: number;
+  created: number;
+  failed: number;
+  rows: Array<{
+    sourceRowNumber: number;
+    status: string;
+    errors?: string[];
+    number?: string;
+    expenseId?: string;
+    financeMirrorCreated?: boolean;
+    accountingJournalGenerated?: boolean;
+  }>;
+}
 
 export const recurringExpensesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<RecurringExpense>>('/purchases/recurring-expenses', { params: filters as any, signal }),

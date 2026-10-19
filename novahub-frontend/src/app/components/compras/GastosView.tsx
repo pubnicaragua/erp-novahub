@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import * as XLSX from 'xlsx';
 import { 
   Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send, Pencil, X
 } from 'lucide-react';
@@ -42,6 +41,8 @@ import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadF
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { downloadExpenseImportTemplate } from './expense-import-template';
+import type { ExpenseImportBlockResponse, ExpenseImportPreviewResponse, ExpenseImportRow } from '../../services/compras.service';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { isBankPaymentMethod } from '../../utils/paymentMethods';
@@ -54,7 +55,6 @@ import type { VoiceExpenseDraft } from '../../utils/voice-expense-parser';
 interface Props { data: Expense[]; summaryData?: Expense[]; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
 type DateFilterPreset = 'all' | 'month' | 'year' | 'range';
-const paymentSourceOptions = ['CASH', 'CARD', 'TRANSFER', 'CHECK'] as const;
 const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   EFECTIVO: 'Efectivo',
   CASH: 'Efectivo',
@@ -115,9 +115,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const [importProgress, setImportProgress] = useState(0);
   const [readingFile, setReadingFile] = useState(false);
   const [readingProgress, setReadingProgress] = useState(0);
-  const [parsedImportRows, setParsedImportRows] = useState<Record<string, string>[]>([]);
-  const [importFileStats, setImportFileStats] = useState<{ total: number; valid: number; skipped: number } | null>(null);
+  const [parsedImportRows, setParsedImportRows] = useState<Record<string, any>[]>([]);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
+  const [expenseImportPreview, setExpenseImportPreview] = useState<ExpenseImportPreviewResponse | null>(null);
+  const [expenseImportAttemptId, setExpenseImportAttemptId] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
   
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -301,39 +302,6 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const categoryOptions = Array.from(new Set(filtered.map((g) => String(g.category || '').toUpperCase()).filter(Boolean)))
     .map((value) => ({ value, label: value === 'OTRO' ? 'Otro' : value, count: filtered.filter((g) => String(g.category || '').toUpperCase() === value).length }));
 
-  const downloadExpenseTemplate = () => {
-    const headers = ['Fecha', 'Descripción', 'Categoría', 'Categoría personalizada', 'Monto', 'Moneda', 'Fuente de pago', 'Pagado a', 'Referencia', 'Estado'];
-    const rows = [
-      ['2026-01-15', 'Pago servicio internet', 'OPERATIVO', '', '1500', 'NIO', 'TRANSFER', 'Proveedor Internet', 'FAC-001', 'PENDING'],
-      ['2026-01-16', 'Mantenimiento de aires acondicionados', 'OTRO', 'Mantenimiento', '250', 'USD', 'EFECTIVO', 'Técnico XYZ', '', 'DRAFT'],
-      ['2026-01-17', 'Publicidad en redes sociales', 'VENTAS', '', '800', 'NIO', 'CARD', 'Agencia ABC', 'TRANSF-088', 'PENDING'],
-    ];
-    const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    sheet['!cols'] = headers.map((header) => ({ wch: Math.max(14, Math.min(28, header.length + 4)) }));
-    const guide = XLSX.utils.aoa_to_sheet([
-      ['GUÍA DE LLENADO · IMPORTACIÓN DE GASTOS'],
-      ['Descripción y monto son obligatorios; las demás columnas son opcionales. Puedes repetir la importación cuando quieras.'],
-      ['Campo', 'Regla'],
-      ['Fecha', 'Formato YYYY-MM-DD (ej. 2026-01-15). Si está vacía se usará la fecha de hoy.'],
-      ['Descripción', 'Obligatoria. Concepto del gasto, ej. "Pago de internet".'],
-      ['Categoría', 'Obligatoria. Valores: OPERATIVO, ADMINISTRATIVO, VENTAS, FINANCIERO, OTRO.'],
-      ['Categoría personalizada', 'Obligatoria cuando Categoría = OTRO. Escribe un nombre libre, ej. "Mantenimiento".'],
-      ['Monto', 'Obligatorio. Mayor que 0. Acepta punto o coma decimal (ej. 1500.50).'],
-      ['Moneda', 'NIO o USD. Si está vacía se usa la moneda configurada en la empresa.'],
-      ['Fuente de pago', 'CASH, CARD, TRANSFER o CHECK. Tarjeta, transferencia y cheque requieren una cuenta bancaria global al pagar. Si está vacía se usa CASH.'],
-      ['Pagado a', 'Opcional. Nombre de la persona o proveedor que recibe el pago.'],
-      ['Referencia', 'Obligatoria para tarjeta, transferencia y cheque. Nº de factura, recibo o comprobante.'],
-      ['Estado', 'DRAFT (borrador), PENDING (pendiente) o PAID (pagado). Si está vacío se crea como PENDING.'],
-      ['Previsualización', 'Después de cargar el archivo verás cuántos gastos se importarán y cuáles se omitirán antes de confirmar.'],
-    ]);
-    guide['!cols'] = [{ wch: 32 }, { wch: 100 }];
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Gastos');
-    XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
-    XLSX.writeFile(workbook, 'plantilla_gastos.xlsx');
-    toast.success('Plantilla descargada');
-  };
-
   const normalizeImportHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_/-]+/g, '');
   const getImportCell = (row: Record<string, any>, aliases: string[]) => {
     const match = aliases.map(normalizeImportHeader).find((alias) => Object.prototype.hasOwnProperty.call(row, alias));
@@ -343,42 +311,83 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const parseExpensesFile = async (file: File, onProgress?: (progress: number) => void) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('Solo se permiten archivos Excel (.xlsx, .xls) o CSV');
     const { rows: rawSheet } = await parseSpreadsheetInWorker(file, 'gastos', false, onProgress);
-    const raw = rawSheet.filter((row) => row.some((cell) => String(cell ?? '').trim()));
-    if (raw.length < 2) return [];
-    const headers = (raw[0] || []).map(normalizeImportHeader);
-    return raw.slice(1).map((values: any[]) => {
-      const row: Record<string, string> = {};
-      headers.forEach((header: string, index: number) => { if (header) row[header] = String(values[index] ?? '').trim(); });
+    if (rawSheet.length < 2) return [];
+    const headers = (rawSheet[0] || []).map(normalizeImportHeader);
+    return rawSheet.slice(1).map((values: any[], index: number) => {
+      const row: Record<string, any> = { sourceRowNumber: index + 2 };
+      headers.forEach((header: string, columnIndex: number) => {
+        const value = values[columnIndex];
+        if (header) row[header] = value instanceof Date || typeof value === 'number' ? value : String(value ?? '').trim();
+      });
       return row;
-    });
+    }).filter((row) => Object.entries(row).some(([key, value]) => key !== 'sourceRowNumber' && String(value ?? '').trim()));
   };
 
   const normalizeExpenseCategory = (raw: string) => {
     const category = String(raw || '').trim().toUpperCase();
-    if (!category) return 'OPERATIVO';
     if (['OPERACIONAL', 'OPERATIVO'].includes(category)) return 'OPERATIVO';
-    if (['ADMINISTRATIVO', 'VENTAS', 'FINANCIERO', 'OTRO'].includes(category)) return category;
-    return 'OTRO';
+    return category;
   };
 
   const normalizeExpenseStatus = (raw: string) => {
     const status = String(raw || '').trim().toUpperCase();
     if (['DRAFT', 'PENDING', 'PAID'].includes(status)) return status;
-    return 'DRAFT';
+    return status || 'PENDING';
   };
 
-  const isValidExpenseImportRow = (row: Record<string, string>) => {
-    const description = String(getImportCell(row, ['descripcion', 'description', 'concepto'])).trim();
-    const amount = Number(String(getImportCell(row, ['monto', 'amount', 'importe', 'valor'])).replace(',', '.'));
-    const category = normalizeExpenseCategory(String(getImportCell(row, ['categoria', 'category'])));
-    const categoryCustom = category === 'OTRO' ? String(getImportCell(row, ['categoriacustom', 'categorycustom', 'categoriapersonalizada'])).trim() : '';
-    return Boolean(description) && Number.isFinite(amount) && amount > 0 && (category !== 'OTRO' || Boolean(categoryCustom));
+  const normalizeExpensePaymentSource = (raw: string) => {
+    const method = String(raw || '').trim().toUpperCase();
+    const aliases: Record<string, string> = {
+      EFECTIVO: 'CASH', CASH: 'CASH', TARJETA: 'CARD', CARD: 'CARD',
+      TRANSFERENCIA: 'TRANSFER', TRANSFER: 'TRANSFER', CHEQUE: 'CHECK', CHECK: 'CHECK',
+    };
+    return aliases[method] || method;
+  };
+
+  const parseImportNumber = (raw: unknown) => {
+    if (typeof raw === 'number') return raw;
+    const value = String(raw ?? '').trim().replace(/\s/g, '');
+    if (!value) return undefined;
+    const comma = value.lastIndexOf(',');
+    const dot = value.lastIndexOf('.');
+    const normalized = comma >= 0 && dot >= 0
+      ? (comma > dot ? value.replace(/\./g, '').replace(',', '.') : value.replace(/,/g, ''))
+      : comma >= 0 ? value.replace(',', '.') : value;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : raw;
+  };
+
+  const normalizeImportDate = (raw: unknown) => {
+    const asIsoDate = (year: number, month: number, day: number) => {
+      const candidate = new Date(year, month - 1, day);
+      if (candidate.getFullYear() !== year || candidate.getMonth() !== month - 1 || candidate.getDate() !== day) return null;
+      return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    };
+    if (raw instanceof Date) return Number.isNaN(raw.getTime()) ? raw : asIsoDate(raw.getFullYear(), raw.getMonth() + 1, raw.getDate()) || raw;
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      const date = new Date(Date.UTC(1899, 11, 30) + raw * 86400000);
+      return asIsoDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()) || raw;
+    }
+    const value = String(raw ?? '').trim();
+    if (!value) return value;
+    const iso = value.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (iso) return asIsoDate(Number(iso[1]), Number(iso[2]), Number(iso[3])) || value;
+    const local = value.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);
+    if (local) return asIsoDate(Number(local[3]), Number(local[2]), Number(local[1])) || value;
+    const serial = Number(value);
+    if (Number.isFinite(serial) && serial > 0) {
+      const date = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+      return asIsoDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()) || value;
+    }
+    return value;
   };
 
   const handleExpenseFileChange = async (file: File | undefined) => {
     setImportFile(file || null);
-    setImportFileStats(null);
     setParsedImportRows([]);
+    setExpenseImportPreview(null);
+    setExpenseImportAttemptId(file ? crypto.randomUUID() : null);
+    setImportResult(null);
     if (!file) return;
     setReadingFile(true);
     setReadingProgress(3);
@@ -387,28 +396,49 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         setReadingProgress(Math.min(84, Math.max(3, progress)));
       });
       setReadingProgress(90);
-      const valid = rows.filter(isValidExpenseImportRow).length;
       setParsedImportRows(rows);
-      setImportFileStats({ total: rows.length, valid, skipped: rows.length - valid });
       setReadingProgress(100);
     } catch {
       setImportFile(null);
-      setImportFileStats(null);
       setParsedImportRows([]);
+      setExpenseImportAttemptId(null);
+      toast.error('No se pudo leer el archivo. Verifica el formato de Excel o CSV.');
     } finally {
       setReadingFile(false);
       setReadingProgress(0);
     }
   };
 
-  const handleImportExpenses = async () => {
+  const buildExpenseImportRows = (rows: Record<string, any>[]): ExpenseImportRow[] => rows.map((row, index) => {
+    const currency = String(getImportCell(row, ['moneda', 'currency']) || '').trim().toUpperCase();
+    const paymentSource = normalizeExpensePaymentSource(String(getImportCell(row, ['metododepago', 'paymentsource', 'fuentedepago', 'cuentaorigen', 'paymentmethod'])));
+    const bankAccountNumber = getImportCell(row, ['numerodecuentabancaria', 'cuentabancaria', 'bankaccountnumber', 'accountnumber']);
+    return {
+      sourceRowNumber: Number(row.sourceRowNumber) || index + 2,
+      date: normalizeImportDate(getImportCell(row, ['fecha', 'date'])),
+      description: String(getImportCell(row, ['descripcion', 'description', 'concepto']) ?? '').trim(),
+      category: normalizeExpenseCategory(String(getImportCell(row, ['categoria', 'category']))),
+      categoryCustom: String(getImportCell(row, ['categoriacustom', 'categorycustom', 'categoriapersonalizada']) ?? '').trim(),
+      amount: parseImportNumber(getImportCell(row, ['monto', 'amount', 'importe', 'valor'])),
+      currency: currency || undefined,
+      exchangeRate: parseImportNumber(getImportCell(row, ['tasadecambio', 'exchangerate', 'tasa'])),
+      status: normalizeExpenseStatus(String(getImportCell(row, ['estado', 'status']))),
+      paymentSource: paymentSource || undefined,
+      paidTo: String(getImportCell(row, ['pagadoa', 'paidto']) ?? '').trim(),
+      reference: String(getImportCell(row, ['referencia', 'reference']) ?? '').trim(),
+      bankAccountNumber: typeof bankAccountNumber === 'number' ? bankAccountNumber : String(bankAccountNumber ?? '').trim(),
+    };
+  });
+
+  const handlePreviewExpenses = async () => {
     if (!importFile) {
-      toast.error('Selecciona un archivo CSV');
+      toast.error('Selecciona un archivo Excel o CSV.');
       return;
     }
     setImporting(true);
     setImportProgress(8);
     setImportResult(null);
+    setExpenseImportPreview(null);
     try {
       const rows = parsedImportRows.length > 0
         ? parsedImportRows
@@ -420,54 +450,96 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         toast.error('El archivo no contiene filas para importar');
         return;
       }
-      setImportProgress(35);
-      const errors: string[] = [];
-      const payload: any[] = [];
-      rows.forEach((row, idx) => {
-        const rowNumber = idx + 2;
-        const description = String(getImportCell(row, ['descripcion', 'description', 'concepto'])).trim();
-        const amount = Number(String(getImportCell(row, ['monto', 'amount', 'importe', 'valor'])).replace(',', '.'));
-        const category = normalizeExpenseCategory(String(getImportCell(row, ['categoria', 'category'])));
-        const categoryCustom = category === 'OTRO' ? String(getImportCell(row, ['categoriacustom', 'categorycustom', 'categoriapersonalizada'])).trim() : '';
-        const status = normalizeExpenseStatus(String(getImportCell(row, ['estado', 'status']) || 'PENDING'));
-        const currencyRaw = String(getImportCell(row, ['moneda', 'currency']) || displayCurrency || 'NIO').trim().toUpperCase();
-        const currency = currencyRaw === 'USD' ? 'USD' : 'NIO';
-        const paymentSourceRaw = String(getImportCell(row, ['cuentaorigen', 'paymentsource', 'fuentedepago', 'metododepago', 'paymentmethod']) || 'EFECTIVO').trim().toUpperCase();
-        const paymentSource = paymentSourceOptions.includes(paymentSourceRaw as any) ? paymentSourceRaw : (paymentSourceRaw === 'CASH' ? 'EFECTIVO' : 'EFECTIVO');
-        const paidTo = String(getImportCell(row, ['pagadoa', 'paidto'])).trim();
-        const reference = String(getImportCell(row, ['referencia', 'reference'])).trim();
-        const dateRaw = String(getImportCell(row, ['fecha', 'date'])).trim();
-        const dateParsed = dateRaw ? new Date(dateRaw) : new Date();
-        const date = Number.isNaN(dateParsed.getTime()) ? new Date().toISOString() : dateParsed.toISOString();
-
-        if (!description) {
-          errors.push(`Fila ${rowNumber}: descripción es obligatoria`);
-          return;
+      const payload = buildExpenseImportRows(rows);
+      const previewRows: ExpenseImportPreviewResponse['rows'] = [];
+      let integrations: ExpenseImportPreviewResponse['integrations'] | undefined;
+      for (let offset = 0; offset < payload.length; offset += 50) {
+        const end = Math.min(payload.length, offset + 50);
+        setImportProgress(30 + Math.round((end / payload.length) * 65));
+        try {
+          const preview = await expensesService.previewImport(payload.slice(offset, end));
+          previewRows.push(...preview.rows);
+          integrations = preview.integrations;
+        } catch (error: any) {
+          const firstRow = payload[offset].sourceRowNumber;
+          const lastRow = payload[end - 1].sourceRowNumber;
+          const blockMessage = `No se pudo validar el bloque ${Math.floor(offset / 50) + 1} (filas ${firstRow}-${lastRow}): ${error?.message || 'error del servidor'}`;
+          previewRows.push(...payload.slice(offset, end).map((row) => ({
+            sourceRowNumber: row.sourceRowNumber,
+            status: 'BLOCKED' as const,
+            errors: [blockMessage],
+            effects: { expense: false, financeMirror: false, accountingJournal: false },
+          })));
         }
-        if (!Number.isFinite(amount) || amount <= 0) {
-          errors.push(`Fila ${rowNumber}: monto inválido`);
-          return;
-        }
-        if (category === 'OTRO' && !categoryCustom) {
-          errors.push(`Fila ${rowNumber}: categoría OTRO requiere categoryCustom`);
-          return;
-        }
-        payload.push({ sourceRow: rowNumber, date, amount, currency, exchangeRate: globalRate, category, categoryCustom: categoryCustom || undefined, description, paidTo: paidTo || undefined, paymentSource, reference: reference || undefined, status });
+      }
+      const ready = previewRows.filter((row) => row.status === 'READY').length;
+      setExpenseImportPreview({
+        summary: { total: previewRows.length, ready, blocked: previewRows.length - ready },
+        integrations: integrations || { financeEnabled: false, accountingEnabled: false, accountingConnectionEnabled: false, autoGenerationEnabled: false },
+        rows: previewRows,
       });
-      setImportProgress(55);
-      const response: any = payload.length ? await expensesService.bulkImport(payload) : { total: rows.length, created: 0, skipped: 0, errors: [] };
-      const serverResult = response?.data || response;
-      const created = Number(serverResult?.created ?? serverResult?.success ?? serverResult?.count ?? 0);
-      const serverErrors = Array.isArray(serverResult?.errors) ? serverResult.errors : [];
-      const skipped = Number(serverResult?.skipped ?? (rows.length - created));
-      setImportProgress(90);
-      const allErrors = [...errors, ...serverErrors];
+      setExpenseImportAttemptId(crypto.randomUUID());
       setImportProgress(100);
-      setImportResult({ total: rows.length, created, skipped, errors: allErrors.slice(0, 12) });
-      if (created > 0) onRefresh();
-      toast.success(`Importación finalizada: ${created} creados, ${skipped} omitidos`);
+      toast.success(`Vista previa lista: ${ready} listos y ${previewRows.length - ready} con errores.`);
     } catch (error: any) {
-      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
+      toast.error(`No se pudo validar el archivo: ${error?.message || 'revisa el formato y vuelve a intentar'}`);
+    } finally {
+      setImporting(false);
+      setImportProgress(0);
+    }
+  };
+
+  const handleConfirmExpenseImport = async (retryOnly = false) => {
+    if (!expenseImportPreview || !expenseImportAttemptId || importing) return;
+    const eligible = expenseImportPreview.rows
+      .filter((row) => retryOnly ? row.status === 'FAILED' : row.status === 'READY')
+      .map((previewRow) => previewRow.sourceRowNumber);
+    if (!eligible.length) {
+      toast.error(retryOnly ? 'No hay filas fallidas para reintentar.' : 'No hay gastos listos para confirmar.');
+      return;
+    }
+    const payload = buildExpenseImportRows(parsedImportRows).filter((row) => eligible.includes(row.sourceRowNumber));
+    setImporting(true);
+    setImportProgress(5);
+    setImportResult(null);
+    const outcomes: ExpenseImportBlockResponse['rows'] = [];
+    const blockErrors: string[] = [];
+    try {
+      for (let offset = 0; offset < payload.length; offset += 50) {
+        const block = payload.slice(offset, offset + 50);
+        setImportProgress(5 + Math.round(((offset + block.length) / payload.length) * 90));
+        try {
+          const result = await expensesService.confirmImportBlock({ attemptId: expenseImportAttemptId, rows: block });
+          outcomes.push(...result.rows);
+          setExpenseImportPreview((current) => current ? {
+            ...current,
+            rows: current.rows.map((row) => {
+              const outcome = result.rows.find((item) => item.sourceRowNumber === row.sourceRowNumber);
+              return outcome ? { ...row, ...outcome } : row;
+            }),
+          } : current);
+        } catch (error: any) {
+          const message = error?.message || 'no se pudo confirmar el bloque';
+          blockErrors.push(`Bloque ${Math.floor(offset / 50) + 1}: ${message}`);
+          outcomes.push(...block.map((row) => ({
+            sourceRowNumber: row.sourceRowNumber,
+            status: 'FAILED',
+            errors: [`No se pudo confirmar este bloque: ${message}`],
+          })));
+        }
+      }
+      const allRows = expenseImportPreview.rows.map((row) => {
+        const outcome = outcomes.find((item) => item.sourceRowNumber === row.sourceRowNumber);
+        return outcome ? { ...row, ...outcome } : row;
+      });
+      const created = allRows.filter((row) => row.status === 'CONFIRMED').length;
+      const errors = allRows.flatMap((row) => (row.errors || []).map((error) => `Fila ${row.sourceRowNumber}: ${error}`));
+      setExpenseImportPreview((current) => current ? { ...current, rows: allRows } : current);
+      setImportResult({ total: allRows.length, created, skipped: allRows.length - created, errors: errors.slice(0, 100) });
+      if (created > 0) onRefresh();
+      toast.success(`Carga finalizada: ${created} gastos confirmados; ${allRows.length - created} pendientes o con error.`);
+    } catch (error: any) {
+      toast.error(`No se pudo confirmar el bloque: ${error?.message || 'revisa la conexión e inténtalo de nuevo'}`);
     } finally {
       setImporting(false);
       setImportProgress(0);
@@ -478,15 +550,18 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     setImportOpen(false);
     setImportResult(null);
     setImportFile(null);
-    setImportFileStats(null);
+    setParsedImportRows([]);
+    setExpenseImportPreview(null);
+    setExpenseImportAttemptId(null);
   };
 
   const clearExpenseImportFile = () => {
     if (readingFile || importing) return;
     setImportFile(null);
     setParsedImportRows([]);
-    setImportFileStats(null);
     setImportResult(null);
+    setExpenseImportPreview(null);
+    setExpenseImportAttemptId(null);
     if (importFileInputRef.current) importFileInputRef.current.value = '';
   };
 
@@ -1065,7 +1140,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
             {canPerform('PURCHASES_EXPENSES', 'import') && (
               <Button
                 variant="outline"
-                onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); setImportFileStats(null); }}
+                onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); setParsedImportRows([]); setExpenseImportPreview(null); setExpenseImportAttemptId(null); }}
                 className="h-10 min-w-0 w-full gap-2 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto"
               >
                 <Upload className="size-4" /> Importar
@@ -1223,15 +1298,15 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                   <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
                     <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
                     <p className="text-xs text-muted-foreground">
-                      Columnas (Excel o CSV): <span className="font-mono">Fecha, Descripción, Categoría, Categoría personalizada, Monto, Moneda, Fuente de pago, Pagado a, Referencia, Estado</span>
+                      Una fila por gasto: <span className="font-mono">Fecha, Descripción, Categoría, Categoría personalizada, Monto, Moneda, Tasa de cambio, Estado, Método de pago, Pagado a, Referencia, Número de cuenta bancaria</span>.
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Categoría: OPERATIVO/ADMINISTRATIVO/VENTAS/FINANCIERO/OTRO · Estado: DRAFT/PENDING/PAID · Moneda: NIO/USD · Fuente: CASH/CARD/TRANSFER/CHECK
+                      La fecha y el monto son obligatorios. OTRO requiere categoría personalizada; TARJETA, TRANSFERENCIA y CHEQUE requieren referencia cuando el estado es PAID.
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Si la categoría es OTRO, la columna "Categoría personalizada" es obligatoria. Acepta encabezados en español o inglés.
+                      El servidor muestra los efectos de Finanzas y Contabilidad según la configuración actual de esta sucursal. Se confirma en bloques de hasta 50 gastos.
                     </p>
-                    <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={downloadExpenseTemplate}>
+                    <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={() => { void downloadExpenseImportTemplate().then(() => toast.success('Plantilla descargada')).catch(() => toast.error('No se pudo generar la plantilla')); }}>
                       <FileDown className="size-4" /> Descargar plantilla Excel
                     </Button>
                   </div>
@@ -1240,9 +1315,49 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                     <label className="text-xs font-bold text-muted-foreground">Archivo Excel o CSV</label>
                     <Input ref={importFileInputRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(e) => { void handleExpenseFileChange(e.target.files?.[0]); e.target.value = ''; }} />
                     {importFile && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p><Button type="button" variant="ghost" size="sm" className="text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearExpenseImportFile} disabled={readingFile || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}
-                    {importFileStats && <p className="text-xs font-semibold text-muted-foreground">Prevalidación: <span className="text-emerald-600">{importFileStats.valid} válidos</span> · <span className={importFileStats.skipped ? 'text-rose-600' : 'text-muted-foreground'}>{importFileStats.skipped} se omitirán</span></p>}
-                    {importFileStats && <ImportReviewSummary total={importFileStats.total} valid={importFileStats.valid} skipped={importFileStats.skipped} entityLabel="gastos" />}
+                    {parsedImportRows.length > 0 && !expenseImportPreview && <p className="text-xs font-semibold text-muted-foreground">{parsedImportRows.length} fila(s) detectadas. Previsualiza para validar datos y efectos en el servidor.</p>}
                   </div>
+
+                  {expenseImportPreview && (
+                    <div className="space-y-3 rounded-xl border border-border/60 bg-card p-3 sm:p-4">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-widest text-foreground">Vista previa del servidor</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          PAID crea efectos según las conexiones activas. DRAFT y PENDING quedan en Compras sin espejo ni asiento.
+                        </p>
+                      </div>
+                      <ImportReviewSummary total={expenseImportPreview.summary.total} valid={expenseImportPreview.summary.ready} skipped={expenseImportPreview.summary.blocked} entityLabel="gastos listos" />
+                      <div className="flex flex-wrap gap-2 text-[10px] font-bold">
+                        <Badge variant="outline" className="border-emerald-500/30 text-emerald-700">Compras activa</Badge>
+                        <Badge variant="outline" className={expenseImportPreview.integrations.financeEnabled ? 'border-emerald-500/30 text-emerald-700' : 'text-muted-foreground'}>Finanzas {expenseImportPreview.integrations.financeEnabled ? 'conectada' : 'desconectada'}</Badge>
+                        <Badge variant="outline" className={expenseImportPreview.integrations.accountingEnabled ? 'border-emerald-500/30 text-emerald-700' : 'text-muted-foreground'}>Asiento automático {expenseImportPreview.integrations.accountingEnabled ? 'activo' : 'inactivo'}</Badge>
+                      </div>
+                      <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                        {expenseImportPreview.rows.map((row) => (
+                          <div key={row.sourceRowNumber} className="min-w-0 rounded-lg border border-border/60 bg-muted/20 p-3">
+                            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-xs font-black">Fila {row.sourceRowNumber}</span>
+                                  <Badge variant="outline" className={row.status === 'READY' ? 'border-emerald-500/30 text-emerald-700' : row.status === 'CONFIRMED' ? 'border-blue-500/30 text-blue-700' : row.status === 'FAILED' || row.status === 'BLOCKED' ? 'border-rose-500/30 text-rose-700' : ''}>
+                                    {row.status === 'READY' ? 'Lista' : row.status === 'BLOCKED' ? 'Corregir' : row.status === 'CONFIRMED' ? 'Confirmada' : row.status === 'FAILED' ? 'Falló' : row.status}
+                                  </Badge>
+                                  {row.status === 'READY' && row.effects?.expense && <span className="text-[10px] text-muted-foreground">Se creará en Compras</span>}
+                                  {row.status === 'READY' && row.effects?.financeMirror && <span className="text-[10px] text-muted-foreground">+ espejo en Finanzas</span>}
+                                  {row.status === 'READY' && row.effects?.accountingJournal && <span className="text-[10px] text-muted-foreground">+ asiento contable</span>}
+                                  {row.status === 'CONFIRMED' && <span className="text-[10px] font-semibold text-emerald-700">Gasto creado en Compras</span>}
+                                  {row.status === 'CONFIRMED' && <span className="text-[10px] text-muted-foreground">{row.financeMirrorCreated ? 'Espejo creado en Finanzas' : 'Sin espejo en Finanzas'}</span>}
+                                  {row.status === 'CONFIRMED' && <span className="text-[10px] text-muted-foreground">{row.accountingJournalGenerated ? 'Asiento generado' : 'Sin asiento contable'}</span>}
+                                </div>
+                                {(row.errors || []).length > 0 && <p className="mt-1 break-words text-xs text-rose-600">{row.errors.join(' · ')}</p>}
+                              </div>
+                              {row.number && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{row.number}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -1270,15 +1385,33 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
             <DialogFooter data-tour="purchases-expense-modal-actions">
               {importResult ? (
-                <Button onClick={finishImport} className="gap-2">
-                  <CheckCircle2 className="size-4" /> Terminar
-                </Button>
+                <>
+                  {expenseImportPreview?.rows.some((row) => row.status === 'FAILED') && (
+                    <Button variant="outline" onClick={() => void handleConfirmExpenseImport(true)} disabled={importing} className="gap-2">
+                      <Upload className="size-4" /> Reintentar fallidas
+                    </Button>
+                  )}
+                  <Button onClick={finishImport} className="gap-2">
+                    <CheckCircle2 className="size-4" /> Terminar
+                  </Button>
+                </>
               ) : (
                 <>
                   <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cerrar</Button>
-                  <Button onClick={handleImportExpenses} disabled={importing || !importFile} className="gap-2">
-                    <Upload className="size-4" /> {importFileStats ? `Importar ${importFileStats.valid} válidos · omitir ${importFileStats.skipped}` : 'Importar gastos'}
-                  </Button>
+                  {!expenseImportPreview ? (
+                    <Button onClick={() => void handlePreviewExpenses()} disabled={importing || !importFile || parsedImportRows.length === 0} className="gap-2">
+                      <Eye className="size-4" /> Previsualizar {parsedImportRows.length ? `${parsedImportRows.length} gastos` : 'gastos'}
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="outline" onClick={() => void handlePreviewExpenses()} disabled={importing || !importFile || parsedImportRows.length === 0} className="gap-2">
+                        <Eye className="size-4" /> Actualizar vista previa
+                      </Button>
+                      <Button onClick={() => void handleConfirmExpenseImport()} disabled={importing || expenseImportPreview.summary.ready === 0} className="gap-2">
+                        <Upload className="size-4" /> Confirmar {expenseImportPreview.summary.ready} gastos listos
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
             </DialogFooter>
