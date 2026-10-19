@@ -2,7 +2,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
-import { applyPdfHeaderComposition, applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfSettings, ensureDashboardChartNodes, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, pdfTemplateImageShapeStyles, resolveTemplateToken, type PdfHeaderComposition, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
+import { applyPdfHeaderComposition, applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfSettings, ensureDashboardChartNodes, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, pdfTemplateImageShapeStyles, resolveTemplateToken, type PdfHeaderComposition, type PdfHeaderContentSpacing, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
 import { applyPdfStyleToDefinition, getPdfTableCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, normalizePdfFrameGeometry, normalizePdfStyleConfig, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfTableStyle } from '../services/pdf-document-style';
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
@@ -12,6 +12,7 @@ export interface PdfTemplateRenderSettings {
   paperSize: 'LETTER' | 'A4' | 'OFICIO' | 'LEGAL' | string;
   orientation: 'portrait' | 'landscape';
   headerComposition?: PdfHeaderComposition;
+  headerContentSpacing?: PdfHeaderContentSpacing;
   backgroundColor?: string;
   primaryColor?: string;
   secondaryColor?: string;
@@ -141,6 +142,42 @@ export function getPdfTableCellVerticalAlignment(_region: 'header' | 'body' | 'f
 
 export function getPdfReportSectionTableGap(targetKey: string) {
   return isStandardPdfLayoutTarget(targetKey) ? 6 : 0;
+}
+
+export function resolvePdfHeaderAnchoredTop(headerContentBottom: number, preferredTop: number, gap: number, preservePreferredTop: boolean) {
+  const preferred = Number.isFinite(Number(preferredTop)) ? Math.max(0, Number(preferredTop)) : 0;
+  const headerBottom = Number.isFinite(Number(headerContentBottom)) ? Math.max(0, Number(headerContentBottom)) : 0;
+  const safeGap = Number.isFinite(Number(gap)) ? Math.max(0, Number(gap)) : 0;
+  const measuredTop = headerBottom > 0 ? headerBottom + safeGap : preferred;
+  return preservePreferredTop ? Math.max(preferred, measuredTop) : measuredTop;
+}
+
+/** Conserva el espaciado actual como pequeño y amplía solo el margen bajo el encabezado según el diseño. */
+export function resolvePdfHeaderContentGap(currentGap: number, pageHeight: number, spacing: unknown) {
+  if (spacing === 'medium') return currentGap + Math.max(12, pageHeight * 0.012);
+  if (spacing === 'large') return currentGap + Math.max(24, pageHeight * 0.024);
+  return currentGap;
+}
+
+/** Aplica el nivel seleccionado sobre la posición pequeña existente, conservando el anclaje al encabezado real. */
+export function resolvePdfHeaderContentTop(headerBottom: number, preferredTop: number, currentGap: number, pageHeight: number, spacing: unknown, preservePreferredTop: boolean) {
+  const currentTop = resolvePdfHeaderAnchoredTop(headerBottom, preferredTop, currentGap, preservePreferredTop);
+  const selectedGap = resolvePdfHeaderContentGap(currentGap, pageHeight, spacing);
+  return currentTop + Math.max(0, selectedGap - currentGap);
+}
+
+export function resolvePdfHistoryInfoTop(documentHeaderBottom: number, entityHeadingBottom: number, gap: number) {
+  const documentBottom = Number.isFinite(Number(documentHeaderBottom)) ? Math.max(0, Number(documentHeaderBottom)) : 0;
+  const entityBottom = Number.isFinite(Number(entityHeadingBottom)) ? Math.max(0, Number(entityHeadingBottom)) : 0;
+  const safeGap = Number.isFinite(Number(gap)) ? Math.max(0, Number(gap)) : 0;
+  return Math.max(documentBottom, entityBottom) + safeGap;
+}
+
+export function resolvePdfReportTableBorderColor(targetKey: string, nodeBorderColor: string | undefined, configuredLineColor: string) {
+  const configuredBorder = String(nodeBorderColor || '').trim();
+  const lineColor = String(configuredLineColor || '').trim() || '#e2e8f0';
+  if (targetKey === 'ventas.customers' && (!configuredBorder || configuredBorder.toLowerCase() === 'transparent')) return lineColor;
+  return configuredBorder || lineColor;
 }
 
 /** Place continuation content just below the header elements that actually repeat. */
@@ -867,8 +904,9 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const primaryColor = safeHtml2CanvasColor(settings.primaryColor, '#10b981');
   const textColor = safeHtml2CanvasColor(settings.textColor, '#334155');
   const lineColor = safeHtml2CanvasColor(settings.lineColor, '#e2e8f0');
-  const tableBorderColor = safeHtml2CanvasColor(node.borderColor || lineColor, lineColor);
-  element.style.borderColor = tablePresentation.outerBorderTone === 'accent' ? primaryColor : tableBorderColor;
+  const tableOuterBorderColor = safeHtml2CanvasColor(node.borderColor || lineColor, lineColor);
+  const tableBorderColor = safeHtml2CanvasColor(resolvePdfReportTableBorderColor(targetKey || '', node.borderColor, lineColor), lineColor);
+  element.style.borderColor = tablePresentation.outerBorderTone === 'accent' ? primaryColor : tableOuterBorderColor;
   const headerBackground = node.tableHeaderColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? '#ffffff' : primaryColor);
   const headerColor = node.tableHeaderTextColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? textColor : '#ffffff');
   const rowTextColor = node.tableTextColor || textColor;
@@ -994,10 +1032,11 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
   const primaryColor = safeHtml2CanvasColor(settings.primaryColor, '#10b981');
   const textColor = safeHtml2CanvasColor(settings.textColor, '#334155');
   const lineColor = safeHtml2CanvasColor(settings.lineColor, '#e2e8f0');
-  const tableBorderColor = safeHtml2CanvasColor(node.borderColor || lineColor, lineColor);
+  const tableOuterBorderColor = safeHtml2CanvasColor(node.borderColor || lineColor, lineColor);
+  const tableBorderColor = safeHtml2CanvasColor(resolvePdfReportTableBorderColor(targetKey || '', node.borderColor, lineColor), lineColor);
   element.style.borderStyle = tablePresentation.outerBorder && !fullWidthReportSections ? 'solid' : 'none';
   element.style.borderWidth = fullWidthReportSections ? '0' : `${tablePresentation.outerBorderWidth}px`;
-  element.style.borderColor = tablePresentation.outerBorderTone === 'accent' ? primaryColor : tableBorderColor;
+  element.style.borderColor = tablePresentation.outerBorderTone === 'accent' ? primaryColor : tableOuterBorderColor;
   if (fullWidthReportSections) element.style.backgroundColor = 'transparent';
   const headerBackground = node.tableHeaderColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? '#ffffff' : primaryColor);
   const headerColor = node.tableHeaderTextColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? textColor : '#ffffff');
@@ -1855,7 +1894,7 @@ function reflowSingleEntityHistory(page: HTMLElement, definition: PdfTemplateDef
   const block = document.createElement('section');
   block.dataset.pdfHistoryParty = 'true';
   Object.assign(block.style, {
-    position: 'absolute', left: '5%', top: `${documentHeaderBottom + Math.max(4, pageRect.height * 0.012)}px`,
+    position: 'absolute', left: '5%', top: '0px',
     width: '90%', display: 'flex', flexDirection: 'column', gap: '2mm', minWidth: '0',
     overflow: 'visible', boxSizing: 'border-box', color: safeHtml2CanvasColor(settings.textColor, '#334155'),
     fontFamily: browserFontFamily(settings.fontFamily),
@@ -1879,6 +1918,8 @@ function reflowSingleEntityHistory(page: HTMLElement, definition: PdfTemplateDef
       entityHeadingBottom = heading.getBoundingClientRect().bottom - pageRect.top;
     } else block.appendChild(heading);
   }
+
+  block.style.top = `${resolvePdfHistoryInfoTop(documentHeaderBottom, entityHeadingBottom, Math.max(4, pageRect.height * 0.012))}px`;
 
   for (let index = 0; index < fieldValues.length; index += 2) {
     const fields = fieldValues.slice(index, index + 2);
@@ -1914,13 +1955,97 @@ function reflowSingleEntityHistory(page: HTMLElement, definition: PdfTemplateDef
   }
 }
 
+/** Mantiene el resumen empresarial debajo del nombre real ya envuelto. */
+function reflowCompanyIdentitySummary(page: HTMLElement, definition: PdfTemplateDefinition) {
+  const nameNode = definition.nodes.find(node => node.enabled !== false && node.id === 'company-name');
+  const summaryNode = definition.nodes.find(node => node.enabled !== false && node.id === 'company-summary');
+  if (!nameNode || !summaryNode) return;
+
+  const pageRect = page.getBoundingClientRect();
+  if (pageRect.height <= 0) return;
+  const renderedNodes = Array.from(page.querySelectorAll<HTMLElement>('[data-pdf-node-id]'));
+  const nameElement = renderedNodes.find(element => element.dataset.pdfNodeId === nameNode.id);
+  const summaryElement = renderedNodes.find(element => element.dataset.pdfNodeId === summaryNode.id);
+  if (!nameElement || !summaryElement) return;
+
+  const nameText = Array.from(nameElement.children).find(child => child.textContent?.trim()) as HTMLElement | undefined;
+  const summaryText = Array.from(summaryElement.children).find(child => child.textContent?.trim()) as HTMLElement | undefined;
+  if (!nameText || !summaryText) return;
+
+  const preferredTop = summaryElement.getBoundingClientRect().top - pageRect.top;
+  let contentBottom = nameText.getBoundingClientRect().bottom - pageRect.top;
+  const logoElement = renderedNodes.find(element => element.dataset.pdfNodeId === 'company-logo');
+  if (logoElement) {
+    const nameRect = nameElement.getBoundingClientRect();
+    const summaryRect = summaryElement.getBoundingClientRect();
+    const logoRect = logoElement.getBoundingClientRect();
+    const overlapsName = nameRect.left < logoRect.right && nameRect.right > logoRect.left;
+    const overlapsSummary = summaryRect.left < logoRect.right && summaryRect.right > logoRect.left;
+    const sharesHorizontalSpace = overlapsName || overlapsSummary;
+    if (sharesHorizontalSpace) contentBottom = Math.max(contentBottom, logoRect.bottom - pageRect.top);
+  }
+
+  const gap = Math.max(4, pageRect.height * 0.006);
+  const top = resolvePdfHeaderAnchoredTop(contentBottom, preferredTop, gap, true);
+  summaryElement.style.top = `${(top / pageRect.height) * 100}%`;
+  summaryElement.style.height = 'auto';
+  summaryElement.style.minHeight = '0';
+  summaryElement.style.overflow = 'visible';
+  summaryText.style.height = 'auto';
+  summaryText.style.minHeight = '0';
+  summaryText.style.overflow = 'visible';
+}
+
+/** Desplaza el contenido de primera página solo cuando el header real lo alcanza. */
+function reflowFirstPageBelowCompanyHeader(page: HTMLElement, definition: PdfTemplateDefinition, settings: PdfTemplateRenderSettings, pageNumber: number) {
+  if (pageNumber !== 1) return;
+  const pageRect = page.getBoundingClientRect();
+  if (pageRect.height <= 0) return;
+
+  const renderedNodes = Array.from(page.querySelectorAll<HTMLElement>('[data-pdf-node-id]'));
+  const identityIds = new Set(['company-logo', 'company-name', 'company-summary']);
+  const headerBottom = Math.max(0, ...definition.nodes
+    .filter(node => node.enabled !== false && (identityIds.has(node.id) || (isPdfFrameHeaderNode(node) && !['document-title', 'document-number', 'document-status', 'document-date', 'document-generated', 'report-meta', 'ticket-meta'].includes(node.id))))
+    .map(node => renderedNodes.find(element => element.dataset.pdfNodeId === node.id))
+    .filter((element): element is HTMLElement => Boolean(element))
+    .map(element => {
+      if (['company-name', 'company-summary'].includes(element.dataset.pdfNodeId || '')) {
+        const visibleText = Array.from(element.children).find(child => child.textContent?.trim()) as HTMLElement | undefined;
+        return visibleText ? visibleText.getBoundingClientRect().bottom - pageRect.top : 0;
+      }
+      return element.getBoundingClientRect().bottom - pageRect.top;
+    }),
+    ...Array.from(page.querySelectorAll<HTMLElement>('.pdf-header')).map(element => element.getBoundingClientRect().bottom - pageRect.top));
+  if (!headerBottom) return;
+
+  const bodyNodes = definition.nodes
+    .filter(node => node.enabled !== false && !identityIds.has(node.id) && !isPdfFrameFooterNode(node))
+    .filter(node => node.id !== 'header' && !node.id.startsWith('header-'))
+    .map(node => ({ node, element: renderedNodes.find(element => element.dataset.pdfNodeId === node.id) }))
+    .filter((item): item is { node: PdfTemplateNode; element: HTMLElement } => Boolean(item.element));
+  const visibleBody = bodyNodes
+    .map(item => ({ ...item, top: item.element.getBoundingClientRect().top - pageRect.top }))
+    .filter(item => item.element.getBoundingClientRect().width > 0 && item.element.getBoundingClientRect().height > 0);
+  if (!visibleBody.length) return;
+
+  const bodyTop = Math.min(...visibleBody.map(item => item.top));
+  const currentGap = Math.max(5, pageRect.height * 0.006);
+  const nextBodyTop = resolvePdfHeaderContentTop(headerBottom, bodyTop, currentGap, pageRect.height, settings.headerContentSpacing, true);
+  const shift = nextBodyTop - bodyTop;
+  if (shift <= 0.5) return;
+
+  visibleBody.forEach(({ element, top }) => {
+    element.style.top = `${((top + shift) / pageRect.height) * 100}%`;
+  });
+}
+
 /**
  * Convierte los campos semánticos ya renderizados en dos tablas compactas:
  * la persona/empresa relacionada y los datos del documento. Los valores se
  * leen del DOM generado por los tokens para mantener intactos los datos y sus
  * formatos; solo cambia su presentación en el PDF.
  */
-function reflowPartySection(page: HTMLElement, definition: PdfTemplateDefinition, settings: PdfTemplateRenderSettings, targetKey: string) {
+function reflowPartySection(page: HTMLElement, definition: PdfTemplateDefinition, settings: PdfTemplateRenderSettings, targetKey: string, pageNumber: number) {
   const partySectionNode = definition.nodes.find(node => node.enabled !== false && node.id === 'party-section');
   const tableNode = definition.nodes.find(node => node.enabled !== false && (node.type === 'table' || node.type === 'report-sections'));
   if (!partySectionNode || !tableNode) return;
@@ -1933,21 +2058,27 @@ function reflowPartySection(page: HTMLElement, definition: PdfTemplateDefinition
   if (!sectionElement || !tableElement) return;
 
   const sectionRect = sectionElement.getBoundingClientRect();
-  const gap = Math.max(5, pageRect.height * 0.009);
+  const currentHeaderGap = Math.max(5, pageRect.height * 0.009);
+  const spacing = pageNumber === 1 ? settings.headerContentSpacing : 'small';
+  const extraHeaderGap = resolvePdfHeaderContentGap(currentHeaderGap, pageRect.height, spacing) - currentHeaderGap;
+  const sectionTableGap = currentHeaderGap;
   const documentNodeIds = new Set(['document-title', 'document-number', 'document-date', 'document-status', 'document-generated', 'document-extra', 'report-meta']);
   const headerBottom = Math.max(0, ...definition.nodes
     .filter(node => node.enabled !== false && isPdfFrameHeaderNode(node) && !documentNodeIds.has(node.id))
     .map(node => renderedNodes.find(element => element.dataset.pdfNodeId === node.id))
     .filter((element): element is HTMLElement => Boolean(element))
     .map(element => {
-      if (element.dataset.pdfNodeId === 'company-summary') {
-        const summary = element.firstElementChild as HTMLElement | null;
-        return summary?.textContent?.trim() ? summary.getBoundingClientRect().bottom - pageRect.top : 0;
+      if (['company-name', 'company-summary'].includes(element.dataset.pdfNodeId || '')) {
+        const visibleText = Array.from(element.children).find(child => child.textContent?.trim()) as HTMLElement | undefined;
+        return visibleText ? visibleText.getBoundingClientRect().bottom - pageRect.top : 0;
       }
       return element.getBoundingClientRect().bottom - pageRect.top;
     }),
     ...(Array.from(page.querySelectorAll<HTMLElement>('.pdf-header')).map(element => element.getBoundingClientRect().bottom - pageRect.top)));
-  const sectionTop = Math.max(sectionRect.top - pageRect.top, headerBottom ? headerBottom + gap : 0);
+  const preferredSectionTop = sectionRect.top - pageRect.top;
+  const hasStandardSalesPreset = ['sales-standard', 'system-default'].includes(String(definition.metadata?.preset || ''));
+  const sectionTopAtSmall = preferredSectionTop - extraHeaderGap;
+  const sectionTop = resolvePdfHeaderContentTop(headerBottom, sectionTopAtSmall, currentHeaderGap, pageRect.height, spacing, !hasStandardSalesPreset);
 
   const partyFields = new Map<string, { node: PdfTemplateNode; label: string; value: string }>();
   definition.nodes
@@ -2013,7 +2144,7 @@ function reflowPartySection(page: HTMLElement, definition: PdfTemplateDefinition
   }
   page.appendChild(infoRow);
   const infoBottom = infoRow.getBoundingClientRect().bottom - pageRect.top;
-  tableElement.style.top = `${infoBottom + gap + pageRect.height * 0.01}px`;
+  tableElement.style.top = `${infoBottom + sectionTableGap + pageRect.height * 0.01}px`;
 }
 
 export async function renderPdfTemplateToPdf({ definition, settings: requestedSettings, targetKey, data, fileName, save = true, onProgress }: PdfTemplateRenderOptions) {
@@ -2025,6 +2156,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       paperSize: requestedSettings.paperSize,
       orientation: requestedSettings.orientation,
       headerComposition: requestedSettings.headerComposition,
+      headerContentSpacing: requestedSettings.headerContentSpacing,
     })
     : requestedSettings as unknown as Record<string, unknown>;
   const baseSettings = normalizePdfPaperSettings(target.key, applyStandardPdfLayoutSettings(target.key, standardSettings)) as PdfTemplateRenderSettings & Record<string, unknown>;
@@ -2252,8 +2384,10 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       page.id = `pdf-template-page-${index}`;
       wrapper.appendChild(page);
       await waitForImages(page);
+      reflowCompanyIdentitySummary(page, job.definition);
+      reflowFirstPageBelowCompanyHeader(page, job.definition, settings, index + 1);
       reflowSingleEntityHistory(page, job.definition, settings, target.key, index + 1);
-      reflowPartySection(page, job.definition, settings, target.key);
+      reflowPartySection(page, job.definition, settings, target.key, index + 1);
       reflowCompactPurchaseListTable(page, job.definition, pageData, target.key);
       reflowIndividualPage(page, job.definition, isSalesPdfLayoutTarget(target.key) && target.structure === 'transaction');
       const logoOverlayRect = logoImageProperties?.width && logoImageProperties?.height

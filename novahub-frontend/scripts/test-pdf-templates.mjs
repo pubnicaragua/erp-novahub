@@ -41,6 +41,21 @@ try {
   );
   assert.equal(normalizedCompany.bankInfo, 'Cuenta real de la empresa', 'La normalización debe conservar los otros ajustes del diseño.');
   assert.equal(definitions.SYSTEM_DEFAULT_PDF_SETTINGS.email, '', 'Las plantillas nuevas deben dejar vacíos los datos de empresa no configurados.');
+  assert.equal(definitions.SYSTEM_DEFAULT_PDF_SETTINGS.headerContentSpacing, 'small', 'Los diseños nuevos deben conservar el espacio actual después del encabezado.');
+  assert.equal(definitions.normalizePdfCompanySettings({}).headerContentSpacing, 'small', 'Los diseños guardados antes del ajuste deben conservar el espacio actual.');
+  assert.equal(definitions.normalizePdfCompanySettings({ headerContentSpacing: 'large' }).headerContentSpacing, 'large', 'La normalización debe conservar el espacio elegido por cada diseño.');
+  assert.equal(definitions.normalizePdfCompanySettings({ headerContentSpacing: 'invalid' }).headerContentSpacing, 'small', 'Un valor desconocido debe volver al espaciado pequeño compatible.');
+  const independentlyConfiguredDesign = definitions.normalizePdfCompanySettings({ headerContentSpacing: 'large' });
+  const untouchedDesign = definitions.normalizePdfCompanySettings({});
+  assert.equal(independentlyConfiguredDesign.headerContentSpacing, 'large', 'El espaciado grande debe pertenecer al diseño seleccionado.');
+  assert.equal(untouchedDesign.headerContentSpacing, 'small', 'El espaciado de otro diseño debe permanecer en el valor predeterminado.');
+  assert.equal(renderer.resolvePdfHeaderContentGap(5, 1000, 'small'), 5, 'Pequeño debe conservar exactamente el espacio actual.');
+  assert.equal(renderer.resolvePdfHeaderContentGap(5, 1000, 'medium'), 17, 'Mediano debe aumentar el espacio base en una distancia visible.');
+  assert.equal(renderer.resolvePdfHeaderContentGap(5, 1000, 'large'), 29, 'Grande debe ofrecer más espacio que mediano.');
+  assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 'small', true), 100, 'Pequeño debe mantener la posición base aunque ya haya espacio suficiente.');
+  assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 'medium', true), 112, 'Mediano debe desplazar el bloque completo un nivel debajo de la posición actual.');
+  assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 'large', true), 124, 'Grande debe desplazar el bloque más que mediano aunque la posición inicial tenga espacio.');
+  assert.equal(renderer.resolvePdfHeaderContentTop(150, 100, 5, 1000, 'medium', true), 167, 'El espaciado debe conservar la corrección por encabezados que ya alcanzan el contenido.');
 
   assert.deepEqual(styles.PDF_STYLE_PRESETS.map(item => item.id), ['light', 'boxed', 'bold', 'striped', 'bubble', 'wave', 'folder'], 'El editor debe ofrecer los siete estilos del piloto.');
   const styleSource = definitions.createDefaultTemplateDefinition('ventas.estimate', definitions.createSystemDefaultPdfDesign('ventas.estimate').settings);
@@ -174,6 +189,42 @@ try {
   assert.equal(customerListSections.backgroundColor, 'transparent', 'El listado de clientes no debe usar una tarjeta exterior.');
   assert.equal(customerListSections.borderColor, 'transparent', 'El listado de clientes no debe usar un recuadro exterior.');
   assert.deepEqual(customerListSections.columns.map(column => column.width), [10, 18, 12, 16, 24, 12, 8], 'El listado de clientes debe reservar espacio suficiente para tipo y contacto.');
+
+  assert.equal(
+    renderer.resolvePdfHeaderAnchoredTop(80, 160, 6, false),
+    86,
+    'La posición predeterminada de la información comercial debe seguir el contenido real del encabezado, aunque la coordenada base sea más baja.',
+  );
+  assert.equal(
+    renderer.resolvePdfHeaderAnchoredTop(170, 160, 6, false),
+    176,
+    'Un encabezado más alto debe empujar la información comercial hacia abajo sin superponerla.',
+  );
+  assert.equal(
+    renderer.resolvePdfHeaderAnchoredTop(80, 160, 6, true),
+    160,
+    'Una plantilla personalizada debe conservar su posición configurada cuando deja más espacio que el encabezado.',
+  );
+  assert.equal(
+    renderer.resolvePdfHeaderAnchoredTop(170, 160, 6, true),
+    176,
+    'Una plantilla personalizada solo se desplaza cuando el encabezado renderizado alcanza su contenido.',
+  );
+  assert.equal(
+    renderer.resolvePdfHistoryInfoTop(160, 210, 6),
+    216,
+    'Los datos del cliente deben comenzar debajo del encabezado o del nombre si este ocupa varias líneas.',
+  );
+  assert.equal(
+    renderer.resolvePdfReportTableBorderColor('ventas.customers', 'transparent', '#cbd5e1'),
+    '#cbd5e1',
+    'El listado de clientes debe usar el color de línea configurado para separar filas aunque el nodo no tenga borde exterior.',
+  );
+  assert.equal(
+    renderer.resolvePdfReportTableBorderColor('reportes.customers', 'transparent', '#cbd5e1'),
+    'transparent',
+    'La corrección de bordes del listado de clientes no debe cambiar otras tablas.',
+  );
 
   const purchaseListDefinition = definitions.createDefaultTemplateDefinition('compras.list', definitions.createSystemDefaultPdfDesign('compras.list').settings);
   const purchaseListTable = purchaseListDefinition.nodes.find(node => node.id === 'items-table');

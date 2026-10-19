@@ -18,7 +18,7 @@ import { toast } from '@/app/services/toast';
 import { storageService } from '../../services/storage.service';
 import { pdfDocumentDesignService, type PdfCompanyProfile, type PdfDocumentDesignFolder, type PdfDocumentDesignRecord, type PdfDocumentType } from '../../services/pdf-document-design.service';
 import { canEditPdfTemplate, getPdfTemplateTarget, isPdfTemplateFixed, normalizePdfTemplateKey, PDF_TEMPLATE_MODULES, PDF_TEMPLATE_TARGETS } from '../../services/pdf-document-catalog';
-import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createPdfTemplateSampleData, createSystemDefaultPdfSettings, ensureDashboardChartNodes, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PURCHASE_PDF_LAYOUT_VERSION, salesPdfLayoutVersionForTarget, sanitizeTemplateDefinition, type PdfHeaderComposition, type PdfTemplateDefinition, type PdfTemplateNode } from '../../services/pdf-template-definition';
+import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createPdfTemplateSampleData, createSystemDefaultPdfSettings, ensureDashboardChartNodes, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PURCHASE_PDF_LAYOUT_VERSION, salesPdfLayoutVersionForTarget, sanitizeTemplateDefinition, type PdfHeaderComposition, type PdfHeaderContentSpacing, type PdfTemplateDefinition, type PdfTemplateNode } from '../../services/pdf-template-definition';
 import { normalizePdfFrameGeometry } from '../../services/pdf-document-style';
 import { clearPdfDesignCache } from '../../utils/pdfGenerator';
 import { renderPdfTemplateToPdf } from '../../utils/pdf-template-renderer';
@@ -30,6 +30,7 @@ type PdfSettings = {
   paperSize: 'LETTER' | 'A4' | 'OFICIO' | 'LEGAL' | 'LABEL' | 'ROLL-80'; orientation: 'portrait' | 'landscape';
   headerLayout: 'classic' | 'split' | 'banner' | 'compact' | 'ribbon' | 'topline' | 'sidebar' | 'centered' | 'boxed' | 'corner' | 'editorial' | 'double-band' | 'fluid' | 'aurora' | 'diagonal' | 'portal' | 'steps' | 'ink' | 'grid' | 'ticket';
   headerComposition: PdfHeaderComposition;
+  headerContentSpacing: PdfHeaderContentSpacing;
   footerLayout: 'line' | 'minimal' | 'band' | 'wave' | 'boxed' | 'split' | 'layers' | 'notch' | 'dots';
   tableLayout: 'standard' | 'striped' | 'boxed' | 'minimal' | 'compact' | 'accent' | 'ledger' | 'cards';
   logoPosition: 'left' | 'center' | 'right'; logoSize: number; logoUrl?: string; templateLogoUrl?: string; templateLogoUri?: string; templateLogoTarget?: string; showCompanyName: boolean; companyName: string;
@@ -51,6 +52,12 @@ const HEADER_COMPOSITION_OPTIONS: Array<{ value: PdfHeaderComposition; label: st
   { value: 'company-left-logo-right', label: 'Datos izq. · logo der.' },
   { value: 'logo-left-company-right', label: 'Logo izq. · datos der.' },
   { value: 'centered-stack', label: 'Centrado' },
+];
+
+const HEADER_CONTENT_SPACING_OPTIONS: Array<{ value: PdfHeaderContentSpacing; label: string; description: string }> = [
+  { value: 'small', label: 'Pequeño', description: 'Actual' },
+  { value: 'medium', label: 'Mediano', description: 'Más espacio' },
+  { value: 'large', label: 'Grande', description: 'Máximo espacio' },
 ];
 
 function ensureLogoNode(definition: PdfTemplateDefinition) {
@@ -616,6 +623,16 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                 </button>)}
               </div>
               <p className="text-[10px] text-muted-foreground">{hasImportedHtmlHeader ? 'El encabezado HTML define esta distribución.' : 'Solo cambia la posición; el contenido se mantiene.'}</p>
+            </div>
+            <div className="space-y-2">
+              <div><Label>Espacio después del encabezado</Label><p className="mt-1 text-xs text-muted-foreground">Ajusta la separación antes del contenido en este diseño.</p></div>
+              <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Espacio después del encabezado">
+                {HEADER_CONTENT_SPACING_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={settings.headerContentSpacing === option.value} disabled={!canModifyActive} onClick={() => update('headerContentSpacing', option.value)} className={cn('flex min-w-0 cursor-pointer flex-col items-center gap-1 rounded-lg border p-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50', settings.headerContentSpacing === option.value ? 'border-primary bg-primary/5 text-foreground shadow-sm' : 'border-border/60 bg-background hover:border-primary/50')}>
+                  <span className="flex h-10 w-full flex-col items-center rounded-md border border-border/50 bg-muted/20 px-2 pt-1"><span className="h-1 w-full rounded-sm bg-muted-foreground/70" /><span className={cn('h-1 w-full rounded-sm bg-primary/70', option.value === 'small' ? 'mt-1' : option.value === 'medium' ? 'mt-2' : 'mt-3')} /></span>
+                  <span className="text-[10px] font-semibold leading-tight">{option.label}</span>
+                  <span className="text-[9px] leading-tight text-muted-foreground">{option.description}</span>
+                </button>)}
+              </div>
             </div>
             <ToggleRow label="Mostrar nombre en este documento" description="Activa u oculta el nombre global en esta plantilla" checked={settings.showCompanyName} onChange={value => update('showCompanyName', value)} disabled={!canModifyActive} />
             <Field label="Nombre"><Input value={companyProfile.name} placeholder={companyName || 'Nombre de empresa'} onChange={event => updateCompanyProfile('name', event.target.value)} disabled={!canEditCompanyProfile} /></Field>

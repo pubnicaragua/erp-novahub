@@ -139,6 +139,7 @@ export interface PdfTemplateDefinition {
 }
 
 export type PdfHeaderComposition = 'company-left-logo-right' | 'logo-left-company-right' | 'centered-stack';
+export type PdfHeaderContentSpacing = 'small' | 'medium' | 'large';
 
 /**
  * Marca la estructura empresarial compartida por los documentos de venta.
@@ -290,6 +291,7 @@ export const TEMPLATE_TOKENS = [
 export const SYSTEM_DEFAULT_PDF_SETTINGS: Record<string, unknown> = {
   paperSize: 'LETTER',
   orientation: 'portrait',
+  headerContentSpacing: 'small',
   headerLayout: 'split',
   footerLayout: 'line',
   tableLayout: 'standard',
@@ -371,6 +373,10 @@ export function normalizePdfCompanySettings<T extends Record<string, unknown>>(s
       ? headerComposition
       : 'company-left-logo-right';
   }
+  const headerContentSpacing = String(normalized.headerContentSpacing || '');
+  normalized.headerContentSpacing = (['small', 'medium', 'large'] as const).includes(headerContentSpacing as PdfHeaderContentSpacing)
+    ? headerContentSpacing
+    : 'small';
   return normalized as T;
 }
 
