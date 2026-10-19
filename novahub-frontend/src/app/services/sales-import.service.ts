@@ -19,6 +19,8 @@ export interface SalesImportInvoiceSource {
   customerCode?: string | null;
   currency?: string | null;
   paymentMethod: string;
+  paymentReference?: string | null;
+  bankAccountNumber?: string | null;
   notes?: string | null;
   items: SalesImportInvoiceSourceItem[];
 }
@@ -42,6 +44,7 @@ export interface SalesImportInvoicePreviewDocument {
 export interface SalesImportInvoicePreviewResponse {
   kind: "INVOICE";
   globalErrors: Array<{ rowNumber?: number; message: string }>;
+  integrations?: { financeEnabled: boolean; accountingEnabled: boolean };
   summary: { total: number; ready: number; blocked: number };
   documents: SalesImportInvoicePreviewDocument[];
 }

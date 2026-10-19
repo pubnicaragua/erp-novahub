@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -22,6 +22,8 @@ import {
   DialogTitle,
 } from "../../ui/dialog";
 import { Label } from "../../ui/label";
+import { Input } from "../../ui/input";
+import { BankAccountSelect } from "../../ui/BankAccountSelect";
 import {
   Select,
   SelectContent,
@@ -45,9 +47,88 @@ import {
 import { toast } from "@/app/services/toast";
 import { getApiErrorMessage } from "../../../services/api";
 import { shouldRestoreSalesImportBatch } from "./sales-import-preview-state";
+import {
+  hasPaymentReferenceField,
+  isBankPaymentMethod,
+  paymentMethodLabel,
+  requiresPaymentReference,
+} from "../../../utils/paymentMethods";
 
 const NO_REGISTER = "__no_cash_session__";
 const BATCH_STORAGE_PREFIX = "novahub-sales-import-batch:";
+const invoicePaymentMethodOptions = [
+  { label: "Efectivo", value: "CASH" },
+  { label: "Tarjeta", value: "CARD" },
+  { label: "Transferencia", value: "TRANSFER" },
+  { label: "Cheque", value: "CHECK" },
+] as const;
+
+type InvoicePaymentField = "paymentMethod" | "paymentReference" | "bankAccountNumber";
+
+function normalizeInvoicePaymentMethod(value?: string | null) {
+  const normalized = String(value || "CASH").trim().toUpperCase();
+  return ({ EFECTIVO: "CASH", TARJETA: "CARD", TRANSFERENCIA: "TRANSFER", CHEQUE: "CHECK" } as Record<string, string>)[normalized] || normalized;
+}
+
+function invoicePaymentFieldFromIssue(field?: string) {
+  const normalized = String(field || "").trim().toLocaleLowerCase("es-NI").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (normalized.includes("metodo de pago")) return "paymentMethod";
+  if (normalized.includes("referencia de pago")) return "paymentReference";
+  if (normalized.includes("cuenta bancaria")) return "bankAccountNumber";
+  return null;
+}
+
+function invoicePaymentIssues(document: SalesImportInvoicePreviewDocument, accountingEnabled: boolean) {
+  const method = normalizeInvoicePaymentMethod(document.source.paymentMethod);
+  const supported = invoicePaymentMethodOptions.some((option) => option.value === method);
+  const issues: string[] = [];
+  if (!supported) issues.push("Selecciona un método de pago válido.");
+  if (supported && requiresPaymentReference(method) && !String(document.source.paymentReference || "").trim()) {
+    issues.push("La referencia es obligatoria para tarjeta, transferencia o cheque.");
+  }
+  const bankAccountNumber = String(document.source.bankAccountNumber || "").trim();
+  if (supported && isBankPaymentMethod(method, true) && accountingEnabled && !bankAccountNumber) {
+    issues.push("Selecciona una cuenta bancaria para Contabilidad.");
+  }
+  if (supported && !isBankPaymentMethod(method, true) && bankAccountNumber) {
+    issues.push("La cuenta bancaria solo aplica a tarjeta, transferencia o cheque.");
+  }
+  return issues;
+}
+
+function isInvoicePaymentIssueResolved(
+  document: SalesImportInvoicePreviewDocument,
+  field: string | undefined,
+  accountingEnabled: boolean,
+  initialSource?: SalesImportInvoicePreviewDocument["source"],
+) {
+  const paymentField = invoicePaymentFieldFromIssue(field);
+  if (!paymentField) return false;
+  const method = normalizeInvoicePaymentMethod(document.source.paymentMethod);
+  if (paymentField === "paymentMethod") {
+    return invoicePaymentMethodOptions.some((option) => option.value === method);
+  }
+  if (paymentField === "paymentReference") {
+    return !requiresPaymentReference(method) || Boolean(String(document.source.paymentReference || "").trim());
+  }
+  if (!isBankPaymentMethod(method, true)) return true;
+  const accountNumber = String(document.source.bankAccountNumber || "").trim();
+  if (!accountNumber) return !accountingEnabled;
+  return Boolean(initialSource && accountNumber !== String(initialSource.bankAccountNumber || "").trim());
+}
+
+function invoiceDocumentReady(
+  document: SalesImportInvoicePreviewDocument,
+  accountingEnabled: boolean,
+  initialSource?: SalesImportInvoicePreviewDocument["source"],
+) {
+  if (["CONFIRMED", "PROCESSING"].includes(document.status)) return false;
+  const unresolvedErrors = (document.preview?.errors || []).filter((issue) => {
+    return !isInvoicePaymentIssueResolved(document, issue.field, accountingEnabled, initialSource);
+  });
+  const nonPaymentErrors = unresolvedErrors.some((issue) => !invoicePaymentFieldFromIssue(issue.field));
+  return !nonPaymentErrors && unresolvedErrors.length === 0 && invoicePaymentIssues(document, accountingEnabled).length === 0;
+}
 
 function clearLegacyInvoiceBatchPointers() {
   for (let index = localStorage.length - 1; index >= 0; index -= 1) {
@@ -107,23 +188,30 @@ function currencyLabel(currency?: string) {
 
 function InvoiceImportPreviewSection({
   preview,
+  initialSources,
   confirming,
   progress,
+  onSourceUpdate,
   onConfirm,
 }: {
   preview: SalesImportInvoicePreviewResponse;
+  initialSources: Map<number, SalesImportInvoicePreviewDocument["source"]>;
   confirming: boolean;
   progress: { current: number; total: number } | null;
+  onSourceUpdate: (sourceRowNumber: number, field: InvoicePaymentField, value: string) => void;
   onConfirm: () => void;
 }) {
-  const readyCount = preview.documents.filter((document) =>
-    ["READY", "FAILED"].includes(document.status),
-  ).length;
+  const accountingEnabled = Boolean(preview.integrations?.accountingEnabled);
+  const readyCount = preview.documents.filter((document) => invoiceDocumentReady(
+    document,
+    accountingEnabled,
+    initialSources.get(document.sourceRowNumber),
+  )).length;
   const confirmedCount = preview.documents.filter(
     (document) => document.status === "CONFIRMED",
   ).length;
   const errorCount = preview.documents.filter(
-    (document) => document.status === "BLOCKED" || document.status === "FAILED",
+    (document) => !invoiceDocumentReady(document, accountingEnabled, initialSources.get(document.sourceRowNumber)) && !["CONFIRMED", "PROCESSING"].includes(document.status),
   ).length;
 
   return (
@@ -134,6 +222,7 @@ function InvoiceImportPreviewSection({
           <p className="mt-1 text-xs text-muted-foreground">
             {preview.summary.total} factura(s) · {readyCount} lista(s) · {errorCount} con errores · {confirmedCount} confirmada(s)
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">Puedes ajustar método, referencia y cuenta bancaria por factura; el servidor vuelve a validar al confirmar.</p>
           {progress && (
             <p className="mt-1 text-xs font-semibold text-primary" role="status">
               Confirmando factura {progress.current} de {progress.total}…
@@ -172,7 +261,15 @@ function InvoiceImportPreviewSection({
 
       <div className="space-y-3">
         {preview.documents.map((document) => (
-          <InvoiceImportDocumentCard key={document.sourceRowNumber} document={document} />
+          <InvoiceImportDocumentCard
+            key={document.sourceRowNumber}
+            document={document}
+            initialSource={initialSources.get(document.sourceRowNumber)}
+            accountingEnabled={accountingEnabled}
+            financeEnabled={Boolean(preview.integrations?.financeEnabled)}
+            confirming={confirming}
+            onSourceUpdate={onSourceUpdate}
+          />
         ))}
       </div>
     </section>
@@ -181,10 +278,26 @@ function InvoiceImportPreviewSection({
 
 function InvoiceImportDocumentCard({
   document,
+  initialSource,
+  accountingEnabled,
+  financeEnabled,
+  confirming,
+  onSourceUpdate,
 }: {
   document: SalesImportInvoicePreviewDocument;
+  initialSource?: SalesImportInvoicePreviewDocument["source"];
+  accountingEnabled: boolean;
+  financeEnabled: boolean;
+  confirming: boolean;
+  onSourceUpdate: (sourceRowNumber: number, field: InvoicePaymentField, value: string) => void;
 }) {
   const data = document.preview;
+  const method = normalizeInvoicePaymentMethod(document.source.paymentMethod);
+  const ready = invoiceDocumentReady(document, accountingEnabled, initialSource);
+  const canEditPayment = !confirming && !["CONFIRMED", "PROCESSING"].includes(document.status);
+  const visibleErrors = (data?.errors || []).filter((issue) => {
+    return !isInvoicePaymentIssueResolved(document, issue.field, accountingEnabled, initialSource);
+  });
   return (
     <details className="group min-w-0 rounded-2xl border border-border/60 bg-card p-4 open:border-primary/30">
       <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
@@ -194,8 +307,8 @@ function InvoiceImportDocumentCard({
         <span className="text-[11px] text-muted-foreground">
           {document.lineCount} línea(s)
         </span>
-        <Badge variant="outline" className={statusClass(document.status)}>
-          {statusLabel(document.status)}
+        <Badge variant="outline" className={statusClass(ready && document.status === "BLOCKED" ? "READY" : document.status)}>
+          {ready && document.status === "BLOCKED" ? "Listo" : statusLabel(document.status)}
         </Badge>
         {document.result?.invoiceNumber && (
           <Badge variant="outline" className="font-mono text-[10px]">
@@ -216,8 +329,63 @@ function InvoiceImportDocumentCard({
           <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
             <span>Cliente: <strong className="text-foreground">{data?.customerName || "—"}</strong></span>
             <span>Fecha: <strong className="text-foreground">{data?.date || "—"}</strong></span>
-            <span>Pago: <strong className="text-foreground">Efectivo</strong></span>
+            <span>Pago: <strong className="text-foreground">{paymentMethodLabel(method)}</strong></span>
           </div>
+          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <label className="min-w-0 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Método de pago</span>
+              <Select
+                value={method}
+                onValueChange={(value) => {
+                  onSourceUpdate(document.sourceRowNumber, "paymentMethod", value);
+                  if (value === "CASH") {
+                    onSourceUpdate(document.sourceRowNumber, "paymentReference", "");
+                    onSourceUpdate(document.sourceRowNumber, "bankAccountNumber", "");
+                  }
+                }}
+                disabled={!canEditPayment}
+              >
+                <SelectTrigger aria-label={`Método de pago de la factura ${document.reference}`} className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {!invoicePaymentMethodOptions.some((option) => option.value === method) && <SelectItem value={method}>Valor importado: {method}</SelectItem>}
+                  {invoicePaymentMethodOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </label>
+            {hasPaymentReferenceField(method) && (
+              <label className="min-w-0 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Referencia de pago{requiresPaymentReference(method) ? " *" : ""}</span>
+                <Input
+                  aria-label={`Referencia de pago de la factura ${document.reference}`}
+                  value={String(document.source.paymentReference || "")}
+                  onChange={(event) => onSourceUpdate(document.sourceRowNumber, "paymentReference", event.target.value)}
+                  disabled={!canEditPayment}
+                  maxLength={120}
+                  className="h-9 text-xs"
+                />
+              </label>
+            )}
+            {isBankPaymentMethod(method, true) && (accountingEnabled || financeEnabled) && (
+              <BankAccountSelect
+                label="Número de cuenta bancaria"
+                placeholder="Seleccionar cuenta existente"
+                required={accountingEnabled}
+                valueMode="accountNumber"
+                allowUnlinked={!accountingEnabled}
+                currency={String(data?.currency || document.source.currency || "")}
+                value={String(document.source.bankAccountNumber || "")}
+                onChange={(value) => onSourceUpdate(document.sourceRowNumber, "bankAccountNumber", value)}
+                disabled={!canEditPayment}
+                className="min-w-0"
+              />
+            )}
+          </div>
+          {isBankPaymentMethod(method, true) && !accountingEnabled && !financeEnabled && (
+            <p className="text-[10px] text-muted-foreground">Las conexiones de Finanzas y Contabilidad están desactivadas; se registrará el método y la referencia sin movimiento bancario.</p>
+          )}
+          {invoicePaymentIssues(document, accountingEnabled).map((issue, index) => (
+            <p key={`payment-issue-${index}`} role="alert" className="rounded-lg bg-destructive/5 p-2 text-xs text-destructive">{issue}</p>
+          ))}
           <div className="overflow-x-auto rounded-xl border border-border/50">
             <table className="w-full min-w-[840px] text-left text-xs">
               <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
@@ -261,7 +429,7 @@ function InvoiceImportDocumentCard({
           </div>
         </div>
         <div className="min-w-0 space-y-2">
-          {document.error && (
+          {document.error && !ready && (
             <div role="alert" className="rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive">
               <strong>{document.status === "FAILED" ? "Error al confirmar" : "Debe corregirse"}</strong>
               <p className="mt-1 whitespace-pre-wrap">{document.error}</p>
@@ -274,7 +442,7 @@ function InvoiceImportDocumentCard({
               <p className="mt-1 text-muted-foreground">La factura no se volverá a crear al reintentar el mismo intento.</p>
             </div>
           )}
-          {data?.errors?.map((issue, index) => (
+          {visibleErrors.map((issue, index) => (
             <div key={`error-${index}`} className="rounded-lg bg-destructive/5 p-2 text-xs text-destructive">
               <strong>{issue.field || "Error"}{issue.rowNumber ? ` · fila ${issue.rowNumber}` : ""}:</strong> {issue.message}
             </div>
@@ -313,6 +481,7 @@ export function SalesImportWizard({
   const [invoicePreview, setInvoicePreview] =
     useState<SalesImportInvoicePreviewResponse | null>(null);
   const [invoiceAttemptId, setInvoiceAttemptId] = useState<string | null>(null);
+  const initialInvoiceSourcesRef = useRef(new Map<number, SalesImportInvoicePreviewDocument["source"]>());
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [workingBlock, setWorkingBlock] = useState<number | null>(null);
@@ -442,6 +611,7 @@ export function SalesImportWizard({
     setBatch(null);
     setPage(1);
     setInvoicePreview(null);
+    initialInvoiceSourcesRef.current.clear();
     setInvoiceAttemptId(null);
     setInvoiceProgress(null);
     setLoadError(null);
@@ -493,6 +663,10 @@ export function SalesImportWizard({
           return;
         }
         const invoiceResponse = response as SalesImportInvoicePreviewResponse;
+        initialInvoiceSourcesRef.current = new Map(invoiceResponse.documents.map((document) => [
+          document.sourceRowNumber,
+          { ...document.source },
+        ]));
         setInvoicePreview(invoiceResponse);
         setInvoiceAttemptId(crypto.randomUUID());
         toast.success(
@@ -560,6 +734,16 @@ export function SalesImportWizard({
     }
   };
 
+  const updateInvoiceSource = (sourceRowNumber: number, field: InvoicePaymentField, value: string) => {
+    setInvoicePreview((current) => current ? {
+      ...current,
+      documents: current.documents.map((document) => document.sourceRowNumber === sourceRowNumber
+        ? { ...document, source: { ...document.source, [field]: value } }
+        : document),
+    } : current);
+    setInvoiceAttemptId(crypto.randomUUID());
+  };
+
   const confirmBlock = async (blockNumber: number) => {
     if (kind !== "POS") return;
     if (!batch || workingBlock !== null) return;
@@ -593,9 +777,11 @@ export function SalesImportWizard({
   const confirmInvoices = async () => {
     if (kind !== "INVOICE" || !invoicePreview || !invoiceAttemptId || confirmingInvoices)
       return;
-    const readyDocuments = invoicePreview.documents.filter((document) =>
-      ["READY", "FAILED"].includes(document.status),
-    );
+    const readyDocuments = invoicePreview.documents.filter((document) => invoiceDocumentReady(
+      document,
+      Boolean(invoicePreview.integrations?.accountingEnabled),
+      initialInvoiceSourcesRef.current.get(document.sourceRowNumber),
+    ));
     if (!readyDocuments.length) {
       toast.error("No hay facturas listas para confirmar.");
       return;
@@ -896,7 +1082,8 @@ export function SalesImportWizard({
                 <ul className="mt-1 list-inside list-disc space-y-0.5">
                   <li>El número oficial lo genera NovaHub.</li>
                   <li>Se vuelve a comprobar el precio y el inventario.</li>
-                  <li>El total calculado se registra como pago en efectivo.</li>
+                  <li>El total calculado se registra como pagado con el método indicado en cada factura.</li>
+                  <li>Tarjeta, transferencia y cheque requieren referencia; la cuenta bancaria se valida para esta sucursal.</li>
                   <li>Un error no revierte otros documentos confirmados.</li>
                 </ul>
               </div>
@@ -906,8 +1093,10 @@ export function SalesImportWizard({
           {kind === "INVOICE" && invoicePreview && (
             <InvoiceImportPreviewSection
               preview={invoicePreview}
+              initialSources={initialInvoiceSourcesRef.current}
               confirming={confirmingInvoices}
               progress={invoiceProgress}
+              onSourceUpdate={updateInvoiceSource}
               onConfirm={() => void confirmInvoices()}
             />
           )}

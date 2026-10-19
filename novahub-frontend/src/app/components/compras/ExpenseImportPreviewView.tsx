@@ -89,7 +89,7 @@ export function ExpenseImportPreviewView({
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary sm:text-xs">Importación masiva</p>
             <h1 className="mt-1 flex items-center gap-2 text-xl font-black tracking-tight sm:text-3xl"><Wallet className="size-5 shrink-0 text-primary sm:size-7" /> Revisar gastos</h1>
-            <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Revisa cada fila, corrige el estado o método de pago y valida los cambios antes de confirmar.</p>
+            <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Revisa cada fila y corrige sus datos; la vista se actualiza automáticamente antes de confirmar.</p>
           </div>
         </header>
 
@@ -108,8 +108,11 @@ export function ExpenseImportPreviewView({
         <ImportReviewSummary total={result?.total ?? preview.summary.total} valid={result?.created ?? readyCount} skipped={result?.skipped ?? skippedCount} entityLabel={result ? 'gastos importados' : 'gastos listos'} />
 
         {previewStale && (
-          <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
-            Cambiaste datos después de la última validación. Actualiza la vista previa para recalcular errores y efectos; la confirmación está deshabilitada hasta entonces.
+          <div role={validating ? 'status' : 'alert'} aria-live="polite" className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+            {validating && <RefreshCw className="size-4 shrink-0 animate-spin" />}
+            {validating
+              ? 'Actualizando automáticamente errores y efectos de las filas modificadas…'
+              : 'Cambios detectados. La vista previa se actualizará automáticamente.'}
           </div>
         )}
 
@@ -231,12 +234,12 @@ export function ExpenseImportPreviewView({
               {preview.rows.some((row) => row.status === 'FAILED') && <Button variant="outline" onClick={onRetryFailed} disabled={importing} className="gap-2"><Upload className="size-4" /> Reintentar fallidas</Button>}
             </div>
           ) : (
-            <Button variant="outline" onClick={onBack} disabled={importing} className="gap-2"><ArrowLeft className="size-4" /> Volver a la carga</Button>
+            <Button variant="outline" onClick={onBack} disabled={importing || validating} className="gap-2"><ArrowLeft className="size-4" /> Volver a la carga</Button>
           )}
           {!result && (
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={onRevalidate} disabled={importing} className="gap-2"><RefreshCw className="size-4" /> {previewStale ? 'Validar correcciones' : 'Actualizar vista previa'}</Button>
-              <Button onClick={onConfirm} disabled={importing || previewStale || readyCount === 0} className="gap-2"><Upload className="size-4" /> Confirmar {readyCount} gastos listos</Button>
+              <Button variant="outline" onClick={onRevalidate} disabled={importing || validating} className="gap-2"><RefreshCw className="size-4" /> Revalidar ahora</Button>
+              <Button onClick={onConfirm} disabled={importing || validating || previewStale || readyCount === 0} className="gap-2"><Upload className="size-4" /> Confirmar {readyCount} gastos listos</Button>
             </div>
           )}
         </footer>

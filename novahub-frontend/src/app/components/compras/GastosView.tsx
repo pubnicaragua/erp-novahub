@@ -123,6 +123,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const [validatingExpenseImport, setValidatingExpenseImport] = useState(false);
   const [expenseImportAttemptId, setExpenseImportAttemptId] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
+  const expenseImportValidationTimerRef = useRef<number | null>(null);
+  const expenseImportValidationRunningRef = useRef(false);
+  const expenseImportValidationRevisionRef = useRef(0);
+  const expenseImportValidationQueuedRef = useRef(false);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
@@ -139,6 +143,12 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [highlightedAlertId]);
+
+  useEffect(() => () => {
+    if (expenseImportValidationTimerRef.current !== null) {
+      window.clearTimeout(expenseImportValidationTimerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (!targetId || !data.some((expense) => expense.id === targetId)) return;
@@ -441,19 +451,34 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     field: 'estado' | 'metododepago' | 'referencia' | 'numerodecuentabancaria',
     value: string,
   ) => {
+    expenseImportValidationRevisionRef.current += 1;
     setImportResult(null);
     setParsedImportRows((current) => current.map((row) => (
       Number(row.sourceRowNumber) === sourceRowNumber ? { ...row, [field]: value } : row
     )));
     setExpenseImportPreviewStale(true);
+    if (expenseImportValidationTimerRef.current !== null) {
+      window.clearTimeout(expenseImportValidationTimerRef.current);
+    }
+    expenseImportValidationTimerRef.current = window.setTimeout(() => {
+      expenseImportValidationTimerRef.current = null;
+      if (expenseImportPreviewOpen) void handlePreviewExpenses(true);
+    }, 450);
   };
 
-  const handlePreviewExpenses = async () => {
+  const handlePreviewExpenses = async (automaticRefresh = false) => {
     if (!importFile) {
-      toast.error('Selecciona un archivo Excel o CSV.');
+      if (!automaticRefresh) toast.error('Selecciona un archivo Excel o CSV.');
       return;
     }
-    setImporting(true);
+    if (expenseImportValidationRunningRef.current) {
+      expenseImportValidationQueuedRef.current = true;
+      return;
+    }
+    expenseImportValidationRunningRef.current = true;
+    const validationRevision = expenseImportValidationRevisionRef.current;
+    const showBlockingProgress = !automaticRefresh || !expenseImportPreviewOpen;
+    if (showBlockingProgress) setImporting(true);
     setValidatingExpenseImport(true);
     setImportProgress(8);
     setImportResult(null);
@@ -491,6 +516,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           })));
         }
       }
+      if (validationRevision !== expenseImportValidationRevisionRef.current) {
+        expenseImportValidationQueuedRef.current = true;
+        return;
+      }
       const ready = previewRows.filter((row) => row.status === 'READY').length;
       setExpenseImportPreview({
         summary: { total: previewRows.length, ready, blocked: previewRows.length - ready },
@@ -502,20 +531,37 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       setExpenseImportPreviewOpen(true);
       setImportOpen(false);
       setImportProgress(100);
-      toast.success(`Vista previa lista: ${ready} listos y ${previewRows.length - ready} con errores.`);
+      if (!automaticRefresh) {
+        toast.success(`Vista previa lista: ${ready} listos y ${previewRows.length - ready} con errores.`);
+      }
     } catch (error: any) {
-      toast.error(`No se pudo validar el archivo: ${error?.message || 'revisa el formato y vuelve a intentar'}`);
+      if (validationRevision === expenseImportValidationRevisionRef.current) {
+        toast.error(`No se pudo validar el archivo: ${error?.message || 'revisa el formato y vuelve a intentar'}`);
+      } else {
+        expenseImportValidationQueuedRef.current = true;
+      }
     } finally {
-      setImporting(false);
+      expenseImportValidationRunningRef.current = false;
       setValidatingExpenseImport(false);
       setImportProgress(0);
+      if (showBlockingProgress) setImporting(false);
+      if (expenseImportValidationQueuedRef.current || validationRevision !== expenseImportValidationRevisionRef.current) {
+        expenseImportValidationQueuedRef.current = false;
+        if (expenseImportValidationTimerRef.current !== null) {
+          window.clearTimeout(expenseImportValidationTimerRef.current);
+        }
+        expenseImportValidationTimerRef.current = window.setTimeout(() => {
+          expenseImportValidationTimerRef.current = null;
+          if (expenseImportPreviewOpen) void handlePreviewExpenses(true);
+        }, 250);
+      }
     }
   };
 
   const handleConfirmExpenseImport = async (retryOnly = false) => {
-    if (!expenseImportPreview || !expenseImportAttemptId || importing) return;
+    if (!expenseImportPreview || !expenseImportAttemptId || importing || validatingExpenseImport) return;
     if (expenseImportPreviewStale) {
-      toast.error('Actualiza la vista previa para validar las correcciones antes de confirmar.');
+      toast.error('Espera a que la vista previa se actualice automáticamente antes de confirmar.');
       return;
     }
     const eligible = expenseImportPreview.rows
@@ -574,6 +620,11 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   };
 
   const finishImport = () => {
+    if (expenseImportValidationTimerRef.current !== null) {
+      window.clearTimeout(expenseImportValidationTimerRef.current);
+      expenseImportValidationTimerRef.current = null;
+    }
+    expenseImportValidationRevisionRef.current += 1;
     setImportOpen(false);
     setExpenseImportPreviewOpen(false);
     setImportResult(null);
@@ -586,6 +637,11 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
   const clearExpenseImportFile = () => {
     if (readingFile || importing) return;
+    if (expenseImportValidationTimerRef.current !== null) {
+      window.clearTimeout(expenseImportValidationTimerRef.current);
+      expenseImportValidationTimerRef.current = null;
+    }
+    expenseImportValidationRevisionRef.current += 1;
     setExpenseImportPreviewOpen(false);
     setImportFile(null);
     setParsedImportRows([]);
@@ -1385,7 +1441,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           </DialogContent>
         </Dialog>
         <ImportProgressOverlay
-          open={importing}
+          open={importing && (!validatingExpenseImport || !expenseImportPreviewOpen)}
           progress={importProgress}
           title={validatingExpenseImport ? 'Validando gastos' : 'Importando gastos'}
           description={validatingExpenseImport ? 'Leyendo el archivo y calculando errores y efectos de cada fila en el servidor.' : 'Registrando los gastos listos en bloques de hasta 50.'}
