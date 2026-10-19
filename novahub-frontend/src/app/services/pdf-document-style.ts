@@ -1,4 +1,5 @@
 import { TEMPLATE_TOKENS } from './pdf-template-definition';
+import { PDF_APPEARANCE_FONTS } from './pdf-appearance';
 
 export type PdfStylePresetId = 'light' | 'boxed' | 'bold' | 'striped' | 'bubble' | 'wave' | 'folder';
 export type PdfTableStyle = 'light' | 'boxed' | 'bold' | 'striped' | 'bubble' | 'wave' | 'folder';
@@ -42,7 +43,7 @@ export interface PdfStyleConfigV1 {
 export const PDF_STYLE_FONTS = [
   'Arial', 'Arial Narrow', 'Calibri', 'Candara', 'Century Gothic', 'Futura', 'Gill Sans', 'Lucida Sans',
   'Segoe UI', 'Tahoma', 'Trebuchet MS', 'Verdana', 'Helvetica', 'Times New Roman', 'Georgia', 'Garamond',
-  'Cambria', 'Palatino Linotype', 'Bookman', 'Courier New', 'Consolas', 'Monaco', 'Impact',
+  'Cambria', 'Palatino Linotype', 'Bookman', 'Courier New', 'Consolas', 'Monaco', 'Impact', ...PDF_APPEARANCE_FONTS,
 ] as const;
 
 export const PDF_STYLE_PRESETS: Array<{ id: PdfStylePresetId; name: string; description: string; palette: PdfStylePalette; tableStyle: PdfTableStyle }> = [
