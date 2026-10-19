@@ -1,6 +1,6 @@
 # Apariencia global y por documento para PDF
 
-**Estado:** especificación para revisión del usuario
+**Estado:** aprobada por el usuario; pendiente del plan de implementación
 **Aprobación conversacional:** recibida para el enfoque de alcance global por sucursal y personalización por PDF
 **Implementación:** no iniciada; requiere aprobación de esta especificación
 
@@ -98,8 +98,8 @@ Antes de capturar/renderizar el PDF, el motor debe esperar a que las fuentes sel
 
 ### Contrato propuesto
 
-- `GET /pdf-document-designs/appearance-profile`: devuelve el perfil de apariencia de la sucursal autenticada y sus valores por defecto cuando no haya un registro guardado.
-- `PATCH /pdf-document-designs/appearance-profile`: valida y guarda una actualización parcial del perfil de esa sucursal.
+- `GET /pdf-document-designs/appearance-profile`: devuelve los ajustes explícitos guardados para la sucursal autenticada; si no existe perfil, devuelve un objeto vacío. El frontend combina cada propiedad ausente con el valor por defecto vigente del diseño de destino para no alterar la apariencia actual.
+- `PATCH /pdf-document-designs/appearance-profile`: valida y guarda una actualización parcial del perfil de esa sucursal. Enviar `null` para una propiedad elimina solo ese ajuste global y restaura el valor por defecto vigente.
 - Los endpoints permanecen protegidos por autenticación y permisos `CONFIG_PDF`; lectura y edición respetan las capacidades existentes para ver/configurar diseños PDF.
 - Los valores desconocidos, familias de fuentes no permitidas, enums inválidos y payloads fuera del tamaño esperado se rechazan con errores de validación claros.
 - El endpoint no permite consultar o actualizar otra sucursal por ID arbitrario.
