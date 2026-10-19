@@ -1101,7 +1101,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn('sales-line-product-header sales-quote-line-product-header col-span-6', pricingMode === 'individual' && 'xl:col-span-5', productLineLayoutClass)}>
+                <div className={cn('sales-line-product-header sales-quote-line-product-header col-span-7', pricingMode === 'individual' && 'xl:col-span-5', productLineLayoutClass)}>
                   <span>Producto</span>
                   {showPriceTypeColumn && <span>Lista de precios</span>}
                 </div>
@@ -1109,14 +1109,14 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                   <div>Aplicar</div>
                   <div className="text-right">Desc.</div>
                 </div>}
-                <div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Cant.</div>
+                <div className="col-span-1 text-right">Cant.</div>
                 <div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Precio U.</div>
                 {pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}
                 <div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className={cn('sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0', pricingMode === 'individual' && 'pricing-individual')}>
-                  <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
+                  <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-7', pricingMode === 'individual' && 'xl:col-span-5')}>
                     <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                       <div data-item-role="product-picker" data-testid={`sales-order-product-${idx}`} className="sales-line-product-picker min-w-0">
                         <SalesProductPicker
@@ -1129,6 +1129,8 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                           variantId={item.variantId}
                           catalogLoading={productsLoading}
                           catalogError={productsError}
+                          showSelectedVariant={false}
+                          showSelectedStock={false}
                           open={salesProductPickerItemId === String(item.id || idx)}
                           onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || idx) : null)}
                           onChange={(val, pickedVariant) => {
@@ -1173,6 +1175,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                           className="sales-line-variant sales-quote-line-variant-column"
                           labelLayout="stacked"
                           showLabel={false}
+                          compactDisplay
                           placeholder="Seleccionar variante"
                           product={products.find((product) => product.id === item.productId)}
                           warehouseId={item.warehouseId || localDoc?.warehouseId}
@@ -1300,7 +1303,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                       </label>
                     </div>
                   )}
-                  <div className={cn('min-w-0 xl:col-span-2', pricingMode === 'individual' && 'xl:col-span-1')}>
+                  <div className="min-w-0 xl:col-span-1">
                     <Input data-testid={`sales-order-quantity-${idx}`}
                       type="number" 
                       min="0"

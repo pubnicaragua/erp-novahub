@@ -1888,7 +1888,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn("sales-line-product-header sales-quote-line-product-header xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5", productLineLayoutClass)}>
+                <div className={cn("sales-line-product-header sales-quote-line-product-header xl:col-span-7", pricingMode === 'individual' && "xl:col-span-5", productLineLayoutClass)}>
                   <span>Producto</span>
                   {showPriceListColumn && <span>Lista de precios</span>}
                 </div>
@@ -1896,14 +1896,14 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   <div>Aplicar</div>
                   <div className="text-right">Desc.</div>
                 </div>}
-                <div className={cn("col-span-2 text-right", pricingMode === 'individual' && "xl:col-span-1")}>Cant.</div>
+                <div className="col-span-1 text-right">Cant.</div>
                 <div className={cn("col-span-2 text-right", pricingMode === 'individual' && "xl:col-span-1")}>Precio U.</div>
                 {pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}
                 <div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
-                  <div data-item-role="product-area" className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
+                  <div data-item-role="product-area" className={cn("min-w-0 xl:col-span-7", pricingMode === 'individual' && "xl:col-span-5")}>
                     <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                       <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                         <SalesProductPicker
@@ -2131,7 +2131,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                       </label>
                     </div>
                   )}
-                  <div className={cn("min-w-0 xl:col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
+                  <div className="min-w-0 xl:col-span-1">
                     <Input type="number" min="0" max={resolveItemType(item) === 'SERVICE' || getItemStock(item) === null ? 1000000 : Math.max(0, getItemStock(item) ?? 0)} value={Number(item.quantity) || ''} placeholder="0"
                       onChange={(e) => {
                         let newQty = Number(e.target.value);

@@ -752,17 +752,17 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn('sales-line-product-header sales-quote-line-product-header col-span-6', pricingMode === 'individual' && 'xl:col-span-5', productLineLayoutClass)}>
+                <div className={cn('sales-line-product-header sales-quote-line-product-header col-span-7', pricingMode === 'individual' && 'xl:col-span-5', productLineLayoutClass)}>
                   <span>Producto</span>
                   {showPriceListColumn && <span>Lista de precios</span>}
-                </div>{pricingMode === 'individual' && <div className="col-span-2 flex gap-1.5"><span className="flex-1">Aplicar</span><span className="flex-1 text-right">Desc.</span></div>}<div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Cant.</div><div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Precio U.</div>{pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}<div className="col-span-2 text-right">Total</div>
+                </div>{pricingMode === 'individual' && <div className="col-span-2 flex gap-1.5"><span className="flex-1">Aplicar</span><span className="flex-1 text-right">Desc.</span></div>}<div className="col-span-1 text-right">Cant.</div><div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Precio U.</div>{pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}<div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => {
                 const product = findProductForItem(item);
                 const itemType = resolveItemType(item);
                 return (
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
-                  <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
+                  <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-7', pricingMode === 'individual' && 'xl:col-span-5')}>
                     <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                       <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                         <SalesProductPicker
@@ -775,6 +775,8 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                           variantId={item.variantId}
                           catalogLoading={productsLoading}
                           catalogError={productsError}
+                          showSelectedVariant={false}
+                          showSelectedStock={false}
                           open={salesProductPickerItemId === String(item.id || idx)}
                           onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || idx) : null)}
                           onChange={(value, variant) => handleCatalogItemChange(idx, value, variant)}
@@ -785,6 +787,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                         className="sales-line-variant sales-quote-line-variant-column"
                         labelLayout="stacked"
                         showLabel={false}
+                        compactDisplay
                         placeholder="Seleccionar variante"
                         product={product}
                         warehouseId={localDoc?.warehouseId}
@@ -844,7 +847,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">%</span>
                     </div>
                   </div>}
-                  <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
+                  <div className="col-span-1"><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
                       const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }} /></div>
                   <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}><Input type="text" value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} readOnly className="bg-muted/20 text-right" onChange={(e) => {

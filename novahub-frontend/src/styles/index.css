@@ -2200,17 +2200,20 @@ th .column-filter-menu .column-filter-icon,
   }
 }
 
-/* Quote lines keep mixed simple/variant products aligned in the same desktop
-   row. Simple rows span the unused variant space so the price-list column does
-   not move when another row needs a variant selector. */
+/* Commercial document lines keep mixed simple/variant products aligned in one
+   desktop row. Simple rows span unused variant space so the price-list column
+   stays aligned when another row needs a variant selector. */
 @media (min-width: 1280px) {
   .sales-quote-line-product-header.sales-quote-line-product-layout--variant-and-price,
   .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(7rem, 0.9fr);
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr) minmax(7rem, 0.9fr);
   }
 
   .sales-quote-line-product-header.sales-quote-line-product-layout--variant-only,
-  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only {
+    grid-template-columns: minmax(0, 1.7fr) minmax(7rem, 0.7fr);
+  }
+
   .sales-quote-line-product-header.sales-quote-line-product-layout--price-only,
   .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--price-only {
     grid-template-columns: minmax(0, 1.45fr) minmax(7rem, 0.9fr);
@@ -2248,7 +2251,10 @@ th .column-filter-menu .column-filter-icon,
     grid-column: 3;
   }
 
-  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only > .sales-quote-line-variant-column,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only > .sales-quote-line-variant-column {
+    grid-column: 2;
+  }
+
   .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--price-only > .sales-quote-line-price-column {
     grid-column: 2;
   }
@@ -2276,6 +2282,10 @@ th .column-filter-menu .column-filter-icon,
   .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only:not(:has(> .sales-line-variant)) > .sales-line-product-picker,
   .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--product-only > .sales-line-product-picker {
     grid-column: 1 / -1;
+  }
+
+  .sales-credit-note-item-grid {
+    grid-template-columns: repeat(13, minmax(0, 1fr));
   }
 }
 
@@ -2457,18 +2467,21 @@ th .column-filter-menu .column-filter-icon,
   .purchases-module .purchase-item-row[data-item-layout="credit"] > div:nth-child(4)::before { content: "Total y acciones"; }
 }
 
-/* Cotizaciones mantienen Producto, Variante y Lista de precios en una sola
-   fila desde tablet; las demás vistas conservan su layout compacto. */
+/* Los documentos comerciales mantienen Producto, Variante y Lista de precios
+   en una sola fila desde tablet, con más espacio para producto. */
 @media (min-width: 640px) and (max-width: 1279px) {
   .sales-line-product-fields.sales-quote-line-product-fields {
     display: grid;
     min-width: 0;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(7rem, 0.9fr);
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr) minmax(7rem, 0.9fr);
     align-items: start;
     gap: 0.5rem;
   }
 
-  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only {
+    grid-template-columns: minmax(0, 1.7fr) minmax(7rem, 0.7fr);
+  }
+
   .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--price-only {
     grid-template-columns: minmax(0, 1.45fr) minmax(7rem, 0.9fr);
   }

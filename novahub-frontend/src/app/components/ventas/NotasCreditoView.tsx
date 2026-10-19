@@ -789,8 +789,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
               </div>
             </div>
             <div className="space-y-2">
-              <div className="hidden px-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground xl:grid xl:grid-cols-12 xl:gap-2">
-                <div className={cn('sales-line-product-header sales-quote-line-product-header col-span-5', productLineLayoutClass)}>
+              <div className="sales-credit-note-item-grid hidden px-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground xl:grid xl:grid-cols-12 xl:gap-2">
+                <div className={cn('sales-line-product-header sales-quote-line-product-header col-span-6', productLineLayoutClass)}>
                   <span>Producto</span>
                   {showPriceListColumn && <span>Lista de precios</span>}
                 </div>
@@ -805,8 +805,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                 const catalog = getItemCatalog(item);
                 const product = findProductForItem(item);
                 return (
-                  <div key={item.id || index} data-item-layout="standard" data-pricing-mode="individual" className="sales-item-row grid min-w-0 grid-cols-1 items-start gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
-                    <div data-item-role="product-area" className="min-w-0 xl:col-span-5">
+                  <div key={item.id || index} data-item-layout="standard" data-pricing-mode="individual" className="sales-item-row sales-credit-note-item-grid grid min-w-0 grid-cols-1 items-start gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
+                    <div data-item-role="product-area" className="min-w-0 xl:col-span-6">
                       <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                         <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                           <SalesProductPicker
@@ -819,6 +819,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                             variantId={item.variantId}
                             catalogLoading={productsLoading}
                             catalogError={productsError}
+                            showSelectedVariant={false}
+                            showSelectedStock={false}
                             open={salesProductPickerItemId === String(item.id || index)}
                             onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || index) : null)}
                             onChange={(value, pickedVariant) => {
@@ -848,6 +850,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                           className="sales-line-variant sales-quote-line-variant-column"
                           labelLayout="stacked"
                           showLabel={false}
+                          compactDisplay
                           placeholder="Seleccionar variante"
                           product={product}
                           warehouseId={localDoc?.warehouseId}

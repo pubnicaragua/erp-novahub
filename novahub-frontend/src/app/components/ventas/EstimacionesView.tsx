@@ -1071,7 +1071,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                 <div className={cn(
                   'sales-line-product-header sales-quote-line-product-header',
                   quoteLineProductLayoutClass,
-                  'xl:col-span-6',
+                  'xl:col-span-7',
                   pricingMode === 'individual' && 'xl:col-span-5',
                 )}>
                   <span>Producto</span>
@@ -1081,7 +1081,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                   <div>Aplicar</div>
                   <div className="text-right">Desc.</div>
                 </div>}
-                <div className={cn("col-span-2 text-right", pricingMode === 'individual' && "xl:col-span-1")}>Cant.</div>
+                <div className="col-span-1 text-right">Cant.</div>
                 <div className={cn("col-span-2 text-right", pricingMode === 'individual' && "xl:col-span-1")}>Precio U.</div>
                 {pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}
                 <div className="col-span-2 text-right">Total</div>
@@ -1092,7 +1092,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                 const itemType = String(resolveItemType(item)).toUpperCase();
                 return (
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
-                  <div data-item-role="product-area" className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
+                  <div data-item-role="product-area" className={cn("min-w-0 xl:col-span-7", pricingMode === 'individual' && "xl:col-span-5")}>
                       <div className={cn('sales-line-product-fields sales-quote-line-product-fields', quoteLineProductLayoutClass)}>
                         <div data-item-role="product-picker" className="sales-line-product-picker min-w-0"><SalesProductPicker
                       otherLocationsPermissionModule="SALES_QUOTES"
@@ -1105,6 +1105,8 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                       variantId={item.variantId}
                       catalogLoading={productsLoading}
                       catalogError={productsError}
+                      showSelectedVariant={false}
+                      showSelectedStock={false}
                       open={salesProductPickerItemId === String(item.id || idx)}
                       onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || idx) : null)}
                       onChange={(val, pickedVariant) => {
@@ -1162,6 +1164,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                            className="sales-line-variant sales-quote-line-variant-column"
                            labelLayout="stacked"
                            showLabel={false}
+                           compactDisplay
                          placeholder="Seleccionar variante"
                          allowOutOfStockSelection
                          product={itemProduct}
@@ -1245,7 +1248,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                       </label>
                     </div>
                   )}
-                  <div className={cn("min-w-0 xl:col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
+                  <div className="min-w-0 xl:col-span-1">
                     <Input 
                       type="number"
                       min="0"
