@@ -71,6 +71,24 @@ const paymentMethodOptions = [
   { label: 'Transferencia', value: 'TRANSFER' },
   { label: 'Cheque', value: 'CHECK' },
 ] as const;
+const expenseImportStatusOptions = [
+  { label: 'Borrador', value: 'DRAFT' },
+  { label: 'Pendiente', value: 'PENDING' },
+  { label: 'Pagado', value: 'PAID' },
+] as const;
+const NO_EXPENSE_IMPORT_PAYMENT = '__SIN_METODO__';
+const displayExpenseImportValue = (value: unknown) => {
+  if (value === undefined || value === null || String(value).trim() === '') return '—';
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? String(value) : value.toLocaleDateString('es-NI');
+  if (typeof value === 'number') return Number.isFinite(value) ? new Intl.NumberFormat('es-NI', { maximumFractionDigits: 6 }).format(value) : String(value);
+  return String(value);
+};
+const ExpenseImportPreviewField = ({ label, value }: { label: string; value: unknown }) => (
+  <div className="min-w-0 rounded-lg border border-border/50 bg-background/70 px-3 py-2">
+    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
+    <p className="mt-1 break-words text-xs font-medium text-foreground">{displayExpenseImportValue(value)}</p>
+  </div>
+);
 const MAX_EVIDENCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -118,6 +136,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const [parsedImportRows, setParsedImportRows] = useState<Record<string, any>[]>([]);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
   const [expenseImportPreview, setExpenseImportPreview] = useState<ExpenseImportPreviewResponse | null>(null);
+  const [expenseImportPreviewStale, setExpenseImportPreviewStale] = useState(false);
   const [expenseImportAttemptId, setExpenseImportAttemptId] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
   
@@ -386,6 +405,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     setImportFile(file || null);
     setParsedImportRows([]);
     setExpenseImportPreview(null);
+    setExpenseImportPreviewStale(false);
     setExpenseImportAttemptId(file ? crypto.randomUUID() : null);
     setImportResult(null);
     if (!file) return;
@@ -401,6 +421,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     } catch {
       setImportFile(null);
       setParsedImportRows([]);
+      setExpenseImportPreviewStale(false);
       setExpenseImportAttemptId(null);
       toast.error('No se pudo leer el archivo. Verifica el formato de Excel o CSV.');
     } finally {
@@ -430,6 +451,17 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     };
   });
 
+  const updateExpenseImportField = (
+    sourceRowNumber: number,
+    field: 'estado' | 'metododepago' | 'referencia' | 'numerodecuentabancaria',
+    value: string,
+  ) => {
+    setParsedImportRows((current) => current.map((row) => (
+      Number(row.sourceRowNumber) === sourceRowNumber ? { ...row, [field]: value } : row
+    )));
+    setExpenseImportPreviewStale(true);
+  };
+
   const handlePreviewExpenses = async () => {
     if (!importFile) {
       toast.error('Selecciona un archivo Excel o CSV.');
@@ -439,6 +471,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     setImportProgress(8);
     setImportResult(null);
     setExpenseImportPreview(null);
+    setExpenseImportPreviewStale(true);
     try {
       const rows = parsedImportRows.length > 0
         ? parsedImportRows
@@ -478,7 +511,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         integrations: integrations || { financeEnabled: false, accountingEnabled: false, accountingConnectionEnabled: false, autoGenerationEnabled: false },
         rows: previewRows,
       });
-      setExpenseImportAttemptId(crypto.randomUUID());
+      if (!expenseImportAttemptId) setExpenseImportAttemptId(crypto.randomUUID());
+      setExpenseImportPreviewStale(false);
       setImportProgress(100);
       toast.success(`Vista previa lista: ${ready} listos y ${previewRows.length - ready} con errores.`);
     } catch (error: any) {
@@ -491,6 +525,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
   const handleConfirmExpenseImport = async (retryOnly = false) => {
     if (!expenseImportPreview || !expenseImportAttemptId || importing) return;
+    if (expenseImportPreviewStale) {
+      toast.error('Actualiza la vista previa para validar las correcciones antes de confirmar.');
+      return;
+    }
     const eligible = expenseImportPreview.rows
       .filter((row) => retryOnly ? row.status === 'FAILED' : row.status === 'READY')
       .map((previewRow) => previewRow.sourceRowNumber);
@@ -552,6 +590,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     setImportFile(null);
     setParsedImportRows([]);
     setExpenseImportPreview(null);
+    setExpenseImportPreviewStale(false);
     setExpenseImportAttemptId(null);
   };
 
@@ -561,6 +600,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     setParsedImportRows([]);
     setImportResult(null);
     setExpenseImportPreview(null);
+    setExpenseImportPreviewStale(false);
     setExpenseImportAttemptId(null);
     if (importFileInputRef.current) importFileInputRef.current.value = '';
   };
@@ -1140,7 +1180,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
             {canPerform('PURCHASES_EXPENSES', 'import') && (
               <Button
                 variant="outline"
-                onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); setParsedImportRows([]); setExpenseImportPreview(null); setExpenseImportAttemptId(null); }}
+                onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); setParsedImportRows([]); setExpenseImportPreview(null); setExpenseImportPreviewStale(false); setExpenseImportAttemptId(null); }}
                 className="h-10 min-w-0 w-full gap-2 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto"
               >
                 <Upload className="size-4" /> Importar
@@ -1323,7 +1363,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                       <div>
                         <p className="text-xs font-black uppercase tracking-widest text-foreground">Vista previa del servidor</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          PAID crea efectos según las conexiones activas. DRAFT y PENDING quedan en Compras sin espejo ni asiento.
+                          Revisa todos los campos de cada gasto. Puedes corregir estado, método de pago, referencia y cuenta bancaria; los efectos se recalculan al actualizar la vista previa.
                         </p>
                       </div>
                       <ImportReviewSummary total={expenseImportPreview.summary.total} valid={expenseImportPreview.summary.ready} skipped={expenseImportPreview.summary.blocked} entityLabel="gastos listos" />
@@ -1332,29 +1372,103 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                         <Badge variant="outline" className={expenseImportPreview.integrations.financeEnabled ? 'border-emerald-500/30 text-emerald-700' : 'text-muted-foreground'}>Finanzas {expenseImportPreview.integrations.financeEnabled ? 'conectada' : 'desconectada'}</Badge>
                         <Badge variant="outline" className={expenseImportPreview.integrations.accountingEnabled ? 'border-emerald-500/30 text-emerald-700' : 'text-muted-foreground'}>Asiento automático {expenseImportPreview.integrations.accountingEnabled ? 'activo' : 'inactivo'}</Badge>
                       </div>
-                      <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
-                        {expenseImportPreview.rows.map((row) => (
-                          <div key={row.sourceRowNumber} className="min-w-0 rounded-lg border border-border/60 bg-muted/20 p-3">
-                            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-xs font-black">Fila {row.sourceRowNumber}</span>
-                                  <Badge variant="outline" className={row.status === 'READY' ? 'border-emerald-500/30 text-emerald-700' : row.status === 'CONFIRMED' ? 'border-blue-500/30 text-blue-700' : row.status === 'FAILED' || row.status === 'BLOCKED' ? 'border-rose-500/30 text-rose-700' : ''}>
-                                    {row.status === 'READY' ? 'Lista' : row.status === 'BLOCKED' ? 'Corregir' : row.status === 'CONFIRMED' ? 'Confirmada' : row.status === 'FAILED' ? 'Falló' : row.status}
-                                  </Badge>
-                                  {row.status === 'READY' && row.effects?.expense && <span className="text-[10px] text-muted-foreground">Se creará en Compras</span>}
-                                  {row.status === 'READY' && row.effects?.financeMirror && <span className="text-[10px] text-muted-foreground">+ espejo en Finanzas</span>}
-                                  {row.status === 'READY' && row.effects?.accountingJournal && <span className="text-[10px] text-muted-foreground">+ asiento contable</span>}
-                                  {row.status === 'CONFIRMED' && <span className="text-[10px] font-semibold text-emerald-700">Gasto creado en Compras</span>}
-                                  {row.status === 'CONFIRMED' && <span className="text-[10px] text-muted-foreground">{row.financeMirrorCreated ? 'Espejo creado en Finanzas' : 'Sin espejo en Finanzas'}</span>}
-                                  {row.status === 'CONFIRMED' && <span className="text-[10px] text-muted-foreground">{row.accountingJournalGenerated ? 'Asiento generado' : 'Sin asiento contable'}</span>}
+                      {expenseImportPreviewStale && (
+                        <div role="alert" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+                          Cambiaste datos después de la última validación. Actualiza la vista previa para recalcular errores y efectos; la confirmación está deshabilitada hasta entonces.
+                        </div>
+                      )}
+                      <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
+                        {expenseImportPreview.rows.map((row) => {
+                          const sourceRecord = parsedImportRows.find((item) => Number(item.sourceRowNumber) === row.sourceRowNumber);
+                          const source = sourceRecord ? buildExpenseImportRows([sourceRecord])[0] : undefined;
+                          const statusValue = String(source?.status || 'PENDING').trim().toUpperCase() || 'PENDING';
+                          const paymentValue = String(source?.paymentSource || '').trim().toUpperCase();
+                          const paymentSelectValue = paymentValue || NO_EXPENSE_IMPORT_PAYMENT;
+                          const rowCanEdit = row.status !== 'CONFIRMED';
+                          return (
+                            <div key={row.sourceRowNumber} className={cn('min-w-0 rounded-xl border bg-muted/20 p-3 sm:p-4', row.status === 'BLOCKED' || row.status === 'FAILED' ? 'border-rose-500/30' : 'border-border/60')}>
+                              <div className="mb-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-xs font-black">Fila {row.sourceRowNumber}</span>
+                                    <Badge variant="outline" className={row.status === 'READY' ? 'border-emerald-500/30 text-emerald-700' : row.status === 'CONFIRMED' ? 'border-blue-500/30 text-blue-700' : row.status === 'FAILED' || row.status === 'BLOCKED' ? 'border-rose-500/30 text-rose-700' : ''}>
+                                      {row.status === 'READY' ? 'Lista' : row.status === 'BLOCKED' ? 'Corregir' : row.status === 'CONFIRMED' ? 'Confirmada' : row.status === 'FAILED' ? 'Falló' : row.status}
+                                    </Badge>
+                                    {expenseImportPreviewStale && <Badge variant="outline" className="border-amber-500/30 text-amber-700">Pendiente de validar</Badge>}
+                                  </div>
+                                  {row.number && <p className="mt-1 break-all font-mono text-[10px] text-muted-foreground">{row.number}</p>}
                                 </div>
-                                {(row.errors || []).length > 0 && <p className="mt-1 break-words text-xs text-rose-600">{row.errors.join(' · ')}</p>}
+                                {row.status === 'CONFIRMED' && <Badge variant="outline" className="border-blue-500/30 text-blue-700">Registro confirmado</Badge>}
                               </div>
-                              {row.number && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{row.number}</span>}
+
+                              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                <ExpenseImportPreviewField label="Fecha" value={source?.date} />
+                                <ExpenseImportPreviewField label="Descripción" value={source?.description} />
+                                <ExpenseImportPreviewField label="Categoría" value={source?.category} />
+                                <ExpenseImportPreviewField label="Categoría personalizada" value={source?.categoryCustom} />
+                                <ExpenseImportPreviewField label="Monto" value={source?.amount} />
+                                <ExpenseImportPreviewField label="Moneda" value={source?.currency} />
+                                <ExpenseImportPreviewField label="Tasa de cambio" value={source?.exchangeRate} />
+                                <ExpenseImportPreviewField label="Pagado a" value={source?.paidTo} />
+
+                                <div className="min-w-0 space-y-1">
+                                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Estado</span>
+                                  <Select value={statusValue} onValueChange={(value) => updateExpenseImportField(row.sourceRowNumber, 'estado', value)} disabled={!rowCanEdit || importing}>
+                                    <SelectTrigger aria-label={`Estado del gasto de la fila ${row.sourceRowNumber}`} className="h-9 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {!expenseImportStatusOptions.some((option) => option.value === statusValue) && <SelectItem value={statusValue}>Valor actual: {statusValue}</SelectItem>}
+                                      {expenseImportStatusOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div className="min-w-0 space-y-1">
+                                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Método de pago</span>
+                                  <Select value={paymentSelectValue} onValueChange={(value) => updateExpenseImportField(row.sourceRowNumber, 'metododepago', value === NO_EXPENSE_IMPORT_PAYMENT ? '' : value)} disabled={!rowCanEdit || importing}>
+                                    <SelectTrigger aria-label={`Método de pago de la fila ${row.sourceRowNumber}`} className="h-9 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {paymentValue && !paymentMethodOptions.some((option) => option.value === paymentValue) && <SelectItem value={paymentValue}>Valor actual: {paymentValue}</SelectItem>}
+                                      <SelectItem value={NO_EXPENSE_IMPORT_PAYMENT}>Sin método</SelectItem>
+                                      {paymentMethodOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <label className="min-w-0 space-y-1">
+                                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Referencia</span>
+                                  <Input aria-label={`Referencia de la fila ${row.sourceRowNumber}`} value={String(source?.reference ?? '')} onChange={(event) => updateExpenseImportField(row.sourceRowNumber, 'referencia', event.target.value)} disabled={!rowCanEdit || importing} className="h-9 text-xs" />
+                                </label>
+
+                                <label className="min-w-0 space-y-1">
+                                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Número de cuenta bancaria</span>
+                                  <Input aria-label={`Número de cuenta bancaria de la fila ${row.sourceRowNumber}`} value={String(source?.bankAccountNumber ?? '')} onChange={(event) => updateExpenseImportField(row.sourceRowNumber, 'numerodecuentabancaria', event.target.value)} disabled={!rowCanEdit || importing} className="h-9 text-xs font-mono" />
+                                </label>
+                              </div>
+
+                              {row.status === 'READY' && (
+                                <div className="mt-3 flex flex-wrap gap-1.5 text-[10px]">
+                                  {row.effects?.expense && <Badge variant="outline" className="border-emerald-500/30 text-emerald-700">Se creará en Compras</Badge>}
+                                  {row.effects?.financeMirror ? <Badge variant="outline" className="border-blue-500/30 text-blue-700">Generará espejo en Finanzas</Badge> : <Badge variant="outline" className="text-muted-foreground">Sin espejo en Finanzas</Badge>}
+                                  {row.effects?.accountingJournal ? <Badge variant="outline" className="border-violet-500/30 text-violet-700">Generará asiento contable</Badge> : <Badge variant="outline" className="text-muted-foreground">Sin asiento contable</Badge>}
+                                </div>
+                              )}
+                              {(row.errors || []).length > 0 && (
+                                <div className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/5 p-3">
+                                  <p className="text-[10px] font-black uppercase tracking-wide text-rose-700">{expenseImportPreviewStale ? 'Errores de la validación anterior' : 'Errores que debes corregir'}</p>
+                                  <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-rose-700 dark:text-rose-300">
+                                    {row.errors.map((error, index) => <li key={`${row.sourceRowNumber}-${index}`} className="break-words">{error}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {row.status === 'BLOCKED' && <p className="mt-2 text-[10px] text-muted-foreground">No se aplicará ningún efecto hasta que corrijas la fila y la vuelvas a validar.</p>}
+                              {row.status === 'CONFIRMED' && <p className="mt-2 text-[10px] font-semibold text-emerald-700">Gasto confirmado en Compras · {row.financeMirrorCreated ? 'espejo creado en Finanzas' : 'sin espejo financiero'} · {row.accountingJournalGenerated ? 'asiento generado' : 'sin asiento contable'}</p>}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1405,9 +1519,9 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                   ) : (
                     <>
                       <Button variant="outline" onClick={() => void handlePreviewExpenses()} disabled={importing || !importFile || parsedImportRows.length === 0} className="gap-2">
-                        <Eye className="size-4" /> Actualizar vista previa
+                        <Eye className="size-4" /> {expenseImportPreviewStale ? 'Validar correcciones' : 'Actualizar vista previa'}
                       </Button>
-                      <Button onClick={() => void handleConfirmExpenseImport()} disabled={importing || expenseImportPreview.summary.ready === 0} className="gap-2">
+                      <Button onClick={() => void handleConfirmExpenseImport()} disabled={importing || expenseImportPreviewStale || expenseImportPreview.summary.ready === 0} className="gap-2">
                         <Upload className="size-4" /> Confirmar {expenseImportPreview.summary.ready} gastos listos
                       </Button>
                     </>
