@@ -4,6 +4,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
@@ -175,10 +176,18 @@ export function ExpenseImportPreviewView({
                       <Input aria-label={`Referencia de la fila ${row.sourceRowNumber}`} value={String(source?.reference ?? '')} onChange={(event) => onFieldUpdate(row.sourceRowNumber, 'referencia', event.target.value)} disabled={!rowCanEdit || importing} className="h-9 text-xs" />
                     </label>
 
-                    <label className="min-w-0 space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Número de cuenta bancaria</span>
-                      <Input aria-label={`Número de cuenta bancaria de la fila ${row.sourceRowNumber}`} value={String(source?.bankAccountNumber ?? '')} onChange={(event) => onFieldUpdate(row.sourceRowNumber, 'numerodecuentabancaria', event.target.value)} disabled={!rowCanEdit || importing} className="h-9 text-xs font-mono" />
-                    </label>
+                    <BankAccountSelect
+                      label="Número de cuenta bancaria"
+                      placeholder="Seleccionar cuenta existente"
+                      required={false}
+                      valueMode="accountNumber"
+                      allowUnlinked={!preview.integrations.accountingConnectionEnabled}
+                      currency={String(source?.currency || '')}
+                      value={String(source?.bankAccountNumber ?? '')}
+                      onChange={(value) => onFieldUpdate(row.sourceRowNumber, 'numerodecuentabancaria', value)}
+                      disabled={!rowCanEdit || importing}
+                      className="min-w-0"
+                    />
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-1.5 text-[10px]">

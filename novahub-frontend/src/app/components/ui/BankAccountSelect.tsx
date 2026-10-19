@@ -24,6 +24,7 @@ type BankAccountSelectProps = {
   className?: string;
   endpoint?: string;
   currency?: string;
+  valueMode?: 'id' | 'accountNumber';
 };
 
 export function BankAccountSelect({
@@ -38,6 +39,7 @@ export function BankAccountSelect({
   className,
   endpoint = '/bank-accounts',
   currency,
+  valueMode = 'id',
 }: BankAccountSelectProps) {
   const normalizedCurrency = String(currency || '').trim().toUpperCase() || undefined;
   const query = useAccountingQuery<any[]>(['bank-accounts', endpoint, 'payment-options', normalizedCurrency], async (signal) =>
@@ -46,11 +48,12 @@ export function BankAccountSelect({
   const accounts = useMemo(() => (query.data || [])
     .filter((account) => account.isActive !== false && (allowUnlinked || account.accountId))
     .sort((a, b) => `${a.bankName} ${a.accountNumber}`.localeCompare(`${b.bankName} ${b.accountNumber}`)), [allowUnlinked, query.data]);
+  const selectedAccountExists = accounts.some((account) => (valueMode === 'accountNumber' ? account.accountNumber : account.id) === value);
 
   const handleChange = (newValue: string) => {
     onChange(newValue);
     if (onAccountSelect) {
-      const found = accounts.find((a) => a.id === newValue) || null;
+      const found = accounts.find((a) => (valueMode === 'accountNumber' ? a.accountNumber : a.id) === newValue) || null;
       onAccountSelect(found ? { id: found.id, bankName: found.bankName, accountNumber: found.accountNumber, currency: found.currency, cardCommissionPercent: Number(found.cardCommissionPercent || 0), cardCommissionAccountId: found.cardCommissionAccountId || undefined } : null);
     }
   };
@@ -61,14 +64,17 @@ export function BankAccountSelect({
         {label}{required && ' *'}
       </p>
       <Select value={value || ''} onValueChange={handleChange} disabled={disabled || query.isLoading}>
-        <SelectTrigger className="h-8 text-xs">
+        <SelectTrigger aria-label={label} className="h-8 text-xs">
           <SelectValue placeholder={query.isLoading ? 'Cargando bancos...' : placeholder} />
         </SelectTrigger>
         <SelectContent>
+          {valueMode === 'accountNumber' && value && !selectedAccountExists && (
+            <SelectItem value={value} disabled>Cuenta importada no disponible: {value}</SelectItem>
+          )}
           {accounts.map((account) => {
             const commission = Number(account.cardCommissionPercent || 0);
             return (
-              <SelectItem key={account.id} value={account.id}>
+              <SelectItem key={account.id} value={valueMode === 'accountNumber' ? account.accountNumber : account.id}>
                 {account.bankName} · {account.accountNumber} · {account.currency || 'NIO'}{commission > 0 ? ` · ${commission.toFixed(2)}%` : ''}
               </SelectItem>
             );
