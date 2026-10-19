@@ -5,6 +5,13 @@ export const PDF_APPEARANCE_FONTS = [
   'Merriweather', 'Lora', 'Playfair Display', 'Source Serif 4', 'PT Serif', 'DM Serif Display',
   'Libre Baskerville', 'Noto Serif', 'Crimson Text',
   'IBM Plex Mono', 'JetBrains Mono', 'Inconsolata', 'Fira Code', 'Source Code Pro', 'Space Mono',
+  'Caveat', 'Dancing Script', 'Great Vibes', 'Lobster', 'Pacifico', 'Permanent Marker', 'Satisfy',
+  'Sacramento', 'Kalam', 'Indie Flower', 'Shadows Into Light', 'Architects Daughter', 'Patrick Hand',
+  'Kaushan Script', 'Yellowtail', 'Comic Neue', 'Courgette', 'Gloria Hallelujah', 'Handlee', 'Rock Salt',
+  'Tangerine', 'Bad Script',
+  'Abril Fatface', 'Anton', 'Bangers', 'Bungee', 'Cinzel Decorative', 'Creepster', 'Monoton', 'Righteous',
+  'Teko', 'Black Ops One', 'Press Start 2P', 'Orbitron', 'Bebas Neue', 'Chewy', 'Alfa Slab One',
+  'Special Elite', 'Audiowide',
 ] as const;
 
 export type PdfAppearanceFontFamily = typeof PDF_APPEARANCE_FONTS[number];
@@ -46,6 +53,8 @@ export const PDF_APPEARANCE_FONT_GROUPS: Array<{ label: string; families: readon
   { label: 'Sans serif', families: ['Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans', 'Source Sans 3', 'Poppins', 'Raleway', 'Ubuntu', 'Fira Sans', 'PT Sans', 'Work Sans', 'DM Sans', 'Archivo', 'Cabin', 'Manrope', 'Quicksand', 'Rubik', 'Oxygen', 'Oswald', 'Barlow', 'Karla', 'Urbanist', 'Mulish'] },
   { label: 'Serif', families: ['Merriweather', 'Lora', 'Playfair Display', 'Source Serif 4', 'PT Serif', 'DM Serif Display', 'Libre Baskerville', 'Noto Serif', 'Crimson Text'] },
   { label: 'Monoespaciadas', families: ['IBM Plex Mono', 'JetBrains Mono', 'Inconsolata', 'Fira Code', 'Source Code Pro', 'Space Mono'] },
+  { label: 'Cursivas y manuscritas', families: ['Caveat', 'Dancing Script', 'Great Vibes', 'Lobster', 'Pacifico', 'Permanent Marker', 'Satisfy', 'Sacramento', 'Kalam', 'Indie Flower', 'Shadows Into Light', 'Architects Daughter', 'Patrick Hand', 'Kaushan Script', 'Yellowtail', 'Comic Neue', 'Courgette', 'Gloria Hallelujah', 'Handlee', 'Rock Salt', 'Tangerine', 'Bad Script'] },
+  { label: 'Decorativas', families: ['Abril Fatface', 'Anton', 'Bangers', 'Bungee', 'Cinzel Decorative', 'Creepster', 'Monoton', 'Righteous', 'Teko', 'Black Ops One', 'Press Start 2P', 'Orbitron', 'Bebas Neue', 'Chewy', 'Alfa Slab One', 'Special Elite', 'Audiowide'] },
 ];
 
 const HEADER_COMPOSITIONS: readonly PdfHeaderComposition[] = ['company-left-logo-right', 'logo-left-company-right', 'centered-stack'];

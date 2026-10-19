@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   PDF_APPEARANCE_FONTS,
+  PDF_APPEARANCE_FONT_GROUPS,
   inferLegacyPdfAppearanceOverrides,
   normalizePdfAppearanceProfile,
   resolvePdfDesignAppearance,
@@ -19,6 +21,16 @@ const fallback = {
   tableStyle: 'light',
   palette: { primary: '#112233', text: '#334455' },
 };
+
+const [globalStylesheet, fontStylesheet] = await Promise.all([
+  readFile(new URL('../src/styles/index.css', import.meta.url), 'utf8'),
+  readFile(new URL('../src/styles/fonts.css', import.meta.url), 'utf8'),
+]);
+const loadedFontStylesheet = `${globalStylesheet}\n${fontStylesheet}`;
+for (const family of PDF_APPEARANCE_FONTS) {
+  const packageName = family.toLowerCase().replaceAll(' ', '-');
+  assert.ok(loadedFontStylesheet.includes(`@fontsource/${packageName}/`), `Debe cargarse localmente la fuente ${family} para que cambie en el PDF.`);
+}
 
 {
   const effective = resolvePdfAppearance(
@@ -74,8 +86,16 @@ const fallback = {
 {
   const normalized = normalizePdfAppearanceProfile({ fontFamily: 'Not Packaged', fontSize: 30, palette: { primary: '#abcdef', other: '#000000' } });
   assert.deepEqual(normalized, { palette: { primary: '#abcdef' } });
+  assert.ok(PDF_APPEARANCE_FONTS.length >= 70, 'El catálogo debe ofrecer una variedad amplia de tipografías, como un editor de documentos.');
   assert.ok(PDF_APPEARANCE_FONTS.includes('Inter'));
   assert.ok(PDF_APPEARANCE_FONTS.includes('JetBrains Mono'));
+  assert.ok(PDF_APPEARANCE_FONT_GROUPS.some(group => group.label === 'Cursivas y manuscritas' && group.families.includes('Dancing Script')));
+  assert.ok(PDF_APPEARANCE_FONT_GROUPS.some(group => group.label === 'Decorativas' && group.families.includes('Creepster')));
+  assert.deepEqual(
+    new Set(PDF_APPEARANCE_FONT_GROUPS.flatMap(group => group.families)),
+    new Set(PDF_APPEARANCE_FONTS),
+    'Todas las fuentes del catálogo deben aparecer agrupadas en el selector.',
+  );
 }
 
 {

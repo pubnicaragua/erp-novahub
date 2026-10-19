@@ -621,12 +621,18 @@ export function browserFontFamily(value?: string) {
   const normalized = family.toLowerCase();
   const serifFonts = PDF_APPEARANCE_FONT_GROUPS.find(group => group.label === 'Serif')?.families || [];
   const monospaceFonts = PDF_APPEARANCE_FONT_GROUPS.find(group => group.label === 'Monoespaciadas')?.families || [];
+  const cursiveFonts = PDF_APPEARANCE_FONT_GROUPS.find(group => group.label === 'Cursivas y manuscritas')?.families || [];
+  const decorativeFonts = PDF_APPEARANCE_FONT_GROUPS.find(group => group.label === 'Decorativas')?.families || [];
   const generic = serifFonts.some(font => font.toLowerCase() === normalized)
     || ['times new roman', 'georgia', 'garamond', 'cambria', 'palatino linotype', 'bookman'].includes(normalized)
     ? 'serif'
     : monospaceFonts.some(font => font.toLowerCase() === normalized)
       || ['courier new', 'consolas', 'monaco'].includes(normalized)
       ? 'monospace'
+      : cursiveFonts.some(font => font.toLowerCase() === normalized)
+        ? 'cursive'
+        : decorativeFonts.some(font => font.toLowerCase() === normalized)
+          ? 'fantasy'
       : 'sans-serif';
   return `"${family.replace(/"/g, '\\"')}", ${generic}`;
 }

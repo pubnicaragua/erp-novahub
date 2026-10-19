@@ -37,12 +37,18 @@ try {
   assert.equal(appearancePanel.includes('Estilo de tabla'), false, 'El panel no debe mostrar ajustes de estilo de tabla por ahora.');
   assert.equal(appearancePanel.includes('type="color"'), false, 'El panel no debe mostrar controles de color por ahora.');
   assert.ok(appearancePanel.includes('Fuente del documento'), 'La fuente del documento debe seguir configurable.');
+  assert.ok(appearancePanel.includes('Buscar tipografía'), 'El selector debe poder buscar entre las familias disponibles.');
+  assert.ok(appearancePanel.includes('data-font-family-picker'), 'La fuente debe presentarse en un selector visual, no en un select nativo.');
+  assert.ok(appearancePanel.includes('pdf-font-family-scrollarea'), 'La lista de fuentes debe tener una barra de desplazamiento explícita.');
+  assert.ok(appearancePanel.includes('Dancing Script'), 'El selector debe mostrar muestras manuscritas/cursivas.');
 
   assert.equal(renderer.browserFontFamily('Inter'), '"Inter", sans-serif', 'La familia elegida debe conservarse en el render final en vez de colapsar a Arial.');
   assert.equal(renderer.browserFontFamily('Merriweather'), '"Merriweather", serif', 'Las fuentes serif deben conservar su familia local y fallback correcto.');
   assert.equal(renderer.browserFontFamily('JetBrains Mono'), '"JetBrains Mono", monospace', 'Las fuentes monoespaciadas deben conservar su familia local y fallback correcto.');
   assert.equal(renderer.browserFontFamily('Source Serif 4'), '"Source Serif 4", serif', 'Las nuevas fuentes serif deben conservar su fallback correcto.');
   assert.equal(renderer.browserFontFamily('Fira Code'), '"Fira Code", monospace', 'Las nuevas fuentes monoespaciadas deben conservar su fallback correcto.');
+  assert.equal(renderer.browserFontFamily('Dancing Script'), '"Dancing Script", cursive', 'Las fuentes manuscritas deben conservar el fallback cursivo.');
+  assert.equal(renderer.browserFontFamily('Press Start 2P'), '"Press Start 2P", fantasy', 'Las fuentes decorativas deben conservar un fallback display.');
   const fontSourceDefinition = {
     nodes: [{ id: 'font-sample', type: 'text', fontFamily: 'Georgia', fontWeight: 700, italic: true, fontSize: 12, align: 'right' }],
   };
