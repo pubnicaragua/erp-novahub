@@ -665,6 +665,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                   dateTo={invoicesDates.dateTo}
                   onDateRangeChange={(from, to) => updateDateRange('facturas', from, to)}
                   salesAlert={salesAlert || undefined}
+                  isSidebarCollapsed={isSidebarCollapsed}
                 />
               )}
               {activeSection === 'facturas-recurrentes' && (

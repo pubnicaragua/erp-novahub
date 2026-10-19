@@ -87,6 +87,7 @@ interface FacturasViewProps {
   dateTo?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
   salesAlert?: PurchaseAlertDetail;
+  isSidebarCollapsed?: boolean;
 }
 
 // Todos los estados posibles (para visualización en badges)
@@ -125,7 +126,7 @@ type InvoicePaymentLine = {
 
 type InvoiceSaveAction = 'SAVE' | 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT';
 
-export function FacturasView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasViewProps) {
+export function FacturasView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert, isSidebarCollapsed = false }: FacturasViewProps) {
   const {
     exchangeRate: globalRate,
     displayCurrency,
@@ -2402,6 +2403,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         onOpenChange={setSalesImportOpen}
         kind="INVOICE"
         tenantId={user?.clientTenantId || user?.tenantId || ''}
+        isSidebarCollapsed={isSidebarCollapsed}
         onFinished={() => { void onRefresh?.(); }}
       />
 

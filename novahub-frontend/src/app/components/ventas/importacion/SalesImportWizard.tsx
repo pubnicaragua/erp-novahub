@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowLeft,
   AlertTriangle,
   CheckCircle2,
   ChevronLeft,
@@ -10,9 +11,11 @@ import {
   Loader2,
   RefreshCw,
   Upload,
+  X,
 } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { ImportReviewSummary } from "../../ui/ImportReviewSummary";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +27,7 @@ import {
 import { Label } from "../../ui/label";
 import { Input } from "../../ui/input";
 import { BankAccountSelect } from "../../ui/BankAccountSelect";
+import { useImportPreviewLayout } from "../../../hooks/useImportPreviewLayout";
 import {
   Select,
   SelectContent,
@@ -148,6 +152,7 @@ interface SalesImportWizardProps {
   tenantId: string;
   register?: CashRegister | null;
   session?: CashRegisterSession | null;
+  isSidebarCollapsed?: boolean;
   onFinished?: () => void;
 }
 
@@ -190,61 +195,17 @@ function InvoiceImportPreviewSection({
   preview,
   initialSources,
   confirming,
-  progress,
   onSourceUpdate,
-  onConfirm,
 }: {
   preview: SalesImportInvoicePreviewResponse;
   initialSources: Map<number, SalesImportInvoicePreviewDocument["source"]>;
   confirming: boolean;
-  progress: { current: number; total: number } | null;
   onSourceUpdate: (sourceRowNumber: number, field: InvoicePaymentField, value: string) => void;
-  onConfirm: () => void;
 }) {
   const accountingEnabled = Boolean(preview.integrations?.accountingEnabled);
-  const readyCount = preview.documents.filter((document) => invoiceDocumentReady(
-    document,
-    accountingEnabled,
-    initialSources.get(document.sourceRowNumber),
-  )).length;
-  const confirmedCount = preview.documents.filter(
-    (document) => document.status === "CONFIRMED",
-  ).length;
-  const errorCount = preview.documents.filter(
-    (document) => !invoiceDocumentReady(document, accountingEnabled, initialSources.get(document.sourceRowNumber)) && !["CONFIRMED", "PROCESSING"].includes(document.status),
-  ).length;
 
   return (
     <section className="min-w-0 space-y-4" aria-live="polite">
-      <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h3 className="text-sm font-black">3. Vista previa y confirmación</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {preview.summary.total} factura(s) · {readyCount} lista(s) · {errorCount} con errores · {confirmedCount} confirmada(s)
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">Puedes ajustar método, referencia y cuenta bancaria por factura; el servidor vuelve a validar al confirmar.</p>
-          {progress && (
-            <p className="mt-1 text-xs font-semibold text-primary" role="status">
-              Confirmando factura {progress.current} de {progress.total}…
-            </p>
-          )}
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          className="shrink-0 gap-2 rounded-xl"
-          disabled={confirming || readyCount === 0}
-          onClick={onConfirm}
-        >
-          {confirming ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <CheckCircle2 className="size-4" />
-          )}
-          {confirming ? "Confirmando…" : `Confirmar ${readyCount} factura(s)`}
-        </Button>
-      </div>
-
       {Boolean(preview.globalErrors.length) && (
         <div
           className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
@@ -276,6 +237,95 @@ function InvoiceImportPreviewSection({
   );
 }
 
+function InvoiceImportPreviewView({
+  preview,
+  fileName,
+  isSidebarCollapsed,
+  initialSources,
+  confirming,
+  progress,
+  onSourceUpdate,
+  onBack,
+  onConfirm,
+  onExit,
+}: {
+  preview: SalesImportInvoicePreviewResponse;
+  fileName: string;
+  isSidebarCollapsed: boolean;
+  initialSources: Map<number, SalesImportInvoicePreviewDocument["source"]>;
+  confirming: boolean;
+  progress: { current: number; total: number } | null;
+  onSourceUpdate: (sourceRowNumber: number, field: InvoicePaymentField, value: string) => void;
+  onBack: () => void;
+  onConfirm: () => void;
+  onExit: () => void;
+}) {
+  useImportPreviewLayout();
+  const accountingEnabled = Boolean(preview.integrations?.accountingEnabled);
+  const readyCount = preview.documents.filter((document) => invoiceDocumentReady(
+    document,
+    accountingEnabled,
+    initialSources.get(document.sourceRowNumber),
+  )).length;
+  const confirmedCount = preview.documents.filter((document) => document.status === "CONFIRMED").length;
+  const skippedCount = preview.documents.filter((document) => (
+    !invoiceDocumentReady(document, accountingEnabled, initialSources.get(document.sourceRowNumber)) &&
+    !["CONFIRMED", "PROCESSING"].includes(document.status)
+  )).length;
+  const warningCount = preview.documents.reduce((total, document) => total + (document.preview?.warnings?.length || 0), 0);
+
+  return (
+    <div data-import-preview-shell="true" className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? "lg:left-[72px]" : "lg:left-[270px]"}`}>
+      <div className="mx-auto flex min-h-0 w-full max-w-[1700px] flex-1 flex-col gap-3 sm:gap-4">
+        <header className="flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3 sm:pb-4">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary sm:text-xs">Importación masiva</p>
+            <h1 className="mt-1 flex items-center gap-2 text-xl font-black tracking-tight sm:text-3xl"><FileSpreadsheet className="size-5 shrink-0 text-primary sm:size-7" /> Revisar facturas</h1>
+            <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Revisa cada factura y corrige el método, la referencia o la cuenta bancaria. El servidor vuelve a validar los datos al confirmar.</p>
+          </div>
+          <Button type="button" variant="ghost" size="sm" className="shrink-0 gap-2 rounded-xl" onClick={onExit} disabled={confirming}>
+            <X className="size-4" /> Salir a Facturas
+          </Button>
+        </header>
+
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card p-3 sm:p-4">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Archivo cargado</p>
+            <p className="truncate text-sm font-bold text-foreground" title={fileName}>{fileName}</p>
+            {progress && <p className="mt-1 text-xs font-semibold text-primary" role="status" aria-live="polite">Confirmando factura {progress.current} de {progress.total}…</p>}
+          </div>
+          <div className="flex flex-wrap gap-2 text-[10px] font-bold">
+            <Badge variant="outline" className="border-emerald-500/30 text-emerald-700">Ventas activa</Badge>
+            <Badge variant="outline" className={preview.integrations?.financeEnabled ? "border-blue-500/30 text-blue-700" : "text-muted-foreground"}>Finanzas {preview.integrations?.financeEnabled ? "conectada" : "desconectada"}</Badge>
+            <Badge variant="outline" className={accountingEnabled ? "border-violet-500/30 text-violet-700" : "text-muted-foreground"}>Contabilidad {accountingEnabled ? "conectada" : "desconectada"}</Badge>
+            {confirmedCount > 0 && <Badge variant="outline" className="border-blue-500/30 text-blue-700">{confirmedCount} confirmada(s)</Badge>}
+          </div>
+        </div>
+
+        <ImportReviewSummary total={preview.summary.total} valid={readyCount} skipped={skippedCount} warnings={warningCount} entityLabel="facturas listas" />
+
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-2xl border border-border/60 bg-card p-3 scrollbar-overlay sm:p-4">
+          <InvoiceImportPreviewSection
+            preview={preview}
+            initialSources={initialSources}
+            confirming={confirming}
+            onSourceUpdate={onSourceUpdate}
+          />
+        </div>
+
+        <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between sm:pt-4">
+          <Button type="button" variant="outline" onClick={onBack} disabled={confirming} className="gap-2"><ArrowLeft className="size-4" /> Volver a la carga</Button>
+          {readyCount > 0 ? (
+            <Button type="button" onClick={onConfirm} disabled={confirming} className="gap-2"><CheckCircle2 className="size-4" /> {confirming ? "Confirmando…" : `Confirmar ${readyCount} factura(s)`}</Button>
+          ) : confirmedCount > 0 ? (
+            <Button type="button" onClick={onExit} disabled={confirming} className="gap-2"><CheckCircle2 className="size-4" /> Terminar</Button>
+          ) : null}
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 function InvoiceImportDocumentCard({
   document,
   initialSource,
@@ -299,7 +349,7 @@ function InvoiceImportDocumentCard({
     return !isInvoicePaymentIssueResolved(document, issue.field, accountingEnabled, initialSource);
   });
   return (
-    <details className="group min-w-0 rounded-2xl border border-border/60 bg-card p-4 open:border-primary/30">
+    <details open className="group min-w-0 rounded-2xl border border-border/60 bg-card p-4 open:border-primary/30">
       <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
         <span className="min-w-0 flex-1 break-all text-sm font-black">
           {document.reference}
@@ -429,7 +479,7 @@ function InvoiceImportDocumentCard({
           </div>
         </div>
         <div className="min-w-0 space-y-2">
-          {document.error && !ready && (
+          {document.error && (!ready || document.status === "FAILED") && (
             <div role="alert" className="rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive">
               <strong>{document.status === "FAILED" ? "Error al confirmar" : "Debe corregirse"}</strong>
               <p className="mt-1 whitespace-pre-wrap">{document.error}</p>
@@ -474,6 +524,7 @@ export function SalesImportWizard({
   tenantId,
   register,
   session,
+  isSidebarCollapsed = false,
   onFinished,
 }: SalesImportWizardProps) {
   const [file, setFile] = useState<File | null>(null);
@@ -744,6 +795,23 @@ export function SalesImportWizard({
     setInvoiceAttemptId(crypto.randomUUID());
   };
 
+  const backToInvoiceUpload = () => {
+    if (confirmingInvoices) return;
+    setInvoicePreview(null);
+    setInvoiceAttemptId(null);
+    setInvoiceProgress(null);
+  };
+
+  const exitInvoiceImport = () => {
+    if (confirmingInvoices) return;
+    setInvoicePreview(null);
+    setInvoiceAttemptId(null);
+    setInvoiceProgress(null);
+    setFile(null);
+    setLoadError(null);
+    onOpenChange(false);
+  };
+
   const confirmBlock = async (blockNumber: number) => {
     if (kind !== "POS") return;
     if (!batch || workingBlock !== null) return;
@@ -883,6 +951,23 @@ export function SalesImportWizard({
     : 1;
   const isComplete = batch?.status === "COMPLETED";
 
+  if (kind === "INVOICE" && invoicePreview) {
+    return (
+      <InvoiceImportPreviewView
+        preview={invoicePreview}
+        fileName={file?.name || ""}
+        isSidebarCollapsed={isSidebarCollapsed}
+        initialSources={initialInvoiceSourcesRef.current}
+        confirming={confirmingInvoices}
+        progress={invoiceProgress}
+        onSourceUpdate={updateInvoiceSource}
+        onBack={backToInvoiceUpload}
+        onConfirm={() => void confirmInvoices()}
+        onExit={exitInvoiceImport}
+      />
+    );
+  }
+
   return (
     <Dialog
       open={open}
@@ -909,7 +994,7 @@ export function SalesImportWizard({
               </DialogTitle>
               <DialogDescription className="mt-2 max-w-3xl">
                 Carga la plantilla, revisa los precios y existencias, y confirma
-                {kind === "INVOICE" ? " cada factura." : " cada bloque."} Cada documento se registra como pagado en efectivo.
+                {kind === "INVOICE" ? " cada factura. El total se registra como pagado con el método indicado para ese documento." : " cada bloque. Las ventas se registran como pagadas en efectivo."}
               </DialogDescription>
             </div>
             <Button
@@ -1089,17 +1174,6 @@ export function SalesImportWizard({
               </div>
             </section>
           </div>
-
-          {kind === "INVOICE" && invoicePreview && (
-            <InvoiceImportPreviewSection
-              preview={invoicePreview}
-              initialSources={initialInvoiceSourcesRef.current}
-              confirming={confirmingInvoices}
-              progress={invoiceProgress}
-              onSourceUpdate={updateInvoiceSource}
-              onConfirm={() => void confirmInvoices()}
-            />
-          )}
 
           {kind === "POS" && batch && (
             <section className="min-w-0 space-y-4" aria-live="polite">
