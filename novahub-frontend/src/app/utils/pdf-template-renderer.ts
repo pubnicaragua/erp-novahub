@@ -5,7 +5,7 @@ import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { applyPdfHeaderComposition, applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfSettings, ensureDashboardChartNodes, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, pdfTemplateImageShapeStyles, resolveTemplateToken, type PdfHeaderComposition, type PdfHeaderContentSpacing, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
 import { applyPdfStyleToDefinition, getPdfTableCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, normalizePdfFrameGeometry, normalizePdfFontFamily, normalizePdfStyleConfig, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfTableStyle } from '../services/pdf-document-style';
-import { PDF_APPEARANCE_FONTS } from '../services/pdf-appearance';
+import { PDF_APPEARANCE_FONT_GROUPS } from '../services/pdf-appearance';
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
 import { pdfStatusLabel } from './pdfStatus';
 
@@ -200,7 +200,9 @@ export function normalizeReportDocumentMetadata(document: Record<string, unknown
   return {
     ...document,
     period: pageNumber === 1 ? document.period : '',
-    generated: pageNumber === 1 ? generated || generationInMeta : '',
+    // Cuando el generador mueve este dato a la fila meta, el nodo separado se
+    // retira del diseño y no debe recibirlo también como token independiente.
+    generated: pageNumber === 1 && !generatedInMetaFallback ? generated || generationInMeta : '',
     meta: [...new Set(metaParts.filter(Boolean))].join(' · '),
   };
 }
@@ -617,10 +619,12 @@ async function waitForImages(root: HTMLElement) {
 export function browserFontFamily(value?: string) {
   const family = normalizePdfFontFamily(value || 'Arial');
   const normalized = family.toLowerCase();
-  const generic = PDF_APPEARANCE_FONTS.slice(6, 9).some(font => font.toLowerCase() === normalized)
+  const serifFonts = PDF_APPEARANCE_FONT_GROUPS.find(group => group.label === 'Serif')?.families || [];
+  const monospaceFonts = PDF_APPEARANCE_FONT_GROUPS.find(group => group.label === 'Monoespaciadas')?.families || [];
+  const generic = serifFonts.some(font => font.toLowerCase() === normalized)
     || ['times new roman', 'georgia', 'garamond', 'cambria', 'palatino linotype', 'bookman'].includes(normalized)
     ? 'serif'
-    : PDF_APPEARANCE_FONTS.slice(9).some(font => font.toLowerCase() === normalized)
+    : monospaceFonts.some(font => font.toLowerCase() === normalized)
       || ['courier new', 'consolas', 'monaco'].includes(normalized)
       ? 'monospace'
       : 'sans-serif';

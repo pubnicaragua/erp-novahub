@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { jsPDF } from 'jspdf';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 const server = await createServer({
   configFile: false,
@@ -18,11 +20,29 @@ try {
   const styles = await server.ssrLoadModule('/src/app/services/pdf-document-style.ts');
   const designService = await server.ssrLoadModule('/src/app/services/pdf-document-design.service.ts');
   const generator = await server.ssrLoadModule('/src/app/utils/pdfGenerator.ts');
+  const appearance = await server.ssrLoadModule('/src/app/services/pdf-appearance.ts');
+  const { PdfAppearanceSettingsPanel } = await server.ssrLoadModule('/src/app/components/configuracion/PdfAppearanceSettingsPanel.tsx');
   const targets = catalog.PDF_TEMPLATE_TARGETS;
+
+  assert.ok(appearance.PDF_APPEARANCE_FONTS.length >= 30, 'El selector debe ofrecer al menos treinta fuentes locales.');
+  for (const family of ['Poppins', 'Source Sans 3', 'Source Serif 4', 'Fira Code']) {
+    assert.ok(appearance.PDF_APPEARANCE_FONTS.includes(family), `El catálogo debe incluir ${family}.`);
+  }
+  const appearancePanel = renderToStaticMarkup(React.createElement(PdfAppearanceSettingsPanel, {
+    scope: 'document', profile: {}, overrides: {},
+    effective: { headerComposition: 'company-left-logo-right', headerContentSpacing: 'small', fontFamily: 'Inter', fontSize: 9 },
+    canEditBranch: true, canEditDocument: true, hasBranchProfile: false, isSavingBranch: false,
+    onScopeChange: () => {}, onChange: () => {}, onReset: () => {}, onResetAll: () => {}, onSaveBranch: () => {},
+  }));
+  assert.equal(appearancePanel.includes('Estilo de tabla'), false, 'El panel no debe mostrar ajustes de estilo de tabla por ahora.');
+  assert.equal(appearancePanel.includes('type="color"'), false, 'El panel no debe mostrar controles de color por ahora.');
+  assert.ok(appearancePanel.includes('Fuente del documento'), 'La fuente del documento debe seguir configurable.');
 
   assert.equal(renderer.browserFontFamily('Inter'), '"Inter", sans-serif', 'La familia elegida debe conservarse en el render final en vez de colapsar a Arial.');
   assert.equal(renderer.browserFontFamily('Merriweather'), '"Merriweather", serif', 'Las fuentes serif deben conservar su familia local y fallback correcto.');
   assert.equal(renderer.browserFontFamily('JetBrains Mono'), '"JetBrains Mono", monospace', 'Las fuentes monoespaciadas deben conservar su familia local y fallback correcto.');
+  assert.equal(renderer.browserFontFamily('Source Serif 4'), '"Source Serif 4", serif', 'Las nuevas fuentes serif deben conservar su fallback correcto.');
+  assert.equal(renderer.browserFontFamily('Fira Code'), '"Fira Code", monospace', 'Las nuevas fuentes monoespaciadas deben conservar su fallback correcto.');
   const fontSourceDefinition = {
     nodes: [{ id: 'font-sample', type: 'text', fontFamily: 'Georgia', fontWeight: 700, italic: true, fontSize: 12, align: 'right' }],
   };
@@ -128,6 +148,21 @@ try {
   assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 'medium', true), 112, 'Mediano debe desplazar el bloque completo un nivel debajo de la posición actual.');
   assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 'large', true), 124, 'Grande debe desplazar el bloque más que mediano aunque la posición inicial tenga espacio.');
   assert.equal(renderer.resolvePdfHeaderContentTop(150, 100, 5, 1000, 'medium', true), 167, 'El espaciado debe conservar la corrección por encabezados que ya alcanzan el contenido.');
+
+  const generatedFallback = renderer.normalizeReportDocumentMetadata({
+    period: 'Periodo: agosto 2026',
+    generated: 'Generado: 08/09/2026 10:30',
+    meta: 'Generado: 08/09/2026 10:30',
+    generatedInMetaFallback: true,
+  }, 1);
+  assert.equal(generatedFallback.generated, '', 'Cuando Generado se lleva a metadatos, no debe quedar el campo independiente.');
+  assert.equal(generatedFallback.meta, 'Generado: 08/09/2026 10:30', 'Generado debe aparecer una sola vez en metadatos.');
+  const generatedFallbackContinuation = renderer.normalizeReportDocumentMetadata({
+    period: 'Periodo: agosto 2026', generated: 'Generado: 08/09/2026 10:30',
+    meta: 'Generado: 08/09/2026 10:30', generatedInMetaFallback: true,
+  }, 2);
+  assert.equal(generatedFallbackContinuation.generated, '', 'Generado no debe repetirse en páginas de continuación.');
+  assert.equal(generatedFallbackContinuation.meta, '', 'Los metadatos de portada no deben repetirse en páginas siguientes.');
 
   assert.deepEqual(styles.PDF_STYLE_PRESETS.map(item => item.id), ['light', 'boxed', 'bold', 'striped', 'bubble', 'wave', 'folder'], 'El editor debe ofrecer los siete estilos del piloto.');
   const styleSource = definitions.createDefaultTemplateDefinition('ventas.estimate', definitions.createSystemDefaultPdfDesign('ventas.estimate').settings);

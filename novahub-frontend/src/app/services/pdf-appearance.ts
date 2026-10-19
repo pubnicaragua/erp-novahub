@@ -1,6 +1,10 @@
 export const PDF_APPEARANCE_FONTS = [
-  'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans',
-  'Merriweather', 'Lora', 'Playfair Display', 'IBM Plex Mono', 'JetBrains Mono',
+  'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans', 'Source Sans 3',
+  'Poppins', 'Raleway', 'Ubuntu', 'Fira Sans', 'PT Sans', 'Work Sans', 'DM Sans',
+  'Archivo', 'Cabin', 'Manrope', 'Quicksand', 'Rubik', 'Oxygen', 'Oswald', 'Barlow', 'Karla', 'Urbanist', 'Mulish',
+  'Merriweather', 'Lora', 'Playfair Display', 'Source Serif 4', 'PT Serif', 'DM Serif Display',
+  'Libre Baskerville', 'Noto Serif', 'Crimson Text',
+  'IBM Plex Mono', 'JetBrains Mono', 'Inconsolata', 'Fira Code', 'Source Code Pro', 'Space Mono',
 ] as const;
 
 export type PdfAppearanceFontFamily = typeof PDF_APPEARANCE_FONTS[number];
@@ -39,9 +43,9 @@ export interface PdfAppearanceDraftState {
 }
 
 export const PDF_APPEARANCE_FONT_GROUPS: Array<{ label: string; families: readonly PdfAppearanceFontFamily[] }> = [
-  { label: 'Sans serif', families: ['Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans'] },
-  { label: 'Serif', families: ['Merriweather', 'Lora', 'Playfair Display'] },
-  { label: 'Monoespaciadas', families: ['IBM Plex Mono', 'JetBrains Mono'] },
+  { label: 'Sans serif', families: ['Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans', 'Source Sans 3', 'Poppins', 'Raleway', 'Ubuntu', 'Fira Sans', 'PT Sans', 'Work Sans', 'DM Sans', 'Archivo', 'Cabin', 'Manrope', 'Quicksand', 'Rubik', 'Oxygen', 'Oswald', 'Barlow', 'Karla', 'Urbanist', 'Mulish'] },
+  { label: 'Serif', families: ['Merriweather', 'Lora', 'Playfair Display', 'Source Serif 4', 'PT Serif', 'DM Serif Display', 'Libre Baskerville', 'Noto Serif', 'Crimson Text'] },
+  { label: 'Monoespaciadas', families: ['IBM Plex Mono', 'JetBrains Mono', 'Inconsolata', 'Fira Code', 'Source Code Pro', 'Space Mono'] },
 ];
 
 const HEADER_COMPOSITIONS: readonly PdfHeaderComposition[] = ['company-left-logo-right', 'logo-left-company-right', 'centered-stack'];
