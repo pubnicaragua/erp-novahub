@@ -438,7 +438,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const { formatConvertedAmount: formatCurrency, formatExplicitAmount, displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const salesIntegrationQuery = useSalesIntegrationPolicy();
-  const salesAccountingEnabled = salesIntegrationQuery.data?.accountingEnabled ?? true;
+  const salesAccountingRequired = salesIntegrationQuery.data?.accountingRequired ?? true;
+  const salesFinanceEnabled = salesIntegrationQuery.data?.financeEnabled ?? true;
   const quickVoiceEnabled = Boolean(user?.isPlatformAdmin || user?.enabledModules?.includes('SALES_VOICE_QUICK'));
   const loggedInSellerId = getLoggedInSellerEmployeeId(user);
   const canCreatePosInvoice = canPerform('RETAIL_POS', 'create');
@@ -888,14 +889,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       return;
     }
     if (queuePayments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim())) { toast.error('La referencia es obligatoria para transferencia, tarjeta y cheque.'); return; }
-    if (salesAccountingEnabled && queuePayments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)) { toast.error('Selecciona el banco para cada pago con tarjeta, transferencia o cheque.'); return; }
+    if (salesAccountingRequired && queuePayments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)) { toast.error('Selecciona el banco para cada pago con tarjeta, transferencia o cheque.'); return; }
     const appliedPayments = getQueuePaymentApplications();
     if (!appliedPayments.length) { toast.error('Registra un monto válido para cubrir el saldo pendiente.'); return; }
     const changeBase = Math.max(0, paidBase - totalBase);
     queueSubmittingRef.current = true;
     setQueueSubmitting(true);
     try {
-      await cajaService.payInvoiceCashQueue(queueInvoice.id, { registerId: selectedRegisterId, sessionId: activeSession.id, claimToken: queueInvoice.claimToken || undefined, payments: appliedPayments.map((payment) => ({ ...payment, bankAccountId: salesAccountingEnabled ? payment.bankAccountId : undefined, cardCommissionPercent: !salesAccountingEnabled && isCardPaymentMethod(payment.method) ? payment.cardCommissionPercent : undefined })) }, createIdempotencyKey('invoice-cash-queue'));
+      await cajaService.payInvoiceCashQueue(queueInvoice.id, { registerId: selectedRegisterId, sessionId: activeSession.id, claimToken: queueInvoice.claimToken || undefined, payments: appliedPayments.map((payment) => ({ ...payment, bankAccountId: (salesAccountingRequired || salesFinanceEnabled) ? payment.bankAccountId : undefined, cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(payment.method) ? payment.cardCommissionPercent : undefined })) }, createIdempotencyKey('invoice-cash-queue'));
       const paidInvoice = {
         ...document,
         customerId: document.customerId || '',
@@ -1767,7 +1768,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       toast.error('La transferencia, tarjeta o cheque requiere una referencia');
       return;
     }
-    if (salesAccountingEnabled && payments.some((payment) => isBankPaymentMethod(payment.method) && !payment.bankAccountId)) {
+    if (salesAccountingRequired && payments.some((payment) => isBankPaymentMethod(payment.method) && !payment.bankAccountId)) {
       toast.error('Selecciona el banco global para cada pago con tarjeta, transferencia o cheque');
       return;
     }
@@ -1776,7 +1777,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     const submitToastId = toast.loading('Cobrando y reservando venta...');
     try {
       const res = await cajaService.createHold(
-        { ...holdCreateDto, payments: payments.map((payment) => ({ ...payment, bankAccountId: salesAccountingEnabled ? payment.bankAccountId : undefined, cardCommissionPercent: !salesAccountingEnabled && isCardPaymentMethod(payment.method) ? payment.cardCommissionPercent : undefined })), currency: 'NIO', exchangeRate: Number(activeSession.exchangeRateUSD), payNow: true },
+        { ...holdCreateDto, payments: payments.map((payment) => ({ ...payment, bankAccountId: (salesAccountingRequired || salesFinanceEnabled) ? payment.bankAccountId : undefined, cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(payment.method) ? payment.cardCommissionPercent : undefined })), currency: 'NIO', exchangeRate: Number(activeSession.exchangeRateUSD), payNow: true },
         createIdempotencyKey('hold'),
       );
       const created = (res as any)?.data || res;
@@ -1978,7 +1979,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       toast.error('La referencia es obligatoria para transferencia, tarjeta y cheque');
       return;
     }
-    if (salesAccountingEnabled && payments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)) {
+    if (salesAccountingRequired && payments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)) {
       toast.error('Selecciona el banco global para cada pago con tarjeta, transferencia o cheque');
       return;
     }
@@ -2007,7 +2008,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         includeTax,
         currency: paymentCurrency,
         exchangeRate: documentRate,
-        payments: payments.map((payment) => ({ ...payment, bankAccountId: salesAccountingEnabled ? payment.bankAccountId : undefined, cardCommissionPercent: !salesAccountingEnabled && isCardPaymentMethod(payment.method) ? payment.cardCommissionPercent : undefined })),
+        payments: payments.map((payment) => ({ ...payment, bankAccountId: (salesAccountingRequired || salesFinanceEnabled) ? payment.bankAccountId : undefined, cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(payment.method) ? payment.cardCommissionPercent : undefined })),
         ...(confirmedDuplicate && duplicateMatches.length > 0
           ? { duplicateConfirmation: { candidateIds: duplicateMatches.map((match) => match.id) } }
           : {}),
@@ -3449,9 +3450,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                           <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
                         )}
                         {payment.method === 'CHECK' && <Input className="mt-2" placeholder="Número de cheque *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                        {salesAccountingEnabled && isBankPaymentMethod(payment.method, true) && <BankAccountSelect currency={payment.currency} className="mt-2" endpoint="/bank-accounts/payment-options" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
-                        {isCardPaymentMethod(payment.method) && !salesAccountingEnabled && <label className="mt-2 block max-w-40 text-[10px] font-bold text-muted-foreground">Comisión de tarjeta (%)<Input type="number" min="0" max="100" step="0.01" value={payment.cardCommissionPercent || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: Number(event.target.value) || 0, cardCommissionAmount: calculateCardCommission(Number(item.amount || 0), Number(event.target.value) || 0) } : item))} className="mt-1 h-9" /></label>}
-                        {isCardPaymentMethod(payment.method) && (payment.bankAccountId || !salesAccountingEnabled) && Number(payment.cardCommissionPercent || 0) > 0 && (
+                        {(salesAccountingRequired || salesFinanceEnabled) && isBankPaymentMethod(payment.method, true) && <BankAccountSelect currency={payment.currency} className="mt-2" allowUnlinked={!salesAccountingRequired && salesFinanceEnabled} required={salesAccountingRequired} endpoint="/bank-accounts/payment-options" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label={salesAccountingRequired ? 'Banco global de destino' : 'Banco destino (opcional)'} />}
+                        {isCardPaymentMethod(payment.method) && !salesAccountingRequired && <label className="mt-2 block max-w-40 text-[10px] font-bold text-muted-foreground">Comisión de tarjeta (%)<Input type="number" min="0" max="100" step="0.01" value={payment.cardCommissionPercent || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: Number(event.target.value) || 0, cardCommissionAmount: calculateCardCommission(Number(item.amount || 0), Number(event.target.value) || 0) } : item))} className="mt-1 h-9" /></label>}
+                        {isCardPaymentMethod(payment.method) && (payment.bankAccountId || !salesAccountingRequired) && Number(payment.cardCommissionPercent || 0) > 0 && (
                           <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
                             <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
                             <span className="font-mono font-bold">{formatCommissionPercent(payment.cardCommissionPercent)}</span>
@@ -3467,7 +3468,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                 </>
               );
             })()}
-            <div className="nh-modal-footer mt-5 flex flex-col-reverse justify-end gap-2 border-t border-border/50 pt-4 sm:flex-row"><Button variant="ghost" onClick={() => { setShowPayment(false); setHoldCreateDto(null); setMixedPaymentEnabled(false); }}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting || selectedPaymentCustomerFavorExceeded || payments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim()) || (salesAccountingEnabled && payments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId))}>{submitting ? <Loader2 className="size-4 animate-spin" /> : holdCreateDto ? 'Cobrar venta' : 'Confirmar y emitir'}</Button></div>
+            <div className="nh-modal-footer mt-5 flex flex-col-reverse justify-end gap-2 border-t border-border/50 pt-4 sm:flex-row"><Button variant="ghost" onClick={() => { setShowPayment(false); setHoldCreateDto(null); setMixedPaymentEnabled(false); }}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting || selectedPaymentCustomerFavorExceeded || payments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim()) || (salesAccountingRequired && payments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId))}>{submitting ? <Loader2 className="size-4 animate-spin" /> : holdCreateDto ? 'Cobrar venta' : 'Confirmar y emitir'}</Button></div>
 
           </div>
         </div>
@@ -3550,8 +3551,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                   {payment.currency && payment.currency !== document.currency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente pendiente: {formatExplicitAmount(convertBetweenCurrencies(getQueuePaymentSummary().missingBase, baseCurrency, payment.currency, 1, Number(payment.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1)), payment.currency)}</p>}
                   {payment.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatCurrency(getCustomerFavorBase(document.customerId), baseCurrency)}. Puedes aplicar solo una parte.</p>}
                   {requiresPaymentReference(payment.method) && <Input className="mt-2" placeholder="Referencia obligatoria" value={payment.reference || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                  {salesAccountingEnabled && isBankPaymentMethod(payment.method, true) && <BankAccountSelect currency={payment.currency} className="mt-2" endpoint="/bank-accounts/payment-options" value={payment.bankAccountId} onChange={(bankAccountId) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco de destino" />}
-                  {isCardPaymentMethod(payment.method) && !salesAccountingEnabled && <label className="mt-2 block max-w-40 text-[10px] font-bold text-muted-foreground">Comisión de tarjeta (%)<Input type="number" min="0" max="100" step="0.01" value={payment.cardCommissionPercent || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: Number(event.target.value) || 0, cardCommissionAmount: calculateCardCommission(Number(item.amount || 0), Number(event.target.value) || 0) } : item))} className="mt-1 h-9" /></label>}
+                  {(salesAccountingRequired || salesFinanceEnabled) && isBankPaymentMethod(payment.method, true) && <BankAccountSelect currency={payment.currency} className="mt-2" allowUnlinked={!salesAccountingRequired && salesFinanceEnabled} required={salesAccountingRequired} endpoint="/bank-accounts/payment-options" value={payment.bankAccountId} onChange={(bankAccountId) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label={salesAccountingRequired ? 'Banco de destino' : 'Banco destino (opcional)'} />}
+                  {isCardPaymentMethod(payment.method) && !salesAccountingRequired && <label className="mt-2 block max-w-40 text-[10px] font-bold text-muted-foreground">Comisión de tarjeta (%)<Input type="number" min="0" max="100" step="0.01" value={payment.cardCommissionPercent || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: Number(event.target.value) || 0, cardCommissionAmount: calculateCardCommission(Number(item.amount || 0), Number(event.target.value) || 0) } : item))} className="mt-1 h-9" /></label>}
                 </div>
               ))}
                {queueMixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => setQueuePayments((current) => [...current, paymentLine('CARD', 0, document.currency)])}>+ Agregar pago mixto</Button>}

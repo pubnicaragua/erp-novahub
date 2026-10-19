@@ -201,9 +201,9 @@ export function FinanceImportModal({
       head: [columns.map(c => c.label)],
       body: [exampleRowData, ...emptyRows],
       theme: 'grid',
-      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
-      bodyStyles: { fontSize: 8, minCellHeight: 10 },
-      styles: { cellPadding: 3 },
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', valign: 'middle' },
+      bodyStyles: { fontSize: 8, minCellHeight: 10, valign: 'middle' },
+      styles: { cellPadding: 3, valign: 'middle' },
       didParseCell: (data: any) => {
         // Style the example row differently
         if (data.section === 'body' && data.row.index === 0) {

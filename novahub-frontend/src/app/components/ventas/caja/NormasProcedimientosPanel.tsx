@@ -8,6 +8,7 @@ import { toast } from '@/app/services/toast';
 import { cajaService } from '../../../services/caja.service';
 import { api, getApiErrorMessage } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useSalesIntegrationPolicy } from '../../../hooks/useSalesIntegrationPolicy';
 
 const WEEKDAYS = [
   { index: 1, label: 'L', name: 'Lunes' },
@@ -40,6 +41,11 @@ interface ProtocolFieldDraft {
 
 export function NormasProcedimientosPanel() {
   const { canPerform } = useAuth();
+  const integrationPolicyQuery = useSalesIntegrationPolicy();
+  const integrationPolicyReady = !integrationPolicyQuery.isFetching && !integrationPolicyQuery.isError && Boolean(integrationPolicyQuery.data);
+  const accountingConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingEnabled === true;
+  const accountingRequired = integrationPolicyReady && integrationPolicyQuery.data?.accountingRequired === true;
+  const financeEnabled = integrationPolicyReady && integrationPolicyQuery.data?.financeEnabled === true;
   const canReadBankAccounts = canPerform('FINANCIAL_ACCOUNTS', 'view')
     || canPerform('RETAIL_POS', 'view')
     || canPerform('RETAIL_CASH_CONTROL', 'view');
@@ -241,7 +247,15 @@ export function NormasProcedimientosPanel() {
           <NormaRow
             icon={<Landmark className="size-4 text-indigo-600" />}
             title="Depósito del cierre a cuenta bancaria"
-            description="Al cerrar, todo el efectivo del arqueo se transfiere a la cuenta bancaria seleccionada (asiento contable DEBE Banco / HABER Caja) y queda en caja solo el fondo fijo configurado."
+            description={!integrationPolicyReady
+              ? 'Al cerrar, el sistema aplicará la conexión efectiva de Ventas con Finanzas y Contabilidad para registrar el depósito correspondiente.'
+              : accountingRequired
+                ? 'Al cerrar se genera el asiento DEBE Banco / HABER Caja. La cuenta bancaria debe tener una cuenta contable vinculada; queda en caja el fondo fijo configurado.'
+                : financeEnabled
+                  ? 'Al cerrar se registra el depósito como movimiento auxiliar de Finanzas, sin asiento ni cuenta contable obligatoria; queda en caja el fondo fijo configurado.'
+                  : accountingConnectionEnabled
+                    ? 'La conexión contable está disponible, pero la generación automática global está apagada. Sin Finanzas activa, el cierre no crea asiento ni movimiento bancario.'
+                    : 'El cierre seguirá siendo operativo. Con Finanzas y Contabilidad desconectadas no se registrará movimiento bancario ni asiento; queda en caja el fondo fijo configurado.'}
             checked={norms?.bankTransferEnabled}
             onCheckedChange={(v) => setNorms({ ...norms, bankTransferEnabled: v })}
           />
@@ -250,15 +264,23 @@ export function NormasProcedimientosPanel() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-bold">Cuenta bancaria destino</p>
-                  <p className="text-[10px] text-muted-foreground">Debe tener cuenta contable vinculada (Contabilidad &gt; Cuentas Bancarias).</p>
+                  <p className="text-[10px] text-muted-foreground">{!integrationPolicyReady
+                    ? 'Verificando si esta conexión requiere cuenta contable…'
+                    : accountingRequired
+                      ? 'Debe tener una cuenta contable vinculada para generar el asiento del depósito.'
+                      : financeEnabled
+                        ? 'La cuenta contable es opcional; se guardará un movimiento auxiliar sin asiento.'
+                        : accountingConnectionEnabled
+                          ? 'La cuenta no se usará mientras la generación automática global esté apagada.'
+                          : 'No se generarán movimientos ni asientos con las conexiones actuales.'}</p>
                 </div>
-                <Select value={norms?.bankAccountId || ''} onValueChange={(v) => setNorms({ ...norms, bankAccountId: v })}>
+                {(!integrationPolicyReady || accountingConnectionEnabled || financeEnabled) ? <Select value={norms?.bankAccountId || ''} onValueChange={(v) => setNorms({ ...norms, bankAccountId: v })}>
                   <SelectTrigger className="h-8 w-full sm:w-72 text-xs">
                     <SelectValue placeholder="Selecciona una cuenta bancaria" />
                   </SelectTrigger>
                   <SelectContent>
                     {bankAccounts.length === 0 && (
-                      <div className="px-3 py-2 text-[10px] text-muted-foreground">No hay cuentas bancarias. Créalas en Contabilidad.</div>
+                      <div className="px-3 py-2 text-[10px] text-muted-foreground">No hay cuentas bancarias disponibles para las conexiones activas.</div>
                     )}
                     {bankAccounts.map((bank: any) => (
                       <SelectItem key={bank.id} value={bank.id}>
@@ -266,7 +288,7 @@ export function NormasProcedimientosPanel() {
                       </SelectItem>
                     ))}
                   </SelectContent>
-                </Select>
+                </Select> : <p className="w-full rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-[10px] text-muted-foreground sm:w-72">No se necesita seleccionar un banco mientras ambas conexiones estén desactivadas.</p>}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

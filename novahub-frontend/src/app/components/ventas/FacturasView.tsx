@@ -146,7 +146,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   } = useCurrency();
   const { user, canPerform } = useAuth();
   const salesIntegrationQuery = useSalesIntegrationPolicy();
-  const salesAccountingEnabled = salesIntegrationQuery.data?.accountingEnabled ?? true;
+  const salesAccountingRequired = salesIntegrationQuery.data?.accountingRequired ?? true;
+  const salesFinanceEnabled = salesIntegrationQuery.data?.financeEnabled ?? true;
   const quickVoiceEnabled = Boolean(user?.isPlatformAdmin || user?.enabledModules?.includes('SALES_VOICE_QUICK'));
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('invoice', user?.tenantId, user?.id);
@@ -787,7 +788,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       toast.error('La referencia es obligatoria para tarjeta, transferencia y cheque');
       return;
     }
-    if (salesAccountingEnabled && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
+    if (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
       toast.error('Selecciona el banco global para cada tarjeta, transferencia o cheque');
       return;
     }
@@ -820,9 +821,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         await handleSaveInvoice('PAYMENT', {
           payments: submittedPaymentLines.map((line) => ({
             ...line,
-            accountId: salesAccountingEnabled ? line.accountId : undefined,
-            bankAccountId: salesAccountingEnabled ? line.bankAccountId : undefined,
-            cardCommissionPercent: !salesAccountingEnabled && isCardPaymentMethod(line.method) ? line.cardCommissionPercent : undefined,
+            accountId: salesAccountingRequired ? line.accountId : undefined,
+            bankAccountId: (salesAccountingRequired || salesFinanceEnabled) ? line.bankAccountId : undefined,
+            cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(line.method) ? line.cardCommissionPercent : undefined,
           })),
           currency: submittedPaymentLines[0]?.currency || paymentCurrency,
           exchangeRate: paymentLineRate(paymentCurrency),
@@ -859,9 +860,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         method: submittedPaymentLines[0]?.method || 'CASH',
         payments: submittedPaymentLines.map((line) => ({
           ...line,
-          accountId: salesAccountingEnabled ? line.accountId : undefined,
-          bankAccountId: salesAccountingEnabled ? line.bankAccountId : undefined,
-          cardCommissionPercent: !salesAccountingEnabled && isCardPaymentMethod(line.method) ? line.cardCommissionPercent : undefined,
+          accountId: salesAccountingRequired ? line.accountId : undefined,
+          bankAccountId: (salesAccountingRequired || salesFinanceEnabled) ? line.bankAccountId : undefined,
+          cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(line.method) ? line.cardCommissionPercent : undefined,
         })),
         dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
         cashRegisterId: cashControlAlreadyLinked ? undefined : cashRegisterId,
@@ -2647,10 +2648,10 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                         <Input type="number" min="0.01" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} autoFocus={index === 0} placeholder="Monto" className="h-9 text-xs tabular-nums" />
                       </div>
                     </div>
-                    {salesAccountingEnabled && isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} className="mt-2" endpoint="/bank-accounts/payment-options" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
-                    {isCardPaymentMethod(line.method) && !salesAccountingEnabled && <label className="block max-w-40 text-[10px] font-bold text-muted-foreground">Comisión de tarjeta (%)<Input type="number" min="0" max="100" step="0.01" value={line.cardCommissionPercent || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: Number(event.target.value) || 0, cardCommissionAmount: calculateCardCommission(Number(item.amount || 0), Number(event.target.value) || 0) } : item))} className="mt-1 h-9" /></label>}
+                    {(salesAccountingRequired || salesFinanceEnabled) && isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} className="mt-2" allowUnlinked={!salesAccountingRequired && salesFinanceEnabled} required={salesAccountingRequired} endpoint="/bank-accounts/payment-options" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label={salesAccountingRequired ? 'Banco global de destino' : 'Banco destino (opcional)'} />}
+                    {isCardPaymentMethod(line.method) && !salesAccountingRequired && <label className="block max-w-40 text-[10px] font-bold text-muted-foreground">Comisión de tarjeta (%)<Input type="number" min="0" max="100" step="0.01" value={line.cardCommissionPercent || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: Number(event.target.value) || 0, cardCommissionAmount: calculateCardCommission(Number(item.amount || 0), Number(event.target.value) || 0) } : item))} className="mt-1 h-9" /></label>}
                     {paymentInvoice && line.currency !== paymentInvoiceCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatInvoiceAmount(getPaymentLineDocumentAmount(line, paymentInvoiceCurrency, paymentInvoice.exchangeRate, baseCurrency, convertBetweenCurrencies), paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>}
-                    {isCardPaymentMethod(line.method) && (line.bankAccountId || !salesAccountingEnabled) && Number(line.cardCommissionPercent || 0) > 0 && (
+                    {isCardPaymentMethod(line.method) && (line.bankAccountId || !salesAccountingRequired) && Number(line.cardCommissionPercent || 0) > 0 && (
                       <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
                         <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
                         <span className="font-mono font-bold">{formatCommissionPercent(line.cardCommissionPercent)}</span>
@@ -2732,7 +2733,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           )}
           <DialogFooter className="shrink-0">
             <Button type="button" variant="outline" onClick={closeInvoicePayment} disabled={paymentLoading}>Cancelar</Button>
-            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || cashLoading || paymentChangeUnsupported || paymentCustomerFavorExceeded || (!paymentHasActiveCredit && paymentRemainingBase > paymentCreditAvailableBase + 0.01) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (salesAccountingEnabled && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))} className="bg-primary font-black">
+            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || cashLoading || paymentChangeUnsupported || paymentCustomerFavorExceeded || (!paymentHasActiveCredit && paymentRemainingBase > paymentCreditAvailableBase + 0.01) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))} className="bg-primary font-black">
               {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
             </Button>
           </DialogFooter>

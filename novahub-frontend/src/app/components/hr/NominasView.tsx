@@ -417,6 +417,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         startY: 28,
         head: [['Empleado', 'Periodo', 'Periodicidad', 'Bruto', 'Neto a Pagar', 'Costo Empresa', 'Estado']],
         body: tableData,
+        styles: { cellPadding: 2, overflow: 'linebreak', valign: 'middle' },
+        headStyles: { valign: 'middle' },
       });
 
       doc.save(buildHumanPdfFileName(`Reporte de nóminas ${new Date().toISOString().slice(0, 10)}`));

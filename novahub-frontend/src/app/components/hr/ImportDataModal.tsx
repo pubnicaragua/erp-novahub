@@ -411,9 +411,9 @@ export function ImportDataModal({
       head: [columns.map(c => c.label)],
       body: [exampleRowData, ...emptyRows],
       theme: 'grid',
-      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
-      bodyStyles: { fontSize: 8, minCellHeight: 10 },
-      styles: { cellPadding: 3 },
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', valign: 'middle' },
+      bodyStyles: { fontSize: 8, minCellHeight: 10, valign: 'middle' },
+      styles: { cellPadding: 3, valign: 'middle' },
       didParseCell: (data: any) => {
         // Style the example row differently
         if (data.section === 'body' && data.row.index === 0) {
@@ -447,8 +447,8 @@ export function ImportDataModal({
         head: [['Departamentos', 'Puestos', 'Monedas']],
         body: refBody,
         theme: 'grid',
-        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
-        bodyStyles: { fontSize: 8 },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', valign: 'middle' },
+        bodyStyles: { fontSize: 8, valign: 'middle' },
       });
     }
 
@@ -464,8 +464,8 @@ export function ImportDataModal({
         head: [['Nº Empleado', 'Nombre', 'Apellido', 'Salario', 'Moneda']],
         body: employees.map((e: any) => [e.employeeNumber, e.firstName, e.lastName, e.salary, e.currency || 'NIO']),
         theme: 'grid',
-        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
-        bodyStyles: { fontSize: 8 },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center', valign: 'middle' },
+        bodyStyles: { fontSize: 8, valign: 'middle' },
       });
     }
 

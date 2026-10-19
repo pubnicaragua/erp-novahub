@@ -388,21 +388,22 @@ export function applyPdfHeaderComposition<T extends PdfTemplateDefinition>(defin
   const isCustomerHistory = getPdfTemplateTarget(targetKey).key === 'ventas.customer-history';
   const isCustomerList = getPdfTemplateTarget(targetKey).key === 'ventas.customers';
   const isPurchaseTarget = isPurchasePdfLayoutTarget(getPdfTemplateTarget(targetKey).key);
-  const cashSectionsY = isCashSession ? 46 : isCashHistoricalReport ? 35.3 : 34.8;
-  const centeredCashSectionsY = isCashSession ? 49.5 : isCashHistoricalReport ? 39.3 : 38.8;
+  const cashSectionsY = isCashSession ? 38.5 : isCashHistoricalReport ? 35.3 : 34.8;
+  const centeredCashSectionsY = isCashSession ? 42 : isCashHistoricalReport ? 39.3 : 38.8;
   const reportHeaderPlacements: Record<string, Partial<PdfTemplateNode>> = reportLikeSalesTarget
     ? selected === 'centered-stack'
       ? {
-        'document-title': { x: 55, y: 26, width: 40, height: isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
-        'document-number': { x: 55, y: isCustomerHistory ? 31 : 35.5, width: 40, height: 2.8, align: 'right' },
-        'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 34.2 : 38.8, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
-        'document-status': { x: isCustomerHistory ? 55 : 58, y: isCustomerHistory ? 37.4 : 38.8, width: isCustomerHistory ? 40 : 37, height: 2.8, align: 'right' },
-        'document-generated': { x: 67, y: isCashHistoricalReport ? 33.5 : isCustomerList ? 32.5 : 35.5, width: 28, height: 2.8, align: 'right' },
-        'report-meta': { x: 5, y: isCashHistoricalReport ? 33.5 : isCustomerList ? 32.5 : 35.5, width: 60, height: 2.8, align: 'left' },
+        'company-summary': { height: 8.5 },
+        'document-title': { x: 55, y: isCashSession ? 23 : 26, width: 40, height: isCashSession ? 5 : isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
+        'document-number': { x: 55, y: isCustomerHistory ? 31 : isCashSession ? 28.5 : 35.5, width: 40, height: 2.8, align: 'right' },
+        'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 34.2 : isCashSession ? 31.5 : 38.8, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
+        'document-status': { x: isCustomerHistory ? 55 : 58, y: isCustomerHistory ? 37.4 : isCashSession ? 31.5 : 38.8, width: isCustomerHistory ? 40 : 37, height: 2.8, align: 'right' },
+        'document-generated': { x: 67, y: isCashSession ? 31.5 : isCashHistoricalReport ? 33.5 : isCustomerList ? 32.5 : 35.5, width: 28, height: 2.8, align: 'right' },
+        'report-meta': { x: 5, y: isCashSession ? 31.5 : isCashHistoricalReport ? 33.5 : isCustomerList ? 32.5 : 35.5, width: 60, height: 2.8, align: 'left' },
         'cash-report-sections': { x: 5, y: centeredCashSectionsY, width: 90, height: 96 - centeredCashSectionsY },
         'report-sections': { x: 5, y: 56, width: 90, height: 39 },
-        'cashier-label': { x: 5, y: 43, width: 40, height: 2.6 },
-        'cashier-name': { x: 5, y: 45.5, width: 50, height: 3.2 },
+        'cashier-label': { x: 5, y: isCashSession ? 35 : 43, width: 40, height: 2.6 },
+        'cashier-name': { x: 5, y: isCashSession ? 37.5 : 45.5, width: 50, height: 3.2 },
         ...(isCustomerHistory ? {
           'history-customer-name': { x: 5, y: 26, width: 44, height: 4.5 },
           'party-tax-id': { x: 5, y: 31.3, width: 44, height: 5.2 },
@@ -415,16 +416,17 @@ export function applyPdfHeaderComposition<T extends PdfTemplateDefinition>(defin
         } : {}),
       }
       : {
-        'document-title': { x: 55, y: 22, width: 40, height: isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
-        'document-number': { x: 55, y: isCustomerHistory ? 27 : 31.5, width: 40, height: 2.8, align: 'right' },
-        'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 30.2 : 35, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
-        'document-status': { x: isCustomerHistory ? 55 : 58, y: isCustomerHistory ? 33.4 : 35, width: isCustomerHistory ? 40 : 37, height: 2.8, align: 'right' },
-        'document-generated': { x: 67, y: isCashHistoricalReport ? 29.5 : isCustomerList ? 27.5 : 31.5, width: 28, height: 2.8, align: 'right' },
-        'report-meta': { x: 5, y: isCashHistoricalReport ? 29.5 : isCustomerList ? 27.5 : 31.5, width: 60, height: 2.8, align: 'left' },
+        'company-summary': { height: 8 },
+        'document-title': { x: 55, y: isCashSession ? 19 : 22, width: 40, height: isCashSession ? 5 : isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
+        'document-number': { x: 55, y: isCustomerHistory ? 27 : isCashSession ? 24.5 : 31.5, width: 40, height: 2.8, align: 'right' },
+        'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 30.2 : isCashSession ? 28 : 35, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
+        'document-status': { x: isCustomerHistory ? 55 : 58, y: isCustomerHistory ? 33.4 : isCashSession ? 28 : 35, width: isCustomerHistory ? 40 : 37, height: 2.8, align: 'right' },
+        'document-generated': { x: 67, y: isCashSession ? 28 : isCashHistoricalReport ? 29.5 : isCustomerList ? 27.5 : 31.5, width: 28, height: 2.8, align: 'right' },
+        'report-meta': { x: 5, y: isCashSession ? 28 : isCashHistoricalReport ? 29.5 : isCustomerList ? 27.5 : 31.5, width: 60, height: 2.8, align: 'left' },
         'cash-report-sections': { x: 5, y: cashSectionsY, width: 90, height: 96 - cashSectionsY },
         'report-sections': { x: 5, y: 51, width: 90, height: 44 },
-        'cashier-label': { x: 5, y: 38.5, width: 40, height: 2.6 },
-        'cashier-name': { x: 5, y: 41, width: 50, height: 3.2 },
+        'cashier-label': { x: 5, y: isCashSession ? 32 : 38.5, width: 40, height: 2.6 },
+        'cashier-name': { x: 5, y: isCashSession ? 34.5 : 41, width: 50, height: 3.2 },
         ...(isCustomerHistory ? {
           'history-customer-name': { x: 5, y: 23, width: 44, height: 4.5 },
           'party-tax-id': { x: 5, y: 28.3, width: 44, height: 5.2 },
@@ -509,10 +511,29 @@ export function applyPdfHeaderComposition<T extends PdfTemplateDefinition>(defin
       'party-section': { x: 5, y: 26, width: 90, height: 18 },
     }
     : {};
+  const isSavedCustomLayout = ['sales-custom', 'purchase-custom', 'custom'].includes(String(definition.metadata?.preset || ''));
+  const customIdentityNodeIds = new Set(['company-name', 'company-summary', 'company-logo']);
 
   return {
     ...definition,
     nodes: definition.nodes.map(item => {
+      if (isSavedCustomLayout) {
+        if (!customIdentityNodeIds.has(item.id)) return item;
+        const identityPlacement = placements[item.id];
+        if (!identityPlacement) return item;
+        const preservedWidth = Number(item.width) || 0;
+        const x = selected === 'centered-stack'
+          ? Math.max(0, (100 - preservedWidth) / 2)
+          : item.id === 'company-logo' && selected === 'company-left-logo-right'
+            ? Math.max(0, 95 - preservedWidth)
+            : Number(identityPlacement.x ?? item.x);
+        return {
+          ...item,
+          x,
+          y: Number(identityPlacement.y ?? item.y),
+          align: identityPlacement.align || item.align,
+        };
+      }
       const placement = customerKpiPlacements[item.id]
         || (item.id === 'report-sections' && customerReportSectionPlacement)
         || reportHeaderPlacements[item.id]
@@ -2250,9 +2271,15 @@ export function resolveTemplateToken(token: string | undefined, data: PdfTemplat
     return summary || fallback;
   }
   let value = readPath(data, token);
-  if (token.startsWith('party.')) {
-    const path = token.slice('party.'.length);
-    for (const source of [data.party, data.customer, data.supplier]) {
+  const partyToken = /^(party|customer|supplier)\.(.+)$/.exec(token);
+  if (partyToken) {
+    const [, prefix, path] = partyToken;
+    const sources = prefix === 'party'
+      ? [data.party, data.customer, data.supplier]
+      : prefix === 'customer'
+        ? [data.customer, data.party]
+        : [data.supplier, data.party];
+    for (const source of sources) {
       const candidate = readPath(source, path);
       if (candidate !== null && candidate !== undefined && String(candidate).trim()) {
         value = candidate;

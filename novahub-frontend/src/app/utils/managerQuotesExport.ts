@@ -227,8 +227,8 @@ export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions
       : [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), displayedTotal(row, displayMode), additionalChargesLabel(row), rateContext(row), pdfStatusLabel(row.status), formatDate(row.expiryDate)]),
     startY: currentY,
     margin: { left: margin, right: margin, bottom: 16 },
-    styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2.5, textColor: [51, 65, 85], overflow: 'linebreak' },
-    headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+    styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2.5, textColor: [51, 65, 85], overflow: 'linebreak', valign: 'middle' },
+    headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', valign: 'middle' },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: { 0: { fontStyle: 'bold' }, 4: { halign: 'right', fontStyle: 'bold' }, 5: { halign: 'left' }, 7: { halign: 'center' } },
     didParseCell: (hook) => {

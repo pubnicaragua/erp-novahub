@@ -19,6 +19,8 @@ try {
   const generator = await server.ssrLoadModule('/src/app/utils/pdfGenerator.ts');
   const targets = catalog.PDF_TEMPLATE_TARGETS;
 
+  assert.equal(definitions.resolveTemplateToken('supplier.name', { party: { name: 'Proveedor de prueba' } }), 'Proveedor de prueba', 'Las plantillas de Compras deben leer el proveedor del alias compartido party usado por sus exportadores.');
+  assert.equal(definitions.resolveTemplateToken('customer.name', { party: { name: 'Cliente de prueba' } }), 'Cliente de prueba', 'Las plantillas de Ventas deben aceptar los datos de contraparte que llegan bajo party.');
   assert.equal(definitions.formatPdfPageNumber('page-of', '', 2.8, 7.9), 'Página 2 de 7', 'La numeración normal debe usar enteros.');
   assert.equal(definitions.formatPdfPageNumber('number-only', '', 3.2, 8), '3', 'La numeración simple debe usar enteros.');
   assert.equal(definitions.formatPdfPageNumber('custom', 'Página {page}.0 de {pages},00', 4.6, 12.4), 'Página 4 de 12', 'La numeración personalizada y su previsualización deben eliminar decimales de página.');
@@ -88,7 +90,7 @@ try {
     '<img src="https://example.com/logo.png" onerror="alert(1)">',
   ]) assert.throws(() => styles.parsePdfHtmlShell(maliciousHtml), /scripts|recursos remotos|etiquetas no admitidas/i, 'El importador debe rechazar scripts, iframes, eventos y recursos remotos.');
 
-  assert.equal(targets.length, 78, 'El catálogo debe incluir las 78 salidas PDF activas encontradas en los módulos.');
+  assert.equal(targets.length, 81, 'El catálogo debe incluir todas las salidas PDF activas encontradas en los módulos.');
   assert.equal(new Set(targets.map(({ key }) => key)).size, targets.length, 'Las claves del catálogo deben ser únicas.');
   assert.ok(targets.some(target => target.key === 'contabilidad.balance-sheet'), 'El balance general de Contabilidad debe tener un destino propio.');
   assert.ok(targets.some(target => target.key === 'restaurante.menu'), 'La carta del Restaurante debe tener un destino propio.');
@@ -178,6 +180,57 @@ try {
   assert.equal(purchaseListTable.y, 27.5, 'El listado de compras debe acercar la tabla al título cuando no hay metadatos.');
   assert.equal(purchaseListTable.width, 90, 'El listado de compras debe usar todo el ancho útil.');
 
+  const cashSessionSettings = definitions.createSystemDefaultPdfDesign('ventas.cash-session').settings;
+  const cashSessionDefinition = definitions.applyPdfHeaderComposition(
+    definitions.createDefaultTemplateDefinition('ventas.cash-session', cashSessionSettings),
+    'company-left-logo-right',
+    'ventas.cash-session',
+  );
+  assert.ok(cashSessionDefinition.nodes.find(node => node.id === 'document-title').y < 20, 'El título del resumen de sesión debe quedar próximo al bloque de empresa.');
+  assert.ok(cashSessionDefinition.nodes.find(node => node.id === 'cash-report-sections').y < 40, 'Las tablas del resumen de sesión deben iniciar después de metadatos compactos.');
+  assert.equal(renderer.getPdfReportSectionTableGap('ventas.cash-historical-report'), 6, 'Los títulos de sección deben separarse de sus tablas con un espacio corto y visible.');
+  assert.equal(renderer.getPdfTableCellVerticalAlignment('header'), 'middle', 'Los encabezados deben alinearse al centro vertical.');
+  assert.equal(renderer.getPdfTableCellVerticalAlignment('body'), 'middle', 'El cuerpo debe alinearse al centro vertical incluso con descripciones multilínea.');
+  assert.equal(renderer.getPdfTableCellVerticalAlignment('footer'), 'middle', 'Los pies y totales deben alinearse al centro vertical.');
+  assert.deepEqual(
+    renderer.fitPdfImageInsideSlot({ x: 10, y: 20, width: 30, height: 10 }, 200, 100),
+    { x: 15, y: 20, width: 20, height: 10 },
+    'La marca añadida al PDF debe conservar la proporción y centrarse en su caja sin deformarla.',
+  );
+  assert.deepEqual(
+    renderer.fitPdfImageInsideSlot({ x: 10, y: 20, width: 30, height: 10 }, 100, 200),
+    { x: 22.5, y: 20, width: 5, height: 10 },
+    'Los logos verticales también deben conservar su proporción dentro de la misma caja.',
+  );
+  let imageDecodeStarted = false;
+  let imageDecodeFinished = false;
+  let releaseImageDecode;
+  const pendingImageDecode = new Promise(resolve => { releaseImageDecode = resolve; });
+  const imageDecode = renderer.waitForPdfImageDecode({ decode: () => { imageDecodeStarted = true; return pendingImageDecode; } }).then(() => { imageDecodeFinished = true; });
+  await Promise.resolve();
+  assert.equal(imageDecodeStarted, true, 'La captura debe pedir al navegador que decodifique el logo antes de rasterizar la página.');
+  assert.equal(imageDecodeFinished, false, 'La captura debe esperar a que termine la decodificación del logo.');
+  releaseImageDecode();
+  await imageDecode;
+  assert.equal(imageDecodeFinished, true, 'La espera de decodificación debe continuar después de que la imagen esté lista.');
+  assert.deepEqual(renderer.getPdfTableHeaderCellLayout(true, true), { padding: '2px 5px', lineHeight: '1.25', contentDisplay: 'flex', contentAlignItems: 'center', contentMinHeight: '1.25em' }, 'El rótulo debe centrarse dentro de un contenedor propio para que el rasterizador no lo empuje contra el borde inferior de la celda.');
+  assert.equal(renderer.getPdfStandardContinuationY(13.5), 16, 'La tabla de continuación debe comenzar poco después del logo y el marco que se repiten.');
+  assert.equal(renderer.getPdfStandardContinuationY(21), 23.5, 'La continuación debe respetar el encabezado repetible de diseños que usan una banda más alta.');
+  assert.equal(renderer.shouldRenderPdfNodeOnPage('company-logo', true, 2), true, 'El logo debe repetirse aunque un diseño antiguo lo haya marcado como solo primera página.');
+  assert.equal(renderer.shouldRenderPdfNodeOnPage('company-name', true, 2), false, 'La información de empresa no debe repetirse al pasar de página.');
+  const customCashDefinition = {
+    ...cashSessionDefinition,
+    metadata: { ...cashSessionDefinition.metadata, preset: 'sales-custom' },
+    nodes: cashSessionDefinition.nodes.map(node => ({
+      ...node,
+      ...(node.id === 'document-title' ? { y: 27 } : {}),
+      ...(node.id === 'cash-report-sections' ? { y: 58 } : {}),
+    })),
+  };
+  const composedCustomCashDefinition = definitions.applyPdfHeaderComposition(customCashDefinition, 'logo-left-company-right', 'ventas.cash-session');
+  assert.equal(composedCustomCashDefinition.nodes.find(node => node.id === 'document-title').y, 27, 'Cambiar la composición empresarial no debe mover el título de un diseño personalizado.');
+  assert.equal(composedCustomCashDefinition.nodes.find(node => node.id === 'cash-report-sections').y, 58, 'Cambiar la composición empresarial no debe mover las tablas guardadas por el usuario.');
+
   const supplierHistoryDefinition = definitions.createDefaultTemplateDefinition('compras.supplier-history', definitions.createSystemDefaultPdfDesign('compras.supplier-history').settings);
   assert.equal(supplierHistoryDefinition.nodes.find(node => node.id === 'document-title').x, 55, 'El título del historial de proveedor debe ocupar la banda derecha.');
   assert.equal(supplierHistoryDefinition.nodes.find(node => node.id === 'party-name').x, 5, 'El nombre del proveedor debe ocupar el lado izquierdo de la banda del título.');
@@ -194,14 +247,20 @@ try {
   assert.ok(dashboardCharts.every(node => node.firstPageOnly !== true), 'Las gráficas del dashboard se colocan mediante páginas de resumen y detalle.');
   const generatedHeader = dashboardDefinition.nodes.find(node => node.id === 'document-generated');
   assert.equal(generatedHeader?.token, 'document.generated');
-  assert.equal(generatedHeader?.firstPageOnly, true, 'La fecha de generación aparece solo en la primera página.');
+  assert.equal(renderer.isPdfFirstPageOnlyInfoNode('document-generated'), true, 'La fecha de generación aparece solo en la primera página.');
+  assert.equal(renderer.isPdfFirstPageOnlyInfoNode('document-title'), true, 'El título del documento no debe repetirse en páginas continuas.');
+  assert.equal(renderer.isPdfFirstPageOnlyInfoNode('company-summary'), true, 'Los datos de empresa no deben repetirse en páginas continuas.');
+  assert.equal(renderer.isPdfFirstPageOnlyInfoNode('company-logo'), false, 'El logo sí se conserva en páginas continuas.');
   const reportDefinition = definitions.createDefaultTemplateDefinition('reportes.sales', definitions.createSystemDefaultPdfDesign('reportes.sales').settings);
   const reportMeta = reportDefinition.nodes.find(node => node.id === 'report-meta');
   assert.ok(reportMeta, 'Los reportes deben reservar una línea compacta para período, filtros y generación.');
-  assert.equal(reportMeta.width, 84, 'El período y la generación deben compartir el renglón completo del encabezado.');
+  const reportGenerated = reportDefinition.nodes.find(node => node.id === 'document-generated');
+  assert.equal(reportMeta.width, 60, 'El período debe reservar su columna izquierda en el renglón de metadatos.');
+  assert.equal(reportGenerated?.x, 67, 'La fecha de generación debe reservar la columna derecha del renglón de metadatos.');
+  assert.equal(reportGenerated?.y, reportMeta.y, 'El período y la fecha de generación deben compartir una sola línea.');
   const sanitizedReportDefinition = definitions.sanitizeTemplateDefinition(reportDefinition, 'reportes.sales', definitions.createSystemDefaultPdfDesign('reportes.sales').settings);
   const sanitizedGeneratedNodes = sanitizedReportDefinition.nodes.filter(node => node.enabled !== false && node.type === 'field' && node.token === 'document.generated');
-  assert.equal(sanitizedGeneratedNodes.length, 0, 'El diseño predeterminado usa un solo metadato para evitar duplicar la generación.');
+  assert.equal(sanitizedGeneratedNodes.length, 1, 'El diseño predeterminado conserva una sola columna explícita para la fecha de generación.');
   const firstPageMetadata = renderer.normalizeReportDocumentMetadata({
     meta: 'Período: septiembre · Sucursal: filtro seleccionado · Generado: 22/09/2026 10:00',
     generated: 'Generado: 22/09/2026 10:00',
@@ -239,6 +298,30 @@ try {
   const pages = renderer.paginatePdfReportSections([{ id: 'long-report', title: 'Reporte largo', columns: [{ id: 'description', label: 'Descripción', token: 'description', width: 70 }, { id: 'amount', label: 'Monto', token: 'amount', width: 30 }], rows: sampleRows }]);
   assert.ok(pages.length > 1, 'Los reportes largos deben paginarse.');
   assert.equal(pages.flatMap(page => page.flatMap(section => section.rows)).length, sampleRows.length, 'La paginación debe conservar todas las filas.');
+
+  const historicalCashSections = [
+    {
+      id: 'cash-summary', title: 'Resumen general',
+      columns: ['sessions', 'closedSessions', 'salesNio', 'salesUsd', 'differenceNio', 'depositsNio'].map(token => ({ id: token, label: token, token, width: 16 })),
+      rows: [{ sessions: '1', closedSessions: '0', salesNio: 'C$ 417,444.03', salesUsd: '$ 0.00', differenceNio: 'C$ -394,636.41', depositsNio: 'C$ 0.00' }],
+    },
+    {
+      id: 'cash-payment-methods', title: 'Formas de pago',
+      columns: ['method', 'operations', 'amountNio', 'amountUsd'].map(token => ({ id: token, label: token, token, width: 25 })),
+      rows: ['Efectivo', 'Tarjeta', 'Transferencia', 'Cheque', 'Otro'].map((method, index) => ({ method, operations: String([13, 1, 2, 0, 0][index]), amountNio: 'C$ 0.00', amountUsd: '$ 0.00' })),
+    },
+    {
+      id: 'cash-sessions', title: 'Detalle de sesiones',
+      columns: ['date', 'register', 'cashier', 'salesCount', 'salesAmounts', 'differenceDeposit'].map(token => ({ id: token, label: token, token, width: 16 })),
+      rows: [{ date: '24/9/2026', register: 'Caja 1', cashier: 'Gabriel Tinoco', salesCount: '16', salesAmounts: 'C$ 417,444.03\n$ 0.00', differenceDeposit: 'C$ -394,636.41\nC$ 0.00' }],
+    },
+  ];
+  assert.deepEqual(renderer.getPdfReportPagination('ventas.cash-historical-report'), { firstPageCapacity: 20, continuationPageCapacity: 24 });
+  const historicalCashPages = renderer.paginatePdfReportSections(
+    historicalCashSections,
+    renderer.getPdfReportPagination('ventas.cash-historical-report'),
+  );
+  assert.equal(historicalCashPages.length, 1, 'Un reporte histórico con una sesión y sus cinco formas de pago debe caber en una página, sin separar la última fila de su sección.');
 
   console.log(`Validación PDF aprobada: ${targets.length} destinos, muestras por vista, gráficas y paginación.`);
 } finally {

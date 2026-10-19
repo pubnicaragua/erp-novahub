@@ -479,15 +479,16 @@ export function FinanceTableView({
         foot,
         showFoot: summary ? 'lastPage' : undefined,
         startY: currentY,
-        styles: { fontSize: 8, cellPadding: 3 },
+        styles: { fontSize: 8, cellPadding: 3, valign: 'middle' },
         headStyles: {
           fillColor: rgbPrimary as [number, number, number],
           textColor: [255, 255, 255],
           fontStyle: 'bold',
           halign: 'center',
+          valign: 'middle',
         },
         alternateRowStyles: { fillColor: [245, 245, 245] },
-        footStyles: { fillColor: [248, 250, 252], textColor: [60, 60, 60], fontStyle: 'bold' },
+        footStyles: { fillColor: [248, 250, 252], textColor: [60, 60, 60], fontStyle: 'bold', valign: 'middle' },
         margin: { left: 14, right: 14 },
       });
 

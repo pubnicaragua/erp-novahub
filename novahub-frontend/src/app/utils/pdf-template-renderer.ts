@@ -45,6 +45,59 @@ export interface PdfTemplateRenderProgress {
   totalPages: number;
 }
 
+const SINGLE_PAGE_PDF_INFO_NODE_IDS = new Set([
+  'company-name', 'company-summary', 'document-title', 'document-number', 'document-date',
+  'document-status', 'document-generated', 'document-extra', 'report-meta', 'ticket-meta',
+  'history-customer-name',
+]);
+
+export function isPdfFirstPageOnlyInfoNode(nodeId: string) {
+  return SINGLE_PAGE_PDF_INFO_NODE_IDS.has(nodeId);
+}
+
+/** El logo es la única pieza del encabezado que debe sobrevivir a una continuación. */
+export function shouldRenderPdfNodeOnPage(nodeId: string, firstPageOnly: boolean | undefined, pageNumber: number) {
+  if (nodeId === 'company-logo') return true;
+  return !firstPageOnly || pageNumber === 1;
+}
+
+/** Reduce la altura ocupada por el interlineado y el padding vertical del encabezado de tabla. */
+export function getPdfTableHeaderCellLayout(compact: boolean, standard: boolean, rollPaper = false) {
+  const verticalPadding = rollPaper ? 1 : compact || standard ? 2 : 4;
+  const horizontalPadding = rollPaper ? 4 : compact ? 5 : 8;
+  return {
+    padding: `${verticalPadding}px ${horizontalPadding}px`,
+    lineHeight: rollPaper ? '1.15' : '1.25',
+    contentDisplay: 'flex',
+    contentAlignItems: 'center',
+    contentMinHeight: rollPaper ? '1.15em' : '1.25em',
+  };
+}
+
+function createPdfTableHeaderLabel(label: unknown, layout: ReturnType<typeof getPdfTableHeaderCellLayout>, whiteSpace: 'normal' | 'nowrap' = 'normal') {
+  const content = document.createElement('span');
+  Object.assign(content.style, {
+    display: layout.contentDisplay,
+    alignItems: layout.contentAlignItems,
+    width: '100%',
+    minWidth: '0',
+    minHeight: layout.contentMinHeight,
+  });
+  const text = document.createElement('span');
+  text.textContent = label === null || label === undefined ? '' : String(label);
+  Object.assign(text.style, {
+    display: 'block',
+    width: '100%',
+    minWidth: '0',
+    lineHeight: layout.lineHeight,
+    whiteSpace,
+    overflowWrap: whiteSpace === 'nowrap' ? 'normal' : 'anywhere',
+    wordBreak: whiteSpace === 'nowrap' ? 'normal' : 'break-word',
+  });
+  content.appendChild(text);
+  return content;
+}
+
 /** Give React and the browser a paint opportunity between expensive canvas jobs. */
 export function yieldToBrowser() {
   return new Promise<void>(resolve => {
@@ -82,11 +135,18 @@ function asRows(data: PdfTemplateData) {
   return data.items || data.rows || data.history || [];
 }
 
-function createRaisedPdfCellText(value: unknown, raiseMm = 1) {
-  const content = document.createElement('span');
-  content.textContent = value === null || value === undefined ? '' : String(value);
-  Object.assign(content.style, { display: 'block', position: 'relative', top: `${-raiseMm}mm` });
-  return content;
+export function getPdfTableCellVerticalAlignment(_region: 'header' | 'body' | 'footer') {
+  return 'middle' as const;
+}
+
+export function getPdfReportSectionTableGap(targetKey: string) {
+  return isStandardPdfLayoutTarget(targetKey) ? 6 : 0;
+}
+
+/** Place continuation content just below the header elements that actually repeat. */
+export function getPdfStandardContinuationY(repeatedHeaderBottom: number) {
+  const headerBottom = Number.isFinite(Number(repeatedHeaderBottom)) ? Math.max(0, Number(repeatedHeaderBottom)) : 13.5;
+  return Math.min(82, Math.max(16, headerBottom + 2.5));
 }
 
 function generatedMetadataParts(value: unknown) {
@@ -351,6 +411,13 @@ export function paginatePdfReportSections(sections: PdfTemplateReportSection[], 
   return groups;
 }
 
+export function getPdfReportPagination(targetKey: string) {
+  if (targetKey === 'ventas.cash-session') return { firstPageCapacity: 16, continuationPageCapacity: 24 };
+  if (targetKey === 'ventas.cash-historical-report') return { firstPageCapacity: 20, continuationPageCapacity: 24 };
+  if (targetKey === 'ventas.customers') return { firstPageCapacity: 11, continuationPageCapacity: 17 };
+  return undefined;
+}
+
 function normalizeData(data: PdfTemplateData | undefined, settings: PdfTemplateRenderSettings, targetKey: string, pageNumber: number, pageCount: number): PdfTemplateData {
   const target = getPdfTemplateTarget(targetKey);
   const source = data || {};
@@ -429,17 +496,63 @@ function rememberedSessionLogo() {
   }
 }
 
+export async function waitForPdfImageDecode(image: Pick<HTMLImageElement, 'decode'>) {
+  if (typeof image.decode !== 'function') return;
+  try {
+    await image.decode();
+  } catch {
+    // Una imagen rota no debe bloquear la exportación; el nodo ya tiene fallback.
+  }
+}
+
+export function fitPdfImageInsideSlot(slot: { x: number; y: number; width: number; height: number }, sourceWidth: number, sourceHeight: number) {
+  const width = Math.max(0, Number(slot.width) || 0);
+  const height = Math.max(0, Number(slot.height) || 0);
+  const imageWidth = Math.max(0, Number(sourceWidth) || 0);
+  const imageHeight = Math.max(0, Number(sourceHeight) || 0);
+  if (!width || !height || !imageWidth || !imageHeight) return { x: Number(slot.x) || 0, y: Number(slot.y) || 0, width: 0, height: 0 };
+  const scale = Math.min(width / imageWidth, height / imageHeight);
+  const fittedWidth = imageWidth * scale;
+  const fittedHeight = imageHeight * scale;
+  return {
+    x: (Number(slot.x) || 0) + (width - fittedWidth) / 2,
+    y: (Number(slot.y) || 0) + (height - fittedHeight) / 2,
+    width: fittedWidth,
+    height: fittedHeight,
+  };
+}
+
+function getPdfCompanyLogoOverlayRect(page: HTMLElement, definition: PdfTemplateDefinition, widthMm: number, heightMm: number) {
+  const logoDefinition = definition.nodes.find(node => node.id === 'company-logo' && node.enabled !== false && node.type === 'image');
+  if (!logoDefinition || logoDefinition.rotation || Number(logoDefinition.opacity ?? 1) < 1 || logoDefinition.shape === 'angled') return null;
+  const logoNode = page.querySelector<HTMLElement>('[data-pdf-node-id="company-logo"]');
+  const frame = logoNode?.firstElementChild as HTMLElement | null;
+  const image = logoNode?.querySelector<HTMLImageElement>('img');
+  if (!logoNode || !frame || !image?.naturalWidth || !image.naturalHeight) return null;
+  const pageBounds = page.getBoundingClientRect();
+  const frameBounds = frame.getBoundingClientRect();
+  if (!pageBounds.width || !pageBounds.height || !frameBounds.width || !frameBounds.height) return null;
+  const slot = {
+    x: (frameBounds.left - pageBounds.left) / pageBounds.width * widthMm,
+    y: (frameBounds.top - pageBounds.top) / pageBounds.height * heightMm,
+    width: frameBounds.width / pageBounds.width * widthMm,
+    height: frameBounds.height / pageBounds.height * heightMm,
+  };
+  const rect = fitPdfImageInsideSlot(slot, image.naturalWidth, image.naturalHeight);
+  if (!rect.width || !rect.height) return null;
+  image.style.visibility = 'hidden';
+  return rect;
+}
+
 async function waitForImages(root: HTMLElement) {
   const images = Array.from(root.querySelectorAll('img'));
   const svgImages = Array.from(root.querySelectorAll('svg image'));
-  await Promise.all([...images.map(image => new Promise<void>(resolve => {
+  await Promise.all([...images.map(async image => {
+    await new Promise<void>(resolve => {
     let settled = false;
     const finish = () => { if (settled) return; settled = true; resolve(); };
     image.addEventListener('load', finish, { once: true });
     image.addEventListener('error', finish, { once: true });
-    // Los logos se convierten a data URLs antes de llegar aquí. Cuando el
-    // navegador ya marcó la imagen como completa no hay motivo para esperar a
-    // que termine una decodificación secundaria antes de rasterizar la página.
     if (image.complete) {
       finish();
       return;
@@ -448,7 +561,9 @@ async function waitForImages(root: HTMLElement) {
     // pequeño margen de seguridad. La espera fija anterior se repetía por
     // cada página y podía sumar varios segundos en un reporte individual.
     window.setTimeout(finish, 750);
-  })), ...svgImages.map(image => new Promise<void>(resolve => {
+    });
+    await waitForPdfImageDecode(image);
+  }), ...svgImages.map(image => new Promise<void>(resolve => {
     if (image.hasAttribute('data-pdf-image-ready')) {
       resolve();
       return;
@@ -723,7 +838,6 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const isRollPaper = settings.paperSize === 'ROLL-80' || settings.paperSize === 'ROLL-58';
   const isTransactionTable = node.id === 'items-table' && !isRollPaper;
   const isStandardTable = Boolean(targetKey && isStandardPdfLayoutTarget(targetKey));
-  const cellTextLiftMm = isStandardTable ? 0 : isTransactionTable ? 2 : 1;
   const salesTableTextBoost = targetKey && isStandardPdfLayoutTarget(targetKey) ? 1.25 : 0;
   // Algunos diseños guardados dejaron la tabla de partidas más cerca del
   // borde que las tarjetas. Normalizamos solo sus márgenes, conservando una
@@ -760,18 +874,20 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const rowTextColor = node.tableTextColor || textColor;
   const rowBackground = node.tableStripeColor || (tableLayout === 'striped' || tableLayout === 'standard' || tableLayout === 'accent' ? '#f8fafc' : 'transparent');
   columns.forEach((column, columnIndex) => {
-    const cell = head.insertCell();
-    if (isStandardTable) cell.textContent = column.label;
-    else cell.appendChild(createRaisedPdfCellText(column.label, cellTextLiftMm));
+    const cell = document.createElement('th');
+    const headerCellLayout = getPdfTableHeaderCellLayout(compact, isStandardTable || isTransactionTable, isRollPaper);
+    cell.scope = 'col';
+    cell.appendChild(createPdfTableHeaderLabel(column.label, headerCellLayout, isRollPaper ? 'nowrap' : 'normal'));
+    head.appendChild(cell);
     cell.style.width = `${column.width || 25}%`;
     cell.style.minWidth = '0'; cell.style.maxWidth = '100%'; cell.style.boxSizing = 'border-box';
-    cell.style.textAlign = column.align || 'left'; cell.style.verticalAlign = 'middle';
-    cell.style.padding = isRollPaper ? '3px 4px' : isStandardTable ? compact ? '4px 5px' : '5px 8px' : isTransactionTable ? '7px 8px' : compact ? '4px 5px' : '7px 8px';
+    cell.style.textAlign = column.align || 'left'; cell.style.verticalAlign = getPdfTableCellVerticalAlignment('header');
+    cell.style.padding = headerCellLayout.padding;
     cell.style.backgroundColor = safeHtml2CanvasColor(column.backgroundColor || headerBackground, headerBackground);
     cell.style.color = safeHtml2CanvasColor(column.color || headerColor, headerColor);
     cell.style.fontWeight = pdfTableStyle === 'bold' ? '800' : '700';
     cell.style.fontSize = pdfPointsToCss(Math.max(isRollPaper ? 6.5 : compact ? 6.8 : 7.5, (node.fontSize || settings.fontSize || 9) - (isRollPaper ? 1.5 : compact ? 2 : 1.5) + salesTableTextBoost));
-    cell.style.lineHeight = compact ? '1.2' : '1.25';
+    cell.style.lineHeight = headerCellLayout.lineHeight;
     cell.style.letterSpacing = isRollPaper || compact ? '0' : '0.15px';
     cell.style.textTransform = tablePresentation.headerTextTransform;
     const headerRuleColor = tablePresentation.headerRuleTone === 'accent' ? primaryColor : tableBorderColor;
@@ -800,8 +916,7 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
       const cell = tr.insertCell();
       const rawValue = row[column.token] ?? row[column.id];
       const cellText = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue);
-      if (isStandardTable) cell.textContent = cellText;
-      else cell.appendChild(createRaisedPdfCellText(cellText, cellTextLiftMm));
+      cell.textContent = cellText;
       cell.style.padding = isRollPaper ? '3px 4px' : isStandardTable ? compact ? '5px 6px' : '7px 8px' : isTransactionTable ? '6px 8px' : compact ? '4px 5px' : tableLayout === 'compact' ? '5px 7px' : '7px 9px';
       cell.style.height = 'auto';
       cell.style.maxHeight = 'none';
@@ -810,7 +925,7 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
       cell.style.textAlign = column.align || 'left';
       const isDescription = column.token === 'description' || column.id === 'description' || /descrip|concepto|detalle/i.test(`${column.label || ''} ${column.token || ''} ${column.id || ''}`) || String(rawValue ?? '').includes('\n');
       const isNumericCell = column.align === 'right' && !isDescription;
-      cell.style.verticalAlign = isStandardTable ? 'middle' : isTransactionTable || isDescription ? 'top' : 'middle';
+      cell.style.verticalAlign = getPdfTableCellVerticalAlignment('body');
       cell.style.lineHeight = compact ? '1.25' : '1.35';
       cell.style.whiteSpace = isDescription ? 'pre-wrap' : isNumericCell ? 'nowrap' : 'normal';
       cell.style.overflow = 'visible';
@@ -837,6 +952,7 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
       cell.style.color = tablePresentation.summaryTone === 'accent' ? headerColor : textColor;
       cell.style.fontWeight = '700';
       cell.style.textAlign = column.align || 'left';
+      cell.style.verticalAlign = getPdfTableCellVerticalAlignment('footer');
       cell.style.whiteSpace = column.align === 'right' ? 'nowrap' : 'normal';
       cell.style.overflow = 'visible';
       cell.style.overflowWrap = column.align === 'right' ? 'normal' : 'anywhere';
@@ -868,7 +984,7 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
 
   const fullWidthReportSections = Boolean(targetKey && isStandardPdfLayoutTarget(targetKey));
   const isCustomerList = targetKey === 'ventas.customers';
-  const sectionTableGap = fullWidthReportSections ? targetKey === 'ventas.cash-historical-report' ? '12px' : '4px' : '0';
+  const sectionTableGap = getPdfReportSectionTableGap(targetKey || '');
   const sections = Array.isArray(data.reportSections) ? data.reportSections : [];
   const content = document.createElement('div');
   Object.assign(content.style, { width: '100%', height: 'auto', minHeight: '0', overflow: 'visible', padding: fullWidthReportSections ? '0' : '6px 8px', boxSizing: 'border-box' });
@@ -911,20 +1027,23 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
     sectionElement.appendChild(title);
 
     const table = document.createElement('table');
-    Object.assign(table.style, { width: fullWidthReportSections ? '100%' : '96%', height: 'auto', margin: fullWidthReportSections ? `${sectionTableGap} 0 0` : '0 auto', borderCollapse: tablePresentation.rowGap ? 'separate' : 'collapse', borderSpacing: tablePresentation.rowGap ? `0 ${tablePresentation.rowGap}px` : '0', tableLayout: 'fixed', fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(tableFontSize), lineHeight: compact ? '1.25' : '1.3' });
+    Object.assign(table.style, { width: fullWidthReportSections ? '100%' : '96%', height: 'auto', margin: fullWidthReportSections ? `${sectionTableGap}px 0 0` : '0 auto', borderCollapse: tablePresentation.rowGap ? 'separate' : 'collapse', borderSpacing: tablePresentation.rowGap ? `0 ${tablePresentation.rowGap}px` : '0', tableLayout: 'fixed', fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(tableFontSize), lineHeight: compact ? '1.25' : '1.3' });
     table.setAttribute('data-responsive-cards', 'false');
     const head = table.createTHead().insertRow();
     Object.assign(head.style, { backgroundColor: safeHtml2CanvasColor(sectionHeaderBackground, headerBackground), color: safeHtml2CanvasColor(sectionHeaderText, headerColor), height: 'auto', lineHeight: compact ? '1.15' : '1.2' });
     section.columns.forEach((column, columnIndex) => {
-      const cell = head.insertCell();
+      const cell = document.createElement('th');
+      const headerCellLayout = getPdfTableHeaderCellLayout(compact, isStandardReportTable);
+      cell.scope = 'col';
+      head.appendChild(cell);
       const keepSessionDateTogether = fullWidthReportSections && section.id === 'cash-sessions' && column.id === 'date';
-      cell.textContent = column.label;
+      cell.appendChild(createPdfTableHeaderLabel(column.label, headerCellLayout, keepSessionDateTogether ? 'nowrap' : 'normal'));
       const configuredColumn = node.columns?.[columnIndex];
       const headerCellBackground = settings.pdfTableStyle ? sectionHeaderBackground : column.backgroundColor || sectionStyle.columnColors?.[String(columnIndex)] || configuredColumn?.backgroundColor || sectionHeaderBackground;
       const headerCellText = settings.pdfTableStyle ? sectionHeaderText : column.color || sectionStyle.columnTextColors?.[String(columnIndex)] || configuredColumn?.color || sectionHeaderText;
       const headerRuleColor = tablePresentation.headerRuleTone === 'accent' ? primaryColor : tableBorderColor;
       const rightAlignHistoricalHeaders = fullWidthReportSections && section.id === 'cash-sessions';
-      Object.assign(cell.style, { width: `${column.width || 100 / Math.max(1, section.columns.length)}%`, minWidth: '0', maxWidth: '100%', boxSizing: 'border-box', textAlign: rightAlignHistoricalHeaders ? 'right' : column.align || 'left', verticalAlign: 'middle', padding: isStandardReportTable ? compact ? '3px 4px' : '4px 6px' : compact ? '3px 4px' : '4px 5px', backgroundColor: safeHtml2CanvasColor(headerCellBackground, sectionHeaderBackground), color: safeHtml2CanvasColor(headerCellText, sectionHeaderText), fontWeight: '700', fontSize: pdfPointsToCss(tableHeaderFontSize), lineHeight: compact ? '1.2' : '1.25', textTransform: tablePresentation.headerTextTransform, borderBottom: `${tablePresentation.headerRuleWidth}px solid ${headerRuleColor}`, whiteSpace: keepSessionDateTogether ? 'nowrap' : 'normal', overflow: 'visible', overflowWrap: keepSessionDateTogether ? 'normal' : 'anywhere', wordBreak: keepSessionDateTogether ? 'normal' : 'break-word', ...(tablePresentation.cellBorders === 'grid' ? { borderLeft: `1px solid ${tableBorderColor}`, borderRight: `1px solid ${tableBorderColor}` } : {}), ...(tablePresentation.rowAccentWidth && columnIndex === 0 ? { borderLeft: `${tablePresentation.rowAccentWidth}px solid ${primaryColor}` } : {}) });
+      Object.assign(cell.style, { width: `${column.width || 100 / Math.max(1, section.columns.length)}%`, minWidth: '0', maxWidth: '100%', boxSizing: 'border-box', textAlign: rightAlignHistoricalHeaders ? 'right' : column.align || 'left', verticalAlign: getPdfTableCellVerticalAlignment('header'), padding: headerCellLayout.padding, backgroundColor: safeHtml2CanvasColor(headerCellBackground, sectionHeaderBackground), color: safeHtml2CanvasColor(headerCellText, sectionHeaderText), fontWeight: '700', fontSize: pdfPointsToCss(tableHeaderFontSize), lineHeight: headerCellLayout.lineHeight, textTransform: tablePresentation.headerTextTransform, borderBottom: `${tablePresentation.headerRuleWidth}px solid ${headerRuleColor}`, whiteSpace: keepSessionDateTogether ? 'nowrap' : 'normal', overflow: 'visible', overflowWrap: keepSessionDateTogether ? 'normal' : 'anywhere', wordBreak: keepSessionDateTogether ? 'normal' : 'break-word', ...(tablePresentation.cellBorders === 'grid' ? { borderLeft: `1px solid ${tableBorderColor}`, borderRight: `1px solid ${tableBorderColor}` } : {}), ...(tablePresentation.rowAccentWidth && columnIndex === 0 ? { borderLeft: `${tablePresentation.rowAccentWidth}px solid ${primaryColor}` } : {}) });
     });
   const body = table.createTBody();
     body.style.height = 'auto';
@@ -939,7 +1058,7 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
         const cellText = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue ?? '—');
         cell.textContent = cellText;
         const rowColor = sectionStyle.rowColor || resolvePdfTableRowBackground(pdfTableStyle, { tableRow: node.tableRowColor || '#ffffff', tableStripe: sectionStyle.stripeColor || rowBackground }, rowIndex);
-        Object.assign(cell.style, { padding: isCustomerList ? '4px 6px' : isStandardReportTable ? compact ? '5px 6px' : '7px 8px' : compact ? '5px 6px' : '7px 8px', height: 'auto', maxHeight: 'none', minWidth: '0', maxWidth: '100%', color: rowTextColor, textAlign: column.align || 'left', verticalAlign: 'middle', whiteSpace: keepSessionDateTogether ? 'nowrap' : 'pre-wrap', overflow: 'visible', overflowWrap: keepSessionDateTogether ? 'normal' : 'anywhere', wordBreak: keepSessionDateTogether ? 'normal' : 'break-word', lineHeight: compact || isCustomerList ? '1.2' : '1.35', backgroundColor: safeHtml2CanvasColor(rowColor, '#ffffff'), ...getPdfTableCellBorders(pdfTableStyle, columnIndex, section.columns.length, tableBorderColor, primaryColor) });
+        Object.assign(cell.style, { padding: isCustomerList ? '4px 6px' : isStandardReportTable ? compact ? '5px 6px' : '7px 8px' : compact ? '5px 6px' : '7px 8px', height: 'auto', maxHeight: 'none', minWidth: '0', maxWidth: '100%', color: rowTextColor, textAlign: column.align || 'left', verticalAlign: getPdfTableCellVerticalAlignment('body'), whiteSpace: keepSessionDateTogether ? 'nowrap' : 'pre-wrap', overflow: 'visible', overflowWrap: keepSessionDateTogether ? 'normal' : 'anywhere', wordBreak: keepSessionDateTogether ? 'normal' : 'break-word', lineHeight: compact || isCustomerList ? '1.2' : '1.35', backgroundColor: safeHtml2CanvasColor(rowColor, '#ffffff'), ...getPdfTableCellBorders(pdfTableStyle, columnIndex, section.columns.length, tableBorderColor, primaryColor) });
       });
     });
     sectionElement.appendChild(table);
@@ -958,6 +1077,7 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
         cell.style.color = tablePresentation.summaryTone === 'accent' ? headerColor : textColor;
         cell.style.fontWeight = '700';
         cell.style.textAlign = column.align || 'left';
+        cell.style.verticalAlign = getPdfTableCellVerticalAlignment('footer');
         cell.style.whiteSpace = column.align === 'right' ? 'nowrap' : 'normal';
         cell.style.overflow = 'visible';
         cell.style.overflowWrap = column.align === 'right' ? 'normal' : 'anywhere';
@@ -1407,11 +1527,11 @@ function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRend
   const detailChartNodes = definition.nodes.filter(node => node.type === 'chart' && !isDashboardTrendNode(node) && activeChartIds.has(String(node.token || '')));
   const styleConfig = normalizePdfStyleConfig(definition.metadata?.pdfStyleConfig);
   const isStandardLayout = isStandardPdfLayoutTarget(targetKey);
-  const singlePageInfoNodeIds = new Set(['company-name', 'company-summary', 'document-title', 'document-number', 'document-date', 'document-status', 'document-generated', 'document-extra', 'report-meta', 'ticket-meta', 'history-customer-name']);
+  const fallbackRepeatedHeaderBottom = styleConfig?.htmlTemplate?.headerHtml.trim() ? 17 : 13.5;
   const repeatedHeaderBottom = definition.nodes
-    .filter(node => node.enabled !== false && isPdfFrameHeaderNode(node) && !singlePageInfoNodeIds.has(node.id))
-    .reduce((bottom, node) => Math.max(bottom, Number(node.y || 0) + Number(node.height || 0)), 17);
-  const standardContinuationY = Math.min(82, Math.max(22, repeatedHeaderBottom + 2.5));
+    .filter(node => node.enabled !== false && isPdfFrameHeaderNode(node) && !isPdfFirstPageOnlyInfoNode(node.id))
+    .reduce((bottom, node) => Math.max(bottom, Number(node.y || 0) + Number(node.height || 0)), fallbackRepeatedHeaderBottom);
+  const standardContinuationY = getPdfStandardContinuationY(repeatedHeaderBottom);
   const hasRepeatableReportHeader = pageNumber > 1 && definition.nodes.some(item => item.enabled !== false && item.type !== 'report-sections' && !item.firstPageOnly && Number(item.y || 0) < 30);
   const hasParty = definition.nodes.some(node => partyField(node) && hasRenderablePartyValue(node, data));
   definition.nodes
@@ -1419,11 +1539,11 @@ function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRend
     .filter(node => !(styleConfig?.htmlTemplate?.headerHtml.trim() && isPdfFrameHeaderNode(node)))
     .filter(node => !(styleConfig?.htmlTemplate?.footerHtml.trim() && isPdfFrameFooterNode(node)))
     .filter(node => !(data.dashboardCover === true && node.type === 'report-sections'))
-    .filter(node => !(isStandardLayout && pageNumber > 1 && (singlePageInfoNodeIds.has(node.id) || node.id === 'party-section' || node.id.startsWith('party-') || node.id.startsWith('cashier-'))))
+    .filter(node => !(isStandardLayout && pageNumber > 1 && (isPdfFirstPageOnlyInfoNode(node.id) || node.id === 'party-section' || node.id.startsWith('party-') || node.id.startsWith('cashier-'))))
     .filter(node => !(isStandardLayout && ['notes', 'document-notes'].includes(node.id)))
     .filter(node => node.type !== 'chart' || Boolean(data.dashboardCharts?.some(chart => chart.id === node.token)))
     .filter(node => node.type !== 'chart' || !dashboardPageMode || (dashboardPageMode === 'overview' ? isDashboardTrendNode(node) : dashboardPageMode === 'detail' ? !isDashboardTrendNode(node) : false))
-    .filter(node => node.type === 'chart' && dashboardPageMode === 'detail' ? true : !node.firstPageOnly || pageNumber === 1)
+    .filter(node => node.type === 'chart' && dashboardPageMode === 'detail' ? true : shouldRenderPdfNodeOnPage(node.id, node.firstPageOnly, pageNumber))
     .filter(node => settings.showPageNumber !== false || node.token !== 'page.number')
     // En un reporte individual los totales y las notas pertenecen a la última
     // página. Dejarlos en cada página hace que ocupen el espacio de la tabla
@@ -1972,7 +2092,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       return {
         ...logoAdjustedDefinition,
         nodes: logoAdjustedDefinition.nodes.some(node => node.id === 'company-logo')
-          ? logoAdjustedDefinition.nodes.map(node => node.id === 'company-logo' ? { ...node, enabled: true } : node)
+          ? logoAdjustedDefinition.nodes.map(node => node.id === 'company-logo' ? { ...node, enabled: true, firstPageOnly: false } : node)
           : [...logoAdjustedDefinition.nodes, { ...logoNode, enabled: true }],
       };
     })()
@@ -2016,11 +2136,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
   const visibleReportSections = reportNode
     ? indexedReportSections.filter(section => reportNode.reportSectionVisibility?.[String(section.templateIndex)] !== false)
     : indexedReportSections;
-  const reportPagination = targetKey === 'ventas.cash-session'
-    ? { firstPageCapacity: 16, continuationPageCapacity: 24 }
-    : targetKey === 'ventas.customers'
-      ? { firstPageCapacity: 11, continuationPageCapacity: 17 }
-      : undefined;
+  const reportPagination = getPdfReportPagination(targetKey);
   const sectionGroups: Array<PdfTemplateReportSection[] | null> = reportNode
     ? (visibleReportSections.length ? paginatePdfReportSections(visibleReportSections, reportPagination) : [[]])
     : visibleReportSections.length
@@ -2123,6 +2239,9 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
   renderDocument.close();
   const wrapper = renderDocument.body;
   Object.assign(wrapper.style, { width: `${width}mm`, height: `${height}mm`, overflow: 'visible', background: '#fff' });
+  const logoImageProperties = safeLogo
+    ? (() => { try { return pdf.getImageProperties(safeLogo); } catch { return null; } })()
+    : null;
   try {
     for (let index = 0; index < renderJobs.length; index += 1) {
       onProgress?.({ page: index + 1, totalPages: renderJobs.length });
@@ -2137,6 +2256,9 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       reflowPartySection(page, job.definition, settings, target.key);
       reflowCompactPurchaseListTable(page, job.definition, pageData, target.key);
       reflowIndividualPage(page, job.definition, isSalesPdfLayoutTarget(target.key) && target.structure === 'transaction');
+      const logoOverlayRect = logoImageProperties?.width && logoImageProperties?.height
+        ? getPdfCompanyLogoOverlayRect(page, job.definition, width, height)
+        : null;
       const requestedRenderScale = Number((job.data as Record<string, unknown>).renderScale);
       const pageHasCharts = Boolean(page.querySelector('[data-pdf-node-type="chart"]'));
       const renderScale = Math.max(0.9, Math.min(2.5, requestedRenderScale || (pageHasCharts ? 2.5 : 1.5)));
@@ -2146,11 +2268,14 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
         logging: false,
         useCORS: true,
         allowTaint: false,
-        foreignObjectRendering: false,
+        foreignObjectRendering: true,
       });
       if (index > 0) pdf.addPage([width, height], settings.orientation === 'landscape' ? 'l' : 'p');
       try {
         pdf.addImage(canvas, 'PNG', 0, 0, width, height, undefined, 'FAST');
+        if (safeLogo && logoImageProperties?.fileType && logoOverlayRect) {
+          pdf.addImage(safeLogo, logoImageProperties.fileType, logoOverlayRect.x, logoOverlayRect.y, logoOverlayRect.width, logoOverlayRect.height, undefined, 'FAST');
+        }
       } finally {
         canvas.width = 0;
         canvas.height = 0;
