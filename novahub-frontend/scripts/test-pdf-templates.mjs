@@ -16,8 +16,80 @@ try {
   const definitions = await server.ssrLoadModule('/src/app/services/pdf-template-definition.ts');
   const renderer = await server.ssrLoadModule('/src/app/utils/pdf-template-renderer.ts');
   const styles = await server.ssrLoadModule('/src/app/services/pdf-document-style.ts');
+  const designService = await server.ssrLoadModule('/src/app/services/pdf-document-design.service.ts');
   const generator = await server.ssrLoadModule('/src/app/utils/pdfGenerator.ts');
   const targets = catalog.PDF_TEMPLATE_TARGETS;
+
+  assert.equal(renderer.browserFontFamily('Inter'), '"Inter", sans-serif', 'La familia elegida debe conservarse en el render final en vez de colapsar a Arial.');
+  assert.equal(renderer.browserFontFamily('Merriweather'), '"Merriweather", serif', 'Las fuentes serif deben conservar su familia local y fallback correcto.');
+  assert.equal(renderer.browserFontFamily('JetBrains Mono'), '"JetBrains Mono", monospace', 'Las fuentes monoespaciadas deben conservar su familia local y fallback correcto.');
+  const fontSourceDefinition = {
+    nodes: [{ id: 'font-sample', type: 'text', fontFamily: 'Georgia', fontWeight: 700, italic: true, fontSize: 12, align: 'right' }],
+  };
+  const selectedFontDefinition = renderer.applyPdfDocumentFontFamily(fontSourceDefinition, 'Inter');
+  assert.equal(selectedFontDefinition.nodes[0].fontFamily, 'Inter', 'La tipografía global debe reemplazar la familia guardada en cada nodo.');
+  assert.deepEqual(
+    ['fontWeight', 'italic', 'fontSize', 'align'].map(key => selectedFontDefinition.nodes[0][key]),
+    [700, true, 12, 'right'],
+    'La tipografía global debe preservar peso, cursiva, tamaño relativo y alineación del nodo.'
+  );
+  assert.equal(fontSourceDefinition.nodes[0].fontFamily, 'Georgia', 'Aplicar la tipografía global no debe mutar la definición guardada.');
+  const effectiveImportedStyle = renderer.resolvePdfStyleConfigForRender(
+    { fontFamily: 'Georgia', fontSize: 12, presetId: 'boxed', tableStyle: 'boxed', palette: { primary: '#112233', tableHeader: '#223344' } },
+    { fontFamily: 'Inter', fontSize: 10, pdfStylePreset: 'striped', pdfTableStyle: 'striped', primaryColor: '#abcdef', tableHeaderColor: '#fedcba' },
+  );
+  assert.equal(effectiveImportedStyle.fontFamily, 'Inter', 'Un estilo HTML importado no debe reemplazar la fuente compartida seleccionada.');
+  assert.equal(effectiveImportedStyle.fontSize, 10);
+  assert.equal(effectiveImportedStyle.tableStyle, 'striped');
+  assert.equal(effectiveImportedStyle.palette.primary, '#abcdef');
+  assert.equal(effectiveImportedStyle.palette.tableHeader, '#fedcba');
+  const globalReportSettings = generator.getGlobalReportSettings({
+    fontFamily: 'Inter', fontSize: 10, headerComposition: 'centered-stack', headerContentSpacing: 'large',
+    pdfTableStyle: 'striped', tableHeaderColor: '#123456', pdfAppearancePalette: { tableHeader: '#123456' },
+  }, 'NovaHub');
+  assert.equal(globalReportSettings.fontFamily, 'Inter', 'Los reportes con estructura propia deben conservar la apariencia de fuente resuelta.');
+  assert.equal(globalReportSettings.headerComposition, 'centered-stack');
+  assert.equal(globalReportSettings.headerContentSpacing, 'large');
+  assert.equal(globalReportSettings.pdfTableStyle, 'striped');
+  assert.equal(globalReportSettings.tableHeaderColor, '#123456');
+  const repairedLegacyLayout = generator.resolvePdfDesignForRender('ventas.estimate', {
+    settings: { paperSize: 'LETTER', orientation: 'portrait', fontFamily: 'Lora', headerContentSpacing: 'large', pdfStylePreset: 'striped', primaryColor: '#123456' },
+    layoutZones: { definition: { nodes: [] } },
+    appearance: { profile: { fontFamily: 'Lora' } },
+  });
+  assert.equal(repairedLegacyLayout.settings.fontFamily, 'Lora', 'Actualizar la estructura vieja no debe descartar la fuente global resuelta.');
+  assert.equal(repairedLegacyLayout.settings.headerContentSpacing, 'large');
+  assert.equal(repairedLegacyLayout.settings.pdfStylePreset, 'striped');
+  assert.equal(repairedLegacyLayout.settings.primaryColor, '#123456');
+  assert.equal(repairedLegacyLayout.appearance.profile.fontFamily, 'Lora');
+  assert.equal(catalog.isPdfTemplateFixed('ventas.cash-ticket'), true, 'Los tickets físicos deben permanecer fuera de la apariencia global.');
+  assert.equal(catalog.isPdfTemplateFixed('inventario.product-labels'), true, 'Las etiquetas físicas deben permanecer fuera de la apariencia global.');
+  {
+    const service = designService.pdfDocumentDesignService;
+    const originalActive = service.active;
+    const originalGetProfile = service.getAppearanceProfile;
+    let profileReads = 0;
+    service.active = async () => null;
+    service.getAppearanceProfile = async () => {
+      profileReads += 1;
+      return { fontFamily: 'Inter', headerComposition: 'logo-left-company-right', headerContentSpacing: 'medium' };
+    };
+    try {
+      generator.clearPdfDesignCache();
+      const resolvedDesign = await generator.getPdfDesign('auditoria.logs');
+      assert.equal(resolvedDesign.settings.fontFamily, 'Inter', 'El diseño efectivo debe heredar la fuente del perfil de sucursal.');
+      assert.equal(resolvedDesign.settings.headerComposition, 'logo-left-company-right');
+      assert.equal(resolvedDesign.settings.headerContentSpacing, 'medium');
+      assert.equal(profileReads, 1, 'El perfil de apariencia debe quedar cacheado con el diseño de la sucursal.');
+      generator.clearPdfDesignCache();
+      await generator.getPdfDesign('inventario.product-labels');
+      assert.equal(profileReads, 1, 'Los formatos físicos fijos no deben cargar el perfil visual.');
+    } finally {
+      service.active = originalActive;
+      service.getAppearanceProfile = originalGetProfile;
+      generator.clearPdfDesignCache();
+    }
+  }
 
   assert.equal(definitions.resolveTemplateToken('supplier.name', { party: { name: 'Proveedor de prueba' } }), 'Proveedor de prueba', 'Las plantillas de Compras deben leer el proveedor del alias compartido party usado por sus exportadores.');
   assert.equal(definitions.resolveTemplateToken('customer.name', { party: { name: 'Cliente de prueba' } }), 'Cliente de prueba', 'Las plantillas de Ventas deben aceptar los datos de contraparte que llegan bajo party.');

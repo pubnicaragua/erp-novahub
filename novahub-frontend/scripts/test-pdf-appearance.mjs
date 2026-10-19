@@ -3,8 +3,11 @@ import {
   PDF_APPEARANCE_FONTS,
   inferLegacyPdfAppearanceOverrides,
   normalizePdfAppearanceProfile,
+  resolvePdfDesignAppearance,
   resetPdfAppearanceOverride,
   resolvePdfAppearance,
+  updatePdfAppearanceDraft,
+  clearPdfAppearanceFallback,
 } from '../src/app/services/pdf-appearance.ts';
 
 const fallback = {
@@ -73,6 +76,60 @@ const fallback = {
   assert.deepEqual(normalized, { palette: { primary: '#abcdef' } });
   assert.ok(PDF_APPEARANCE_FONTS.includes('Inter'));
   assert.ok(PDF_APPEARANCE_FONTS.includes('JetBrains Mono'));
+}
+
+{
+  const resolved = resolvePdfDesignAppearance(
+    { headerComposition: 'company-left-logo-right', headerContentSpacing: 'small', fontFamily: 'Arial', appearanceOverrides: { fontFamily: 'Lora' }, paperSize: 'A4', orientation: 'landscape' },
+    { metadata: { pdfStyleConfig: { fontFamily: 'Georgia', fontSize: 9, palette: { primary: '#123456' }, tableStyle: 'light' } } },
+    { fontFamily: 'Inter', headerContentSpacing: 'large', palette: { primary: '#abcdef', tableHeader: '#234567' } },
+  );
+  assert.equal(resolved.settings.fontFamily, 'Lora', 'El override local debe prevalecer sobre el perfil y los estilos heredados.');
+  assert.equal(resolved.settings.headerContentSpacing, 'large', 'Los valores no personalizados localmente deben heredar el perfil global.');
+  assert.equal(resolved.settings.primaryColor, '#abcdef', 'La paleta global debe aplicarse por propiedad.');
+  assert.equal(resolved.settings.tableHeaderColor, '#234567', 'La paleta de tabla global debe llegar al renderer.');
+  assert.equal(resolved.settings.paperSize, 'A4', 'La apariencia no debe cambiar el papel del documento.');
+  assert.equal(resolved.settings.orientation, 'landscape', 'La apariencia no debe cambiar la orientación del documento.');
+}
+
+{
+  const reset = resolvePdfDesignAppearance(
+    { fontFamily: 'Georgia', appearanceOverrides: {} },
+    { metadata: { pdfStyleConfig: { fontFamily: 'Georgia' } } },
+    { fontFamily: 'Inter' },
+  );
+  assert.equal(reset.settings.fontFamily, 'Inter', 'Un objeto local vacío explícito debe seguir heredando tras restablecer.');
+  assert.deepEqual(reset.overrides, {});
+}
+
+{
+  const legacyDefinition = { metadata: { pdfStyleConfig: { fontFamily: 'Lora', palette: { primary: '#123456' } } } };
+  const legacySettings = { fontFamily: 'Lora', primaryColor: '#123456' };
+  const clearedFont = clearPdfAppearanceFallback(legacySettings, legacyDefinition, 'fontFamily');
+  const resetFont = resolvePdfDesignAppearance({ ...clearedFont.settings, appearanceOverrides: {} }, clearedFont.definition, {});
+  assert.equal(resetFont.settings.fontFamily, 'Arial', 'Restablecer una fuente local sin perfil global debe volver a la fuente ERP por defecto.');
+  assert.equal(legacySettings.fontFamily, 'Lora', 'Limpiar un override no debe mutar el diseño fuente.');
+
+  const clearedPrimary = clearPdfAppearanceFallback(legacySettings, legacyDefinition, 'palette.primary');
+  const resetPrimary = resolvePdfDesignAppearance({ ...clearedPrimary.settings, appearanceOverrides: {} }, clearedPrimary.definition, {});
+  assert.equal(resetPrimary.settings.primaryColor, '#65536b', 'Restablecer un color local debe descartar el valor legado del estilo.');
+
+  const clearedAll = clearPdfAppearanceFallback(
+    { paperSize: 'A4', orientation: 'landscape', fontFamily: 'Lora', margins: 18 },
+    { nodes: [{ id: 'items', type: 'table' }], metadata: { pdfStyleConfig: { fontFamily: 'Lora' } } },
+  );
+  assert.deepEqual([clearedAll.settings.paperSize, clearedAll.settings.orientation, clearedAll.settings.margins], ['A4', 'landscape', 18], 'Restablecer apariencia debe conservar papel y márgenes del PDF.');
+  assert.deepEqual(clearedAll.definition.nodes, [{ id: 'items', type: 'table' }], 'Restablecer apariencia no debe alterar contenido del documento.');
+}
+
+{
+  const branchDraft = updatePdfAppearanceDraft('branch', { fontFamily: 'Inter' }, { fontFamily: 'Lora' }, 'fontFamily', 'Roboto');
+  assert.deepEqual(branchDraft.profile, { fontFamily: 'Roboto' }, 'La edición global solo debe cambiar el perfil de sucursal.');
+  assert.deepEqual(branchDraft.overrides, { fontFamily: 'Lora' }, 'Editar global no debe mutar overrides locales.');
+  const localDraft = updatePdfAppearanceDraft('document', { fontFamily: 'Inter' }, {}, 'palette.primary', '#abcdef');
+  assert.deepEqual(localDraft.profile, { fontFamily: 'Inter' }, 'La edición local no debe mutar el perfil global.');
+  assert.deepEqual(localDraft.overrides, { palette: { primary: '#abcdef' } });
+  assert.deepEqual(resetPdfAppearanceOverride({ palette: { primary: '#abcdef', text: '#123456' } }, 'palette.primary'), { palette: { text: '#123456' } }, 'Restablecer un color debe conservar los demás overrides de la paleta.');
 }
 
 console.log('Validación PDF appearance aprobada: herencia, paleta, reset, legado y catálogo de fuentes.');

@@ -4,7 +4,8 @@ import JsBarcode from 'jsbarcode';
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { applyPdfHeaderComposition, applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfSettings, ensureDashboardChartNodes, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, pdfTemplateImageShapeStyles, resolveTemplateToken, type PdfHeaderComposition, type PdfHeaderContentSpacing, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
-import { applyPdfStyleToDefinition, getPdfTableCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, normalizePdfFrameGeometry, normalizePdfStyleConfig, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfTableStyle } from '../services/pdf-document-style';
+import { applyPdfStyleToDefinition, getPdfTableCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, normalizePdfFrameGeometry, normalizePdfFontFamily, normalizePdfStyleConfig, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfTableStyle } from '../services/pdf-document-style';
+import { PDF_APPEARANCE_FONTS } from '../services/pdf-appearance';
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
 import { pdfStatusLabel } from './pdfStatus';
 
@@ -613,15 +614,95 @@ async function waitForImages(root: HTMLElement) {
   }))]);
 }
 
-function browserFontFamily(value?: string) {
-  const normalized = String(value || 'helvetica').trim().toLowerCase();
-  if (['times', 'times new roman', 'georgia', 'garamond', 'cambria', 'palatino linotype', 'bookman'].includes(normalized)) {
-    return 'Georgia, "Times New Roman", serif';
+export function browserFontFamily(value?: string) {
+  const family = normalizePdfFontFamily(value || 'Arial');
+  const normalized = family.toLowerCase();
+  const generic = PDF_APPEARANCE_FONTS.slice(6, 9).some(font => font.toLowerCase() === normalized)
+    || ['times new roman', 'georgia', 'garamond', 'cambria', 'palatino linotype', 'bookman'].includes(normalized)
+    ? 'serif'
+    : PDF_APPEARANCE_FONTS.slice(9).some(font => font.toLowerCase() === normalized)
+      || ['courier new', 'consolas', 'monaco'].includes(normalized)
+      ? 'monospace'
+      : 'sans-serif';
+  return `"${family.replace(/"/g, '\\"')}", ${generic}`;
+}
+
+/** Replaces node-level families while preserving all semantic text styling. */
+export function applyPdfDocumentFontFamily<T extends { nodes: any[]; metadata?: Record<string, any> }>(definition: T, fontFamily?: string): T {
+  const family = normalizePdfFontFamily(fontFamily || 'Arial');
+  return { ...definition, nodes: definition.nodes.map(node => ({ ...node, fontFamily: family })) };
+}
+
+function collectPdfFontFaceRules(family: string) {
+  if (typeof document === 'undefined') return [];
+  const expected = family.trim().replace(/^['"]|['"]$/g, '').toLowerCase();
+  const found: string[] = [];
+  const visit = (rules: CSSRuleList) => {
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSFontFaceRule) {
+        const match = rule.style.getPropertyValue('font-family').replace(/^['"]|['"]$/g, '').toLowerCase();
+        if (match === expected) found.push(rule.cssText);
+      } else if ('cssRules' in rule && (rule as CSSGroupingRule).cssRules) {
+        try { visit((rule as CSSGroupingRule).cssRules); } catch { /* la hoja puede estar protegida por CORS */ }
+      }
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) {
+    try { if (sheet.cssRules) visit(sheet.cssRules); } catch { /* omite hojas externas no accesibles */ }
   }
-  if (['courier', 'courier new', 'consolas', 'monaco'].includes(normalized)) {
-    return '"Courier New", Courier, monospace';
+  return [...new Set(found)];
+}
+
+async function waitForPdfDocumentFonts(renderDocument: Document, family?: string) {
+  const selected = normalizePdfFontFamily(family || 'Arial');
+  const rules = collectPdfFontFaceRules(selected);
+  if (rules.length && renderDocument.head) {
+    const style = renderDocument.createElement('style');
+    style.dataset.pdfFontFaces = selected;
+    style.textContent = rules.join('\n');
+    renderDocument.head.appendChild(style);
   }
-  return 'Arial, Helvetica, sans-serif';
+  const fontSet = renderDocument.fonts;
+  if (!fontSet) return;
+  const cssFamily = browserFontFamily(selected).split(',')[0];
+  try {
+    await Promise.all(['400', '700'].map(weight => fontSet.load(`${weight} 12px ${cssFamily}`)));
+    await fontSet.ready;
+  } catch {
+    // Keep the browser's generic fallback if a local font asset is unavailable.
+  }
+}
+
+function enforcePdfDocumentFont(root: HTMLElement, family?: string) {
+  const cssFamily = browserFontFamily(family);
+  root.style.setProperty('font-family', cssFamily, 'important');
+  root.querySelectorAll<HTMLElement>('*').forEach(element => element.style.setProperty('font-family', cssFamily, 'important'));
+}
+
+export function resolvePdfStyleConfigForRender(value: unknown, settings: Record<string, unknown>) {
+  const stored = normalizePdfStyleConfig(value);
+  if (!stored) return undefined;
+  const requestedPalette = settings.pdfAppearancePalette;
+  const palette = requestedPalette && typeof requestedPalette === 'object' ? requestedPalette as Record<string, unknown> : {};
+  return normalizePdfStyleConfig({
+    ...stored,
+    fontFamily: settings.fontFamily || stored.fontFamily,
+    fontSize: settings.fontSize || stored.fontSize,
+    presetId: settings.pdfStylePreset || stored.presetId,
+    tableStyle: settings.pdfTableStyle || stored.tableStyle,
+    palette: {
+      ...stored.palette,
+      primary: palette.primary || settings.primaryColor || stored.palette.primary,
+      secondary: palette.secondary || settings.secondaryColor || stored.palette.secondary,
+      text: palette.text || settings.textColor || stored.palette.text,
+      line: palette.line || settings.lineColor || stored.palette.line,
+      tableHeader: palette.tableHeader || settings.tableHeaderColor || stored.palette.tableHeader,
+      tableHeaderText: palette.tableHeaderText || settings.tableHeaderTextColor || stored.palette.tableHeaderText,
+      tableRow: palette.tableRow || settings.tableRowColor || stored.palette.tableRow,
+      tableStripe: palette.tableStripe || settings.tableStripeColor || stored.palette.tableStripe,
+      tableBorder: palette.tableBorder || settings.tableBorderColor || stored.palette.tableBorder,
+    },
+  });
 }
 
 /**
@@ -759,7 +840,7 @@ function setBaseNodeStyle(element: HTMLDivElement, node: PdfTemplateNode, settin
     position: 'absolute', left: `${nodeX}%`, top: `${node.y}%`, width: `${nodeWidth}%`, height: `${node.height}%`, boxSizing: 'border-box',
     padding: `${verticalPadding}% ${horizontalPadding}%`, color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155'), backgroundColor: imageNode ? 'transparent' : safeHtml2CanvasColor(node.backgroundColor, 'transparent'),
     borderColor: safeHtml2CanvasColor(node.borderColor || settings.lineColor, '#e2e8f0'), borderStyle: imageNode ? 'none' : borderStyle, borderWidth: imageNode ? '0' : node.type === 'divider' ? '1px' : borderStyle === 'none' ? '0' : borderStyle === 'double' ? '3px' : '1px', borderRadius: imageNode ? '0' : borderRadius, clipPath: imageNode ? 'none' : clipPath, opacity: String(node.opacity ?? 1), transform: node.rotation ? `rotateZ(${node.rotation}deg)` : '', transformOrigin: 'center center', fontSize: pdfPointsToCss(node.fontSize || settings.fontSize || 9),
-    fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontWeight: String(node.fontWeight || (node.bold ? 700 : 400)), fontStyle: node.italic ? 'italic' : 'normal', textAlign: node.align || 'left',
+    fontFamily: browserFontFamily(settings.fontFamily), fontWeight: String(node.fontWeight || (node.bold ? 700 : 400)), fontStyle: node.italic ? 'italic' : 'normal', textAlign: node.align || 'left',
     textDecorationLine: [node.underline ? 'underline' : '', node.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ') || 'none',
     textTransform: node.textTransform || 'none', letterSpacing: `${node.letterSpacing || 0}px`,
     overflow: imageNode ? 'visible' : 'hidden', lineHeight: String(node.lineHeight || 1.25), display: textualNode ? 'flex' : 'block', alignItems: node.id === 'company-summary' || (node.type === 'section' && node.id === 'party-section') ? 'flex-start' : 'center',
@@ -898,7 +979,7 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const columns = node.columns?.length ? node.columns : [{ id: 'description', label: 'Descripción', token: 'description', width: 70 }, { id: 'total', label: 'Total', token: 'total', width: 30, align: 'right' as const }];
   const compact = node.id === 'items-table' || columns.length >= 5 || isRollPaper;
   table.style.fontSize = pdfPointsToCss(Math.max(isRollPaper ? 6.5 : compact ? 7 : 7.5, (node.fontSize || settings.fontSize || 9) - (isRollPaper ? 1.2 : compact ? 1.8 : 1) + salesTableTextBoost));
-  table.style.fontFamily = browserFontFamily(node.fontFamily || settings.fontFamily); table.style.tableLayout = 'fixed'; table.style.lineHeight = compact ? '1.12' : '1.25';
+  table.style.fontFamily = browserFontFamily(settings.fontFamily); table.style.tableLayout = 'fixed'; table.style.lineHeight = compact ? '1.12' : '1.25';
   const head = table.createTHead().insertRow();
   const tableLayout = settings.tableLayout || 'standard';
   const primaryColor = safeHtml2CanvasColor(settings.primaryColor, '#10b981');
@@ -1062,11 +1143,11 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
     Object.assign(sectionElement.style, { width: '100%', marginBottom: sectionIndex === sections.length - 1 ? '0' : compact ? '6px' : '9px', overflow: 'visible' });
     const title = document.createElement('div');
     title.textContent = section.title;
-    Object.assign(title.style, { display: 'block', boxSizing: 'border-box', width: fullWidthReportSections ? '100%' : '96%', height: 'auto', minHeight: pdfPointsToCss(tableTitleFontSize), margin: fullWidthReportSections ? '0' : '0 auto 15px', color: textColor, fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(tableTitleFontSize), fontWeight: '700', lineHeight: '1.25', padding: '2px 0 1px', borderBottom: 'none', whiteSpace: 'normal', overflow: 'visible', overflowWrap: 'anywhere' });
+    Object.assign(title.style, { display: 'block', boxSizing: 'border-box', width: fullWidthReportSections ? '100%' : '96%', height: 'auto', minHeight: pdfPointsToCss(tableTitleFontSize), margin: fullWidthReportSections ? '0' : '0 auto 15px', color: textColor, fontFamily: browserFontFamily(settings.fontFamily), fontSize: pdfPointsToCss(tableTitleFontSize), fontWeight: '700', lineHeight: '1.25', padding: '2px 0 1px', borderBottom: 'none', whiteSpace: 'normal', overflow: 'visible', overflowWrap: 'anywhere' });
     sectionElement.appendChild(title);
 
     const table = document.createElement('table');
-    Object.assign(table.style, { width: fullWidthReportSections ? '100%' : '96%', height: 'auto', margin: fullWidthReportSections ? `${sectionTableGap}px 0 0` : '0 auto', borderCollapse: tablePresentation.rowGap ? 'separate' : 'collapse', borderSpacing: tablePresentation.rowGap ? `0 ${tablePresentation.rowGap}px` : '0', tableLayout: 'fixed', fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(tableFontSize), lineHeight: compact ? '1.25' : '1.3' });
+    Object.assign(table.style, { width: fullWidthReportSections ? '100%' : '96%', height: 'auto', margin: fullWidthReportSections ? `${sectionTableGap}px 0 0` : '0 auto', borderCollapse: tablePresentation.rowGap ? 'separate' : 'collapse', borderSpacing: tablePresentation.rowGap ? `0 ${tablePresentation.rowGap}px` : '0', tableLayout: 'fixed', fontFamily: browserFontFamily(settings.fontFamily), fontSize: pdfPointsToCss(tableFontSize), lineHeight: compact ? '1.25' : '1.3' });
     table.setAttribute('data-responsive-cards', 'false');
     const head = table.createTHead().insertRow();
     Object.assign(head.style, { backgroundColor: safeHtml2CanvasColor(sectionHeaderBackground, headerBackground), color: safeHtml2CanvasColor(sectionHeaderText, headerColor), height: 'auto', lineHeight: compact ? '1.15' : '1.2' });
@@ -1225,7 +1306,7 @@ function createChartNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const chartType = node.chartType || chart.type;
   const title = document.createElement('div');
   title.textContent = chart.title || node.label;
-  Object.assign(title.style, { flex: '0 0 auto', minHeight: pdfPointsToCss(8), maxHeight: pdfPointsToCss(20), fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(8), fontWeight: '700', color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155'), lineHeight: '1.15', whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', overflowWrap: 'anywhere', position: 'relative', zIndex: '1' });
+  Object.assign(title.style, { flex: '0 0 auto', minHeight: pdfPointsToCss(8), maxHeight: pdfPointsToCss(20), fontFamily: browserFontFamily(settings.fontFamily), fontSize: pdfPointsToCss(8), fontWeight: '700', color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155'), lineHeight: '1.15', whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', overflowWrap: 'anywhere', position: 'relative', zIndex: '1' });
   element.appendChild(title);
   const viewBox = chartType === 'area' ? '0 0 420 230' : '0 0 360 220';
   const svg = svgElement('svg', { viewBox, preserveAspectRatio: 'xMidYMid meet', width: '100%', height: '100%' });
@@ -2161,8 +2242,9 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
     : requestedSettings as unknown as Record<string, unknown>;
   const baseSettings = normalizePdfPaperSettings(target.key, applyStandardPdfLayoutSettings(target.key, standardSettings)) as PdfTemplateRenderSettings & Record<string, unknown>;
   // El estándar fija la geometría base del ERP; una personalización guardada
-  // puede seguir aplicando paleta, tipografía y presentación de tabla.
-  const pdfStyleConfig = normalizePdfStyleConfig(definition.metadata?.pdfStyleConfig);
+  // puede seguir aplicando paleta y presentación de tabla. Los campos de
+  // apariencia resueltos en settings tienen prioridad sobre el estilo legacy.
+  const pdfStyleConfig = resolvePdfStyleConfigForRender(definition.metadata?.pdfStyleConfig, baseSettings);
   const tableLayoutByStyle: Record<string, string> = { light: 'minimal', boxed: 'boxed', bold: 'boxed', striped: 'striped', bubble: 'cards', wave: 'accent', folder: 'ledger' };
   const settings = applyStandardPdfLayoutSettings(target.key, pdfStyleConfig ? {
     ...baseSettings,
@@ -2233,7 +2315,10 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
   const composedDefinition = pdfStyleConfig?.htmlTemplate?.headerHtml.trim()
     ? ensuredDefinition
     : applyPdfHeaderComposition(ensuredDefinition, settings.headerComposition, targetKey);
-  const baseDefinition = pdfStyleConfig ? applyPdfStyleToDefinition(composedDefinition, pdfStyleConfig) : composedDefinition;
+  const styledDefinition = pdfStyleConfig ? applyPdfStyleToDefinition(composedDefinition, pdfStyleConfig) : composedDefinition;
+  const baseDefinition = target.templateMode === 'fixed'
+    ? styledDefinition
+    : applyPdfDocumentFontFamily(styledDefinition, settings.fontFamily);
   const isRepeatedLabel = getPdfTemplateTarget(targetKey).key === 'inventario.product-labels';
   // LABEL ya define sus dimensiones físicas como 70 × 38 mm. No se debe
   // volver a intercambiar ese par por la orientación, porque jsPDF terminaría
@@ -2383,6 +2468,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       const page = renderPage(job.definition, settings, pageData, width, height, targetKey);
       page.id = `pdf-template-page-${index}`;
       wrapper.appendChild(page);
+      await waitForPdfDocumentFonts(renderDocument, settings.fontFamily);
       await waitForImages(page);
       reflowCompanyIdentitySummary(page, job.definition);
       reflowFirstPageBelowCompanyHeader(page, job.definition, settings, index + 1);
@@ -2390,6 +2476,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       reflowPartySection(page, job.definition, settings, target.key, index + 1);
       reflowCompactPurchaseListTable(page, job.definition, pageData, target.key);
       reflowIndividualPage(page, job.definition, isSalesPdfLayoutTarget(target.key) && target.structure === 'transaction');
+      if (target.templateMode !== 'fixed') enforcePdfDocumentFont(page, settings.fontFamily);
       const logoOverlayRect = logoImageProperties?.width && logoImageProperties?.height
         ? getPdfCompanyLogoOverlayRect(page, job.definition, width, height)
         : null;
