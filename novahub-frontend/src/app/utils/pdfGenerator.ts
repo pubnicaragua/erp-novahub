@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import jspdfAutoTable from 'jspdf-autotable';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
-import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
+import { getPdfTemplateTarget, isPdfTemplateFixed } from '../services/pdf-document-catalog';
 import { getBase64Image } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
@@ -15,6 +15,7 @@ import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, create
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
 import { isEstimateCustomFieldExpired, normalizeEstimateImages } from '../types';
+import { resolvePdfDesignAppearance, type PdfAppearanceProfile } from '../services/pdf-appearance';
 
 type PdfRgb = [number, number, number];
 
@@ -41,16 +42,40 @@ type ReportPdfKpi = {
 const PDF_DESIGN_CACHE_TTL_MS = 5 * 60_000;
 const pdfDesignCache = new Map<string, { value: any; expiresAt: number }>();
 const pdfDesignRequests = new Map<string, Promise<any>>();
+const pdfAppearanceProfileCache = new Map<string, { value: PdfAppearanceProfile; expiresAt: number }>();
+const pdfAppearanceProfileRequests = new Map<string, Promise<PdfAppearanceProfile>>();
+let activePdfDesignScope = '';
 
 function pdfDesignCacheScope() {
   if (typeof window === 'undefined') return 'server';
   try {
     const branding = JSON.parse(window.localStorage.getItem('nh-session-branding') || 'null');
-    // El diseño es por tenant. No usar solo logo/nombre evita reutilizar una
-    // plantilla al cambiar de usuario o de sucursal en el mismo navegador.
-    return String(branding?.tenantId || branding?.name || branding?.logo || 'browser');
+    // AuthContext guarda tenantId como el clientTenant activo (sucursal);
+    // nombre/logo no son identificadores de scope seguros para la caché.
+    return String(branding?.tenantId || 'browser');
   } catch {
     return 'browser';
+  }
+}
+
+async function loadPdfAppearanceProfile(scope: string) {
+  const cached = pdfAppearanceProfileCache.get(scope);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached) pdfAppearanceProfileCache.delete(scope);
+  const existing = pdfAppearanceProfileRequests.get(scope);
+  if (existing) return existing;
+  const request = pdfDocumentDesignService.getAppearanceProfile()
+    .then(value => value && typeof value === 'object' ? value as PdfAppearanceProfile : {})
+    .catch(() => ({} as PdfAppearanceProfile));
+  pdfAppearanceProfileRequests.set(scope, request);
+  try {
+    const value = await request;
+    if (pdfAppearanceProfileRequests.get(scope) === request) {
+      pdfAppearanceProfileCache.set(scope, { value, expiresAt: Date.now() + PDF_DESIGN_CACHE_TTL_MS });
+    }
+    return value;
+  } finally {
+    if (pdfAppearanceProfileRequests.get(scope) === request) pdfAppearanceProfileRequests.delete(scope);
   }
 }
 
@@ -61,6 +86,10 @@ export function clearPdfDesignCache(targetKey?: string) {
   }
   for (const key of pdfDesignRequests.keys()) {
     if (!normalizedTarget || key.endsWith(`:${normalizedTarget}`)) pdfDesignRequests.delete(key);
+  }
+  if (!normalizedTarget) {
+    pdfAppearanceProfileCache.clear();
+    pdfAppearanceProfileRequests.clear();
   }
 }
 
@@ -292,14 +321,37 @@ async function loadPdfDesign(targetKey: string) {
 
 export async function getPdfDesign(targetKey: string) {
   const normalizedTarget = getPdfTemplateTarget(targetKey).key;
-  const cacheKey = `${pdfDesignCacheScope()}:${normalizedTarget}`;
+  const scope = pdfDesignCacheScope();
+  if (activePdfDesignScope && activePdfDesignScope !== scope) {
+    pdfDesignCache.clear();
+    pdfDesignRequests.clear();
+    pdfAppearanceProfileCache.clear();
+    pdfAppearanceProfileRequests.clear();
+  }
+  activePdfDesignScope = scope;
+  const cacheKey = `${scope}:${normalizedTarget}`;
   const cached = pdfDesignCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   if (cached) pdfDesignCache.delete(cacheKey);
   const existingRequest = pdfDesignRequests.get(cacheKey);
   if (existingRequest) return existingRequest;
 
-  const request = loadPdfDesign(normalizedTarget);
+  const request = (async () => {
+    const design = await loadPdfDesign(normalizedTarget);
+    if (isPdfTemplateFixed(normalizedTarget)) return design;
+    const profile = await loadPdfAppearanceProfile(scope);
+    const definition = (design?.layoutZones as any)?.definition;
+    const appearance = resolvePdfDesignAppearance(
+      (design?.settings || {}) as Record<string, unknown>,
+      definition,
+      profile,
+    );
+    return {
+      ...design,
+      settings: appearance.settings,
+      appearance: { profile, overrides: appearance.overrides, effective: appearance.effective },
+    };
+  })();
   pdfDesignRequests.set(cacheKey, request);
   try {
     const value = await request;
@@ -368,6 +420,22 @@ export function getGlobalReportSettings(source: Record<string, any> | undefined,
     textColor: value('textColor', defaults.textColor),
     lineColor: value('lineColor', defaults.lineColor),
     backgroundColor: value('backgroundColor', defaults.backgroundColor),
+    // Los reportes conservan su estructura propia, pero heredan la apariencia
+    // visual activa del destino: fuente, espacios, paleta y estilo de tabla.
+    headerComposition: value('headerComposition', defaults.headerComposition),
+    headerContentSpacing: value('headerContentSpacing', defaults.headerContentSpacing),
+    fontFamily: value('fontFamily', defaults.fontFamily),
+    fontSize: value('fontSize', defaults.fontSize),
+    pdfStylePreset: value('pdfStylePreset', defaults.pdfStylePreset),
+    pdfTableStyle: value('pdfTableStyle', defaults.pdfTableStyle),
+    tableLayout: value('tableLayout', defaults.tableLayout),
+    tableHeaderColor: value('tableHeaderColor', defaults.tableHeaderColor),
+    tableHeaderTextColor: value('tableHeaderTextColor', defaults.tableHeaderTextColor),
+    tableRowColor: value('tableRowColor', defaults.tableRowColor),
+    tableStripeColor: value('tableStripeColor', defaults.tableStripeColor),
+    tableBorderColor: value('tableBorderColor', defaults.tableBorderColor),
+    appearanceOverrides: value('appearanceOverrides', defaults.appearanceOverrides),
+    pdfAppearancePalette: value('pdfAppearancePalette', defaults.pdfAppearancePalette),
   };
 }
 
@@ -2634,13 +2702,29 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
   return { doc, blob };
 }
 
+const LEGACY_LAYOUT_PRESERVED_SETTINGS = [
+  'paperSize', 'orientation', 'margins',
+  'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'pdfStylePreset', 'pdfTableStyle', 'tableLayout',
+  'primaryColor', 'secondaryColor', 'textColor', 'lineColor', 'tableHeaderColor', 'tableHeaderTextColor',
+  'tableRowColor', 'tableStripeColor', 'tableBorderColor', 'pdfAppearancePalette', 'appearanceOverrides',
+] as const;
+
+export function resolvePdfDesignForRender(targetKey: string, loadedDesign: any) {
+  const definition = (loadedDesign?.layoutZones as any)?.definition;
+  if (!isStandardPdfLayoutTarget(targetKey) || hasCurrentStandardPdfLayout(targetKey, definition)) return loadedDesign;
+  const systemDesign = createSystemDefaultPdfDesign(targetKey);
+  const sourceSettings = loadedDesign?.settings && typeof loadedDesign.settings === 'object' ? loadedDesign.settings as Record<string, unknown> : {};
+  const settings = { ...(systemDesign.settings || {}) } as Record<string, unknown>;
+  for (const key of LEGACY_LAYOUT_PRESERVED_SETTINGS) {
+    if (Object.prototype.hasOwnProperty.call(sourceSettings, key)) settings[key] = sourceSettings[key];
+  }
+  return { ...systemDesign, settings, appearance: loadedDesign?.appearance };
+}
+
 async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format = 'configured', fileName, designOverride, save = true, onProgress }: { targetKey: string; data: PdfTemplateData; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; fileName: string; designOverride?: any; save?: boolean; onProgress?: (progress: PdfTemplateRenderProgress) => void }) {
   if (format === 'roll-58' || format === 'roll-80') return null;
   const loadedDesign = designOverride || await getPdfDesign(targetKey);
-  const legacySalesDefinition = (loadedDesign?.layoutZones as any)?.definition;
-  const design = isStandardPdfLayoutTarget(targetKey) && !hasCurrentStandardPdfLayout(targetKey, legacySalesDefinition)
-    ? createSystemDefaultPdfDesign(targetKey)
-    : loadedDesign;
+  const design = resolvePdfDesignForRender(targetKey, loadedDesign);
   const baseSettings = { ...(createSystemDefaultPdfDesign(targetKey).settings || {}), ...(design?.settings && typeof design.settings === 'object' ? design.settings : {}) } as Record<string, any>;
   const settings = applyStandardPdfLayoutSettings(targetKey, configuredHistoryPaper(baseSettings, format));
   const renderSettings = normalizePdfPaperSettings(targetKey, { paperSize: 'LETTER', orientation: 'portrait' as const, ...settings });

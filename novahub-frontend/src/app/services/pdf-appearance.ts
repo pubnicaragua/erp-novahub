@@ -31,6 +31,12 @@ export type PdfAppearanceProperty = keyof PdfAppearanceProfile;
 export type PdfAppearanceProfilePatch = Omit<Partial<PdfAppearanceProfile>, 'palette'> & {
   palette?: Partial<Record<PdfAppearancePaletteKey, string | null>> | null;
 };
+export type PdfAppearanceDraftKey = PdfAppearanceProperty | `palette.${PdfAppearancePaletteKey}`;
+export type PdfAppearanceDraftScope = 'branch' | 'document';
+export interface PdfAppearanceDraftState {
+  profile: Partial<PdfAppearanceProfile>;
+  overrides: Partial<PdfAppearanceOverrides>;
+}
 
 export const PDF_APPEARANCE_FONT_GROUPS: Array<{ label: string; families: readonly PdfAppearanceFontFamily[] }> = [
   { label: 'Sans serif', families: ['Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans'] },
@@ -153,6 +159,76 @@ export function inferLegacyPdfAppearanceOverrides(
   return overrides as PdfAppearanceOverrides;
 }
 
+/** Resolves an existing document without rewriting its stored definition. */
+export function resolvePdfDesignAppearance(
+  settingsValue: Record<string, unknown> | null | undefined,
+  definition: Record<string, any> | null | undefined,
+  branchProfile: Partial<PdfAppearanceProfile> | null | undefined,
+) {
+  const settings = settingsValue && typeof settingsValue === 'object' ? settingsValue : {};
+  const styleCandidate = definition?.metadata?.pdfStyleConfig;
+  const style = styleCandidate && typeof styleCandidate === 'object' && !Array.isArray(styleCandidate)
+    ? styleCandidate as Record<string, any>
+    : {};
+  const hasExplicitOverrides = Object.prototype.hasOwnProperty.call(settings, 'appearanceOverrides');
+  const explicitOverrides = settings.appearanceOverrides && typeof settings.appearanceOverrides === 'object'
+    ? settings.appearanceOverrides as PdfAppearanceOverrides
+    : {};
+  // An explicit empty object means the user reset local values and wants to
+  // inherit. Legacy inference must not silently reintroduce a reset value.
+  const overrides = hasExplicitOverrides
+    ? explicitOverrides
+    : inferLegacyPdfAppearanceOverrides('', settings, definition);
+  const legacyPalette = style.palette && typeof style.palette === 'object' ? style.palette : {};
+  const configuredFontFamily = String(style.fontFamily || settings.fontFamily || 'Arial');
+  const fallback: PdfAppearanceOverrides = {
+    headerComposition: settings.headerComposition as PdfHeaderComposition || 'company-left-logo-right',
+    headerContentSpacing: settings.headerContentSpacing as PdfHeaderContentSpacing || 'small',
+    fontFamily: normalizeLegacyFontForComparison(configuredFontFamily) === 'arial' ? 'Arial' : configuredFontFamily,
+    fontSize: Number(style.fontSize || settings.fontSize) || 9,
+    presetId: String(style.presetId || settings.pdfStylePreset || 'light') as PdfAppearancePreset,
+    tableStyle: String(style.tableStyle || settings.pdfTableStyle || 'light') as PdfAppearancePreset,
+    palette: {
+      primary: String(legacyPalette.primary || settings.primaryColor || DEFAULT_STYLE_PALETTE.primary),
+      secondary: String(legacyPalette.secondary || settings.secondaryColor || DEFAULT_STYLE_PALETTE.secondary),
+      text: String(legacyPalette.text || settings.textColor || DEFAULT_STYLE_PALETTE.text),
+      line: String(legacyPalette.line || settings.lineColor || DEFAULT_STYLE_PALETTE.line),
+      tableHeader: String(legacyPalette.tableHeader || settings.tableHeaderColor || DEFAULT_STYLE_PALETTE.tableHeader),
+      tableHeaderText: String(legacyPalette.tableHeaderText || settings.tableHeaderTextColor || DEFAULT_STYLE_PALETTE.tableHeaderText),
+      tableRow: String(legacyPalette.tableRow || settings.tableRowColor || DEFAULT_STYLE_PALETTE.tableRow),
+      tableStripe: String(legacyPalette.tableStripe || settings.tableStripeColor || DEFAULT_STYLE_PALETTE.tableStripe),
+      tableBorder: String(legacyPalette.tableBorder || settings.tableBorderColor || DEFAULT_STYLE_PALETTE.tableBorder),
+    },
+  };
+  const effective = resolvePdfAppearance(fallback, branchProfile, overrides);
+  const tableLayout: Record<PdfAppearancePreset, string> = {
+    light: 'minimal', boxed: 'boxed', bold: 'boxed', striped: 'striped', bubble: 'cards', wave: 'accent', folder: 'ledger',
+  };
+  const palette = effective.palette || {};
+  return {
+    effective,
+    overrides,
+    settings: {
+      ...settings,
+      ...effective,
+      appearanceOverrides: overrides,
+      pdfAppearancePalette: effective.palette,
+      pdfStylePreset: effective.presetId,
+      pdfTableStyle: effective.tableStyle,
+      tableLayout: tableLayout[effective.tableStyle as PdfAppearancePreset] || settings.tableLayout,
+      ...(palette.primary ? { primaryColor: palette.primary } : {}),
+      ...(palette.secondary ? { secondaryColor: palette.secondary } : {}),
+      ...(palette.text ? { textColor: palette.text } : {}),
+      ...(palette.line ? { lineColor: palette.line } : {}),
+      ...(palette.tableHeader ? { tableHeaderColor: palette.tableHeader } : {}),
+      ...(palette.tableHeaderText ? { tableHeaderTextColor: palette.tableHeaderText } : {}),
+      ...(palette.tableRow ? { tableRowColor: palette.tableRow } : {}),
+      ...(palette.tableStripe ? { tableStripeColor: palette.tableStripe } : {}),
+      ...(palette.tableBorder ? { tableBorderColor: palette.tableBorder } : {}),
+    },
+  };
+}
+
 function hasLegacyValue(value: unknown): boolean {
   return value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
 }
@@ -167,8 +243,98 @@ function sameLegacyValue(value: unknown, defaultValue: unknown): boolean {
   return Object.is(value, defaultValue);
 }
 
-export function resetPdfAppearanceOverride(overrides: PdfAppearanceOverrides, key: PdfAppearanceProperty): PdfAppearanceOverrides {
+function setAppearanceDraftValue<T extends Record<string, any>>(source: T, key: PdfAppearanceDraftKey, value: unknown): T {
+  if (key.startsWith('palette.')) {
+    const paletteKey = key.slice('palette.'.length) as PdfAppearancePaletteKey;
+    return { ...source, palette: { ...((source.palette as Record<string, unknown> | undefined) || {}), [paletteKey]: value } };
+  }
+  return { ...source, [key]: value };
+}
+
+export function updatePdfAppearanceDraft(
+  scope: PdfAppearanceDraftScope,
+  profile: Partial<PdfAppearanceProfile>,
+  overrides: Partial<PdfAppearanceOverrides>,
+  key: PdfAppearanceDraftKey,
+  value: unknown,
+): PdfAppearanceDraftState {
+  return scope === 'branch'
+    ? { profile: setAppearanceDraftValue(profile as Record<string, any>, key, value), overrides }
+    : { profile, overrides: setAppearanceDraftValue(overrides as Record<string, any>, key, value) };
+}
+
+export function resetPdfAppearanceOverride(overrides: PdfAppearanceOverrides, key: PdfAppearanceDraftKey): PdfAppearanceOverrides {
   const next = { ...overrides };
-  delete next[key];
+  if (key.startsWith('palette.')) {
+    const paletteKey = key.slice('palette.'.length) as PdfAppearancePaletteKey;
+    const palette = { ...(next.palette || {}) };
+    delete palette[paletteKey];
+    if (Object.keys(palette).length) next.palette = palette;
+    else delete next.palette;
+  } else {
+    delete next[key as PdfAppearanceProperty];
+  }
   return next;
+}
+
+/** Removes a reset property's stale rendered value while leaving content and paper settings intact. */
+export function clearPdfAppearanceFallback(
+  settingsValue: Record<string, unknown>,
+  definitionValue: Record<string, any>,
+  key?: PdfAppearanceDraftKey,
+) {
+  const settings = { ...settingsValue };
+  const metadata = definitionValue?.metadata && typeof definitionValue.metadata === 'object'
+    ? definitionValue.metadata as Record<string, any>
+    : {};
+  const sourceStyle = metadata.pdfStyleConfig && typeof metadata.pdfStyleConfig === 'object'
+    ? metadata.pdfStyleConfig as Record<string, any>
+    : {};
+  const style = { ...sourceStyle };
+  const stylePalette = { ...(sourceStyle.palette || {}) };
+  const settingKeys: Record<Exclude<PdfAppearanceProperty, 'palette'>, string[]> = {
+    headerComposition: ['headerComposition'],
+    headerContentSpacing: ['headerContentSpacing'],
+    fontFamily: ['fontFamily'],
+    fontSize: ['fontSize'],
+    presetId: ['pdfStylePreset'],
+    tableStyle: ['pdfTableStyle', 'tableLayout'],
+  };
+  const paletteSettingKeys: Record<PdfAppearancePaletteKey, string> = {
+    primary: 'primaryColor', secondary: 'secondaryColor', text: 'textColor', line: 'lineColor',
+    tableHeader: 'tableHeaderColor', tableHeaderText: 'tableHeaderTextColor', tableRow: 'tableRowColor',
+    tableStripe: 'tableStripeColor', tableBorder: 'tableBorderColor',
+  };
+  const clearKey = (item: PdfAppearanceDraftKey) => {
+    if (item.startsWith('palette.')) {
+      const paletteKey = item.slice('palette.'.length) as PdfAppearancePaletteKey;
+      delete settings[paletteSettingKeys[paletteKey]];
+      const renderedPalette = { ...((settings.pdfAppearancePalette as Record<string, unknown> | undefined) || {}) };
+      delete renderedPalette[paletteKey];
+      if (Object.keys(renderedPalette).length) settings.pdfAppearancePalette = renderedPalette;
+      else delete settings.pdfAppearancePalette;
+      delete stylePalette[paletteKey];
+      return;
+    }
+    const property = item as Exclude<PdfAppearanceProperty, 'palette'>;
+    for (const settingKey of settingKeys[property]) delete settings[settingKey];
+    delete style[property];
+  };
+
+  if (key) clearKey(key);
+  else {
+    for (const property of APPEARANCE_KEYS) {
+      if (property === 'palette') {
+        for (const paletteKey of PDF_APPEARANCE_PALETTE_KEYS) clearKey(`palette.${paletteKey}`);
+        delete settings.pdfAppearancePalette;
+      } else clearKey(property);
+    }
+  }
+  if (Object.keys(stylePalette).length) style.palette = stylePalette;
+  else delete style.palette;
+  const definition = {
+    ...definitionValue,
+    metadata: { ...metadata, pdfStyleConfig: style },
+  };
+  return { settings, definition };
 }

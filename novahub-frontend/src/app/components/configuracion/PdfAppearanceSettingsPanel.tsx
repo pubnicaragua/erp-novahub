@@ -1,0 +1,135 @@
+import React from 'react';
+import { Check, RotateCcw, Save, SwatchBook, Type } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { cn } from '../ui/utils';
+import {
+  PDF_APPEARANCE_FONT_GROUPS,
+  PDF_APPEARANCE_PALETTE_KEYS,
+  type PdfAppearanceDraftKey,
+  type PdfAppearanceDraftScope,
+  type PdfAppearanceOverrides,
+  type PdfAppearancePaletteKey,
+  type PdfAppearanceProfile,
+} from '../../services/pdf-appearance';
+import { PDF_STYLE_PRESETS } from '../../services/pdf-document-style';
+
+const COMPOSITIONS = [
+  { value: 'company-left-logo-right', label: 'Datos izq. · logo der.' },
+  { value: 'logo-left-company-right', label: 'Logo izq. · datos der.' },
+  { value: 'centered-stack', label: 'Centrado' },
+] as const;
+const SPACINGS = [
+  { value: 'small', label: 'Pequeño' },
+  { value: 'medium', label: 'Mediano' },
+  { value: 'large', label: 'Grande' },
+] as const;
+const PRESETS = [
+  { value: 'light', label: 'Ligero' }, { value: 'boxed', label: 'Enmarcado' },
+  { value: 'bold', label: 'Alto contraste' }, { value: 'striped', label: 'Filas alternas' },
+  { value: 'bubble', label: 'Suave' }, { value: 'wave', label: 'Acentuado' }, { value: 'folder', label: 'Documental' },
+] as const;
+const PALETTE_LABELS: Record<PdfAppearancePaletteKey, string> = {
+  primary: 'Principal', secondary: 'Secundario', text: 'Texto', line: 'Líneas',
+  tableHeader: 'Encabezado de tabla', tableHeaderText: 'Texto del encabezado',
+  tableRow: 'Fila', tableStripe: 'Fila alterna', tableBorder: 'Bordes de tabla',
+};
+const PROPERTY_LABELS: Partial<Record<PdfAppearanceDraftKey, string>> = {
+  headerComposition: 'Composición del encabezado', headerContentSpacing: 'Espacio después del encabezado',
+  fontFamily: 'Fuente del documento', fontSize: 'Tamaño base', presetId: 'Estilo de tabla', tableStyle: 'Estilo de tabla',
+};
+
+function hasLocalOverride(overrides: PdfAppearanceOverrides, key: PdfAppearanceDraftKey) {
+  if (key.startsWith('palette.')) return overrides.palette?.[key.slice(8) as PdfAppearancePaletteKey] !== undefined;
+  return (overrides as Record<string, unknown>)[key] !== undefined;
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="min-w-0 space-y-1"><Label className="text-xs">{label}</Label>{children}</div>;
+}
+
+export interface PdfAppearanceSettingsPanelProps {
+  scope: PdfAppearanceDraftScope;
+  profile: Partial<PdfAppearanceProfile>;
+  overrides: Partial<PdfAppearanceOverrides>;
+  effective: Record<string, any>;
+  canEditBranch: boolean;
+  canEditDocument: boolean;
+  hasBranchProfile: boolean;
+  isSavingBranch: boolean;
+  hasImportedHtmlHeader?: boolean;
+  onScopeChange: (scope: PdfAppearanceDraftScope) => void;
+  onChange: (key: PdfAppearanceDraftKey, value: unknown) => void;
+  onReset: (key: PdfAppearanceDraftKey) => void;
+  onResetAll: () => void;
+  onSaveBranch: () => void;
+}
+
+export function PdfAppearanceSettingsPanel({
+  scope, profile, overrides, effective, canEditBranch, canEditDocument, hasBranchProfile, isSavingBranch,
+  hasImportedHtmlHeader = false, onScopeChange, onChange, onReset, onResetAll, onSaveBranch,
+}: PdfAppearanceSettingsPanelProps) {
+  const branchScope = scope === 'branch';
+  const disabled = branchScope ? !canEditBranch : !canEditDocument;
+  const configuredGlobalProperties = Object.keys(profile).length;
+  const property = (key: PdfAppearanceDraftKey, value: unknown, control: React.ReactNode) => (
+    <div className="space-y-1.5 rounded-lg border border-border/50 bg-background p-2.5" key={key}>
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs">{PROPERTY_LABELS[key] || key}</Label>
+        <div className="flex items-center gap-1">
+          <span className={cn('text-[9px] font-medium', !branchScope && hasLocalOverride(overrides as PdfAppearanceOverrides, key) ? 'text-primary' : 'text-muted-foreground')}>
+            {branchScope ? 'Global' : hasLocalOverride(overrides as PdfAppearanceOverrides, key) ? 'Solo este PDF' : 'Heredado'}
+          </span>
+          {!branchScope && hasLocalOverride(overrides as PdfAppearanceOverrides, key) && <button type="button" onClick={() => onReset(key)} disabled={disabled} className="inline-flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50" aria-label={`Restablecer ${PROPERTY_LABELS[key] || key} a la apariencia global`} title="Heredar valor global"><RotateCcw className="size-3" /></button>}
+        </div>
+      </div>
+      {control}
+      {branchScope && value !== undefined && <span className="sr-only">Valor compartido entre los PDF de la sucursal activa</span>}
+    </div>
+  );
+
+  return <details data-tour="pdf-appearance" open className="group rounded-lg border bg-card text-card-foreground shadow-none">
+    <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-6 pb-3 pt-6 [&::-webkit-details-marker]:hidden">
+      <div className="space-y-1.5"><h3 className="flex items-center gap-2 text-sm font-semibold"><SwatchBook className="size-4 text-primary" />Apariencia del PDF</h3><p className="text-xs text-muted-foreground">Define la presentación compartida o solo de este diseño.</p></div>
+      <span aria-hidden="true" className="mt-0.5 text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
+    </summary>
+    <div className="space-y-3 px-6 pb-5 pt-0">
+      <Field label="Alcance de esta configuración">
+        <select aria-label="Alcance de la apariencia PDF" value={scope} disabled={(!canEditBranch && !canEditDocument)} onChange={event => onScopeChange(event.target.value as PdfAppearanceDraftScope)} className="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60">
+          <option value="branch" disabled={!canEditBranch}>Todos los PDF de esta sucursal</option>
+          <option value="document" disabled={!canEditDocument}>Solo este PDF</option>
+        </select>
+      </Field>
+      <p className="rounded-md border border-primary/15 bg-primary/5 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+        {branchScope ? `Los cambios guardados se aplicarán a los PDF editables de esta sucursal que hereden cada propiedad.${configuredGlobalProperties ? ` Hay ${configuredGlobalProperties} propiedades globales configuradas.` : ' Aún no hay propiedades globales guardadas.'}` : 'Los cambios se guardan únicamente en el diseño abierto. Las propiedades sin override siguen heredando la configuración global.'}
+      </p>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs font-semibold"><Type className="size-3.5 text-primary" />Encabezado y tipografía</div>
+        {property('headerComposition', effective.headerComposition, <select aria-label="Composición del encabezado PDF" value={effective.headerComposition || 'company-left-logo-right'} disabled={disabled || hasImportedHtmlHeader} onChange={event => onChange('headerComposition', event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60">{COMPOSITIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>)}
+        {hasImportedHtmlHeader && <p className="text-[10px] text-muted-foreground">El encabezado HTML importado conserva su propia composición.</p>}
+        {property('headerContentSpacing', effective.headerContentSpacing, <select aria-label="Espacio después del encabezado PDF" value={effective.headerContentSpacing || 'small'} disabled={disabled} onChange={event => onChange('headerContentSpacing', event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60">{SPACINGS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>)}
+        {property('fontFamily', effective.fontFamily, <select aria-label="Fuente de todo el documento PDF" value={effective.fontFamily || 'Inter'} disabled={disabled} onChange={event => onChange('fontFamily', event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60">{PDF_APPEARANCE_FONT_GROUPS.map(group => <optgroup key={group.label} label={group.label}>{group.families.map(font => <option key={font} value={font}>{font}</option>)}</optgroup>)}</select>)}
+        {property('fontSize', effective.fontSize, <div className="flex items-center gap-2"><Input aria-label="Tamaño base de fuente PDF" type="number" min={7} max={16} step={0.5} value={effective.fontSize || 9} disabled={disabled} onChange={event => onChange('fontSize', Number(event.target.value))} className="h-9 text-xs" /><span className="text-xs text-muted-foreground">pt</span></div>)}
+      </div>
+      <div className="space-y-2">
+        <div className="text-xs font-semibold">Presentación y tablas</div>
+        {property('presetId', effective.presetId, <select aria-label="Paleta y tema visual del PDF" value={effective.presetId || 'light'} disabled={disabled} onChange={event => onChange('presetId', event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60">{PDF_STYLE_PRESETS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>)}
+        {property('tableStyle', effective.tableStyle || effective.presetId, <select aria-label="Estilo de tablas PDF" value={effective.tableStyle || effective.presetId || 'light'} disabled={disabled} onChange={event => onChange('tableStyle', event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60">{PRESETS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>)}
+        <div className="grid grid-cols-2 gap-2">
+          {PDF_APPEARANCE_PALETTE_KEYS.map(key => {
+            const overrideKey = `palette.${key}` as const;
+            const value = effective.palette?.[key] || '#65536b';
+            return <div key={key} className="min-w-0 rounded-lg border border-border/50 bg-background p-2">
+              <div className="mb-1 flex items-center justify-between gap-1"><Label htmlFor={`pdf-appearance-${key}`} className="truncate text-[10px]">{PALETTE_LABELS[key]}</Label>{!branchScope && hasLocalOverride(overrides as PdfAppearanceOverrides, overrideKey) && <button type="button" onClick={() => onReset(overrideKey)} disabled={disabled} className="inline-flex size-5 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted disabled:opacity-50" aria-label={`Restablecer color ${PALETTE_LABELS[key]}`}><RotateCcw className="size-3" /></button>}</div>
+              <div className="flex items-center gap-2"><input id={`pdf-appearance-${key}`} type="color" value={value} disabled={disabled} onChange={event => onChange(overrideKey, event.target.value)} className="h-8 w-9 cursor-pointer rounded border border-input bg-background p-0.5 disabled:cursor-not-allowed disabled:opacity-60" /><span className="truncate font-mono text-[10px] text-muted-foreground">{value}</span></div>
+              {!branchScope && <span className="mt-1 block text-[9px] text-muted-foreground">{hasLocalOverride(overrides as PdfAppearanceOverrides, overrideKey) ? 'Solo este PDF' : 'Heredado'}</span>}
+            </div>;
+          })}
+        </div>
+      </div>
+      {branchScope ? <div className="space-y-2 border-t border-border/50 pt-3"><Button type="button" className="w-full gap-2" onClick={onSaveBranch} disabled={!canEditBranch || isSavingBranch}>{isSavingBranch ? <span className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" /> : hasBranchProfile ? <Save className="size-4" /> : <Check className="size-4" />}{isSavingBranch ? 'Guardando apariencia…' : 'Guardar apariencia global'}</Button><p className="text-[10px] text-muted-foreground">Perfil compartido por los PDF de {`la sucursal activa`}.</p></div>
+        : <div className="space-y-2 border-t border-border/50 pt-3"><Button type="button" variant="outline" className="w-full gap-2" onClick={onResetAll} disabled={!canEditDocument || !Object.keys(overrides).length}><RotateCcw className="size-3.5" />Restablecer a apariencia global</Button><p className="text-[10px] text-muted-foreground">Guarda con el botón principal para conservar los cambios en este PDF.</p></div>}
+    </div>
+  </details>;
+}
