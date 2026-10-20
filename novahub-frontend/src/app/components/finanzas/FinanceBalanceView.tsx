@@ -433,11 +433,11 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
       ];
       const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.balance', title: 'Balance general', tenantName: companyName, tenantLogo: logoUrl, rows: reportRows, columns: [{ header: 'Concepto', value: row => row.description || row.concept || row.category || '—' }, { header: 'Tipo', value: row => row.reportType }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Monto', value: row => fmtNum(Math.abs(cv(row))), align: 'right' }], totals: { 'Total Ingresos': fmtNum(totalIncome), 'Total Gastos': fmtNum(totalExpense), 'Balance Neto': fmtNum(balance) }, fileName: buildDateFilteredLabeledPdfFileName('Balance general', 'pdf', dateRange.start, dateRange.end) });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
-      const primaryColor = themeConfig.colors.primary || '#10b981';
+      const primaryColor = pdfSettings.primaryColor || '#01422c';
       const rgbPrimary = primaryColor.startsWith('#') 
         ? [parseInt(primaryColor.slice(1,3), 16), parseInt(primaryColor.slice(3,5), 16), parseInt(primaryColor.slice(5,7), 16)]
-        : [16, 185, 129];
-      const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
+        : [1, 66, 44];
+      const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#01422c';
       const marginX = 14;
       const contentWidth = pageWidth - marginX * 2;
 

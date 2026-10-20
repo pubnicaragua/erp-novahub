@@ -101,7 +101,7 @@ function reportPdfLines(doc: jsPDF, value: unknown, maxWidth: number, fontSize: 
 }
 
 /** Dibuja las tarjetas KPI de los reportes sin permitir que su texto escape. */
-export function drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns, gap = 4, boxHeight = 22, labelFontSize = 7.5, valueFontSize = 10, detailFontSize = 6.5 }: {
+export function drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns, gap = 4, boxHeight = 22, labelFontSize = 7.5, valueFontSize = 10, detailFontSize = 6.5, primaryColor, secondaryColor }: {
   doc: jsPDF;
   kpis: ReportPdfKpi[];
   marginX: number;
@@ -113,6 +113,8 @@ export function drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY,
   labelFontSize?: number;
   valueFontSize?: number;
   detailFontSize?: number;
+  primaryColor?: string;
+  secondaryColor?: string;
 }) {
   const safeColumns = Math.max(1, Math.min(Math.floor(columns) || 1, kpis.length || 1));
   const boxWidth = (contentWidth - (safeColumns - 1) * gap) / safeColumns;
@@ -126,13 +128,21 @@ export function drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY,
       : 0;
     const x = marginX + rowOffset + column * (boxWidth + gap);
     const y = currentY + row * (boxHeight + gap);
-    const color = kpi.color;
-    doc.setFillColor(color[0] ?? 16, color[1] ?? 185, color[2] ?? 129);
+    const configuredColor = index % 2 ? secondaryColor : primaryColor;
+    const fallbackColor: PdfRgb = [Number(kpi.color[0] ?? 16), Number(kpi.color[1] ?? 185), Number(kpi.color[2] ?? 129)];
+    const color = configuredColor ? pdfDesignColor(configuredColor, fallbackColor) : fallbackColor;
+    const normalizedChannels = color.map(channel => {
+      const srgb = channel / 255;
+      return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+    });
+    const luminance = normalizedChannels[0] * 0.2126 + normalizedChannels[1] * 0.7152 + normalizedChannels[2] * 0.0722;
+    const contrastText: PdfRgb = luminance > 0.48 ? [31, 41, 55] : [255, 255, 255];
+    doc.setFillColor(color[0], color[1], color[2]);
     doc.roundedRect(x, y, boxWidth, boxHeight, 3, 3, 'F');
     const textWidth = boxWidth - 5;
 
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(contrastText[0], contrastText[1], contrastText[2]);
     const labelLines = reportPdfLines(doc, kpi.label, textWidth, labelFontSize, 2);
     doc.text(labelLines, x + boxWidth / 2, y + 4.5, { align: 'center', lineHeightFactor: 1.05 });
 

@@ -47,7 +47,7 @@ export const PDF_STYLE_FONTS = [
 ] as const;
 
 export const PDF_STYLE_PRESETS: Array<{ id: PdfStylePresetId; name: string; description: string; palette: PdfStylePalette; tableStyle: PdfTableStyle }> = [
-  { id: 'light', name: 'Light', description: 'Limpio, ligero y con líneas discretas.', palette: { primary: '#65536b', secondary: '#8b7c91', text: '#29313c', line: '#d9dce1', tableHeader: '#ffffff', tableHeaderText: '#303541', tableRow: '#ffffff', tableStripe: '#f7f6f8', tableBorder: '#d9dce1' }, tableStyle: 'light' },
+  { id: 'light', name: 'Light', description: 'Limpio, ligero y con líneas discretas.', palette: { primary: '#01422c', secondary: '#01422c', text: '#334155', line: '#01422c', tableHeader: '#01422c', tableHeaderText: '#ffffff', tableRow: '#ffffff', tableStripe: '#f8fafc', tableBorder: '#d7dee7' }, tableStyle: 'light' },
   { id: 'boxed', name: 'Boxed', description: 'Bloques delimitados y tabla enmarcada.', palette: { primary: '#355c7d', secondary: '#6c8ba4', text: '#263746', line: '#b9c7d1', tableHeader: '#eaf0f4', tableHeaderText: '#263746', tableRow: '#ffffff', tableStripe: '#f6f8fa', tableBorder: '#9eafbb' }, tableStyle: 'boxed' },
   { id: 'bold', name: 'Bold', description: 'Contraste alto para documentos ejecutivos.', palette: { primary: '#242a35', secondary: '#555f70', text: '#242a35', line: '#69717c', tableHeader: '#303641', tableHeaderText: '#ffffff', tableRow: '#ffffff', tableStripe: '#f1f2f4', tableBorder: '#89919a' }, tableStyle: 'bold' },
   { id: 'striped', name: 'Striped', description: 'Filas alternas para lectura rápida.', palette: { primary: '#566477', secondary: '#8794a3', text: '#293442', line: '#d5dbe1', tableHeader: '#566477', tableHeaderText: '#ffffff', tableRow: '#ffffff', tableStripe: '#e7ebef', tableBorder: '#d5dbe1' }, tableStyle: 'striped' },
@@ -134,6 +134,15 @@ function tint(color: string, amount = 0.92) {
   return `#${channel(0)}${channel(2)}${channel(4)}`;
 }
 
+function readableTextOn(color: string) {
+  const match = color.match(/^#([0-9a-f]{6})$/i);
+  if (!match) return '#ffffff';
+  const channels = [0, 2, 4].map(offset => parseInt(match[1].slice(offset, offset + 2), 16) / 255)
+    .map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  return luminance > 0.48 ? '#1f2937' : '#ffffff';
+}
+
 function isSafePdfLayoutValue(property: string, value: string) {
   const normalized = value.trim().toLowerCase();
   const enumerations: Record<string, string[]> = {
@@ -189,6 +198,14 @@ export function applyPdfStyleToDefinition<T extends { nodes: any[]; metadata?: R
     nodes: normalizedDefinition.nodes.map(node => {
       const isTable = node.type === 'table' || node.type === 'report-sections';
       const accent = /title|number|total|company-name/i.test(String(node.id || ''));
+      const reportKpiCard = String(node.id || '').match(/^report-kpi-card-(\d+)$/);
+      const reportKpiText = String(node.id || '').match(/^report-kpi-(?:label|value|detail)-(\d+)$/);
+      const reportKpiBackground = reportKpiCard
+        ? (Number(reportKpiCard[1]) % 2 ? config.palette.secondary : config.palette.primary)
+        : '';
+      const reportKpiTextBackground = reportKpiText
+        ? (Number(reportKpiText[1]) % 2 ? config.palette.secondary : config.palette.primary)
+        : '';
       const isHeaderSection = node.type === 'section' && node.id === 'header';
       const isPartySection = node.type === 'section' && node.id === 'party-section';
       const isHeaderRule = node.type === 'divider' && node.id === 'header-accent';
@@ -250,14 +267,14 @@ export function applyPdfStyleToDefinition<T extends { nodes: any[]; metadata?: R
         ...(isSplitFooterAccent ? { width: 65 } : {}),
         fontFamily: config.fontFamily,
         fontSize: Math.max(5, Math.min(72, styledFontSize)),
-        color: accent ? config.palette.primary : config.palette.text,
-        borderColor: isTable ? config.palette.tableBorder
+        color: reportKpiText ? readableTextOn(reportKpiTextBackground) : accent ? config.palette.primary : config.palette.text,
+        borderColor: reportKpiCard ? reportKpiBackground : isTable ? config.palette.tableBorder
           : isHeaderRule ? config.palette.primary
             : isHeaderSection && !isLightNeutralColor(String(node.borderColor || '')) ? config.palette.primary
               : isFooterBand || isFooterAccent ? (sourceFrameFill && !isLightNeutralColor(sourceFrameFill) ? (isFooterLayer || isFooterWaveAccent ? config.palette.secondary : config.palette.primary) : config.palette.line)
                 : isHeaderFrame && isFrameDecoration && sourceFrameFill && !isLightNeutralColor(sourceFrameFill) ? (/band|shadow/.test(String(node.id || '')) ? config.palette.secondary : config.palette.primary)
                   : isHeaderSection || isPartySection || isFooterFrame ? config.palette.line : config.palette.line,
-        ...(isFrameDecoration ? { backgroundColor: mappedFrameFill } : {}),
+        ...(reportKpiCard ? { backgroundColor: reportKpiBackground } : isFrameDecoration ? { backgroundColor: mappedFrameFill } : {}),
         ...(isHeaderSection ? { pdfHeaderDecoration: undefined, pdfHeaderAccentColor: undefined } : {}),
         ...(isPartySection ? { backgroundColor: tint(config.palette.primary, 0.95), borderColor: config.palette.line, borderStyle: 'solid', borderRadius: 4 } : {}),
         ...(isHeaderRule ? { color: config.palette.primary } : {}),

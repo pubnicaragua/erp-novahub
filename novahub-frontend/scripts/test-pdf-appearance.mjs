@@ -11,6 +11,7 @@ import {
   updatePdfAppearanceDraft,
   clearPdfAppearanceFallback,
   pdfFontFacesSupportWeight,
+  pdfFontUsesSystemFallback,
 } from '../src/app/services/pdf-appearance.ts';
 
 const fallback = {
@@ -26,6 +27,8 @@ const fallback = {
 assert.equal(pdfFontFacesSupportWeight(['400'], 700), false, 'Las familias de peso 400 no deben simular negrita.');
 assert.equal(pdfFontFacesSupportWeight(['400', '700'], 700), true, 'Se conserva la variante negrita cuando existe.');
 assert.equal(pdfFontFacesSupportWeight(['100 900'], 700), true, 'Se reconoce el peso negrita en una fuente variable.');
+assert.equal(pdfFontUsesSystemFallback('Arial'), true, 'Arial debe poder renderizarse con la fuente instalada del sistema sin exigir un archivo web.');
+assert.equal(pdfFontUsesSystemFallback('Inter'), false, 'Las fuentes empaquetadas deben seguir cargándose como recursos del PDF.');
 
 const [globalStylesheet, fontStylesheet] = await Promise.all([
   readFile(new URL('../src/styles/index.css', import.meta.url), 'utf8'),
@@ -86,7 +89,7 @@ const retriedFontCss = await pdfFontEmbeddingUtilities.inlinePdfFontFaceRules(re
 assert.equal(retryLoads, 2, 'Un recurso fallido se retira del caché para permitir otro intento.');
 assert.match(retriedFontCss, /data:font\/woff2;base64,AQIDBA==/);
 const loadedFontStylesheet = `${globalStylesheet}\n${fontStylesheet}`;
-for (const family of PDF_APPEARANCE_FONTS) {
+for (const family of PDF_APPEARANCE_FONTS.filter(family => family !== 'Arial')) {
   const packageName = family.toLowerCase().replaceAll(' ', '-');
   assert.ok(loadedFontStylesheet.includes(`@fontsource/${packageName}/`), `Debe cargarse localmente la fuente ${family} para que cambie en el PDF.`);
 }
@@ -145,6 +148,13 @@ for (const family of PDF_APPEARANCE_FONTS) {
 {
   const normalized = normalizePdfAppearanceProfile({ fontFamily: 'Not Packaged', fontSize: 30, palette: { primary: '#abcdef', other: '#000000' } });
   assert.deepEqual(normalized, { palette: { primary: '#abcdef' } });
+  const templateProfile = normalizePdfAppearanceProfile({
+    templateId: 'default-v1', templateVersion: 1, headerComposition: 'company-left-logo-right',
+    headerContentSpacing: 'small', fontFamily: 'Arial', fontSize: 9,
+    palette: { primary: '#01422c', line: '#01422c', tableHeader: '#01422c', tableHeaderText: '#ffffff' },
+  });
+  assert.deepEqual([templateProfile.templateId, templateProfile.templateVersion, templateProfile.fontFamily, templateProfile.fontSize], ['default-v1', 1, 'Arial', 9]);
+  assert.equal(templateProfile.palette?.primary, '#01422c');
   assert.ok(PDF_APPEARANCE_FONTS.length >= 70, 'El catálogo debe ofrecer una variedad amplia de tipografías, como un editor de documentos.');
   assert.ok(PDF_APPEARANCE_FONTS.includes('Inter'));
   assert.ok(PDF_APPEARANCE_FONTS.includes('JetBrains Mono'));
@@ -155,6 +165,24 @@ for (const family of PDF_APPEARANCE_FONTS) {
     new Set(PDF_APPEARANCE_FONTS),
     'Todas las fuentes del catálogo deben aparecer agrupadas en el selector.',
   );
+}
+
+{
+  const globalTemplate = {
+    templateId: 'default-v1', templateVersion: 1,
+    headerComposition: 'company-left-logo-right', headerContentSpacing: 'small', fontFamily: 'Arial', fontSize: 9,
+    presetId: 'light', tableStyle: 'light',
+    palette: { primary: '#01422c', secondary: '#01422c', line: '#01422c', tableHeader: '#01422c', tableHeaderText: '#ffffff' },
+  };
+  const resolved = resolvePdfDesignAppearance(
+    { fontFamily: 'Lora', primaryColor: '#ff00ff', appearanceOverrides: {}, logoUrl: 'logo.png', paperSize: 'LETTER' },
+    { metadata: { pdfStyleConfig: { fontFamily: 'Georgia', palette: { primary: '#00ffff' } } } },
+    globalTemplate,
+  );
+  assert.equal(resolved.settings.fontFamily, 'Arial', 'La plantilla global debe prevalecer sobre estilos antiguos del diseño.');
+  assert.equal(resolved.settings.primaryColor, '#01422c', 'El tema de interfaz y el color antiguo del PDF no deben imponerse a la plantilla global.');
+  assert.equal(resolved.settings.logoUrl, 'logo.png', 'El rebase visual debe conservar el logotipo del diseño.');
+  assert.equal(resolved.settings.paperSize, 'LETTER', 'El rebase visual debe conservar las propiedades físicas del documento.');
 }
 
 {
@@ -191,7 +219,7 @@ for (const family of PDF_APPEARANCE_FONTS) {
 
   const clearedPrimary = clearPdfAppearanceFallback(legacySettings, legacyDefinition, 'palette.primary');
   const resetPrimary = resolvePdfDesignAppearance({ ...clearedPrimary.settings, appearanceOverrides: {} }, clearedPrimary.definition, {});
-  assert.equal(resetPrimary.settings.primaryColor, '#65536b', 'Restablecer un color local debe descartar el valor legado del estilo.');
+  assert.equal(resetPrimary.settings.primaryColor, '#01422c', 'Restablecer un color local debe volver a la plantilla predeterminada del PDF.');
 
   const clearedAll = clearPdfAppearanceFallback(
     { paperSize: 'A4', orientation: 'landscape', fontFamily: 'Lora', margins: 18 },

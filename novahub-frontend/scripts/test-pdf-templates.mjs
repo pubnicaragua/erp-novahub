@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { createServer } from 'vite';
 import { jsPDF } from 'jspdf';
 import React from 'react';
@@ -24,6 +25,20 @@ try {
   const { PdfAppearanceSettingsPanel } = await server.ssrLoadModule('/src/app/components/configuracion/PdfAppearanceSettingsPanel.tsx');
   const targets = catalog.PDF_TEMPLATE_TARGETS;
 
+  for (const reportFile of [
+    'CustomersReportTab.tsx', 'ProvidersReportTab.tsx', 'SalesReportTab.tsx',
+    'PurchasesReportTab.tsx', 'FinanceReportTab.tsx', 'InventoryReportTab.tsx', 'HRReportTab.tsx',
+  ]) {
+    const source = await readFile(new URL(`../src/app/components/reportes/${reportFile}`, import.meta.url), 'utf8');
+    const pdfStart = source.indexOf('exportPDF: async');
+    const excelStart = source.indexOf('exportExcel: async', pdfStart);
+    assert.ok(pdfStart >= 0 && excelStart > pdfStart, `${reportFile} debe conservar un exportador PDF y uno de Excel identificables.`);
+    const pdfExport = source.slice(pdfStart, excelStart);
+    assert.match(pdfExport, /drawReportKpiCards\([\s\S]*?primaryColor:\s*pdfSettings\.primaryColor[\s\S]*?secondaryColor:\s*pdfSettings\.secondaryColor/, `${reportFile} debe tomar los colores KPI de la paleta PDF.`);
+    assert.match(pdfExport, /drawReportTable\([\s\S]*?color:\s*rgbPrimary/, `${reportFile} debe pintar sus tablas con el color principal del perfil PDF.`);
+    assert.doesNotMatch(pdfExport, /themeConfig\.colors\.primary/, `${reportFile} no debe usar el tema de interfaz como paleta del PDF.`);
+  }
+
   assert.ok(appearance.PDF_APPEARANCE_FONTS.length >= 30, 'El selector debe ofrecer al menos treinta fuentes locales.');
   for (const family of ['Poppins', 'Source Sans 3', 'Source Serif 4', 'Fira Code']) {
     assert.ok(appearance.PDF_APPEARANCE_FONTS.includes(family), `El catálogo debe incluir ${family}.`);
@@ -35,12 +50,56 @@ try {
     onScopeChange: () => {}, onChange: () => {}, onReset: () => {}, onResetAll: () => {}, onSaveBranch: () => {},
   }));
   assert.equal(appearancePanel.includes('Estilo de tabla'), false, 'El panel no debe mostrar ajustes de estilo de tabla por ahora.');
-  assert.equal(appearancePanel.includes('type="color"'), false, 'El panel no debe mostrar controles de color por ahora.');
+  assert.equal(appearancePanel.includes('type="color"'), true, 'La paleta de colores del PDF debe seguir configurable independientemente del tema de interfaz.');
   assert.ok(appearancePanel.includes('Fuente del documento'), 'La fuente del documento debe seguir configurable.');
   assert.ok(appearancePanel.includes('Buscar tipografía'), 'El selector debe poder buscar entre las familias disponibles.');
   assert.ok(appearancePanel.includes('data-font-family-picker'), 'La fuente debe presentarse en un selector visual, no en un select nativo.');
   assert.ok(appearancePanel.includes('pdf-font-family-scrollarea'), 'La lista de fuentes debe tener una barra de desplazamiento explícita.');
   assert.ok(appearancePanel.includes('Dancing Script'), 'El selector debe mostrar muestras manuscritas/cursivas.');
+
+  const defaultTemplateSettings = definitions.createSystemDefaultPdfSettings();
+  assert.deepEqual(
+    [defaultTemplateSettings.fontFamily, defaultTemplateSettings.fontSize, defaultTemplateSettings.primaryColor, defaultTemplateSettings.secondaryColor, defaultTemplateSettings.lineColor, defaultTemplateSettings.paletteMode],
+    ['Arial', 9, '#01422c', '#01422c', '#01422c', 'independent'],
+    'La apariencia base debe usar la marca PDF de la sucursal y no el tema de interfaz.',
+  );
+
+  const templateAppearanceProfile = {
+    templateId: 'default-v1', templateVersion: 1,
+    headerComposition: 'company-left-logo-right', headerContentSpacing: 'small',
+    fontFamily: 'Arial', fontSize: 9, presetId: 'light', tableStyle: 'light',
+    palette: { primary: '#01422c', secondary: '#01422c', text: '#334155', line: '#01422c', tableHeader: '#01422c', tableHeaderText: '#ffffff', tableRow: '#ffffff', tableStripe: '#f8fafc', tableBorder: '#d7dee7' },
+  };
+  const customerKpiSettings = definitions.createSystemDefaultPdfDesign('ventas.customers').settings;
+  const customerKpiDefinition = definitions.createDefaultTemplateDefinition('ventas.customers', customerKpiSettings);
+  const customerKpiAppearance = appearance.resolvePdfDesignAppearance(customerKpiSettings, customerKpiDefinition, templateAppearanceProfile);
+  const customerKpiStyleConfig = renderer.resolvePdfStyleConfigForRender(customerKpiDefinition.metadata?.pdfStyleConfig, customerKpiAppearance.settings);
+  const styledCustomerKpis = styles.applyPdfStyleToDefinition(customerKpiDefinition, customerKpiStyleConfig);
+  for (const index of [0, 1, 2, 3, 4]) {
+    const card = styledCustomerKpis.nodes.find(node => node.id === `report-kpi-card-${index}`);
+    const label = styledCustomerKpis.nodes.find(node => node.id === `report-kpi-label-${index}`);
+    assert.equal(card?.backgroundColor, '#01422c', `El KPI ${index + 1} debe usar la paleta configurada para el PDF.`);
+    assert.equal(label?.color, '#ffffff', `El texto del KPI ${index + 1} debe contrastar con el fondo de marca.`);
+  }
+
+  const directKpiPdf = new jsPDF();
+  const fillCalls = [];
+  const textColorCalls = [];
+  const originalSetFillColor = directKpiPdf.setFillColor.bind(directKpiPdf);
+  const originalSetTextColor = directKpiPdf.setTextColor.bind(directKpiPdf);
+  directKpiPdf.setFillColor = (...color) => { fillCalls.push(color); return originalSetFillColor(...color); };
+  directKpiPdf.setTextColor = (...color) => { textColorCalls.push(color); return originalSetTextColor(...color); };
+  generator.drawReportKpiCards({
+    doc: directKpiPdf,
+    kpis: [
+      { label: 'Uno', value: '1', detail: 'Primer KPI', color: [16, 185, 129] },
+      { label: 'Dos', value: '2', detail: 'Segundo KPI', color: [59, 130, 246] },
+    ],
+    marginX: 10, contentWidth: 190, currentY: 20, columns: 2,
+    primaryColor: '#01422c', secondaryColor: '#ffffff',
+  });
+  assert.deepEqual(fillCalls, [[1, 66, 44], [255, 255, 255]], 'Los KPI nativos deben usar los colores del PDF y no los colores incluidos por el reporte.');
+  assert.deepEqual(textColorCalls, [[255, 255, 255], [31, 41, 55]], 'El texto de los KPI nativos debe conservar contraste con colores claros y oscuros.');
 
   assert.equal(renderer.browserFontFamily('Inter'), '"Inter", sans-serif', 'La familia elegida debe conservarse en el render final en vez de colapsar a Arial.');
   assert.equal(renderer.browserFontFamily('Merriweather'), '"Merriweather", serif', 'Las fuentes serif deben conservar su familia local y fallback correcto.');
@@ -294,6 +353,10 @@ try {
   assert.equal(customerHistoryTitle.x, 55, 'El título del historial del cliente debe ocupar la banda derecha.');
   assert.equal(customerHistoryTitle.align, 'right', 'El título del historial debe alinearse a la derecha, frente al nombre de la entidad.');
   assert.equal(customerHistoryPartyName.x, 5, 'El nombre del cliente debe iniciar a la izquierda en la misma banda que el título.');
+  assert.equal(customerHistoryPartyName.y, customerHistoryTitle.y, 'El nombre del cliente y el título del historial deben compartir la misma banda.');
+  const customerHistoryNode = id => customerHistoryDefinition.nodes.find(node => node.id === id);
+  assert.ok(customerHistoryNode('party-tax-id').y > customerHistoryNode('document-status').y, 'Los datos del cliente deben quedar debajo del encabezado y sus metadatos.');
+  assert.ok(customerHistoryNode('items-table').y > customerHistoryNode('party-balance-summary').y, 'La tabla del historial debe comenzar después del último dato real del cliente.');
 
   const customerListDefinition = definitions.createDefaultTemplateDefinition('ventas.customers', definitions.createSystemDefaultPdfDesign('ventas.customers').settings);
   const customerListSections = customerListDefinition.nodes.find(node => node.id === 'report-sections');
@@ -399,6 +462,9 @@ try {
   assert.equal(supplierHistoryDefinition.nodes.find(node => node.id === 'document-title').x, 55, 'El título del historial de proveedor debe ocupar la banda derecha.');
   assert.equal(supplierHistoryDefinition.nodes.find(node => node.id === 'party-name').x, 5, 'El nombre del proveedor debe ocupar el lado izquierdo de la banda del título.');
   assert.equal(supplierHistoryDefinition.nodes.find(node => node.id === 'party-name').width, 44, 'El nombre del proveedor debe dejar libre la banda derecha para el título.');
+  assert.equal(supplierHistoryDefinition.nodes.find(node => node.id === 'party-name').y, supplierHistoryDefinition.nodes.find(node => node.id === 'document-title').y, 'El nombre del proveedor y el título del historial deben compartir la misma banda.');
+  assert.ok(supplierHistoryDefinition.nodes.find(node => node.id === 'party-tax-id').y > supplierHistoryDefinition.nodes.find(node => node.id === 'report-meta').y, 'Los datos del proveedor deben quedar debajo de los metadatos del historial.');
+  assert.ok(supplierHistoryDefinition.nodes.find(node => node.id === 'items-table').y > supplierHistoryDefinition.nodes.find(node => node.id === 'party-balance-summary').y, 'La tabla del proveedor debe comenzar después del último dato real.');
 
   const dashboard = definitions.createPdfTemplateSampleData('dashboard.tenant-overview');
   const dashboardDefinition = definitions.createDefaultTemplateDefinition('dashboard.tenant-overview', definitions.createSystemDefaultPdfDesign('dashboard.tenant-overview').settings);

@@ -1,5 +1,5 @@
 export const PDF_APPEARANCE_FONTS = [
-  'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans', 'Source Sans 3',
+  'Arial', 'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans', 'Source Sans 3',
   'Poppins', 'Raleway', 'Ubuntu', 'Fira Sans', 'PT Sans', 'Work Sans', 'DM Sans',
   'Archivo', 'Cabin', 'Manrope', 'Quicksand', 'Rubik', 'Oxygen', 'Oswald', 'Barlow', 'Karla', 'Urbanist', 'Mulish',
   'Merriweather', 'Lora', 'Playfair Display', 'Source Serif 4', 'PT Serif', 'DM Serif Display',
@@ -15,6 +15,14 @@ export const PDF_APPEARANCE_FONTS = [
 ] as const;
 
 export type PdfAppearanceFontFamily = typeof PDF_APPEARANCE_FONTS[number];
+const PDF_SYSTEM_FONT_FALLBACKS = new Set(['arial']);
+
+/** True when a catalog family is provided by the browser/OS instead of a bundled @font-face. */
+export function pdfFontUsesSystemFallback(family: string) {
+  const normalized = String(family || '').replace(/^['"]|['"]$/g, '').trim().toLowerCase();
+  return PDF_SYSTEM_FONT_FALLBACKS.has(normalized);
+}
+
 export const PDF_APPEARANCE_FONT_SIZE_MIN = 2;
 export const PDF_APPEARANCE_FONT_SIZE_MAX = 20;
 export type PdfHeaderComposition = 'company-left-logo-right' | 'logo-left-company-right' | 'centered-stack';
@@ -27,8 +35,11 @@ export const PDF_APPEARANCE_PALETTE_KEYS = [
 
 export type PdfAppearancePaletteKey = typeof PDF_APPEARANCE_PALETTE_KEYS[number];
 export type PdfAppearancePalette = Partial<Record<PdfAppearancePaletteKey, string>>;
+export const PDF_DEFAULT_TEMPLATE_ID = 'default-v1' as const;
 
 export interface PdfAppearanceProfile {
+  templateId?: typeof PDF_DEFAULT_TEMPLATE_ID;
+  templateVersion?: 1;
   headerComposition?: PdfHeaderComposition;
   headerContentSpacing?: PdfHeaderContentSpacing;
   fontFamily?: PdfAppearanceFontFamily;
@@ -41,7 +52,7 @@ export interface PdfAppearanceProfile {
 /** Legacy string values remain representable until the user resets an old design. */
 export type PdfAppearanceOverrides = Omit<PdfAppearanceProfile, 'fontFamily'> & { fontFamily?: string };
 export type PdfAppearanceProperty = keyof PdfAppearanceProfile;
-export type PdfAppearanceProfilePatch = Omit<Partial<PdfAppearanceProfile>, 'palette'> & {
+export type PdfAppearanceProfilePatch = Omit<Partial<PdfAppearanceProfile>, 'palette' | 'templateId' | 'templateVersion'> & {
   palette?: Partial<Record<PdfAppearancePaletteKey, string | null>> | null;
 };
 export type PdfAppearanceDraftKey = PdfAppearanceProperty | `palette.${PdfAppearancePaletteKey}`;
@@ -52,7 +63,7 @@ export interface PdfAppearanceDraftState {
 }
 
 export const PDF_APPEARANCE_FONT_GROUPS: Array<{ label: string; families: readonly PdfAppearanceFontFamily[] }> = [
-  { label: 'Sans serif', families: ['Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans', 'Source Sans 3', 'Poppins', 'Raleway', 'Ubuntu', 'Fira Sans', 'PT Sans', 'Work Sans', 'DM Sans', 'Archivo', 'Cabin', 'Manrope', 'Quicksand', 'Rubik', 'Oxygen', 'Oswald', 'Barlow', 'Karla', 'Urbanist', 'Mulish'] },
+  { label: 'Sans serif', families: ['Arial', 'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans', 'Source Sans 3', 'Poppins', 'Raleway', 'Ubuntu', 'Fira Sans', 'PT Sans', 'Work Sans', 'DM Sans', 'Archivo', 'Cabin', 'Manrope', 'Quicksand', 'Rubik', 'Oxygen', 'Oswald', 'Barlow', 'Karla', 'Urbanist', 'Mulish'] },
   { label: 'Serif', families: ['Merriweather', 'Lora', 'Playfair Display', 'Source Serif 4', 'PT Serif', 'DM Serif Display', 'Libre Baskerville', 'Noto Serif', 'Crimson Text'] },
   { label: 'Monoespaciadas', families: ['IBM Plex Mono', 'JetBrains Mono', 'Inconsolata', 'Fira Code', 'Source Code Pro', 'Space Mono'] },
   { label: 'Cursivas y manuscritas', families: ['Caveat', 'Dancing Script', 'Great Vibes', 'Lobster', 'Pacifico', 'Permanent Marker', 'Satisfy', 'Sacramento', 'Kalam', 'Indie Flower', 'Shadows Into Light', 'Architects Daughter', 'Patrick Hand', 'Kaushan Script', 'Yellowtail', 'Comic Neue', 'Courgette', 'Gloria Hallelujah', 'Handlee', 'Rock Salt', 'Tangerine', 'Bad Script'] },
@@ -76,8 +87,8 @@ const HEADER_COMPOSITIONS: readonly PdfHeaderComposition[] = ['company-left-logo
 const HEADER_SPACINGS: readonly PdfHeaderContentSpacing[] = ['small', 'medium', 'large'];
 const PRESETS: readonly PdfAppearancePreset[] = ['light', 'boxed', 'bold', 'striped', 'bubble', 'wave', 'folder'];
 const DEFAULT_STYLE_PALETTE: Record<PdfAppearancePaletteKey, string> = {
-  primary: '#65536b', secondary: '#8b7c91', text: '#29313c', line: '#d9dce1',
-  tableHeader: '#ffffff', tableHeaderText: '#303541', tableRow: '#ffffff', tableStripe: '#f7f6f8', tableBorder: '#d9dce1',
+  primary: '#01422c', secondary: '#01422c', text: '#334155', line: '#01422c',
+  tableHeader: '#01422c', tableHeaderText: '#ffffff', tableRow: '#ffffff', tableStripe: '#f8fafc', tableBorder: '#d7dee7',
 };
 const APPEARANCE_KEYS: readonly PdfAppearanceProperty[] = [
   'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'presetId', 'tableStyle', 'palette',
@@ -95,6 +106,8 @@ export function normalizePdfAppearanceProfile(value: unknown): PdfAppearanceProf
   if (typeof fontSize === 'number' && Number.isFinite(fontSize) && fontSize >= PDF_APPEARANCE_FONT_SIZE_MIN && fontSize <= PDF_APPEARANCE_FONT_SIZE_MAX) profile.fontSize = fontSize;
   if (PRESETS.includes(source.presetId as PdfAppearancePreset)) profile.presetId = source.presetId as PdfAppearancePreset;
   if (PRESETS.includes(source.tableStyle as PdfAppearancePreset)) profile.tableStyle = source.tableStyle as PdfAppearancePreset;
+  if (source.templateId === PDF_DEFAULT_TEMPLATE_ID) profile.templateId = PDF_DEFAULT_TEMPLATE_ID;
+  if (source.templateVersion === 1) profile.templateVersion = 1;
   if (source.palette && typeof source.palette === 'object' && !Array.isArray(source.palette)) {
     const paletteSource = source.palette as Record<string, unknown>;
     const palette: PdfAppearancePalette = {};

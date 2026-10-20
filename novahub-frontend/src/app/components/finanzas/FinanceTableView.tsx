@@ -412,10 +412,10 @@ export function FinanceTableView({
       const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: filteredData, columns: reportColumns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), tableSummary: summary, fileName: buildDateFilteredLabeledPdfFileName(title, 'pdf', dateRange.start, dateRange.end) });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const pageWidth = doc.internal.pageSize.getWidth();
-      const primaryColor = themeConfig.colors.primary || '#10b981';
+      const primaryColor = pdfSettings.primaryColor || '#01422c';
       const rgbPrimary = primaryColor.startsWith('#') 
         ? [parseInt(primaryColor.slice(1,3), 16), parseInt(primaryColor.slice(3,5), 16), parseInt(primaryColor.slice(5,7), 16)]
-        : [16, 185, 129];
+        : [1, 66, 44];
 
       let currentY = 15;
       if (logoUrl) {

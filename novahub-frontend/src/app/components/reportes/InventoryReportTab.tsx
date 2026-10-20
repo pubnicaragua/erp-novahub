@@ -673,11 +673,11 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
         const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.inventory');
-        const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
-        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
+        const primaryColor = pdfSettings.primaryColor || '#01422c';
+        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#01422c';
         const rgbPrimary = primaryHex.startsWith('#')
           ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)]
-          : [16, 185, 129];
+          : [1, 66, 44];
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
@@ -732,11 +732,11 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         const boxH = 22;
         checkPage(boxH + 5);
-        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 4, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5 });
+        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 4, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5, primaryColor: pdfSettings.primaryColor, secondaryColor: pdfSettings.secondaryColor });
 
-        const renderTable = (title: string, headers: string[], rows: any[][], accent: [number, number, number]) => {
-          reportSections.push({ title, headers, rows, color: accent });
-          currentY = drawReportTable({ doc, title, headers, rows, color: accent, marginX, contentWidth, currentY });
+        const renderTable = (title: string, headers: string[], rows: any[][], _accent: [number, number, number]) => {
+          reportSections.push({ title, headers, rows, color: rgbPrimary });
+          currentY = drawReportTable({ doc, title, headers, rows, color: rgbPrimary, marginX, contentWidth, currentY });
         };
 
         renderTable('Productos con mayor valor inmovilizado', ['Producto', 'Unidades', 'Costo prom.', 'Valor total', 'Participación', 'Días sin mov.', 'Bodega'], topValued.map((p) => [p.name.substring(0, 32), fmtQty(p.qty), formatConvertedAmount(p.costPrice, 'NIO'), formatConvertedAmount(p.value, 'NIO'), `${valuation.totalValue > 0 ? ((p.value / valuation.totalValue) * 100).toFixed(1) : '0'}%`, p.daysSince === null ? 'N/D' : fmtQty(p.daysSince), p.mainWarehouse]), [16, 185, 129]);

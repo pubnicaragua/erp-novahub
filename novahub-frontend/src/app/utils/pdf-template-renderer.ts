@@ -5,7 +5,7 @@ import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { applyPdfHeaderComposition, applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfSettings, ensureDashboardChartNodes, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, pdfTemplateImageShapeStyles, resolveTemplateToken, type PdfHeaderComposition, type PdfHeaderContentSpacing, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
 import { applyPdfStyleToDefinition, createDefaultPdfStyleConfig, getPdfTableCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, normalizePdfFrameGeometry, normalizePdfFontFamily, normalizePdfStyleConfig, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfTableStyle } from '../services/pdf-document-style';
-import { PDF_APPEARANCE_FONT_GROUPS, PDF_APPEARANCE_FONTS, pdfFontFacesSupportWeight } from '../services/pdf-appearance';
+import { PDF_APPEARANCE_FONT_GROUPS, PDF_APPEARANCE_FONTS, pdfFontFacesSupportWeight, pdfFontUsesSystemFallback } from '../services/pdf-appearance';
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
 import { inlinePdfFontFaceRules } from './pdf-font-embedding';
 import { pdfStatusLabel } from './pdfStatus';
@@ -668,7 +668,8 @@ export async function preparePdfDocumentFonts(renderDocument: Document, family?:
   const selected = normalizePdfFontFamily(family || 'Arial');
   const rules = collectPdfFontFaceRules(selected);
   const isCatalogFont = PDF_APPEARANCE_FONTS.some(font => font.toLowerCase() === selected.toLowerCase());
-  if (isCatalogFont && !rules.length) {
+  const requiresBundledFont = isCatalogFont && !pdfFontUsesSystemFallback(selected);
+  if (requiresBundledFont && !rules.length) {
     throw new Error(`No se encontraron los archivos de la fuente ${selected} para generar el PDF.`);
   }
   let embeddedFontCss = '';
@@ -677,9 +678,9 @@ export async function preparePdfDocumentFonts(renderDocument: Document, family?:
       ? await inlinePdfFontFaceRules(rules.map(({ cssText, baseUrl }) => ({ cssText, baseUrl })))
       : '';
   } catch (error) {
-    if (isCatalogFont) throw new Error(`No se pudo preparar la fuente ${selected} para generar el PDF.`, { cause: error });
+    if (requiresBundledFont) throw new Error(`No se pudo preparar la fuente ${selected} para generar el PDF.`, { cause: error });
   }
-  if (isCatalogFont && !embeddedFontCss) {
+  if (requiresBundledFont && !embeddedFontCss) {
     throw new Error(`No se pudieron preparar los archivos de la fuente ${selected} para generar el PDF.`);
   }
   if (embeddedFontCss && renderDocument.head) {
@@ -689,18 +690,18 @@ export async function preparePdfDocumentFonts(renderDocument: Document, family?:
     renderDocument.head.appendChild(style);
   }
   const fontSet = renderDocument.fonts;
-  if (!fontSet && isCatalogFont) {
+  if (!fontSet && requiresBundledFont) {
     throw new Error(`El navegador no permite comprobar la carga de la fuente ${selected} para el PDF.`);
   }
   if (fontSet) {
     const cssFamily = browserFontFamily(selected).split(',')[0];
     try {
       const regularFaces = await fontSet.load(`400 12px ${cssFamily}`);
-      if (isCatalogFont && !regularFaces.length) throw new Error('El navegador no registró ninguna variante regular de la fuente.');
+      if (requiresBundledFont && !regularFaces.length) throw new Error('El navegador no registró ninguna variante regular de la fuente.');
       await fontSet.load(`700 12px ${cssFamily}`);
       await fontSet.ready;
     } catch (error) {
-      if (isCatalogFont) throw new Error(`El navegador no pudo cargar la fuente ${selected} para el PDF.`, { cause: error });
+      if (requiresBundledFont) throw new Error(`El navegador no pudo cargar la fuente ${selected} para el PDF.`, { cause: error });
     }
   }
   return {

@@ -52,6 +52,7 @@ export const pdfDocumentDesignService = {
   updateCompanyProfile: (data: PdfCompanyProfile) => api.patch<PdfCompanyProfile>('/pdf-document-designs/company-profile', data),
   getAppearanceProfile: () => api.get<PdfAppearanceProfile>('/pdf-document-designs/appearance-profile'),
   updateAppearanceProfile: (patch: PdfAppearanceProfilePatch) => api.patch<PdfAppearanceProfile>('/pdf-document-designs/appearance-profile', patch),
+  applyTemplate: (templateId: 'default-v1') => api.post<{ templateId: string; templateVersion: number; updatedDesignCount: number; alreadyApplied: boolean }>('/pdf-document-designs/apply-template', { templateId }),
   createFolder: (data: { name: string; color?: string }) => api.post<PdfDocumentDesignFolder>('/pdf-document-designs/folders', data),
   updateFolder: (id: string, data: { name?: string; color?: string }) => api.patch<PdfDocumentDesignFolder>(`/pdf-document-designs/folders/${id}`, data),
   removeFolder: (id: string) => api.delete(`/pdf-document-designs/folders/${id}`),

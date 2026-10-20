@@ -25,7 +25,7 @@ import { clearPdfDesignCache } from '../../utils/pdfGenerator';
 import { renderPdfTemplateToPdf } from '../../utils/pdf-template-renderer';
 import { PdfLivePreview } from './PdfLivePreview';
 import { PdfAppearanceSettingsPanel } from './PdfAppearanceSettingsPanel';
-import { clearPdfAppearanceFallback, resetPdfAppearanceOverride, resolvePdfDesignAppearance, updatePdfAppearanceDraft, type PdfAppearanceDraftKey, type PdfAppearanceDraftScope, type PdfAppearanceOverrides, type PdfAppearanceProfile } from '../../services/pdf-appearance';
+import { clearPdfAppearanceFallback, PDF_DEFAULT_TEMPLATE_ID, resetPdfAppearanceOverride, resolvePdfDesignAppearance, updatePdfAppearanceDraft, type PdfAppearanceDraftKey, type PdfAppearanceDraftScope, type PdfAppearanceOverrides, type PdfAppearanceProfile } from '../../services/pdf-appearance';
 
 const DOCUMENTS = PDF_TEMPLATE_TARGETS;
 
@@ -228,6 +228,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   }, [companyProfile.logo]);
 
   const hasActiveBranchScope = Boolean(String(tenantId || '').trim());
+  const canEditCompanyProfile = hasActiveBranchScope && canEdit;
   const activeBranchLabel = branchName || companyName || 'Sucursal actual';
   const branchScopeRef = useRef<string | null>(null);
   const resetDraftForScope = useCallback((preferredDocumentType?: PdfDocumentType) => {
@@ -333,47 +334,56 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       setIsLoading(false);
       return () => { cancelled = true; };
     }
-    Promise.all([
-      pdfDocumentDesignService.list(),
-      pdfDocumentDesignService.listFolders(),
-      pdfDocumentDesignService.getCompanyProfile().catch(() => null),
-      pdfDocumentDesignService.getAppearanceProfile().catch(() => ({} as PdfAppearanceProfile)),
-    ])
-      .then(([records, folderRecords, savedCompanyProfile, savedAppearanceProfile]) => {
-        if (cancelled) return;
-        const normalizedAppearanceProfile = savedAppearanceProfile && typeof savedAppearanceProfile === 'object' ? savedAppearanceProfile : {};
-        appearanceProfileRef.current = normalizedAppearanceProfile;
-        setAppearanceProfile(normalizedAppearanceProfile);
+    const load = async () => {
+      let savedAppearanceProfile = await pdfDocumentDesignService.getAppearanceProfile().catch(() => null);
+      if (cancelled) return;
+      if (savedAppearanceProfile && canEditCompanyProfile && savedAppearanceProfile.templateId !== PDF_DEFAULT_TEMPLATE_ID) {
+        try {
+          await pdfDocumentDesignService.applyTemplate(PDF_DEFAULT_TEMPLATE_ID);
+          clearPdfDesignCache();
+          savedAppearanceProfile = await pdfDocumentDesignService.getAppearanceProfile().catch(() => savedAppearanceProfile);
+        } catch (error: any) {
+          toast.error(error?.message || 'No se pudo activar la plantilla Predeterminada para esta sucursal');
+        }
+      }
+      const [records, folderRecords, savedCompanyProfile] = await Promise.all([
+        pdfDocumentDesignService.list(),
+        pdfDocumentDesignService.listFolders(),
+        pdfDocumentDesignService.getCompanyProfile().catch(() => null),
+      ]);
+      if (cancelled) return;
+      const normalizedAppearanceProfile = savedAppearanceProfile && typeof savedAppearanceProfile === 'object' ? savedAppearanceProfile : {};
+      appearanceProfileRef.current = normalizedAppearanceProfile;
+      setAppearanceProfile(normalizedAppearanceProfile);
+      setAppearanceOverrides({});
+      setAppearanceOverridesExplicit(false);
+      if (!appearanceScopeChosen.current) setAppearanceScope(Object.keys(normalizedAppearanceProfile).length ? 'branch' : 'document');
+      setHasSavedCompanyProfile(Boolean(savedCompanyProfile));
+      setCompanyProfile(savedCompanyProfile || createDefaultPdfCompanyProfile(companyName, logo || ''));
+      setDesigns(records || []);
+      setFolders(folderRecords || []);
+      let storedDocumentType: PdfDocumentType | undefined;
+      try {
+        const stored = window.localStorage.getItem(documentViewStorageKey);
+        if (stored && PDF_TEMPLATE_TARGETS.some(target => target.key === stored)) storedDocumentType = stored as PdfDocumentType;
+      } catch { /* almacenamiento no disponible */ }
+      const preferredRecord = storedDocumentType && records?.find(record => normalizePdfTemplateKey(record.documentTypes?.[0] || '') === storedDocumentType);
+      if (preferredRecord) loadDesign(preferredRecord, normalizedAppearanceProfile);
+      else if (storedDocumentType) {
+        resetDraftForScope(storedDocumentType);
         setAppearanceOverrides({});
         setAppearanceOverridesExplicit(false);
-        if (!appearanceScopeChosen.current) setAppearanceScope(Object.keys(normalizedAppearanceProfile).length ? 'branch' : 'document');
-        setHasSavedCompanyProfile(Boolean(savedCompanyProfile));
-        setCompanyProfile(savedCompanyProfile || createDefaultPdfCompanyProfile(companyName, logo || ''));
-        setDesigns(records || []);
-        setFolders(folderRecords || []);
-        let storedDocumentType: PdfDocumentType | undefined;
-        try {
-          const stored = window.localStorage.getItem(documentViewStorageKey);
-          if (stored && PDF_TEMPLATE_TARGETS.some(target => target.key === stored)) storedDocumentType = stored as PdfDocumentType;
-        } catch { /* almacenamiento no disponible */ }
-        const preferredRecord = storedDocumentType && records?.find(record => normalizePdfTemplateKey(record.documentTypes?.[0] || '') === storedDocumentType);
-        if (preferredRecord) loadDesign(preferredRecord, normalizedAppearanceProfile);
-        else if (storedDocumentType) {
-          resetDraftForScope(storedDocumentType);
-          setAppearanceOverrides({});
-          setAppearanceOverridesExplicit(false);
-        }
-        else if (records?.length) loadDesign(records[0], normalizedAppearanceProfile);
-        else {
-          resetDraftForScope();
-          setAppearanceOverrides({});
-          setAppearanceOverridesExplicit(false);
-        }
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setIsLoading(false); });
+      }
+      else if (records?.length) loadDesign(records[0], normalizedAppearanceProfile);
+      else {
+        resetDraftForScope();
+        setAppearanceOverrides({});
+        setAppearanceOverridesExplicit(false);
+      }
+    };
+    void load().catch(() => {}).finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
-  }, [companyName, documentViewStorageKey, hasActiveBranchScope, loadDesign, logo, resetDraftForScope, tenantId]);
+  }, [canEditCompanyProfile, companyName, documentViewStorageKey, hasActiveBranchScope, loadDesign, logo, resetDraftForScope, tenantId]);
   useEffect(() => {
     if (settings.paletteMode !== 'corporate' || !corporateColor || activeId !== 'draft') return;
     const timer = setTimeout(() => { setSettings(prev => ({ ...prev, primaryColor: corporateColor })); }, 0);
@@ -460,7 +470,6 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const selectedTargetEditable = canEditPdfTemplate(selectedTarget);
   const hasImportedHtmlHeader = Boolean(String((templateDefinition.metadata?.pdfStyleConfig as { htmlTemplate?: { headerHtml?: string } } | undefined)?.htmlTemplate?.headerHtml || '').trim());
   const canModifyActive = hasActiveBranchScope && selectedTargetEditable && (activeId === 'draft' ? canCreate : canEdit);
-  const canEditCompanyProfile = hasActiveBranchScope && canEdit;
   const update = <K extends keyof PdfSettings>(key: K, value: PdfSettings[K]) => { if (canModifyActive) setSettings(prev => ({ ...prev, [key]: value })); };
   const updateAppearance = (key: PdfAppearanceDraftKey, value: unknown) => {
     const canChange = appearanceScope === 'branch' ? canEditCompanyProfile : canModifyActive;
@@ -535,7 +544,8 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     if (!canEditCompanyProfile || isSavingAppearance) return;
     setIsSavingAppearance(true);
     try {
-      const savedProfile = await pdfDocumentDesignService.updateAppearanceProfile(appearanceProfile);
+      const { templateId: _templateId, templateVersion: _templateVersion, ...editableProfile } = appearanceProfile;
+      const savedProfile = await pdfDocumentDesignService.updateAppearanceProfile(editableProfile);
       appearanceProfileRef.current = savedProfile;
       setAppearanceProfile(savedProfile);
       clearPdfDesignCache();
@@ -688,6 +698,23 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
             <Field label="Carpeta"><div className="flex gap-2"><select aria-label="Carpeta del diseño" value={selectedFolderId || ''} onChange={event => setSelectedFolderId(event.target.value || null)} disabled={!canModifyActive} className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm"><option value="">Sin carpeta</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><Button type="button" variant="outline" size="icon" title="Nueva carpeta" className="size-9 shrink-0 cursor-pointer" onClick={openNewFolder} disabled={!canModifyActive}><FolderPlus className="size-4" /></Button></div></Field>
             <Field label="Descripción"><Textarea value={description} onChange={event => setDescription(event.target.value)} disabled={!canModifyActive} placeholder="Describe cuándo debe utilizarse" rows={2} /></Field>
             <div className="rounded-lg border border-primary/15 bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground"><span className="font-semibold text-primary">{selectedTarget.moduleLabel} · {selectedTarget.label}</span><br />{selectedTargetEditable ? 'Este diseño se guarda para esta vista y sucursal.' : 'Formato físico fijo del sistema.'}</div>
+          </CardContent>
+        </details>
+
+        <details data-tour="pdf-templates" open className="group rounded-lg border bg-card text-card-foreground shadow-none">
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-6 pb-3 pt-6 [&::-webkit-details-marker]:hidden">
+            <div className="space-y-1.5"><CardTitle className="text-sm">Plantillas</CardTitle><CardDescription className="text-xs">Base compartida para los PDF de esta sucursal.</CardDescription></div>
+            <ChevronDown className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <CardContent className="pt-0">
+            <div className="rounded-xl border border-primary/40 bg-primary/5 p-3" aria-current="true">
+              <div className="flex items-center gap-2">
+                <LayoutTemplate className="size-4 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1 text-sm font-semibold">Predeterminada</span>
+                <Badge variant="secondary" className="shrink-0">Activa</Badge>
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">Empresa a la izquierda, logotipo a la derecha, líneas y encabezados en verde oscuro, con fuente Arial de 9 pt.</p>
+            </div>
           </CardContent>
         </details>
 
