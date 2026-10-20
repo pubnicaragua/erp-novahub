@@ -1289,55 +1289,6 @@ th .column-filter-menu .column-filter-icon,
   overflow-wrap: anywhere;
 }
 
-/* Servicios tiene menos columnas que Productos. Conserva medidas compactas
-   para Estado, precios y acciones, y reparte el espacio adicional entre las
-   columnas de texto para aprovechar resoluciones amplias sin dejar huecos. */
-.inventory-module [data-catalog-table="service"] {
-  display: block;
-  width: 100%;
-  max-width: none;
-  table-layout: auto;
-}
-
-.inventory-module [data-catalog-table="service"] > colgroup {
-  display: none;
-}
-
-.inventory-module [data-catalog-table="service"] > thead,
-.inventory-module [data-catalog-table="service"] > tbody {
-  display: block;
-  width: 100%;
-}
-
-.inventory-module [data-catalog-table="service"] > thead > tr,
-.inventory-module [data-catalog-table="service"] > tbody > tr {
-  display: grid;
-  width: 100%;
-  grid-template-columns: 40px 112px minmax(224px, 1.6fr) minmax(180px, 1.2fr) 144px 112px 112px 112px 128px;
-}
-
-.inventory-module [data-catalog-table="service"][data-catalog-cost="hidden"] > thead > tr,
-.inventory-module [data-catalog-table="service"][data-catalog-cost="hidden"] > tbody > tr {
-  grid-template-columns: 40px 112px minmax(224px, 1.6fr) minmax(180px, 1.2fr) 144px 112px 112px 128px;
-}
-
-.inventory-module [data-catalog-table="service"] > thead > tr > th,
-.inventory-module [data-catalog-table="service"] > tbody > tr > td {
-  display: flex;
-  width: auto !important;
-  min-width: 0;
-  max-width: none;
-}
-
-.inventory-module [data-catalog-table="service"] > thead > tr > th {
-  align-items: center;
-}
-
-.inventory-module [data-catalog-table="service"] > tbody > tr > td[colspan] {
-  display: block;
-  grid-column: 1 / -1;
-}
-
 /* Encabezados persistentes para todas las tablas del ERP. El encabezado y
    sus celdas usan la misma capa para que siga visible tanto cuando el scroll
    vertical pertenece al módulo como cuando pertenece a una tabla acotada.
