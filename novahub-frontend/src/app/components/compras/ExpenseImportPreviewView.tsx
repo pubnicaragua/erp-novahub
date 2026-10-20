@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ArrowLeft, CheckCircle2, RefreshCw, Upload, Wallet } from 'lucide-react';
 import type { ExpenseImportPreviewResponse, ExpenseImportRow } from '../../services/compras.service';
 import { Badge } from '../ui/badge';
@@ -6,6 +7,7 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { Input } from '../ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { cn } from '../ui/utils';
@@ -78,9 +80,12 @@ export function ExpenseImportPreviewView({
   onFinish,
 }: Props) {
   useImportPreviewLayout();
+  const [confirmImportOpen, setConfirmImportOpen] = useState(false);
+  const [confirmationWord, setConfirmationWord] = useState('');
   const sourceRows = new Map(rows.map((row) => [row.sourceRowNumber, row]));
   const readyCount = preview.rows.filter((row) => row.status === 'READY').length;
   const skippedCount = preview.rows.filter((row) => row.status === 'BLOCKED' || row.status === 'FAILED').length;
+  const canConfirmImport = confirmationWord.trim().toLocaleUpperCase() === 'IMPORTAR';
 
   return (
     <div data-import-preview-shell="true" className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
@@ -240,11 +245,47 @@ export function ExpenseImportPreviewView({
           {!result && (
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={onRevalidate} disabled={importing || validating} className="gap-2"><RefreshCw className="size-4" /> Revalidar ahora</Button>
-              <Button onClick={onConfirm} disabled={importing || validating || previewStale || readyCount === 0} className="gap-2"><Upload className="size-4" /> Confirmar {readyCount} gastos listos</Button>
+              <Button onClick={() => setConfirmImportOpen(true)} disabled={importing || validating || previewStale || readyCount === 0} className="gap-2"><Upload className="size-4" /> Confirmar {readyCount} gastos listos</Button>
             </div>
           )}
         </footer>
       </div>
+      <Dialog open={confirmImportOpen} onOpenChange={(open) => { setConfirmImportOpen(open); if (!open) setConfirmationWord(''); }}>
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Confirmar importación de gastos</DialogTitle>
+            <DialogDescription>
+              Se importarán {readyCount} gastos listos. Los que estén pagados pueden generar movimientos en Finanzas y asientos contables según la configuración de esta sucursal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label htmlFor="confirm-expense-import-word" className="text-xs font-bold text-foreground">Escribe <span className="font-black">IMPORTAR</span> para continuar</label>
+            <Input
+              id="confirm-expense-import-word"
+              autoComplete="off"
+              value={confirmationWord}
+              onChange={(event) => setConfirmationWord(event.target.value)}
+              placeholder="IMPORTAR"
+              disabled={importing}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => { setConfirmImportOpen(false); setConfirmationWord(''); }} disabled={importing}>Cancelar</Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!canConfirmImport) return;
+                setConfirmImportOpen(false);
+                setConfirmationWord('');
+                onConfirm();
+              }}
+              disabled={!canConfirmImport || importing || validating || previewStale}
+            >
+              <Upload className="mr-2 size-4" /> Importar gastos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ImportProgressOverlay open={importing} progress={progress} title={validating ? 'Validando gastos' : 'Importando gastos'} description={validating ? 'Recalculando errores y efectos de cada fila en el servidor.' : 'Registrando los gastos listos en bloques de hasta 50.'} />
     </div>
   );
