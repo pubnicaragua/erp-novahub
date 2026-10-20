@@ -400,12 +400,17 @@ export function applyPdfHeaderComposition<T extends PdfTemplateDefinition>(defin
   const isCustomerHistory = getPdfTemplateTarget(targetKey).key === 'ventas.customer-history';
   const isCustomerList = getPdfTemplateTarget(targetKey).key === 'ventas.customers';
   const isPurchaseTarget = isPurchasePdfLayoutTarget(getPdfTemplateTarget(targetKey).key);
+  const reportCompanySummaryPlacement: Partial<PdfTemplateNode> = selected === 'centered-stack'
+    ? { x: 5, y: hasLogo ? 14.8 : 9.8, width: 90, align: 'center', height: 8.5 }
+    : selected === 'logo-left-company-right'
+      ? { x: 41, y: 11, width: 54, align: 'right', height: 8 }
+      : { x: 5, y: 11, width: 54, align: 'left', height: 8 };
   const cashSectionsY = isCashSession ? 38.5 : isCashHistoricalReport ? 35.3 : 34.8;
   const centeredCashSectionsY = isCashSession ? 42 : isCashHistoricalReport ? 39.3 : 38.8;
   const reportHeaderPlacements: Record<string, Partial<PdfTemplateNode>> = reportLikeSalesTarget
     ? selected === 'centered-stack'
       ? {
-        'company-summary': { height: 8.5 },
+        'company-summary': reportCompanySummaryPlacement,
         'document-title': { x: 55, y: isCashSession ? 23 : 26, width: 40, height: isCashSession ? 5 : isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
         'document-number': { x: 55, y: isCustomerHistory ? 31 : isCashSession ? 28.5 : 35.5, width: 40, height: 2.8, align: 'right' },
         'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 34.2 : isCashSession ? 31.5 : 38.8, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
@@ -428,7 +433,7 @@ export function applyPdfHeaderComposition<T extends PdfTemplateDefinition>(defin
         } : {}),
       }
       : {
-        'company-summary': { height: 8 },
+        'company-summary': reportCompanySummaryPlacement,
         'document-title': { x: 55, y: isCashSession ? 19 : 22, width: 40, height: isCashSession ? 5 : isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
         'document-number': { x: 55, y: isCustomerHistory ? 27 : isCashSession ? 24.5 : 31.5, width: 40, height: 2.8, align: 'right' },
         'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 30.2 : isCashSession ? 28 : 35, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },

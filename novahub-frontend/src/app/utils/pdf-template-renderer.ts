@@ -650,7 +650,7 @@ function collectPdfFontFaceRules(family: string) {
   const found: Array<{ cssText: string; baseUrl: string; weight: string }> = [];
   const visit = (rules: CSSRuleList) => {
     for (const rule of Array.from(rules)) {
-      if (rule instanceof CSSFontFaceRule) {
+      if (isPdfFontFaceRule(rule)) {
         const match = rule.style.getPropertyValue('font-family').replace(/^['"]|['"]$/g, '').toLowerCase();
         if (match === expected) found.push({ cssText: rule.cssText, baseUrl: rule.parentStyleSheet?.href || document.baseURI, weight: rule.style.getPropertyValue('font-weight') || 'normal' });
       } else if ('cssRules' in rule && (rule as CSSGroupingRule).cssRules) {
@@ -662,6 +662,11 @@ function collectPdfFontFaceRules(family: string) {
     try { if (sheet.cssRules) visit(sheet.cssRules); } catch { /* omite hojas externas no accesibles */ }
   }
   return [...new Map(found.map(rule => [`${rule.baseUrl}\n${rule.cssText}`, rule])).values()];
+}
+
+/** CSSFontFaceRule no está expuesta como constructor en todos los webviews; CSSRule.type es estable. */
+export function isPdfFontFaceRule(rule: CSSRule): rule is CSSFontFaceRule {
+  return rule.type === 5;
 }
 
 export async function preparePdfDocumentFonts(renderDocument: Document, family?: string) {

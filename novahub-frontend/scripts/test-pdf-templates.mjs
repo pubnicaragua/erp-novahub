@@ -108,6 +108,9 @@ try {
   assert.equal(renderer.browserFontFamily('Fira Code'), '"Fira Code", monospace', 'Las nuevas fuentes monoespaciadas deben conservar su fallback correcto.');
   assert.equal(renderer.browserFontFamily('Dancing Script'), '"Dancing Script", cursive', 'Las fuentes manuscritas deben conservar el fallback cursivo.');
   assert.equal(renderer.browserFontFamily('Press Start 2P'), '"Press Start 2P", fantasy', 'Las fuentes decorativas deben conservar un fallback display.');
+  assert.equal(renderer.browserFontFamily('Bad Script'), '"Bad Script", cursive', 'Las fuentes cursivas del final de la lista deben conservar su familia y fallback.');
+  assert.equal(renderer.isPdfFontFaceRule({ type: 5 }), true, 'El renderer debe reconocer las fuentes aunque el navegador no exponga CSSFontFaceRule como constructor.');
+  assert.equal(renderer.isPdfFontFaceRule({ type: 1 }), false, 'Las reglas de estilo comunes no deben tratarse como archivos de fuente.');
   const fontSourceDefinition = {
     nodes: [{ id: 'font-sample', type: 'text', fontFamily: 'Georgia', fontWeight: 700, italic: true, fontSize: 12, align: 'right' }],
   };
@@ -457,6 +460,22 @@ try {
   const composedCustomCashDefinition = definitions.applyPdfHeaderComposition(customCashDefinition, 'logo-left-company-right', 'ventas.cash-session');
   assert.equal(composedCustomCashDefinition.nodes.find(node => node.id === 'document-title').y, 27, 'Cambiar la composición empresarial no debe mover el título de un diseño personalizado.');
   assert.equal(composedCustomCashDefinition.nodes.find(node => node.id === 'cash-report-sections').y, 58, 'Cambiar la composición empresarial no debe mover las tablas guardadas por el usuario.');
+
+  const cashHistoryDefinition = definitions.createDefaultTemplateDefinition('ventas.cash-historical-report', definitions.createSystemDefaultPdfDesign('ventas.cash-historical-report').settings);
+  const rightAlignedCashIdentity = definitions.applyPdfHeaderComposition(cashHistoryDefinition, 'logo-left-company-right', 'ventas.cash-historical-report');
+  const rightAlignedCashSummary = rightAlignedCashIdentity.nodes.find(node => node.id === 'company-summary');
+  assert.deepEqual(
+    [rightAlignedCashSummary?.x, rightAlignedCashSummary?.width, rightAlignedCashSummary?.align],
+    [41, 54, 'right'],
+    'Al invertir el encabezado de un reporte, el eslogan, dirección e identificación deben moverse y alinearse con el nombre de empresa.',
+  );
+  const centeredCashIdentity = definitions.applyPdfHeaderComposition(cashHistoryDefinition, 'centered-stack', 'ventas.cash-historical-report');
+  const centeredCashSummary = centeredCashIdentity.nodes.find(node => node.id === 'company-summary');
+  assert.deepEqual(
+    [centeredCashSummary?.x, centeredCashSummary?.width, centeredCashSummary?.align],
+    [5, 90, 'center'],
+    'Al centrar el encabezado de un reporte, todas las líneas de datos empresariales deben ocupar y alinearse al centro.',
+  );
 
   const supplierHistoryDefinition = definitions.createDefaultTemplateDefinition('compras.supplier-history', definitions.createSystemDefaultPdfDesign('compras.supplier-history').settings);
   assert.equal(supplierHistoryDefinition.nodes.find(node => node.id === 'document-title').x, 55, 'El título del historial de proveedor debe ocupar la banda derecha.');
