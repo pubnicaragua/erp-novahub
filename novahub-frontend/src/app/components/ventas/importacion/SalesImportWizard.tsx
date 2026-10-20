@@ -71,6 +71,7 @@ const invoicePaymentMethodOptions = [
 
 type InvoiceSourceUpdate =
   | { field: "paymentMethod" | "paymentReference" | "bankAccountNumber"; value: string }
+  | { field: "chargeKind" | "chargeDescription" | "chargeAmount"; chargeSourceRowNumber: number; value: string | number | null }
   | { field: "priceList" | "warehouse"; itemSourceRowNumber: number; optionId: string; optionName: string };
 
 function normalizeInvoicePaymentMethod(value?: string | null) {
@@ -396,7 +397,7 @@ function InvoiceImportDocumentCard({
                   const isService = item?.itemType?.toUpperCase() === "SERVICE";
                   return (
                     <tr key={`${sourceItem.sourceRowNumber}-${sourceItem.productCode}-${index}`} className="border-t border-border/50 align-top">
-                      <td className="max-w-[230px] break-words p-2"><span className="font-semibold">{item?.description || "Producto"}</span><span className="block text-[10px] text-muted-foreground">{sourceItem.productCode}</span></td>
+                      <td className="max-w-[230px] break-words p-2"><span className="font-semibold">{item?.description || "Producto"}</span><Badge variant="outline" className="ml-1 text-[9px]">{isService ? "Servicio" : "Producto"}</Badge><span className="block text-[10px] text-muted-foreground">{sourceItem.productCode}</span></td>
                       <td className="min-w-[190px] p-2">
                         {isService ? "Catálogo" : (
                           <Select value={selectedPriceList?.id || (sourceItem.priceListName ? missingPriceListValue : "")} onValueChange={(value) => {
@@ -436,6 +437,53 @@ function InvoiceImportDocumentCard({
               </tbody>
             </table>
           </div>
+          <section className="min-w-0 space-y-2 rounded-xl border border-border/50 p-3" aria-label={`Cargos de la factura ${document.reference}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-bold">Cargos</h3>
+                <p className="text-[10px] text-muted-foreground">Se suman al total y al pago; heredan la moneda y no mueven inventario ni llevan IVA propio.</p>
+              </div>
+              {Number(data?.chargeTotals?.total || 0) > 0 && (
+                <span className="text-xs font-semibold">Total cargos: {currencyLabel(data?.currency)} {Number(data?.chargeTotals?.total).toLocaleString("es-NI", { minimumFractionDigits: 2 })}</span>
+              )}
+            </div>
+            {(document.source.charges || []).length === 0 ? (
+              <p className="rounded-lg bg-muted/30 p-2 text-xs text-muted-foreground">Esta factura no tiene cargos importados.</p>
+            ) : (
+              <div className="space-y-2">
+                {(document.source.charges || []).map((charge) => {
+                  const knownKind = ["EXTRA", "DELIVERY"].includes(String(charge.kind).toUpperCase());
+                  return (
+                    <div key={charge.sourceRowNumber} className="grid min-w-0 grid-cols-1 gap-2 rounded-lg bg-muted/20 p-2 sm:grid-cols-[minmax(130px,0.7fr)_minmax(180px,1.5fr)_minmax(120px,0.7fr)]">
+                      <label className="min-w-0 space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Tipo de cargo · fila {charge.sourceRowNumber}</span>
+                        <Select
+                          value={String(charge.kind || "")}
+                          onValueChange={(value) => onSourceUpdate(document.sourceRowNumber, { field: "chargeKind", chargeSourceRowNumber: charge.sourceRowNumber, value })}
+                          disabled={!canEditPayment}
+                        >
+                          <SelectTrigger aria-label={`Tipo de cargo fila ${charge.sourceRowNumber} de ${document.reference}`} className="h-9 text-xs"><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
+                          <SelectContent>
+                            {!knownKind && Boolean(charge.kind) && <SelectItem value={String(charge.kind)}>Valor importado: {charge.kind}</SelectItem>}
+                            <SelectItem value="EXTRA">Coste extra</SelectItem>
+                            <SelectItem value="DELIVERY">Delivery</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <label className="min-w-0 space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Descripción</span>
+                        <Input aria-label={`Descripción del cargo fila ${charge.sourceRowNumber} de ${document.reference}`} value={String(charge.description || "")} onChange={(event) => onSourceUpdate(document.sourceRowNumber, { field: "chargeDescription", chargeSourceRowNumber: charge.sourceRowNumber, value: event.target.value })} disabled={!canEditPayment} maxLength={160} className="h-9 text-xs" />
+                      </label>
+                      <label className="min-w-0 space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Monto ({currencyLabel(data?.currency)})</span>
+                        <Input aria-label={`Monto del cargo fila ${charge.sourceRowNumber} de ${document.reference}`} type="number" min="0.01" step="0.01" value={charge.amount ?? ""} onChange={(event) => onSourceUpdate(document.sourceRowNumber, { field: "chargeAmount", chargeSourceRowNumber: charge.sourceRowNumber, value: event.target.value === "" ? null : Number(event.target.value) })} disabled={!canEditPayment} className="h-9 text-xs" />
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </div>
         <div className="min-w-0 space-y-2">
           {document.error && (!ready || document.status === "FAILED") && <div role="alert" className="rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive"><strong>{document.status === "FAILED" ? "Error al confirmar" : "Debe corregirse"}</strong><p className="mt-1 whitespace-pre-wrap">{document.error}</p></div>}
@@ -742,7 +790,17 @@ export function SalesImportWizard({
     if (!current || !existing || ["CONFIRMED", "PROCESSING"].includes(existing.status)) return;
 
     let source = existing.source;
-    if (update.field === "priceList" || update.field === "warehouse") {
+    if (update.field === "chargeKind" || update.field === "chargeDescription" || update.field === "chargeAmount") {
+      source = {
+        ...source,
+        charges: (source.charges || []).map((charge) => {
+          if (charge.sourceRowNumber !== update.chargeSourceRowNumber) return charge;
+          if (update.field === "chargeKind") return { ...charge, kind: String(update.value || "") };
+          if (update.field === "chargeDescription") return { ...charge, description: String(update.value || "") };
+          return { ...charge, amount: update.value === null ? null : Number(update.value) };
+        }),
+      };
+    } else if (update.field === "priceList" || update.field === "warehouse") {
       source = {
         ...source,
         items: source.items.map((item) => item.sourceRowNumber === update.itemSourceRowNumber
@@ -751,7 +809,7 @@ export function SalesImportWizard({
             : { ...item, warehouseId: update.optionId, warehouseName: update.optionName }
           : item),
       };
-    } else {
+    } else if (update.field === "paymentMethod" || update.field === "paymentReference" || update.field === "bankAccountNumber") {
       source = { ...source, [update.field]: update.value };
       if (update.field === "paymentMethod" && normalizeInvoicePaymentMethod(update.value) === "CASH") {
         source = { ...source, paymentReference: "", bankAccountNumber: "" };

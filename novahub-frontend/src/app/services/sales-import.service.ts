@@ -14,6 +14,13 @@ export interface SalesImportInvoiceSourceItem {
   taxOverride: string;
 }
 
+export interface SalesImportInvoiceSourceCharge {
+  sourceRowNumber: number;
+  kind: "EXTRA" | "DELIVERY" | string;
+  description: string;
+  amount: number | null;
+}
+
 export interface SalesImportInvoiceSource {
   reference: string;
   sourceRowNumber: number;
@@ -25,6 +32,7 @@ export interface SalesImportInvoiceSource {
   bankAccountNumber?: string | null;
   notes?: string | null;
   items: SalesImportInvoiceSourceItem[];
+  charges?: SalesImportInvoiceSourceCharge[];
 }
 
 export interface SalesImportInvoicePreviewDocument {
@@ -99,6 +107,17 @@ export interface SalesImportDocument {
       taxAmount?: number;
       total?: number;
     };
+    pricingTotals?: {
+      subtotal?: number;
+      discountAmount?: number;
+      taxAmount?: number;
+      total?: number;
+    };
+    chargeTotals?: {
+      extraCharges?: number;
+      delivery?: number;
+      total?: number;
+    };
     items?: Array<{
       sourceRowNumber?: number;
       productCode?: string;
@@ -106,6 +125,7 @@ export interface SalesImportDocument {
       itemType?: string;
       quantity?: number;
       unitPrice?: number;
+      priceMissing?: boolean;
       priceListName?: string | null;
       taxRate?: number;
       discount?: number;
