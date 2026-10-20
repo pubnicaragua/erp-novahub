@@ -4,7 +4,7 @@ import JsBarcode from 'jsbarcode';
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { applyPdfHeaderComposition, applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfSettings, ensureDashboardChartNodes, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, pdfTemplateImageShapeStyles, resolveTemplateToken, type PdfHeaderComposition, type PdfHeaderContentSpacing, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
-import { applyPdfStyleToDefinition, getPdfTableCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, normalizePdfFrameGeometry, normalizePdfFontFamily, normalizePdfStyleConfig, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfTableStyle } from '../services/pdf-document-style';
+import { applyPdfStyleToDefinition, createDefaultPdfStyleConfig, getPdfTableCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, normalizePdfFrameGeometry, normalizePdfFontFamily, normalizePdfStyleConfig, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfTableStyle } from '../services/pdf-document-style';
 import { PDF_APPEARANCE_FONT_GROUPS, PDF_APPEARANCE_FONTS, pdfFontFacesSupportWeight } from '../services/pdf-appearance';
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
 import { inlinePdfFontFaceRules } from './pdf-font-embedding';
@@ -721,26 +721,27 @@ function preventSyntheticPdfBold(root: HTMLElement, hasRealBoldFace: boolean | u
 
 export function resolvePdfStyleConfigForRender(value: unknown, settings: Record<string, unknown>) {
   const stored = normalizePdfStyleConfig(value);
-  if (!stored) return undefined;
   const requestedPalette = settings.pdfAppearancePalette;
+  if (!stored && (!requestedPalette || typeof requestedPalette !== 'object')) return undefined;
   const palette = requestedPalette && typeof requestedPalette === 'object' ? requestedPalette as Record<string, unknown> : {};
+  const base = stored || createDefaultPdfStyleConfig();
   return normalizePdfStyleConfig({
-    ...stored,
-    fontFamily: settings.fontFamily || stored.fontFamily,
-    fontSize: settings.fontSize || stored.fontSize,
-    presetId: settings.pdfStylePreset || stored.presetId,
-    tableStyle: settings.pdfTableStyle || stored.tableStyle,
+    ...base,
+    fontFamily: settings.fontFamily || base.fontFamily,
+    fontSize: settings.fontSize || base.fontSize,
+    presetId: settings.pdfStylePreset || base.presetId,
+    tableStyle: settings.pdfTableStyle || base.tableStyle,
     palette: {
-      ...stored.palette,
-      primary: palette.primary || settings.primaryColor || stored.palette.primary,
-      secondary: palette.secondary || settings.secondaryColor || stored.palette.secondary,
-      text: palette.text || settings.textColor || stored.palette.text,
-      line: palette.line || settings.lineColor || stored.palette.line,
-      tableHeader: palette.tableHeader || settings.tableHeaderColor || stored.palette.tableHeader,
-      tableHeaderText: palette.tableHeaderText || settings.tableHeaderTextColor || stored.palette.tableHeaderText,
-      tableRow: palette.tableRow || settings.tableRowColor || stored.palette.tableRow,
-      tableStripe: palette.tableStripe || settings.tableStripeColor || stored.palette.tableStripe,
-      tableBorder: palette.tableBorder || settings.tableBorderColor || stored.palette.tableBorder,
+      ...base.palette,
+      primary: palette.primary || settings.primaryColor || base.palette.primary,
+      secondary: palette.secondary || settings.secondaryColor || base.palette.secondary,
+      text: palette.text || settings.textColor || base.palette.text,
+      line: palette.line || settings.lineColor || base.palette.line,
+      tableHeader: palette.tableHeader || settings.tableHeaderColor || base.palette.tableHeader,
+      tableHeaderText: palette.tableHeaderText || settings.tableHeaderTextColor || base.palette.tableHeaderText,
+      tableRow: palette.tableRow || settings.tableRowColor || base.palette.tableRow,
+      tableStripe: palette.tableStripe || settings.tableStripeColor || base.palette.tableStripe,
+      tableBorder: palette.tableBorder || settings.tableBorderColor || base.palette.tableBorder,
     },
   });
 }

@@ -29,7 +29,21 @@ const SPACINGS = [
 const PROPERTY_LABELS: Partial<Record<PdfAppearanceDraftKey, string>> = {
   headerComposition: 'Composición del encabezado', headerContentSpacing: 'Espacio después del encabezado',
   fontFamily: 'Fuente del documento', fontSize: 'Tamaño base',
+  'palette.primary': 'Color principal',
+  'palette.secondary': 'Color secundario',
+  'palette.text': 'Texto del documento',
+  'palette.line': 'Líneas y separadores',
+  'palette.tableHeader': 'Fondo del encabezado de tabla',
+  'palette.tableHeaderText': 'Texto del encabezado de tabla',
+  'palette.tableRow': 'Fondo de las filas',
+  'palette.tableStripe': 'Fondo de filas alternas',
+  'palette.tableBorder': 'Bordes de tablas',
 };
+
+const PALETTE_GROUPS: Array<{ label: string; keys: PdfAppearancePaletteKey[] }> = [
+  { label: 'Encabezado y pie', keys: ['primary', 'secondary', 'text', 'line'] },
+  { label: 'Tablas', keys: ['tableHeader', 'tableHeaderText', 'tableRow', 'tableStripe', 'tableBorder'] },
+];
 
 function hasLocalOverride(overrides: PdfAppearanceOverrides, key: PdfAppearanceDraftKey) {
   if (key.startsWith('palette.')) return overrides.palette?.[key.slice(8) as PdfAppearancePaletteKey] !== undefined;
@@ -38,6 +52,41 @@ function hasLocalOverride(overrides: PdfAppearanceOverrides, key: PdfAppearanceD
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="min-w-0 space-y-1"><Label className="text-xs">{label}</Label>{children}</div>;
+}
+
+function PdfColorPicker({ value, disabled, label, onChange }: { value: string; disabled: boolean; label: string; onChange: (color: string) => void }) {
+  const [draft, setDraft] = React.useState(value);
+  const isHexColor = (color: string) => /^#[0-9a-f]{6}$/i.test(color);
+  React.useEffect(() => setDraft(value), [value]);
+
+  return <div className="flex min-w-0 items-center gap-2">
+    <Input
+      aria-label={`Selector de ${label}`}
+      type="color"
+      value={isHexColor(value) ? value : '#000000'}
+      disabled={disabled}
+      onChange={event => {
+        const color = event.target.value.toUpperCase();
+        setDraft(color);
+        onChange(color);
+      }}
+      className="h-9 w-12 shrink-0 cursor-pointer p-1"
+    />
+    <Input
+      aria-label={`Código hexadecimal de ${label}`}
+      value={draft}
+      maxLength={7}
+      disabled={disabled}
+      placeholder="#1A2B3C"
+      onChange={event => {
+        const color = event.target.value.toUpperCase();
+        setDraft(color);
+        if (isHexColor(color)) onChange(color);
+      }}
+      onBlur={() => { if (!isHexColor(draft)) setDraft(value); }}
+      className="h-9 min-w-0 font-mono text-xs uppercase"
+    />
+  </div>;
 }
 
 function PdfFontFamilyPicker({ value, disabled, onChange }: { value: string; disabled: boolean; onChange: (family: string) => void }) {
@@ -157,6 +206,20 @@ export function PdfAppearanceSettingsPanel({
         {property('headerContentSpacing', effective.headerContentSpacing, <select aria-label="Espacio después del encabezado PDF" value={effective.headerContentSpacing || 'small'} disabled={disabled} onChange={event => onChange('headerContentSpacing', event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60">{SPACINGS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>)}
         {property('fontFamily', effective.fontFamily, <PdfFontFamilyPicker value={effective.fontFamily || 'Inter'} disabled={disabled} onChange={font => onChange('fontFamily', font)} />)}
         {property('fontSize', effective.fontSize, <div className="flex items-center gap-2"><Input aria-label="Tamaño base de fuente PDF" type="number" min={PDF_APPEARANCE_FONT_SIZE_MIN} max={PDF_APPEARANCE_FONT_SIZE_MAX} step={0.5} value={effective.fontSize || 9} disabled={disabled} onChange={event => onChange('fontSize', Number(event.target.value))} className="h-9 text-xs" /><span className="text-xs text-muted-foreground">pt</span></div>)}
+      </div>
+      <div className="space-y-2 border-t border-border/50 pt-3">
+        <div className="flex items-center gap-2 text-xs font-semibold"><SwatchBook className="size-3.5 text-primary" />Colores del PDF</div>
+        <p className="text-[10px] leading-relaxed text-muted-foreground">Estos colores pertenecen al PDF y se conservan aunque cambies el tema de la aplicación. Elige si aplicarlos a todos los PDF de la sucursal o solo a este diseño.</p>
+        {PALETTE_GROUPS.map(group => <section key={group.label} className="space-y-2" aria-label={group.label}>
+          <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</h4>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {group.keys.map(paletteKey => {
+              const key = `palette.${paletteKey}` as const;
+              const value = String(effective.palette?.[paletteKey] || '#000000');
+              return property(key, value, <PdfColorPicker value={value} disabled={disabled} label={PROPERTY_LABELS[key] || paletteKey} onChange={color => onChange(key, color)} />);
+            })}
+          </div>
+        </section>)}
       </div>
       {branchScope ? <div className="space-y-2 border-t border-border/50 pt-3"><Button type="button" className="w-full gap-2" onClick={onSaveBranch} disabled={!canEditBranch || isSavingBranch}>{isSavingBranch ? <span className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" /> : hasBranchProfile ? <Save className="size-4" /> : <Check className="size-4" />}{isSavingBranch ? 'Guardando apariencia…' : 'Guardar apariencia global'}</Button><p className="text-[10px] text-muted-foreground">Perfil compartido por los PDF de {`la sucursal activa`}.</p></div>
         : <div className="space-y-2 border-t border-border/50 pt-3"><Button type="button" variant="outline" className="w-full gap-2" onClick={onResetAll} disabled={!canEditDocument || !Object.keys(overrides).length}><RotateCcw className="size-3.5" />Restablecer a apariencia global</Button><p className="text-[10px] text-muted-foreground">Guarda con el botón principal para conservar los cambios en este PDF.</p></div>}

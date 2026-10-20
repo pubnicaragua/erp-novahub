@@ -188,7 +188,7 @@ export function applyPdfStyleToDefinition<T extends { nodes: any[]; metadata?: R
     ...normalizedDefinition,
     nodes: normalizedDefinition.nodes.map(node => {
       const isTable = node.type === 'table' || node.type === 'report-sections';
-      const accent = /title|number|total/i.test(String(node.id || ''));
+      const accent = /title|number|total|company-name/i.test(String(node.id || ''));
       const isHeaderSection = node.type === 'section' && node.id === 'header';
       const isPartySection = node.type === 'section' && node.id === 'party-section';
       const isHeaderRule = node.type === 'divider' && node.id === 'header-accent';
@@ -250,7 +250,7 @@ export function applyPdfStyleToDefinition<T extends { nodes: any[]; metadata?: R
         ...(isSplitFooterAccent ? { width: 65 } : {}),
         fontFamily: config.fontFamily,
         fontSize: Math.max(5, Math.min(72, styledFontSize)),
-        color: (isHeaderFrame || isFooterFrame) && node.color ? node.color : accent ? config.palette.primary : config.palette.text,
+        color: accent ? config.palette.primary : config.palette.text,
         borderColor: isTable ? config.palette.tableBorder
           : isHeaderRule ? config.palette.primary
             : isHeaderSection && !isLightNeutralColor(String(node.borderColor || '')) ? config.palette.primary
