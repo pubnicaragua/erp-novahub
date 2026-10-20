@@ -1,3 +1,5 @@
+import { parsePdfHeaderContentSpacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM } from './pdf-header-spacing';
+
 export const PDF_APPEARANCE_FONTS = [
   'Arial', 'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans', 'Source Sans 3',
   'Poppins', 'Raleway', 'Ubuntu', 'Fira Sans', 'PT Sans', 'Work Sans', 'DM Sans',
@@ -26,7 +28,6 @@ export function pdfFontUsesSystemFallback(family: string) {
 export const PDF_APPEARANCE_FONT_SIZE_MIN = 2;
 export const PDF_APPEARANCE_FONT_SIZE_MAX = 20;
 export type PdfHeaderComposition = 'company-left-logo-right' | 'logo-left-company-right' | 'centered-stack';
-export type PdfHeaderContentSpacing = 'small' | 'medium' | 'large';
 export type PdfAppearancePreset = 'light' | 'boxed' | 'bold' | 'striped' | 'bubble' | 'wave' | 'folder';
 
 export const PDF_APPEARANCE_PALETTE_KEYS = [
@@ -41,7 +42,7 @@ export interface PdfAppearanceProfile {
   templateId?: typeof PDF_DEFAULT_TEMPLATE_ID;
   templateVersion?: 1;
   headerComposition?: PdfHeaderComposition;
-  headerContentSpacing?: PdfHeaderContentSpacing;
+  headerContentSpacing?: number;
   fontFamily?: PdfAppearanceFontFamily;
   fontSize?: number;
   presetId?: PdfAppearancePreset;
@@ -84,7 +85,6 @@ export function pdfFontFacesSupportWeight(faceWeights: readonly string[], reques
 }
 
 const HEADER_COMPOSITIONS: readonly PdfHeaderComposition[] = ['company-left-logo-right', 'logo-left-company-right', 'centered-stack'];
-const HEADER_SPACINGS: readonly PdfHeaderContentSpacing[] = ['small', 'medium', 'large'];
 const PRESETS: readonly PdfAppearancePreset[] = ['light', 'boxed', 'bold', 'striped', 'bubble', 'wave', 'folder'];
 const DEFAULT_STYLE_PALETTE: Record<PdfAppearancePaletteKey, string> = {
   primary: '#01422c', secondary: '#01422c', text: '#334155', line: '#01422c',
@@ -100,7 +100,8 @@ export function normalizePdfAppearanceProfile(value: unknown): PdfAppearanceProf
   const source = value as Record<string, unknown>;
   const profile: PdfAppearanceProfile = {};
   if (HEADER_COMPOSITIONS.includes(source.headerComposition as PdfHeaderComposition)) profile.headerComposition = source.headerComposition as PdfHeaderComposition;
-  if (HEADER_SPACINGS.includes(source.headerContentSpacing as PdfHeaderContentSpacing)) profile.headerContentSpacing = source.headerContentSpacing as PdfHeaderContentSpacing;
+  const headerContentSpacing = parsePdfHeaderContentSpacing(source.headerContentSpacing);
+  if (headerContentSpacing !== null) profile.headerContentSpacing = headerContentSpacing;
   if (PDF_APPEARANCE_FONTS.includes(source.fontFamily as PdfAppearanceFontFamily)) profile.fontFamily = source.fontFamily as PdfAppearanceFontFamily;
   const fontSize = source.fontSize;
   if (typeof fontSize === 'number' && Number.isFinite(fontSize) && fontSize >= PDF_APPEARANCE_FONT_SIZE_MIN && fontSize <= PDF_APPEARANCE_FONT_SIZE_MAX) profile.fontSize = fontSize;
@@ -135,7 +136,11 @@ export function resolvePdfAppearance(
 
   for (const key of APPEARANCE_KEYS) {
     if (key === 'palette') continue;
-    const value = localRecord[key] ?? branchRecord[key] ?? fallbackRecord[key];
+    const value = key === 'headerContentSpacing'
+      ? parsePdfHeaderContentSpacing(localRecord[key])
+        ?? parsePdfHeaderContentSpacing(branchRecord[key])
+        ?? parsePdfHeaderContentSpacing(fallbackRecord[key])
+      : localRecord[key] ?? branchRecord[key] ?? fallbackRecord[key];
     if (value !== undefined && value !== null) resolved[key] = value;
   }
 
@@ -163,7 +168,7 @@ export function inferLegacyPdfAppearanceOverrides(
     : {};
   const defaults: Record<string, unknown> = {
     headerComposition: 'company-left-logo-right',
-    headerContentSpacing: 'small',
+    headerContentSpacing: PDF_HEADER_CONTENT_SPACING_DEFAULT_MM,
     fontFamily: 'Arial',
     fontSize: 9,
     presetId: 'light',
@@ -176,7 +181,8 @@ export function inferLegacyPdfAppearanceOverrides(
     'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'presetId', 'tableStyle',
   ];
   for (const property of directProperties) {
-    const raw = style[property] !== undefined ? style[property] : source[property];
+    const rawValue = style[property] !== undefined ? style[property] : source[property];
+    const raw = property === 'headerContentSpacing' ? parsePdfHeaderContentSpacing(rawValue) : rawValue;
     if (!hasLegacyValue(raw)) continue;
     if (property === 'fontFamily') {
       if (normalizeLegacyFontForComparison(raw) === normalizeLegacyFontForComparison(defaults.fontFamily)) continue;
@@ -224,7 +230,7 @@ export function resolvePdfDesignAppearance(
   const configuredFontFamily = String(style.fontFamily || settings.fontFamily || 'Arial');
   const fallback: PdfAppearanceOverrides = {
     headerComposition: settings.headerComposition as PdfHeaderComposition || 'company-left-logo-right',
-    headerContentSpacing: settings.headerContentSpacing as PdfHeaderContentSpacing || 'small',
+    headerContentSpacing: parsePdfHeaderContentSpacing(settings.headerContentSpacing) ?? PDF_HEADER_CONTENT_SPACING_DEFAULT_MM,
     fontFamily: normalizeLegacyFontForComparison(configuredFontFamily) === 'arial' ? 'Arial' : configuredFontFamily,
     fontSize: Number(style.fontSize || settings.fontSize) || 9,
     presetId: String(style.presetId || settings.pdfStylePreset || 'light') as PdfAppearancePreset,

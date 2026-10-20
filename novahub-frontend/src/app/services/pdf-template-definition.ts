@@ -1,4 +1,5 @@
 import { getPdfTemplatePartyConfig, getPdfTemplateTarget, isPdfTemplateFixed, type PdfTemplateTarget } from './pdf-document-catalog';
+import { normalizePdfHeaderContentSpacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM } from './pdf-header-spacing';
 
 export type PdfTemplateNodeType = 'section' | 'text' | 'field' | 'table' | 'report-sections' | 'chart' | 'totals' | 'image' | 'barcode' | 'divider' | 'spacer';
 export type PdfTemplateChartType = 'area' | 'bar' | 'donut';
@@ -139,7 +140,7 @@ export interface PdfTemplateDefinition {
 }
 
 export type PdfHeaderComposition = 'company-left-logo-right' | 'logo-left-company-right' | 'centered-stack';
-export type PdfHeaderContentSpacing = 'small' | 'medium' | 'large';
+export type { PdfHeaderContentSpacing } from './pdf-header-spacing';
 
 /**
  * Marca la estructura empresarial compartida por los documentos de venta.
@@ -211,7 +212,7 @@ export function applyStandardPdfLayoutSettings<T extends Record<string, unknown>
     tableLayout: 'boxed',
     pdfTableStyle: 'boxed',
     ...(getPdfTemplateTarget(targetKey).key === 'compras.supplier-history'
-      ? { paperSize: 'LETTER', orientation: 'landscape', fontSize: 9 }
+      ? { paperSize: 'LETTER', orientation: 'portrait', fontSize: 9 }
       : {}),
   };
 }
@@ -292,7 +293,7 @@ export const SYSTEM_DEFAULT_PDF_SETTINGS: Record<string, unknown> = {
   paperSize: 'LETTER',
   orientation: 'portrait',
   headerComposition: 'company-left-logo-right',
-  headerContentSpacing: 'small',
+  headerContentSpacing: PDF_HEADER_CONTENT_SPACING_DEFAULT_MM,
   headerLayout: 'classic',
   footerLayout: 'line',
   tableLayout: 'standard',
@@ -379,10 +380,7 @@ export function normalizePdfCompanySettings<T extends Record<string, unknown>>(s
       ? headerComposition
       : 'company-left-logo-right';
   }
-  const headerContentSpacing = String(normalized.headerContentSpacing || '');
-  normalized.headerContentSpacing = (['small', 'medium', 'large'] as const).includes(headerContentSpacing as PdfHeaderContentSpacing)
-    ? headerContentSpacing
-    : 'small';
+  normalized.headerContentSpacing = normalizePdfHeaderContentSpacing(normalized.headerContentSpacing);
   return normalized as T;
 }
 
@@ -1762,8 +1760,8 @@ function createStandardPurchaseDefinition(targetKey: string, settings: Record<st
   if (isList) {
     nodes.push(
       node({ type: 'field', label: 'Título del documento', token: 'document.title', x: 55, y: 22, width: 40, height: 5.5, fontSize: 10, color: primary, bold: true, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-title'),
-      node({ type: 'field', label: 'Alcance', token: 'document.meta', x: 5, y: 30, width: 60, height: 3.2, fontSize: 7.5, color: text, borderStyle: 'none', padding: 0.2 }, 'report-meta'),
-      node({ type: 'field', label: 'Generado', token: 'document.generated', x: 67, y: 30, width: 28, height: 3.2, fontSize: 7, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated'),
+      node({ type: 'field', label: 'Alcance', token: 'document.meta', x: 5, y: 27.8, width: 60, height: 3.2, fontSize: 7.5, color: text, borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+      node({ type: 'field', label: 'Generado', token: 'document.generated', x: 67, y: 27.8, width: 28, height: 3.2, fontSize: 7, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated'),
     );
   } else if (isSupplierHistory) {
     const prefix = `${party.tokenPrefix}.`;
@@ -1940,7 +1938,7 @@ export function createSystemDefaultPdfDesign(targetKey: string, overrides?: Reco
   const target = getPdfTemplateTarget(targetKey);
   const initialSettings = createSystemDefaultPdfSettings({
     ...(target.key === 'inventario.product-labels' ? { paperSize: 'LABEL', orientation: 'landscape', margins: 2, fontFamily: 'helvetica', fontSize: 8 } : {}),
-    ...(['ventas.cash-historical-report', 'ventas.customers', 'compras.supplier-history'].includes(target.key) ? { paperSize: 'LETTER', orientation: 'landscape', fontSize: 9 } : {}),
+    ...(['ventas.cash-historical-report', 'ventas.customers'].includes(target.key) ? { paperSize: 'LETTER', orientation: 'landscape', fontSize: 9 } : {}),
     ...(target.family === 'cash-ticket' ? { paperSize: 'ROLL-80', orientation: 'portrait', margins: 3, fontFamily: 'helvetica', fontSize: 8, primaryColor: '#000000', secondaryColor: '#000000', textColor: '#000000', lineColor: '#000000' } : {}),
     ...(overrides || {}),
   });

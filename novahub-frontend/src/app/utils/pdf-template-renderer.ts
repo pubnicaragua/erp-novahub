@@ -6,6 +6,7 @@ import { applyPdfHeaderComposition, applyStandardPdfLayoutSettings, createDefaul
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
 import { applyPdfStyleToDefinition, createDefaultPdfStyleConfig, getPdfTableCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, normalizePdfFrameGeometry, normalizePdfFontFamily, normalizePdfStyleConfig, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfTableStyle } from '../services/pdf-document-style';
 import { PDF_APPEARANCE_FONT_GROUPS, PDF_APPEARANCE_FONTS, pdfFontFacesSupportWeight, pdfFontUsesSystemFallback } from '../services/pdf-appearance';
+import { normalizePdfHeaderContentSpacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM } from '../services/pdf-header-spacing';
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
 import { inlinePdfFontFaceRules } from './pdf-font-embedding';
 import { pdfStatusLabel } from './pdfStatus';
@@ -146,6 +147,8 @@ export function getPdfReportSectionTableGap(targetKey: string) {
   return isStandardPdfLayoutTarget(targetKey) ? 6 : 0;
 }
 
+const PDF_CSS_PIXELS_PER_MM = 96 / 25.4;
+
 export function resolvePdfHeaderAnchoredTop(headerContentBottom: number, preferredTop: number, gap: number, preservePreferredTop: boolean) {
   const preferred = Number.isFinite(Number(preferredTop)) ? Math.max(0, Number(preferredTop)) : 0;
   const headerBottom = Number.isFinite(Number(headerContentBottom)) ? Math.max(0, Number(headerContentBottom)) : 0;
@@ -154,18 +157,35 @@ export function resolvePdfHeaderAnchoredTop(headerContentBottom: number, preferr
   return preservePreferredTop ? Math.max(preferred, measuredTop) : measuredTop;
 }
 
-/** Conserva el espaciado actual como pequeño y amplía solo el margen bajo el encabezado según el diseño. */
-export function resolvePdfHeaderContentGap(currentGap: number, pageHeight: number, spacing: unknown) {
-  if (spacing === 'medium') return currentGap + Math.max(12, pageHeight * 0.012);
-  if (spacing === 'large') return currentGap + Math.max(24, pageHeight * 0.024);
-  return currentGap;
+/** Distancia física común después del encabezado, independiente del tamaño u orientación de la hoja. */
+export function resolvePdfHeaderContentGap(_currentGap: number, _pageHeight: number, spacing: unknown) {
+  const millimeters = normalizePdfHeaderContentSpacing(spacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM);
+  return millimeters * PDF_CSS_PIXELS_PER_MM;
 }
 
-/** Aplica el nivel seleccionado sobre la posición pequeña existente, conservando el anclaje al encabezado real. */
+/** Alinea el inicio del contenido al encabezado medido y mantiene el incremento en diseños personalizados. */
 export function resolvePdfHeaderContentTop(headerBottom: number, preferredTop: number, currentGap: number, pageHeight: number, spacing: unknown, preservePreferredTop: boolean) {
-  const currentTop = resolvePdfHeaderAnchoredTop(headerBottom, preferredTop, currentGap, preservePreferredTop);
+  const smallGap = resolvePdfHeaderContentGap(currentGap, pageHeight, 'small');
   const selectedGap = resolvePdfHeaderContentGap(currentGap, pageHeight, spacing);
-  return currentTop + Math.max(0, selectedGap - currentGap);
+  if (!preservePreferredTop) return resolvePdfHeaderAnchoredTop(headerBottom, preferredTop, selectedGap, false);
+  const currentTop = resolvePdfHeaderAnchoredTop(headerBottom, preferredTop, smallGap, true);
+  return currentTop + Math.max(0, selectedGap - smallGap);
+}
+
+/** Separación compacta entre los datos visibles de un listado y su tabla. */
+export function resolvePdfCompactTableTop(contentBottom: number) {
+  const bottom = Number.isFinite(Number(contentBottom)) ? Math.max(0, Number(contentBottom)) : 0;
+  return bottom + 5 * PDF_CSS_PIXELS_PER_MM;
+}
+
+function getPdfVisibleTextBottom(element: HTMLElement, pageTop: number) {
+  const range = element.ownerDocument.createRange();
+  range.selectNodeContents(element);
+  const textBottom = Array.from(range.getClientRects())
+    .filter(rect => rect.width > 0 && rect.height > 0)
+    .reduce((bottom, rect) => Math.max(bottom, rect.bottom - pageTop), 0);
+  range.detach();
+  return textBottom || element.getBoundingClientRect().bottom - pageTop;
 }
 
 export function resolvePdfHistoryInfoTop(documentHeaderBottom: number, entityHeadingBottom: number, gap: number) {
@@ -1834,27 +1854,29 @@ function reflowIndividualPage(page: HTMLElement, definition: PdfTemplateDefiniti
     });
 }
 
-/** Acerca el listado de Compras al título y solo baja la tabla cuando hay metadatos reales. */
+/** Coloca la tabla del listado justo después del título y de los metadatos que realmente aparecen. */
 function reflowCompactPurchaseListTable(page: HTMLElement, definition: PdfTemplateDefinition, data: PdfTemplateData, targetKey: string) {
   if (targetKey !== 'compras.list') return;
   const pageNumber = Number((data.page as Record<string, unknown> | undefined)?.index || (data.page as Record<string, unknown> | undefined)?.number || 1);
   if (pageNumber > 1) return;
   const documentData = (data.document || {}) as Record<string, unknown>;
-  const hasMetadata = ['meta', 'period', 'generated', 'extra'].some(key => String(documentData[key] ?? '').trim().length > 0);
-  if (!hasMetadata) return;
-
   const pageRect = page.getBoundingClientRect();
   const tableNode = definition.nodes.find(node => node.id === 'items-table' && node.type === 'table');
   const tableElement = page.querySelector<HTMLElement>('[data-pdf-node-id="items-table"]');
   if (!tableNode || !tableElement || pageRect.height <= 0) return;
+  const titleElement = page.querySelector<HTMLElement>('[data-pdf-node-id="document-title"]');
+  const titleBottom = titleElement?.textContent?.trim()
+    ? getPdfVisibleTextBottom(titleElement, pageRect.top)
+    : 0;
   const metaIds = new Set(['report-meta', 'document-generated', 'document-extra']);
   const metaBottom = Array.from(page.querySelectorAll<HTMLElement>('[data-pdf-node-id]'))
     .filter(element => metaIds.has(element.dataset.pdfNodeId || '') && element.textContent?.trim())
-    .reduce((bottom, element) => Math.max(bottom, element.getBoundingClientRect().bottom - pageRect.top), 0);
-  if (metaBottom <= 0) return;
-  const tableTop = tableElement.getBoundingClientRect().top - pageRect.top;
-  const desiredTop = metaBottom + pageRect.height * 0.012;
-  if (desiredTop > tableTop) tableElement.style.top = `${(desiredTop / pageRect.height) * 100}%`;
+    .reduce((bottom, element) => Math.max(bottom, getPdfVisibleTextBottom(element, pageRect.top)), 0);
+  const dataHasMetadata = ['meta', 'period', 'generated', 'extra'].some(key => String(documentData[key] ?? '').trim().length > 0);
+  const contentBottom = Math.max(titleBottom, dataHasMetadata ? metaBottom : 0);
+  if (contentBottom <= 0) return;
+  const desiredTop = resolvePdfCompactTableTop(contentBottom);
+  tableElement.style.top = `${(desiredTop / pageRect.height) * 100}%`;
 }
 
 /**
@@ -2111,12 +2133,10 @@ function reflowCompanyIdentitySummary(page: HTMLElement, definition: PdfTemplate
   const summaryElement = renderedNodes.find(element => element.dataset.pdfNodeId === summaryNode.id);
   if (!nameElement || !summaryElement) return;
 
-  const nameText = Array.from(nameElement.children).find(child => child.textContent?.trim()) as HTMLElement | undefined;
-  const summaryText = Array.from(summaryElement.children).find(child => child.textContent?.trim()) as HTMLElement | undefined;
-  if (!nameText || !summaryText) return;
+  if (!nameElement.textContent?.trim() || !summaryElement.textContent?.trim()) return;
 
   const preferredTop = summaryElement.getBoundingClientRect().top - pageRect.top;
-  let contentBottom = nameText.getBoundingClientRect().bottom - pageRect.top;
+  let contentBottom = getPdfVisibleTextBottom(nameElement, pageRect.top);
   const logoElement = renderedNodes.find(element => element.dataset.pdfNodeId === 'company-logo');
   if (logoElement) {
     const nameRect = nameElement.getBoundingClientRect();
@@ -2134,14 +2154,11 @@ function reflowCompanyIdentitySummary(page: HTMLElement, definition: PdfTemplate
   summaryElement.style.height = 'auto';
   summaryElement.style.minHeight = '0';
   summaryElement.style.overflow = 'visible';
-  summaryText.style.height = 'auto';
-  summaryText.style.minHeight = '0';
-  summaryText.style.overflow = 'visible';
 }
 
 /** Desplaza el contenido de primera página solo cuando el header real lo alcanza. */
-function reflowFirstPageBelowCompanyHeader(page: HTMLElement, definition: PdfTemplateDefinition, settings: PdfTemplateRenderSettings, pageNumber: number) {
-  if (pageNumber !== 1) return;
+function reflowFirstPageBelowCompanyHeader(page: HTMLElement, definition: PdfTemplateDefinition, settings: PdfTemplateRenderSettings, targetKey: string, pageNumber: number) {
+  if (pageNumber !== 1 || !isStandardPdfLayoutTarget(targetKey)) return;
   const pageRect = page.getBoundingClientRect();
   if (pageRect.height <= 0) return;
 
@@ -2153,8 +2170,7 @@ function reflowFirstPageBelowCompanyHeader(page: HTMLElement, definition: PdfTem
     .filter((element): element is HTMLElement => Boolean(element))
     .map(element => {
       if (['company-name', 'company-summary'].includes(element.dataset.pdfNodeId || '')) {
-        const visibleText = Array.from(element.children).find(child => child.textContent?.trim()) as HTMLElement | undefined;
-        return visibleText ? visibleText.getBoundingClientRect().bottom - pageRect.top : 0;
+        return element.textContent?.trim() ? getPdfVisibleTextBottom(element, pageRect.top) : 0;
       }
       return element.getBoundingClientRect().bottom - pageRect.top;
     }),
@@ -2172,10 +2188,10 @@ function reflowFirstPageBelowCompanyHeader(page: HTMLElement, definition: PdfTem
   if (!visibleBody.length) return;
 
   const bodyTop = Math.min(...visibleBody.map(item => item.top));
-  const currentGap = Math.max(5, pageRect.height * 0.006);
-  const nextBodyTop = resolvePdfHeaderContentTop(headerBottom, bodyTop, currentGap, pageRect.height, settings.headerContentSpacing, true);
+  const currentGap = resolvePdfHeaderContentGap(0, pageRect.height, 'small');
+  const nextBodyTop = resolvePdfHeaderContentTop(headerBottom, bodyTop, currentGap, pageRect.height, settings.headerContentSpacing, false);
   const shift = nextBodyTop - bodyTop;
-  if (shift <= 0.5) return;
+  if (Math.abs(shift) <= 0.5) return;
 
   visibleBody.forEach(({ element, top }) => {
     element.style.top = `${((top + shift) / pageRect.height) * 100}%`;
@@ -2201,8 +2217,8 @@ function reflowPartySection(page: HTMLElement, definition: PdfTemplateDefinition
   if (!sectionElement || !tableElement) return;
 
   const sectionRect = sectionElement.getBoundingClientRect();
-  const currentHeaderGap = Math.max(5, pageRect.height * 0.009);
-  const spacing = pageNumber === 1 ? settings.headerContentSpacing : 'small';
+  const currentHeaderGap = resolvePdfHeaderContentGap(0, pageRect.height, 'small');
+  const spacing = pageNumber === 1 ? settings.headerContentSpacing : PDF_HEADER_CONTENT_SPACING_DEFAULT_MM;
   const extraHeaderGap = resolvePdfHeaderContentGap(currentHeaderGap, pageRect.height, spacing) - currentHeaderGap;
   const sectionTableGap = currentHeaderGap;
   const documentNodeIds = new Set(['document-title', 'document-number', 'document-date', 'document-status', 'document-generated', 'document-extra', 'report-meta']);
@@ -2212,16 +2228,14 @@ function reflowPartySection(page: HTMLElement, definition: PdfTemplateDefinition
     .filter((element): element is HTMLElement => Boolean(element))
     .map(element => {
       if (['company-name', 'company-summary'].includes(element.dataset.pdfNodeId || '')) {
-        const visibleText = Array.from(element.children).find(child => child.textContent?.trim()) as HTMLElement | undefined;
-        return visibleText ? visibleText.getBoundingClientRect().bottom - pageRect.top : 0;
+        return element.textContent?.trim() ? getPdfVisibleTextBottom(element, pageRect.top) : 0;
       }
       return element.getBoundingClientRect().bottom - pageRect.top;
     }),
     ...(Array.from(page.querySelectorAll<HTMLElement>('.pdf-header')).map(element => element.getBoundingClientRect().bottom - pageRect.top)));
   const preferredSectionTop = sectionRect.top - pageRect.top;
-  const hasStandardSalesPreset = ['sales-standard', 'system-default'].includes(String(definition.metadata?.preset || ''));
   const sectionTopAtSmall = preferredSectionTop - extraHeaderGap;
-  const sectionTop = resolvePdfHeaderContentTop(headerBottom, sectionTopAtSmall, currentHeaderGap, pageRect.height, spacing, !hasStandardSalesPreset);
+  const sectionTop = resolvePdfHeaderContentTop(headerBottom, sectionTopAtSmall, currentHeaderGap, pageRect.height, spacing, false);
 
   const partyFields = new Map<string, { node: PdfTemplateNode; label: string; value: string }>();
   definition.nodes
@@ -2533,7 +2547,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       wrapper.appendChild(page);
       await waitForImages(page);
       reflowCompanyIdentitySummary(page, job.definition);
-      reflowFirstPageBelowCompanyHeader(page, job.definition, settings, index + 1);
+      reflowFirstPageBelowCompanyHeader(page, job.definition, settings, target.key, index + 1);
       reflowSingleEntityHistory(page, job.definition, settings, target.key, index + 1);
       reflowPartySection(page, job.definition, settings, target.key, index + 1);
       reflowCompactPurchaseListTable(page, job.definition, pageData, target.key);

@@ -15,16 +15,18 @@ import {
   type PdfAppearancePaletteKey,
   type PdfAppearanceProfile,
 } from '../../services/pdf-appearance';
+import {
+  normalizePdfHeaderContentSpacing,
+  parsePdfHeaderContentSpacing,
+  PDF_HEADER_CONTENT_SPACING_MAX_MM,
+  PDF_HEADER_CONTENT_SPACING_MIN_MM,
+  type PdfHeaderContentSpacing,
+} from '../../services/pdf-header-spacing';
 
 const COMPOSITIONS = [
   { value: 'company-left-logo-right', label: 'Datos izq. · logo der.' },
   { value: 'logo-left-company-right', label: 'Logo izq. · datos der.' },
   { value: 'centered-stack', label: 'Centrado' },
-] as const;
-const SPACINGS = [
-  { value: 'small', label: 'Pequeño' },
-  { value: 'medium', label: 'Mediano' },
-  { value: 'large', label: 'Grande' },
 ] as const;
 const PROPERTY_LABELS: Partial<Record<PdfAppearanceDraftKey, string>> = {
   headerComposition: 'Composición del encabezado', headerContentSpacing: 'Espacio después del encabezado',
@@ -54,10 +56,60 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <div className="min-w-0 space-y-1"><Label className="text-xs">{label}</Label>{children}</div>;
 }
 
+function PdfHeaderSpacingInput({ value, disabled, onChange }: { value: PdfHeaderContentSpacing; disabled: boolean; onChange: (spacing: number) => void }) {
+  const normalizedValue = normalizePdfHeaderContentSpacing(value);
+  const [draftState, setDraftState] = React.useState({ value: normalizedValue, text: String(normalizedValue) });
+  const draft = draftState.value === normalizedValue ? draftState.text : String(normalizedValue);
+
+  const commit = () => {
+    const spacing = parsePdfHeaderContentSpacing(draft);
+    if (spacing === null) {
+      setDraftState({ value: normalizedValue, text: String(normalizedValue) });
+      return;
+    }
+    onChange(spacing);
+    setDraftState({ value: spacing, text: String(spacing) });
+  };
+
+  return <div>
+    <div className="flex items-center gap-2">
+      <Input
+        aria-label="Espacio después del encabezado PDF en milímetros"
+        type="number"
+        min={PDF_HEADER_CONTENT_SPACING_MIN_MM}
+        max={PDF_HEADER_CONTENT_SPACING_MAX_MM}
+        step={0.5}
+        inputMode="decimal"
+        value={draft}
+        disabled={disabled}
+        onChange={event => {
+          const next = event.target.value;
+          if (!next.trim() || next.endsWith('.')) {
+            setDraftState({ value: normalizedValue, text: next });
+            return;
+          }
+          const spacing = Number(next);
+          if (Number.isFinite(spacing) && spacing >= PDF_HEADER_CONTENT_SPACING_MIN_MM && spacing <= PDF_HEADER_CONTENT_SPACING_MAX_MM) {
+            setDraftState({ value: spacing, text: next });
+            onChange(spacing);
+          } else {
+            setDraftState({ value: normalizedValue, text: next });
+          }
+        }}
+        onBlur={commit}
+        onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+        className="h-9 min-w-0 text-xs"
+      />
+      <span className="shrink-0 text-xs text-muted-foreground">mm</span>
+    </div>
+    <p className="pt-1 text-[10px] text-muted-foreground">De 0 a 50 mm; admite medios milímetros.</p>
+  </div>;
+}
+
 function PdfColorPicker({ value, disabled, label, onChange }: { value: string; disabled: boolean; label: string; onChange: (color: string) => void }) {
-  const [draft, setDraft] = React.useState(value);
+  const [draftState, setDraftState] = React.useState({ value, text: value });
+  const draft = draftState.value === value ? draftState.text : value;
   const isHexColor = (color: string) => /^#[0-9a-f]{6}$/i.test(color);
-  React.useEffect(() => setDraft(value), [value]);
 
   return <div className="flex min-w-0 items-center gap-2">
     <Input
@@ -67,7 +119,7 @@ function PdfColorPicker({ value, disabled, label, onChange }: { value: string; d
       disabled={disabled}
       onChange={event => {
         const color = event.target.value.toUpperCase();
-        setDraft(color);
+        setDraftState({ value: color, text: color });
         onChange(color);
       }}
       className="h-9 w-12 shrink-0 cursor-pointer p-1"
@@ -80,10 +132,10 @@ function PdfColorPicker({ value, disabled, label, onChange }: { value: string; d
       placeholder="#1A2B3C"
       onChange={event => {
         const color = event.target.value.toUpperCase();
-        setDraft(color);
+        setDraftState({ value, text: color });
         if (isHexColor(color)) onChange(color);
       }}
-      onBlur={() => { if (!isHexColor(draft)) setDraft(value); }}
+      onBlur={() => { setDraftState({ value, text: isHexColor(draft) ? draft : value }); }}
       className="h-9 min-w-0 font-mono text-xs uppercase"
     />
   </div>;
@@ -203,7 +255,7 @@ export function PdfAppearanceSettingsPanel({
         <div className="flex items-center gap-2 text-xs font-semibold"><Type className="size-3.5 text-primary" />Encabezado y tipografía</div>
         {property('headerComposition', effective.headerComposition, <select aria-label="Composición del encabezado PDF" value={effective.headerComposition || 'company-left-logo-right'} disabled={disabled || hasImportedHtmlHeader} onChange={event => onChange('headerComposition', event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60">{COMPOSITIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>)}
         {hasImportedHtmlHeader && <p className="text-[10px] text-muted-foreground">El encabezado HTML importado conserva su propia composición.</p>}
-        {property('headerContentSpacing', effective.headerContentSpacing, <select aria-label="Espacio después del encabezado PDF" value={effective.headerContentSpacing || 'small'} disabled={disabled} onChange={event => onChange('headerContentSpacing', event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60">{SPACINGS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>)}
+        {property('headerContentSpacing', effective.headerContentSpacing, <PdfHeaderSpacingInput value={normalizePdfHeaderContentSpacing(effective.headerContentSpacing)} disabled={disabled} onChange={spacing => onChange('headerContentSpacing', spacing)} />)}
         {property('fontFamily', effective.fontFamily, <PdfFontFamilyPicker value={effective.fontFamily || 'Inter'} disabled={disabled} onChange={font => onChange('fontFamily', font)} />)}
         {property('fontSize', effective.fontSize, <div className="flex items-center gap-2"><Input aria-label="Tamaño base de fuente PDF" type="number" min={PDF_APPEARANCE_FONT_SIZE_MIN} max={PDF_APPEARANCE_FONT_SIZE_MAX} step={0.5} value={effective.fontSize || 9} disabled={disabled} onChange={event => onChange('fontSize', Number(event.target.value))} className="h-9 text-xs" /><span className="text-xs text-muted-foreground">pt</span></div>)}
       </div>

@@ -16,7 +16,7 @@ import {
 
 const fallback = {
   headerComposition: 'company-left-logo-right',
-  headerContentSpacing: 'small',
+  headerContentSpacing: 2,
   fontFamily: 'Arial',
   fontSize: 9,
   presetId: 'light',
@@ -101,13 +101,13 @@ for (const family of PDF_APPEARANCE_FONTS.filter(family => family !== 'Arial')) 
     { fontFamily: 'Lora', palette: { text: '#abcdef' } },
   );
   assert.equal(effective.fontFamily, 'Lora');
-  assert.equal(effective.headerContentSpacing, 'medium');
+  assert.equal(effective.headerContentSpacing, 5);
   assert.deepEqual(effective.palette, { primary: '#223344', text: '#abcdef' });
 }
 
 {
   const effective = resolvePdfAppearance(fallback, { headerContentSpacing: 'large' }, { fontFamily: 'Roboto' });
-  assert.equal(effective.headerContentSpacing, 'large');
+  assert.equal(effective.headerContentSpacing, 8);
   assert.equal(effective.fontFamily, 'Roboto');
   assert.equal(effective.headerComposition, fallback.headerComposition);
   assert.equal(effective.tableStyle, fallback.tableStyle);
@@ -142,7 +142,7 @@ for (const family of PDF_APPEARANCE_FONTS.filter(family => family !== 'Arial')) 
     headerContentSpacing: 'unexpected-spacing',
   }, {});
   assert.equal(overrides.fontFamily, 'Ancient ERP Font');
-  assert.equal(overrides.headerContentSpacing, 'unexpected-spacing');
+  assert.equal('headerContentSpacing' in overrides, false, 'Los valores de espacio desconocidos no deben conservarse como opciones válidas.');
 }
 
 {
@@ -150,7 +150,7 @@ for (const family of PDF_APPEARANCE_FONTS.filter(family => family !== 'Arial')) 
   assert.deepEqual(normalized, { palette: { primary: '#abcdef' } });
   const templateProfile = normalizePdfAppearanceProfile({
     templateId: 'default-v1', templateVersion: 1, headerComposition: 'company-left-logo-right',
-    headerContentSpacing: 'small', fontFamily: 'Arial', fontSize: 9,
+    headerContentSpacing: 2, fontFamily: 'Arial', fontSize: 9,
     palette: { primary: '#01422c', line: '#01422c', tableHeader: '#01422c', tableHeaderText: '#ffffff' },
   });
   assert.deepEqual([templateProfile.templateId, templateProfile.templateVersion, templateProfile.fontFamily, templateProfile.fontSize], ['default-v1', 1, 'Arial', 9]);
@@ -170,7 +170,7 @@ for (const family of PDF_APPEARANCE_FONTS.filter(family => family !== 'Arial')) 
 {
   const globalTemplate = {
     templateId: 'default-v1', templateVersion: 1,
-    headerComposition: 'company-left-logo-right', headerContentSpacing: 'small', fontFamily: 'Arial', fontSize: 9,
+    headerComposition: 'company-left-logo-right', headerContentSpacing: 2, fontFamily: 'Arial', fontSize: 9,
     presetId: 'light', tableStyle: 'light',
     palette: { primary: '#01422c', secondary: '#01422c', line: '#01422c', tableHeader: '#01422c', tableHeaderText: '#ffffff' },
   };
@@ -187,12 +187,12 @@ for (const family of PDF_APPEARANCE_FONTS.filter(family => family !== 'Arial')) 
 
 {
   const resolved = resolvePdfDesignAppearance(
-    { headerComposition: 'company-left-logo-right', headerContentSpacing: 'small', fontFamily: 'Arial', appearanceOverrides: { fontFamily: 'Lora' }, paperSize: 'A4', orientation: 'landscape' },
+    { headerComposition: 'company-left-logo-right', headerContentSpacing: 2, fontFamily: 'Arial', appearanceOverrides: { fontFamily: 'Lora' }, paperSize: 'A4', orientation: 'landscape' },
     { metadata: { pdfStyleConfig: { fontFamily: 'Georgia', fontSize: 9, palette: { primary: '#123456' }, tableStyle: 'light' } } },
-    { fontFamily: 'Inter', headerContentSpacing: 'large', palette: { primary: '#abcdef', tableHeader: '#234567' } },
+    { fontFamily: 'Inter', headerContentSpacing: 8, palette: { primary: '#abcdef', tableHeader: '#234567' } },
   );
   assert.equal(resolved.settings.fontFamily, 'Lora', 'El override local debe prevalecer sobre el perfil y los estilos heredados.');
-  assert.equal(resolved.settings.headerContentSpacing, 'large', 'Los valores no personalizados localmente deben heredar el perfil global.');
+  assert.equal(resolved.settings.headerContentSpacing, 8, 'Los valores no personalizados localmente deben heredar el perfil global.');
   assert.equal(resolved.settings.primaryColor, '#abcdef', 'La paleta global debe aplicarse por propiedad.');
   assert.equal(resolved.settings.tableHeaderColor, '#234567', 'La paleta de tabla global debe llegar al renderer.');
   assert.equal(resolved.settings.paperSize, 'A4', 'La apariencia no debe cambiar el papel del documento.');

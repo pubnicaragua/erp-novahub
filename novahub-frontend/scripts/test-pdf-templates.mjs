@@ -45,7 +45,7 @@ try {
   }
   const appearancePanel = renderToStaticMarkup(React.createElement(PdfAppearanceSettingsPanel, {
     scope: 'document', profile: {}, overrides: {},
-    effective: { headerComposition: 'company-left-logo-right', headerContentSpacing: 'small', fontFamily: 'Inter', fontSize: 9 },
+    effective: { headerComposition: 'company-left-logo-right', headerContentSpacing: 2, fontFamily: 'Inter', fontSize: 9 },
     canEditBranch: true, canEditDocument: true, hasBranchProfile: false, isSavingBranch: false,
     onScopeChange: () => {}, onChange: () => {}, onReset: () => {}, onResetAll: () => {}, onSaveBranch: () => {},
   }));
@@ -66,7 +66,7 @@ try {
 
   const templateAppearanceProfile = {
     templateId: 'default-v1', templateVersion: 1,
-    headerComposition: 'company-left-logo-right', headerContentSpacing: 'small',
+    headerComposition: 'company-left-logo-right', headerContentSpacing: 2,
     fontFamily: 'Arial', fontSize: 9, presetId: 'light', tableStyle: 'light',
     palette: { primary: '#01422c', secondary: '#01422c', text: '#334155', line: '#01422c', tableHeader: '#01422c', tableHeaderText: '#ffffff', tableRow: '#ffffff', tableStripe: '#f8fafc', tableBorder: '#d7dee7' },
   };
@@ -132,21 +132,21 @@ try {
   assert.equal(effectiveImportedStyle.palette.primary, '#abcdef');
   assert.equal(effectiveImportedStyle.palette.tableHeader, '#fedcba');
   const globalReportSettings = generator.getGlobalReportSettings({
-    fontFamily: 'Inter', fontSize: 10, headerComposition: 'centered-stack', headerContentSpacing: 'large',
+    fontFamily: 'Inter', fontSize: 10, headerComposition: 'centered-stack', headerContentSpacing: 8,
     pdfTableStyle: 'striped', tableHeaderColor: '#123456', pdfAppearancePalette: { tableHeader: '#123456' },
   }, 'NovaHub');
   assert.equal(globalReportSettings.fontFamily, 'Inter', 'Los reportes con estructura propia deben conservar la apariencia de fuente resuelta.');
   assert.equal(globalReportSettings.headerComposition, 'centered-stack');
-  assert.equal(globalReportSettings.headerContentSpacing, 'large');
+  assert.equal(globalReportSettings.headerContentSpacing, 8);
   assert.equal(globalReportSettings.pdfTableStyle, 'striped');
   assert.equal(globalReportSettings.tableHeaderColor, '#123456');
   const repairedLegacyLayout = generator.resolvePdfDesignForRender('ventas.estimate', {
-    settings: { paperSize: 'LETTER', orientation: 'portrait', fontFamily: 'Lora', headerContentSpacing: 'large', pdfStylePreset: 'striped', primaryColor: '#123456' },
+    settings: { paperSize: 'LETTER', orientation: 'portrait', fontFamily: 'Lora', headerContentSpacing: 8, pdfStylePreset: 'striped', primaryColor: '#123456' },
     layoutZones: { definition: { nodes: [] } },
     appearance: { profile: { fontFamily: 'Lora' } },
   });
   assert.equal(repairedLegacyLayout.settings.fontFamily, 'Lora', 'Actualizar la estructura vieja no debe descartar la fuente global resuelta.');
-  assert.equal(repairedLegacyLayout.settings.headerContentSpacing, 'large');
+  assert.equal(repairedLegacyLayout.settings.headerContentSpacing, 8);
   assert.equal(repairedLegacyLayout.settings.pdfStylePreset, 'striped');
   assert.equal(repairedLegacyLayout.settings.primaryColor, '#123456');
   assert.equal(repairedLegacyLayout.appearance.profile.fontFamily, 'Lora');
@@ -160,14 +160,14 @@ try {
     service.active = async () => null;
     service.getAppearanceProfile = async () => {
       profileReads += 1;
-      return { fontFamily: 'Inter', headerComposition: 'logo-left-company-right', headerContentSpacing: 'medium' };
+      return { fontFamily: 'Inter', headerComposition: 'logo-left-company-right', headerContentSpacing: 5 };
     };
     try {
       generator.clearPdfDesignCache();
       const resolvedDesign = await generator.getPdfDesign('auditoria.logs');
       assert.equal(resolvedDesign.settings.fontFamily, 'Inter', 'El diseño efectivo debe heredar la fuente del perfil de sucursal.');
       assert.equal(resolvedDesign.settings.headerComposition, 'logo-left-company-right');
-      assert.equal(resolvedDesign.settings.headerContentSpacing, 'medium');
+      assert.equal(resolvedDesign.settings.headerContentSpacing, 5);
       assert.equal(profileReads, 1, 'El perfil de apariencia debe quedar cacheado con el diseño de la sucursal.');
       generator.clearPdfDesignCache();
       await generator.getPdfDesign('inventario.product-labels');
@@ -201,21 +201,32 @@ try {
   );
   assert.equal(normalizedCompany.bankInfo, 'Cuenta real de la empresa', 'La normalización debe conservar los otros ajustes del diseño.');
   assert.equal(definitions.SYSTEM_DEFAULT_PDF_SETTINGS.email, '', 'Las plantillas nuevas deben dejar vacíos los datos de empresa no configurados.');
-  assert.equal(definitions.SYSTEM_DEFAULT_PDF_SETTINGS.headerContentSpacing, 'small', 'Los diseños nuevos deben conservar el espacio actual después del encabezado.');
-  assert.equal(definitions.normalizePdfCompanySettings({}).headerContentSpacing, 'small', 'Los diseños guardados antes del ajuste deben conservar el espacio actual.');
-  assert.equal(definitions.normalizePdfCompanySettings({ headerContentSpacing: 'large' }).headerContentSpacing, 'large', 'La normalización debe conservar el espacio elegido por cada diseño.');
-  assert.equal(definitions.normalizePdfCompanySettings({ headerContentSpacing: 'invalid' }).headerContentSpacing, 'small', 'Un valor desconocido debe volver al espaciado pequeño compatible.');
-  const independentlyConfiguredDesign = definitions.normalizePdfCompanySettings({ headerContentSpacing: 'large' });
+  assert.equal(definitions.SYSTEM_DEFAULT_PDF_SETTINGS.headerContentSpacing, 2, 'Los diseños nuevos deben usar dos milímetros después del encabezado.');
+  assert.equal(definitions.normalizePdfCompanySettings({}).headerContentSpacing, 2, 'Los diseños guardados sin valor deben usar el espacio predeterminado.');
+  assert.equal(definitions.normalizePdfCompanySettings({ headerContentSpacing: 'large' }).headerContentSpacing, 8, 'Los valores antiguos deben convertirse a su equivalente en milímetros.');
+  assert.equal(definitions.normalizePdfCompanySettings({ headerContentSpacing: 'invalid' }).headerContentSpacing, 2, 'Un valor desconocido debe volver al espacio predeterminado compatible.');
+  const independentlyConfiguredDesign = definitions.normalizePdfCompanySettings({ headerContentSpacing: 8 });
   const untouchedDesign = definitions.normalizePdfCompanySettings({});
-  assert.equal(independentlyConfiguredDesign.headerContentSpacing, 'large', 'El espaciado grande debe pertenecer al diseño seleccionado.');
-  assert.equal(untouchedDesign.headerContentSpacing, 'small', 'El espaciado de otro diseño debe permanecer en el valor predeterminado.');
-  assert.equal(renderer.resolvePdfHeaderContentGap(5, 1000, 'small'), 5, 'Pequeño debe conservar exactamente el espacio actual.');
-  assert.equal(renderer.resolvePdfHeaderContentGap(5, 1000, 'medium'), 17, 'Mediano debe aumentar el espacio base en una distancia visible.');
-  assert.equal(renderer.resolvePdfHeaderContentGap(5, 1000, 'large'), 29, 'Grande debe ofrecer más espacio que mediano.');
-  assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 'small', true), 100, 'Pequeño debe mantener la posición base aunque ya haya espacio suficiente.');
-  assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 'medium', true), 112, 'Mediano debe desplazar el bloque completo un nivel debajo de la posición actual.');
-  assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 'large', true), 124, 'Grande debe desplazar el bloque más que mediano aunque la posición inicial tenga espacio.');
-  assert.equal(renderer.resolvePdfHeaderContentTop(150, 100, 5, 1000, 'medium', true), 167, 'El espaciado debe conservar la corrección por encabezados que ya alcanzan el contenido.');
+  assert.equal(independentlyConfiguredDesign.headerContentSpacing, 8, 'El espacio configurado debe pertenecer al diseño seleccionado.');
+  assert.equal(untouchedDesign.headerContentSpacing, 2, 'El espacio de otro diseño debe permanecer en el valor predeterminado.');
+  const cssPixelsPerMillimeter = 96 / 25.4;
+  assert.equal(renderer.resolvePdfHeaderContentGap(5, 1000, 2), 2 * cssPixelsPerMillimeter, 'El número ingresado se interpreta en milímetros.');
+  assert.equal(renderer.resolvePdfHeaderContentGap(5, 1000, 5), 5 * cssPixelsPerMillimeter, 'Los valores personalizados conservan la separación física.');
+  assert.equal(renderer.resolvePdfHeaderContentGap(5, 1000, 8), 8 * cssPixelsPerMillimeter, 'La separación no depende de la orientación o dimensión de página.');
+  assert.equal(renderer.resolvePdfHeaderContentGap(5, 1000, 'medium'), 5 * cssPixelsPerMillimeter, 'Los valores guardados anteriores siguen siendo compatibles.');
+  assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 2, false), 40 + 2 * cssPixelsPerMillimeter, 'Los PDF predeterminados deben iniciar a la misma distancia medida desde el encabezado, aunque sus posiciones base difieran.');
+  assert.equal(renderer.resolvePdfHeaderContentTop(40, 220, 5, 1000, 2, false), 40 + 2 * cssPixelsPerMillimeter, 'Una posición heredada más baja no debe conservar un hueco adicional por PDF.');
+  assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 5, true), 100 + 3 * cssPixelsPerMillimeter, 'El espacio global debe incrementar la distancia física sin perder la posición personalizada.');
+  assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 8, true), 100 + 6 * cssPixelsPerMillimeter, 'El espacio mayor debe incrementar la distancia más que el anterior.');
+  assert.equal(renderer.resolvePdfHeaderContentTop(150, 100, 5, 1000, 5, false), 150 + 5 * cssPixelsPerMillimeter, 'Un encabezado alto debe mantener su distancia física uniforme respecto al contenido.');
+  assert.equal(renderer.resolvePdfCompactTableTop(100), 100 + 5 * cssPixelsPerMillimeter, 'Las tablas de listados deben seguir el último dato visible con un margen compacto.');
+
+  const supplierHistoryDefault = definitions.createSystemDefaultPdfDesign('compras.supplier-history');
+  assert.deepEqual(
+    [supplierHistoryDefault.settings.paperSize, supplierHistoryDefault.settings.orientation],
+    ['LETTER', 'portrait'],
+    'El historial de proveedor debe usar Carta vertical como los demás documentos estándar de una entidad.',
+  );
 
   const generatedFallback = renderer.normalizeReportDocumentMetadata({
     period: 'Periodo: agosto 2026',
