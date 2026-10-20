@@ -10,6 +10,7 @@ import {
   resolvePdfAppearance,
   updatePdfAppearanceDraft,
   clearPdfAppearanceFallback,
+  pdfFontFacesSupportWeight,
 } from '../src/app/services/pdf-appearance.ts';
 
 const fallback = {
@@ -22,10 +23,68 @@ const fallback = {
   palette: { primary: '#112233', text: '#334455' },
 };
 
+assert.equal(pdfFontFacesSupportWeight(['400'], 700), false, 'Las familias de peso 400 no deben simular negrita.');
+assert.equal(pdfFontFacesSupportWeight(['400', '700'], 700), true, 'Se conserva la variante negrita cuando existe.');
+assert.equal(pdfFontFacesSupportWeight(['100 900'], 700), true, 'Se reconoce el peso negrita en una fuente variable.');
+
 const [globalStylesheet, fontStylesheet] = await Promise.all([
   readFile(new URL('../src/styles/index.css', import.meta.url), 'utf8'),
   readFile(new URL('../src/styles/fonts.css', import.meta.url), 'utf8'),
 ]);
+const pdfFontEmbeddingUtilities = await import('../src/app/utils/pdf-font-embedding.ts').catch(() => ({}));
+assert.equal(
+  typeof pdfFontEmbeddingUtilities.inlinePdfFontFaceRules,
+  'function',
+  'El renderer debe poder incluir los archivos tipográficos en el SVG que captura html2canvas.',
+);
+const sampleFontBytes = new Uint8Array([1, 2, 3, 4]);
+let assetLoads = 0;
+const embeddedFontCss = await pdfFontEmbeddingUtilities.inlinePdfFontFaceRules([
+  {
+    cssText: '@font-face { font-family: "Test Font"; font-style: normal; font-weight: 700; unicode-range: U+0000-00FF; src: url("./test-font.woff2") format("woff2"), url("./test-font.woff") format("woff"); }',
+    baseUrl: 'https://novahub.test/assets/fonts.css',
+  },
+], async url => {
+  assetLoads += 1;
+  assert.equal(url, 'https://novahub.test/assets/test-font.woff2', 'Debe resolver el recurso desde la hoja de estilos original.');
+  return { bytes: sampleFontBytes.buffer, contentType: 'font/woff2' };
+});
+assert.match(embeddedFontCss, /font-family: "Test Font"/);
+assert.match(embeddedFontCss, /font-weight: 700/);
+assert.match(embeddedFontCss, /unicode-range: U\+0000-00FF/);
+assert.match(embeddedFontCss, /src: url\("data:font\/woff2;base64,AQIDBA=="\) format\("woff2"\)/);
+assert.doesNotMatch(embeddedFontCss, /novahub\.test|\.woff/);
+await pdfFontEmbeddingUtilities.inlinePdfFontFaceRules([
+  {
+    cssText: '@font-face { font-family: "Test Font"; font-weight: 700; src: url("./test-font.woff2") format("woff2"); }',
+    baseUrl: 'https://novahub.test/assets/fonts.css',
+  },
+], async () => {
+  assetLoads += 1;
+  return { bytes: sampleFontBytes.buffer, contentType: 'font/woff2' };
+});
+assert.equal(assetLoads, 1, 'Los bytes y la conversión a data URL se reutilizan entre vistas previas.');
+const alreadyEmbeddedCss = await pdfFontEmbeddingUtilities.inlinePdfFontFaceRules([{
+  cssText: '@font-face { font-family: "Embedded Font"; font-weight: 400; src: url("data:font/woff2;base64,AQIDBA==") format("woff2"); }',
+  baseUrl: 'https://novahub.test/assets/fonts.css',
+}], async () => { throw new Error('No debe solicitar un data URL.'); });
+assert.match(alreadyEmbeddedCss, /data:font\/woff2;base64,AQIDBA==/);
+
+const retryRule = [{
+  cssText: '@font-face { font-family: "Retry Font"; font-weight: 400; src: url("./retry-font.woff2") format("woff2"); }',
+  baseUrl: 'https://novahub.test/retry/fonts.css',
+}];
+let retryLoads = 0;
+await assert.rejects(pdfFontEmbeddingUtilities.inlinePdfFontFaceRules(retryRule, async () => {
+  retryLoads += 1;
+  throw new Error('fallo de red simulado');
+}), /fallo de red simulado/);
+const retriedFontCss = await pdfFontEmbeddingUtilities.inlinePdfFontFaceRules(retryRule, async () => {
+  retryLoads += 1;
+  return { bytes: sampleFontBytes.buffer, contentType: 'font/woff2' };
+});
+assert.equal(retryLoads, 2, 'Un recurso fallido se retira del caché para permitir otro intento.');
+assert.match(retriedFontCss, /data:font\/woff2;base64,AQIDBA==/);
 const loadedFontStylesheet = `${globalStylesheet}\n${fontStylesheet}`;
 for (const family of PDF_APPEARANCE_FONTS) {
   const packageName = family.toLowerCase().replaceAll(' ', '-');

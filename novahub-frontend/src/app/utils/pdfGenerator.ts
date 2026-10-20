@@ -10,7 +10,7 @@ import { buildDateFilteredLabeledPdfFileName, buildDateFilteredPdfFileName, buil
 import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
 import { getPurchasePriorityOption } from './purchasePriority';
-import { renderPdfTemplateToPdf, type PdfTemplateRenderProgress } from './pdf-template-renderer';
+import { preparePdfDocumentFonts, renderPdfTemplateToPdf, type PdfTemplateRenderProgress } from './pdf-template-renderer';
 import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
@@ -993,6 +993,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
     ? savedSettings
     : { ...savedSettings, paperSize: paperSettingForDownload(format as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>), orientation: 'portrait' };
   const design = normalizePdfPaperSettings(targetKey, outputSettings);
+  const selectedFontFamily = String(design.fontFamily || 'Arial');
   const customer = estimate.customer || estimate.client || {};
   const customerAddress = customer.address || [customer.city, customer.department, customer.country].filter(Boolean).join(', ');
   const fields = Array.isArray(savedDesign.layoutZones?.fields) ? savedDesign.layoutZones.fields : [];
@@ -1043,7 +1044,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
     .map((charge) => `<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>${escapeHtml(charge.label)}</span><span>${escapeHtml(formatAmount(charge.amount, estimate.currency, estimate.exchangeRate))}</span></div>`)
     .join('');
   const totalsHtml = `<div style="font-size:.78em;text-align:right;background:#f7fbf9;border-radius:6px;padding:10px 12px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span>Subtotal</span><span>${escapeHtml(formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span>Impuesto</span><span>${escapeHtml(formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate))}</span></div>${additionalChargesHtml}<div style="display:flex;justify-content:space-between;border-top:1px solid ${line};padding-top:4px;margin-top:2px;color:${primary};font-size:1.18em;font-weight:800;"><span>TOTAL</span><span>${escapeHtml(total)}</span></div></div>`;
-  const pageHtml = `<div id="pdf-template-canvas" style="position:relative;width:${pageWidthPx}px;height:${pageHeightPx}px;overflow:hidden;background:#fff;color:${text};font-family:${escapeHtml(design.fontFamily || 'Arial')};font-size:${Number(design.fontSize) || 9}px;box-sizing:border-box;">
+  const pageHtml = `<div id="pdf-template-canvas" style="position:relative;width:${pageWidthPx}px;height:${pageHeightPx}px;overflow:hidden;background:#fff;color:${text};font-family:${escapeHtml(selectedFontFamily)};font-size:${Number(design.fontSize) || 9}px;box-sizing:border-box;">
     <div style="position:absolute;inset:0 0 auto;height:29%;background:${headerBackground};border-top:6px solid ${primary};border-bottom:${headerBorder};${headerLayout === 'double-band' ? `border-bottom:10px solid ${line};` : ''}${headerLayout === 'sidebar' ? `border-left:10px solid ${primary};` : ''}${headerLayout === 'boxed' ? `inset:2%;height:25%;border:1px solid ${line};border-radius:10px;` : ''}"></div>${design.watermark ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.06;transform:rotate(-25deg);font-size:64px;font-weight:800;color:#64748b;">${escapeHtml(design.watermark)}</div>` : ''}${logo}
     ${zone('company', `<strong>${escapeHtml(values.company)}</strong>`, 'font-size:1.18em;letter-spacing:.01em;')}
     ${zone('slogan', `<span style="opacity:.75">${escapeHtml(values.slogan)}</span>`, 'font-size:.78em;')}
@@ -1083,9 +1084,12 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
   renderDocument.close();
   const wrapper = renderDocument.body;
   Object.assign(wrapper.style, { width: `${pageWidthPx}px`, height: `${pageHeightPx}px`, background: '#fff' });
-  wrapper.innerHTML = pageHtml;
   try {
+    const fontSetup = await preparePdfDocumentFonts(renderDocument, selectedFontFamily);
+    wrapper.innerHTML = pageHtml;
     const { default: html2canvas } = await import('html2canvas');
+    const page = wrapper.firstElementChild as HTMLElement;
+    if (fontSetup.hasRealBoldFace === false) page.style.setProperty('font-synthesis-weight', 'none', 'important');
     const canvas = await html2canvas(wrapper.firstElementChild as HTMLElement, {
       // El HTML legado también se renderiza en una superficie aislada; usamos
       // una escala de impresión para que el texto no pierda nitidez.
@@ -1093,6 +1097,13 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
       backgroundColor: '#ffffff',
       useCORS: true,
       logging: false,
+      onclone: (clonedDocument, clonedElement) => {
+        if (!fontSetup.cssText) return;
+        const fontStyle = clonedDocument.createElement('style');
+        fontStyle.dataset.pdfFontFaces = selectedFontFamily;
+        fontStyle.textContent = fontSetup.cssText;
+        clonedElement.prepend(fontStyle);
+      },
     });
     const { format, orientation } = pdfDesignPaper(design);
     const doc = new jsPDF({ orientation, unit: 'mm', format });

@@ -57,6 +57,19 @@ export const PDF_APPEARANCE_FONT_GROUPS: Array<{ label: string; families: readon
   { label: 'Decorativas', families: ['Abril Fatface', 'Anton', 'Bangers', 'Bungee', 'Cinzel Decorative', 'Creepster', 'Monoton', 'Righteous', 'Teko', 'Black Ops One', 'Press Start 2P', 'Orbitron', 'Bebas Neue', 'Chewy', 'Alfa Slab One', 'Special Elite', 'Audiowide'] },
 ];
 
+/** Checks whether the loaded @font-face declarations contain a real face for a weight. */
+export function pdfFontFacesSupportWeight(faceWeights: readonly string[], requestedWeight: number) {
+  return faceWeights.some(value => {
+    const descriptor = String(value || 'normal').trim().toLowerCase();
+    if (descriptor === 'normal') return requestedWeight === 400;
+    if (descriptor === 'bold') return requestedWeight === 700;
+    const weights = descriptor.split(/\s+/).map(Number);
+    if (!weights.length || weights.some(weight => !Number.isFinite(weight) || weight < 1 || weight > 1000)) return false;
+    if (weights.length === 1) return weights[0] === requestedWeight;
+    return weights.length === 2 && requestedWeight >= weights[0] && requestedWeight <= weights[1];
+  });
+}
+
 const HEADER_COMPOSITIONS: readonly PdfHeaderComposition[] = ['company-left-logo-right', 'logo-left-company-right', 'centered-stack'];
 const HEADER_SPACINGS: readonly PdfHeaderContentSpacing[] = ['small', 'medium', 'large'];
 const PRESETS: readonly PdfAppearancePreset[] = ['light', 'boxed', 'bold', 'striped', 'bubble', 'wave', 'folder'];

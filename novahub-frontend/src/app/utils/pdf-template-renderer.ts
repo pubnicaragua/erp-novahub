@@ -5,8 +5,9 @@ import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { applyPdfHeaderComposition, applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfSettings, ensureDashboardChartNodes, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, pdfTemplateImageShapeStyles, resolveTemplateToken, type PdfHeaderComposition, type PdfHeaderContentSpacing, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
 import { applyPdfStyleToDefinition, getPdfTableCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, normalizePdfFrameGeometry, normalizePdfFontFamily, normalizePdfStyleConfig, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfTableStyle } from '../services/pdf-document-style';
-import { PDF_APPEARANCE_FONT_GROUPS } from '../services/pdf-appearance';
+import { PDF_APPEARANCE_FONT_GROUPS, PDF_APPEARANCE_FONTS, pdfFontFacesSupportWeight } from '../services/pdf-appearance';
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
+import { inlinePdfFontFaceRules } from './pdf-font-embedding';
 import { pdfStatusLabel } from './pdfStatus';
 
 export interface PdfTemplateRenderSettings {
@@ -646,12 +647,12 @@ export function applyPdfDocumentFontFamily<T extends { nodes: any[]; metadata?: 
 function collectPdfFontFaceRules(family: string) {
   if (typeof document === 'undefined') return [];
   const expected = family.trim().replace(/^['"]|['"]$/g, '').toLowerCase();
-  const found: string[] = [];
+  const found: Array<{ cssText: string; baseUrl: string; weight: string }> = [];
   const visit = (rules: CSSRuleList) => {
     for (const rule of Array.from(rules)) {
       if (rule instanceof CSSFontFaceRule) {
         const match = rule.style.getPropertyValue('font-family').replace(/^['"]|['"]$/g, '').toLowerCase();
-        if (match === expected) found.push(rule.cssText);
+        if (match === expected) found.push({ cssText: rule.cssText, baseUrl: rule.parentStyleSheet?.href || document.baseURI, weight: rule.style.getPropertyValue('font-weight') || 'normal' });
       } else if ('cssRules' in rule && (rule as CSSGroupingRule).cssRules) {
         try { visit((rule as CSSGroupingRule).cssRules); } catch { /* la hoja puede estar protegida por CORS */ }
       }
@@ -660,33 +661,62 @@ function collectPdfFontFaceRules(family: string) {
   for (const sheet of Array.from(document.styleSheets)) {
     try { if (sheet.cssRules) visit(sheet.cssRules); } catch { /* omite hojas externas no accesibles */ }
   }
-  return [...new Set(found)];
+  return [...new Map(found.map(rule => [`${rule.baseUrl}\n${rule.cssText}`, rule])).values()];
 }
 
-async function waitForPdfDocumentFonts(renderDocument: Document, family?: string) {
+export async function preparePdfDocumentFonts(renderDocument: Document, family?: string) {
   const selected = normalizePdfFontFamily(family || 'Arial');
   const rules = collectPdfFontFaceRules(selected);
-  if (rules.length && renderDocument.head) {
+  const isCatalogFont = PDF_APPEARANCE_FONTS.some(font => font.toLowerCase() === selected.toLowerCase());
+  if (isCatalogFont && !rules.length) {
+    throw new Error(`No se encontraron los archivos de la fuente ${selected} para generar el PDF.`);
+  }
+  let embeddedFontCss = '';
+  try {
+    embeddedFontCss = rules.length
+      ? await inlinePdfFontFaceRules(rules.map(({ cssText, baseUrl }) => ({ cssText, baseUrl })))
+      : '';
+  } catch (error) {
+    if (isCatalogFont) throw new Error(`No se pudo preparar la fuente ${selected} para generar el PDF.`, { cause: error });
+  }
+  if (isCatalogFont && !embeddedFontCss) {
+    throw new Error(`No se pudieron preparar los archivos de la fuente ${selected} para generar el PDF.`);
+  }
+  if (embeddedFontCss && renderDocument.head) {
     const style = renderDocument.createElement('style');
     style.dataset.pdfFontFaces = selected;
-    style.textContent = rules.join('\n');
+    style.textContent = embeddedFontCss;
     renderDocument.head.appendChild(style);
   }
   const fontSet = renderDocument.fonts;
-  if (!fontSet) return;
-  const cssFamily = browserFontFamily(selected).split(',')[0];
-  try {
-    await Promise.all(['400', '700'].map(weight => fontSet.load(`${weight} 12px ${cssFamily}`)));
-    await fontSet.ready;
-  } catch {
-    // Keep the browser's generic fallback if a local font asset is unavailable.
+  if (!fontSet && isCatalogFont) {
+    throw new Error(`El navegador no permite comprobar la carga de la fuente ${selected} para el PDF.`);
   }
+  if (fontSet) {
+    const cssFamily = browserFontFamily(selected).split(',')[0];
+    try {
+      const regularFaces = await fontSet.load(`400 12px ${cssFamily}`);
+      if (isCatalogFont && !regularFaces.length) throw new Error('El navegador no registró ninguna variante regular de la fuente.');
+      await fontSet.load(`700 12px ${cssFamily}`);
+      await fontSet.ready;
+    } catch (error) {
+      if (isCatalogFont) throw new Error(`El navegador no pudo cargar la fuente ${selected} para el PDF.`, { cause: error });
+    }
+  }
+  return {
+    cssText: embeddedFontCss,
+    hasRealBoldFace: rules.length ? pdfFontFacesSupportWeight(rules.map(rule => rule.weight), 700) : undefined,
+  };
 }
 
 function enforcePdfDocumentFont(root: HTMLElement, family?: string) {
   const cssFamily = browserFontFamily(family);
   root.style.setProperty('font-family', cssFamily, 'important');
   root.querySelectorAll<HTMLElement>('*').forEach(element => element.style.setProperty('font-family', cssFamily, 'important'));
+}
+
+function preventSyntheticPdfBold(root: HTMLElement, hasRealBoldFace: boolean | undefined) {
+  if (hasRealBoldFace === false) root.style.setProperty('font-synthesis-weight', 'none', 'important');
 }
 
 export function resolvePdfStyleConfigForRender(value: unknown, settings: Record<string, unknown>) {
@@ -2470,6 +2500,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
     ? (() => { try { return pdf.getImageProperties(safeLogo); } catch { return null; } })()
     : null;
   try {
+    const fontSetup = await preparePdfDocumentFonts(renderDocument, settings.fontFamily);
     for (let index = 0; index < renderJobs.length; index += 1) {
       onProgress?.({ page: index + 1, totalPages: renderJobs.length });
       await yieldToBrowser();
@@ -2478,7 +2509,6 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       const page = renderPage(job.definition, settings, pageData, width, height, targetKey);
       page.id = `pdf-template-page-${index}`;
       wrapper.appendChild(page);
-      await waitForPdfDocumentFonts(renderDocument, settings.fontFamily);
       await waitForImages(page);
       reflowCompanyIdentitySummary(page, job.definition);
       reflowFirstPageBelowCompanyHeader(page, job.definition, settings, index + 1);
@@ -2487,6 +2517,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       reflowCompactPurchaseListTable(page, job.definition, pageData, target.key);
       reflowIndividualPage(page, job.definition, isSalesPdfLayoutTarget(target.key) && target.structure === 'transaction');
       if (target.templateMode !== 'fixed') enforcePdfDocumentFont(page, settings.fontFamily);
+      preventSyntheticPdfBold(page, fontSetup.hasRealBoldFace);
       const logoOverlayRect = logoImageProperties?.width && logoImageProperties?.height
         ? getPdfCompanyLogoOverlayRect(page, job.definition, width, height)
         : null;
@@ -2500,6 +2531,13 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
         useCORS: true,
         allowTaint: false,
         foreignObjectRendering: true,
+        onclone: (clonedDocument, clonedElement) => {
+          if (!fontSetup.cssText) return;
+          const fontStyle = clonedDocument.createElement('style');
+          fontStyle.dataset.pdfFontFaces = settings.fontFamily || 'Arial';
+          fontStyle.textContent = fontSetup.cssText;
+          clonedElement.prepend(fontStyle);
+        },
       });
       if (index > 0) pdf.addPage([width, height], settings.orientation === 'landscape' ? 'l' : 'p');
       try {
