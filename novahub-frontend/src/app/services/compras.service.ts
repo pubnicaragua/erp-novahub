@@ -127,10 +127,10 @@ export interface ExpenseImportRow {
   categoryCustom?: unknown;
   amount?: unknown;
   currency?: unknown;
-  exchangeRate?: unknown;
   status?: unknown;
   paymentSource?: unknown;
   paidTo?: unknown;
+  supplierCode?: unknown;
   reference?: unknown;
   bankAccountNumber?: unknown;
 }
@@ -140,6 +140,8 @@ export interface ExpenseImportPreviewRow {
   status: 'READY' | 'BLOCKED' | 'CONFIRMED' | 'FAILED' | string;
   errors: string[];
   effects: { expense: boolean; financeMirror: boolean; accountingJournal: boolean };
+  supplier?: { id?: string | null; code?: string | null; name: string; isGeneral: boolean; willCreate: boolean };
+  resolvedExchangeRate?: number;
   number?: string;
   expenseId?: string;
   financeMirrorCreated?: boolean;
@@ -169,6 +171,9 @@ export interface ExpenseImportBlockResponse {
     expenseId?: string;
     financeMirrorCreated?: boolean;
     accountingJournalGenerated?: boolean;
+    supplier?: { id?: string | null; code?: string | null; name: string; isGeneral: boolean; willCreate: boolean };
+    supplierCreated?: boolean;
+    resolvedExchangeRate?: number;
   }>;
 }
 

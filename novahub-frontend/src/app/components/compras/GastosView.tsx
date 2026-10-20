@@ -345,6 +345,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
   const normalizeExpenseStatus = (raw: string) => {
     const status = String(raw || '').trim().toUpperCase();
+    const translated: Record<string, string> = { BORRADOR: 'DRAFT', PENDIENTE: 'PENDING', PAGADO: 'PAID' };
+    if (translated[status]) return translated[status];
     if (['DRAFT', 'PENDING', 'PAID'].includes(status)) return status;
     return status || 'PENDING';
   };
@@ -438,10 +440,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       categoryCustom: String(getImportCell(row, ['categoriacustom', 'categorycustom', 'categoriapersonalizada']) ?? '').trim(),
       amount: parseImportNumber(getImportCell(row, ['monto', 'amount', 'importe', 'valor'])),
       currency: currency || undefined,
-      exchangeRate: parseImportNumber(getImportCell(row, ['tasadecambio', 'exchangerate', 'tasa'])),
       status: normalizeExpenseStatus(String(getImportCell(row, ['estado', 'status']))),
       paymentSource: paymentSource || undefined,
       paidTo: String(getImportCell(row, ['pagadoa', 'paidto']) ?? '').trim(),
+      supplierCode: String(getImportCell(row, ['codigodeproveedor', 'suppliercode', 'codigoproveedor']) ?? '').trim() || undefined,
       reference: String(getImportCell(row, ['referencia', 'reference']) ?? '').trim(),
       bankAccountNumber: typeof bankAccountNumber === 'number' ? bankAccountNumber : String(bankAccountNumber ?? '').trim(),
     };
@@ -1421,10 +1423,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
               <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
                 <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground">Formato esperado</p>
                 <p className="text-xs text-muted-foreground">
-                  Una fila por gasto: <span className="font-mono">Fecha, Descripción, Categoría, Categoría personalizada, Monto, Moneda, Tasa de cambio, Estado, Método de pago, Pagado a, Referencia{accountingRouteEnabled ? ', Número de cuenta bancaria' : ''}</span>.
+                  Una fila por gasto: <span className="font-mono">Fecha, Descripción, Categoría, Categoría personalizada, Monto, Moneda, Estado, Método de pago, Pagado a, Código de proveedor, Referencia{accountingRouteEnabled ? ', Número de cuenta bancaria' : ''}</span>. La tasa de cambio se aplica automáticamente desde la configuración de la sucursal.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  La fecha y el monto son obligatorios. OTRO requiere categoría personalizada; TARJETA, TRANSFERENCIA y CHEQUE requieren referencia cuando el estado es PAID.
+                  Usa los estados Borrador, Pendiente o Pagado. La fecha y el monto son obligatorios. OTRO requiere categoría personalizada; TARJETA, TRANSFERENCIA y CHEQUE requieren referencia cuando el estado es Pagado.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   El servidor muestra los efectos de Finanzas y Contabilidad según la configuración actual de esta sucursal. Se confirma en bloques de hasta 50 gastos.

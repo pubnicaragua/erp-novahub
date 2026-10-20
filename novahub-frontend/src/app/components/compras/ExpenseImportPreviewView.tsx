@@ -153,8 +153,15 @@ export function ExpenseImportPreviewView({
                     <ExpenseImportPreviewField label="Categoría personalizada" value={source?.categoryCustom} />
                     <ExpenseImportPreviewField label="Monto" value={source?.amount} />
                     <ExpenseImportPreviewField label="Moneda" value={source?.currency} />
-                    <ExpenseImportPreviewField label="Tasa de cambio" value={source?.exchangeRate} />
+                    <ExpenseImportPreviewField label="Tasa aplicada por el sistema" value={row.resolvedExchangeRate} />
                     <ExpenseImportPreviewField label="Pagado a" value={source?.paidTo} />
+                    <ExpenseImportPreviewField label="Código de proveedor" value={source?.supplierCode} />
+                    <ExpenseImportPreviewField
+                      label="Proveedor vinculado"
+                      value={row.supplier
+                        ? `${row.supplier.name}${row.supplier.code ? ` · ${row.supplier.code}` : ''}${row.supplier.willCreate ? ' · se creará al confirmar' : ''}`
+                        : 'No resuelto'}
+                    />
 
                     <div className="min-w-0 space-y-1">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Estado</span>
