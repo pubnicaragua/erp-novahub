@@ -322,7 +322,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   };
 
   const parseExpensesFile = async (file: File, onProgress?: (progress: number) => void) => {
-    if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('Solo se permiten archivos Excel (.xlsx, .xls) o CSV');
+    if (!/\.(xlsx|xls)$/i.test(file.name)) throw new Error('Selecciona un archivo Excel válido (.xlsx o .xls)');
     const { rows: rawSheet } = await parseSpreadsheetInWorker(file, 'gastos', false, onProgress);
     if (rawSheet.length < 2) return [];
     const headers = (rawSheet[0] || []).map(normalizeImportHeader);
@@ -418,7 +418,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       setParsedImportRows([]);
       setExpenseImportPreviewStale(false);
       setExpenseImportAttemptId(null);
-      toast.error('No se pudo leer el archivo. Verifica el formato de Excel o CSV.');
+      toast.error('No se pudo leer el archivo. Verifica que sea un Excel válido.');
     } finally {
       setReadingFile(false);
       setReadingProgress(0);
@@ -468,7 +468,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
   const handlePreviewExpenses = async (automaticRefresh = false) => {
     if (!importFile) {
-      if (!automaticRefresh) toast.error('Selecciona un archivo Excel o CSV.');
+      if (!automaticRefresh) toast.error('Selecciona un archivo Excel.');
       return;
     }
     if (expenseImportValidationRunningRef.current) {
@@ -1396,7 +1396,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
             <DialogHeader data-tour="purchases-expense-modal-title">
               <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar gastos</DialogTitle>
               <DialogDescription>
-                Sube un archivo Excel o CSV para registrar gastos masivamente. Usa la plantilla para mantener el formato correcto.
+                Sube un archivo Excel para registrar gastos masivamente. Usa la plantilla para mantener el formato correcto.
               </DialogDescription>
               <PurchaseViewTutorial view="expenses" context="form" labelOverride="Cómo importar gastos" stepKeys={['title', 'data', 'actions']} targetPrefix="purchases-expense-modal" />
             </DialogHeader>
@@ -1419,8 +1419,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-bold text-muted-foreground">Archivo Excel o CSV</label>
-                <Input ref={importFileInputRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(event) => { void handleExpenseFileChange(event.target.files?.[0]); event.target.value = ''; }} />
+                <label className="text-xs font-bold text-muted-foreground">Archivo Excel</label>
+                <Input ref={importFileInputRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { void handleExpenseFileChange(event.target.files?.[0]); event.target.value = ''; }} />
                 {importFile && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p><Button type="button" variant="ghost" size="sm" className="text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearExpenseImportFile} disabled={readingFile || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}
                 {parsedImportRows.length > 0 && <p className="text-xs font-semibold text-muted-foreground">{parsedImportRows.length} fila(s) detectadas. La revisión detallada se abrirá en una vista completa antes de confirmar.</p>}
               </div>

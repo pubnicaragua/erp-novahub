@@ -185,6 +185,7 @@ export function ExpenseImportPreviewView({
                       required={false}
                       valueMode="accountNumber"
                       allowUnlinked={!preview.integrations.accountingConnectionEnabled}
+                      showUnavailableOptions
                       currency={String(source?.currency || '')}
                       value={String(source?.bankAccountNumber ?? '')}
                       onChange={(value) => onFieldUpdate(row.sourceRowNumber, 'numerodecuentabancaria', value)}
