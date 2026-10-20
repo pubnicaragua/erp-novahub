@@ -7,6 +7,8 @@ import { ScrollArea } from '../ui/scroll-area';
 import { cn } from '../ui/utils';
 import {
   PDF_APPEARANCE_FONT_GROUPS,
+  PDF_APPEARANCE_FONT_SIZE_MAX,
+  PDF_APPEARANCE_FONT_SIZE_MIN,
   type PdfAppearanceDraftKey,
   type PdfAppearanceDraftScope,
   type PdfAppearanceOverrides,
@@ -154,7 +156,7 @@ export function PdfAppearanceSettingsPanel({
         {hasImportedHtmlHeader && <p className="text-[10px] text-muted-foreground">El encabezado HTML importado conserva su propia composición.</p>}
         {property('headerContentSpacing', effective.headerContentSpacing, <select aria-label="Espacio después del encabezado PDF" value={effective.headerContentSpacing || 'small'} disabled={disabled} onChange={event => onChange('headerContentSpacing', event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60">{SPACINGS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>)}
         {property('fontFamily', effective.fontFamily, <PdfFontFamilyPicker value={effective.fontFamily || 'Inter'} disabled={disabled} onChange={font => onChange('fontFamily', font)} />)}
-        {property('fontSize', effective.fontSize, <div className="flex items-center gap-2"><Input aria-label="Tamaño base de fuente PDF" type="number" min={7} max={16} step={0.5} value={effective.fontSize || 9} disabled={disabled} onChange={event => onChange('fontSize', Number(event.target.value))} className="h-9 text-xs" /><span className="text-xs text-muted-foreground">pt</span></div>)}
+        {property('fontSize', effective.fontSize, <div className="flex items-center gap-2"><Input aria-label="Tamaño base de fuente PDF" type="number" min={PDF_APPEARANCE_FONT_SIZE_MIN} max={PDF_APPEARANCE_FONT_SIZE_MAX} step={0.5} value={effective.fontSize || 9} disabled={disabled} onChange={event => onChange('fontSize', Number(event.target.value))} className="h-9 text-xs" /><span className="text-xs text-muted-foreground">pt</span></div>)}
       </div>
       {branchScope ? <div className="space-y-2 border-t border-border/50 pt-3"><Button type="button" className="w-full gap-2" onClick={onSaveBranch} disabled={!canEditBranch || isSavingBranch}>{isSavingBranch ? <span className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" /> : hasBranchProfile ? <Save className="size-4" /> : <Check className="size-4" />}{isSavingBranch ? 'Guardando apariencia…' : 'Guardar apariencia global'}</Button><p className="text-[10px] text-muted-foreground">Perfil compartido por los PDF de {`la sucursal activa`}.</p></div>
         : <div className="space-y-2 border-t border-border/50 pt-3"><Button type="button" variant="outline" className="w-full gap-2" onClick={onResetAll} disabled={!canEditDocument || !Object.keys(overrides).length}><RotateCcw className="size-3.5" />Restablecer a apariencia global</Button><p className="text-[10px] text-muted-foreground">Guarda con el botón principal para conservar los cambios en este PDF.</p></div>}

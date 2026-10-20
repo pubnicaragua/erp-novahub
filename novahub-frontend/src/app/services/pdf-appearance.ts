@@ -15,6 +15,8 @@ export const PDF_APPEARANCE_FONTS = [
 ] as const;
 
 export type PdfAppearanceFontFamily = typeof PDF_APPEARANCE_FONTS[number];
+export const PDF_APPEARANCE_FONT_SIZE_MIN = 2;
+export const PDF_APPEARANCE_FONT_SIZE_MAX = 20;
 export type PdfHeaderComposition = 'company-left-logo-right' | 'logo-left-company-right' | 'centered-stack';
 export type PdfHeaderContentSpacing = 'small' | 'medium' | 'large';
 export type PdfAppearancePreset = 'light' | 'boxed' | 'bold' | 'striped' | 'bubble' | 'wave' | 'folder';
@@ -90,7 +92,7 @@ export function normalizePdfAppearanceProfile(value: unknown): PdfAppearanceProf
   if (HEADER_SPACINGS.includes(source.headerContentSpacing as PdfHeaderContentSpacing)) profile.headerContentSpacing = source.headerContentSpacing as PdfHeaderContentSpacing;
   if (PDF_APPEARANCE_FONTS.includes(source.fontFamily as PdfAppearanceFontFamily)) profile.fontFamily = source.fontFamily as PdfAppearanceFontFamily;
   const fontSize = source.fontSize;
-  if (typeof fontSize === 'number' && Number.isFinite(fontSize) && fontSize >= 7 && fontSize <= 16) profile.fontSize = fontSize;
+  if (typeof fontSize === 'number' && Number.isFinite(fontSize) && fontSize >= PDF_APPEARANCE_FONT_SIZE_MIN && fontSize <= PDF_APPEARANCE_FONT_SIZE_MAX) profile.fontSize = fontSize;
   if (PRESETS.includes(source.presetId as PdfAppearancePreset)) profile.presetId = source.presetId as PdfAppearancePreset;
   if (PRESETS.includes(source.tableStyle as PdfAppearancePreset)) profile.tableStyle = source.tableStyle as PdfAppearancePreset;
   if (source.palette && typeof source.palette === 'object' && !Array.isArray(source.palette)) {

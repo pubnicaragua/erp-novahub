@@ -173,7 +173,7 @@ export function normalizePdfStyleConfig(value: unknown): PdfStyleConfigV1 | unde
     version: 1,
     presetId: preset.id,
     fontFamily: normalizePdfFontFamily(candidate.fontFamily),
-    fontSize: Number.isFinite(fontSize) ? Math.max(7, Math.min(16, fontSize)) : 9,
+    fontSize: Number.isFinite(fontSize) ? Math.max(2, Math.min(20, fontSize)) : 9,
     palette,
     tableStyle: PDF_STYLE_PRESETS.some(item => item.id === candidate.tableStyle) ? candidate.tableStyle as PdfTableStyle : preset.tableStyle,
     ...(safeHtml ? { htmlTemplate: safeHtml } : {}),

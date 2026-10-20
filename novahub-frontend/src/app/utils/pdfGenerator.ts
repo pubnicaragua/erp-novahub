@@ -1246,7 +1246,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const serifFonts = ['times', 'times new roman', 'georgia', 'garamond', 'cambria', 'palatino linotype', 'bookman'];
   const monoFonts = ['courier', 'courier new', 'consolas', 'monaco'];
   const fontName = serifFonts.includes(selectedFont) ? 'times' : monoFonts.includes(selectedFont) ? 'courier' : 'helvetica';
-  const baseFontSize = Math.max(7, Math.min(13, Number(design.fontSize) || 9));
+  const baseFontSize = Math.max(2, Math.min(20, Number(design.fontSize) || 9));
   const companyDisplayName = design.showCompanyName === false ? '' : (design.companyName || tenantName || 'Nuestra Empresa');
   const logoPosition = design.logoPosition || 'left';
   const headerLayout = design.headerLayout || 'split';
@@ -3410,7 +3410,7 @@ export const generateConfiguredHistoryPDF = async ({
   const margin = Math.max(8, Math.min(28, Number(settings.margins) || 14));
   const rightEdge = pageWidth - margin;
   const fontName = configuredPdfFont(settings.fontFamily);
-  const baseFontSize = Math.max(7, Math.min(13, Number(settings.fontSize) || 9));
+  const baseFontSize = Math.max(2, Math.min(20, Number(settings.fontSize) || 9));
   const headerLayout = String(settings.headerLayout || 'split');
   const tableLayout = String(settings.tableLayout || 'standard');
   const isBannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(headerLayout);
