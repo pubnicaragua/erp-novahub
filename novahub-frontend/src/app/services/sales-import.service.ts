@@ -6,8 +6,10 @@ export interface SalesImportInvoiceSourceItem {
   sourceRowNumber: number;
   productCode: string;
   priceListName: string;
+  priceListId?: string | null;
   quantity: number;
   warehouseName: string;
+  warehouseId?: string | null;
   discount: number;
   taxOverride: string;
 }
@@ -45,8 +47,20 @@ export interface SalesImportInvoicePreviewResponse {
   kind: "INVOICE";
   globalErrors: Array<{ rowNumber?: number; message: string }>;
   integrations?: { financeEnabled: boolean; accountingEnabled: boolean };
+  catalogOptions?: SalesImportCatalogOptions;
   summary: { total: number; ready: number; blocked: number };
   documents: SalesImportInvoicePreviewDocument[];
+}
+
+export interface SalesImportCatalogOptions {
+  priceLists: Array<{ id: string; code: string; name: string }>;
+  warehouses: Array<{ id: string; name: string }>;
+}
+
+export interface SalesImportInvoiceDocumentPreviewResponse {
+  document: SalesImportInvoicePreviewDocument;
+  integrations: { financeEnabled: boolean; accountingEnabled: boolean };
+  catalogOptions: SalesImportCatalogOptions;
 }
 
 export interface SalesImportInvoiceConfirmationResult {
@@ -210,5 +224,13 @@ export const salesImportService = {
       `${basePath("INVOICE")}/documents/confirm`,
       { attemptId, document, context },
       `${attemptId}:${document.sourceRowNumber}`,
+    ),
+  revalidateInvoiceDocument: (
+    document: SalesImportInvoiceSource,
+    context: { registerId?: string; sessionId?: string },
+  ) =>
+    api.post<SalesImportInvoiceDocumentPreviewResponse>(
+      `${basePath("INVOICE")}/documents/preview`,
+      { document, context },
     ),
 };

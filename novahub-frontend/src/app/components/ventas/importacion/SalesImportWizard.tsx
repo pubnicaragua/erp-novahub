@@ -43,6 +43,7 @@ import {
 import {
   salesImportService,
   type SalesImportBatch,
+  type SalesImportCatalogOptions,
   type SalesImportInvoicePreviewDocument,
   type SalesImportInvoicePreviewResponse,
   type SalesImportKind,
@@ -67,19 +68,13 @@ const invoicePaymentMethodOptions = [
   { label: "Cheque", value: "CHECK" },
 ] as const;
 
-type InvoicePaymentField = "paymentMethod" | "paymentReference" | "bankAccountNumber";
+type InvoiceSourceUpdate =
+  | { field: "paymentMethod" | "paymentReference" | "bankAccountNumber"; value: string }
+  | { field: "priceList" | "warehouse"; itemSourceRowNumber: number; optionId: string; optionName: string };
 
 function normalizeInvoicePaymentMethod(value?: string | null) {
   const normalized = String(value || "CASH").trim().toUpperCase();
   return ({ EFECTIVO: "CASH", TARJETA: "CARD", TRANSFERENCIA: "TRANSFER", CHEQUE: "CHECK" } as Record<string, string>)[normalized] || normalized;
-}
-
-function invoicePaymentFieldFromIssue(field?: string) {
-  const normalized = String(field || "").trim().toLocaleLowerCase("es-NI").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (normalized.includes("metodo de pago")) return "paymentMethod";
-  if (normalized.includes("referencia de pago")) return "paymentReference";
-  if (normalized.includes("cuenta bancaria")) return "bankAccountNumber";
-  return null;
 }
 
 function invoicePaymentIssues(document: SalesImportInvoicePreviewDocument, accountingEnabled: boolean) {
@@ -100,38 +95,22 @@ function invoicePaymentIssues(document: SalesImportInvoicePreviewDocument, accou
   return issues;
 }
 
-function isInvoicePaymentIssueResolved(
-  document: SalesImportInvoicePreviewDocument,
-  field: string | undefined,
-  accountingEnabled: boolean,
-  initialSource?: SalesImportInvoicePreviewDocument["source"],
-) {
-  const paymentField = invoicePaymentFieldFromIssue(field);
-  if (!paymentField) return false;
-  const method = normalizeInvoicePaymentMethod(document.source.paymentMethod);
-  if (paymentField === "paymentMethod") {
-    return invoicePaymentMethodOptions.some((option) => option.value === method);
-  }
-  if (paymentField === "paymentReference") {
-    return !requiresPaymentReference(method) || Boolean(String(document.source.paymentReference || "").trim());
-  }
-  if (!isBankPaymentMethod(method, true)) return true;
-  const accountNumber = String(document.source.bankAccountNumber || "").trim();
-  if (!accountNumber) return !accountingEnabled;
-  return Boolean(initialSource && accountNumber !== String(initialSource.bankAccountNumber || "").trim());
-}
-
 function invoiceDocumentReady(
   document: SalesImportInvoicePreviewDocument,
   accountingEnabled: boolean,
-  initialSource?: SalesImportInvoicePreviewDocument["source"],
 ) {
-  if (["CONFIRMED", "PROCESSING"].includes(document.status)) return false;
-  const unresolvedErrors = (document.preview?.errors || []).filter((issue) => {
-    return !isInvoicePaymentIssueResolved(document, issue.field, accountingEnabled, initialSource);
-  });
-  const nonPaymentErrors = unresolvedErrors.some((issue) => !invoicePaymentFieldFromIssue(issue.field));
-  return !nonPaymentErrors && unresolvedErrors.length === 0 && invoicePaymentIssues(document, accountingEnabled).length === 0;
+  return document.status === "READY"
+    && !(document.preview?.errors || []).length
+    && invoicePaymentIssues(document, accountingEnabled).length === 0;
+}
+
+function cancelPendingInvoiceValidations(
+  timers: Map<number, ReturnType<typeof setTimeout>>,
+  versions: Map<number, number>,
+) {
+  timers.forEach((timer) => clearTimeout(timer));
+  timers.clear();
+  versions.forEach((version, rowNumber) => versions.set(rowNumber, version + 1));
 }
 
 function clearLegacyInvoiceBatchPointers() {
@@ -168,6 +147,8 @@ function statusLabel(status?: string) {
       return "Falló";
     case "PROCESSING":
       return "Procesando";
+    case "VALIDATING":
+      return "Validando";
     default:
       return status || "—";
   }
@@ -193,14 +174,12 @@ function currencyLabel(currency?: string) {
 
 function InvoiceImportPreviewSection({
   preview,
-  initialSources,
   confirming,
   onSourceUpdate,
 }: {
   preview: SalesImportInvoicePreviewResponse;
-  initialSources: Map<number, SalesImportInvoicePreviewDocument["source"]>;
   confirming: boolean;
-  onSourceUpdate: (sourceRowNumber: number, field: InvoicePaymentField, value: string) => void;
+  onSourceUpdate: (sourceRowNumber: number, update: InvoiceSourceUpdate) => void;
 }) {
   const accountingEnabled = Boolean(preview.integrations?.accountingEnabled);
 
@@ -225,7 +204,7 @@ function InvoiceImportPreviewSection({
           <InvoiceImportDocumentCard
             key={document.sourceRowNumber}
             document={document}
-            initialSource={initialSources.get(document.sourceRowNumber)}
+            catalogOptions={preview.catalogOptions || { priceLists: [], warehouses: [] }}
             accountingEnabled={accountingEnabled}
             financeEnabled={Boolean(preview.integrations?.financeEnabled)}
             confirming={confirming}
@@ -241,8 +220,8 @@ function InvoiceImportPreviewView({
   preview,
   fileName,
   isSidebarCollapsed,
-  initialSources,
   confirming,
+  validationPending,
   progress,
   onSourceUpdate,
   onBack,
@@ -252,10 +231,10 @@ function InvoiceImportPreviewView({
   preview: SalesImportInvoicePreviewResponse;
   fileName: string;
   isSidebarCollapsed: boolean;
-  initialSources: Map<number, SalesImportInvoicePreviewDocument["source"]>;
   confirming: boolean;
+  validationPending: boolean;
   progress: { current: number; total: number } | null;
-  onSourceUpdate: (sourceRowNumber: number, field: InvoicePaymentField, value: string) => void;
+  onSourceUpdate: (sourceRowNumber: number, update: InvoiceSourceUpdate) => void;
   onBack: () => void;
   onConfirm: () => void;
   onExit: () => void;
@@ -265,11 +244,10 @@ function InvoiceImportPreviewView({
   const readyCount = preview.documents.filter((document) => invoiceDocumentReady(
     document,
     accountingEnabled,
-    initialSources.get(document.sourceRowNumber),
   )).length;
   const confirmedCount = preview.documents.filter((document) => document.status === "CONFIRMED").length;
   const skippedCount = preview.documents.filter((document) => (
-    !invoiceDocumentReady(document, accountingEnabled, initialSources.get(document.sourceRowNumber)) &&
+    !invoiceDocumentReady(document, accountingEnabled) &&
     !["CONFIRMED", "PROCESSING"].includes(document.status)
   )).length;
   const warningCount = preview.documents.reduce((total, document) => total + (document.preview?.warnings?.length || 0), 0);
@@ -281,7 +259,7 @@ function InvoiceImportPreviewView({
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary sm:text-xs">Importación masiva</p>
             <h1 className="mt-1 flex items-center gap-2 text-xl font-black tracking-tight sm:text-3xl"><FileSpreadsheet className="size-5 shrink-0 text-primary sm:size-7" /> Revisar facturas</h1>
-            <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Revisa cada factura y corrige el método, la referencia o la cuenta bancaria. El servidor vuelve a validar los datos al confirmar.</p>
+            <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Corrige pagos, bodegas y listas de precios. Cada cambio se recalcula y valida en el servidor automáticamente.</p>
           </div>
           <Button type="button" variant="ghost" size="sm" className="shrink-0 gap-2 rounded-xl" onClick={onExit} disabled={confirming}>
             <X className="size-4" /> Salir a Facturas
@@ -293,6 +271,7 @@ function InvoiceImportPreviewView({
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Archivo cargado</p>
             <p className="truncate text-sm font-bold text-foreground" title={fileName}>{fileName}</p>
             {progress && <p className="mt-1 text-xs font-semibold text-primary" role="status" aria-live="polite">Confirmando factura {progress.current} de {progress.total}…</p>}
+            {validationPending && <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300" role="status" aria-live="polite">Recalculando cambios y validando con el servidor…</p>}
           </div>
           <div className="flex flex-wrap gap-2 text-[10px] font-bold">
             <Badge variant="outline" className="border-emerald-500/30 text-emerald-700">Ventas activa</Badge>
@@ -307,7 +286,6 @@ function InvoiceImportPreviewView({
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-2xl border border-border/60 bg-card p-3 scrollbar-overlay sm:p-4">
           <InvoiceImportPreviewSection
             preview={preview}
-            initialSources={initialSources}
             confirming={confirming}
             onSourceUpdate={onSourceUpdate}
           />
@@ -316,9 +294,9 @@ function InvoiceImportPreviewView({
         <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between sm:pt-4">
           <Button type="button" variant="outline" onClick={onBack} disabled={confirming} className="gap-2"><ArrowLeft className="size-4" /> Volver a la carga</Button>
           {readyCount > 0 ? (
-            <Button type="button" onClick={onConfirm} disabled={confirming} className="gap-2"><CheckCircle2 className="size-4" /> {confirming ? "Confirmando…" : `Confirmar ${readyCount} factura(s)`}</Button>
+            <Button type="button" onClick={onConfirm} disabled={confirming || validationPending} className="gap-2"><CheckCircle2 className="size-4" /> {confirming ? "Confirmando…" : validationPending ? "Validando cambios…" : `Confirmar ${readyCount} factura(s)`}</Button>
           ) : confirmedCount > 0 ? (
-            <Button type="button" onClick={onExit} disabled={confirming} className="gap-2"><CheckCircle2 className="size-4" /> Terminar</Button>
+            <Button type="button" onClick={onExit} disabled={confirming || validationPending} className="gap-2"><CheckCircle2 className="size-4" /> Terminar</Button>
           ) : null}
         </footer>
       </div>
@@ -328,51 +306,32 @@ function InvoiceImportPreviewView({
 
 function InvoiceImportDocumentCard({
   document,
-  initialSource,
+  catalogOptions,
   accountingEnabled,
   financeEnabled,
   confirming,
   onSourceUpdate,
 }: {
   document: SalesImportInvoicePreviewDocument;
-  initialSource?: SalesImportInvoicePreviewDocument["source"];
+  catalogOptions: SalesImportCatalogOptions;
   accountingEnabled: boolean;
   financeEnabled: boolean;
   confirming: boolean;
-  onSourceUpdate: (sourceRowNumber: number, field: InvoicePaymentField, value: string) => void;
+  onSourceUpdate: (sourceRowNumber: number, update: InvoiceSourceUpdate) => void;
 }) {
   const data = document.preview;
   const method = normalizeInvoicePaymentMethod(document.source.paymentMethod);
-  const ready = invoiceDocumentReady(document, accountingEnabled, initialSource);
+  const ready = invoiceDocumentReady(document, accountingEnabled);
   const canEditPayment = !confirming && !["CONFIRMED", "PROCESSING"].includes(document.status);
-  const visibleErrors = (data?.errors || []).filter((issue) => {
-    return !isInvoicePaymentIssueResolved(document, issue.field, accountingEnabled, initialSource);
-  });
+  const visibleErrors = data?.errors || [];
   return (
     <details open className="group min-w-0 rounded-2xl border border-border/60 bg-card p-4 open:border-primary/30">
       <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-        <span className="min-w-0 flex-1 break-all text-sm font-black">
-          {document.reference}
-        </span>
-        <span className="text-[11px] text-muted-foreground">
-          {document.lineCount} línea(s)
-        </span>
-        <Badge variant="outline" className={statusClass(ready && document.status === "BLOCKED" ? "READY" : document.status)}>
-          {ready && document.status === "BLOCKED" ? "Listo" : statusLabel(document.status)}
-        </Badge>
-        {document.result?.invoiceNumber && (
-          <Badge variant="outline" className="font-mono text-[10px]">
-            {document.result.invoiceNumber}
-          </Badge>
-        )}
-        {data?.totals?.total !== undefined && (
-          <span className="w-full text-right text-sm font-black text-primary sm:w-auto">
-            {currencyLabel(data.currency)}{" "}
-            {Number(data.totals.total).toLocaleString("es-NI", {
-              minimumFractionDigits: 2,
-            })}
-          </span>
-        )}
+        <span className="min-w-0 flex-1 break-all text-sm font-black">{document.reference}</span>
+        <span className="text-[11px] text-muted-foreground">{document.lineCount} línea(s)</span>
+        <Badge variant="outline" className={statusClass(ready ? "READY" : document.status)}>{statusLabel(ready && document.status === "BLOCKED" ? "READY" : document.status)}</Badge>
+        {document.result?.invoiceNumber && <Badge variant="outline" className="font-mono text-[10px]">{document.result.invoiceNumber}</Badge>}
+        {data?.totals?.total !== undefined && <span className="w-full text-right text-sm font-black text-primary sm:w-auto">{currencyLabel(data.currency)} {Number(data.totals.total).toLocaleString("es-NI", { minimumFractionDigits: 2 })}</span>}
       </summary>
       <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(240px,0.55fr)]">
         <div className="min-w-0 space-y-3">
@@ -386,13 +345,7 @@ function InvoiceImportDocumentCard({
               <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Método de pago</span>
               <Select
                 value={method}
-                onValueChange={(value) => {
-                  onSourceUpdate(document.sourceRowNumber, "paymentMethod", value);
-                  if (value === "CASH") {
-                    onSourceUpdate(document.sourceRowNumber, "paymentReference", "");
-                    onSourceUpdate(document.sourceRowNumber, "bankAccountNumber", "");
-                  }
-                }}
+                onValueChange={(value) => onSourceUpdate(document.sourceRowNumber, { field: "paymentMethod", value })}
                 disabled={!canEditPayment}
               >
                 <SelectTrigger aria-label={`Método de pago de la factura ${document.reference}`} className="h-9 text-xs"><SelectValue /></SelectTrigger>
@@ -405,14 +358,7 @@ function InvoiceImportDocumentCard({
             {hasPaymentReferenceField(method) && (
               <label className="min-w-0 space-y-1">
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Referencia de pago{requiresPaymentReference(method) ? " *" : ""}</span>
-                <Input
-                  aria-label={`Referencia de pago de la factura ${document.reference}`}
-                  value={String(document.source.paymentReference || "")}
-                  onChange={(event) => onSourceUpdate(document.sourceRowNumber, "paymentReference", event.target.value)}
-                  disabled={!canEditPayment}
-                  maxLength={120}
-                  className="h-9 text-xs"
-                />
+                <Input aria-label={`Referencia de pago de la factura ${document.reference}`} value={String(document.source.paymentReference || "")} onChange={(event) => onSourceUpdate(document.sourceRowNumber, { field: "paymentReference", value: event.target.value })} disabled={!canEditPayment} maxLength={120} className="h-9 text-xs" />
               </label>
             )}
             {isBankPaymentMethod(method, true) && (accountingEnabled || financeEnabled) && (
@@ -424,99 +370,84 @@ function InvoiceImportDocumentCard({
                 allowUnlinked={!accountingEnabled}
                 currency={String(data?.currency || document.source.currency || "")}
                 value={String(document.source.bankAccountNumber || "")}
-                onChange={(value) => onSourceUpdate(document.sourceRowNumber, "bankAccountNumber", value)}
+                onChange={(value) => onSourceUpdate(document.sourceRowNumber, { field: "bankAccountNumber", value })}
                 disabled={!canEditPayment}
                 className="min-w-0"
               />
             )}
           </div>
-          {isBankPaymentMethod(method, true) && !accountingEnabled && !financeEnabled && (
-            <p className="text-[10px] text-muted-foreground">Las conexiones de Finanzas y Contabilidad están desactivadas; se registrará el método y la referencia sin movimiento bancario.</p>
-          )}
-          {invoicePaymentIssues(document, accountingEnabled).map((issue, index) => (
-            <p key={`payment-issue-${index}`} role="alert" className="rounded-lg bg-destructive/5 p-2 text-xs text-destructive">{issue}</p>
-          ))}
+          {isBankPaymentMethod(method, true) && !accountingEnabled && !financeEnabled && <p className="text-[10px] text-muted-foreground">Las conexiones de Finanzas y Contabilidad están desactivadas; se registrará el método y la referencia sin movimiento bancario.</p>}
+          {invoicePaymentIssues(document, accountingEnabled).map((issue, index) => <p key={`payment-issue-${index}`} role="alert" className="rounded-lg bg-destructive/5 p-2 text-xs text-destructive">{issue}</p>)}
           <div className="overflow-x-auto rounded-xl border border-border/50">
-            <table className="w-full min-w-[840px] text-left text-xs">
+            <table className="w-full min-w-[1120px] text-left text-xs">
               <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
-                <tr>
-                  <th className="p-2">Producto / SKU</th>
-                  <th className="p-2">Lista de precios</th>
-                  <th className="p-2">Cantidad</th>
-                  <th className="p-2">Precio</th>
-                  <th className="p-2">Desc.</th>
-                  <th className="p-2">IVA</th>
-                  <th className="p-2">Bodega</th>
-                  <th className="p-2">Disponible al prever</th>
-                </tr>
+                <tr><th className="p-2">Producto / SKU</th><th className="p-2">Lista de precios</th><th className="p-2">Cantidad</th><th className="p-2">Precio</th><th className="p-2">Desc.</th><th className="p-2">IVA</th><th className="p-2">Bodega</th><th className="p-2">Disponible al prever</th></tr>
               </thead>
               <tbody>
-                {data?.items?.map((item, index) => (
-                  <tr key={`${item.sourceRowNumber || index}-${item.productCode}`} className="border-t border-border/50">
-                    <td className="max-w-[240px] break-words p-2">
-                      <span className="font-semibold">{item.description || "Producto"}</span>
-                      <span className="block text-[10px] text-muted-foreground">{item.productCode}</span>
-                    </td>
-                    <td className="max-w-[180px] break-words p-2">
-                      {item.itemType?.toUpperCase() === "SERVICE" ? "Catálogo" : item.priceListName || "Predeterminada"}
-                    </td>
-                    <td className="p-2">{item.quantity}</td>
-                    <td className="p-2">{currencyLabel(data.currency)} {Number(item.unitPrice || 0).toLocaleString("es-NI", { minimumFractionDigits: 2 })}</td>
-                    <td className="p-2">{Number(item.discount || 0)}%</td>
-                    <td className="p-2">{Number(item.taxRate || 0)}%</td>
-                    <td className="p-2">{item.warehouseName || "Servicio"}</td>
-                    <td className="p-2">
-                      {item.availableStock === null || !item.warehouseName
-                        ? "—"
-                        : item.availableStock === undefined
-                          ? "No disponible"
-                          : Number(item.availableStock).toLocaleString("es-NI")}
-                    </td>
-                  </tr>
-                ))}
+                {document.source.items.map((sourceItem, index) => {
+                  const item = data?.items?.find((previewItem) => previewItem.sourceRowNumber === sourceItem.sourceRowNumber);
+                  const selectedPriceList = catalogOptions.priceLists.find((list) => list.id === sourceItem.priceListId)
+                    || catalogOptions.priceLists.find((list) => list.name.trim().toLocaleLowerCase("es-NI") === sourceItem.priceListName.trim().toLocaleLowerCase("es-NI"));
+                  const missingPriceListValue = `__missing-price-list-${sourceItem.sourceRowNumber}__`;
+                  const selectedWarehouse = catalogOptions.warehouses.find((warehouse) => warehouse.id === sourceItem.warehouseId)
+                    || catalogOptions.warehouses.find((warehouse) => warehouse.name.trim().toLocaleLowerCase("es-NI") === sourceItem.warehouseName.trim().toLocaleLowerCase("es-NI"));
+                  const missingWarehouseValue = `__missing-warehouse-${sourceItem.sourceRowNumber}__`;
+                  const isService = item?.itemType?.toUpperCase() === "SERVICE";
+                  return (
+                    <tr key={`${sourceItem.sourceRowNumber}-${sourceItem.productCode}-${index}`} className="border-t border-border/50 align-top">
+                      <td className="max-w-[230px] break-words p-2"><span className="font-semibold">{item?.description || "Producto"}</span><span className="block text-[10px] text-muted-foreground">{sourceItem.productCode}</span></td>
+                      <td className="min-w-[190px] p-2">
+                        {isService ? "Catálogo" : (
+                          <Select value={selectedPriceList?.id || (sourceItem.priceListName ? missingPriceListValue : "")} onValueChange={(value) => {
+                            const option = catalogOptions.priceLists.find((list) => list.id === value);
+                            if (option) onSourceUpdate(document.sourceRowNumber, { field: "priceList", itemSourceRowNumber: sourceItem.sourceRowNumber, optionId: option.id, optionName: option.name });
+                          }} disabled={!canEditPayment}>
+                            <SelectTrigger aria-label={`Lista de precios de la línea ${sourceItem.sourceRowNumber} de ${document.reference}`} className="h-9 text-xs"><SelectValue placeholder="Seleccionar lista" /></SelectTrigger>
+                            <SelectContent>
+                              {!selectedPriceList && Boolean(sourceItem.priceListName) && <SelectItem value={missingPriceListValue}>No disponible: {sourceItem.priceListName}</SelectItem>}
+                              {catalogOptions.priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name} · {list.code}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </td>
+                      <td className="p-2">{sourceItem.quantity}</td>
+                      <td className="p-2">{item?.priceMissing ? "Sin precio" : `${currencyLabel(data?.currency)} ${Number(item?.unitPrice || 0).toLocaleString("es-NI", { minimumFractionDigits: 2 })}`}</td>
+                      <td className="p-2">{Number(sourceItem.discount || 0)}%</td>
+                      <td className="p-2">{Number(item?.taxRate || 0)}%</td>
+                      <td className="min-w-[190px] p-2">
+                        {isService ? "Servicio" : (
+                          <Select value={selectedWarehouse?.id || (sourceItem.warehouseName ? missingWarehouseValue : "")} onValueChange={(value) => {
+                            const option = catalogOptions.warehouses.find((warehouse) => warehouse.id === value);
+                            if (option) onSourceUpdate(document.sourceRowNumber, { field: "warehouse", itemSourceRowNumber: sourceItem.sourceRowNumber, optionId: option.id, optionName: option.name });
+                          }} disabled={!canEditPayment}>
+                            <SelectTrigger aria-label={`Bodega de la línea ${sourceItem.sourceRowNumber} de ${document.reference}`} className="h-9 text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
+                            <SelectContent>
+                              {!selectedWarehouse && Boolean(sourceItem.warehouseName) && <SelectItem value={missingWarehouseValue}>No disponible: {sourceItem.warehouseName}</SelectItem>}
+                              {catalogOptions.warehouses.map((warehouse) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </td>
+                      <td className="p-2">{isService || !sourceItem.warehouseName ? "—" : item?.availableStock === undefined ? "Vuelve a validar" : Number(item.availableStock).toLocaleString("es-NI")}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
         <div className="min-w-0 space-y-2">
-          {document.error && (!ready || document.status === "FAILED") && (
-            <div role="alert" className="rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive">
-              <strong>{document.status === "FAILED" ? "Error al confirmar" : "Debe corregirse"}</strong>
-              <p className="mt-1 whitespace-pre-wrap">{document.error}</p>
-            </div>
-          )}
-          {document.result?.postCommitWarning && (
-            <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-foreground">
-              <strong>La factura quedó registrada; falta completar un proceso posterior.</strong>
-              <p className="mt-1 whitespace-pre-wrap">{document.result.postCommitWarning}</p>
-              <p className="mt-1 text-muted-foreground">La factura no se volverá a crear al reintentar el mismo intento.</p>
-            </div>
-          )}
-          {visibleErrors.map((issue, index) => (
-            <div key={`error-${index}`} className="rounded-lg bg-destructive/5 p-2 text-xs text-destructive">
-              <strong>{issue.field || "Error"}{issue.rowNumber ? ` · fila ${issue.rowNumber}` : ""}:</strong> {issue.message}
-            </div>
-          ))}
-          {data?.warnings?.map((warning, index) => (
-            <div key={`warning-${index}`} className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-foreground">
-              <p className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-                <span><strong>{warning.field || "Aviso"}:</strong> {warning.message}</span>
-              </p>
-            </div>
-          ))}
-          {document.status === "CONFIRMED" && (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="size-4 shrink-0" />
-              Factura registrada como pagada.
-            </div>
-          )}
+          {document.error && (!ready || document.status === "FAILED") && <div role="alert" className="rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive"><strong>{document.status === "FAILED" ? "Error al confirmar" : "Debe corregirse"}</strong><p className="mt-1 whitespace-pre-wrap">{document.error}</p></div>}
+          {document.result?.postCommitWarning && <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-foreground"><strong>La factura quedó registrada; falta completar un proceso posterior.</strong><p className="mt-1 whitespace-pre-wrap">{document.result.postCommitWarning}</p><p className="mt-1 text-muted-foreground">La factura no se volverá a crear al reintentar el mismo intento.</p></div>}
+          {visibleErrors.map((issue, index) => <div key={`error-${index}`} className="rounded-lg bg-destructive/5 p-2 text-xs text-destructive"><strong>{issue.field || "Error"}{issue.rowNumber ? ` · fila ${issue.rowNumber}` : ""}:</strong> {issue.message}</div>)}
+          {data?.warnings?.map((warning, index) => <div key={`warning-${index}`} className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-foreground"><p className="flex items-start gap-2"><AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" /><span><strong>{warning.field || "Aviso"}:</strong> {warning.message}</span></p></div>)}
+          {document.status === "VALIDATING" && <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">Recalculando precio, existencias y validaciones…</div>}
+          {document.status === "CONFIRMED" && <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="size-4 shrink-0" />Factura registrada como pagada.</div>}
         </div>
       </div>
     </details>
   );
 }
-
 export function SalesImportWizard({
   open,
   onOpenChange,
@@ -532,7 +463,9 @@ export function SalesImportWizard({
   const [invoicePreview, setInvoicePreview] =
     useState<SalesImportInvoicePreviewResponse | null>(null);
   const [invoiceAttemptId, setInvoiceAttemptId] = useState<string | null>(null);
-  const initialInvoiceSourcesRef = useRef(new Map<number, SalesImportInvoicePreviewDocument["source"]>());
+  const invoicePreviewRef = useRef<SalesImportInvoicePreviewResponse | null>(null);
+  const invoiceValidationTimersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const invoiceValidationVersionsRef = useRef(new Map<number, number>());
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [workingBlock, setWorkingBlock] = useState<number | null>(null);
@@ -549,6 +482,15 @@ export function SalesImportWizard({
     session: CashRegisterSession | null;
   } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => () => {
+    invoiceValidationTimersRef.current.forEach((timer) => clearTimeout(timer));
+    invoiceValidationTimersRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    invoicePreviewRef.current = invoicePreview;
+  }, [invoicePreview]);
 
   const storageKey = `${BATCH_STORAGE_PREFIX}${tenantId}:${kind}`;
   const activeRegister =
@@ -662,7 +604,11 @@ export function SalesImportWizard({
     setBatch(null);
     setPage(1);
     setInvoicePreview(null);
-    initialInvoiceSourcesRef.current.clear();
+    invoicePreviewRef.current = null;
+    cancelPendingInvoiceValidations(
+      invoiceValidationTimersRef.current,
+      invoiceValidationVersionsRef.current,
+    );
     setInvoiceAttemptId(null);
     setInvoiceProgress(null);
     setLoadError(null);
@@ -699,6 +645,11 @@ export function SalesImportWizard({
     setBusy(true);
     setBatch(null);
     setInvoicePreview(null);
+    invoicePreviewRef.current = null;
+    cancelPendingInvoiceValidations(
+      invoiceValidationTimersRef.current,
+      invoiceValidationVersionsRef.current,
+    );
     setPage(1);
     setLoadError(null);
     setDuplicatePrompt(false);
@@ -714,10 +665,7 @@ export function SalesImportWizard({
           return;
         }
         const invoiceResponse = response as SalesImportInvoicePreviewResponse;
-        initialInvoiceSourcesRef.current = new Map(invoiceResponse.documents.map((document) => [
-          document.sourceRowNumber,
-          { ...document.source },
-        ]));
+        invoicePreviewRef.current = invoiceResponse;
         setInvoicePreview(invoiceResponse);
         setInvoiceAttemptId(crypto.randomUUID());
         toast.success(
@@ -785,26 +733,111 @@ export function SalesImportWizard({
     }
   };
 
-  const updateInvoiceSource = (sourceRowNumber: number, field: InvoicePaymentField, value: string) => {
-    setInvoicePreview((current) => current ? {
+  const updateInvoiceSource = (sourceRowNumber: number, update: InvoiceSourceUpdate) => {
+    if (confirmingInvoices) return;
+    const current = invoicePreviewRef.current;
+    const existing = current?.documents.find((document) => document.sourceRowNumber === sourceRowNumber);
+    if (!current || !existing || ["CONFIRMED", "PROCESSING"].includes(existing.status)) return;
+
+    let source = existing.source;
+    if (update.field === "priceList" || update.field === "warehouse") {
+      source = {
+        ...source,
+        items: source.items.map((item) => item.sourceRowNumber === update.itemSourceRowNumber
+          ? update.field === "priceList"
+            ? { ...item, priceListId: update.optionId, priceListName: update.optionName }
+            : { ...item, warehouseId: update.optionId, warehouseName: update.optionName }
+          : item),
+      };
+    } else {
+      source = { ...source, [update.field]: update.value };
+      if (update.field === "paymentMethod" && normalizeInvoicePaymentMethod(update.value) === "CASH") {
+        source = { ...source, paymentReference: "", bankAccountNumber: "" };
+      }
+    }
+
+    const changedDocument: SalesImportInvoicePreviewDocument = {
+      ...existing,
+      source,
+      status: "VALIDATING",
+      error: null,
+    };
+    const updatedPreview: SalesImportInvoicePreviewResponse = {
       ...current,
       documents: current.documents.map((document) => document.sourceRowNumber === sourceRowNumber
-        ? { ...document, source: { ...document.source, [field]: value } }
+        ? changedDocument
         : document),
-    } : current);
+    };
+    invoicePreviewRef.current = updatedPreview;
+    setInvoicePreview(updatedPreview);
     setInvoiceAttemptId(crypto.randomUUID());
+
+    const priorTimer = invoiceValidationTimersRef.current.get(sourceRowNumber);
+    if (priorTimer) clearTimeout(priorTimer);
+    const version = (invoiceValidationVersionsRef.current.get(sourceRowNumber) || 0) + 1;
+    invoiceValidationVersionsRef.current.set(sourceRowNumber, version);
+    const timer = setTimeout(() => {
+      invoiceValidationTimersRef.current.delete(sourceRowNumber);
+      void salesImportService.revalidateInvoiceDocument(source, currentContext)
+        .then((result) => {
+          if (invoiceValidationVersionsRef.current.get(sourceRowNumber) !== version) return;
+          const latest = invoicePreviewRef.current;
+          if (!latest) return;
+          const documents = latest.documents.map((document) => document.sourceRowNumber === sourceRowNumber
+            ? result.document
+            : document);
+          const nextPreview: SalesImportInvoicePreviewResponse = {
+            ...latest,
+            integrations: result.integrations,
+            catalogOptions: result.catalogOptions,
+            documents,
+            summary: {
+              ...latest.summary,
+              ready: documents.filter((document) => document.status === "READY").length,
+              blocked: documents.filter((document) => !["READY", "CONFIRMED", "PROCESSING"].includes(document.status)).length,
+            },
+          };
+          invoicePreviewRef.current = nextPreview;
+          setInvoicePreview(nextPreview);
+        })
+        .catch((error) => {
+          if (invoiceValidationVersionsRef.current.get(sourceRowNumber) !== version) return;
+          const latest = invoicePreviewRef.current;
+          if (!latest) return;
+          const message = getApiErrorMessage(error, "No se pudo revalidar esta factura. Corrige el dato o vuelve a intentarlo.");
+          const documents = latest.documents.map((document) => document.sourceRowNumber === sourceRowNumber
+            ? { ...document, status: "BLOCKED", preview: undefined, error: message }
+            : document);
+          const nextPreview: SalesImportInvoicePreviewResponse = {
+            ...latest,
+            documents,
+            summary: {
+              ...latest.summary,
+              ready: documents.filter((document) => document.status === "READY").length,
+              blocked: documents.filter((document) => !["READY", "CONFIRMED", "PROCESSING"].includes(document.status)).length,
+            },
+          };
+          invoicePreviewRef.current = nextPreview;
+          setInvoicePreview(nextPreview);
+        });
+    }, 350);
+    invoiceValidationTimersRef.current.set(sourceRowNumber, timer);
   };
 
   const backToInvoiceUpload = () => {
     if (confirmingInvoices) return;
+    cancelPendingInvoiceValidations(invoiceValidationTimersRef.current, invoiceValidationVersionsRef.current);
     setInvoicePreview(null);
+    invoicePreviewRef.current = null;
     setInvoiceAttemptId(null);
     setInvoiceProgress(null);
   };
 
   const exitInvoiceImport = () => {
     if (confirmingInvoices) return;
+    cancelPendingInvoiceValidations(invoiceValidationTimersRef.current, invoiceValidationVersionsRef.current);
     setInvoicePreview(null);
+    invoicePreviewRef.current = null;
     setInvoiceAttemptId(null);
     setInvoiceProgress(null);
     setFile(null);
@@ -845,10 +878,10 @@ export function SalesImportWizard({
   const confirmInvoices = async () => {
     if (kind !== "INVOICE" || !invoicePreview || !invoiceAttemptId || confirmingInvoices)
       return;
+    cancelPendingInvoiceValidations(invoiceValidationTimersRef.current, invoiceValidationVersionsRef.current);
     const readyDocuments = invoicePreview.documents.filter((document) => invoiceDocumentReady(
       document,
       Boolean(invoicePreview.integrations?.accountingEnabled),
-      initialInvoiceSourcesRef.current.get(document.sourceRowNumber),
     ));
     if (!readyDocuments.length) {
       toast.error("No hay facturas listas para confirmar.");
@@ -957,8 +990,8 @@ export function SalesImportWizard({
         preview={invoicePreview}
         fileName={file?.name || ""}
         isSidebarCollapsed={isSidebarCollapsed}
-        initialSources={initialInvoiceSourcesRef.current}
         confirming={confirmingInvoices}
+        validationPending={invoicePreview.documents.some((document) => document.status === "VALIDATING")}
         progress={invoiceProgress}
         onSourceUpdate={updateInvoiceSource}
         onBack={backToInvoiceUpload}
@@ -974,8 +1007,10 @@ export function SalesImportWizard({
       onOpenChange={(nextOpen) => {
         if (!busy && workingBlock === null && !confirmingInvoices) {
           if (!nextOpen && kind === "INVOICE") {
+            cancelPendingInvoiceValidations(invoiceValidationTimersRef.current, invoiceValidationVersionsRef.current);
             setFile(null);
             setInvoicePreview(null);
+            invoicePreviewRef.current = null;
             setInvoiceAttemptId(null);
             setInvoiceProgress(null);
             setLoadError(null);
@@ -1028,6 +1063,10 @@ export function SalesImportWizard({
                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 className="block w-full min-w-0 cursor-pointer rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-xs file:font-bold file:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 onChange={(event) => {
+                  if (kind === "INVOICE") {
+                    cancelPendingInvoiceValidations(invoiceValidationTimersRef.current, invoiceValidationVersionsRef.current);
+                    invoicePreviewRef.current = null;
+                  }
                   setFile(event.target.files?.[0] || null);
                   setBatch(null);
                   setInvoicePreview(null);
