@@ -2001,6 +2001,11 @@ function reflowSingleEntityHistory(page: HTMLElement, definition: PdfTemplateDef
   const partyNameElement = byId.get(partyNameId);
   const partyName = partyNameElement ? readValue(partyNameElement, partyNameId) : '';
   partyNameElement?.remove();
+  const titleStartsOnRightHalf = Boolean(documentTitleRect && documentTitleRect.left - pageRect.left >= pageRect.width * 0.5);
+  const titleTop = documentTitleRect ? documentTitleRect.top - pageRect.top : documentHeaderBottom;
+  const headingWidth = documentTitleRect
+    ? Math.max(36, Math.min(56, ((documentTitleRect.left - pageRect.left) / pageRect.width) * 100 - 10))
+    : 90;
   let entityHeadingBottom = 0;
 
   const orderedFieldIds = ['party-tax-id', 'party-address', 'party-phone', 'party-email', 'party-contact', 'party-balance-summary'];
@@ -2023,14 +2028,20 @@ function reflowSingleEntityHistory(page: HTMLElement, definition: PdfTemplateDef
     fontFamily: browserFontFamily(settings.fontFamily),
   });
 
-  if (partyName) {
+  if (targetKey === 'ventas.customer-history' && titleStartsOnRightHalf) {
+    Object.assign(block.style, {
+      left: '5%', top: `${Math.max(0, titleTop)}px`, width: `${headingWidth}%`,
+      display: 'block', gap: '0',
+    });
+    const partySummary = createPdfPartySummary([
+      ...(partyName ? [{ id: 'party-name', label: 'Cliente', value: partyName }] : []),
+      ...fieldValues,
+    ], settings);
+    Object.assign(partySummary.style, { flex: 'none', width: '100%' });
+    block.appendChild(partySummary);
+  } else if (partyName) {
     const heading = document.createElement('div');
     heading.textContent = partyName;
-    const titleStartsOnRightHalf = Boolean(documentTitleRect && documentTitleRect.left - pageRect.left >= pageRect.width * 0.5);
-    const titleTop = documentTitleRect ? documentTitleRect.top - pageRect.top : documentHeaderBottom;
-    const headingWidth = documentTitleRect
-      ? Math.max(36, Math.min(56, ((documentTitleRect.left - pageRect.left) / pageRect.width) * 100 - 10))
-      : 90;
     Object.assign(heading.style, {
       ...(titleStartsOnRightHalf ? { position: 'absolute', left: '5%', top: `${titleTop}px`, width: `${headingWidth}%` } : {}),
       width: titleStartsOnRightHalf ? `${headingWidth}%` : '100%', minWidth: '0', fontSize: pdfPointsToCss(9), fontWeight: '700', lineHeight: '1.2',
@@ -2042,28 +2053,32 @@ function reflowSingleEntityHistory(page: HTMLElement, definition: PdfTemplateDef
     } else block.appendChild(heading);
   }
 
-  block.style.top = `${resolvePdfHistoryInfoTop(documentHeaderBottom, entityHeadingBottom, Math.max(4, pageRect.height * 0.012))}px`;
+  if (targetKey !== 'ventas.customer-history' || !titleStartsOnRightHalf) {
+    block.style.top = `${resolvePdfHistoryInfoTop(documentHeaderBottom, entityHeadingBottom, Math.max(4, pageRect.height * 0.012))}px`;
+  }
 
-  for (let index = 0; index < fieldValues.length; index += 2) {
-    const fields = fieldValues.slice(index, index + 2);
-    const row = document.createElement('div');
-    Object.assign(row.style, {
-      display: 'grid', gridTemplateColumns: fields.length > 1 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)',
-      gap: '2mm 5mm', width: '100%', minWidth: '0', alignItems: 'start',
-    });
-    fields.forEach(field => {
-      const cell = document.createElement('div');
-      Object.assign(cell.style, { minWidth: '0', display: 'flex', flexDirection: 'column', gap: '0.5mm', overflow: 'visible' });
-      const label = document.createElement('span');
-      label.textContent = field.label;
-      Object.assign(label.style, { color: '#64748b', fontSize: pdfPointsToCss(5.8), fontWeight: '700', letterSpacing: '0.35px', textTransform: 'uppercase', lineHeight: '1.05' });
-      const value = document.createElement('span');
-      value.textContent = field.value;
-      Object.assign(value.style, { color: safeHtml2CanvasColor(settings.textColor, '#334155'), fontSize: pdfPointsToCss(7.4), lineHeight: '1.2', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'normal' });
-      cell.append(label, value);
-      row.appendChild(cell);
-    });
-    block.appendChild(row);
+  if (targetKey !== 'ventas.customer-history' || !titleStartsOnRightHalf) {
+    for (let index = 0; index < fieldValues.length; index += 2) {
+      const fields = fieldValues.slice(index, index + 2);
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        display: 'grid', gridTemplateColumns: fields.length > 1 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)',
+        gap: '2mm 5mm', width: '100%', minWidth: '0', alignItems: 'start',
+      });
+      fields.forEach(field => {
+        const cell = document.createElement('div');
+        Object.assign(cell.style, { minWidth: '0', display: 'flex', flexDirection: 'column', gap: '0.5mm', overflow: 'visible' });
+        const label = document.createElement('span');
+        label.textContent = field.label;
+        Object.assign(label.style, { color: '#64748b', fontSize: pdfPointsToCss(5.8), fontWeight: '700', letterSpacing: '0.35px', textTransform: 'uppercase', lineHeight: '1.05' });
+        const value = document.createElement('span');
+        value.textContent = field.value;
+        Object.assign(value.style, { color: safeHtml2CanvasColor(settings.textColor, '#334155'), fontSize: pdfPointsToCss(7.4), lineHeight: '1.2', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'normal' });
+        cell.append(label, value);
+        row.appendChild(cell);
+      });
+      block.appendChild(row);
+    }
   }
   page.appendChild(block);
 
