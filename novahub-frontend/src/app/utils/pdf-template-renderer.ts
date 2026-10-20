@@ -178,6 +178,25 @@ export function resolvePdfCompactTableTop(contentBottom: number) {
   return bottom + 5 * PDF_CSS_PIXELS_PER_MM;
 }
 
+/** Calcula la posición común de la tabla usando solo bloques visibles del cuerpo. */
+export function resolvePdfPrimaryTableTop(candidates: Array<{ bottom: number; visible: boolean; layoutOnly?: boolean }>) {
+  const contentBottom = candidates
+    .filter(candidate => candidate.visible && !candidate.layoutOnly && Number.isFinite(Number(candidate.bottom)))
+    .reduce((bottom, candidate) => Math.max(bottom, Number(candidate.bottom)), 0);
+  return contentBottom > 0 ? resolvePdfCompactTableTop(contentBottom) : null;
+}
+
+/** Selecciona la primera tabla activa para anclar el flujo del contenido. */
+export function resolvePdfPrimaryTableNode(nodes: Array<Pick<PdfTemplateNode, 'id' | 'type' | 'enabled' | 'y'>>) {
+  return nodes
+    .filter(node => node.enabled !== false && (node.type === 'table' || node.type === 'report-sections'))
+    .sort((left, right) => {
+      const leftTop = Number(left.y);
+      const rightTop = Number(right.y);
+      return (Number.isFinite(leftTop) ? leftTop : 0) - (Number.isFinite(rightTop) ? rightTop : 0);
+    })[0] || null;
+}
+
 function getPdfVisibleTextBottom(element: HTMLElement, pageTop: number) {
   const range = element.ownerDocument.createRange();
   range.selectNodeContents(element);
@@ -1854,28 +1873,49 @@ function reflowIndividualPage(page: HTMLElement, definition: PdfTemplateDefiniti
     });
 }
 
-/** Coloca la tabla del listado justo después del título y de los metadatos que realmente aparecen. */
-function reflowCompactPurchaseListTable(page: HTMLElement, definition: PdfTemplateDefinition, data: PdfTemplateData, targetKey: string) {
-  if (targetKey !== 'compras.list') return;
+/** Coloca el bloque principal de tablas después del último contenido visible. */
+function reflowPrimaryTableAfterContent(page: HTMLElement, definition: PdfTemplateDefinition, data: PdfTemplateData, targetKey: string) {
   const pageNumber = Number((data.page as Record<string, unknown> | undefined)?.index || (data.page as Record<string, unknown> | undefined)?.number || 1);
-  if (pageNumber > 1) return;
-  const documentData = (data.document || {}) as Record<string, unknown>;
+  const target = getPdfTemplateTarget(targetKey);
+  if (pageNumber > 1 || target.templateMode === 'fixed') return;
+
+  const tableNode = resolvePdfPrimaryTableNode(definition.nodes);
+  if (!tableNode) return;
   const pageRect = page.getBoundingClientRect();
-  const tableNode = definition.nodes.find(node => node.id === 'items-table' && node.type === 'table');
-  const tableElement = page.querySelector<HTMLElement>('[data-pdf-node-id="items-table"]');
-  if (!tableNode || !tableElement || pageRect.height <= 0) return;
-  const titleElement = page.querySelector<HTMLElement>('[data-pdf-node-id="document-title"]');
-  const titleBottom = titleElement?.textContent?.trim()
-    ? getPdfVisibleTextBottom(titleElement, pageRect.top)
-    : 0;
-  const metaIds = new Set(['report-meta', 'document-generated', 'document-extra']);
-  const metaBottom = Array.from(page.querySelectorAll<HTMLElement>('[data-pdf-node-id]'))
-    .filter(element => metaIds.has(element.dataset.pdfNodeId || '') && element.textContent?.trim())
-    .reduce((bottom, element) => Math.max(bottom, getPdfVisibleTextBottom(element, pageRect.top)), 0);
-  const dataHasMetadata = ['meta', 'period', 'generated', 'extra'].some(key => String(documentData[key] ?? '').trim().length > 0);
-  const contentBottom = Math.max(titleBottom, dataHasMetadata ? metaBottom : 0);
-  if (contentBottom <= 0) return;
-  const desiredTop = resolvePdfCompactTableTop(contentBottom);
+  const renderedNodes = new Map(Array.from(page.querySelectorAll<HTMLElement>('[data-pdf-node-id]'))
+    .map(element => [element.dataset.pdfNodeId || '', element] as const));
+  const tableElement = renderedNodes.get(tableNode.id);
+  if (!tableElement || pageRect.height <= 0) return;
+
+  const tableTop = tableElement.getBoundingClientRect().top - pageRect.top;
+  const documentInfoIds = new Set([
+    'document-title', 'document-number', 'document-date', 'document-status',
+    'document-generated', 'document-extra', 'report-meta', 'ticket-meta',
+  ]);
+  const companyIds = new Set(['company-logo', 'company-name', 'company-summary']);
+  const candidates = definition.nodes
+    .filter(node => node.enabled !== false && node.id !== tableNode.id)
+    .filter(node => !companyIds.has(node.id) && !['notes', 'document-notes'].includes(node.id))
+    .filter(node => !isPdfFrameFooterNode(node))
+    .filter(node => !isPdfFrameHeaderNode(node) || documentInfoIds.has(node.id))
+    .filter(node => !['header', 'header-accent'].includes(node.id) && !node.id.startsWith('header-'))
+    .map(node => {
+      const element = renderedNodes.get(node.id);
+      if (!element) return { bottom: 0, visible: false };
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return { bottom: 0, visible: false };
+      const isSemanticPreTableContent = documentInfoIds.has(node.id) || node.id === 'party-section';
+      if (!isSemanticPreTableContent && rect.top - pageRect.top >= tableTop) return { bottom: 0, visible: false };
+      if (element.textContent?.trim()) {
+        return { bottom: getPdfVisibleTextBottom(element, pageRect.top), visible: true };
+      }
+      const isVisibleGraphic = ['section', 'chart', 'image', 'divider', 'barcode'].includes(node.type);
+      return { bottom: rect.bottom - pageRect.top, visible: isVisibleGraphic };
+    })
+    .concat(Array.from(page.querySelectorAll<HTMLElement>('[data-pdf-info-row], [data-pdf-history-party]'))
+      .map(element => ({ bottom: element.getBoundingClientRect().bottom - pageRect.top, visible: true })));
+  const desiredTop = resolvePdfPrimaryTableTop(candidates);
+  if (desiredTop === null) return;
   tableElement.style.top = `${(desiredTop / pageRect.height) * 100}%`;
 }
 
@@ -2550,7 +2590,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       reflowFirstPageBelowCompanyHeader(page, job.definition, settings, target.key, index + 1);
       reflowSingleEntityHistory(page, job.definition, settings, target.key, index + 1);
       reflowPartySection(page, job.definition, settings, target.key, index + 1);
-      reflowCompactPurchaseListTable(page, job.definition, pageData, target.key);
+      reflowPrimaryTableAfterContent(page, job.definition, pageData, target.key);
       reflowIndividualPage(page, job.definition, isSalesPdfLayoutTarget(target.key) && target.structure === 'transaction');
       if (target.templateMode !== 'fixed') enforcePdfDocumentFont(page, settings.fontFamily);
       preventSyntheticPdfBold(page, fontSetup.hasRealBoldFace);

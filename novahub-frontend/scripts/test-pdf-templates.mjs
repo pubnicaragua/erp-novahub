@@ -220,6 +220,28 @@ try {
   assert.equal(renderer.resolvePdfHeaderContentTop(40, 100, 5, 1000, 8, true), 100 + 6 * cssPixelsPerMillimeter, 'El espacio mayor debe incrementar la distancia más que el anterior.');
   assert.equal(renderer.resolvePdfHeaderContentTop(150, 100, 5, 1000, 5, false), 150 + 5 * cssPixelsPerMillimeter, 'Un encabezado alto debe mantener su distancia física uniforme respecto al contenido.');
   assert.equal(renderer.resolvePdfCompactTableTop(100), 100 + 5 * cssPixelsPerMillimeter, 'Las tablas de listados deben seguir el último dato visible con un margen compacto.');
+  assert.equal(typeof renderer.resolvePdfPrimaryTableTop, 'function', 'El renderer debe exponer el cálculo universal de posición de la tabla principal.');
+  assert.equal(typeof renderer.resolvePdfPrimaryTableNode, 'function', 'El renderer debe identificar la primera tabla activa aunque el diseño tenga tablas adicionales.');
+  assert.equal(
+    renderer.resolvePdfPrimaryTableNode([
+      { id: 'secondary-table', type: 'table', enabled: true, y: 60 },
+      { id: 'items-table', type: 'table', enabled: true, y: 36 },
+      { id: 'disabled-table', type: 'table', enabled: false, y: 10 },
+    ])?.id,
+    'items-table',
+    'El reflujo debe elegir la tabla activa que empieza primero en la página, sin dejar de normalizar diseños con varias tablas.',
+  );
+  assert.equal(renderer.resolvePdfPrimaryTableNode([{ id: 'disabled-table', type: 'table', enabled: false, y: 10 }]), null, 'Sin tablas activas no se debe inventar una tabla principal.');
+  assert.equal(
+    renderer.resolvePdfPrimaryTableTop([
+      { bottom: 100, visible: true },
+      { bottom: 260, visible: false },
+      { bottom: 900, visible: true, layoutOnly: true },
+    ]),
+    100 + 5 * cssPixelsPerMillimeter,
+    'La tabla debe ignorar campos vacíos y franjas de presentación al calcular su posición.',
+  );
+  assert.equal(renderer.resolvePdfPrimaryTableTop([]), null, 'Sin contenido visible no se debe inventar una posición de tabla.');
 
   const supplierHistoryDefault = definitions.createSystemDefaultPdfDesign('compras.supplier-history');
   assert.deepEqual(
@@ -336,6 +358,10 @@ try {
     const settings = definitions.createSystemDefaultPdfDesign(target.key).settings;
     const definition = definitions.createDefaultTemplateDefinition(target.key, settings);
     assert.ok(definition.nodes.length > 0, `${target.key} necesita una estructura canvas inicial.`);
+    if (target.templateMode !== 'fixed') {
+      const primaryTableCount = definition.nodes.filter(node => node.enabled !== false && ['table', 'report-sections'].includes(node.type)).length;
+      assert.equal(primaryTableCount, 1, `${target.key} debe tener un bloque principal para el reflujo común de tablas.`);
+    }
     if (definitions.isStandardPdfLayoutTarget(target.key)) {
       assert.ok(definitions.hasCurrentStandardPdfLayout(target.key, definition), `${target.key} debe usar la versión predeterminada vigente.`);
       assert.equal(definition.nodes.some(node => ['notes', 'document-notes'].includes(node.id)), false, `${target.key} no debe imprimir el bloque de notas del documento.`);
