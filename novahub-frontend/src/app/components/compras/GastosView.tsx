@@ -432,6 +432,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     const currency = String(getImportCell(row, ['moneda', 'currency']) || '').trim().toUpperCase();
     const paymentSource = normalizeExpensePaymentSource(String(getImportCell(row, ['metododepago', 'paymentsource', 'fuentedepago', 'cuentaorigen', 'paymentmethod'])));
     const bankAccountNumber = getImportCell(row, ['numerodecuentabancaria', 'cuentabancaria', 'bankaccountnumber', 'accountnumber']);
+    const paidTo = String(getImportCell(row, ['pagadoa', 'paidto']) ?? '').trim();
+    const hasLegacySupplierCodeColumn = ['codigodeproveedor', 'suppliercode', 'codigoproveedor']
+      .some((key) => Object.prototype.hasOwnProperty.call(row, normalizeImportHeader(key)));
+    const legacySupplierCode = String(getImportCell(row, ['codigodeproveedor', 'suppliercode', 'codigoproveedor']) ?? '').trim();
     return {
       sourceRowNumber: Number(row.sourceRowNumber) || index + 2,
       date: normalizeImportDate(getImportCell(row, ['fecha', 'date'])),
@@ -442,8 +446,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       currency: currency || undefined,
       status: normalizeExpenseStatus(String(getImportCell(row, ['estado', 'status']))),
       paymentSource: paymentSource || undefined,
-      paidTo: String(getImportCell(row, ['pagadoa', 'paidto']) ?? '').trim(),
-      supplierCode: String(getImportCell(row, ['codigodeproveedor', 'suppliercode', 'codigoproveedor']) ?? '').trim() || undefined,
+      paidTo,
+      // En la plantilla vigente, Pagado a es el código del proveedor. Los
+      // archivos antiguos con la columna separada conservan su interpretación.
+      supplierCode: (hasLegacySupplierCodeColumn ? legacySupplierCode : paidTo) || undefined,
       reference: String(getImportCell(row, ['referencia', 'reference']) ?? '').trim(),
       bankAccountNumber: typeof bankAccountNumber === 'number' ? bankAccountNumber : String(bankAccountNumber ?? '').trim(),
     };
@@ -1423,7 +1429,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
               <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
                 <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground">Formato esperado</p>
                 <p className="text-xs text-muted-foreground">
-                  Una fila por gasto: <span className="font-mono">Fecha, Descripción, Categoría, Categoría personalizada, Monto, Moneda, Estado, Método de pago, Pagado a, Código de proveedor, Referencia{accountingRouteEnabled ? ', Número de cuenta bancaria' : ''}</span>. La tasa de cambio se aplica automáticamente desde la configuración de la sucursal.
+                  Una fila por gasto: <span className="font-mono">Fecha, Descripción, Categoría, Categoría personalizada, Monto, Moneda, Estado, Método de pago, Pagado a, Referencia{accountingRouteEnabled ? ', Número de cuenta bancaria' : ''}</span>. En Pagado a escribe únicamente el código del proveedor; si queda vacío, se vincula al Proveedor General de la sucursal. La tasa de cambio se aplica automáticamente desde la configuración de la sucursal.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Usa los estados Borrador, Pendiente o Pagado. La fecha y el monto son obligatorios. OTRO requiere categoría personalizada; TARJETA, TRANSFERENCIA y CHEQUE requieren referencia cuando el estado es Pagado.

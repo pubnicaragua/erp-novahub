@@ -155,7 +155,6 @@ export function ExpenseImportPreviewView({
                     <ExpenseImportPreviewField label="Moneda" value={source?.currency} />
                     <ExpenseImportPreviewField label="Tasa aplicada por el sistema" value={row.resolvedExchangeRate} />
                     <ExpenseImportPreviewField label="Pagado a" value={source?.paidTo} />
-                    <ExpenseImportPreviewField label="Código de proveedor" value={source?.supplierCode} />
                     <ExpenseImportPreviewField
                       label="Proveedor vinculado"
                       value={row.supplier
