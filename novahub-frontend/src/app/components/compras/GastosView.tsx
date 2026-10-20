@@ -1307,7 +1307,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         </div>
         <div className="min-w-0">
           <div className="min-w-0">
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} actionsWidth="w-48" highlightedRowId={highlightedAlertId} showSelection={canPerform('PURCHASES_EXPENSES', 'delete')} onRowClick={(row) => setSelectedExpenseDetail(row)}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} showSelection={canPerform('PURCHASES_EXPENSES', 'delete')} onRowClick={(row) => setSelectedExpenseDetail(row)}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'}...`);
             try {
@@ -1328,10 +1328,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                 <Button title="Editar gasto" aria-label="Editar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setEditingId(row.id); }}><Pencil className="size-4" /></Button>
               )}
               {canPerform('PURCHASES_EXPENSES', 'approve') && String(row.status || '').toUpperCase() === 'DRAFT' && (
-                <Button type="button" title="Cambiar a pendiente" aria-label="Cambiar gasto a pendiente" variant="outline" size="sm" className="h-8 shrink-0 gap-1 rounded-lg px-2 text-[10px] text-amber-700" onClick={() => { void handleStatusAction(row, 'PENDING'); }}><Send className="size-3.5" /> Cambiar a pendiente</Button>
+                <Button type="button" title="Cambiar a pendiente" aria-label="Cambiar gasto a pendiente" variant="ghost" size="icon" className="size-8 rounded-lg text-amber-600 hover:bg-amber-500/10 hover:text-amber-700" onClick={() => { void handleStatusAction(row, 'PENDING'); }}><Send className="size-4" /></Button>
               )}
               {canPerform('PURCHASES_EXPENSES', 'approve') && String(row.status || '').toUpperCase() === 'PENDING' && (
-                <Button type="button" title="Registrar pago" aria-label="Registrar pago del gasto" variant="outline" size="sm" className="h-8 shrink-0 gap-1 rounded-lg px-2 text-[10px] text-emerald-700" onClick={() => openPaymentDialog(row)}><CircleDollarSign className="size-3.5" /> Registrar pago</Button>
+                <Button type="button" title="Registrar pago" aria-label="Registrar pago del gasto" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700" onClick={() => openPaymentDialog(row)}><CircleDollarSign className="size-4" /></Button>
               )}
             </div>
           )}
