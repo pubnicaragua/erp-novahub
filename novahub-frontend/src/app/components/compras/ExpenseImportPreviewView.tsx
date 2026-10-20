@@ -184,19 +184,19 @@ export function ExpenseImportPreviewView({
                       <Input aria-label={`Referencia de la fila ${row.sourceRowNumber}`} value={String(source?.reference ?? '')} onChange={(event) => onFieldUpdate(row.sourceRowNumber, 'referencia', event.target.value)} disabled={!rowCanEdit || importing} className="h-9 text-xs" />
                     </label>
 
-                    <BankAccountSelect
+                    {preview.integrations.accountingConnectionEnabled && <BankAccountSelect
                       label="Número de cuenta bancaria"
                       placeholder="Seleccionar cuenta existente"
-                      required={false}
+                      required={preview.integrations.accountingEnabled}
                       valueMode="accountNumber"
-                      allowUnlinked={!preview.integrations.accountingConnectionEnabled}
+                      allowUnlinked={!preview.integrations.accountingEnabled}
                       showUnavailableOptions
                       currency={String(source?.currency || '')}
                       value={String(source?.bankAccountNumber ?? '')}
                       onChange={(value) => onFieldUpdate(row.sourceRowNumber, 'numerodecuentabancaria', value)}
                       disabled={!rowCanEdit || importing}
                       className="min-w-0"
-                    />
+                    />}
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-1.5 text-[10px]">

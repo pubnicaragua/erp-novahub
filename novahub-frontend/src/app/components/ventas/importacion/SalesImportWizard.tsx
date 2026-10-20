@@ -28,6 +28,7 @@ import { Label } from "../../ui/label";
 import { Input } from "../../ui/input";
 import { BankAccountSelect } from "../../ui/BankAccountSelect";
 import { useImportPreviewLayout } from "../../../hooks/useImportPreviewLayout";
+import { useSalesIntegrationPolicy } from "../../../hooks/useSalesIntegrationPolicy";
 import {
   Select,
   SelectContent,
@@ -361,7 +362,7 @@ function InvoiceImportDocumentCard({
                 <Input aria-label={`Referencia de pago de la factura ${document.reference}`} value={String(document.source.paymentReference || "")} onChange={(event) => onSourceUpdate(document.sourceRowNumber, { field: "paymentReference", value: event.target.value })} disabled={!canEditPayment} maxLength={120} className="h-9 text-xs" />
               </label>
             )}
-            {isBankPaymentMethod(method, true) && (accountingEnabled || financeEnabled) && (
+            {isBankPaymentMethod(method, true) && accountingEnabled && (
               <BankAccountSelect
                 label="Número de cuenta bancaria"
                 placeholder="Seleccionar cuenta existente"
@@ -376,7 +377,7 @@ function InvoiceImportDocumentCard({
               />
             )}
           </div>
-          {isBankPaymentMethod(method, true) && !accountingEnabled && !financeEnabled && <p className="text-[10px] text-muted-foreground">Las conexiones de Finanzas y Contabilidad están desactivadas; se registrará el método y la referencia sin movimiento bancario.</p>}
+          {isBankPaymentMethod(method, true) && !accountingEnabled && <p className="text-[10px] text-muted-foreground">Contabilidad está desconectada; no se requiere cuenta bancaria. Se conserva el método y la referencia{financeEnabled ? ' y Finanzas recibe el registro sin una cuenta bancaria asociada' : ' sin movimiento bancario'}.</p>}
           {invoicePaymentIssues(document, accountingEnabled).map((issue, index) => <p key={`payment-issue-${index}`} role="alert" className="rounded-lg bg-destructive/5 p-2 text-xs text-destructive">{issue}</p>)}
           <div className="overflow-x-auto rounded-xl border border-border/50">
             <table className="w-full min-w-[1120px] text-left text-xs">
@@ -458,6 +459,7 @@ export function SalesImportWizard({
   isSidebarCollapsed = false,
   onFinished,
 }: SalesImportWizardProps) {
+  const salesIntegrationQuery = useSalesIntegrationPolicy();
   const [file, setFile] = useState<File | null>(null);
   const [batch, setBatch] = useState<SalesImportBatch | null>(null);
   const [invoicePreview, setInvoicePreview] =
@@ -971,7 +973,16 @@ export function SalesImportWizard({
     try {
       const { downloadSalesImportTemplate } =
         await import("./sales-import-template");
-      await downloadSalesImportTemplate(kind);
+      const policyResult = kind === "INVOICE"
+        ? await salesIntegrationQuery.refetch()
+        : null;
+      if (kind === "INVOICE" && (!policyResult?.data || policyResult.isError)) {
+        throw new Error("No se pudo verificar la conexión de Contabilidad. Inténtalo de nuevo.");
+      }
+      await downloadSalesImportTemplate(
+        kind,
+        kind === "INVOICE" && policyResult?.data?.accountingEnabled === true,
+      );
     } catch (error) {
       toast.error(
         getApiErrorMessage(error, "No se pudo generar la plantilla Excel."),
@@ -1037,8 +1048,9 @@ export function SalesImportWizard({
               variant="outline"
               className="h-9 shrink-0 gap-2 rounded-xl"
               onClick={() => void downloadTemplate()}
+              disabled={kind === "INVOICE" && salesIntegrationQuery.isFetching}
             >
-              <Download className="size-4" /> Plantilla Excel
+              <Download className="size-4" /> {kind === "INVOICE" && salesIntegrationQuery.isFetching ? "Verificando Contabilidad…" : kind === "INVOICE" && salesIntegrationQuery.isError ? "Reintentar conexión" : "Plantilla Excel"}
             </Button>
           </div>
         </DialogHeader>

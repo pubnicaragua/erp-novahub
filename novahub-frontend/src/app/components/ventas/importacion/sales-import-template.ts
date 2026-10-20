@@ -13,7 +13,7 @@ const detailHeaders = [
 
 const workbookMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-export async function downloadSalesImportTemplate(kind: SalesImportKind) {
+export async function downloadSalesImportTemplate(kind: SalesImportKind, accountingConnectionEnabled = false) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'NovaHub ERP';
   workbook.subject = kind === 'POS' ? 'Plantilla de importación de Caja' : 'Plantilla de importación de facturas';
@@ -36,7 +36,9 @@ export async function downloadSalesImportTemplate(kind: SalesImportKind) {
     ['Pago', kind === 'POS' ? 'En Caja solo se admite EFECTIVO en esta plantilla. El sistema registra el total calculado.' : 'Admite EFECTIVO, TARJETA, TRANSFERENCIA y CHEQUE. El total calculado se registra como un pago completo. TARJETA, TRANSFERENCIA y CHEQUE requieren referencia de pago.'],
     ...(kind === 'INVOICE' ? [
       ['Referencia de pago', 'Obligatoria para tarjeta, transferencia o cheque. Escribe el número de autorización, comprobante o cheque.'],
-      ['Número de cuenta bancaria', 'Se puede indicar en el Excel o seleccionar en la vista previa. Se valida contra las cuentas activas de esta sucursal y su moneda; es obligatorio si Contabilidad está conectada.'],
+      ['Cuenta bancaria', accountingConnectionEnabled
+        ? 'La conexión de Contabilidad está activa. Se puede indicar el número en el Excel o seleccionar una cuenta activa de esta sucursal en la vista previa.'
+        : 'La conexión de Contabilidad está inactiva. No se pide cuenta bancaria; se conserva el método de pago y la referencia.'],
     ] : []),
     ['Bloques', 'La vista previa separa el trabajo en bloques de hasta 50 documentos o 1.000 líneas. Las líneas de una misma factura no se separan.'],
     ['Caja', kind === 'POS' ? 'La importación se inicia desde una caja y una sesión que ya estén abiertas. La caja y sesión elegidas aplican a toda la carga.' : 'En Facturas puedes elegir opcionalmente una caja abierta para asociar el pago a su sesión.'],
@@ -56,14 +58,22 @@ export async function downloadSalesImportTemplate(kind: SalesImportKind) {
     'Código de cliente',
     'Moneda',
     'Método de pago',
-    ...(kind === 'INVOICE' ? ['Referencia de pago', 'Número de cuenta bancaria'] : []),
+    ...(kind === 'INVOICE' ? [
+      'Referencia de pago',
+      ...(accountingConnectionEnabled ? ['Número de cuenta bancaria'] : []),
+    ] : []),
     'Observación',
   ];
   const today = new Date();
   const exampleDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  documents.columns = kind === 'INVOICE'
-    ? [{ width: 24 }, { width: 15 }, { width: 22 }, { width: 12 }, { width: 18 }, { width: 24 }, { width: 28 }, { width: 38 }]
-    : [{ width: 24 }, { width: 15 }, { width: 22 }, { width: 12 }, { width: 18 }, { width: 38 }];
+  documents.columns = [
+    { width: 24 }, { width: 15 }, { width: 22 }, { width: 12 }, { width: 18 },
+    ...(kind === 'INVOICE' ? [
+      { width: 24 },
+      ...(accountingConnectionEnabled ? [{ width: 28 }] : []),
+    ] : []),
+    { width: 38 },
+  ];
   documents.addRow(documentHeaders);
   documents.addRow([
     'FAC-001',
@@ -71,7 +81,7 @@ export async function downloadSalesImportTemplate(kind: SalesImportKind) {
     '',
     'NIO',
     'EFECTIVO',
-    ...(kind === 'INVOICE' ? ['', ''] : []),
+    ...(kind === 'INVOICE' ? ['', ...(accountingConnectionEnabled ? [''] : [])] : []),
     'Venta de ejemplo; eliminar o reemplazar antes de cargar.',
   ]);
   documents.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -79,7 +89,7 @@ export async function downloadSalesImportTemplate(kind: SalesImportKind) {
   documents.getRow(1).alignment = { wrapText: true, vertical: 'middle' };
   documents.getRow(1).height = 34;
   documents.getColumn(2).numFmt = 'dd/mm/yyyy';
-  if (kind === 'INVOICE') documents.getColumn(7).numFmt = '@';
+  if (kind === 'INVOICE' && accountingConnectionEnabled) documents.getColumn(7).numFmt = '@';
   documents.getColumn(4).eachCell((cell, rowNumber) => { if (rowNumber > 1) cell.dataValidation = { type: 'list', allowBlank: true, formulae: ['"NIO,USD"'] }; });
   documents.getColumn(5).eachCell((cell, rowNumber) => { if (rowNumber > 1) cell.dataValidation = { type: 'list', allowBlank: true, formulae: [kind === 'INVOICE' ? '"EFECTIVO,TARJETA,TRANSFERENCIA,CHEQUE"' : '"EFECTIVO"'] }; });
 

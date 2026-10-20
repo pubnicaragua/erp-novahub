@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 
-const HEADERS = [
+const BASE_HEADERS = [
   'Fecha',
   'Descripción',
   'Categoría',
@@ -12,7 +12,6 @@ const HEADERS = [
   'Método de pago',
   'Pagado a',
   'Referencia',
-  'Número de cuenta bancaria',
 ];
 
 const workbookMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -38,7 +37,11 @@ function addListValidation(sheet: ExcelJS.Worksheet, column: string, values: str
   }
 }
 
-export async function downloadExpenseImportTemplate() {
+export async function downloadExpenseImportTemplate(accountingConnectionEnabled: boolean) {
+  const headers = [
+    ...BASE_HEADERS,
+    ...(accountingConnectionEnabled ? ['Número de cuenta bancaria'] : []),
+  ];
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'NovaHub ERP';
   workbook.title = 'Plantilla de importación masiva de gastos';
@@ -59,7 +62,9 @@ export async function downloadExpenseImportTemplate() {
     ['Tasa de cambio', 'Opcional. Si queda vacía, se usa la tasa configurada en esta sucursal. Para moneda base se utiliza 1.'],
     ['Estado', 'DRAFT (borrador), PENDING (pendiente) o PAID (pagado). Si queda vacío, se importa como PENDING.'],
     ['Método de pago', 'EFECTIVO, TARJETA, TRANSFERENCIA o CHEQUE. Es obligatorio para PAID. Los pagos bancarios requieren referencia.'],
-    ['Cuenta bancaria', 'Escribe como texto el número exacto de una cuenta activa de esta sucursal. La columna está preparada como texto para conservar ceros iniciales y todos los dígitos. Se exige para pagos bancarios cuando la conexión contable y la generación automática de asientos están activas; con Finanzas solamente es opcional.'],
+    ['Cuenta bancaria', accountingConnectionEnabled
+      ? 'La conexión de Contabilidad está activa. Para pagos bancarios, escribe como texto el número exacto de una cuenta activa de esta sucursal; se exige cuando se generará el asiento contable.'
+      : 'La conexión de Contabilidad está inactiva. Esta plantilla no incluye una cuenta bancaria; se conserva el método de pago y su referencia sin pedir una cuenta.'],
     ['OTRO y referencia', 'Una categoría OTRO necesita su nombre personalizado. TARJETA, TRANSFERENCIA y CHEQUE requieren una referencia al marcar PAID.'],
     ['Efectos', 'Todos los estados crean el gasto operativo en Compras. Solo PAID crea espejo en Finanzas cuando la conexión está habilitada y asiento cuando Contabilidad y la generación automática están activas.'],
     ['Bloques', 'Carga cualquier cantidad de filas. El sistema valida y confirma en bloques de hasta 50; los errores de una fila no detienen las demás.'],
@@ -78,15 +83,16 @@ export async function downloadExpenseImportTemplate() {
   const expenses = workbook.addWorksheet('Gastos');
   expenses.columns = [
     { width: 15 }, { width: 40 }, { width: 20 }, { width: 27 }, { width: 16 }, { width: 12 },
-    { width: 18 }, { width: 14 }, { width: 20 }, { width: 27 }, { width: 25 }, { width: 29 },
+    { width: 18 }, { width: 14 }, { width: 20 }, { width: 27 }, { width: 25 },
+    ...(accountingConnectionEnabled ? [{ width: 29 }] : []),
   ];
-  expenses.addRow(HEADERS);
+  expenses.addRow(headers);
   const today = new Date();
   const exampleDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   expenses.addRows([
-    [exampleDate, 'Servicio de internet', 'OPERATIVO', '', 1500, 'NIO', '', 'PAID', 'EFECTIVO', 'Proveedor Internet', '', ''],
-    [exampleDate, 'Mantenimiento de equipo', 'OTRO', 'Mantenimiento', 250, 'USD', 36.5, 'PENDING', '', 'Técnico XYZ', '', ''],
-    [exampleDate, 'Publicidad en redes', 'VENTAS', '', 800, 'NIO', '', 'PAID', 'TRANSFERENCIA', 'Agencia ABC', 'TR-0088', '001234560078'],
+    [exampleDate, 'Servicio de internet', 'OPERATIVO', '', 1500, 'NIO', '', 'PAID', 'EFECTIVO', 'Proveedor Internet', '', ...(accountingConnectionEnabled ? [''] : [])],
+    [exampleDate, 'Mantenimiento de equipo', 'OTRO', 'Mantenimiento', 250, 'USD', 36.5, 'PENDING', '', 'Técnico XYZ', '', ...(accountingConnectionEnabled ? [''] : [])],
+    [exampleDate, 'Publicidad en redes', 'VENTAS', '', 800, 'NIO', '', 'PAID', 'TRANSFERENCIA', 'Agencia ABC', 'TR-0088', ...(accountingConnectionEnabled ? ['001234560078'] : [])],
   ]);
   const header = expenses.getRow(1);
   header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -96,7 +102,7 @@ export async function downloadExpenseImportTemplate() {
   expenses.getColumn(1).numFmt = 'dd/mm/yyyy';
   expenses.getColumn(5).numFmt = '#,##0.00';
   expenses.getColumn(7).numFmt = '0.000000';
-  expenses.getColumn(12).numFmt = '@';
+  if (accountingConnectionEnabled) expenses.getColumn(12).numFmt = '@';
   expenses.getColumn(1).eachCell((cell, rowNumber) => { if (rowNumber > 1) cell.alignment = { vertical: 'top' }; });
   expenses.getColumn(2).alignment = { wrapText: true, vertical: 'top' };
 
@@ -117,7 +123,7 @@ export async function downloadExpenseImportTemplate() {
     expenses.getCell(`G${row}`).dataValidation = { ...rateValidation };
   }
   expenses.views = [{ state: 'frozen', ySplit: 1 }];
-  expenses.autoFilter = { from: 'A1', to: 'L1' };
+  expenses.autoFilter = { from: 'A1', to: `${String.fromCharCode(64 + headers.length)}1` };
 
   const buffer = await workbook.xlsx.writeBuffer();
   const bytes = new Uint8Array(buffer);

@@ -85,6 +85,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const integrationPolicyQuery = usePurchasesIntegrationPolicy();
   const integrationPolicyReady = !integrationPolicyQuery.isFetching && !integrationPolicyQuery.isError && Boolean(integrationPolicyQuery.data);
   const accountingConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingRequired === true;
+  const accountingRouteEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingEnabled === true;
   const financeConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.financeEnabled === true;
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
@@ -1420,7 +1421,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
               <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
                 <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground">Formato esperado</p>
                 <p className="text-xs text-muted-foreground">
-                  Una fila por gasto: <span className="font-mono">Fecha, Descripción, Categoría, Categoría personalizada, Monto, Moneda, Tasa de cambio, Estado, Método de pago, Pagado a, Referencia, Número de cuenta bancaria</span>.
+                  Una fila por gasto: <span className="font-mono">Fecha, Descripción, Categoría, Categoría personalizada, Monto, Moneda, Tasa de cambio, Estado, Método de pago, Pagado a, Referencia{accountingRouteEnabled ? ', Número de cuenta bancaria' : ''}</span>.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   La fecha y el monto son obligatorios. OTRO requiere categoría personalizada; TARJETA, TRANSFERENCIA y CHEQUE requieren referencia cuando el estado es PAID.
@@ -1428,7 +1429,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                 <p className="mt-1 text-xs text-muted-foreground">
                   El servidor muestra los efectos de Finanzas y Contabilidad según la configuración actual de esta sucursal. Se confirma en bloques de hasta 50 gastos.
                 </p>
-                <Button variant="ghost" size="sm" className="mt-3 h-8 gap-2" onClick={() => { void downloadExpenseImportTemplate().then(() => toast.success('Plantilla descargada')).catch(() => toast.error('No se pudo generar la plantilla')); }}>
+                <Button variant="ghost" size="sm" className="mt-3 h-8 gap-2" disabled={integrationPolicyQuery.isFetching || (!integrationPolicyQuery.data && !integrationPolicyQuery.isError)} onClick={() => { void integrationPolicyQuery.refetch().then((result) => {
+                  if (result.isError || !result.data) throw new Error('No se pudo verificar la conexión de Contabilidad.');
+                  return downloadExpenseImportTemplate(result.data.accountingEnabled === true);
+                }).then(() => toast.success('Plantilla descargada')).catch(() => toast.error('No se pudo generar la plantilla')); }}>
                   <FileDown className="size-4" /> Descargar plantilla Excel
                 </Button>
               </div>
