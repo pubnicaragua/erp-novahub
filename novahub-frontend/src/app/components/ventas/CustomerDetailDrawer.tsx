@@ -767,10 +767,40 @@ export function CustomerDetailDrawer({
                         </Select>
                       </div>
                     </div>
+                  {loading ? <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2"><Skeleton className="h-20 rounded-xl" /><Skeleton className="h-20 rounded-xl" /></div> : (customer?.historicalSummaries || []).length > 0 ? (
+                    <section aria-labelledby="customer-imported-history-movements-title" className="mt-4 min-w-0 space-y-3 rounded-xl border border-primary/15 bg-primary/[0.025] p-3 sm:p-4">
+                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <h4 id="customer-imported-history-movements-title" className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-muted-foreground/80">
+                            <Database className="size-4 shrink-0 text-primary" /> Historial importado
+                          </h4>
+                          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Antecedentes acumulados de la importación inicial. El resumen permanece visible con cualquier filtro.</p>
+                        </div>
+                        <Badge variant="outline" className="w-fit shrink-0 text-[9px]">Informativo</Badge>
+                      </div>
+                      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {(customer?.historicalSummaries || []).map((summary) => (
+                          <article key={`movement-history-${summary.id}`} className="flex min-w-0 flex-col justify-between gap-3 rounded-lg border border-border/40 bg-background/70 p-3">
+                            <div className="min-w-0">
+                              <p className="break-words text-xs font-black text-foreground">{summary.activityType}</p>
+                              <p className="mt-1 break-words text-[10px] leading-relaxed text-muted-foreground">
+                                {Number(summary.recordCount || 0).toLocaleString('es-NI')} registros
+                                {summary.measureValue !== null && summary.measureValue !== undefined ? ` · ${summary.measureLabel || 'Medida'}: ${Number(summary.measureValue).toLocaleString('es-NI')}${summary.measureUnit ? ` ${summary.measureUnit}` : ''}` : ''}
+                              </p>
+                            </div>
+                            <div className="flex min-w-0 items-end justify-between gap-2 border-t border-border/40 pt-2">
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Total acumulado · {summary.currency}</span>
+                              <span className="shrink-0 text-sm font-black tabular-nums text-primary">{formatExplicitAmount(Number(summary.amount || 0), normalizeCurrency(summary.currency, baseCurrency))}</span>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
                   {loadingRelated ? (
                     <div className="mt-4 space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div>
                   ) : visibleMovements.length === 0 ? (
-                    <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">No hay movimientos para este filtro.</p>
+                    <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">No hay movimientos operativos para este filtro.</p>
                   ) : (
                     <div className="mt-4 min-w-0 divide-y divide-border/40 rounded-xl border border-border/50">
                       {visibleMovements.slice(0, 100).map((transaction) => (
