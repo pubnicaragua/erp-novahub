@@ -410,6 +410,12 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     return Number.isFinite(displayPrice) ? displayPrice.toFixed(2) : '';
   };
 
+  const getTemplatePriceValue = (item?: PriceListItem) => {
+    if (!item) return '';
+    const basePrice = Number(item.basePrice ?? item.price);
+    return Number.isFinite(basePrice) ? basePrice : '';
+  };
+
   const getDisplayPriceValue = (item?: PriceListItem) => item
     ? formatSalesAmount(convertBaseToDisplay(Number(item.basePrice ?? item.price ?? 0)))
     : '';
@@ -613,14 +619,14 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
           );
           const variantPrices = importLists.map((list) => {
             const vi = variantItems.find((i) => i.priceListId === list.id);
-            return vi?.price ?? '';
+            return getTemplatePriceValue(vi);
           });
           rows.push([variant.sku, product.name, attrs, Number(product.costPrice ?? product.details?.costPrice ?? 0), ...variantPrices]);
         });
       } else {
         rows.push(activeItemType === 'SERVICE'
-          ? [product.code, product.name, ...importLists.map((list) => byList?.get(list.id)?.price ?? '')]
-          : [product.code, product.name, Number(product.costPrice ?? product.details?.costPrice ?? 0), ...importLists.map((list) => byList?.get(list.id)?.price ?? '')]);
+          ? [product.code, product.name, ...importLists.map((list) => getTemplatePriceValue(byList?.get(list.id)))]
+          : [product.code, product.name, Number(product.costPrice ?? product.details?.costPrice ?? 0), ...importLists.map((list) => getTemplatePriceValue(byList?.get(list.id)))]);
       }
     });
     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -633,10 +639,11 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       ['GUÍA DE LLENADO · ACTUALIZACIÓN DE PRECIOS'],
       ['1. No cambies los encabezados Código/SKU ni los nombres de las listas.'],
       ...(activeItemType === 'PRODUCT' ? [['2. El costo es informativo y no se actualizará al importar.']] : []),
-      ['3. Los precios existentes se incluyen como referencia. Si mantienes el mismo valor, no se hará ningún cambio.'],
-      ['4. Ingresa únicamente los precios de las listas que deseas actualizar. Las celdas vacías no modifican el precio existente.'],
-      ['5. La moneda y la tasa se eligen en la ventana de carga. Guarda el archivo como .xlsx y cárgalo desde Listas de Precios.'],
-      hasVariants && activeItemType === 'PRODUCT' ? ['6. Para productos con variantes, usa el SKU de la variante (no el del producto padre).'] : [],
+      [`3. Los precios existentes se incluyen en la moneda base del negocio (${baseCurrency}).`],
+      [`4. Al importar esta plantilla, selecciona ${baseCurrency} para conservar el valor de los precios precargados.`],
+      ['5. Ingresa únicamente los precios de las listas que deseas actualizar. Las celdas vacías no modifican el precio existente.'],
+      ['6. Guarda el archivo como .xlsx y cárgalo desde Listas de Precios.'],
+      hasVariants && activeItemType === 'PRODUCT' ? ['7. Para productos con variantes, usa el SKU de la variante (no el del producto padre).'] : [],
       ['Listas incluidas:', ...importLists.map((list) => list.name)],
     ].filter((row) => row.length > 0));
     guide['!cols'] = [{ wch: 72 }, ...importLists.map(() => ({ wch: 24 }))];
@@ -1195,7 +1202,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       </DialogContent>
     </Dialog>
 
-    <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}><DialogContent className="w-[calc(100vw-2rem)] !max-w-[36rem]"><DialogHeader><DialogTitle>Preparar plantilla de precios</DialogTitle><DialogDescription>Revisa el contenido antes de descargar el archivo.</DialogDescription></DialogHeader><div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm"><div className="flex justify-between"><span>{itemLabel} seleccionados</span><b>{downloadScopeIds.length}</b></div><div className="flex justify-between"><span>Listas incluidas</span><b>{importLists.length}</b></div><div className="flex justify-between"><span>Precios existentes incluidos</span><b>{catalogProducts.filter((product) => downloadScopeIds.includes(product.id)).reduce((total, product) => total + importLists.filter((list) => itemsByProduct.get(product.id)?.has(list.id)).length, 0)}</b></div>{activeItemType === 'PRODUCT' && <div className="flex justify-between"><span>Costo de referencia</span><b>Incluido</b></div>}</div><div className="space-y-2 text-xs text-muted-foreground"><p>• La plantilla incluirá código, nombre y una columna por cada lista visible{activeItemType === 'PRODUCT' ? ', además del costo informativo' : ''}.</p><p>• Los precios existentes se descargarán para usarlos como referencia.</p><p>• Las celdas vacías no modifican los precios existentes.</p></div><DialogFooter><Button variant="outline" onClick={() => setDownloadOpen(false)}>Cancelar</Button><Button onClick={() => downloadTemplate(downloadScopeIds)}><Download className="mr-2 size-4" /> Descargar plantilla</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}><DialogContent className="w-[calc(100vw-2rem)] !max-w-[36rem]"><DialogHeader><DialogTitle>Preparar plantilla de precios</DialogTitle><DialogDescription>Revisa el contenido antes de descargar el archivo.</DialogDescription></DialogHeader><div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm"><div className="flex justify-between"><span>{itemLabel} seleccionados</span><b>{downloadScopeIds.length}</b></div><div className="flex justify-between"><span>Listas incluidas</span><b>{importLists.length}</b></div><div className="flex justify-between"><span>Precios existentes incluidos</span><b>{catalogProducts.filter((product) => downloadScopeIds.includes(product.id)).reduce((total, product) => total + importLists.filter((list) => itemsByProduct.get(product.id)?.has(list.id)).length, 0)}</b></div>{activeItemType === 'PRODUCT' && <div className="flex justify-between"><span>Costo de referencia</span><b>Incluido</b></div>}</div><div className="space-y-2 text-xs text-muted-foreground"><p>• La plantilla incluirá código, nombre y una columna por cada lista visible{activeItemType === 'PRODUCT' ? ', además del costo informativo' : ''}.</p><p>• Los precios existentes se descargan en moneda base ({baseCurrency}) como referencia.</p><p>• Las celdas vacías no modifican los precios existentes.</p></div><DialogFooter><Button variant="outline" onClick={() => setDownloadOpen(false)}>Cancelar</Button><Button onClick={() => downloadTemplate(downloadScopeIds)}><Download className="mr-2 size-4" /> Descargar plantilla</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) clearPriceImportFile(); setImportOpen(open); }}>
       <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-2xl overflow-y-auto">
         <DialogHeader><DialogTitle>Actualizar precios en varias listas</DialogTitle><DialogDescription>Carga el archivo y luego abre la previsualización completa para editarlo antes de confirmar.</DialogDescription></DialogHeader>
