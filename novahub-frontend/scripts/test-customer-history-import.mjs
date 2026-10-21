@@ -84,6 +84,16 @@ const malformedAmount = aggregateCustomerHistory([
 assert.match(malformedAmount.customers[0].errors.join(' '), /importe inválido/i, 'mixed currency arithmetic is flagged for review instead of parsed as 601388');
 assert.equal(prepareCustomerHistoryForImport(malformedAmount.customers[0]).summaries.length, 0, 'malformed amount is not saved as historical spend');
 
+const incompleteMeasure = aggregateCustomerHistory([
+  { rowNumber: 2, name: 'Medida parcial', identifier: 'ID-7', amount: 10, measure: 2, currency: 'USD' },
+  { rowNumber: 3, name: 'Medida parcial', identifier: 'ID-7', amount: 5, measure: '', currency: 'USD' },
+], { activityType: 'Estadías', measureLabel: 'Noches', measureUnit: 'noches', fallbackCurrency: 'USD' });
+const incompleteMeasurePreparation = prepareCustomerHistoryForImport(incompleteMeasure.customers[0]);
+assert.equal(incompleteMeasurePreparation.summaries[0].measureLabel, 'Noches registradas', 'partial measure totals are labeled as reported values');
+assert.equal(incompleteMeasurePreparation.summaries[0].measureValue, 2, 'only supplied measure values are added');
+assert.match(incompleteMeasurePreparation.summaries[0].measureLabel, /registradas/i);
+assert.match(incompleteMeasure.customers[0].warnings.join(' '), /solo suma los valores informados/i, 'missing measures are disclosed without dropping the complete spend total');
+
 const ambiguousName = aggregateCustomerHistory([
   { rowNumber: 2, name: 'Hotel Sol', identifier: 'ID-9', amount: 100, currency: 'USD' },
   { rowNumber: 3, name: 'Hotel Solaris', identifier: 'ID 9', amount: 50, currency: 'USD' },

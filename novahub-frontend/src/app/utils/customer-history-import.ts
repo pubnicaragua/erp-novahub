@@ -111,6 +111,7 @@ export function aggregateCustomerHistory(
     recordCount: number;
     measureValue: number;
     hasMeasure: boolean;
+    missingMeasureCount: number;
     amount: number;
     documents: Map<string, number>;
   }>();
@@ -168,7 +169,7 @@ export function aggregateCustomerHistory(
     const groupKey = `${customerKey}\u0000${rowActivityType.toLocaleLowerCase()}\u0000${currency}`;
     let group = groups.get(groupKey);
     if (!group) {
-      group = { customer, activityType: rowActivityType, currency, recordCount: 0, measureValue: 0, hasMeasure: false, amount: 0, documents: new Map() };
+      group = { customer, activityType: rowActivityType, currency, recordCount: 0, measureValue: 0, hasMeasure: false, missingMeasureCount: 0, amount: 0, documents: new Map() };
       groups.set(groupKey, group);
     }
 
@@ -195,6 +196,9 @@ export function aggregateCustomerHistory(
       group.recordCount += 1;
       group.amount += amount;
     }
+    if (source.measure !== undefined && (source.measure === null || String(source.measure).trim() === '')) {
+      group.missingMeasureCount += 1;
+    }
     if (measure !== null) {
       group.measureValue += measure;
       group.hasMeasure = true;
@@ -202,12 +206,16 @@ export function aggregateCustomerHistory(
   }
 
   for (const group of groups.values()) {
-    const measureLabel = group.hasMeasure ? String(options.measureLabel || '').trim() || null : null;
+    const configuredMeasureLabel = String(options.measureLabel || '').trim() || null;
+    const measureLabel = group.hasMeasure && configuredMeasureLabel
+      ? `${configuredMeasureLabel}${group.missingMeasureCount ? ' registradas' : ''}`
+      : null;
     const measureUnit = group.hasMeasure ? String(options.measureUnit || '').trim() || null : null;
     if (measureLabel && measureLabel.length > 80) addError(group.customer, 'La etiqueta de medida no puede superar 80 caracteres.');
     if (measureUnit && measureUnit.length > 32) addError(group.customer, 'La unidad de medida no puede superar 32 caracteres.');
     if (group.amount >= 10000000000000000) addError(group.customer, 'El total supera el importe máximo permitido.');
     if (group.measureValue >= 100000000000000) addError(group.customer, 'La medida supera el valor máximo permitido.');
+    if (group.missingMeasureCount) addWarning(group.customer, `La medida "${configuredMeasureLabel || 'Medida'}" falta en ${group.missingMeasureCount} registro(s); el resumen solo suma los valores informados.`);
     group.customer.summaries.push({
       identifier: group.customer.identifier,
       activityType: group.activityType,
@@ -232,4 +240,8 @@ export function aggregateCustomerHistory(
 
 function addError(customer: CustomerHistoryImportCustomer, message: string) {
   if (!customer.errors.includes(message)) customer.errors.push(message);
+}
+
+function addWarning(customer: CustomerHistoryImportCustomer, message: string) {
+  if (!customer.warnings.includes(message)) customer.warnings.push(message);
 }

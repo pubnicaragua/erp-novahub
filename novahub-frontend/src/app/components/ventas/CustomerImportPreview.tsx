@@ -94,13 +94,18 @@ function HistoricalSummaryPreview({ summaries }: { summaries?: CustomerHistoryIm
   return (
     <div className="mt-2 space-y-1 rounded-lg border border-primary/15 bg-primary/[0.035] p-2 text-[10px] leading-relaxed">
       <p className="font-black uppercase tracking-wider text-primary">Resumen histórico importado</p>
-      {summaries.map((summary) => (
-        <p key={`${summary.activityType}-${summary.currency}`} className="break-words text-foreground">
-          <span className="font-bold">{summary.activityType}:</span> {summary.recordCount} registros
-          {summary.measureValue !== null && summary.measureValue !== undefined ? ` · ${summary.measureValue} ${summary.measureLabel || 'medida'}${summary.measureUnit ? ` ${summary.measureUnit}` : ''}` : ''}
-          {' · '}{formatCurrencyAmount(summary.amount, summary.currency, true)}
-        </p>
-      ))}
+      {summaries.map((summary) => {
+        const measureLabel = summary.measureLabel || 'medida';
+        const measureUnit = String(summary.measureUnit || '').trim();
+        const extraUnit = measureUnit && !measureLabel.toLocaleLowerCase().includes(measureUnit.toLocaleLowerCase()) ? ` ${measureUnit}` : '';
+        return (
+          <p key={`${summary.activityType}-${summary.currency}`} className="break-words text-foreground">
+            <span className="font-bold">{summary.activityType}:</span> {summary.recordCount} registros
+            {summary.measureValue !== null && summary.measureValue !== undefined ? ` · ${summary.measureValue} ${measureLabel}${extraUnit}` : ''}
+            {' · '}{formatCurrencyAmount(summary.amount, summary.currency, true)}
+          </p>
+        );
+      })}
     </div>
   );
 }
