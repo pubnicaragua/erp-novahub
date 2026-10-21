@@ -19,6 +19,7 @@ type BankAccountSelectProps = {
   label?: string;
   placeholder?: string;
   required?: boolean;
+  allowUnlinked?: boolean;
   disabled?: boolean;
   className?: string;
   endpoint?: string;
@@ -32,6 +33,7 @@ export function BankAccountSelect({
   label = 'Banco de destino',
   placeholder = 'Seleccionar banco',
   required = true,
+  allowUnlinked = false,
   disabled = false,
   className,
   endpoint = '/bank-accounts',
@@ -42,13 +44,8 @@ export function BankAccountSelect({
     accountingList(await api.get(endpoint, { params: normalizedCurrency ? { currency: normalizedCurrency } : undefined, signal })),
   );
   const accounts = useMemo(() => (query.data || [])
-    .filter((account) => account.isActive !== false && account.accountId)
-    .sort((a, b) => `${a.bankName} ${a.accountNumber}`.localeCompare(`${b.bankName} ${b.accountNumber}`)), [query.data]);
-
-  const selectedAccount = useMemo(() => {
-    if (!value) return null;
-    return accounts.find((a) => a.id === value) || null;
-  }, [value, accounts]);
+    .filter((account) => account.isActive !== false && (allowUnlinked || account.accountId))
+    .sort((a, b) => `${a.bankName} ${a.accountNumber}`.localeCompare(`${b.bankName} ${b.accountNumber}`)), [allowUnlinked, query.data]);
 
   const handleChange = (newValue: string) => {
     onChange(newValue);
@@ -78,7 +75,9 @@ export function BankAccountSelect({
           })}
           {!query.isLoading && !query.isError && accounts.length === 0 && (
             <SelectItem value="__no_bank_accounts__" disabled>
-              {normalizedCurrency ? `No hay cuentas bancarias activas en ${normalizedCurrency} con cuenta contable hija vinculada.` : 'No hay cuentas bancarias activas con cuenta contable hija vinculada.'}
+              {allowUnlinked
+                ? normalizedCurrency ? `No hay cuentas bancarias activas en ${normalizedCurrency}.` : 'No hay cuentas bancarias activas.'
+                : normalizedCurrency ? `No hay cuentas bancarias activas en ${normalizedCurrency} con cuenta contable hija vinculada.` : 'No hay cuentas bancarias activas con cuenta contable hija vinculada.'}
             </SelectItem>
           )}
         </SelectContent>

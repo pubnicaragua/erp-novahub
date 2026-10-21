@@ -77,7 +77,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
   const { canPerform, user } = useAuth();
   const integrationPolicyQuery = usePurchasesIntegrationPolicy();
   const integrationPolicyReady = !integrationPolicyQuery.isFetching && !integrationPolicyQuery.isError && Boolean(integrationPolicyQuery.data);
-  const accountingConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingRequired === true;
+  const accountingRequired = integrationPolicyReady && integrationPolicyQuery.data?.accountingRequired === true;
   const {
     exchangeRate: globalRate,
     displayCurrency,
@@ -666,12 +666,12 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
                 <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
                   <div className="flex items-center gap-2">
                     <Info className="size-3.5 shrink-0 text-primary" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-foreground">{accountingConnectionEnabled ? 'Contabilización al pagar' : 'Compra operativa'}</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-foreground">{!integrationPolicyReady ? 'Verificando conexión contable' : accountingRequired ? 'Contabilización al pagar' : 'Compra operativa'}</p>
                   </div>
-                  {accountingConnectionEnabled ? <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                  {!integrationPolicyReady ? <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Estamos consultando la conexión efectiva. Al guardar, el servidor validará si esta operación requiere cuentas o asientos.</p> : accountingRequired ? <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
                     El total bruto es subtotal + IVA. El IR no se suma al efectivo: se retiene al proveedor y queda como obligación fiscal. Al liquidarla, el asiento queda Debe bruto = Haber pago neto + IR retenido.
                   </p> : <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Con la configuración actual, la factura y sus pagos se conservan en Compras sin generar asientos automáticos.</p>}
-                  {accountingConnectionEnabled && <p className="mt-1 text-[9px] font-semibold text-primary">Las cuentas y los medios de pago se configuran en Contabilidad → Configuración → Compras.</p>}
+                  {accountingRequired && <p className="mt-1 text-[9px] font-semibold text-primary">Las cuentas y los medios de pago se configuran en Contabilidad → Configuración → Compras.</p>}
                 </div>
               </div>
             </CardContent>

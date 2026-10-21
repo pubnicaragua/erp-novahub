@@ -14,6 +14,7 @@ import { cn } from '../ui/utils';
 import { toast } from '@/app/services/toast';
 import * as XLSX from 'xlsx';
 import { mobiliarioService } from '../../services/mobiliario.service';
+import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
 import { api } from '../../services/api';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
@@ -271,6 +272,16 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   );
   const branchesQuery = useAccountingQuery<any[]>(['sucursales'], async (signal) => accountingList(await api.get('/sucursales', { signal })));
   const usersQuery = useAccountingQuery<any[]>(['users-list'], async (signal) => accountingList(await api.get('/users', { signal })));
+  const integrationPolicyQuery = useAccountingQuery<any>(
+    ['inventory-integration-policy'],
+    async () => inventoryService.getIntegrationPolicy(),
+    { staleTime: 0, refetchOnMount: 'always' },
+  );
+  const integrationPolicyReady = !integrationPolicyQuery.isFetching
+    && !integrationPolicyQuery.isError
+    && Boolean(integrationPolicyQuery.data);
+  const fixedAssetSyncEnabled = integrationPolicyReady
+    && integrationPolicyQuery.data?.accountingEnabled === true;
 
   const response = listQuery.data as any;
   const allAssets: AssetRow[] = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
@@ -539,7 +550,11 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       const res = await mobiliarioService.importAssets(items);
       setImportProgress(90);
       setImportResult(res);
-      toast.success(`Importación completada: ${res?.createdCount ?? 0} activos y ${res?.fixedAssetCount ?? 0} registros en Activos Fijos`);
+      if (res?.fixedAssetSyncPaused) {
+        toast.success(`Importación completada: ${res?.createdCount ?? 0} activos operativos. ${res?.fixedAssetPendingCount ?? 0} pendientes para Activos Fijos.`);
+      } else {
+        toast.success(`Importación completada: ${res?.createdCount ?? 0} activos y ${res?.fixedAssetCount ?? 0} registros en Activos Fijos`);
+      }
       completeNotificationAction(actionToken);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       listQuery.refetch();
@@ -562,6 +577,11 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
     const actionToken = beginNotificationAction();
     try {
       const result = await mobiliarioService.syncFixedAssets();
+      if (result?.paused) {
+        toast.info('La conexión Inventario → Contabilidad está desactivada. No se modificaron los activos; la sincronización queda pausada.');
+        completeNotificationAction(actionToken);
+        return;
+      }
       setImportResult((previous: any) => ({
         ...(previous || {}),
         repairedFixedAssetCount: result?.createdCount ?? 0,
@@ -695,9 +715,15 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           {canImportAssets && <Button variant="outline" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <FileDown className="size-4" /> Plantilla
           </Button>}
-          {canEditAssets && canViewInventoryCost && <Button variant="outline" size="sm" onClick={handleSyncFixedAssets} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+          {canEditAssets && canViewInventoryCost && fixedAssetSyncEnabled && <Button variant="outline" size="sm" onClick={handleSyncFixedAssets} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <RefreshCw className="size-4" /> Sincronizar Activos Fijos
           </Button>}
+          {canViewInventoryCost && !integrationPolicyReady && <Badge variant="outline" className="h-10 justify-center px-3 text-[10px] font-bold text-muted-foreground">
+            Verificando conexión con Contabilidad…
+          </Badge>}
+          {canViewInventoryCost && integrationPolicyReady && !fixedAssetSyncEnabled && <Badge variant="outline" className="h-10 justify-center border-warning/30 bg-warning/5 px-3 text-[10px] font-bold text-warning">
+            Sincronización con Activos Fijos pausada
+          </Badge>}
           {canImportAssets && <Button variant="outline" size="sm" onClick={() => document.getElementById('mobiliario-import-file')?.click()} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <Upload className="size-4" /> Importar Excel
           </Button>}
@@ -1076,7 +1102,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           <DialogHeader data-tour="mobiliario-import-title">
             <DialogTitle>Importar Mobiliario y Equipos</DialogTitle>
             <DialogDescription className="flex flex-wrap items-center justify-between gap-2">
-              <span>{importFileName} · {importRowsData.length} filas detectadas. Los códigos vacíos se asignan automáticamente; cada activo con costo mayor que 0 también se registra en Activos Fijos.</span>
+              <span>{importFileName} · {importRowsData.length} filas detectadas. Los códigos vacíos se asignan automáticamente; {fixedAssetSyncEnabled ? 'cada activo con costo mayor que 0 también se registra en Activos Fijos.' : integrationPolicyReady ? 'la conexión está desactivada, así que se importarán los activos operativos y la sincronización contable quedará pendiente.' : 'se está verificando la conexión; el servidor confirmará los efectos al importar.'}</span>
               <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearMobiliarioImportFile} disabled={readingFile || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button>
             </DialogDescription>
             <InventoryViewTutorial label="Cómo importar mobiliario" targetPrefix="mobiliario-import" copy={{ data: { description: 'Revisa el archivo, las filas detectadas y los errores antes de registrar los activos.' }, actions: { description: 'Confirma la importación para crear los activos válidos.' } }} />
@@ -1099,18 +1125,21 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Activos creados</p>
                 </div>
                 <div className="rounded-xl border border-info/20 bg-info/5 p-3 text-center">
-                  <p className="text-2xl font-black text-info">{importResult.fixedAssetCount ?? 0}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">En Activos Fijos</p>
+                  <p className="text-2xl font-black text-info">{importResult.fixedAssetSyncPaused ? importResult.fixedAssetPendingCount ?? 0 : importResult.fixedAssetCount ?? 0}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{importResult.fixedAssetSyncPaused ? 'Pendientes para Activos Fijos' : 'En Activos Fijos'}</p>
                 </div>
                 <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-center">
                   <p className="text-2xl font-black text-destructive">{importResult.skippedCount ?? 0}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Omitidos</p>
                 </div>
-                <div className="rounded-xl border border-warning/20 bg-warning/5 p-3 text-center">
+                {!importResult.fixedAssetSyncPaused && <div className="rounded-xl border border-warning/20 bg-warning/5 p-3 text-center">
                   <p className="text-2xl font-black text-warning">{importResult.fixedAssetSkippedCount ?? 0}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sin Activo Fijo</p>
-                </div>
+                </div>}
               </div>
+              {importResult.fixedAssetSyncPaused && <div role="status" className="rounded-xl border border-warning/30 bg-warning/5 p-3 text-[11px] leading-relaxed text-foreground">
+                Inventario → Contabilidad está desactivada. Los activos se guardaron en Mobiliario y Equipos; no se crearon registros ni depreciaciones en Activos Fijos. Podrás sincronizar los pendientes cuando Super Admin active la conexión.
+              </div>}
               {(importResult.fixedAssetSkipped || []).length > 0 && (
                 <div className="max-h-48 overflow-y-auto rounded-xl border border-warning/30 bg-warning/5 p-3 scrollbar-overlay">
                   <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-warning">Revisión contable</p>

@@ -67,7 +67,7 @@ const TUTORIALS: Record<PurchaseTutorialView, PurchaseTutorial> = {
     filters: 'Busca por descripción, proveedor o categoría. Puedes combinar el texto con el KPI activo y revisar la etiqueta de filtro para limpiarlo.',
     actions: 'Usa los KPI para filtrar pendientes o categorías, busca por texto, descarga soportes y abre el detalle de cada gasto.',
     pagination: 'Cambia el tamaño de página, valida el rango de gastos visible y recorre las páginas para no confundir el total filtrado con el total general.',
-    tip: 'Adjunta evidencia y selecciona la cuenta contable correcta para mantener la trazabilidad del gasto.',
+    tip: 'Adjunta evidencia y, cuando Compras → Contabilidad esté activa, selecciona la cuenta contable correcta para mantener la trazabilidad del gasto.',
     form: { label: 'Cómo registrar gasto', description: 'Registra un egreso con concepto, proveedor, fecha, cuenta de origen y soporte.', data: 'Captura descripción, categoría, fecha, proveedor, beneficiario y referencia.', summary: 'Confirma moneda, monto total, cuenta de origen y evidencia adjunta.', actions: 'Guarda el gasto cuando la información esté completa para que quede disponible en el control de egresos.', tip: 'Adjuntar el comprobante facilita la revisión y conciliación posterior.', steps: ['title', 'data', 'summary', 'actions'] },
   },
   'recurring-expenses': {

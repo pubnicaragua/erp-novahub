@@ -123,7 +123,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, convertBetweenCurrencies } = useCurrency();
   const { user, canPerform } = useAuth();
   const salesIntegrationQuery = useSalesIntegrationPolicy();
-  const salesAccountingEnabled = salesIntegrationQuery.data?.accountingEnabled ?? true;
+  const salesAccountingRequired = salesIntegrationQuery.data?.accountingRequired ?? true;
+  const salesFinanceEnabled = salesIntegrationQuery.data?.financeEnabled ?? true;
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('credit-note', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
@@ -526,8 +527,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       .map((line) => ({ ...line, amount: String(line.amount || '').replace(/,/g, ''), reference: String(line.reference || '').trim() }))
       .filter((line) => Number(line.amount) > 0);
     if (!effectiveLines.length) return void toast.error('Agrega al menos un medio de pago con monto mayor que cero');
-    if (salesAccountingEnabled && effectiveLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) return void toast.error('Selecciona la cuenta contable para cada medio de pago');
-    if (salesAccountingEnabled && effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) return void toast.error('Selecciona el banco global para cada medio de pago bancario');
+    if (salesAccountingRequired && effectiveLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) return void toast.error('Selecciona la cuenta contable para cada medio de pago');
+    if (salesAccountingRequired && effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) return void toast.error('Selecciona el banco global para cada medio de pago bancario');
     if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) return void toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque');
     const creditCurrency = paymentCredit.currency === 'USD' ? 'USD' : 'NIO';
     const creditBalance = Number(paymentCredit.balance ?? Number(paymentCredit.total || 0) - Number(paymentCredit.amountPaid || 0));
@@ -575,18 +576,18 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         amount: Number(firstLine.amount),
         currency: firstLine.currency,
         paymentMethod: firstLine.method,
-        accountId: salesAccountingEnabled && requiresManualPaymentAccount(firstLine.method) ? firstLine.accountId : undefined,
-        bankAccountId: salesAccountingEnabled && isBankPaymentMethod(firstLine.method, true) ? firstLine.bankAccountId : undefined,
-        cardCommissionPercent: !salesAccountingEnabled && isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionPercent || undefined : undefined,
+        accountId: salesAccountingRequired && requiresManualPaymentAccount(firstLine.method) ? firstLine.accountId : undefined,
+        bankAccountId: (salesAccountingRequired || salesFinanceEnabled) && isBankPaymentMethod(firstLine.method, true) ? firstLine.bankAccountId : undefined,
+        cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionPercent || undefined : undefined,
         reference: hasPaymentReferenceField(firstLine.method) ? firstLine.reference : undefined,
         payments: submittedLines.map((line) => ({
           method: line.method,
           amount: Number(line.amount),
           currency: line.currency,
           exchangeRate: line.exchangeRate,
-          accountId: salesAccountingEnabled && requiresManualPaymentAccount(line.method) ? line.accountId : undefined,
-          bankAccountId: salesAccountingEnabled && isBankPaymentMethod(line.method, true) ? line.bankAccountId : undefined,
-          cardCommissionPercent: !salesAccountingEnabled && isCardPaymentMethod(line.method) ? line.cardCommissionPercent || undefined : undefined,
+          accountId: salesAccountingRequired && requiresManualPaymentAccount(line.method) ? line.accountId : undefined,
+          bankAccountId: (salesAccountingRequired || salesFinanceEnabled) && isBankPaymentMethod(line.method, true) ? line.bankAccountId : undefined,
+          cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(line.method) ? line.cardCommissionPercent || undefined : undefined,
           reference: hasPaymentReferenceField(line.method) ? line.reference : undefined,
         })),
       });
@@ -1140,9 +1141,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                       </div>
                       {paymentCredit && line.currency !== paymentCreditCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente crédito: {formatExplicitAmount(getPaymentLineDocumentAmount(line, paymentCreditCurrency, paymentCredit.exchangeRate, baseCurrency, convertBetweenCurrencies), paymentCreditCurrency)}</p>}
                       {line.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}. Puedes aplicar solo una parte.</p>}
-                      {salesAccountingEnabled && isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} endpoint="/bank-accounts/payment-options" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(String(item.amount || '').replace(/,/g, '') || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" className="mt-2" />}
-                      {isCardPaymentMethod(line.method) && !salesAccountingEnabled && <label className="mt-2 block max-w-40 text-[10px] font-bold text-muted-foreground">Comisión de tarjeta (%)<Input type="number" min="0" max="100" step="0.01" value={line.cardCommissionPercent || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: Number(event.target.value) || 0, cardCommissionAmount: calculateCardCommission(Number(String(item.amount || '').replace(/,/g, '') || 0), Number(event.target.value) || 0) } : item))} className="mt-1 h-9" /></label>}
-                      {isCardPaymentMethod(line.method) && (line.bankAccountId || !salesAccountingEnabled) && Number(line.cardCommissionPercent || 0) > 0 && (
+                      {(salesAccountingRequired || salesFinanceEnabled) && isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} allowUnlinked={!salesAccountingRequired && salesFinanceEnabled} required={salesAccountingRequired} endpoint="/bank-accounts/payment-options" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(String(item.amount || '').replace(/,/g, '') || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label={salesAccountingRequired ? 'Banco global de destino' : 'Banco destino (opcional)'} className="mt-2" />}
+                      {isCardPaymentMethod(line.method) && !salesAccountingRequired && <label className="mt-2 block max-w-40 text-[10px] font-bold text-muted-foreground">Comisión de tarjeta (%)<Input type="number" min="0" max="100" step="0.01" value={line.cardCommissionPercent || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: Number(event.target.value) || 0, cardCommissionAmount: calculateCardCommission(Number(String(item.amount || '').replace(/,/g, '') || 0), Number(event.target.value) || 0) } : item))} className="mt-1 h-9" /></label>}
+                      {isCardPaymentMethod(line.method) && (line.bankAccountId || !salesAccountingRequired) && Number(line.cardCommissionPercent || 0) > 0 && (
                         <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
                           <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
                           <span className="font-mono font-bold">{formatCommissionPercent(line.cardCommissionPercent)}</span>
@@ -1175,7 +1176,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setPaymentCredit(null)} disabled={paymentLoading}>Cancelar</Button>
-            <Button onClick={handlePayment} disabled={paymentLoading || paymentCustomerFavorExceeded || !paymentLines.some((line) => Number(String(line.amount || '').replace(/,/g, '')) > 0) || (salesAccountingEnabled && paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) || (salesAccountingEnabled && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentAmountMismatch} className="bg-primary font-black">{paymentLoading ? 'Registrando...' : 'Confirmar pago'}</Button>
+            <Button onClick={handlePayment} disabled={paymentLoading || paymentCustomerFavorExceeded || !paymentLines.some((line) => Number(String(line.amount || '').replace(/,/g, '')) > 0) || (salesAccountingRequired && paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentAmountMismatch} className="bg-primary font-black">{paymentLoading ? 'Registrando...' : 'Confirmar pago'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

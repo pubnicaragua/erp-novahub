@@ -133,7 +133,7 @@ export const recurringInvoicesService = {
 
 // ---- Payments Received ----
 export const paymentsService = {
-  getIntegrationPolicy: () => api.get<{ financeEnabled: boolean; accountingEnabled: boolean }>('/sales/integration-policy'),
+  getIntegrationPolicy: () => api.get<{ financeEnabled: boolean; accountingEnabled: boolean; accountingRequired: boolean }>('/sales/integration-policy'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentReceived>>('/sales/payments', { params: filters as any, signal }),
   getById: (id: string) => api.get<PaymentReceived>(`/sales/payments/${id}`),
   create: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string }, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),

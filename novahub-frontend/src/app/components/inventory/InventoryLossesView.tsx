@@ -100,7 +100,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
           </div>
         </div>
         <div className="erp-list-toolbar flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-tour="inventory-losses-actions">
-          <InventoryViewTutorial label="Cómo consultar pérdidas" targetPrefix="inventory-losses" copy={{ data: { description: 'Filtra las pérdidas por período y revisa el valor, cantidad, razón, bodega y cuenta contable.' }, actions: { description: 'Usa los filtros para revisar el historial de mermas y su vínculo contable.' } }} />
+          <InventoryViewTutorial label="Cómo consultar pérdidas" targetPrefix="inventory-losses" copy={{ data: { description: 'Filtra las pérdidas por período y revisa el valor, cantidad, razón, bodega y la cuenta contable asociada cuando exista.' }, actions: { description: 'Usa los filtros para revisar el historial de mermas y su vínculo contable, si fue generado.' } }} />
           <DateField
             value={dateFrom}
             onChange={(value) => { setDateFrom(value); setPage(1); }}
@@ -159,7 +159,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
         <Card className="rounded-2xl border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-              <BookOpenCheck className="size-3.5 text-destructive" /> Cuenta contable vinculada
+              <BookOpenCheck className="size-3.5 text-destructive" /> Cuenta contable (si aplica)
             </div>
             <p className="mt-1 text-sm font-bold font-mono">
               {accountSummary ? `${accountSummary.code} · ${accountSummary.name}` : '—'}
