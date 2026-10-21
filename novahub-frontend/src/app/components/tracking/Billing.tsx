@@ -19,7 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 import type { NotificationDomainRefreshDetail } from '../../services/notification-domain-refresh';
 import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
-import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
+import { publicLinkUrl } from '../../services/public-access.service';
 import { customersService } from '../../services/ventas.service';
 import { buildCustomerWhatsAppUrl } from '../ventas/WhatsAppActionButton';
 import {
@@ -45,8 +45,11 @@ type SubView = 'available' | 'delivery' | 'traceability';
 export function Billing() {
   const { canPerform, user } = useAuth();
   const canReadBilling = canPerform('TRACKING_BILLING', 'view');
-  const canApproveBilling = canPerform('TRACKING_BILLING', 'approve');
-  const canDeleteBilling = canPerform('TRACKING_BILLING', 'delete');
+  const canBillPackages = canPerform('TRACKING_BILLING', 'bill');
+  const canDeliverPackages = canPerform('TRACKING_BILLING', 'deliver');
+  const canIssueCreditNote = canPerform('TRACKING_BILLING', 'issue');
+  const canCancelBilling = canPerform('TRACKING_BILLING', 'cancel');
+  const canSendInvoice = canPerform('TRACKING_BILLING', 'send');
   const [sub, setSub] = useState<SubView>('available');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -199,14 +202,10 @@ export function Billing() {
   }, [canReadBilling, selected, customerId, customerName, date, dueDate, rates]);
 
   const sendWhatsApp = useCallback(async () => {
-    if (!canApproveBilling) return;
+    if (!canSendInvoice) return;
     if (!result || !lastCustomerId) { toast.error('No hay cliente registrado para la factura'); return; }
     try {
-      const link = await publicAccessService.createDocumentLink({
-        customerId: lastCustomerId,
-        documentType: 'invoice',
-        documentId: result.invoice.id,
-      });
+      const link = await logisticsService.billingShareInvoice({ invoiceId: result.invoice.id });
       const url = publicLinkUrl(link.path);
       let phone = '';
       try {
@@ -221,10 +220,10 @@ export function Billing() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo generar el enlace de la factura'));
     }
-  }, [canApproveBilling, result, lastCustomerId]);
+  }, [canSendInvoice, result, lastCustomerId]);
 
   const confirm = useCallback(async () => {
-    if (!canApproveBilling || !preview) return;
+    if (!canBillPackages || !preview) return;
     setConfirming(true);
     const actionToken = beginNotificationAction();
     try {
@@ -247,7 +246,7 @@ export function Billing() {
       completeNotificationAction(actionToken);
       setConfirming(false);
     }
-  }, [canApproveBilling, preview, date, dueDate, rates, replacementCtx, load]);
+  }, [canBillPackages, preview, date, dueDate, rates, replacementCtx, load]);
 
   const reset = useCallback(() => {
     setResult(null);
@@ -261,7 +260,7 @@ export function Billing() {
   }, []);
 
   const deliver = useCallback(async () => {
-    if (!canApproveBilling) return;
+    if (!canDeliverPackages) return;
     if (deliverSel.size === 0) { toast.error('Selecciona al menos un paquete facturado'); return; }
     setDelivering(true);
     const actionToken = beginNotificationAction();
@@ -277,7 +276,7 @@ export function Billing() {
       completeNotificationAction(actionToken);
       setDelivering(false);
     }
-  }, [canApproveBilling, deliverSel, deliverNote]);
+  }, [canDeliverPackages, deliverSel, deliverNote]);
 
   const runTrace = useCallback(async (name?: string) => {
     const target = (name ?? traceName).trim();
@@ -306,7 +305,7 @@ export function Billing() {
   }, [canReadBilling]);
 
   const confirmCancel = useCallback(async () => {
-    if (!canDeleteBilling || !reversalPreview) return;
+    if (!canCancelBilling || !reversalPreview) return;
     if (reversalReason.trim().length < 3) { toast.error('Indica una razón de al menos 3 caracteres'); return; }
     setReversalBusy(true);
     const actionToken = beginNotificationAction();
@@ -321,10 +320,10 @@ export function Billing() {
       completeNotificationAction(actionToken);
       setReversalBusy(false);
     }
-  }, [canDeleteBilling, reversalPreview, reversalReason, load]);
+  }, [canCancelBilling, reversalPreview, reversalReason, load]);
 
   const rebillAfterReversal = useCallback(async () => {
-    if (!reversalResult) return;
+    if (!canBillPackages || !reversalResult) return;
     try {
       const replacement = await logisticsService.billingReplacement(reversalResult.reversal.invoiceId);
       const pkgIds = replacement.packages.map((p) => p.id);
@@ -341,10 +340,10 @@ export function Billing() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo preparar la refacturación'));
     }
-  }, [reversalResult]);
+  }, [canBillPackages, reversalResult]);
 
   const runCreditNote = useCallback(async () => {
-    if (!canApproveBilling || !reversalPreview) return;
+    if (!canIssueCreditNote || !reversalPreview) return;
     setCreditNoteBusy(true);
     const actionToken = beginNotificationAction();
     try {
@@ -357,7 +356,7 @@ export function Billing() {
       completeNotificationAction(actionToken);
       setCreditNoteBusy(false);
     }
-  }, [canApproveBilling, reversalPreview, reversalReason]);
+  }, [canIssueCreditNote, reversalPreview, reversalReason]);
 
   const summary = data?.summary;
   const customerOptions = useMemo(() => customers.map((customer) => ({
@@ -567,7 +566,7 @@ export function Billing() {
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                {canApproveBilling && <Button className="rounded-xl text-xs" onClick={confirm} disabled={confirming} data-tour="log-billing-confirm">
+                {canBillPackages && <Button className="rounded-xl text-xs" onClick={confirm} disabled={confirming} data-tour="log-billing-confirm">
                   {confirming ? 'Confirmando…' : `Emitir factura (${preview.packageCount})`}
                 </Button>}
                 <Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva factura</Button>
@@ -582,9 +581,9 @@ export function Billing() {
                 Factura <b>{result.invoice.number}</b> por <b>${Number(result.invoice.total || 0).toFixed(2)}</b> con <b>{result.billedPackages}</b> paquete(s). Usa la pestaña <b>Entrega</b> para registrar la salida.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button className="rounded-xl text-xs" onClick={() => void sendWhatsApp()} disabled={!lastCustomerId}>
+                {canSendInvoice && <Button className="rounded-xl text-xs" onClick={() => void sendWhatsApp()} disabled={!lastCustomerId}>
                   <MessageCircle className="size-4" /> Enviar factura por WhatsApp
-                </Button>
+                </Button>}
                 <Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva factura</Button>
               </div>
             </Card>
@@ -605,7 +604,7 @@ export function Billing() {
                 <Table>
                   <TableHeader className="bg-muted/40">
                     <TableRow>
-                      <TableHead className="w-10"></TableHead>
+                      {canDeliverPackages && <TableHead className="w-10"></TableHead>}
                       <TableHead className="text-[10px] font-black uppercase tracking-widest">Tracking</TableHead>
                       <TableHead className="text-[10px] font-black uppercase tracking-widest">Cliente</TableHead>
                       <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Importe</TableHead>
@@ -615,9 +614,9 @@ export function Billing() {
                   <TableBody>
                     {deliverable.map((p) => (
                       <TableRow key={p.id} className={deliverSel.has(p.id) ? 'bg-primary/5' : ''}>
-                        <TableCell>
+                        {canDeliverPackages && <TableCell>
                           <input type="checkbox" aria-label={`Entregar ${p.trackingCode}`} checked={deliverSel.has(p.id)} onChange={() => toggleDeliver(p.id)} className="size-4 accent-primary" />
-                        </TableCell>
+                        </TableCell>}
                         <TableCell className="font-mono text-xs font-bold text-primary">{p.trackingCode}</TableCell>
                         <TableCell className="text-xs font-semibold">{p.customerName || '—'}</TableCell>
                         <TableCell className="text-right text-xs font-black">${(p.saleAmount ?? 0).toFixed(2)}</TableCell>
@@ -628,8 +627,8 @@ export function Billing() {
                 </Table>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Input value={deliverNote} onChange={(e) => setDeliverNote(e.target.value)} placeholder="Observación de entrega (opcional)" className="max-w-sm rounded-xl text-xs" />
-                {canApproveBilling && <Button className="rounded-xl text-xs" onClick={deliver} disabled={delivering || deliverSel.size === 0}>
+                {canDeliverPackages && <Input value={deliverNote} onChange={(e) => setDeliverNote(e.target.value)} placeholder="Observación de entrega (opcional)" className="max-w-sm rounded-xl text-xs" />}
+                {canDeliverPackages && <Button className="rounded-xl text-xs" onClick={deliver} disabled={delivering || deliverSel.size === 0}>
                   <PackageCheck className="size-4" /> {delivering ? 'Entregando…' : `Entregar (${deliverSel.size})`}
                 </Button>}
               </div>
@@ -685,10 +684,10 @@ export function Billing() {
                       <span className="font-black text-primary">{pkgs[0]?.saleInvoiceNumber || invoiceId}</span>
                       <span className="text-muted-foreground">{pkgs.length} paquete(s) · ${pkgs.reduce((s, p) => s + (p.saleAmount ?? 0), 0).toFixed(2)}</span>
                       <div className="flex gap-1">
-                        {canDeleteBilling && <Button variant="outline" size="sm" className="h-7 rounded-lg text-[10px]" onClick={() => openReversal(invoiceId)}>
+                        {canCancelBilling && <Button variant="outline" size="sm" className="h-7 rounded-lg text-[10px]" onClick={() => openReversal(invoiceId)}>
                           <RotateCcw className="size-3" /> Anular / Reversar
                         </Button>}
-                        {canApproveBilling && <Button variant="outline" size="sm" className="h-7 rounded-lg text-[10px]" onClick={() => openReversal(invoiceId)}>
+                        {canIssueCreditNote && <Button variant="outline" size="sm" className="h-7 rounded-lg text-[10px]" onClick={() => openReversal(invoiceId)}>
                           <FileText className="size-3" /> Nota de crédito
                         </Button>}
                       </div>
@@ -716,9 +715,9 @@ export function Billing() {
                     Factura <b>{reversalResult.reversal.invoiceNumber}</b> anulada por <b>{reversalResult.reversal.reversedBy || 'usuario'}</b>.
                     {reversalResult.restoredPackages} paquete(s) vuelven a <b>Disponibles para facturar</b>. El historial de la factura original se conserva.
                   </p>
-                  <Button className="mt-3 rounded-xl text-xs" onClick={rebillAfterReversal}>
+                  {canBillPackages && <Button className="mt-3 rounded-xl text-xs" onClick={rebillAfterReversal}>
                     <PackageCheck className="size-4" /> Corregir y volver a facturar
-                  </Button>
+                  </Button>}
                 </Card>
               ) : reversalPreview ? (
                 <>
@@ -763,10 +762,10 @@ export function Billing() {
             </div>
             {!reversalResult && reversalPreview && (
               <SheetFooter className="flex-row justify-end gap-2 border-t border-border/50 px-5 py-3">
-                {canApproveBilling && <Button type="button" variant="outline" className="rounded-xl text-xs" onClick={runCreditNote} disabled={creditNoteBusy || !reversalPreview.invoice}>
+                {canIssueCreditNote && <Button type="button" variant="outline" className="rounded-xl text-xs" onClick={runCreditNote} disabled={creditNoteBusy || !reversalPreview.invoice}>
                   <FileText className="size-4" /> {creditNoteBusy ? 'Generando…' : 'Nota de crédito'}
                 </Button>}
-                {canDeleteBilling && <Button type="button" className="rounded-xl text-xs" onClick={confirmCancel} disabled={reversalBusy || !reversalPreview.reversable}>
+                {canCancelBilling && <Button type="button" className="rounded-xl text-xs" onClick={confirmCancel} disabled={reversalBusy || !reversalPreview.reversable}>
                   {reversalBusy ? 'Anulando…' : 'Anular y reversar'}
                 </Button>}
               </SheetFooter>

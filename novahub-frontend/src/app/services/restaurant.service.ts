@@ -7,7 +7,7 @@ export interface RestaurantTable {
   zone?: string | null;
   seats: number;
   status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING' | 'INACTIVE';
-  publicToken: string;
+  publicToken?: string;
   branchId: string;
   isActive?: boolean;
 }
@@ -267,6 +267,7 @@ export const restaurantService = {
     api.idempotentPost<RestaurantTable>('/restaurant/tables', body, key),
   updateTable: (id: string, body: Partial<RestaurantTable>) =>
     api.patch<RestaurantTable>(`/restaurant/tables/${id}`, body),
+  rotateTableQr: (id: string) => api.post<RestaurantTable>(`/restaurant/tables/${id}/qr/rotate`),
   getMenu: (signal?: AbortSignal) => api.get<RestaurantMenuCategory[]>('/restaurant/menu', { signal }),
   getConfiguration: (branchIdOrSignal?: string | AbortSignal, signal?: AbortSignal) => {
     const branchId = typeof branchIdOrSignal === 'string' ? branchIdOrSignal : undefined;

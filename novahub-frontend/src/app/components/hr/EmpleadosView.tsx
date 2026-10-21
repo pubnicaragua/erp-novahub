@@ -110,10 +110,22 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     status: (emp: any) => String(emp.employmentStatus || ''),
   };
   const colFilteredEmployees = colFilters.applyTo(filteredEmployees, filterGetters);
-  const departmentOptions = [...new Map(filteredEmployees.map((e: any) => [e.department?.name || '—', e.department?.name || '—'])).entries()]
-    .map(([, label]) => ({ value: label, label, count: filteredEmployees.filter((e: any) => (e.department?.name || '—') === label).length }));
-  const positionOptions = [...new Map(filteredEmployees.map((e: any) => [e.position?.title || '—', e.position?.title || '—'])).entries()]
-    .map(([, label]) => ({ value: label, label, count: filteredEmployees.filter((e: any) => (e.position?.title || '—') === label).length }));
+  const departmentNames = Array.from(new Set<string>(
+    filteredEmployees.map((employee: any) => String(employee.department?.name || '—')),
+  ));
+  const departmentOptions = departmentNames.map((label) => ({
+    value: label,
+    label,
+    count: filteredEmployees.filter((employee: any) => String(employee.department?.name || '—') === label).length,
+  }));
+  const positionNames = Array.from(new Set<string>(
+    filteredEmployees.map((employee: any) => String(employee.position?.title || '—')),
+  ));
+  const positionOptions = positionNames.map((label) => ({
+    value: label,
+    label,
+    count: filteredEmployees.filter((employee: any) => String(employee.position?.title || '—') === label).length,
+  }));
   const statusOptionsForFilter = [
     { value: 'ACTIVE', label: 'Activo', count: filteredEmployees.filter((e: any) => String(e.employmentStatus || '') === 'ACTIVE').length },
     { value: 'INACTIVE', label: 'Inactivo', count: filteredEmployees.filter((e: any) => String(e.employmentStatus || '') === 'INACTIVE').length },
@@ -386,6 +398,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   };
 
   const handleSubmitApproval = async (id: string) => {
+    if (!canPerform('HR_EMPLOYEES', 'submit')) return;
     const actionToken = beginNotificationAction();
     try {
       await hrService.submitEmployee(id);
@@ -396,6 +409,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   };
 
   const handleApprove = async (id: string) => {
+    if (!canPerform('HR_EMPLOYEES', 'approve')) return;
     const actionToken = beginNotificationAction();
     try {
       await hrService.approveEmployee(id);
@@ -406,6 +420,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   };
 
   const handleReject = async () => {
+    if (!canPerform('HR_EMPLOYEES', 'reject')) return;
     if (!rejectEmpId || !rejectReason.trim()) return toast.error('Debe indicar el motivo del rechazo');
     const actionToken = beginNotificationAction();
     try {
@@ -1082,17 +1097,17 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
                         {canPerform('HR_EMPLOYEES', 'edit') && <Button variant="ghost" size="icon" title="Editar empleado" aria-label="Editar empleado" onClick={(event) => { event.stopPropagation(); handleEdit(emp); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Edit2 className="size-4" /></Button>}
-                            {emp.approvalStatus === 'DRAFT' && canPerform('HR_EMPLOYEES', 'approve') && (
+                            {emp.approvalStatus === 'DRAFT' && canPerform('HR_EMPLOYEES', 'submit') && (
                               <Button title="Enviar a aprobación" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-warning/10 hover:text-warning" onClick={(e) => { e.stopPropagation(); handleSubmitApproval(emp.id); }}>
                                 <Send className="size-4" />
                               </Button>
                             )}
-                            {emp.approvalStatus === 'PENDING_APPROVAL' && (canPerform('HR_EMPLOYEES', 'approve') || canPerform('HR_EMPLOYEES', 'delete')) && (
+                            {emp.approvalStatus === 'PENDING_APPROVAL' && (canPerform('HR_EMPLOYEES', 'approve') || canPerform('HR_EMPLOYEES', 'reject')) && (
                               <>
                                 {canPerform('HR_EMPLOYEES', 'approve') && <Button title="Aprobar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-success/10 hover:text-success" onClick={(e) => { e.stopPropagation(); handleApprove(emp.id); }}>
                                   <CheckCircle2 className="size-4" />
                                 </Button>}
-                                {canPerform('HR_EMPLOYEES', 'delete') && <Button title="Rechazar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={(e) => { e.stopPropagation(); setRejectEmpId(emp.id); }}>
+                                {canPerform('HR_EMPLOYEES', 'reject') && <Button title="Rechazar" aria-label="Rechazar empleado" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={(e) => { e.stopPropagation(); setRejectEmpId(emp.id); }}>
                                   <XCircle className="size-4" />
                                 </Button>}
                               </>
@@ -1472,7 +1487,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
           <div data-tour="hr-employee-reject-data"><Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Motivo del rechazo..." className="min-h-[100px]" /></div>
           <DialogFooter data-tour="hr-employee-reject-actions">
             <Button variant="outline" onClick={() => { setRejectEmpId(null); setRejectReason(''); }}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleReject}>Rechazar</Button>
+            {canPerform('HR_EMPLOYEES', 'reject') && <Button variant="destructive" onClick={handleReject}>Rechazar</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1503,9 +1518,9 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
           const employee = employees.find((candidate: any) => candidate.id === detailEmployeeId);
           if (!employee) return undefined;
           return <>
-            {employee.approvalStatus === 'DRAFT' && canPerform('HR_EMPLOYEES', 'approve') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setDetailEmployeeId(null); handleSubmitApproval(employee.id); }}><Send className="mr-1.5 size-3.5" />Enviar a aprobación</Button>}
+            {employee.approvalStatus === 'DRAFT' && canPerform('HR_EMPLOYEES', 'submit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setDetailEmployeeId(null); handleSubmitApproval(employee.id); }}><Send className="mr-1.5 size-3.5" />Enviar a aprobación</Button>}
             {employee.approvalStatus === 'PENDING_APPROVAL' && canPerform('HR_EMPLOYEES', 'approve') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-success" onClick={() => { setDetailEmployeeId(null); handleApprove(employee.id); }}><CheckCircle2 className="mr-1.5 size-3.5" />Aprobar</Button>}
-            {employee.approvalStatus === 'PENDING_APPROVAL' && canPerform('HR_EMPLOYEES', 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setDetailEmployeeId(null); setRejectEmpId(employee.id); }}><XCircle className="mr-1.5 size-3.5" />Rechazar</Button>}
+            {employee.approvalStatus === 'PENDING_APPROVAL' && canPerform('HR_EMPLOYEES', 'reject') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setDetailEmployeeId(null); setRejectEmpId(employee.id); }}><XCircle className="mr-1.5 size-3.5" />Rechazar</Button>}
             <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setDetailEmployeeId(null); loadChangeLog(employee.id); }}><History className="mr-1.5 size-3.5" />Historial</Button>
             {canPerform('HR_EMPLOYEES', 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setDetailEmployeeId(null); setPendingDeleteId(employee.id); }}><Ban className="mr-1.5 size-3.5" />Anular</Button>}
           </>;

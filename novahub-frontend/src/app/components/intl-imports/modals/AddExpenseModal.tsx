@@ -20,6 +20,7 @@ interface AddExpenseModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: (expense: IntlImportExpense) => void;
+  canAddExpense?: boolean;
 }
 
 const EXPENSE_TYPES = [
@@ -37,6 +38,7 @@ export function AddExpenseModal({
   open,
   onOpenChange,
   onSuccess,
+  canAddExpense = false,
 }: AddExpenseModalProps) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -47,7 +49,7 @@ export function AddExpenseModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!containerId) return;
+    if (!canAddExpense || !containerId) return;
     if (form.amount <= 0) {
       toast.error('El monto del gasto debe ser mayor a 0');
       return;
@@ -79,7 +81,7 @@ export function AddExpenseModal({
   if (!containerId) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open && canAddExpense} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2 text-primary font-semibold">
@@ -139,7 +141,7 @@ export function AddExpenseModal({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !canAddExpense}>
               {loading ? 'Guardando...' : 'Registrar Gasto'}
             </Button>
           </DialogFooter>

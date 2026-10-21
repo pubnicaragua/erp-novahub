@@ -470,7 +470,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
 
   // Sync currency from topbar
   const handleSave = async () => {
-    if (isCreating && (!canPerform('SALES_PAYMENTS', 'create') || !canPerform('SALES_PAYMENTS', 'approve'))) return;
+    if (isCreating && !canPerform('SALES_PAYMENTS', 'pay')) return;
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     const effectiveLines = paymentLines
@@ -796,7 +796,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
           </div>
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="payments" context="form" />
-            {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
+            {canPerform('SALES_PAYMENTS', 'pay') && (
             <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={paymentCustomerFavorExceeded || paymentGeneralBalanceExceeded || paymentChangeUnsupported || Boolean(cashRegisterId && (cashLoading || !cashSession)) || (Boolean(linkedPaymentDocument) && paymentRemainingBase > 0.01 && (!partialPaymentEnabled || !paymentPartialCreditFits || !localDoc.dueDate)) || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || (salesAccountingRequired && paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))}>
               Confirmar Pago
             </Button>
@@ -974,7 +974,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar pago..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
-            {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
+            {canPerform('SALES_PAYMENTS', 'pay') && (
               <Button onClick={startNew} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Registrar Pago</Button>
             )}

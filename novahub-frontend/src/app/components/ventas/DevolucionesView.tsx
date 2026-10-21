@@ -443,6 +443,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
   });
 
   const handleApprove = async (id: string) => {
+    if (!canPerform('SALES_RETURNS', 'approve')) return;
     const approveToastId = toast.loading('Aprobando nota de crédito...');
     try {
       await salesReturnsService.approve(id);
@@ -452,6 +453,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
   };
 
   const handleProcess = async (id: string) => {
+    if (!canPerform('SALES_RETURNS', 'process')) return;
     const processToastId = toast.loading('Aplicando saldo y actualizando inventario...');
     try {
       await salesReturnsService.process(id);
@@ -529,11 +531,11 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
             <SalesViewTutorial view="returns" context="form" />
             {canPerform('SALES_RETURNS', 'edit') && (
               <>
-                {!isCreating && (localDoc?.status || '').toUpperCase() === 'PENDING' && canPerform('SALES_RETURNS', 'delete') && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                {!isCreating && (localDoc?.status || '').toUpperCase() === 'PENDING' && canPerform('SALES_RETURNS', 'reject') && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => { if (!window.confirm('¿Rechazar esta nota de crédito? El registro se conservará y no se podrá revertir.')) return; try { await salesReturnsService.reject(localDoc.id); setEditingId(null); setLocalDoc(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo rechazar la nota'); } }}><XCircle className="size-3 mr-2" /> Rechazar Nota</Button>}
                 {canApprove && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => { handleApprove(localDoc.id); setEditingId(null); setLocalDoc(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar Nota</Button>}
-                {!isCreating && (localDoc?.status || '').toUpperCase() === 'APPROVED' && canPerform('SALES_RETURNS', 'approve') && <Button variant="outline" className="rounded-xl border-blue-500/50 text-blue-500 hover:bg-blue-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4" onClick={() => handleProcess(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aplicar Saldo</Button>}
+                {!isCreating && (localDoc?.status || '').toUpperCase() === 'APPROVED' && canPerform('SALES_RETURNS', 'process') && <Button variant="outline" className="rounded-xl border-blue-500/50 text-blue-500 hover:bg-blue-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4" onClick={() => handleProcess(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aplicar Saldo</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   {isCreating ? 'Registrar Nota' : 'Guardar Cambios'}
                 </Button>
@@ -699,9 +701,9 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
         <EditableDataTable data={filteredData}
           pagination={pagination}
           bulkAction="reject"
-          showSelection={canPerform('SALES_RETURNS', 'delete')}
-          isRowSelectable={(row) => canPerform('SALES_RETURNS', 'delete') && String(row.status || '').toUpperCase() === 'PENDING'}
-          onBulkDelete={canPerform('SALES_RETURNS', 'delete') ? async (ids) => { const rejectToastId = toast.loading(`Rechazando ${ids.length} nota${ids.length === 1 ? '' : 's'} de crédito...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.reject(id as string); } toast.success('Notas de crédito rechazadas', { id: rejectToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron rechazar', { id: rejectToastId }); } } : undefined}
+          showSelection={canPerform('SALES_RETURNS', 'reject')}
+          isRowSelectable={(row) => canPerform('SALES_RETURNS', 'reject') && String(row.status || '').toUpperCase() === 'PENDING'}
+          onBulkDelete={canPerform('SALES_RETURNS', 'reject') ? async (ids) => { if (!canPerform('SALES_RETURNS', 'reject')) return; const rejectToastId = toast.loading(`Rechazando ${ids.length} nota${ids.length === 1 ? '' : 's'} de crédito...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.reject(id as string); } toast.success('Notas de crédito rechazadas', { id: rejectToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron rechazar', { id: rejectToastId }); } } : undefined}
           columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setDetailReturn(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           verticalScroll
@@ -711,11 +713,11 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
                {canPerform('SALES_RETURNS', 'approve') && (row.status||'').toUpperCase() === 'PENDING' && (
                  <Button title="Aprobar Nota de Crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
                )}
-               {canPerform('SALES_RETURNS', 'approve') && (row.status||'').toUpperCase() === 'APPROVED' && (
+               {canPerform('SALES_RETURNS', 'process') && (row.status||'').toUpperCase() === 'APPROVED' && (
                  <Button title="Aplicar saldo y actualizar inventario" variant="ghost" size="icon" className="size-8 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors" onClick={() => handleProcess(row.id)}><CheckCircle2 className="size-4" /></Button>
                )}
                 <Button title="Ver nota de crédito completa" aria-label="Ver nota de crédito completa" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailReturn(null); startEdit(row.id); }}><Eye className="size-4" /></Button>
-               {canPerform('SALES_RETURNS', 'delete') && (row.status||'').toUpperCase() === 'PENDING' && (
+               {canPerform('SALES_RETURNS', 'reject') && (row.status||'').toUpperCase() === 'PENDING' && (
                  <Button title="Rechazar nota de crédito" aria-label="Rechazar nota de crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><XCircle className="size-4" /></Button>
                )}
             </div>
@@ -736,8 +738,8 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
         }}
         extraActions={detailReturn ? <>
           {canPerform('SALES_RETURNS', 'approve') && String(detailReturn.status || '').toUpperCase() === 'PENDING' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleApprove(detailReturn.id)}><ShieldCheck className="mr-2 size-4" />Aprobar</Button>}
-          {canPerform('SALES_RETURNS', 'approve') && String(detailReturn.status || '').toUpperCase() === 'APPROVED' && <Button type="button" className="rounded-xl bg-blue-600 text-white hover:bg-blue-700" onClick={() => handleProcess(detailReturn.id)}><CheckCircle2 className="mr-2 size-4" />Aplicar saldo</Button>}
-          {canPerform('SALES_RETURNS', 'delete') && String(detailReturn.status || '').toUpperCase() === 'PENDING' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReturn(null); setPendingDeleteId(detailReturn.id); }}><XCircle className="mr-2 size-4" />Rechazar</Button>}
+          {canPerform('SALES_RETURNS', 'process') && String(detailReturn.status || '').toUpperCase() === 'APPROVED' && <Button type="button" className="rounded-xl bg-blue-600 text-white hover:bg-blue-700" onClick={() => handleProcess(detailReturn.id)}><CheckCircle2 className="mr-2 size-4" />Aplicar saldo</Button>}
+          {canPerform('SALES_RETURNS', 'reject') && String(detailReturn.status || '').toUpperCase() === 'PENDING' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReturn(null); setPendingDeleteId(detailReturn.id); }}><XCircle className="mr-2 size-4" />Rechazar</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_RETURNS', 'export') ? (format) => { if (detailReturn) void handleExportPDF(detailReturn, format); } : undefined}
       />
@@ -751,6 +753,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
         variant="destructive"
         loading={deleteLoading}
         onConfirm={async () => {
+          if (!canPerform('SALES_RETURNS', 'reject')) return;
           if (!pendingDeleteId) return;
           const deleteToastId = toast.loading('Rechazando nota de crédito...');
           try {

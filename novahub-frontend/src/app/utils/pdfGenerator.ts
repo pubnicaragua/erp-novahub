@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import jspdfAutoTable from 'jspdf-autotable';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
-import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
+import { getPdfTemplateTarget, isPdfTemplateFixed } from '../services/pdf-document-catalog';
 import { getBase64Image } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
@@ -10,11 +10,12 @@ import { buildDateFilteredLabeledPdfFileName, buildDateFilteredPdfFileName, buil
 import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
 import { getPurchasePriorityOption } from './purchasePriority';
-import { renderPdfTemplateToPdf, type PdfTemplateRenderProgress } from './pdf-template-renderer';
+import { preparePdfDocumentFonts, renderPdfTemplateToPdf, type PdfTemplateRenderProgress } from './pdf-template-renderer';
 import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
 import { isEstimateCustomFieldExpired, normalizeEstimateImages } from '../types';
+import { resolvePdfDesignAppearance, type PdfAppearanceProfile } from '../services/pdf-appearance';
 
 type PdfRgb = [number, number, number];
 
@@ -41,16 +42,40 @@ type ReportPdfKpi = {
 const PDF_DESIGN_CACHE_TTL_MS = 5 * 60_000;
 const pdfDesignCache = new Map<string, { value: any; expiresAt: number }>();
 const pdfDesignRequests = new Map<string, Promise<any>>();
+const pdfAppearanceProfileCache = new Map<string, { value: PdfAppearanceProfile; expiresAt: number }>();
+const pdfAppearanceProfileRequests = new Map<string, Promise<PdfAppearanceProfile>>();
+let activePdfDesignScope = '';
 
 function pdfDesignCacheScope() {
   if (typeof window === 'undefined') return 'server';
   try {
     const branding = JSON.parse(window.localStorage.getItem('nh-session-branding') || 'null');
-    // El diseño es por tenant. No usar solo logo/nombre evita reutilizar una
-    // plantilla al cambiar de usuario o de sucursal en el mismo navegador.
-    return String(branding?.tenantId || branding?.name || branding?.logo || 'browser');
+    // AuthContext guarda tenantId como el clientTenant activo (sucursal);
+    // nombre/logo no son identificadores de scope seguros para la caché.
+    return String(branding?.tenantId || 'browser');
   } catch {
     return 'browser';
+  }
+}
+
+async function loadPdfAppearanceProfile(scope: string) {
+  const cached = pdfAppearanceProfileCache.get(scope);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached) pdfAppearanceProfileCache.delete(scope);
+  const existing = pdfAppearanceProfileRequests.get(scope);
+  if (existing) return existing;
+  const request = pdfDocumentDesignService.getAppearanceProfile()
+    .then(value => value && typeof value === 'object' ? value as PdfAppearanceProfile : {})
+    .catch(() => ({} as PdfAppearanceProfile));
+  pdfAppearanceProfileRequests.set(scope, request);
+  try {
+    const value = await request;
+    if (pdfAppearanceProfileRequests.get(scope) === request) {
+      pdfAppearanceProfileCache.set(scope, { value, expiresAt: Date.now() + PDF_DESIGN_CACHE_TTL_MS });
+    }
+    return value;
+  } finally {
+    if (pdfAppearanceProfileRequests.get(scope) === request) pdfAppearanceProfileRequests.delete(scope);
   }
 }
 
@@ -62,6 +87,10 @@ export function clearPdfDesignCache(targetKey?: string) {
   for (const key of pdfDesignRequests.keys()) {
     if (!normalizedTarget || key.endsWith(`:${normalizedTarget}`)) pdfDesignRequests.delete(key);
   }
+  if (!normalizedTarget) {
+    pdfAppearanceProfileCache.clear();
+    pdfAppearanceProfileRequests.clear();
+  }
 }
 
 function reportPdfLines(doc: jsPDF, value: unknown, maxWidth: number, fontSize: number, maxLines = 2) {
@@ -72,7 +101,7 @@ function reportPdfLines(doc: jsPDF, value: unknown, maxWidth: number, fontSize: 
 }
 
 /** Dibuja las tarjetas KPI de los reportes sin permitir que su texto escape. */
-export function drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns, gap = 4, boxHeight = 22, labelFontSize = 7.5, valueFontSize = 10, detailFontSize = 6.5 }: {
+export function drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns, gap = 4, boxHeight = 22, labelFontSize = 7.5, valueFontSize = 10, detailFontSize = 6.5, primaryColor, secondaryColor }: {
   doc: jsPDF;
   kpis: ReportPdfKpi[];
   marginX: number;
@@ -84,6 +113,8 @@ export function drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY,
   labelFontSize?: number;
   valueFontSize?: number;
   detailFontSize?: number;
+  primaryColor?: string;
+  secondaryColor?: string;
 }) {
   const safeColumns = Math.max(1, Math.min(Math.floor(columns) || 1, kpis.length || 1));
   const boxWidth = (contentWidth - (safeColumns - 1) * gap) / safeColumns;
@@ -97,13 +128,21 @@ export function drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY,
       : 0;
     const x = marginX + rowOffset + column * (boxWidth + gap);
     const y = currentY + row * (boxHeight + gap);
-    const color = kpi.color;
-    doc.setFillColor(color[0] ?? 16, color[1] ?? 185, color[2] ?? 129);
+    const configuredColor = index % 2 ? secondaryColor : primaryColor;
+    const fallbackColor: PdfRgb = [Number(kpi.color[0] ?? 16), Number(kpi.color[1] ?? 185), Number(kpi.color[2] ?? 129)];
+    const color = configuredColor ? pdfDesignColor(configuredColor, fallbackColor) : fallbackColor;
+    const normalizedChannels = color.map(channel => {
+      const srgb = channel / 255;
+      return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+    });
+    const luminance = normalizedChannels[0] * 0.2126 + normalizedChannels[1] * 0.7152 + normalizedChannels[2] * 0.0722;
+    const contrastText: PdfRgb = luminance > 0.48 ? [31, 41, 55] : [255, 255, 255];
+    doc.setFillColor(color[0], color[1], color[2]);
     doc.roundedRect(x, y, boxWidth, boxHeight, 3, 3, 'F');
     const textWidth = boxWidth - 5;
 
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(contrastText[0], contrastText[1], contrastText[2]);
     const labelLines = reportPdfLines(doc, kpi.label, textWidth, labelFontSize, 2);
     doc.text(labelLines, x + boxWidth / 2, y + 4.5, { align: 'center', lineHeightFactor: 1.05 });
 
@@ -291,15 +330,45 @@ async function loadPdfDesign(targetKey: string) {
 }
 
 export async function getPdfDesign(targetKey: string) {
-  const normalizedTarget = getPdfTemplateTarget(targetKey).key;
-  const cacheKey = `${pdfDesignCacheScope()}:${normalizedTarget}`;
+  const target = getPdfTemplateTarget(targetKey);
+  const normalizedTarget = target.key;
+  const scope = pdfDesignCacheScope();
+  if (activePdfDesignScope && activePdfDesignScope !== scope) {
+    pdfDesignCache.clear();
+    pdfDesignRequests.clear();
+    pdfAppearanceProfileCache.clear();
+    pdfAppearanceProfileRequests.clear();
+  }
+  activePdfDesignScope = scope;
+  const cacheKey = `${scope}:${normalizedTarget}`;
+  if (target.branchCustomizable === false) {
+    const design = createSystemDefaultPdfDesign(normalizedTarget);
+    pdfDesignRequests.delete(cacheKey);
+    pdfDesignCache.set(cacheKey, { value: design, expiresAt: Date.now() + PDF_DESIGN_CACHE_TTL_MS });
+    return design;
+  }
   const cached = pdfDesignCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   if (cached) pdfDesignCache.delete(cacheKey);
   const existingRequest = pdfDesignRequests.get(cacheKey);
   if (existingRequest) return existingRequest;
 
-  const request = loadPdfDesign(normalizedTarget);
+  const request = (async () => {
+    const design = await loadPdfDesign(normalizedTarget);
+    if (isPdfTemplateFixed(normalizedTarget)) return design;
+    const profile = await loadPdfAppearanceProfile(scope);
+    const definition = (design?.layoutZones as any)?.definition;
+    const appearance = resolvePdfDesignAppearance(
+      (design?.settings || {}) as Record<string, unknown>,
+      definition,
+      profile,
+    );
+    return {
+      ...design,
+      settings: appearance.settings,
+      appearance: { profile, overrides: appearance.overrides, effective: appearance.effective },
+    };
+  })();
   pdfDesignRequests.set(cacheKey, request);
   try {
     const value = await request;
@@ -368,6 +437,22 @@ export function getGlobalReportSettings(source: Record<string, any> | undefined,
     textColor: value('textColor', defaults.textColor),
     lineColor: value('lineColor', defaults.lineColor),
     backgroundColor: value('backgroundColor', defaults.backgroundColor),
+    // Los reportes conservan su estructura propia, pero heredan la apariencia
+    // visual activa del destino: fuente, espacios, paleta y estilo de tabla.
+    headerComposition: value('headerComposition', defaults.headerComposition),
+    headerContentSpacing: value('headerContentSpacing', defaults.headerContentSpacing),
+    fontFamily: value('fontFamily', defaults.fontFamily),
+    fontSize: value('fontSize', defaults.fontSize),
+    pdfStylePreset: value('pdfStylePreset', defaults.pdfStylePreset),
+    pdfTableStyle: value('pdfTableStyle', defaults.pdfTableStyle),
+    tableLayout: value('tableLayout', defaults.tableLayout),
+    tableHeaderColor: value('tableHeaderColor', defaults.tableHeaderColor),
+    tableHeaderTextColor: value('tableHeaderTextColor', defaults.tableHeaderTextColor),
+    tableRowColor: value('tableRowColor', defaults.tableRowColor),
+    tableStripeColor: value('tableStripeColor', defaults.tableStripeColor),
+    tableBorderColor: value('tableBorderColor', defaults.tableBorderColor),
+    appearanceOverrides: value('appearanceOverrides', defaults.appearanceOverrides),
+    pdfAppearancePalette: value('pdfAppearancePalette', defaults.pdfAppearancePalette),
   };
 }
 
@@ -925,6 +1010,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
     ? savedSettings
     : { ...savedSettings, paperSize: paperSettingForDownload(format as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>), orientation: 'portrait' };
   const design = normalizePdfPaperSettings(targetKey, outputSettings);
+  const selectedFontFamily = String(design.fontFamily || 'Arial');
   const customer = estimate.customer || estimate.client || {};
   const customerAddress = customer.address || [customer.city, customer.department, customer.country].filter(Boolean).join(', ');
   const fields = Array.isArray(savedDesign.layoutZones?.fields) ? savedDesign.layoutZones.fields : [];
@@ -975,7 +1061,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
     .map((charge) => `<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>${escapeHtml(charge.label)}</span><span>${escapeHtml(formatAmount(charge.amount, estimate.currency, estimate.exchangeRate))}</span></div>`)
     .join('');
   const totalsHtml = `<div style="font-size:.78em;text-align:right;background:#f7fbf9;border-radius:6px;padding:10px 12px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span>Subtotal</span><span>${escapeHtml(formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span>Impuesto</span><span>${escapeHtml(formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate))}</span></div>${additionalChargesHtml}<div style="display:flex;justify-content:space-between;border-top:1px solid ${line};padding-top:4px;margin-top:2px;color:${primary};font-size:1.18em;font-weight:800;"><span>TOTAL</span><span>${escapeHtml(total)}</span></div></div>`;
-  const pageHtml = `<div id="pdf-template-canvas" style="position:relative;width:${pageWidthPx}px;height:${pageHeightPx}px;overflow:hidden;background:#fff;color:${text};font-family:${escapeHtml(design.fontFamily || 'Arial')};font-size:${Number(design.fontSize) || 9}px;box-sizing:border-box;">
+  const pageHtml = `<div id="pdf-template-canvas" style="position:relative;width:${pageWidthPx}px;height:${pageHeightPx}px;overflow:hidden;background:#fff;color:${text};font-family:${escapeHtml(selectedFontFamily)};font-size:${Number(design.fontSize) || 9}px;box-sizing:border-box;">
     <div style="position:absolute;inset:0 0 auto;height:29%;background:${headerBackground};border-top:6px solid ${primary};border-bottom:${headerBorder};${headerLayout === 'double-band' ? `border-bottom:10px solid ${line};` : ''}${headerLayout === 'sidebar' ? `border-left:10px solid ${primary};` : ''}${headerLayout === 'boxed' ? `inset:2%;height:25%;border:1px solid ${line};border-radius:10px;` : ''}"></div>${design.watermark ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.06;transform:rotate(-25deg);font-size:64px;font-weight:800;color:#64748b;">${escapeHtml(design.watermark)}</div>` : ''}${logo}
     ${zone('company', `<strong>${escapeHtml(values.company)}</strong>`, 'font-size:1.18em;letter-spacing:.01em;')}
     ${zone('slogan', `<span style="opacity:.75">${escapeHtml(values.slogan)}</span>`, 'font-size:.78em;')}
@@ -1015,9 +1101,12 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
   renderDocument.close();
   const wrapper = renderDocument.body;
   Object.assign(wrapper.style, { width: `${pageWidthPx}px`, height: `${pageHeightPx}px`, background: '#fff' });
-  wrapper.innerHTML = pageHtml;
   try {
+    const fontSetup = await preparePdfDocumentFonts(renderDocument, selectedFontFamily);
+    wrapper.innerHTML = pageHtml;
     const { default: html2canvas } = await import('html2canvas');
+    const page = wrapper.firstElementChild as HTMLElement;
+    if (fontSetup.hasRealBoldFace === false) page.style.setProperty('font-synthesis-weight', 'none', 'important');
     const canvas = await html2canvas(wrapper.firstElementChild as HTMLElement, {
       // El HTML legado también se renderiza en una superficie aislada; usamos
       // una escala de impresión para que el texto no pierda nitidez.
@@ -1025,6 +1114,13 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
       backgroundColor: '#ffffff',
       useCORS: true,
       logging: false,
+      onclone: (clonedDocument, clonedElement) => {
+        if (!fontSetup.cssText) return;
+        const fontStyle = clonedDocument.createElement('style');
+        fontStyle.dataset.pdfFontFaces = selectedFontFamily;
+        fontStyle.textContent = fontSetup.cssText;
+        clonedElement.prepend(fontStyle);
+      },
     });
     const { format, orientation } = pdfDesignPaper(design);
     const doc = new jsPDF({ orientation, unit: 'mm', format });
@@ -1167,7 +1263,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const serifFonts = ['times', 'times new roman', 'georgia', 'garamond', 'cambria', 'palatino linotype', 'bookman'];
   const monoFonts = ['courier', 'courier new', 'consolas', 'monaco'];
   const fontName = serifFonts.includes(selectedFont) ? 'times' : monoFonts.includes(selectedFont) ? 'courier' : 'helvetica';
-  const baseFontSize = Math.max(7, Math.min(13, Number(design.fontSize) || 9));
+  const baseFontSize = Math.max(2, Math.min(20, Number(design.fontSize) || 9));
   const companyDisplayName = design.showCompanyName === false ? '' : (design.companyName || tenantName || 'Nuestra Empresa');
   const logoPosition = design.logoPosition || 'left';
   const headerLayout = design.headerLayout || 'split';
@@ -2634,13 +2730,29 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
   return { doc, blob };
 }
 
+const LEGACY_LAYOUT_PRESERVED_SETTINGS = [
+  'paperSize', 'orientation', 'margins',
+  'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'pdfStylePreset', 'pdfTableStyle', 'tableLayout',
+  'primaryColor', 'secondaryColor', 'textColor', 'lineColor', 'tableHeaderColor', 'tableHeaderTextColor',
+  'tableRowColor', 'tableStripeColor', 'tableBorderColor', 'pdfAppearancePalette', 'appearanceOverrides',
+] as const;
+
+export function resolvePdfDesignForRender(targetKey: string, loadedDesign: any) {
+  const definition = (loadedDesign?.layoutZones as any)?.definition;
+  if (!isStandardPdfLayoutTarget(targetKey) || hasCurrentStandardPdfLayout(targetKey, definition)) return loadedDesign;
+  const systemDesign = createSystemDefaultPdfDesign(targetKey);
+  const sourceSettings = loadedDesign?.settings && typeof loadedDesign.settings === 'object' ? loadedDesign.settings as Record<string, unknown> : {};
+  const settings = { ...(systemDesign.settings || {}) } as Record<string, unknown>;
+  for (const key of LEGACY_LAYOUT_PRESERVED_SETTINGS) {
+    if (Object.prototype.hasOwnProperty.call(sourceSettings, key)) settings[key] = sourceSettings[key];
+  }
+  return { ...systemDesign, settings, appearance: loadedDesign?.appearance };
+}
+
 async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format = 'configured', fileName, designOverride, save = true, onProgress }: { targetKey: string; data: PdfTemplateData; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; fileName: string; designOverride?: any; save?: boolean; onProgress?: (progress: PdfTemplateRenderProgress) => void }) {
   if (format === 'roll-58' || format === 'roll-80') return null;
   const loadedDesign = designOverride || await getPdfDesign(targetKey);
-  const legacySalesDefinition = (loadedDesign?.layoutZones as any)?.definition;
-  const design = isStandardPdfLayoutTarget(targetKey) && !hasCurrentStandardPdfLayout(targetKey, legacySalesDefinition)
-    ? createSystemDefaultPdfDesign(targetKey)
-    : loadedDesign;
+  const design = resolvePdfDesignForRender(targetKey, loadedDesign);
   const baseSettings = { ...(createSystemDefaultPdfDesign(targetKey).settings || {}), ...(design?.settings && typeof design.settings === 'object' ? design.settings : {}) } as Record<string, any>;
   const settings = applyStandardPdfLayoutSettings(targetKey, configuredHistoryPaper(baseSettings, format));
   const renderSettings = normalizePdfPaperSettings(targetKey, { paperSize: 'LETTER', orientation: 'portrait' as const, ...settings });
@@ -3315,7 +3427,7 @@ export const generateConfiguredHistoryPDF = async ({
   const margin = Math.max(8, Math.min(28, Number(settings.margins) || 14));
   const rightEdge = pageWidth - margin;
   const fontName = configuredPdfFont(settings.fontFamily);
-  const baseFontSize = Math.max(7, Math.min(13, Number(settings.fontSize) || 9));
+  const baseFontSize = Math.max(2, Math.min(20, Number(settings.fontSize) || 9));
   const headerLayout = String(settings.headerLayout || 'split');
   const tableLayout = String(settings.tableLayout || 'standard');
   const isBannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(headerLayout);

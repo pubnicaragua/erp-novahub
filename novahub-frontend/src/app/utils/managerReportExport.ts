@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
-import { generateConfiguredReportSectionsPDF, getPdfDesign, isVirtualSystemDefaultDesign } from './pdfGenerator';
+import { generateConfiguredReportSectionsPDF, isVirtualSystemDefaultDesign } from './pdfGenerator';
+import { createSystemDefaultPdfDesign } from '../services/pdf-template-definition';
 import { buildDateFilteredDownloadFileName, buildDateFilteredPdfFileName } from './exportFileNames';
 import { buildManagerReportModel, formatManagerReportValue } from './managerReportModel';
 import type { ManagerReportModel, ManagerReportOptions } from './managerReportModel';
@@ -95,13 +96,11 @@ export async function exportManagerReportExcel(options: ManagerReportOptions) {
 
 export async function exportManagerReportPdf(options: ManagerReportOptions) {
   const model = buildManagerReportModel(options);
-  let design: any;
-  try {
-    design = await getPdfDesign('reportes.finance');
-  } catch {
-    // The semantic renderer falls back to the system template if needed.
-  }
-  const settings = { ...(design?.settings || {}), ...(model.primaryColor ? { primaryColor: model.primaryColor } : {}) };
+  const targetKey = options.targetKey || 'reportes.finance';
+  // Los reportes Manager consolidan varias sucursales. Usan el diseño base
+  // del ERP y no heredan diseños ni apariencia PDF guardados por sucursal.
+  const design = createSystemDefaultPdfDesign(targetKey);
+  const settings = { ...(design?.settings || {}) };
   const virtualDefault = isVirtualSystemDefaultDesign(design);
   const defaultDefinition = design?.layoutZones?.definition;
   const reportDesign = virtualDefault && defaultDefinition
@@ -160,7 +159,7 @@ export async function exportManagerReportPdf(options: ManagerReportOptions) {
   ];
 
   await generateConfiguredReportSectionsPDF({
-    targetKey: 'reportes.finance',
+    targetKey,
     title: model.title,
     tenantName: model.tenantName,
     tenantLogo: model.tenantLogo,

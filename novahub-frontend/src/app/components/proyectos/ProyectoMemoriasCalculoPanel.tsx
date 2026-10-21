@@ -634,7 +634,7 @@ function ProjectCalculationMemoryEditor({
   // ACCIONES GLOBALES: GUARDAR EN PROYECTO
   // -------------------------------------------------------------
   const handleSaveToProject = async () => {
-    if (saving || !canPerform('PROJECTS', 'edit')) return;
+    if (saving || !canPerform('PROJECTS_EXPENSES', 'manageCalculationMemory')) return;
     setSaving(true);
     try {
       const payload = {
@@ -991,14 +991,14 @@ function ProjectCalculationMemoryEditor({
             <span>Restablecer Ejemplo</span>
           </Button>
 
-          <Button
+          {canPerform('PROJECTS_EXPENSES', 'manageCalculationMemory') && <Button
             onClick={handleSaveToProject}
-            disabled={saving || !canPerform('PROJECTS', 'edit')}
+            disabled={saving}
             className="gap-2 rounded-xl bg-primary font-bold shadow-md hover:bg-primary/90"
           >
             <Save className="size-4" />
             <span>{saving ? 'Guardando…' : 'Guardar en el Proyecto'}</span>
-          </Button>
+          </Button>}
         </div>
       </div>
 

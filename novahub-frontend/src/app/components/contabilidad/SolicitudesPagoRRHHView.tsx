@@ -186,7 +186,8 @@ export function SolicitudesPagoRRHHView() {
     enabled: canReadPaymentRequests,
   });
 
-  const runAction = async (id: string, action: () => Promise<any>, success: string) => {
+  const runAction = async (id: string, action: () => Promise<any>, success: string, permitted: boolean) => {
+    if (!permitted) return;
     setBusyId(id);
     const actionToken = beginNotificationAction();
     try {
@@ -205,6 +206,7 @@ export function SolicitudesPagoRRHHView() {
   };
 
   const openPayment = (request: PaymentRequest) => {
+    if (!canPayRequests) return;
     const nextCurrency = displayCurrency;
     const sourceCurrency = request.currency === 'USD' ? 'USD' : 'NIO';
     const sourceRate = Number(request.exchangeRate || 1);
@@ -238,6 +240,7 @@ export function SolicitudesPagoRRHHView() {
   const formatNativeAmount = (amount: number, currency: string) => `${currency === 'USD' ? '$' : 'C$'} ${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const submitPayment = () => {
+    if (!canPayRequests) return;
     if (!paymentRequest || !balanced) {
       toast.error(isPayrollPayment
         ? `Registra un abono mayor que cero y no superior al saldo pendiente (${requestRemainingBase.toFixed(2)} ${baseCurrency}).`
@@ -256,6 +259,7 @@ export function SolicitudesPagoRRHHView() {
       paymentRequest.id,
       () => hrService.payPaymentRequest(paymentRequest.id, paymentLines.map((line) => ({ ...line, amount: parsePaymentAmount(line.amount) })), paymentCurrency),
       'Pago registrado y asiento contable generado.',
+      canPayRequests,
     );
   };
 
@@ -336,8 +340,8 @@ export function SolicitudesPagoRRHHView() {
                   <div className="min-w-[150px] lg:text-right"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto solicitado</p><p className="mt-1 text-lg font-black text-primary">{formatConvertedAmount(Number(request.amount || 0), request.currency as any, Number(request.exchangeRate || 1))}</p><p className="text-[10px] text-muted-foreground">Pagado: {formatNativeAmount((request.payments || []).reduce((sum, payment) => sum + Number(payment.baseAmount || 0), 0), baseCurrency)} · Saldo: {formatNativeAmount(Math.max(Number(request.baseAmount || 0) - (request.payments || []).reduce((sum, payment) => sum + Number(payment.baseAmount || 0), 0), 0), baseCurrency)}</p></div>
                   <Badge variant="outline" className={cn('w-fit shrink-0 gap-1 rounded-md px-3 py-1 text-[10px] font-black', status.className)}><StatusIcon className="size-3.5" /> {status.label}</Badge>
                   <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
-                    {request.status === 'PENDING' && canApproveRequests && <Button size="sm" className="rounded-xl" disabled={busyId === request.id} onClick={() => runAction(request.id, () => hrService.approvePaymentRequest(request.id), 'Solicitud aprobada.') }><Check className="mr-1.5 size-4" /> Aprobar</Button>}
-                    {request.status === 'PENDING' && canRejectRequests && <Button size="sm" variant="outline" className="rounded-xl text-rose-600 hover:bg-rose-500/10" disabled={busyId === request.id} onClick={() => { const reason = window.prompt('Motivo del rechazo (opcional):') || 'Rechazada por Contabilidad'; runAction(request.id, () => hrService.rejectPaymentRequest(request.id, reason), 'Solicitud rechazada.'); }}><X className="mr-1.5 size-4" /> Rechazar</Button>}
+                    {request.status === 'PENDING' && canApproveRequests && <Button size="sm" className="rounded-xl" disabled={busyId === request.id} onClick={() => runAction(request.id, () => hrService.approvePaymentRequest(request.id), 'Solicitud aprobada.', canApproveRequests) }><Check className="mr-1.5 size-4" /> Aprobar</Button>}
+                    {request.status === 'PENDING' && canRejectRequests && <Button size="sm" variant="outline" className="rounded-xl text-rose-600 hover:bg-rose-500/10" disabled={busyId === request.id} onClick={() => { if (!canRejectRequests) return; const reason = window.prompt('Motivo del rechazo (opcional):') || 'Rechazada por Contabilidad'; runAction(request.id, () => hrService.rejectPaymentRequest(request.id, reason), 'Solicitud rechazada.', canRejectRequests); }}><X className="mr-1.5 size-4" /> Rechazar</Button>}
                     {(request.status === 'APPROVED' || request.status === 'PARTIAL') && canPayRequests && <Button size="sm" className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" disabled={busyId === request.id} onClick={() => openPayment(request)}><Banknote className="mr-1.5 size-4" /> Registrar abono</Button>}
                     {request.status === 'PAID' && <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600"><FileCheck2 className="size-4" /> Contabilizada</span>}
                     <ChevronRight className="hidden size-4 text-muted-foreground/40 lg:block" />
@@ -365,7 +369,7 @@ export function SolicitudesPagoRRHHView() {
               <p className="mt-2 text-[10px] text-muted-foreground">Saldo contable antes del abono: <span className="font-bold text-foreground">{formatNativeAmount(requestRemainingBase, baseCurrency)}</span></p>
             </div>
           </div>
-          <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setPaymentRequest(null)} disabled={busyId === paymentRequest?.id}>Cancelar</Button><Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" disabled={!balanced || busyId === paymentRequest?.id || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankMethod(line.method) && !line.bankAccountId)} onClick={submitPayment}>{busyId === paymentRequest?.id ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Banknote className="mr-2 size-4" />} Confirmar y contabilizar</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setPaymentRequest(null)} disabled={busyId === paymentRequest?.id}>Cancelar</Button><Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" disabled={!canPayRequests || !balanced || busyId === paymentRequest?.id || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankMethod(line.method) && !line.bankAccountId)} onClick={submitPayment}>{busyId === paymentRequest?.id ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Banknote className="mr-2 size-4" />} Confirmar y contabilizar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

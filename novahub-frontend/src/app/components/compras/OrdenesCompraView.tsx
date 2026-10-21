@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Combobox } from '../ui/Combobox';
 import { TaxDetail } from '../ui/TaxSelector';
 import { isTaxExempt } from '../../utils/taxUtils';
-import { purchaseOrdersService, purchaseRequestsService } from '../../services/compras.service';
+import { purchaseOrdersService } from '../../services/compras.service';
 import { inventoryService } from '../../services/inventario.service';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { storageService } from '../../services/storage.service';
@@ -1047,6 +1047,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
   const [previewOrder, setPreviewOrder] = useState<Partial<PurchaseOrder> | null>(null);
   const [pendingApproveOrder, setPendingApproveOrder] = useState<Partial<PurchaseOrder> | null>(null);
   const [approving, setApproving] = useState(false);
+  const [submittingOrderId, setSubmittingOrderId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -2208,6 +2209,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
   };
 
   const handleCancelConfirm = async () => {
+    if (!canPerform('PURCHASES_ORDERS', 'read') || !canPerform('PURCHASES_ORDERS', 'reject')) return;
     const requestedCancelIds = [...(pendingCancelId ? [pendingCancelId] : []), ...pendingBulkCancelIds];
     const cancelIds = requestedCancelIds.filter((id) => {
       const status = String(data.find((order) => order.id === id)?.status || '').toUpperCase();
@@ -2235,6 +2237,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
   };
 
   const handleApproveOrder = async (orderId: string) => {
+    if (!canPerform('PURCHASES_ORDERS', 'read') || !canPerform('PURCHASES_ORDERS', 'approve')) return;
     setApproving(true);
     const approveToastId = toast.loading('Aprobando orden de compra y preparando recepción...');
     try {
@@ -2251,6 +2254,23 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
       toast.error(e?.response?.data?.message || e?.message || 'Error al aprobar', { id: approveToastId });
     } finally {
       setApproving(false);
+    }
+  };
+
+  const handleSubmitOrder = async (orderId: string) => {
+    if (!canPerform('PURCHASES_ORDERS', 'read') || !canPerform('PURCHASES_ORDERS', 'submit')) return;
+    setSubmittingOrderId(orderId);
+    const submitToastId = toast.loading('Enviando orden de compra a proceso...');
+    try {
+      await purchaseOrdersService.submit(orderId);
+      toast.success('Orden enviada a proceso', { id: submitToastId });
+      setPreviewOrder(null);
+      setEditingId(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo enviar la orden a proceso', { id: submitToastId });
+    } finally {
+      setSubmittingOrderId(null);
     }
   };
 
@@ -2348,15 +2368,17 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
         setEditingId(String(previewOrder.id));
       }}
       extraActions={previewOrder ? <>
-        {canPerform('PURCHASES_ORDERS', 'approve') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(previewOrder); }}><CheckCircle2 className="mr-2 size-4" />Aprobar</Button>}
+        {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'submit') && normalizePurchaseOrderStatus(previewOrder.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl" disabled={submittingOrderId === previewOrder.id} onClick={() => void handleSubmitOrder(String(previewOrder.id))}><Check className="mr-2 size-4" />Enviar a proceso</Button>}
+        {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'approve') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(previewOrder); }}><CheckCircle2 className="mr-2 size-4" />Aprobar</Button>}
         {canPerform('PURCHASES_ORDERS', 'edit') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setPreviewOrder(null); setEditingId(String(previewOrder.id)); }}><Pencil className="mr-2 size-4" />Editar</Button>}
-        {canPerform('PURCHASES_ORDERS', 'delete') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setPreviewOrder(null); setPendingCancelId(String(previewOrder.id)); setCancelReason(''); }}><Ban className="mr-2 size-4" />Rechazar</Button>}
+        {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'reject') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setPreviewOrder(null); setPendingCancelId(String(previewOrder.id)); setCancelReason(''); }}><Ban className="mr-2 size-4" />Rechazar</Button>}
       </> : undefined}
       onDownloadPdf={canPerform('PURCHASES_ORDERS', 'export') ? (format) => previewOrder ? void handleDownloadOrderPdf(previewOrder, format) : undefined : undefined}
     />
   );
 
   const handleSaveDoc = async (newStatus: 'DRAFT' | 'IN_PROCESS' = 'DRAFT') => {
+    if (editingId === 'NEW' ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')) return;
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
     if (!String(localDoc.address || '').trim()) return toast.error('Debe ingresar la dirección');
     if ((localDoc.items || []).length === 0) return toast.error('Debe agregar al menos un ítem');
@@ -2399,6 +2421,9 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
       : (PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(newStatus) && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(currentOrderStatus)
         ? (currentOrderStatus === 'IN_PROCESS' && newStatus === 'DRAFT' ? currentOrderStatus : newStatus)
         : currentOrderStatus);
+    if (statusToSave === 'IN_PROCESS' && currentOrderStatus === 'DRAFT' && !canPerform('PURCHASES_ORDERS', 'submit')) {
+      return toast.error('Tu rol no permite enviar la orden a proceso. Guarda el borrador o solicita ese permiso.');
+    }
     const orderCurrency = normalizePurchaseCurrency(localDoc.currency || displayCurrency);
     const orderExchangeRate = orderCurrency === 'NIO' ? 1 : (Number(localDoc.exchangeRate) > 0 ? Number(localDoc.exchangeRate) : globalRate);
     const cleanedDoc: any = {
@@ -2467,12 +2492,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
     
     try {
       if (editingId === 'NEW') {
-        const created = await purchaseOrdersService.create(cleanedDoc);
-        if (created?.purchaseRequestId) {
-          try {
-            await purchaseRequestsService.changeStatus(created.purchaseRequestId, 'APPROVED', undefined, created.supplierId);
-          } catch { /* la solicitud se podrá aprobar manualmente */ }
-        }
+        await purchaseOrdersService.create(cleanedDoc);
         toast.success(statusToSave === 'DRAFT' ? 'Orden guardada como borrador' : 'Orden guardada en proceso', { id: saveToastId });
       } else {
         await purchaseOrdersService.update(editingId!, cleanedDoc);
@@ -2795,22 +2815,20 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
                 <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
                   Guardar borrador
                 </Button>
-                <Button data-testid="purchase-order-save-in-process" onClick={() => handleSaveDoc('IN_PROCESS')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                  Guardar
-                </Button>
+                {canPerform('PURCHASES_ORDERS', 'submit') && <Button data-testid="purchase-order-save-in-process" onClick={() => handleSaveDoc('IN_PROCESS')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">Enviar a proceso</Button>}
               </>
             )}
-            {!isNew && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(currentStatus) && canPerform('PURCHASES_ORDERS', 'edit') && (
+            {!isNew && currentStatus === 'DRAFT' && canPerform('PURCHASES_ORDERS', 'edit') && (
               <>
-                {currentStatus === 'DRAFT' && (
-                  <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
-                    Guardar borrador
-                  </Button>
-                )}
-                <Button onClick={() => handleSaveDoc('IN_PROCESS')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                  Guardar
-                </Button>
+                <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">Guardar borrador</Button>
+                {canPerform('PURCHASES_ORDERS', 'submit') && <Button onClick={() => handleSaveDoc('IN_PROCESS')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">Enviar a proceso</Button>}
               </>
+            )}
+            {!isNew && currentStatus === 'DRAFT' && canPerform('PURCHASES_ORDERS', 'submit') && !canPerform('PURCHASES_ORDERS', 'edit') && (
+              <Button onClick={() => void handleSubmitOrder(String(localDoc.id))} disabled={submittingOrderId === localDoc.id} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">Enviar a proceso</Button>
+            )}
+            {!isNew && currentStatus === 'IN_PROCESS' && canPerform('PURCHASES_ORDERS', 'edit') && (
+              <Button onClick={() => handleSaveDoc('IN_PROCESS')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">Guardar cambios</Button>
             )}
           </div>
         </div>
@@ -3428,8 +3446,8 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setPreviewOrder(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_ORDERS', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel" showHorizontalControls actionsWidth="w-56" fitContent
-          onBulkDelete={canPerform('PURCHASES_ORDERS', 'delete') ? async (ids) => {
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setPreviewOrder(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_ORDERS', 'reject')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel" showHorizontalControls actionsWidth="w-56" fitContent
+          onBulkDelete={canPerform('PURCHASES_ORDERS', 'reject') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => {
               if (id.startsWith('new-')) return false;
               return PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(data.find((order) => order.id === id)?.status));
@@ -3444,9 +3462,10 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
               <Button title="Ver detalle completo" aria-label="Ver detalle completo de la orden" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setPreviewOrder(null); setEditingId(String(row.id)); }}>
                 <Eye className="size-4" />
               </Button>
-              {canPerform('PURCHASES_ORDERS', 'approve') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button type="button" title="Aprobar orden de compra" aria-label="Aprobar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(row); }}><CheckCircle2 className="size-4" /></Button>}
+              {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'submit') && normalizePurchaseOrderStatus(row.status) === 'DRAFT' && <Button type="button" title="Enviar orden a proceso" aria-label={`Enviar a proceso la orden ${row.number || ''}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-primary hover:bg-primary/10" disabled={submittingOrderId === row.id} onClick={() => void handleSubmitOrder(String(row.id))}><Check className="size-4" /></Button>}
+              {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'approve') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button type="button" title="Aprobar orden de compra" aria-label="Aprobar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(row); }}><CheckCircle2 className="size-4" /></Button>}
               {canPerform('PURCHASES_ORDERS', 'edit') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button title="Editar orden de compra" aria-label="Editar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(String(row.id))}><Pencil className="size-4" /></Button>}
-              {canPerform('PURCHASES_ORDERS', 'delete') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button type="button" title="Rechazar orden de compra" aria-label="Rechazar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-600" onClick={() => { setPreviewOrder(null); setPendingCancelId(String(row.id)); setCancelReason(''); }}><Ban className="size-4" /></Button>}
+              {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'reject') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button type="button" title="Rechazar orden de compra" aria-label="Rechazar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-600" onClick={() => { setPreviewOrder(null); setPendingCancelId(String(row.id)); setCancelReason(''); }}><Ban className="size-4" /></Button>}
             </div>
           )}
         />

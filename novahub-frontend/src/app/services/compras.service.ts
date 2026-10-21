@@ -24,6 +24,7 @@ export const purchaseOrdersService = {
   getById: (id: string) => api.get<PurchaseOrder>(`/purchases/orders/${id}`),
   create: (data: Partial<PurchaseOrder>, idempotencyKey?: string) => api.idempotentPost<PurchaseOrder>('/purchases/orders', data, idempotencyKey),
   update: (id: string, data: Partial<PurchaseOrder>) => api.patch<PurchaseOrder>(`/purchases/orders/${id}`, data),
+  submit: (id: string) => api.post<PurchaseOrder>(`/purchases/orders/${id}/submit`, {}),
   approve: (id: string, idempotencyKey?: string) => api.idempotentPatch<{ order: PurchaseOrder; receipt: PurchaseReceipt }>(`/purchases/orders/${id}/approve`, {}, idempotencyKey),
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<PurchaseOrder, 'id' | 'number' | 'status'> }>(`/purchases/orders/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
@@ -39,6 +40,7 @@ export const purchaseReceiptsService = {
   create: (data: Partial<PurchaseReceipt>, idempotencyKey?: string) => api.idempotentPost<PurchaseReceipt>('/purchases/receipts', data, idempotencyKey),
   update: (id: string, data: Partial<PurchaseReceipt>, idempotencyKey?: string) => api.idempotentPatch<PurchaseReceipt>(`/purchases/receipts/${id}`, data, idempotencyKey),
   approve: (id: string, idempotencyKey?: string) => api.idempotentPost<PurchaseReceipt>(`/purchases/receipts/${id}/approve`, {}, idempotencyKey),
+  retryInventory: (id: string) => api.post<PurchaseReceipt>(`/purchases/receipts/${id}/retry-inventory`, {}),
   createCredit: (id: string, data: { date?: string; reason: string; items: Array<{ receiptItemId: string; quantity: number }> }) => api.post<SupplierCredit>(`/purchases/receipts/${id}/credit`, data),
   cancel: (id: string, reason?: string) => api.post<PurchaseReceipt>(`/purchases/receipts/${id}/cancel`, { reason }),
   registerInvoice: (id: string, data: { number: string; date?: string; dueDate?: string; subtotal?: number; taxAmount?: number; withholdingTotal?: number; withholdingBase?: number; total?: number; currency?: string; exchangeRate?: number; status?: 'PENDING' | 'CREDIT'; notes?: string; attachments: Array<{ fileName: string; fileType: string; fileSize: number; fileUrl: string }> }) =>
@@ -111,16 +113,78 @@ export const supplierCreditsService = {
 export const expensesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Expense>>('/purchases/expenses', { params: filters as any, signal }),
   create: (data: Partial<Expense>) => api.post<Expense>('/purchases/expenses', data),
+  previewImport: (rows: ExpenseImportRow[]) => api.post<ExpenseImportPreviewResponse>('/purchases/expenses/import/preview', { rows }),
+  confirmImportBlock: (data: { attemptId: string; rows: ExpenseImportRow[] }) => api.post<ExpenseImportBlockResponse>('/purchases/expenses/import/confirm-block', data),
   bulkImport: (data: Partial<Expense>[]) => api.post<{ success: number; count: number; failed: number }>('/purchases/expenses/bulk-import', data),
   update: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}`, data),
   updateStatus: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}/status`, data),
   delete: (id: string) => api.delete<void>(`/purchases/expenses/${id}`),
 };
 
+export interface ExpenseImportRow {
+  sourceRowNumber: number;
+  date?: unknown;
+  description?: unknown;
+  category?: unknown;
+  categoryCustom?: unknown;
+  amount?: unknown;
+  currency?: unknown;
+  status?: unknown;
+  paymentSource?: unknown;
+  paidTo?: unknown;
+  supplierCode?: unknown;
+  reference?: unknown;
+  bankAccountNumber?: unknown;
+}
+
+export interface ExpenseImportPreviewRow {
+  sourceRowNumber: number;
+  status: 'READY' | 'BLOCKED' | 'CONFIRMED' | 'FAILED' | string;
+  errors: string[];
+  effects: { expense: boolean; financeMirror: boolean; accountingJournal: boolean };
+  supplier?: { id?: string | null; code?: string | null; name: string; isGeneral: boolean; willCreate: boolean };
+  resolvedExchangeRate?: number;
+  number?: string;
+  expenseId?: string;
+  financeMirrorCreated?: boolean;
+  accountingJournalGenerated?: boolean;
+}
+
+export interface ExpenseImportPreviewResponse {
+  summary: { total: number; ready: number; blocked: number };
+  integrations: {
+    financeEnabled: boolean;
+    accountingEnabled: boolean;
+    accountingConnectionEnabled: boolean;
+    autoGenerationEnabled: boolean;
+  };
+  rows: ExpenseImportPreviewRow[];
+}
+
+export interface ExpenseImportBlockResponse {
+  total: number;
+  created: number;
+  failed: number;
+  rows: Array<{
+    sourceRowNumber: number;
+    status: string;
+    errors?: string[];
+    number?: string;
+    expenseId?: string;
+    financeMirrorCreated?: boolean;
+    accountingJournalGenerated?: boolean;
+    supplier?: { id?: string | null; code?: string | null; name: string; isGeneral: boolean; willCreate: boolean };
+    supplierCreated?: boolean;
+    resolvedExchangeRate?: number;
+  }>;
+}
+
 export const recurringExpensesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<RecurringExpense>>('/purchases/recurring-expenses', { params: filters as any, signal }),
   create: (data: Partial<RecurringExpense>) => api.post<RecurringExpense>('/purchases/recurring-expenses', data),
   update: (id: string, data: Partial<RecurringExpense>) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}`, data),
+  pause: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/pause`, {}),
+  resume: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/resume`, {}),
   delete: (id: string) => api.delete<void>(`/purchases/recurring-expenses/${id}`),
 };
 
@@ -152,6 +216,7 @@ export const purchaseManagementService = {
   create: (data: Partial<PurchaseManagement>) => api.post<PurchaseManagement>('/purchases/management', data),
   update: (id: string, data: Partial<PurchaseManagement>) => api.patch<PurchaseManagement>(`/purchases/management/${id}`, data),
   delete: (id: string) => api.delete<void>(`/purchases/management/${id}`),
+  submit: (id: string) => api.post<PurchaseManagement>(`/purchases/management/${id}/submit`, {}),
   approve: (id: string) => api.post<PurchaseManagement>(`/purchases/management/${id}/approve`, {}),
   reject: (id: string, reason?: string) => api.post<PurchaseManagement>(`/purchases/management/${id}/reject`, { reason }),
   convertToOrder: (id: string) => api.post<PurchaseOrder>(`/purchases/management/${id}/convert-to-order`, {}),

@@ -66,11 +66,13 @@ export function ControlDashboardCajaView({
 
   const { displayCurrency, exchangeRate: globalRate } = useCurrency();
   const { user, canPerform } = useAuth();
-  const canEditCash = canPerform('RETAIL_CASH_CONTROL', 'edit');
-  const canApproveCash = canPerform('RETAIL_CASH_CONTROL', 'approve');
+  const canOpenSession = canPerform('RETAIL_CASH_CONTROL', 'open');
+  const canRecordMovement = canPerform('RETAIL_CASH_CONTROL', 'movement');
+  const canCountSession = canPerform('RETAIL_CASH_CONTROL', 'count');
+  const canCloseSession = canPerform('RETAIL_CASH_CONTROL', 'close');
   const canExportCash = canPerform('RETAIL_CASH_CONTROL', 'export');
   const canManageRegisters = canPerform('RETAIL_CASH_CONTROL', 'manage');
-  const canResolveDeficits = canPerform('RETAIL_CASH_CONTROL', 'approve');
+  const canResolveDeficits = canPerform('RETAIL_CASH_CONTROL', 'resolve');
   const canReadTeamUsers = canPerform('CONFIG_USERS', 'view');
   const canSelectAllRegisters = Boolean(
     user?.isTenantAdmin
@@ -166,6 +168,7 @@ export function ControlDashboardCajaView({
   }, [activeSection, loadDeficits]);
 
   const resolveDeficitCharge = async (chargeId: string, status: 'COLLECTED' | 'WRITTEN_OFF') => {
+    if (!canPerform('RETAIL_CASH_CONTROL', 'resolve')) return;
     setSavingCharge(chargeId);
     try {
       await cajaService.updateDeficitCharge(chargeId, {
@@ -332,7 +335,7 @@ export function ControlDashboardCajaView({
               <AperturaCajaStep 
                 selectedRegister={selectedRegister} 
                 onOpenSession={openSession} 
-                canOperate={canEditCash}
+                canOperate={canOpenSession}
               />
             )}
 
@@ -348,8 +351,9 @@ export function ControlDashboardCajaView({
                 onSubmitCount={savePartialCount}
                 onConfirmClose={closeSession} 
                 onNavigateToFacturacion={onNavigateToFacturacion}
-                canEdit={canEditCash}
-                canApprove={canApproveCash}
+                canRecordMovement={canRecordMovement}
+                canCount={canCountSession}
+                canClose={canCloseSession}
                 canExport={canExportCash}
               />
             )}

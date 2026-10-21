@@ -133,6 +133,12 @@ export const ProyectosPage = ({ activeSubModule, onSubModuleChange }: ProyectosP
                 canCreate={canPerform('PROJECTS_LIST', 'create')}
                 canEdit={canPerform('PROJECTS_LIST', 'edit')}
                 canDelete={canPerform('PROJECTS_LIST', 'delete')}
+                canChangeStatus={canPerform('PROJECTS_LIST', 'changeStatus')}
+                canComplete={canPerform('PROJECTS_LIST', 'complete')}
+                canCancel={canPerform('PROJECTS_LIST', 'cancel')}
+                canManageMembers={canPerform('PROJECTS_LIST', 'manageMembers')}
+                canViewCosts={canPerform('PROJECTS_EXPENSES', 'view')}
+                canViewTimeline={canPerform('PROJECTS_PROGRESS', 'view')}
               />
             </div>
           )}

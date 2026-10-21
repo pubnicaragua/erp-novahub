@@ -47,12 +47,17 @@ const months = [
 
 export function PeriodosView() {
   const { canPerform } = useAuth();
+  const canClosePeriod = canPerform('ACCOUNTING_PERIODS', 'close');
+  const canReopenPeriod = canPerform('ACCOUNTING_PERIODS', 'reopen');
+  const canLockPeriod = canPerform('ACCOUNTING_PERIODS', 'lock');
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [closeConfirmId, setCloseConfirmId] = useState<string | null>(null);
   const [closeLoading, setCloseLoading] = useState(false);
   const [reopenConfirmId, setReopenConfirmId] = useState<string | null>(null);
   const [reopenLoading, setReopenLoading] = useState(false);
+  const [lockConfirmId, setLockConfirmId] = useState<string | null>(null);
+  const [lockLoading, setLockLoading] = useState(false);
   const [form, setForm] = useState({ name: '', month: '', year: '' });
 
   const currentYear = new Date().getFullYear();
@@ -88,7 +93,7 @@ export function PeriodosView() {
   };
 
   const handleClose = async () => {
-    if (!closeConfirmId) return;
+    if (!closeConfirmId || !canClosePeriod) return;
     const actionToken = beginNotificationAction();
     try {
       setCloseLoading(true);
@@ -106,7 +111,7 @@ export function PeriodosView() {
   };
 
   const handleReopen = async () => {
-    if (!reopenConfirmId) return;
+    if (!reopenConfirmId || !canReopenPeriod) return;
     const actionToken = beginNotificationAction();
     try {
       setReopenLoading(true);
@@ -120,6 +125,24 @@ export function PeriodosView() {
       failNotificationAction(actionToken);
     } finally {
       setReopenLoading(false);
+    }
+  };
+
+  const handleLock = async () => {
+    if (!lockConfirmId || !canLockPeriod) return;
+    const actionToken = beginNotificationAction();
+    try {
+      setLockLoading(true);
+      await contabilidadService.lockPeriod(lockConfirmId);
+      toast.success('Período bloqueado');
+      completeNotificationAction(actionToken);
+      setLockConfirmId(null);
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
+    } catch (e: any) {
+      toast.error(e?.message || 'Error al bloquear período');
+      failNotificationAction(actionToken);
+    } finally {
+      setLockLoading(false);
     }
   };
 
@@ -185,7 +208,7 @@ export function PeriodosView() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {p.status === 'OPEN' && canPerform('ACCOUNTING_PERIODS', 'approve') && (
+                      {p.status === 'OPEN' && canClosePeriod && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -196,7 +219,7 @@ export function PeriodosView() {
                           <Lock className="size-4" />
                         </Button>
                       )}
-                      {p.status === 'CLOSED' && canPerform('ACCOUNTING_PERIODS', 'approve') && (
+                      {p.status === 'CLOSED' && canReopenPeriod && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -205,6 +228,18 @@ export function PeriodosView() {
                           title="Reabrir Período"
                         >
                           <Unlock className="size-4" />
+                        </Button>
+                      )}
+                      {p.status === 'CLOSED' && canLockPeriod && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-600"
+                          onClick={() => setLockConfirmId(p.id)}
+                          title="Bloquear período"
+                          aria-label={`Bloquear período ${p.name}`}
+                        >
+                          <Lock className="size-4" />
                         </Button>
                       )}
                     </div>
@@ -218,7 +253,7 @@ export function PeriodosView() {
             {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : periods.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay períodos registrados</p> : periods.map((p) => (
               <div key={p.id} className={cn('min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3', isCurrentPeriod(p) && 'border-primary/30 bg-primary/[0.03]')}>
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-black">{p.name}</p><p className="mt-1 text-[10px] text-muted-foreground">{months.find((m) => m.value === String(p.month))?.label || p.month} {p.year}</p></div><Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[p.status || 'OPEN'])}>{statusLabels[p.status || 'OPEN']}</Badge></div>
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Inicio</span><span>{p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A'}</span></div><div><span className="block text-muted-foreground">Fin</span><span>{p.endDate ? new Date(p.endDate).toLocaleDateString() : 'N/A'}</span></div><div className="col-span-2 flex justify-end gap-1"><span className="sr-only">Acciones</span>{p.status === 'OPEN' && canPerform('ACCOUNTING_PERIODS', 'approve') && <Button variant="ghost" size="icon" className="size-7" onClick={() => setCloseConfirmId(p.id)}><Lock className="size-4" /></Button>}{p.status === 'CLOSED' && canPerform('ACCOUNTING_PERIODS', 'approve') && <Button variant="ghost" size="icon" className="size-7" onClick={() => setReopenConfirmId(p.id)}><Unlock className="size-4" /></Button>}</div></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Inicio</span><span>{p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A'}</span></div><div><span className="block text-muted-foreground">Fin</span><span>{p.endDate ? new Date(p.endDate).toLocaleDateString() : 'N/A'}</span></div><div className="col-span-2 flex justify-end gap-1"><span className="sr-only">Acciones</span>{p.status === 'OPEN' && canClosePeriod && <Button variant="ghost" size="icon" className="size-7" onClick={() => setCloseConfirmId(p.id)} aria-label={`Cerrar período ${p.name}`}><Lock className="size-4" /></Button>}{p.status === 'CLOSED' && canReopenPeriod && <Button variant="ghost" size="icon" className="size-7" onClick={() => setReopenConfirmId(p.id)} aria-label={`Reabrir período ${p.name}`}><Unlock className="size-4" /></Button>}{p.status === 'CLOSED' && canLockPeriod && <Button variant="ghost" size="icon" className="size-7 text-amber-600" onClick={() => setLockConfirmId(p.id)} aria-label={`Bloquear período ${p.name}`}><Lock className="size-4" /></Button>}</div></div>
               </div>
             ))}
           </div>
@@ -296,6 +331,26 @@ export function PeriodosView() {
           <Button variant="outline" onClick={() => setReopenConfirmId(null)} disabled={reopenLoading} className="rounded-xl text-[10px] font-black uppercase tracking-widest">Cancelar</Button>
             <Button onClick={handleReopen} disabled={reopenLoading} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest">
               {reopenLoading ? 'Reabriendo...' : 'Reabrir Período'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!lockConfirmId} onOpenChange={(o) => { if (!o && !lockLoading) setLockConfirmId(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mb-2 flex items-center gap-3">
+              <div className="rounded-full bg-amber-500/10 p-3"><Lock className="size-6 text-amber-600" /></div>
+              <div>
+                <DialogTitle className="text-lg font-black uppercase tracking-tight">Bloquear período</DialogTitle>
+                <DialogDescription className="text-xs">El período cerrado quedará bloqueado. La reapertura normal solo está disponible antes de bloquearlo.</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setLockConfirmId(null)} disabled={lockLoading} className="rounded-xl text-[10px] font-black uppercase tracking-widest">Cancelar</Button>
+            <Button onClick={handleLock} disabled={!canLockPeriod || lockLoading} className="rounded-xl bg-amber-600 text-white hover:bg-amber-700 text-[10px] font-black uppercase tracking-widest">
+              {lockLoading ? 'Bloqueando...' : 'Confirmar bloqueo'}
             </Button>
           </DialogFooter>
         </DialogContent>

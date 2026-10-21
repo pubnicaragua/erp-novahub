@@ -5,17 +5,25 @@ import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
 import mapUrl from '../../../maps/diseñoui_mapas_freelancers.html?url';
 
 export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: string; onSubModuleChange?: (value: string) => void }) {
-  const { user, hasAccess } = useAuth();
+  const { user, hasAccess, canPerform } = useAuth();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const isSuperAdmin = user?.role === 'superadmin';
+  const normalizedRole = String(user?.role || '').toUpperCase();
+  const canAssignTeam = isSuperAdmin || ['SUPER_ADMIN', 'SUPERADMIN', 'PLATFORM_ADMIN', 'PARTNER', 'ADMIN', 'MANAGER'].includes(normalizedRole) || Boolean((user as any)?.isTenantAdmin) || Boolean((user as any)?.managerContext?.canEdit);
   const isAuthorizedUser = Boolean(user) && hasAccess('fuerza-comercial');
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
   const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const googleMapsMapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
   const tenantLogo = user?.clientTenant?.logo || user?.sessionBranding?.logo || isotipoUrl;
   const view = activeSubModule === 'fuerza-comercial-kanban' ? 'kanban' : activeSubModule === 'fuerza-comercial-historial' ? 'history' : 'map';
-  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(tenantLogo)}&companyLogo=${encodeURIComponent(tenantLogo)}&view=${view}&userId=${encodeURIComponent(user?.id || '')}&tenantId=${encodeURIComponent(user?.clientTenantId || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&mapId=${encodeURIComponent(googleMapsMapId)}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
+  const workflowActions = [
+    'importProspects', 'updateProspect', 'changeStage', 'registerVisit', 'discardProspect', 'assignProspect',
+    'attachEvidence', 'manageConsent', 'send', 'createRoute', 'editRoute', 'assignRoute', 'changeRouteStatus',
+    'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation',
+  ] as const;
+  const workflowPermissions = Object.fromEntries(workflowActions.map((action) => [action, canPerform('FORCE_SALES', action)]));
+  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(tenantLogo)}&companyLogo=${encodeURIComponent(tenantLogo)}&view=${view}&userId=${encodeURIComponent(user?.id || '')}&tenantId=${encodeURIComponent(user?.clientTenantId || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&canAssignTeam=${canAssignTeam ? 'true' : 'false'}&permissions=${encodeURIComponent(JSON.stringify(workflowPermissions))}&mapId=${encodeURIComponent(googleMapsMapId)}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
 
   useEffect(() => {
     const onMapMessage = (event: MessageEvent) => {

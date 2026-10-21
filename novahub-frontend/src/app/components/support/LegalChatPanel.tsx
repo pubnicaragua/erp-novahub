@@ -18,10 +18,11 @@ import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 interface LegalChatPanelProps {
   caseId: string;
   caseNumber: string;
+  canSendMessages: boolean;
   onBack: () => void;
 }
 
-export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelProps) {
+export function LegalChatPanel({ caseId, caseNumber, canSendMessages, onBack }: LegalChatPanelProps) {
   const { user } = useAuth();
   const messagesQuery = useTenantQuery<LegalMessage[]>(['legal', 'messages', caseId], signal => legalService.listMessages(caseId, signal), {
     refetchInterval: 5000,
@@ -41,6 +42,7 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
   }, [messages]);
 
   const handleSend = async () => {
+    if (!canSendMessages) return;
     if (!newText.trim() && !uploading) return;
     setSending(true);
     try {
@@ -66,6 +68,7 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canSendMessages) return;
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
@@ -115,7 +118,7 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
               <span className="text-sm font-black tracking-tight">Chat — {caseNumber}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          {canSendMessages && <div className="flex items-center gap-2">
             <Input
               value={customerPhone}
               onChange={(e) => setCustomerPhone(e.target.value)}
@@ -131,7 +134,7 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
             >
               <MessageCircle className="size-3.5" /> WhatsApp
             </Button>
-          </div>
+          </div>}
         </div>
 
         <div className="h-[400px] overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-background to-muted/10">
@@ -211,7 +214,7 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
           <div ref={bottomRef} />
         </div>
 
-        <div className="border-t border-border/30 p-4 bg-background">
+        {canSendMessages && <div className="border-t border-border/30 p-4 bg-background">
           <div className="flex items-end gap-2">
             <div className="flex-1 relative">
               <textarea
@@ -225,6 +228,8 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
+                aria-label="Adjuntar archivo al chat legal"
+                title="Adjuntar archivo"
                 className="absolute right-3 bottom-3 text-muted-foreground hover:text-foreground transition-colors"
               >
                 {uploading ? <Loader2 className="size-4 animate-spin" /> : <Paperclip className="size-4" />}
@@ -233,6 +238,8 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
             <Button
               onClick={handleSend}
               disabled={sending || (!newText.trim() && !uploading)}
+              aria-label="Enviar mensaje legal"
+              title="Enviar mensaje"
               className="size-[42px] rounded-2xl shrink-0"
             >
               {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -245,7 +252,7 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
             onChange={handleFileSelect}
             accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp"
           />
-        </div>
+        </div>}
       </CardContent>
     </Card>
   );

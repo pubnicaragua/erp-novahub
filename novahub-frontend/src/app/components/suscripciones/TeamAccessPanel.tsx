@@ -36,7 +36,7 @@ interface TeamAccessPanelProps {
 }
 
 const permissionActions = [...PERMISSION_ACTION_DEFINITIONS, ...SENSITIVE_PERMISSION_ACTION_DEFINITIONS];
-const LEGACY_PERMISSION_KEYS = ['view', 'canView', 'write', 'canWrite', 'canCreate', 'canEdit', 'canApprove', 'canViewCost', 'deactivate', 'cancel', 'reject', 'reverse', 'canDelete', 'canDeactivate', 'canCancel', 'canReject', 'canReverse'];
+const LEGACY_PERMISSION_KEYS = ['view', 'canView', 'write', 'canWrite', 'canCreate', 'canEdit', 'canApprove', 'pay', 'canPay', 'submit', 'canSubmit', 'lookup', 'canLookup', 'sync', 'canSync', 'registerEvent', 'canRegisterEvent', 'bill', 'canBill', 'send', 'canSend', 'confirm', 'canConfirm', 'receive', 'canReceive', 'import', 'canImport', 'deliver', 'canDeliver', 'issue', 'canIssue', 'close', 'canClose', 'closeByException', 'canCloseByException', 'reopenContainer', 'canReopenContainer', 'assignPackages', 'canAssignPackages', 'unassignPackages', 'canUnassignPackages', 'movePackages', 'canMovePackages', 'consolidate', 'canConsolidate', 'dispatch', 'canDispatch', 'sendToCustoms', 'canSendToCustoms', 'addExpense', 'canAddExpense', 'post', 'canPost', 'saveRun', 'canSaveRun', 'createJournal', 'canCreateJournal', 'createReversal', 'canCreateReversal', 'generateProjection', 'canGenerateProjection', 'processDepreciation', 'canProcessDepreciation', 'updateBalance', 'canUpdateBalance', 'autoMatch', 'canAutoMatch', 'addMovement', 'canAddMovement', 'editMovement', 'canEditMovement', 'matchMovement', 'canMatchMovement', 'complete', 'canComplete', 'lock', 'canLock', 'audit', 'canAudit', 'sendToCorrect', 'canSendToCorrect', 'reissueInvoice', 'canReissueInvoice', 'approveCancellation', 'canApproveCancellation', 'rejectCancellation', 'canRejectCancellation', 'canViewCost', 'deactivate', 'cancel', 'reject', 'convert', 'canDelete', 'canDeactivate', 'canCancel', 'canReject', 'canConvert', 'canReverse'];
 const DATA_VISIBILITY_MODULE = 'DATA_VISIBILITY';
 
 /**
@@ -76,7 +76,9 @@ const ROLE_PERMISSION_CHILDREN = ROLE_PERMISSION_MODULES.filter((module: any) =>
 
 const emptyPermissions = () => [...ROLE_PERMISSION_MODULES.map((module: any) => ({
   module: module.id,
-  ...Object.fromEntries(permissionActions.map(({ key }) => [key, false])),
+  ...Object.fromEntries(permissionActions.filter(({ key }) => key === 'viewCost'
+    ? supportsInventoryCostPermission(module.id)
+    : supportsPermissionAction(module.id, key)).map(({ key }) => [key, false])),
   ...(module.id === 'SALES_PRICE_LISTS' ? { allowedPriceListIds: [] } : {}),
 })), { module: DATA_VISIBILITY_MODULE, customerVisibility: 'TENANT', userVisibility: 'TENANT' }];
 
@@ -89,11 +91,229 @@ const getLinkedUserCount = (role: any, users: any[]) => Number.isFinite(Number(r
   ? Number(role._count.users)
   : users.filter((user: any) => user.customRoleId === role?.id).length;
 
-const getActionLabel = (key: PermissionMatrixAction) => permissionActions.find((action) => action.key === key)?.label || key;
+const getActionLabel = (key: PermissionMatrixAction, moduleId?: string) => {
+  const labels: Record<string, Record<string, string>> = {
+    FINANCING: { startReview: 'Iniciar revisión', approve: 'Aprobar solicitud', reject: 'Rechazar solicitud', disburse: 'Marcar desembolso', reopen: 'Regresar a pendientes' },
+    FINANCING_APPLICATIONS: { addNote: 'Agregar nota del revisor', addDocument: 'Adjuntar documento' },
+    SALES_QUOTES: { submit: 'Enviar a proceso', convert: 'Enviar a orden', cancel: 'Cancelar cotización' },
+    SALES_ORDERS: { submit: 'Enviar a proceso', approve: 'Aprobar orden', convert: 'Enviar a factura', cancel: 'Cancelar orden' },
+    SALES_INVOICES: { submit: 'Emitir factura', sendToCredit: 'Enviar a crédito', sendToCash: 'Enviar a caja', cancel: 'Solicitar anulación' },
+    SALES_PAYMENTS: { pay: 'Registrar cobro', cancel: 'Anular cobro' },
+    SALES_RECURRING: { pause: 'Pausar programación', resume: 'Reanudar programación', cancel: 'Finalizar programación' },
+    SALES_RETURNS: { approve: 'Aprobar devolución', process: 'Aplicar saldo e inventario', reject: 'Rechazar devolución' },
+    SALES_CREDIT_NOTES: { issue: 'Emitir crédito', send: 'Enviar a caja', pay: 'Registrar devolución', cancel: 'Cancelar crédito' },
+    RETAIL_POS: { pay: 'Cobrar factura', reconcile: 'Reconciliar cola de caja', claim: 'Tomar gestión', release: 'Liberar gestión', confirm: 'Confirmar apartado', deliver: 'Entregar apartado', cancel: 'Cancelar apartado' },
+    RETAIL_CASH_CONTROL: { open: 'Abrir sesión', movement: 'Registrar movimiento', count: 'Registrar arqueo', close: 'Cerrar sesión', resolve: 'Resolver faltante', configure: 'Configurar caja' },
+    PURCHASES_REQUESTS: { submit: 'Enviar a pendientes', cancel: 'Anular solicitud', reject: 'Rechazar gestión', convert: 'Convertir en orden' },
+    PURCHASES_ORDERS: { submit: 'Enviar a proceso', approve: 'Aprobar orden', reject: 'Rechazar orden' },
+    PURCHASES_RECEIPTS: { receive: 'Recepcionar mercancía', cancel: 'Cancelar recepción', cancelInvoice: 'Anular factura de proveedor', retryInventory: 'Reintentar inventario', registerInvoice: 'Registrar factura' },
+    PURCHASES_PAYMENTS: { pay: 'Registrar pago a proveedor', cancel: 'Anular pago' },
+    PURCHASES_RETURNS: { issue: 'Emitir crédito', apply: 'Aplicar crédito', void: 'Anular crédito' },
+    PURCHASES_EXPENSES_REC: { pause: 'Pausar gasto recurrente', resume: 'Reanudar gasto recurrente' },
+    PURCHASES_INVOICES_REC: { pause: 'Pausar compra recurrente', resume: 'Reanudar compra recurrente', cancel: 'Anular compra recurrente' },
+    INVENTORY_ADJUSTMENTS: { approve: 'Aprobar y aplicar ajuste' },
+    INVENTORY_AUDITS: { start: 'Iniciar conteo', close: 'Cerrar conteo', approve: 'Aprobar diferencias', reopen: 'Reabrir auditoría', cancel: 'Cancelar auditoría' },
+    TRACKING_TRANSIT: { lookup: 'Consultar transportista', sync: 'Sincronizar tracking', registerEvent: 'Registrar evento manual' },
+    TRACKING_RECEPTION: { receive: 'Registrar recepción física' },
+    TRACKING_PACKAGES: { import: 'Importar paquetes' },
+    TRACKING_BATCHES: { confirm: 'Confirmar referencia' },
+    TRACKING_RECONCILIATION: { confirm: 'Confirmar conciliación' },
+    TRACKING_BILLING: { bill: 'Emitir factura de venta', deliver: 'Registrar entrega', send: 'Compartir factura', issue: 'Emitir nota de crédito', cancel: 'Anular y reversar venta logística' },
+    IMPORT_INTL_ORIGIN: { registerEvent: 'Registrar hito manual', deliver: 'Marcar paquete entregado', cancel: 'Cancelar paquete' },
+    IMPORT_INTL_CONTAINERS: { assignPackages: 'Asignar paquetes', unassignPackages: 'Devolver paquetes a origen', movePackages: 'Mover paquetes', consolidate: 'Consolidar contenedor', dispatch: 'Despachar contenedor', sendToCustoms: 'Enviar a aduana', cancel: 'Cancelar contenedor' },
+    IMPORT_INTL_CUSTOMS: { addExpense: 'Registrar gasto de importación', close: 'Cerrar y prorratear contenedor' },
+    ACCOUNTING_JOURNAL: { post: 'Contabilizar asiento', void: 'Anular asiento publicado' },
+    ACCOUNTING_HR_PAYMENT_REQUESTS: { approve: 'Aprobar solicitud', reject: 'Rechazar solicitud', pay: 'Registrar pago' },
+    ACCOUNTING_EXCHANGE_DIFFERENCES: { saveRun: 'Guardar valoración', createJournal: 'Crear asiento borrador', post: 'Contabilizar valoración', createReversal: 'Crear borrador de reversión' },
+    ACCOUNTING_ASSETS: { generateProjection: 'Generar proyección', processDepreciation: 'Procesar depreciación' },
+    ACCOUNTING_RECONCILIATION: { updateBalance: 'Actualizar saldos', autoMatch: 'Aplicar coincidencias automáticas', addMovement: 'Agregar movimiento manual', editMovement: 'Editar movimiento', matchMovement: 'Conciliar movimiento', complete: 'Completar conciliación' },
+    ACCOUNTING_PERIODS: { close: 'Cerrar período', reopen: 'Reabrir período', lock: 'Bloquear período' },
+    ACCOUNTING_INVOICE_AUDIT: { audit: 'Auditar facturas', sendToCorrect: 'Enviar a corregir', cancelInvoice: 'Anular y reversar factura', reissueInvoice: 'Registrar reemisión', approveCancellation: 'Aprobar solicitud de anulación', rejectCancellation: 'Rechazar solicitud de anulación' },
+  };
+  return labels[moduleId || '']?.[key] || permissionActions.find((action) => action.key === key)?.label || key;
+};
 
 const getViewActionDescription = (module: any, action: PermissionMatrixAction) => {
   if (action === 'read') return `Permite acceder a la vista ${module.label}.`;
-  return permissionActions.find((item) => item.key === action)?.description || `Permite ejecutar ${getActionLabel(action).toLowerCase()} en ${module.label}.`;
+  const descriptions: Record<string, Record<string, string>> = {
+    FINANCING: {
+      startReview: 'Cambia una solicitud pendiente a En revisión.',
+      approve: 'Cambia una solicitud en revisión a Aprobada.',
+      reject: 'Cambia una solicitud a Rechazada.',
+      disburse: 'Marca una solicitud como Desembolsada.',
+      reopen: 'Regresa una solicitud a Pendiente.',
+    },
+    FINANCING_APPLICATIONS: {
+      addNote: 'Agrega una nota interna del revisor y conserva el historial.',
+      addDocument: 'Adjunta un documento a la solicitud sin cambiar su estado.',
+    },
+    SALES_QUOTES: {
+      submit: 'Permite cambiar una cotización de borrador a En proceso.',
+      convert: 'Crea una orden de venta desde una cotización en proceso.',
+      cancel: 'Cancela una cotización abierta y conserva su historial.',
+    },
+    SALES_ORDERS: {
+      submit: 'Permite cambiar una orden de borrador a En proceso.',
+      approve: 'Aprueba una orden de venta que cumple las reglas del flujo.',
+      convert: 'Crea una factura desde una orden aprobada o en proceso.',
+      cancel: 'Cancela una orden abierta y conserva su historial.',
+    },
+    SALES_INVOICES: {
+      submit: 'Permite emitir una factura en estado pendiente.',
+      sendToCredit: 'Traslada el saldo pendiente al crédito del cliente.',
+      sendToCash: 'Envía la factura pendiente a la cola de caja.',
+      cancel: 'Envía una solicitud de anulación al flujo contable.',
+    },
+    SALES_PAYMENTS: { pay: 'Registra un cobro y actualiza el saldo de la factura.', cancel: 'Anula un cobro y conserva su trazabilidad.' },
+    SALES_RECURRING: { pause: 'Pausa la programación de facturas recurrentes.', resume: 'Reanuda una programación pausada.', cancel: 'Finaliza la programación sin borrar su historial.' },
+    SALES_RETURNS: {
+      approve: 'Aprueba una devolución pendiente.',
+      process: 'Aplica el saldo de la devolución y procesa los movimientos de inventario.',
+      reject: 'Rechaza una devolución pendiente y conserva su historial.',
+    },
+    SALES_CREDIT_NOTES: {
+      issue: 'Emite el crédito y valida el límite y saldo del cliente.',
+      send: 'Envía el crédito emitido a la cola de caja.',
+      pay: 'Registra la devolución del crédito y su efecto en pagos recibidos.',
+      cancel: 'Cancela el crédito pendiente sin borrar su historial.',
+    },
+    RETAIL_POS: {
+      pay: 'Confirma el cobro de la factura POS.',
+      reconcile: 'Libera reservas vencidas y sincroniza operaciones pagadas de la cola.',
+      claim: 'Toma una operación pendiente en caja.',
+      release: 'Libera una operación tomada para que otra persona la procese.',
+      confirm: 'Confirma un apartado de caja.',
+      deliver: 'Confirma la entrega del apartado.',
+      cancel: 'Cancela el apartado sin eliminar su trazabilidad.',
+    },
+    RETAIL_CASH_CONTROL: {
+      open: 'Abre una sesión de caja para una persona y caja registradora.',
+      movement: 'Registra una entrada o salida manual de efectivo.',
+      count: 'Registra el conteo de denominaciones de la sesión.',
+      close: 'Cierra la sesión y conserva el arqueo y sus diferencias.',
+      resolve: 'Cobra o condona un faltante de caja.',
+      configure: 'Actualiza normas, cierre automático y protocolo de cierre.',
+    },
+    PURCHASES_ORDERS: {
+      submit: 'Permite cambiar una orden de borrador a En proceso.',
+      approve: 'Aprueba la orden y prepara la recepción pendiente asociada.',
+      reject: 'Rechaza una orden que sigue en borrador o en proceso.',
+    },
+    PURCHASES_RECEIPTS: {
+      receive: 'Confirma las cantidades recibidas y procesa los movimientos de inventario.',
+      cancel: 'Cancela una recepción pendiente.',
+      cancelInvoice: 'Anula una factura de proveedor y revierte su efecto en cuentas por pagar.',
+      retryInventory: 'Reintenta la sincronización de inventario de una recepción procesada parcialmente.',
+      registerInvoice: 'Registra una factura de proveedor o evidencia fiscal de la recepción.',
+    },
+    PURCHASES_PAYMENTS: {
+      pay: 'Registra pagos simples o mixtos y aplica sus efectos a cuentas por pagar.',
+      cancel: 'Anula un pago de proveedor y conserva su trazabilidad.',
+    },
+    PURCHASES_RETURNS: {
+      issue: 'Emite un crédito de proveedor y aplica los efectos contables existentes.',
+      apply: 'Aplica un crédito emitido a una cuenta por pagar.',
+      void: 'Anula un crédito que todavía no se ha aplicado.',
+    },
+    PURCHASES_EXPENSES_REC: {
+      pause: 'Pausa la programación de un gasto recurrente.',
+      resume: 'Reanuda la programación de un gasto recurrente.',
+    },
+    PURCHASES_INVOICES_REC: {
+      pause: 'Pausa la generación programada de compras recurrentes.',
+      resume: 'Reanuda la generación programada de compras recurrentes.',
+      cancel: 'Finaliza una programación de compras recurrentes.',
+    },
+    INVENTORY_ADJUSTMENTS: {
+      approve: 'Aprueba el ajuste y aplica las existencias y efectos contables correspondientes.',
+    },
+    INVENTORY_AUDITS: {
+      start: 'Inicia el conteo y captura la existencia de referencia de la bodega.',
+      close: 'Cierra el conteo y deja las diferencias listas para revisión.',
+      approve: 'Aprueba el acta y genera un ajuste borrador cuando existen diferencias.',
+      reopen: 'Reabre un conteo cerrado para corregir la revisión.',
+      cancel: 'Cancela el acta sin eliminar su trazabilidad.',
+    },
+    TRACKING_TRANSIT: {
+      lookup: 'Consulta el transportista y registra el ticket y los eventos devueltos.',
+      sync: 'Sincroniza el estado de un ticket existente con el servicio del transportista.',
+      registerEvent: 'Agrega un evento manual al historial del envío.',
+    },
+    TRACKING_RECEPTION: { receive: 'Registra la recepción física del paquete en la sucursal y bodega seleccionadas.' },
+    TRACKING_PACKAGES: { import: 'Valida y confirma la importación masiva o rápida de paquetes.' },
+    TRACKING_BATCHES: { confirm: 'Confirma la referencia y registra la factura de compra asociada cuando aplica.' },
+    TRACKING_RECONCILIATION: { confirm: 'Crea la factura del proveedor y asocia los paquetes seleccionados.' },
+    TRACKING_BILLING: {
+      bill: 'Emite la factura de venta y cambia los paquetes seleccionados a Facturado.',
+      deliver: 'Marca los paquetes facturados como entregados.',
+      send: 'Crea el enlace público de una factura logística para compartirla con el cliente.',
+      issue: 'Emite una nota de crédito para la factura logística.',
+      cancel: 'Anula la factura logística y revierte los efectos contables aplicables.',
+    },
+    IMPORT_INTL_ORIGIN: {
+      registerEvent: 'Agrega un hito al historial sin cambiar el estado actual del paquete.',
+      deliver: 'Marca un paquete como entregado al cliente y registra el evento de trazabilidad.',
+      cancel: 'Cancela un paquete y conserva su historial.',
+    },
+    IMPORT_INTL_CONTAINERS: {
+      assignPackages: 'Asigna paquetes recibidos a un contenedor abierto.',
+      unassignPackages: 'Devuelve paquetes de un contenedor abierto a la bodega de origen.',
+      movePackages: 'Traslada paquetes entre contenedores y guarda el historial del movimiento.',
+      consolidate: 'Cambia el estado del contenedor a consolidado.',
+      dispatch: 'Pone el contenedor y sus paquetes en tránsito.',
+      sendToCustoms: 'Pone el contenedor y sus paquetes en proceso aduanal.',
+      cancel: 'Cancela un contenedor no cerrado y marca sus paquetes como cancelados, conservando la trazabilidad.',
+    },
+    IMPORT_INTL_CUSTOMS: {
+      addExpense: 'Agrega un gasto de aduana o logística al contenedor.',
+      close: 'Cierra el contenedor y ejecuta el prorrateo de costos.',
+      closeByException: 'Cierra un contenedor fuera de los mínimos con motivo obligatorio y auditoría.',
+      reopenContainer: 'Reabre un contenedor con motivo obligatorio y conserva el prorrateo histórico.',
+    },
+    ACCOUNTING_JOURNAL: {
+      post: 'Contabiliza un asiento borrador y aplica los cambios al libro contable.',
+      void: 'Anula un asiento publicado y conserva la reversión y el historial contable.',
+    },
+    ACCOUNTING_HR_PAYMENT_REQUESTS: {
+      approve: 'Aprueba la solicitud de pago para dejarla lista para pago.',
+      reject: 'Rechaza la solicitud pendiente y conserva el motivo y su historial.',
+      pay: 'Registra pagos parciales o finales y genera el asiento de RR. HH.',
+    },
+    ACCOUNTING_EXCHANGE_DIFFERENCES: {
+      saveRun: 'Guarda una valoración cambiaria con la tasa y los saldos usados.',
+      createJournal: 'Crea el borrador contable de una valoración guardada.',
+      post: 'Contabiliza el borrador de valoración revisado.',
+      createReversal: 'Crea un borrador para revertir la valoración en otro período.',
+    },
+    ACCOUNTING_ASSETS: {
+      generateProjection: 'Calcula la proyección de depreciación de un activo fijo.',
+      processDepreciation: 'Procesa el período de depreciación y genera sus asientos.',
+    },
+    ACCOUNTING_RECONCILIATION: {
+      updateBalance: 'Actualiza los saldos del estado bancario de la conciliación.',
+      autoMatch: 'Busca y aplica coincidencias entre movimientos bancarios y contables.',
+      addMovement: 'Agrega manualmente un movimiento del estado de cuenta.',
+      editMovement: 'Edita el monto bancario o las notas de un movimiento.',
+      matchMovement: 'Marca o desmarca un movimiento como conciliado.',
+      complete: 'Completa la conciliación bancaria cuando las reglas lo permiten.',
+    },
+    ACCOUNTING_PERIODS: {
+      close: 'Cierra el período y ejecuta los asientos de cierre definidos.',
+      reopen: 'Reabre un período cerrado si se cumplen las reglas contables.',
+      lock: 'Bloquea un período cerrado para impedir cambios posteriores.',
+    },
+    ACCOUNTING_INVOICE_AUDIT: {
+      audit: 'Valida las facturas seleccionadas y registra el resultado de auditoría.',
+      sendToCorrect: 'Envía una factura con anomalías a su flujo de corrección.',
+      cancelInvoice: 'Anula la factura auditada y revierte su asiento cuando corresponde.',
+      reissueInvoice: 'Vincula una factura corregida con la factura anulada.',
+      approveCancellation: 'Aprueba una solicitud pendiente y procesa la anulación.',
+      rejectCancellation: 'Rechaza una solicitud pendiente de anulación.',
+    },
+  };
+  return descriptions[module.id]?.[action]
+    || permissionActions.find((item) => item.key === action)?.description
+    || `Permite ejecutar ${getActionLabel(action, module.id).toLowerCase()} en ${module.label}.`;
 };
 
 const ROLE_PERMISSIONS_TOUR_STEPS: Record<'preview' | 'editor', GuidedTourStep[]> = {
@@ -498,7 +718,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
       const target = permissions.find((permission: any) => permission.module === moduleId);
       if (!target) return current;
       const nextValue = !permissionValue(target, action);
-      if (action === 'read' && !nextValue && permissionActions.some(({ key }) => key !== 'read' && permissionValue(target, key))) return current;
+      if (action === 'read' && !nextValue && permissionActions.some(({ key }) => key !== 'read' && actionIsAvailable(moduleId, key) && permissionValue(target, key))) return current;
       target[action] = nextValue;
       if (action !== 'read' && nextValue) target.read = true;
 
@@ -510,7 +730,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
         childPermission[action] = nextValue;
         if (action !== 'read' && nextValue) childPermission.read = true;
         if (action === 'read' && !nextValue) {
-          permissionActions.filter(({ key }) => key !== 'read').forEach(({ key }) => { childPermission[key] = false; });
+          permissionActions.filter(({ key }) => key !== 'read' && actionIsAvailable(child.id, key)).forEach(({ key }) => { childPermission[key] = false; });
           childPermission.write = false;
         }
       });
@@ -544,6 +764,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
           return result;
         }
         permissionActions.forEach(({ key }) => {
+          if ((key === 'submit' || key === 'pay') && !actionIsAvailable(module, key)) return;
           existing[key] = Boolean(existing[key] || permissionValue(permission, key));
         });
         existing.write = Boolean(existing.write || permission.write);
@@ -681,7 +902,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
               const expanded = expandedSections[group] ?? false;
               return <section key={group} className="overflow-hidden rounded-xl border border-border/60">
                 <div className="flex items-center justify-between gap-3 bg-muted/50 px-4 py-3"><button type="button" onClick={() => toggleSection(group)} className="flex min-w-0 items-center gap-2 text-left" aria-expanded={expanded}><ChevronDown className={cn('size-4 shrink-0 text-primary transition-transform', expanded && 'rotate-180')} /><span className="truncate text-xs font-black uppercase tracking-widest text-primary">{getPermissionGroupLabel(group)}</span><Badge variant="secondary" className="shrink-0 text-[9px]">{(modules as any[]).length} vistas</Badge></button><span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{expanded ? 'Contraer' : 'Desplegar'}</span></div>
-                {expanded && <div className="overflow-x-auto"><div className="min-w-[1040px]"><div className="grid items-center gap-1.5 border-t border-border/40 bg-card px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span>Vista</span>{permissionActions.map(({ key, label }) => <span key={key} className="text-center">{label}</span>)}</div>{(modules as any[]).map((module: any) => { const permission = normalizePermissions(viewingRole.permissions).find((item: any) => item.module === module.id) || {}; return <div key={module.id} className="grid items-center gap-1.5 border-t border-border/40 px-5 py-3.5 text-sm" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span className={module.parent ? 'pl-5 text-muted-foreground' : 'font-bold'}>{module.label}</span>{permissionActions.map(({ key }) => <div key={key} className="flex justify-center">{!actionIsAvailable(module.id, key) ? <span className="text-muted-foreground/20" aria-label="No aplica">—</span> : permissionValue(permission, key) ? <Badge className="border-emerald-500/20 bg-emerald-500/10 text-[10px] text-emerald-500"><Check className="mr-1 size-3" />Sí</Badge> : <span className="text-muted-foreground/30">—</span>}</div>)}</div>; })}</div></div>}
+                {expanded && <div className="overflow-x-auto"><div style={{ minWidth: 320 + permissionActions.length * 96 }}><div className="grid items-center gap-1.5 border-t border-border/40 bg-card px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span>Vista</span>{permissionActions.map(({ key, label }) => <span key={key} className="text-center">{label}</span>)}</div>{(modules as any[]).map((module: any) => { const permission = normalizePermissions(viewingRole.permissions).find((item: any) => item.module === module.id) || {}; return <div key={module.id} className="grid items-center gap-1.5 border-t border-border/40 px-5 py-3.5 text-sm" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span className={module.parent ? 'pl-5 text-muted-foreground' : 'font-bold'}>{module.label}</span>{permissionActions.map(({ key }) => <div key={key} className="flex justify-center">{!actionIsAvailable(module.id, key) ? <span className="text-muted-foreground/20" aria-label="No aplica">—</span> : permissionValue(permission, key) ? <Badge className="border-emerald-500/20 bg-emerald-500/10 text-[10px] text-emerald-500"><Check className="mr-1 size-3" />Sí</Badge> : <span className="text-muted-foreground/30">—</span>}</div>)}</div>; })}</div></div>}
               </section>;
             })}
             </div>
@@ -798,8 +1019,8 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
                              <div className="grid gap-2 border-t border-border/50 px-3 py-3 sm:grid-cols-2 sm:px-4 lg:grid-cols-3">
                                {availableActions.map(({ key }) => (
                                  <div key={key} className="flex min-w-0 items-start gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-                                   <Checkbox checked={permissionValue(permission, key)} onCheckedChange={() => togglePermission(module.id, key)} aria-label={`${module.label}: ${getActionLabel(key)}`} className="mt-0.5" />
-                                   <div className="min-w-0"><p className="text-xs font-semibold">{getActionLabel(key)}</p><p className="text-[10px] leading-relaxed text-muted-foreground">{getViewActionDescription(module, key)}</p></div>
+                                    <Checkbox checked={permissionValue(permission, key, module.id)} onCheckedChange={() => togglePermission(module.id, key)} aria-label={`${module.label}: ${getActionLabel(key, module.id)}`} className="mt-0.5" />
+                                    <div className="min-w-0"><p className="text-xs font-semibold">{getActionLabel(key, module.id)}</p><p className="text-[10px] leading-relaxed text-muted-foreground">{getViewActionDescription(module, key)}</p></div>
                                  </div>
                                ))}
                                {module.id === 'SALES_PRICE_LISTS' && (

@@ -1,4 +1,5 @@
 import { getPdfTemplatePartyConfig, getPdfTemplateTarget, isPdfTemplateFixed, type PdfTemplateTarget } from './pdf-document-catalog';
+import { normalizePdfHeaderContentSpacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM } from './pdf-header-spacing';
 
 export type PdfTemplateNodeType = 'section' | 'text' | 'field' | 'table' | 'report-sections' | 'chart' | 'totals' | 'image' | 'barcode' | 'divider' | 'spacer';
 export type PdfTemplateChartType = 'area' | 'bar' | 'donut';
@@ -139,6 +140,7 @@ export interface PdfTemplateDefinition {
 }
 
 export type PdfHeaderComposition = 'company-left-logo-right' | 'logo-left-company-right' | 'centered-stack';
+export type { PdfHeaderContentSpacing } from './pdf-header-spacing';
 
 /**
  * Marca la estructura empresarial compartida por los documentos de venta.
@@ -210,7 +212,7 @@ export function applyStandardPdfLayoutSettings<T extends Record<string, unknown>
     tableLayout: 'boxed',
     pdfTableStyle: 'boxed',
     ...(getPdfTemplateTarget(targetKey).key === 'compras.supplier-history'
-      ? { paperSize: 'LETTER', orientation: 'landscape', fontSize: 9 }
+      ? { paperSize: 'LETTER', orientation: 'portrait', fontSize: 9 }
       : {}),
   };
 }
@@ -290,10 +292,12 @@ export const TEMPLATE_TOKENS = [
 export const SYSTEM_DEFAULT_PDF_SETTINGS: Record<string, unknown> = {
   paperSize: 'LETTER',
   orientation: 'portrait',
-  headerLayout: 'split',
+  headerComposition: 'company-left-logo-right',
+  headerContentSpacing: PDF_HEADER_CONTENT_SPACING_DEFAULT_MM,
+  headerLayout: 'classic',
   footerLayout: 'line',
   tableLayout: 'standard',
-  logoPosition: 'left',
+  logoPosition: 'right',
   logoSize: 34,
   showCompanyName: true,
   companyName: '',
@@ -316,15 +320,20 @@ export const SYSTEM_DEFAULT_PDF_SETTINGS: Record<string, unknown> = {
   terms: '',
   defaultNotes: '',
   margins: 14,
-  fontFamily: 'helvetica',
+  fontFamily: 'Arial',
   fontSize: 9,
   primaryColor: '#01422c',
-  secondaryColor: '#0f3b65',
+  secondaryColor: '#01422c',
   textColor: '#334155',
-  lineColor: '#e2e8f0',
+  lineColor: '#01422c',
+  tableHeaderColor: '#01422c',
+  tableHeaderTextColor: '#ffffff',
+  tableRowColor: '#ffffff',
+  tableStripeColor: '#f8fafc',
+  tableBorderColor: '#d7dee7',
   backgroundColor: '#ffffff',
   separator: 'solid',
-  paletteMode: 'corporate',
+  paletteMode: 'independent',
 };
 
 /**
@@ -371,6 +380,7 @@ export function normalizePdfCompanySettings<T extends Record<string, unknown>>(s
       ? headerComposition
       : 'company-left-logo-right';
   }
+  normalized.headerContentSpacing = normalizePdfHeaderContentSpacing(normalized.headerContentSpacing);
   return normalized as T;
 }
 
@@ -388,21 +398,27 @@ export function applyPdfHeaderComposition<T extends PdfTemplateDefinition>(defin
   const isCustomerHistory = getPdfTemplateTarget(targetKey).key === 'ventas.customer-history';
   const isCustomerList = getPdfTemplateTarget(targetKey).key === 'ventas.customers';
   const isPurchaseTarget = isPurchasePdfLayoutTarget(getPdfTemplateTarget(targetKey).key);
-  const cashSectionsY = isCashSession ? 46 : isCashHistoricalReport ? 35.3 : 34.8;
-  const centeredCashSectionsY = isCashSession ? 49.5 : isCashHistoricalReport ? 39.3 : 38.8;
+  const reportCompanySummaryPlacement: Partial<PdfTemplateNode> = selected === 'centered-stack'
+    ? { x: 5, y: hasLogo ? 14.8 : 9.8, width: 90, align: 'center', height: 8.5 }
+    : selected === 'logo-left-company-right'
+      ? { x: 41, y: 11, width: 54, align: 'right', height: 8 }
+      : { x: 5, y: 11, width: 54, align: 'left', height: 8 };
+  const cashSectionsY = isCashSession ? 38.5 : isCashHistoricalReport ? 35.3 : 34.8;
+  const centeredCashSectionsY = isCashSession ? 42 : isCashHistoricalReport ? 39.3 : 38.8;
   const reportHeaderPlacements: Record<string, Partial<PdfTemplateNode>> = reportLikeSalesTarget
     ? selected === 'centered-stack'
       ? {
-        'document-title': { x: 55, y: 26, width: 40, height: isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
-        'document-number': { x: 55, y: isCustomerHistory ? 31 : 35.5, width: 40, height: 2.8, align: 'right' },
-        'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 34.2 : 38.8, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
-        'document-status': { x: isCustomerHistory ? 55 : 58, y: isCustomerHistory ? 37.4 : 38.8, width: isCustomerHistory ? 40 : 37, height: 2.8, align: 'right' },
-        'document-generated': { x: 67, y: isCashHistoricalReport ? 33.5 : isCustomerList ? 32.5 : 35.5, width: 28, height: 2.8, align: 'right' },
-        'report-meta': { x: 5, y: isCashHistoricalReport ? 33.5 : isCustomerList ? 32.5 : 35.5, width: 60, height: 2.8, align: 'left' },
+        'company-summary': reportCompanySummaryPlacement,
+        'document-title': { x: 55, y: isCashSession ? 23 : 26, width: 40, height: isCashSession ? 5 : isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
+        'document-number': { x: 55, y: isCustomerHistory ? 31 : isCashSession ? 28.5 : 35.5, width: 40, height: 2.8, align: 'right' },
+        'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 34.2 : isCashSession ? 31.5 : 38.8, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
+        'document-status': { x: isCustomerHistory ? 55 : 58, y: isCustomerHistory ? 37.4 : isCashSession ? 31.5 : 38.8, width: isCustomerHistory ? 40 : 37, height: 2.8, align: 'right' },
+        'document-generated': { x: 67, y: isCashSession ? 31.5 : isCashHistoricalReport ? 33.5 : isCustomerList ? 32.5 : 35.5, width: 28, height: 2.8, align: 'right' },
+        'report-meta': { x: 5, y: isCashSession ? 31.5 : isCashHistoricalReport ? 33.5 : isCustomerList ? 32.5 : 35.5, width: 60, height: 2.8, align: 'left' },
         'cash-report-sections': { x: 5, y: centeredCashSectionsY, width: 90, height: 96 - centeredCashSectionsY },
         'report-sections': { x: 5, y: 56, width: 90, height: 39 },
-        'cashier-label': { x: 5, y: 43, width: 40, height: 2.6 },
-        'cashier-name': { x: 5, y: 45.5, width: 50, height: 3.2 },
+        'cashier-label': { x: 5, y: isCashSession ? 35 : 43, width: 40, height: 2.6 },
+        'cashier-name': { x: 5, y: isCashSession ? 37.5 : 45.5, width: 50, height: 3.2 },
         ...(isCustomerHistory ? {
           'history-customer-name': { x: 5, y: 26, width: 44, height: 4.5 },
           'party-tax-id': { x: 5, y: 31.3, width: 44, height: 5.2 },
@@ -415,16 +431,17 @@ export function applyPdfHeaderComposition<T extends PdfTemplateDefinition>(defin
         } : {}),
       }
       : {
-        'document-title': { x: 55, y: 22, width: 40, height: isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
-        'document-number': { x: 55, y: isCustomerHistory ? 27 : 31.5, width: 40, height: 2.8, align: 'right' },
-        'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 30.2 : 35, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
-        'document-status': { x: isCustomerHistory ? 55 : 58, y: isCustomerHistory ? 33.4 : 35, width: isCustomerHistory ? 40 : 37, height: 2.8, align: 'right' },
-        'document-generated': { x: 67, y: isCashHistoricalReport ? 29.5 : isCustomerList ? 27.5 : 31.5, width: 28, height: 2.8, align: 'right' },
-        'report-meta': { x: 5, y: isCashHistoricalReport ? 29.5 : isCustomerList ? 27.5 : 31.5, width: 60, height: 2.8, align: 'left' },
+        'company-summary': reportCompanySummaryPlacement,
+        'document-title': { x: 55, y: isCashSession ? 19 : 22, width: 40, height: isCashSession ? 5 : isCashHistoricalReport || isCustomerHistory || isCustomerList ? 4.8 : 9, align: 'right' },
+        'document-number': { x: 55, y: isCustomerHistory ? 27 : isCashSession ? 24.5 : 31.5, width: 40, height: 2.8, align: 'right' },
+        'document-date': { x: isCustomerHistory ? 55 : 5, y: isCustomerHistory ? 30.2 : isCashSession ? 28 : 35, width: 40, height: 2.8, align: isCustomerHistory ? 'right' as const : 'left' as const },
+        'document-status': { x: isCustomerHistory ? 55 : 58, y: isCustomerHistory ? 33.4 : isCashSession ? 28 : 35, width: isCustomerHistory ? 40 : 37, height: 2.8, align: 'right' },
+        'document-generated': { x: 67, y: isCashSession ? 28 : isCashHistoricalReport ? 29.5 : isCustomerList ? 27.5 : 31.5, width: 28, height: 2.8, align: 'right' },
+        'report-meta': { x: 5, y: isCashSession ? 28 : isCashHistoricalReport ? 29.5 : isCustomerList ? 27.5 : 31.5, width: 60, height: 2.8, align: 'left' },
         'cash-report-sections': { x: 5, y: cashSectionsY, width: 90, height: 96 - cashSectionsY },
         'report-sections': { x: 5, y: 51, width: 90, height: 44 },
-        'cashier-label': { x: 5, y: 38.5, width: 40, height: 2.6 },
-        'cashier-name': { x: 5, y: 41, width: 50, height: 3.2 },
+        'cashier-label': { x: 5, y: isCashSession ? 32 : 38.5, width: 40, height: 2.6 },
+        'cashier-name': { x: 5, y: isCashSession ? 34.5 : 41, width: 50, height: 3.2 },
         ...(isCustomerHistory ? {
           'history-customer-name': { x: 5, y: 23, width: 44, height: 4.5 },
           'party-tax-id': { x: 5, y: 28.3, width: 44, height: 5.2 },
@@ -509,10 +526,29 @@ export function applyPdfHeaderComposition<T extends PdfTemplateDefinition>(defin
       'party-section': { x: 5, y: 26, width: 90, height: 18 },
     }
     : {};
+  const isSavedCustomLayout = ['sales-custom', 'purchase-custom', 'custom'].includes(String(definition.metadata?.preset || ''));
+  const customIdentityNodeIds = new Set(['company-name', 'company-summary', 'company-logo']);
 
   return {
     ...definition,
     nodes: definition.nodes.map(item => {
+      if (isSavedCustomLayout) {
+        if (!customIdentityNodeIds.has(item.id)) return item;
+        const identityPlacement = placements[item.id];
+        if (!identityPlacement) return item;
+        const preservedWidth = Number(item.width) || 0;
+        const x = selected === 'centered-stack'
+          ? Math.max(0, (100 - preservedWidth) / 2)
+          : item.id === 'company-logo' && selected === 'company-left-logo-right'
+            ? Math.max(0, 95 - preservedWidth)
+            : Number(identityPlacement.x ?? item.x);
+        return {
+          ...item,
+          x,
+          y: Number(identityPlacement.y ?? item.y),
+          align: identityPlacement.align || item.align,
+        };
+      }
       const placement = customerKpiPlacements[item.id]
         || (item.id === 'report-sections' && customerReportSectionPlacement)
         || reportHeaderPlacements[item.id]
@@ -565,6 +601,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     headers: string[],
     values: Array<Array<string | number>> = [],
     columnWidths?: number[],
+    columnAlignments?: Array<PdfTemplateColumn['align']>,
   ): PdfTemplateReportSection => {
     const sampleValue = (header: string, rowIndex: number) => {
       const label = header.toLocaleLowerCase('es-NI');
@@ -594,7 +631,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       label,
       token: `column-${index}`,
       width: columnWidths?.[index] || 100 / headers.length,
-      align: index === 0 ? 'left' : 'right',
+      align: columnAlignments?.[index] || (index === 0 ? 'left' : 'right'),
     })),
     rows: rows.map((row) =>
       Object.fromEntries(row.map((value, index) => [`column-${index}`, value])),
@@ -708,6 +745,98 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       items: reportSections[2].rows,
       rows: reportSections[2].rows,
     };
+  }
+  if (target.module === 'inventario') {
+    const sectionsByTarget: Record<string, PdfTemplateReportSection> = {
+      'inventario.products': reportSection('inventory-products', 'Productos', ['Código', 'Nombre', 'Categoría', 'Unidad', 'Stock', 'Precio', 'Estado'], [
+        ['PROD-001', 'Tóner compatible TN-450', 'Impresión', 'Unidad', '24', 'C$ 850.00', 'Activo'],
+        ['PROD-002', 'Papel carta Premium', 'Papelería', 'Resma', '8', 'C$ 245.00', 'Activo'],
+      ], [14, 24, 14, 11, 9, 14, 14], ['left', 'left', 'left', 'left', 'right', 'right', 'center']),
+      'inventario.services': reportSection('inventory-services', 'Servicios', ['Código', 'Nombre', 'Categoría', 'Unidad', 'Precio', 'Estado'], [
+        ['SERV-001', 'Instalación de equipo', 'Soporte técnico', 'Servicio', 'C$ 1,250.00', 'Activo'],
+        ['SERV-002', 'Mantenimiento preventivo', 'Mantenimiento', 'Servicio', 'C$ 950.00', 'Activo'],
+      ], [16, 25, 17, 14, 15, 13], ['left', 'left', 'left', 'left', 'right', 'center']),
+      'inventario.assets': reportSection('inventory-assets', 'Mobiliario y equipos', ['Código', 'Nombre', 'Categoría', 'Ubicación', 'Responsable', 'Adquisición', 'Costo', 'Moneda', 'Estado'], [
+        ['ACT-0001', 'Computadora de caja 1', 'Equipo informático', 'Tienda principal', 'Gabriel Tinoco', '15/03/2026', 'USD 750.00', 'USD', 'Activo'],
+        ['ACT-0002', 'Estantería metálica', 'Mobiliario', 'Bodega central', 'Ana Martínez', '10/02/2026', 'C$ 12,500.00', 'NIO', 'Activo'],
+      ], [12, 18, 11, 12, 14, 10, 10, 6, 7], ['left', 'left', 'left', 'left', 'left', 'center', 'right', 'center', 'center']),
+      'inventario.movements': reportSection('inventory-movements', 'Movimientos de inventario', ['Fecha', 'Tipo', 'Código', 'Producto', 'Almacén', 'Cantidad', 'Stock anterior', 'Stock resultante', 'Usuario', 'Referencia'], [
+        ['08/09/2026', 'Entrada', 'PROD-001', 'Tóner compatible TN-450', 'Bodega Central', '12', '4', '16', 'Ana Martínez', 'COMP-00124'],
+        ['07/09/2026', 'Salida', 'PROD-002', 'Papel carta Premium', 'Tienda principal', '2', '10', '8', 'Gabriel Tinoco', 'FAC-001245'],
+      ], [10, 9, 10, 19, 12, 7, 8, 8, 9, 8], ['center', 'left', 'left', 'left', 'left', 'right', 'right', 'right', 'left', 'left']),
+      'inventario.manager-adjustments': reportSection('manager-inventory-adjustments', 'Ajustes consolidados', ['Sucursal', 'Ajuste', 'Fecha', 'Rubro', 'Almacén', 'Motivo', 'Productos', 'Unidades aumentadas', 'Unidades disminuidas', 'Impacto monetario', 'Estado'], [
+        ['Tienda principal', 'AJU-000124', '08/09/2026', 'Ventas', 'Bodega Central', 'Conteo físico', '4', '12', '2', 'C$ 1,250.00', 'Aprobado'],
+        ['Sucursal norte', 'AJU-000123', '07/09/2026', 'Operaciones', 'Tienda norte', 'Daño de producto', '1', '0', '1', 'C$ 850.00', 'Pendiente'],
+      ], undefined, ['left', 'left', 'center', 'left', 'left', 'left', 'right', 'right', 'right', 'right', 'center']),
+    };
+    const section = sectionsByTarget[target.key] || reportSection('inventory-summary', target.label, ['Indicador', 'Valor', 'Detalle']);
+    return {
+      ...base,
+      party: undefined,
+      document: { ...base.document, title: target.label.toUpperCase(), number: '', date: '', status: '', period: 'Registros de ejemplo para la vista seleccionada', notes: '' },
+      reportSections: [section],
+      items: section.rows,
+      rows: section.rows,
+    };
+  }
+  if (target.key === 'finanzas.manager-consolidated') {
+    const section = reportSection('manager-finance', 'Finanzas consolidadas', ['Sucursal', 'Vista', 'Identificador', 'Fecha', 'Descripción', 'Estado', 'Monto', 'Tasa aplicada', 'Rubro'], [
+      ['Tienda principal', 'Ingresos', 'REC-000124', '08/09/2026', 'Cobro de factura FAC-001245', 'Recibido', 'C$ 4,850.00', '1.0000', 'Ventas'],
+      ['Sucursal norte', 'Gastos', 'GAS-000031', '07/09/2026', 'Compra de suministros', 'Pagado', 'C$ 1,250.00', '1.0000', 'Operaciones'],
+    ], undefined, ['left', 'left', 'left', 'center', 'left', 'center', 'right', 'right', 'left']);
+    return { ...base, party: undefined, document: { ...base.document, title: 'FINANZAS CONSOLIDADAS', number: '', date: '', status: '', notes: '' }, reportSections: [section], items: section.rows, rows: section.rows };
+  }
+  if (target.module === 'finanzas') {
+    const sectionsByTarget: Record<string, PdfTemplateReportSection> = {
+      'finanzas.balance': reportSection('finance-balance', 'Balance general', ['Concepto', 'Tipo', 'Fecha', 'Monto'], [
+        ['Caja general', 'Activo', '08/09/2026', 'C$ 8,500.00'],
+        ['Proveedores por pagar', 'Pasivo', '08/09/2026', 'C$ 2,300.00'],
+        ['Capital de operación', 'Patrimonio', '08/09/2026', 'C$ 6,200.00'],
+      ], [42, 19, 19, 20], ['left', 'left', 'center', 'right']),
+      'finanzas.transactions': reportSection('finance-transactions', 'Movimientos financieros', ['No. Recibo', 'Fecha Reg.', 'Origen', 'Descripción', 'Categoría', 'Monto', 'Notas'], [
+        ['INC-803839', '07/10/2026 22:07', 'Ventas · Pagos', 'Cobro de factura FAC-TIENDA-m-050 · Cliente: Flores Ríos', 'VENTAS', 'C$ 736.94', 'Pago mixto · 2 movimientos. Consultar desglose.'],
+        ['INC-824607', '07/10/2026 22:07', 'Ventas · Pagos', 'Cobro de factura FAC-TIENDA-m-042 · Cliente: Enrique Reyes', 'VENTAS', 'C$ 36.62', 'Ingreso automático por pago recibido PAG-081'],
+        ['INC-061791', '07/10/2026 22:07', 'Ventas · Caja', 'Venta en efectivo FAC-TIENDA-m-044', 'VENTAS', 'C$ 1,250.00', 'Registrado en Caja 1'],
+      ], [14, 13, 13, 27, 10, 12, 11], ['left', 'center', 'left', 'left', 'left', 'right', 'left']),
+    };
+    const section = sectionsByTarget[target.key] || reportSection('finance-summary', target.label, ['Indicador', 'Valor', 'Detalle']);
+    return { ...base, party: undefined, document: { ...base.document, title: target.label.toUpperCase(), number: '', date: '', status: '', notes: '' }, reportSections: [section], items: section.rows, rows: section.rows };
+  }
+  if (target.key === 'contabilidad.manager-consolidated') {
+    const section = reportSection('manager-accounting', 'Contabilidad consolidada', ['Sucursal', 'Vista', 'Identificador', 'Fecha', 'Cuenta', 'Debe', 'Haber', 'Saldo', 'Moneda', 'Estado', 'Rubro'], [
+      ['Tienda principal', 'Libro Diario', 'AS-000124', '08/09/2026', 'Caja general', 'C$ 4,850.00', 'C$ 0.00', 'C$ 4,850.00', 'NIO', 'Contabilizado', 'Ventas'],
+      ['Sucursal norte', 'Balance', 'AS-000123', '07/09/2026', 'Proveedores', 'C$ 0.00', 'C$ 2,300.00', 'C$ 2,300.00', 'NIO', 'Contabilizado', 'Operaciones'],
+    ], undefined, ['left', 'left', 'left', 'center', 'left', 'right', 'right', 'right', 'center', 'center', 'left']);
+    return { ...base, party: undefined, document: { ...base.document, title: 'CONTABILIDAD CONSOLIDADA', number: '', date: '', status: '', notes: '' }, reportSections: [section], items: section.rows, rows: section.rows };
+  }
+  if (target.module === 'contabilidad') {
+    const sectionsByTarget: Record<string, PdfTemplateReportSection> = {
+      'contabilidad.trial-balance': reportSection('accounting-trial-balance', 'Balance de comprobación', ['Código', 'Cuenta', 'Tipo', 'Débitos', 'Créditos', 'Saldo'], [
+        ['1101', 'Caja general', 'Activo', 'C$ 8,500.00', 'C$ 0.00', 'C$ 8,500.00'], ['1102', 'Bancos nacionales', 'Activo', 'C$ 42,100.00', 'C$ 0.00', 'C$ 42,100.00'], ['4101', 'Ventas', 'Ingreso', 'C$ 0.00', 'C$ 50,600.00', '-C$ 50,600.00'],
+      ], [13, 29, 15, 14, 14, 15], ['left', 'left', 'left', 'right', 'right', 'right']),
+      'contabilidad.journal': reportSection('accounting-journal', 'Libro Diario', ['# Asiento', 'Fecha', 'Descripción', 'Estado', 'Debe', 'Haber', 'Ref. Tipo', 'Referencia'], [
+        ['AS-000124', '08/09/2026', 'Venta de factura FAC-001245', 'Contabilizado', 'C$ 4,850.00', 'C$ 4,850.00', 'Factura', 'FAC-001245'],
+        ['AS-000123', '07/09/2026', 'Pago a proveedor PRO-00088', 'Contabilizado', 'C$ 2,300.00', 'C$ 2,300.00', 'Pago', 'PAG-00088'],
+      ], [12, 11, 25, 14, 12, 12, 8, 6], ['left', 'center', 'left', 'center', 'right', 'right', 'left', 'left']),
+      'contabilidad.ledger': reportSection('accounting-ledger', 'Libro Mayor', ['Fecha', 'Código', 'Cuenta', 'Tipo', 'Descripción', 'Referencia', 'Débito', 'Crédito', 'Saldo'], [
+        ['08/09/2026', '1101', 'Caja general', 'Activo', 'Venta de factura FAC-001245', 'FAC-001245', 'C$ 4,850.00', 'C$ 0.00', 'C$ 12,350.00'],
+        ['07/09/2026', '2101', 'Proveedores', 'Pasivo', 'Pago a proveedor PRO-00088', 'PAG-00088', 'C$ 2,300.00', 'C$ 0.00', 'C$ 9,700.00'],
+      ], [10, 10, 17, 10, 20, 11, 8, 7, 7], ['center', 'left', 'left', 'left', 'left', 'left', 'right', 'right', 'right']),
+      'contabilidad.balance-sheet': reportSection('accounting-balance-sheet', 'Estado de situación financiera', ['Código', 'Cuenta', 'Tipo', 'Saldo'], [
+        ['1101', 'Caja general', 'Activo', 'C$ 8,500.00'], ['2101', 'Proveedores', 'Pasivo', 'C$ 2,300.00'], ['3101', 'Capital', 'Patrimonio', 'C$ 6,200.00'],
+      ], [16, 42, 20, 22], ['left', 'left', 'left', 'right']),
+      'contabilidad.profit-loss': reportSection('accounting-profit-loss', 'Estado de resultados', ['Cuenta', 'Tipo', 'Ingresos', 'Gastos', 'Resultado'], [
+        ['Ventas de productos', 'Ingreso', 'C$ 24,500.00', '—', 'C$ 24,500.00'], ['Costo de ventas', 'Costo', '—', 'C$ 9,800.00', '-C$ 9,800.00'], ['Gastos operativos', 'Gasto', '—', 'C$ 4,250.00', '-C$ 4,250.00'],
+      ], [28, 16, 19, 19, 18], ['left', 'left', 'right', 'right', 'right']),
+      'contabilidad.chart': reportSection('accounting-chart', 'Plan de cuentas', ['Código', 'Nombre', 'Tipo', 'Naturaleza', 'Estado'], [
+        ['1101', 'Caja general', 'Activo', 'Deudora', 'Activa'], ['2101', 'Proveedores', 'Pasivo', 'Acreedora', 'Activa'], ['4101', 'Ventas', 'Ingreso', 'Acreedora', 'Activa'],
+      ], [16, 35, 18, 18, 13], ['left', 'left', 'left', 'left', 'center']),
+      'contabilidad.fixed-assets': reportSection('accounting-fixed-assets', 'Activos fijos', ['Código', 'Activo', 'Categoría', 'Adquisición', 'Costo', 'Depreciación acumulada', 'Valor en libros', 'Estado'], [
+        ['AF-0001', 'Computadora de caja 1', 'Equipo informático', '15/03/2026', 'USD 750.00', 'USD 75.00', 'USD 675.00', 'Activo'], ['AF-0002', 'Estantería metálica', 'Mobiliario', '10/02/2026', 'C$ 12,500.00', 'C$ 625.00', 'C$ 11,875.00', 'Activo'],
+      ], [12, 20, 14, 11, 12, 13, 12, 6], ['left', 'left', 'left', 'center', 'right', 'right', 'right', 'center']),
+    };
+    const section = sectionsByTarget[target.key] || reportSection('accounting-summary', target.label, ['Indicador', 'Valor', 'Detalle']);
+    return { ...base, party: undefined, document: { ...base.document, title: target.label.toUpperCase(), number: '', date: '', status: '', notes: '' }, reportSections: [section], items: section.rows, rows: section.rows };
   }
   if (target.key === 'dashboard.tenant-overview') {
     const dashboardCharts: PdfTemplateChart[] = [
@@ -1724,8 +1853,8 @@ function createStandardPurchaseDefinition(targetKey: string, settings: Record<st
   if (isList) {
     nodes.push(
       node({ type: 'field', label: 'Título del documento', token: 'document.title', x: 55, y: 22, width: 40, height: 5.5, fontSize: 10, color: primary, bold: true, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-title'),
-      node({ type: 'field', label: 'Alcance', token: 'document.meta', x: 5, y: 30, width: 60, height: 3.2, fontSize: 7.5, color: text, borderStyle: 'none', padding: 0.2 }, 'report-meta'),
-      node({ type: 'field', label: 'Generado', token: 'document.generated', x: 67, y: 30, width: 28, height: 3.2, fontSize: 7, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated'),
+      node({ type: 'field', label: 'Alcance', token: 'document.meta', x: 5, y: 27.8, width: 60, height: 3.2, fontSize: 7.5, color: text, borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+      node({ type: 'field', label: 'Generado', token: 'document.generated', x: 67, y: 27.8, width: 28, height: 3.2, fontSize: 7, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated'),
     );
   } else if (isSupplierHistory) {
     const prefix = `${party.tokenPrefix}.`;
@@ -1902,7 +2031,7 @@ export function createSystemDefaultPdfDesign(targetKey: string, overrides?: Reco
   const target = getPdfTemplateTarget(targetKey);
   const initialSettings = createSystemDefaultPdfSettings({
     ...(target.key === 'inventario.product-labels' ? { paperSize: 'LABEL', orientation: 'landscape', margins: 2, fontFamily: 'helvetica', fontSize: 8 } : {}),
-    ...(['ventas.cash-historical-report', 'ventas.customers', 'compras.supplier-history'].includes(target.key) ? { paperSize: 'LETTER', orientation: 'landscape', fontSize: 9 } : {}),
+    ...(['ventas.cash-historical-report', 'ventas.customers'].includes(target.key) ? { paperSize: 'LETTER', orientation: 'landscape', fontSize: 9 } : {}),
     ...(target.family === 'cash-ticket' ? { paperSize: 'ROLL-80', orientation: 'portrait', margins: 3, fontFamily: 'helvetica', fontSize: 8, primaryColor: '#000000', secondaryColor: '#000000', textColor: '#000000', lineColor: '#000000' } : {}),
     ...(overrides || {}),
   });
@@ -1912,7 +2041,9 @@ export function createSystemDefaultPdfDesign(targetKey: string, overrides?: Reco
     id: `system-default:${target.key}`,
     clientTenantId: undefined,
     name: `Predeterminado del ERP · ${target.label}`,
-    description: 'Diseño nativo de NovaHub. Se puede personalizar y guardar para esta sucursal.',
+    description: target.branchCustomizable === false
+      ? 'Diseño nativo de NovaHub. Este reporte conserva el formato predeterminado del sistema.'
+      : 'Diseño nativo de NovaHub. Se puede personalizar y guardar para esta sucursal.',
     templateKey: 'system-default',
     documentTypes: [target.key],
     folderId: null,
@@ -2250,9 +2381,15 @@ export function resolveTemplateToken(token: string | undefined, data: PdfTemplat
     return summary || fallback;
   }
   let value = readPath(data, token);
-  if (token.startsWith('party.')) {
-    const path = token.slice('party.'.length);
-    for (const source of [data.party, data.customer, data.supplier]) {
+  const partyToken = /^(party|customer|supplier)\.(.+)$/.exec(token);
+  if (partyToken) {
+    const [, prefix, path] = partyToken;
+    const sources = prefix === 'party'
+      ? [data.party, data.customer, data.supplier]
+      : prefix === 'customer'
+        ? [data.customer, data.party]
+        : [data.supplier, data.party];
+    for (const source of sources) {
       const candidate = readPath(source, path);
       if (candidate !== null && candidate !== undefined && String(candidate).trim()) {
         value = candidate;

@@ -21,6 +21,6 @@ export async function generateManagerTablePDF({ title, rows, fileName }: { title
   doc.text(title, 14, 16);
   doc.setFontSize(9);
   doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')}`, 14, 23);
-  doc.autoTable({ startY: 29, head: [columns], body, styles: { fontSize: 7, cellPadding: 2 }, headStyles: { fillColor: [16, 185, 129] }, theme: 'grid' });
+  doc.autoTable({ startY: 29, head: [columns], body, styles: { fontSize: 7, cellPadding: 2, valign: 'middle' }, headStyles: { fillColor: [16, 185, 129], valign: 'middle' }, theme: 'grid' });
   doc.save(fileName);
 }

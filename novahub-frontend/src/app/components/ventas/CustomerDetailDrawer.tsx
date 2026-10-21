@@ -31,6 +31,7 @@ import {
   Banknote,
   Download,
   Loader2,
+  Database,
 } from 'lucide-react';
 
 import {
@@ -101,7 +102,7 @@ interface CustomerDetailDrawerProps {
   extraActions?: ReactNode;
 }
 
-type TabKey = 'general' | 'movimientos' | 'historial';
+type TabKey = 'general' | 'movimientos' | 'resumen-historico' | 'historial';
 type MovementFilter = 'ALL' | 'Factura' | 'Orden de venta' | 'Cotización' | 'Nota de crédito' | 'Crédito' | 'Pago recibido' | 'Factura recurrente';
 type HistoryExportScope = 'ALL' | 'FILTERED';
 type HistoryExportCurrency = 'NIO' | 'USD';
@@ -578,14 +579,17 @@ export function CustomerDetailDrawer({
               )}
             </div>
 
-            <TabsList className="w-full justify-start h-9 overflow-x-auto bg-muted/40 p-1 rounded-xl border border-border/40 font-bold text-xs">
-              <TabsTrigger value="general" className="rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
+            <TabsList className="flex-nowrap w-full justify-start h-9 overflow-x-auto bg-muted/40 p-1 rounded-xl border border-border/40 font-bold text-xs">
+              <TabsTrigger value="general" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
                 <User className="size-3.5" /> General
               </TabsTrigger>
-              <TabsTrigger value="movimientos" className="rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
+              <TabsTrigger value="movimientos" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
                 <Activity className="size-3.5" /> Movimientos ({relatedTransactions.length})
               </TabsTrigger>
-              <TabsTrigger value="historial" className="rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
+              <TabsTrigger value="resumen-historico" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
+                <Database className="size-3.5" /> Resumen importado
+              </TabsTrigger>
+              <TabsTrigger value="historial" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
                 <History className="size-3.5" /> Historial
               </TabsTrigger>
             </TabsList>
@@ -784,6 +788,48 @@ export function CustomerDetailDrawer({
                       ))}
                     </div>
                   )}
+                </Card>
+              </TabsContent>
+
+              {/* Resumen legado informativo, separado de los movimientos y de la auditoría */}
+              <TabsContent value="resumen-historico" className="mt-0 min-w-0 space-y-4 outline-none">
+                <Card className="space-y-4 rounded-2xl border-border/60 bg-card p-5 shadow-sm">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80">
+                      <Database className="size-4 text-primary" /> Resumen histórico importado
+                    </h3>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Antecedentes acumulados que llegaron con el alta inicial del cliente. Son informativos y no representan movimientos ni saldos de NovaHub.</p>
+                  </div>
+                  {loading ? <div className="grid gap-3 sm:grid-cols-2"><Skeleton className="h-28 rounded-xl" /><Skeleton className="h-28 rounded-xl" /></div> : (customer?.historicalSummaries || []).length ? (
+                    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {(customer?.historicalSummaries || []).map((summary) => (
+                        <article key={summary.id} className="min-w-0 space-y-3 rounded-xl border border-primary/15 bg-primary/[0.025] p-4">
+                          <div className="flex min-w-0 items-start justify-between gap-2">
+                            <h4 className="min-w-0 break-words text-sm font-black text-foreground">{summary.activityType}</h4>
+                            <Badge variant="outline" className="shrink-0 text-[9px]">Histórico</Badge>
+                          </div>
+                          <div className={`grid gap-2 ${summary.measureValue === null || summary.measureValue === undefined ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                            <div className="min-w-0 rounded-lg border border-border/40 bg-background/70 p-2.5">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Registros</p>
+                              <p className="mt-1 break-words text-base font-black tabular-nums text-foreground">{Number(summary.recordCount || 0).toLocaleString('es-NI')}</p>
+                            </div>
+                            {summary.measureValue !== null && summary.measureValue !== undefined && <div className="min-w-0 rounded-lg border border-border/40 bg-background/70 p-2.5">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">{summary.measureLabel || 'Medida'}</p>
+                              <p className="mt-1 break-words text-sm font-bold tabular-nums text-foreground">{`${Number(summary.measureValue).toLocaleString('es-NI')}${summary.measureUnit ? ` ${summary.measureUnit}` : ''}`}</p>
+                            </div>}
+                          </div>
+                          <div className="rounded-lg border border-primary/15 bg-background/70 p-3">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Total acumulado · {summary.currency}</p>
+                            <p className="mt-1 break-words text-lg font-black tabular-nums text-primary">{formatExplicitAmount(Number(summary.amount || 0), normalizeCurrency(summary.currency, baseCurrency))}</p>
+                          </div>
+                          <div className="space-y-1 border-t border-border/40 pt-2 text-[10px] text-muted-foreground">
+                            {summary.sourceFileName && <p className="break-words">Origen: {summary.sourceFileName}</p>}
+                            {summary.importedAt && <p>Importado: {format(new Date(summary.importedAt), 'PPP', { locale: es })}</p>}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : <p className="rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Este cliente no tiene resúmenes históricos importados.</p>}
                 </Card>
               </TabsContent>
 

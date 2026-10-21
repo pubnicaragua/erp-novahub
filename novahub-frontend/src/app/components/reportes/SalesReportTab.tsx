@@ -735,9 +735,9 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
         const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.sales');
-        const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
-        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
-        const rgbPrimary = primaryHex.startsWith('#') ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)] : [16, 185, 129];
+        const primaryColor = pdfSettings.primaryColor || '#01422c';
+        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#01422c';
+        const rgbPrimary = primaryHex.startsWith('#') ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)] : [1, 66, 44];
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
@@ -777,11 +777,11 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const kpiColumns = 4;
         const kpiRows = Math.ceil(kpis.length / kpiColumns);
         checkPage(kpiRows * boxH + (kpiRows - 1) * 4 + 5);
-        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: kpiColumns, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5 });
+        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: kpiColumns, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5, primaryColor: pdfSettings.primaryColor, secondaryColor: pdfSettings.secondaryColor });
 
-        const renderSection = (title: string, headers: string[], rows: (string | number)[][], colorRGB: number[]) => {
-          reportSections.push({ title, headers, rows, color: colorRGB });
-          currentY = drawReportTable({ doc, title, headers, rows, color: colorRGB, marginX, contentWidth, currentY });
+        const renderSection = (title: string, headers: string[], rows: (string | number)[][], _colorRGB: number[]) => {
+          reportSections.push({ title, headers, rows, color: rgbPrimary });
+          currentY = drawReportTable({ doc, title, headers, rows, color: rgbPrimary, marginX, contentWidth, currentY });
         };
         const money = (value: unknown) => formatConvertedAmount(Number(value || 0), 'NIO');
         const percent = (value: unknown) => `${Number(value || 0).toFixed(1)}%`;

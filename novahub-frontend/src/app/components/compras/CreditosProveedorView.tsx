@@ -482,12 +482,13 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<SupplierCredit>) => {
+    if (!canPerform('PURCHASES_RETURNS', 'read') || !canPerform('PURCHASES_RETURNS', 'edit')) return;
     try { await vendorCreditsService.update(id as string, updates); toast.success('Crédito actualizado'); onRefresh(); }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
   };
 
   const handleIssueConfirm = async () => {
-    if (!pendingIssueId) return;
+    if (!pendingIssueId || !canPerform('PURCHASES_RETURNS', 'read') || !canPerform('PURCHASES_RETURNS', 'issue')) return;
     setIssueLoading(true);
     const toastId = toast.loading('Emitiendo crédito de proveedor...');
     try {
@@ -503,7 +504,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   };
 
   const handleApplyConfirm = async () => {
-    if (!applyTarget) return;
+    if (!applyTarget || !canPerform('PURCHASES_RETURNS', 'read') || !canPerform('PURCHASES_RETURNS', 'apply')) return;
     setApplyLoading(true);
     const toastId = toast.loading('Aplicando crédito de proveedor...');
     try {
@@ -536,6 +537,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const creditGrandTotal = Math.max(0, creditTaxBase + creditTaxAmount - creditWithholdingTotal);
   
   const handleSaveDoc = async () => {
+    if (editingId === 'NEW') {
+      if (!canPerform('PURCHASES_RETURNS', 'create')) return;
+    } else if (!canPerform('PURCHASES_RETURNS', 'read') || !canPerform('PURCHASES_RETURNS', 'edit')) return;
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
     
     const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando crédito de proveedor...' : 'Guardando crédito de proveedor...');
@@ -568,6 +572,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         await vendorCreditsService.create(finalDoc as any);
         toast.success('Crédito registrado exitosamente', { id: saveToastId });
       } else {
+        // Status transitions are handled by the dedicated issue/apply/void endpoints.
+        delete (finalDoc as any).status;
         await vendorCreditsService.update(editingId!, finalDoc as any);
         toast.success('Crédito guardado', { id: saveToastId });
       }
@@ -579,7 +585,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   };
 
   const handleVoidConfirm = async () => {
-    if (!pendingVoidId) return;
+    if (!pendingVoidId || !canPerform('PURCHASES_RETURNS', 'read') || !canPerform('PURCHASES_RETURNS', 'void')) return;
     setVoidLoading(true);
     const voidToastId = toast.loading('Anulando crédito de proveedor...');
     try {
@@ -667,7 +673,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toLowerCase());
     const isLocked = !isNew && ['applied', 'partial', 'paid', 'voided'].includes(String(localDoc.status || '').toLowerCase());
-    const canMutate = isNew ? canPerform('PURCHASES_RETURNS', 'create') : (canPerform('PURCHASES_RETURNS', 'edit') && !isLocked);
+    const canMutate = isNew
+      ? canPerform('PURCHASES_RETURNS', 'create')
+      : (canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'edit') && !isLocked);
     const invoiceOptions = supplierInvoices
       .filter(inv => !localDoc.supplierId || inv.supplierId === localDoc.supplierId)
       .filter(inv => String(inv.status || '').toUpperCase() !== 'CANCELLED')
@@ -687,7 +695,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           </div>
           <div className="flex items-center gap-3 flex-wrap" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="credits" context="form" />
-             {!isNew && canPerform('PURCHASES_RETURNS', 'delete') && !isLocked && (
+             {!isNew && canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'void') && !isLocked && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingVoidId(editingId)}>
                   <Ban className="size-3 mr-2" /> Anular
@@ -698,7 +706,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 <Lock className="size-3.5" /> Crédito {currentStatus?.label?.toLowerCase()} · Solo lectura
               </div>
             )}
-            {((isNew && canPerform('PURCHASES_RETURNS', 'create')) || (!isNew && canPerform('PURCHASES_RETURNS', 'edit'))) && !isLocked && (
+            {((isNew && canPerform('PURCHASES_RETURNS', 'create')) || (!isNew && canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'edit'))) && !isLocked && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Crédito
               </Button>
@@ -983,7 +991,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                         <button type="button" onClick={() => setItemTypeFilter('PRODUCT')} className={cn('flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-widest transition-colors', itemTypeFilter === 'PRODUCT' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}><Boxes className="size-3" /> Producto</button>
                         <button type="button" onClick={() => setItemTypeFilter('SERVICE')} className={cn('flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-widest transition-colors', itemTypeFilter === 'SERVICE' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}><Wrench className="size-3" /> Servicio</button>
                       </div>
-                      {canPerform('PURCHASES_RETURNS', 'import') && <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                      {canMutate && canPerform('PURCHASES_RETURNS', 'import') && <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                         <Upload className="size-3 mr-1.5" /> Importar
                       </Button>}
                       <Button variant="outline" size="sm" onClick={downloadCreditTemplate} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
@@ -1216,7 +1224,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
             return (
              <div className="flex items-center gap-1">
               <Button title="Ver detalle completo" aria-label="Ver detalle completo del crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setDetailCredit(null); openEditor(row.id); }}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_RETURNS', 'edit') && <Button title="Editar crédito" aria-label="Editar crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailCredit(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
+              {canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'edit') && !['APPLIED', 'PARTIAL', 'PAID', 'VOIDED'].includes(String(row.status || '').toUpperCase()) && <Button title="Editar crédito" aria-label="Editar crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailCredit(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
             </div>
           );
           }}
@@ -1244,10 +1252,10 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         extraActions={detailCredit && (() => {
           const status = String(detailCredit.status || '').toUpperCase();
           return <>
-            {canPerform('PURCHASES_RETURNS', 'edit') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailCredit(null); openEditor(detailCredit.id); }}><Pencil className="size-4" /> Editar</Button>}
-            {canPerform('PURCHASES_RETURNS', 'approve') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-blue-600" onClick={() => setPendingIssueId(detailCredit.id)}><Send className="size-4" /> Emitir</Button>}
-            {canPerform('PURCHASES_RETURNS', 'approve') && status === 'ISSUED' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600" onClick={() => setApplyTarget(detailCredit)}><CheckCircle2 className="size-4" /> Aplicar</Button>}
-            {canPerform('PURCHASES_RETURNS', 'delete') && ['DRAFT', 'ISSUED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingVoidId(detailCredit.id)}><Ban className="size-4" /> Anular</Button>}
+            {canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'edit') && !['APPLIED', 'PARTIAL', 'PAID', 'VOIDED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailCredit(null); openEditor(detailCredit.id); }}><Pencil className="size-4" /> Editar</Button>}
+            {canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'issue') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-blue-600" onClick={() => setPendingIssueId(detailCredit.id)}><Send className="size-4" /> Emitir</Button>}
+            {canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'apply') && status === 'ISSUED' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600" onClick={() => setApplyTarget(detailCredit)}><CheckCircle2 className="size-4" /> Aplicar</Button>}
+            {canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'void') && ['DRAFT', 'ISSUED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingVoidId(detailCredit.id)}><Ban className="size-4" /> Anular</Button>}
           </>;
         })()}
         onDownloadPdf={canPerform('PURCHASES_RETURNS', 'export') ? (format) => detailCredit ? void handleDownloadCreditPdf(detailCredit, format) : undefined : undefined}
@@ -1285,9 +1293,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           )}
           <DialogFooter data-tour="purchases-credit-modal-actions">
             <Button variant="outline" onClick={() => setApplyTarget(null)} disabled={applyLoading}>Cancelar</Button>
-            <Button onClick={handleApplyConfirm} disabled={applyLoading} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
+            {canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'apply') && <Button onClick={handleApplyConfirm} disabled={applyLoading} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
               <CheckCircle2 className="size-4" /> {applyLoading ? 'Aplicando...' : 'Aplicar crédito'}
-            </Button>
+            </Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

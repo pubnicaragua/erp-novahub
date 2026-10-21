@@ -99,7 +99,7 @@ const inferMode = (format: 'AWBOX' | 'OGLOBAL' | null, item?: string) => {
 
 export function Reception() {
   const { canPerform } = useAuth();
-  const canCreateReception = canPerform('TRACKING_RECEPTION', 'create');
+  const canReceivePackages = canPerform('TRACKING_RECEPTION', 'receive');
   const [view, setView] = useState<ReceptionView>('reception');
   const [ctx, setCtx] = useState<{ settings: LogisticsSettings; warehouses: LogisticsWarehouse[]; shipmentModes: ShipmentMode[] } | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -230,7 +230,7 @@ export function Reception() {
   }), []);
 
   const onPickPdfs = useCallback(async (files: File[] = []) => {
-    if (!canCreateReception || files.length === 0) return;
+    if (!canReceivePackages || files.length === 0) return;
     setImporting(true);
     try {
       const results = await Promise.all(files.map(async (file) => logisticsService.pdfPreview(file.name, await readPdf(file))));
@@ -255,12 +255,12 @@ export function Reception() {
     } finally {
       setImporting(false);
     }
-  }, [canCreateReception, form.warehouseId, readPdf]);
+  }, [canReceivePackages, form.warehouseId, readPdf]);
 
   const addRow = useCallback(() => {
-    if (!canCreateReception) return;
+    if (!canReceivePackages) return;
     setRows((previous) => [...previous, { ...emptyRow(previous.length), warehouseId: form.warehouseId || undefined }]);
-  }, [canCreateReception, form.warehouseId]);
+  }, [canReceivePackages, form.warehouseId]);
 
   const changeDefaultWarehouse = useCallback((warehouseId: string) => {
     const previousDefault = form.warehouseId;
@@ -345,7 +345,7 @@ export function Reception() {
   }, []);
 
   const saveReception = useCallback(async () => {
-    if (!canCreateReception || !ctx || !canSave) return;
+    if (!canReceivePackages || !ctx || !canSave) return;
     setSaving(true);
     const actionToken = beginNotificationAction();
     try {
@@ -381,7 +381,7 @@ export function Reception() {
       completeNotificationAction(actionToken);
       setSaving(false);
     }
-  }, [canCreateReception, canSave, ctx, form, rows, warehouse]);
+  }, [canReceivePackages, canSave, ctx, form, rows, warehouse]);
 
   if (!ctx) return <div className="p-10 text-center text-sm text-muted-foreground">Cargando configuración logística…</div>;
 
@@ -400,7 +400,7 @@ export function Reception() {
       </div>
 
       <Card className="rounded-2xl border-border/60 p-5 shadow-sm" data-tour="log-reception-wizard">
-        <fieldset disabled={!canCreateReception} className="contents">
+        <fieldset disabled={!canReceivePackages} className="contents">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Truck className="size-5" /></div>
           <div className="min-w-0 flex-1">
@@ -408,7 +408,7 @@ export function Reception() {
             <p className="text-xs text-muted-foreground">Aquí haces todo: eliges proveedor, cargas PDF o agregas paquetes manualmente y los agrupas en una referencia.</p>
           </div>
           <input ref={pdfInputRef} type="file" accept="application/pdf" multiple className="hidden" onChange={(event) => { void onPickPdfs(Array.from(event.target.files || [])); event.target.value = ''; }} />
-          {canCreateReception && <Button type="button" variant="outline" className="rounded-xl text-xs" disabled={importing} onClick={() => pdfInputRef.current?.click()}><FileUp className="size-4" /> {importing ? 'Procesando PDF…' : 'Cargar PDF AWBOX / OGLOBAL'}</Button>}
+          {canReceivePackages && <Button type="button" variant="outline" className="rounded-xl text-xs" disabled={importing} onClick={() => pdfInputRef.current?.click()}><FileUp className="size-4" /> {importing ? 'Procesando PDF…' : 'Cargar PDF AWBOX / OGLOBAL'}</Button>}
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -474,7 +474,7 @@ export function Reception() {
           </tbody></table>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">{canCreateReception && <Button className="rounded-xl" onClick={saveReception} disabled={saving || !canSave || Boolean(reference)} data-tour="log-reception-save">{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Registrar recepción ({rows.length})</Button>}{reference && <><Badge variant="outline" className="gap-1 rounded-lg text-[11px] text-emerald-600 ring-emerald-300"><CheckCircle2 className="size-3.5" /> {reference}</Badge><Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva recepción</Button></>}</div>
+        <div className="mt-4 flex flex-wrap items-center gap-2">{canReceivePackages && <Button className="rounded-xl" onClick={saveReception} disabled={saving || !canSave || Boolean(reference)} data-tour="log-reception-save">{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Registrar recepción ({rows.length})</Button>}{reference && <><Badge variant="outline" className="gap-1 rounded-lg text-[11px] text-emerald-600 ring-emerald-300"><CheckCircle2 className="size-3.5" /> {reference}</Badge><Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva recepción</Button></>}</div>
         </fieldset>
       </Card>
     </div>

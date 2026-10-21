@@ -252,6 +252,8 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
   };
 
   const toggleStatus = async (row: RecurringInvoice) => {
+    const action = (row.status || '').toUpperCase() === 'ACTIVE' ? 'pause' : 'resume';
+    if (!canPerform('SALES_RECURRING', action)) return;
     const statusToastId = toast.loading((row.status || '').toUpperCase() === 'ACTIVE' ? 'Pausando factura recurrente...' : 'Reanudando factura recurrente...');
     try {
       if ((row.status||'').toUpperCase() === 'ACTIVE') {
@@ -619,7 +621,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
             <SalesViewTutorial view="recurring" context="form" />
             {canEditDocument && canPerform('SALES_RECURRING', 'edit') && (
               <>
-                {!isCreating && ['ACTIVE', 'PAUSED'].includes(String(localDoc?.status || '').toUpperCase()) && canPerform('SALES_RECURRING', 'delete') && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                {!isCreating && ['ACTIVE', 'PAUSED'].includes(String(localDoc?.status || '').toUpperCase()) && canPerform('SALES_RECURRING', 'cancel') && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => { if (!window.confirm('¿Cancelar esta factura recurrente? Se conservarán el contrato y las facturas ya generadas.')) return; try { await recurringInvoicesService.cancel(localDoc.id); clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); commitLocalDoc(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo cancelar'); } }}><Ban className="size-3 mr-2" /> Cancelar</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   Guardar Factura Recurrente
@@ -921,16 +923,16 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
         <EditableDataTable data={filtered}
           pagination={pagination}
           bulkAction="cancel"
-          showSelection={canPerform('SALES_RECURRING', 'delete')}
-          isRowSelectable={(row) => canPerform('SALES_RECURRING', 'delete') && ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase())}
-          onBulkDelete={canPerform('SALES_RECURRING', 'delete') ? async (ids) => { const cancelToastId = toast.loading(`Cancelando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.cancel(id as string); } toast.success('Facturas recurrentes canceladas', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron cancelar', { id: cancelToastId }); } } : undefined}
+          showSelection={canPerform('SALES_RECURRING', 'cancel')}
+          isRowSelectable={(row) => canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase())}
+          onBulkDelete={canPerform('SALES_RECURRING', 'cancel') ? async (ids) => { if (!canPerform('SALES_RECURRING', 'cancel')) return; const cancelToastId = toast.loading(`Cancelando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.cancel(id as string); } toast.success('Facturas recurrentes canceladas', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron cancelar', { id: cancelToastId }); } } : undefined}
           columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailRecurring(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           verticalScroll
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-               {canPerform('SALES_RECURRING', 'edit') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
+               {canPerform('SALES_RECURRING', (row.status || '').toUpperCase() === 'ACTIVE' ? 'pause' : 'resume') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
                  (row.status||'').toUpperCase() === 'ACTIVE' ? (
                    <Button title="Pausar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 transition-colors"><Pause className="size-4" /></Button>
                  ) : (
@@ -938,7 +940,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                  )
                )}
                <Button title="Ver factura recurrente completa" aria-label="Ver factura recurrente completa" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailRecurring(null); setEditingId(row.id); }}><Eye className="size-4" /></Button>
-               {canPerform('SALES_RECURRING', 'delete') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
+               {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
                  <Button title="Cancelar factura recurrente" aria-label="Cancelar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
                )}
             </div>
@@ -957,8 +959,8 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
           setEditingId(detailRecurring.id);
         }}
         extraActions={detailRecurring ? <>
-          {canPerform('SALES_RECURRING', 'edit') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => toggleStatus(detailRecurring)}>{String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? <Pause className="mr-2 size-4" /> : <Play className="mr-2 size-4" />}{String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? 'Pausar' : 'Reanudar'}</Button>}
-          {canPerform('SALES_RECURRING', 'delete') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailRecurring(null); setPendingDeleteId(detailRecurring.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {canPerform('SALES_RECURRING', String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? 'pause' : 'resume') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => toggleStatus(detailRecurring)}>{String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? <Pause className="mr-2 size-4" /> : <Play className="mr-2 size-4" />}{String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? 'Pausar' : 'Reanudar'}</Button>}
+          {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailRecurring(null); setPendingDeleteId(detailRecurring.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_RECURRING', 'export') ? (format) => { if (detailRecurring) void handleExportPDF(detailRecurring, format); } : undefined}
       />
@@ -971,6 +973,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
               variant="destructive"
               loading={deleteLoading}
               onConfirm={async () => {
+                if (!canPerform('SALES_RECURRING', 'cancel')) return;
                 if (!pendingDeleteId) return;
                 const deleteToastId = toast.loading('Cancelando factura recurrente...');
                 try {

@@ -18,6 +18,8 @@ const FRONTEND_MODULE_ALIASES: Record<string, string> = {
 };
 
 const VIEW_PARENT_ALIASES: Record<string, string> = {
+  IMPORT_INTL: 'TRACKING', IMPORT_INTL_ORIGIN: 'TRACKING', IMPORT_INTL_CONTAINERS: 'TRACKING',
+  IMPORT_INTL_CUSTOMS: 'TRACKING', IMPORT_INTL_CONFIG: 'TRACKING',
   RETAIL_POS: 'SALES', RETAIL_CASH_CONTROL: 'SALES', SALES_POS: 'SALES', CAJA: 'SALES',
   CLIENTS: 'SALES', PROVIDERS: 'PURCHASES', FINANCIAL_ACCOUNTS: 'FINANCIAL',
   CONFIG_COMPANY: 'MY_COMPANY', CONFIG_USERS: 'MY_COMPANY', CONFIG_ROLES: 'MY_COMPANY',
@@ -25,6 +27,10 @@ const VIEW_PARENT_ALIASES: Record<string, string> = {
   CONFIG_BRANDING: 'CONFIGURATION', CONFIG_PDF: 'CONFIGURATION', CONFIG_SECURITY: 'CONFIGURATION',
   CONFIG_CURRENCY: 'CONFIGURATION', CONFIG_NOVA_PULSE: 'CONFIGURATION', AUDIT_LOGS: 'CONFIGURATION',
 };
+
+const IMPORT_INTL_VIEW_IDS = new Set([
+  'IMPORT_INTL_ORIGIN', 'IMPORT_INTL_CONTAINERS', 'IMPORT_INTL_CUSTOMS', 'IMPORT_INTL_CONFIG',
+]);
 
 function normalizedId(value: unknown): string {
   const normalized = String(value || '').trim().toUpperCase();
@@ -78,6 +84,9 @@ export function canAccessModuleShell(policies: unknown, moduleOrView: unknown): 
   if (!policy) return true;
   if (policy.state !== 'VISIBLE') return false;
   if (!Array.isArray(policy.viewIds)) return true;
+  if (normalized === 'IMPORT_INTL') {
+    return policy.viewIds.some((viewId) => IMPORT_INTL_VIEW_IDS.has(String(viewId).toUpperCase()));
+  }
   if (normalized !== parent) return policy.viewIds.some((viewId) => String(viewId).toUpperCase() === normalized);
   return policy.viewIds.length > 0;
 }

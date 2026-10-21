@@ -17,8 +17,12 @@ interface TareasCardsViewProps {
   onApprove?: (task: Task) => void;
   onReject?: (task: Task) => void;
   onComplete?: (task: Task) => void;
-  canEdit: boolean;
+  canSubmitApproval: boolean;
   canApprove: boolean;
+  canReject: boolean;
+  canComplete: boolean;
+  canClaimAction: boolean;
+  canReassignAction: boolean;
   getTaskDisplayStatus: (task: any) => string;
   /** Categoría activa del filtro del padre: 'ALL' o un slug de ACTIVITY_CATEGORIES. */
   categoryFilter?: string;
@@ -58,8 +62,12 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
   onApprove,
   onReject,
   onComplete,
-  canEdit,
+  canSubmitApproval,
   canApprove,
+  canReject,
+  canComplete,
+  canClaimAction,
+  canReassignAction,
   getTaskDisplayStatus,
   categoryFilter = 'ALL',
   onCategoryFilterChange,
@@ -105,8 +113,8 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
         const categoryId = String(task.categoryId || '').trim().toUpperCase();
         const isCategoryFiltered = categoryFilter !== 'ALL' && categoryId === categoryFilter;
         const isMine = Boolean(currentUserId) && Boolean(isTaskMine?.(task));
-        const showClaim = canEdit && Boolean(onClaimTask) && Boolean(canClaimTask?.(task)) && !isMine;
-        const showReassign = canEdit && Boolean(onReassignTask) && !isClosed;
+        const showClaim = canClaimAction && Boolean(onClaimTask) && Boolean(canClaimTask?.(task)) && !isMine;
+        const showReassign = canReassignAction && Boolean(onReassignTask) && !isClosed;
 
         return (
           <motion.div
@@ -264,7 +272,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                         </Button>
                       )}
 
-                      {['PENDING', 'IN_PROGRESS'].includes(displayStatus) && canEdit && onSubmitApproval && (
+                      {['PENDING', 'IN_PROGRESS'].includes(displayStatus) && canSubmitApproval && onSubmitApproval && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -291,7 +299,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                               <CheckCircle2 className="size-4" />
                             </Button>
                           )}
-                          {onReject && (
+                          {canReject && onReject && (
                             <Button
                               type="button"
                               variant="ghost"
@@ -306,7 +314,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                         </>
                       )}
 
-                      {displayStatus !== 'COMPLETED' && displayStatus !== 'WAITING_APPROVAL' && canApprove && onComplete && (
+                      {displayStatus !== 'COMPLETED' && displayStatus !== 'WAITING_APPROVAL' && canComplete && onComplete && (
                         <Button
                           type="button"
                           variant="ghost"

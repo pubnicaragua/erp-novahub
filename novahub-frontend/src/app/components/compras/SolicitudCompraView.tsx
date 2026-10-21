@@ -107,14 +107,16 @@ interface SolicitudCompraViewProps {
 
 export function SolicitudCompraView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog: _warehouseCatalog, supplierCatalog = [], selectedBranchId = '', supplierCatalogLoading = false, supplierCatalogError = false }: SolicitudCompraViewProps) {
   const { user, canPerform } = useAuth();
+  const canReadRequests = canPerform('PURCHASES_REQUESTS', 'read');
   const canExportRequests = canPerform('PURCHASES_REQUESTS', 'export');
-  const canApproveRequests = canPerform('PURCHASES_REQUESTS', 'approve');
-  const canCancelRequests = canPerform('PURCHASES_REQUESTS', 'delete');
+  const canApproveRequests = canReadRequests && canPerform('PURCHASES_REQUESTS', 'approve');
+  const canCancelRequests = canReadRequests && canPerform('PURCHASES_REQUESTS', 'cancel');
+  const canSubmitManagement = canReadRequests && canPerform('PURCHASES_REQUESTS', 'submit');
   // La gestión ocurre dentro de la vista Solicitudes; no es una vista
   // independiente del sidebar ni necesita una fila propia en la matriz.
-  const canApproveManagement = canPerform('PURCHASES_REQUESTS', 'approve');
-  const canRejectManagement = canPerform('PURCHASES_REQUESTS', 'reject');
-  const canConvertManagement = canPerform('PURCHASES_REQUESTS', 'convert');
+  const canApproveManagement = canReadRequests && canPerform('PURCHASES_REQUESTS', 'approve');
+  const canRejectManagement = canReadRequests && canPerform('PURCHASES_REQUESTS', 'reject');
+  const canConvertManagement = canReadRequests && canPerform('PURCHASES_REQUESTS', 'convert');
   const supplierDependencyState = workflowDependencyState({
     isLoading: supplierCatalogLoading,
     isError: supplierCatalogError,
@@ -135,6 +137,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
   const [detailOpen, setDetailOpen] = useState<PurchaseRequest | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [pendingApproveManagement, setPendingApproveManagement] = useState<PurchaseManagement | null>(null);
+  const [pendingSubmitManagement, setPendingSubmitManagement] = useState<PurchaseManagement | null>(null);
   const [pendingRejectManagement, setPendingRejectManagement] = useState<PurchaseManagement | null>(null);
   const [pendingConvertManagement, setPendingConvertManagement] = useState<PurchaseManagement | null>(null);
   const [pendingRequestAction, setPendingRequestAction] = useState<RequestActionState | null>(null);
@@ -372,6 +375,27 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
     setPendingApproveManagement(mgmt);
   };
 
+  const handleSubmitManagement = (mgmt: PurchaseManagement) => {
+    if (!canSubmitManagement || mgmt.status !== 'DRAFT') return;
+    setPendingSubmitManagement(mgmt);
+  };
+
+  const confirmSubmitManagement = async () => {
+    if (!canSubmitManagement || !pendingSubmitManagement) return;
+    const mgmt = pendingSubmitManagement;
+    setActionLoading(mgmt.id);
+    const actionToken = beginNotificationAction();
+    const submitToastId = toast.loading('Enviando gestión a aprobación...');
+    try {
+      await purchaseManagementService.submit(mgmt.id);
+      toast.success('Gestión enviada a aprobación', { id: submitToastId });
+      setPendingSubmitManagement(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al enviar la gestión a aprobación', { id: submitToastId });
+    } finally { completeNotificationAction(actionToken); setActionLoading(null); }
+  };
+
   const confirmApproveManagement = async () => {
     if (!canApproveManagement) return;
     if (!pendingApproveManagement) return;
@@ -443,6 +467,8 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
   const confirmRequestAction = async () => {
     if (!pendingRequestAction) return;
     const { request: req, action } = pendingRequestAction;
+    if (action === 'approve' && !canApproveRequests) return;
+    if (action === 'cancel' && !canCancelRequests) return;
     if (action === 'approve' && !approvalSupplierId) {
       toast.error('Seleccione un proveedor para aprobar la solicitud.');
       return;
@@ -689,6 +715,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
           return <>
             {requestStatus === 'PENDING_APPROVAL' && canApproveRequests && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => handleRequestApprove(detailOpen)} disabled={actionLoading === detailOpen.id}><CheckCircle className="size-4" /> Aprobar solicitud</Button>}
             {requestStatus === 'PENDING_APPROVAL' && canCancelRequests && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => handleRequestCancel(detailOpen)} disabled={actionLoading === detailOpen.id}><X className="size-4" /> Cancelar solicitud</Button>}
+            {management && management.status === 'DRAFT' && canSubmitManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => handleSubmitManagement(management)} disabled={actionLoading === management.id}><Send className="size-4" /> Enviar gestión a aprobación</Button>}
             {management && management.status === 'PENDING_APPROVAL' && canApproveManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => handleApproveManagement(management)} disabled={actionLoading === management.id}><CheckCircle className="size-4" /> Aprobar gestión</Button>}
             {management && management.status === 'PENDING_APPROVAL' && canRejectManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => handleRejectManagement(management)} disabled={actionLoading === management.id}><X className="size-4" /> Rechazar gestión</Button>}
             {management && management.status === 'APPROVED' && canConvertManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-primary" onClick={() => handleConvertToOrder(management)} disabled={actionLoading === management.id}><Send className="size-4" /> Convertir a orden</Button>}
@@ -707,6 +734,15 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         confirmLabel="Rechazar"
         onConfirm={confirmRejectManagement}
         loading={Boolean(actionLoading && pendingRejectManagement)}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingSubmitManagement)}
+        onOpenChange={open => { if (!open && !actionLoading) setPendingSubmitManagement(null); }}
+        title="¿Enviar gestión a aprobación?"
+        description="La gestión pasará a la bandeja de aprobación para que una persona autorizada la revise."
+        confirmLabel="Enviar a aprobación"
+        onConfirm={confirmSubmitManagement}
+        loading={Boolean(pendingSubmitManagement && actionLoading === pendingSubmitManagement.id)}
       />
       <ConfirmDialog
         open={Boolean(pendingApproveManagement)}

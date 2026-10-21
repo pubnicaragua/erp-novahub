@@ -163,6 +163,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'PROJECTS_PARAMETROS', label: 'Parámetros del Proyecto', parent: 'PROJECTS' },
   { id: 'PROJECTS_DOCUMENTS', label: 'Documentos', parent: 'PROJECTS' },
   { id: 'PROJECTS_TIME', label: 'Tiempo y cronograma', parent: 'PROJECTS' },
+  { id: 'PROJECTS_PROGRESS', label: 'Avance y evidencias', parent: 'PROJECTS' },
 
   // Documentos
   { id: 'DOCUMENTS_FILES', label: 'Archivos', parent: 'DOCUMENTS' },
@@ -363,6 +364,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'proyectos-hitos': ['PROJECTS_MILESTONES', 'PROJECTS'],
   'proyectos-documentos': ['PROJECTS_DOCUMENTS', 'PROJECTS'],
   'proyectos-tiempo': ['PROJECTS_TIME', 'PROJECTS'],
+  'proyectos-avance': ['PROJECTS_PROGRESS', 'PROJECTS'],
 
   'fuerza-comercial': ['FORCE_SALES'],
   'fuerza-comercial-kanban': ['FORCE_SALES'],

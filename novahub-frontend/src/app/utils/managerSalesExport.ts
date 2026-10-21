@@ -193,8 +193,8 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
     body: options.rows.length ? options.rows.map((row) => keys.map((key) => pdfReportCell(key, row[key]))) : [['Sin registros para el alcance seleccionado']],
     startY: currentY,
     margin: { left: margin, right: margin, bottom: 14 },
-    styles: { font: 'helvetica', fontSize: keys.length > 12 ? 5.8 : 7, cellPadding: 1.8, textColor: [51, 65, 85], overflow: 'linebreak' },
-    headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+    styles: { font: 'helvetica', fontSize: keys.length > 12 ? 5.8 : 7, cellPadding: 1.8, textColor: [51, 65, 85], overflow: 'linebreak', valign: 'middle' },
+    headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', valign: 'middle' },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     didParseCell: (hook) => {
       if (hook.section === 'body' && String(keys[hook.column.index] || '').toLowerCase().includes('equivalencia')) hook.cell.styles.textColor = primary;
@@ -214,8 +214,8 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
       body: sheetData.rows.length ? sheetData.rows.map((row) => sheetKeys.map((key) => pdfReportCell(key, row[key]))) : [['Sin registros para el alcance seleccionado']],
       startY: extraY,
       margin: { left: margin, right: margin, bottom: 14 },
-      styles: { font: 'helvetica', fontSize: sheetKeys.length > 10 ? 5.8 : 7, cellPadding: 1.8, textColor: [51, 65, 85], overflow: 'linebreak' },
-      headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      styles: { font: 'helvetica', fontSize: sheetKeys.length > 10 ? 5.8 : 7, cellPadding: 1.8, textColor: [51, 65, 85], overflow: 'linebreak', valign: 'middle' },
+      headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', valign: 'middle' },
       alternateRowStyles: { fillColor: [248, 250, 252] },
     });
     extraY = Number((doc as any).lastAutoTable?.finalY || extraY) + 8;

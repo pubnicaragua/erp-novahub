@@ -6,10 +6,15 @@ const RECOVERY_TOKEN_PREFIX = `${BUILD_ID}:`;
 
 const DYNAMIC_IMPORT_ERROR =
   /failed to fetch dynamically imported module|importing a module script failed|failed to load module script|unable to preload css|failed to preload css|chunkloaderror|loading chunk [\w-]+ failed/i;
+// A stale tab can resolve a lazy import to an incompatible module namespace.
+// The named-export dereference then fails before it produces React.lazy's
+// { default } object, so treat that as a chunk error and use the guarded reload.
+const INVALID_MODULE_NAMESPACE_ERROR =
+  /cannot read properties of undefined \(reading ['"][A-Z][\w$]*['"]\)/i;
 
 export function isDynamicImportLoadError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? '');
-  return DYNAMIC_IMPORT_ERROR.test(message);
+  return DYNAMIC_IMPORT_ERROR.test(message) || INVALID_MODULE_NAMESPACE_ERROR.test(message);
 }
 
 export function recoverFromChunk(moduleName: string): boolean {

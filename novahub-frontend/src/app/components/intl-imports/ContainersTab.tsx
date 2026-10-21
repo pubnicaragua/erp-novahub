@@ -6,6 +6,9 @@ import {
   RefreshCw,
   Calendar,
   Trash2,
+  Truck,
+  Landmark,
+  Ban,
 } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { getApiErrorMessage } from '@/app/services/api';
@@ -26,7 +29,14 @@ import { IntlContainerDetailSheet } from './modals/IntlContainerDetailSheet';
 
 interface ContainersTabProps {
   canCreate?: boolean;
-  canEdit?: boolean;
+  canDelete?: boolean;
+  canAssignPackages?: boolean;
+  canUnassignPackages?: boolean;
+  canMovePackages?: boolean;
+  canConsolidate?: boolean;
+  canDispatch?: boolean;
+  canSendToCustoms?: boolean;
+  canCancel?: boolean;
 }
 
 const containerBadgeVariant = (status: IntlImportContainerStatus) => {
@@ -48,7 +58,18 @@ const containerBadgeVariant = (status: IntlImportContainerStatus) => {
   }
 };
 
-export function ContainersTab({ canCreate = true, canEdit = false }: ContainersTabProps) {
+export function ContainersTab({
+  canCreate = false,
+  canDelete = false,
+  canAssignPackages = false,
+  canUnassignPackages = false,
+  canMovePackages = false,
+  canConsolidate = false,
+  canDispatch = false,
+  canSendToCustoms = false,
+  canCancel = false,
+}: ContainersTabProps) {
+  const canDeleteContainer = canDelete && canUnassignPackages;
   const [containers, setContainers] = useState<IntlImportContainer[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -60,6 +81,8 @@ export function ContainersTab({ canCreate = true, canEdit = false }: ContainersT
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [containerToDelete, setContainerToDelete] = useState<IntlImportContainer | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [containerToCancel, setContainerToCancel] = useState<IntlImportContainer | null>(null);
+  const [statusUpdatingContainerId, setStatusUpdatingContainerId] = useState<string | null>(null);
 
   // Detail sheet
   const [detailContainer, setDetailContainer] = useState<IntlImportContainer | null>(null);
@@ -82,6 +105,32 @@ export function ContainersTab({ canCreate = true, canEdit = false }: ContainersT
       setLoading(false);
     }
   }, [statusFilter]);
+
+  const updateContainerStatus = async (
+    container: IntlImportContainer,
+    status: IntlImportContainerStatus,
+    allowed: boolean,
+  ): Promise<boolean> => {
+    if (!allowed || container.isClosed || statusUpdatingContainerId) return false;
+    try {
+      setStatusUpdatingContainerId(container.id);
+      await intlImportsService.updateContainer(container.id, { status });
+      toast.success(`Contenedor ${container.containerNumber}: ${INTL_CONTAINER_STATUS_LABELS[status]}`);
+      await fetchContainers();
+      return true;
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'No se pudo cambiar el estado del contenedor'));
+      return false;
+    } finally {
+      setStatusUpdatingContainerId(null);
+    }
+  };
+
+  const handleCancelContainer = async () => {
+    if (!canCancel || !containerToCancel) return;
+    const cancelled = await updateContainerStatus(containerToCancel, 'CANCELLED', canCancel);
+    if (cancelled) setContainerToCancel(null);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -107,7 +156,7 @@ export function ContainersTab({ canCreate = true, canEdit = false }: ContainersT
   }, [statusFilter]);
 
   const handleDeleteContainer = async () => {
-    if (!containerToDelete) return;
+    if (!canDeleteContainer || !containerToDelete) return;
     try {
       setDeleting(true);
       await intlImportsService.deleteContainer(containerToDelete.id);
@@ -301,7 +350,7 @@ export function ContainersTab({ canCreate = true, canEdit = false }: ContainersT
 
                 {/* Acciones */}
                 <div className="pt-2 border-t border-border flex flex-wrap items-center justify-between gap-2">
-                  {!c.isClosed ? (
+                  {!c.isClosed && canDeleteContainer ? (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -315,6 +364,51 @@ export function ContainersTab({ canCreate = true, canEdit = false }: ContainersT
                   ) : <div />}
 
                   <div className="flex flex-wrap items-center gap-1.5 flex-1 justify-end">
+                    {c.status === 'OPEN' && canConsolidate && (c.packagesCount || c.packages?.length || 0) > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={Boolean(statusUpdatingContainerId)}
+                        onClick={() => void updateContainerStatus(c, 'CONSOLIDATED', canConsolidate)}
+                        aria-label={`Consolidar contenedor ${c.containerNumber}`}
+                      >
+                        <PackageCheck className="size-4 mr-1.5 text-primary" /> Consolidar
+                      </Button>
+                    )}
+                    {c.status === 'CONSOLIDATED' && canDispatch && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={Boolean(statusUpdatingContainerId)}
+                        onClick={() => void updateContainerStatus(c, 'IN_TRANSIT', canDispatch)}
+                        aria-label={`Despachar contenedor ${c.containerNumber}`}
+                      >
+                        <Truck className="size-4 mr-1.5 text-primary" /> Despachar
+                      </Button>
+                    )}
+                    {c.status === 'IN_TRANSIT' && canSendToCustoms && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={Boolean(statusUpdatingContainerId)}
+                        onClick={() => void updateContainerStatus(c, 'CUSTOMS_CLEARANCE', canSendToCustoms)}
+                        aria-label={`Enviar a aduana el contenedor ${c.containerNumber}`}
+                      >
+                        <Landmark className="size-4 mr-1.5 text-primary" /> Enviar a aduana
+                      </Button>
+                    )}
+                    {!c.isClosed && c.status !== 'CANCELLED' && canCancel && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        disabled={Boolean(statusUpdatingContainerId)}
+                        onClick={() => setContainerToCancel(c)}
+                        aria-label={`Cancelar contenedor ${c.containerNumber}`}
+                      >
+                        <Ban className="size-4 mr-1.5" /> Cancelar
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -326,7 +420,7 @@ export function ContainersTab({ canCreate = true, canEdit = false }: ContainersT
                       Ver Detalle
                     </Button>
 
-                    {c.status === 'OPEN' && (
+                    {c.status === 'OPEN' && canAssignPackages && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -354,6 +448,7 @@ export function ContainersTab({ canCreate = true, canEdit = false }: ContainersT
         onSuccess={() => fetchContainers()}
         defaultCbm={config?.defaultContainerCbm}
         defaultMaxKg={config?.defaultContainerMaxKg}
+        canCreate={canCreate}
       />
 
       <AssignPackagesModal
@@ -361,10 +456,11 @@ export function ContainersTab({ canCreate = true, canEdit = false }: ContainersT
         open={assignModalOpen}
         onOpenChange={setAssignModalOpen}
         onSuccess={() => fetchContainers()}
+        canAssign={canAssignPackages}
       />
 
       <ConfirmDialog
-        open={Boolean(containerToDelete)}
+        open={canDeleteContainer && Boolean(containerToDelete)}
         onOpenChange={(open) => !open && setContainerToDelete(null)}
         title={`¿Eliminar contenedor ${containerToDelete?.containerNumber}?`}
         description="Esta acción eliminará el contenedor y desasignará sus paquetes, devolviéndolos al estado en Bodega Origen. Los gastos asociados también serán removidos."
@@ -374,12 +470,24 @@ export function ContainersTab({ canCreate = true, canEdit = false }: ContainersT
         onConfirm={handleDeleteContainer}
       />
 
+      <ConfirmDialog
+        open={canCancel && Boolean(containerToCancel)}
+        onOpenChange={(open) => !open && setContainerToCancel(null)}
+        title={`¿Cancelar contenedor ${containerToCancel?.containerNumber}?`}
+        description="El contenedor pasará a estado cancelado y los paquetes asociados también quedarán cancelados, conservando su historial de trazabilidad."
+        confirmLabel="Cancelar contenedor"
+        variant="destructive"
+        loading={statusUpdatingContainerId === containerToCancel?.id}
+        onConfirm={handleCancelContainer}
+      />
+
       <IntlContainerDetailSheet
         container={detailContainer}
         open={detailSheetOpen}
         onOpenChange={setDetailSheetOpen}
         onRefresh={fetchContainers}
-        canEdit={canEdit}
+        canMovePackages={canMovePackages}
+        canUnassignPackages={canUnassignPackages}
       />
     </div>
   );

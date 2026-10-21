@@ -518,6 +518,10 @@ export const logisticsService = {
     return api.post('/logistics/billing/confirm', data) as Promise<BillingConfirmResult>;
   },
 
+  async billingShareInvoice(data: { invoiceId: string }) {
+    return api.post('/logistics/billing/share-link', data) as Promise<{ id: string; token: string; path: string; expiresAt?: string | null }>;
+  },
+
   async deliverPackages(data: DeliverPackagesInput) {
     return api.post('/logistics/billing/deliver', data) as Promise<{ delivered: number }>;
   },

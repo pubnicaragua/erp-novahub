@@ -267,13 +267,24 @@ const getPriceStatusInfo = (product: any) => {
   }
 };
 
-// Servicios no necesitan el ancho de las columnas operativas de productos;
-// su tabla solo conserva código, descripción, categoría, disponibilidad,
-// precios y acciones.
-const SERVICE_TABLE_MIN_WIDTH = {
-  withoutCost: 1052,
-  withCost: 1164,
-} as const;
+const getServiceTableWidth = (visibleColumns: Record<string, boolean>, canViewCost: boolean) => {
+  const columns: { key: string; width: number; requiresCost?: boolean }[] = [
+    { key: 'code', width: PRODUCT_TABLE_WIDTH_NUMBERS.code },
+    { key: 'name', width: PRODUCT_TABLE_WIDTH_NUMBERS.name },
+    { key: 'note', width: PRODUCT_TABLE_WIDTH_NUMBERS.note },
+    { key: 'category', width: PRODUCT_TABLE_WIDTH_NUMBERS.category },
+    { key: 'warehouse', width: PRODUCT_TABLE_WIDTH_NUMBERS.status },
+    { key: 'price', width: PRODUCT_TABLE_WIDTH_NUMBERS.price },
+    { key: 'cost', width: PRODUCT_TABLE_WIDTH_NUMBERS.cost, requiresCost: true },
+    { key: 'priceUpdatedAt', width: PRODUCT_TABLE_WIDTH_NUMBERS.priceUpdatedAt },
+    { key: 'priceStatus', width: PRODUCT_TABLE_WIDTH_NUMBERS.priceStatus },
+  ];
+
+  return columns.reduce((total, column) => {
+    if (visibleColumns[column.key] === false || (column.requiresCost && !canViewCost)) return total;
+    return total + column.width;
+  }, PRODUCT_TABLE_WIDTH_NUMBERS.selector + PRODUCT_TABLE_WIDTH_NUMBERS.actions);
+};
 
 const SOLICITUD_PAGE_SIZE = 50;
 
@@ -1063,7 +1074,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   const { openingId, startOpening } = useDetailOpeningFeedback();
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
-  const canCreatePurchaseRequest = canPerform('PURCHASES', 'create');
+  const canCreatePurchaseRequest = canPerform('PURCHASES_REQUESTS', 'create');
   const catalogItemType = itemType || 'PRODUCT';
   const isServiceView = catalogItemType === 'SERVICE';
   const catalogPermissionModule: 'INVENTORY_PRODUCTS' | 'INVENTORY_SERVICES' = isServiceView
@@ -1100,7 +1111,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   }, [isSidebarCollapsed, isServiceView]);
   const catalogTableWidth = useMemo(() => {
     if (isServiceView) {
-      return canViewInventoryCost ? SERVICE_TABLE_MIN_WIDTH.withCost : SERVICE_TABLE_MIN_WIDTH.withoutCost;
+      return getServiceTableWidth(visibleColumns, canViewInventoryCost);
     }
     let sum = PRODUCT_TABLE_WIDTH_NUMBERS.selector + PRODUCT_TABLE_WIDTH_NUMBERS.actions;
     COLUMN_DEFINITIONS.forEach((col: any) => {
@@ -1589,6 +1600,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   });
 
   const openLowStockSolicitud = () => {
+    if (!canCreatePurchaseRequest) return;
     clearSolicitudPreparation();
     loadSolicitudEmployees();
     setSolicitudWarehouseId('');
@@ -1624,6 +1636,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   };
 
   const openSelectedSolicitud = () => {
+    if (!canCreatePurchaseRequest) return;
     if (selectedIds.size === 0) { toast.error('Selecciona al menos un producto'); return; }
     loadSolicitudEmployees();
     // La selección puede contener productos de distintas páginas. El listado
@@ -1720,6 +1733,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   };
 
   const handleCreateSolicitud = async () => {
+    if (!canCreatePurchaseRequest) return;
     if (solicitudProducts.length === 0) { toast.error('No hay productos en la solicitud'); return; }
     if (!solicitudWarehouseId) { toast.error('Selecciona una bodega'); return; }
     setSolicitudCreating(true);
@@ -4573,7 +4587,6 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
           containerClassName="w-max min-w-full max-w-none min-h-0 overflow-visible"
           className="table-fixed"
           data-catalog-table={isServiceView ? 'service' : 'product'}
-          data-catalog-cost={canViewInventoryCost ? 'visible' : 'hidden'}
           style={{ width: `${catalogTableWidth}px`, minWidth: '100%', maxWidth: 'none' }}
         >
           <TableHeader>

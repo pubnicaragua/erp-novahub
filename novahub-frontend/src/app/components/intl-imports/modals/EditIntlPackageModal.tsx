@@ -6,6 +6,7 @@ export interface EditIntlPackageModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: (updated: IntlImportPackage) => void;
+  canEdit?: boolean;
 }
 
 export function EditIntlPackageModal({
@@ -13,6 +14,7 @@ export function EditIntlPackageModal({
   open,
   onOpenChange,
   onSuccess,
+  canEdit = false,
 }: EditIntlPackageModalProps) {
   return (
     <IntlPackageModal
@@ -20,6 +22,7 @@ export function EditIntlPackageModal({
       onOpenChange={onOpenChange}
       onSuccess={onSuccess}
       packageToEdit={packageData}
+      canEdit={canEdit}
     />
   );
 }

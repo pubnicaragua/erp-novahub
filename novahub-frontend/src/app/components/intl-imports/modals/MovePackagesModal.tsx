@@ -26,6 +26,7 @@ interface MovePackagesModalProps {
   sourceContainer: IntlImportContainer | null;
   packageIds: string[];
   onSuccess: () => void;
+  canMove?: boolean;
 }
 
 export function MovePackagesModal({
@@ -34,6 +35,7 @@ export function MovePackagesModal({
   sourceContainer,
   packageIds,
   onSuccess,
+  canMove = false,
 }: MovePackagesModalProps) {
   const [containers, setContainers] = useState<IntlImportContainer[]>([]);
   const [targetId, setTargetId] = useState('');
@@ -54,6 +56,7 @@ export function MovePackagesModal({
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
+      if (next && !canMove) return;
       if (next) {
         setTargetId('');
         setReason('');
@@ -62,10 +65,11 @@ export function MovePackagesModal({
       }
       onOpenChange(next);
     },
-    [onOpenChange],
+    [canMove, onOpenChange],
   );
 
   const handleSimulate = useCallback(async () => {
+    if (!canMove) return;
     if (!targetId) {
       setError('Seleccione el contenedor de destino');
       return;
@@ -79,10 +83,10 @@ export function MovePackagesModal({
     } finally {
       setSimulating(false);
     }
-  }, [targetId, packageIds, reason]);
+  }, [canMove, targetId, packageIds, reason]);
 
   const handleConfirm = useCallback(async () => {
-    if (!simulation) return;
+    if (!canMove || !simulation) return;
     setSaving(true);
     try {
       const res = await intlImportsService.movePackages({
@@ -98,14 +102,14 @@ export function MovePackagesModal({
     } finally {
       setSaving(false);
     }
-  }, [simulation, targetId, packageIds, reason, onSuccess, handleOpenChange]);
+  }, [canMove, simulation, targetId, packageIds, reason, onSuccess, handleOpenChange]);
 
   const target = containers.find((c) => c.id === targetId);
   // `allowed` es la decision del servidor; no se re-deriva aqui.
   const blocked = !!simulation && !simulation.allowed;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open && canMove} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
@@ -157,7 +161,7 @@ export function MovePackagesModal({
           </div>
 
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={handleSimulate} disabled={!targetId || simulating}>
+            <Button size="sm" variant="outline" onClick={handleSimulate} disabled={!canMove || !targetId || simulating}>
               {simulating ? 'Simulando...' : 'Simular movimiento'}
             </Button>
             {simulation && !blocked && (
@@ -227,7 +231,7 @@ export function MovePackagesModal({
           <Button variant="ghost" onClick={() => handleOpenChange(false)}>
             Cancelar
           </Button>
-          <Button onClick={handleConfirm} disabled={!simulation || blocked || saving}>
+          <Button onClick={handleConfirm} disabled={!canMove || !simulation || blocked || saving}>
             {saving ? 'Moviendo...' : 'Confirmar movimiento'}
           </Button>
         </DialogFooter>

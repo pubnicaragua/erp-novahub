@@ -43,7 +43,9 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
   const totals = data?.totals || {};
   const summary = data?.summary || {};
   const baseCurrency = data?.baseCurrency || 'NIO';
-  const canEdit = canPerform('PROJECTS', 'edit');
+  const canCreate = canPerform('PROJECTS_EXPENSES', 'create');
+  const canEdit = canPerform('PROJECTS_EXPENSES', 'edit');
+  const canDelete = canPerform('PROJECTS_EXPENSES', 'delete');
 
   const invalidate = () => {
     invalidateTenantQueries(queryClient);
@@ -52,8 +54,15 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
   };
   const mutation = useMutation({
     mutationFn: (args: { type: 'create' | 'update' | 'delete'; id?: string; payload?: any }) => {
-      if (args.type === 'create') return projectsService.createBudgetLine(projectId, args.payload);
-      if (args.type === 'update') return projectsService.updateBudgetLine(projectId, args.id!, args.payload);
+      if (args.type === 'create') {
+        if (!canCreate) throw new Error('No tienes permiso para crear líneas de presupuesto.');
+        return projectsService.createBudgetLine(projectId, args.payload);
+      }
+      if (args.type === 'update') {
+        if (!canEdit) throw new Error('No tienes permiso para editar líneas de presupuesto.');
+        return projectsService.updateBudgetLine(projectId, args.id!, args.payload);
+      }
+      if (!canDelete) throw new Error('No tienes permiso para eliminar líneas de presupuesto.');
       return projectsService.deleteBudgetLine(projectId, args.id!);
     },
     onSuccess: () => invalidate(),
@@ -101,7 +110,7 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
       <Card className="rounded-2xl border-border/60 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="flex items-center gap-2 text-sm"><Wallet className="size-4 text-primary" /> Líneas de presupuesto</CardTitle>
-          {canEdit && <Button variant="default" size="sm" onClick={() => setDialog({ open: true })} className="gap-1.5"><Plus className="size-4" /> Línea</Button>}
+          {canCreate && <Button variant="default" size="sm" onClick={() => setDialog({ open: true })} className="gap-1.5"><Plus className="size-4" /> Línea</Button>}
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -114,7 +123,7 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
                   <TableHead className="text-right">Monto</TableHead>
                   <TableHead>Moneda</TableHead>
                   <TableHead className="text-right">Base</TableHead>
-                  {canEdit && <TableHead className="w-20" />}
+                  {(canEdit || canDelete) && <TableHead className="w-20" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -132,11 +141,11 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
                     <TableCell className="text-right">{money(line.amount, line.currency)}</TableCell>
                     <TableCell className="text-xs">{line.currency}</TableCell>
                     <TableCell className="text-right text-xs">{money(line.baseAmount, baseCurrency)}</TableCell>
-                    {canEdit && (
+                    {(canEdit || canDelete) && (
                       <TableCell>
                         <div className="flex justify-end gap-1">
-                          <Button size="icon" variant="ghost" className="size-8" onClick={() => setDialog({ open: true, editing: line })}><Pencil className="size-4" /></Button>
-                          <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setLineToDelete(line)}><Trash2 className="size-4" /></Button>
+                          {canEdit && <Button size="icon" variant="ghost" className="size-8" title="Editar línea" aria-label="Editar línea" onClick={() => setDialog({ open: true, editing: line })}><Pencil className="size-4" /></Button>}
+                          {canDelete && <Button size="icon" variant="ghost" className="size-8 text-rose-500" title="Eliminar línea" aria-label="Eliminar línea" onClick={() => setLineToDelete(line)}><Trash2 className="size-4" /></Button>}
                         </div>
                       </TableCell>
                     )}
@@ -234,6 +243,9 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
 
   const canCreate = canPerform('PROJECTS_EXPENSES', 'create');
   const canEdit = canPerform('PROJECTS_EXPENSES', 'edit');
+  const canDelete = canPerform('PROJECTS_EXPENSES', 'delete');
+  const canCreateJournal = canPerform('PROJECTS_EXPENSES', 'createJournal');
+  const canViewQuotations = canPerform('PROJECTS_QUOTATIONS', 'view');
   const invalidate = () => {
     invalidateTenantQueries(queryClient);
     queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -242,9 +254,19 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
 
   const mutation = useMutation({
     mutationFn: (args: { type: 'create' | 'update' | 'delete' | 'journal'; id?: string; payload?: any }) => {
-      if (args.type === 'create') return projectsService.createCost(projectId, args.payload);
-      if (args.type === 'update') return projectsService.updateCost(projectId, args.id!, args.payload);
-      if (args.type === 'journal') return projectsService.generateJournal(projectId, args.id!);
+      if (args.type === 'create') {
+        if (!canCreate) throw new Error('No tienes permiso para registrar costos.');
+        return projectsService.createCost(projectId, args.payload);
+      }
+      if (args.type === 'update') {
+        if (!canEdit) throw new Error('No tienes permiso para editar costos.');
+        return projectsService.updateCost(projectId, args.id!, args.payload);
+      }
+      if (args.type === 'journal') {
+        if (!canCreateJournal) throw new Error('No tienes permiso para generar asientos contables.');
+        return projectsService.generateJournal(projectId, args.id!);
+      }
+      if (!canDelete) throw new Error('No tienes permiso para eliminar costos.');
       return projectsService.deleteCost(projectId, args.id!);
     },
     onSuccess: (res: any, args) => {
@@ -319,9 +341,9 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
                     <TableCell className="text-xs">{c.recordedBy?.name || '—'}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
-                        {c.status === 'EXECUTED' && canEdit && <Button size="icon" variant="ghost" className="size-8 text-emerald-600" title="Generar asiento contable" onClick={() => mutation.mutate({ type: 'journal', id: c.id })}><BookOpenCheck className="size-4" /></Button>}
+                        {c.status === 'EXECUTED' && canCreateJournal && <Button size="icon" variant="ghost" className="size-8 text-emerald-600" title="Generar asiento contable" aria-label="Generar asiento contable" onClick={() => mutation.mutate({ type: 'journal', id: c.id })}><BookOpenCheck className="size-4" /></Button>}
                         {canEdit && <Button size="icon" variant="ghost" className="size-8" onClick={() => setDialog({ open: true, editing: c })}><Pencil className="size-4" /></Button>}
-                        {canEdit && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setCostToDelete(c)}><Trash2 className="size-4" /></Button>}
+                        {canDelete && <Button size="icon" variant="ghost" className="size-8 text-rose-500" title="Eliminar costo" aria-label="Eliminar costo" onClick={() => setCostToDelete(c)}><Trash2 className="size-4" /></Button>}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -344,7 +366,7 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
       )}
 
       {dialog.open && (
-        <CostDialog projectId={projectId} editing={dialog.editing} suppliers={suppliers} onClose={() => setDialog({ open: false, editing: null })}
+        <CostDialog projectId={projectId} editing={dialog.editing} suppliers={suppliers} canViewQuotations={canViewQuotations} onClose={() => setDialog({ open: false, editing: null })}
           onSubmit={(payload) => mutation.mutate(dialog.editing ? { type: 'update', id: dialog.editing.id, payload } : { type: 'create', payload })} />
       )}
 
@@ -368,11 +390,11 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
   );
 }
 
-function CostDialog({ projectId, editing, suppliers, onClose, onSubmit }: { projectId: string; editing?: ProjectCost | null; suppliers: any[]; onClose: () => void; onSubmit: (payload: any) => void }) {
+function CostDialog({ projectId, editing, suppliers, canViewQuotations, onClose, onSubmit }: { projectId: string; editing?: ProjectCost | null; suppliers: any[]; canViewQuotations: boolean; onClose: () => void; onSubmit: (payload: any) => void }) {
   const quotationsQuery = useTenantQuery<ProjectMaterialQuotation[]>(
     ['projects', 'material-quotations', projectId],
     (s) => projectsService.materialQuotations(projectId, undefined, s).then((res: any) => asList(res)),
-    { enabled: Boolean(projectId) }
+    { enabled: Boolean(projectId) && canViewQuotations }
   );
   const quotations = asList(quotationsQuery.data) as ProjectMaterialQuotation[];
 
@@ -450,7 +472,7 @@ function CostDialog({ projectId, editing, suppliers, onClose, onSubmit }: { proj
               </SelectContent>
             </Select>
           </div>
-          <div className="sm:col-span-2">
+          {canViewQuotations && <div className="sm:col-span-2">
             <Label>Vincular Cotización de Materiales (Opcional)</Label>
             <Select
               value={form.quotationId || 'NONE'}
@@ -483,7 +505,7 @@ function CostDialog({ projectId, editing, suppliers, onClose, onSubmit }: { proj
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </div>}
           <div className="sm:col-span-2"><Label>Concepto *</Label><Input value={form.concept} onChange={(e) => setForm((f: any) => ({ ...f, concept: e.target.value }))} placeholder="Ej. Materiales de construcción" /></div>
           <div><Label>Categoría</Label><Input value={form.category} onChange={(e) => setForm((f: any) => ({ ...f, category: e.target.value }))} placeholder="OPERATIVO" /></div>
           <div><Label>Monto</Label><Input type="number" min={0} value={form.amount} onChange={(e) => setForm((f: any) => ({ ...f, amount: e.target.value }))} placeholder="0.00" /></div>
@@ -519,11 +541,18 @@ function CostDialog({ projectId, editing, suppliers, onClose, onSubmit }: { proj
 }
 
 export function ProyectoReportePanel({ projectId }: PanelsProps) {
-  const reportQuery = useTenantQuery<ProjectReport>(['projects', 'report', projectId], (s) => projectsService.report(projectId, s), { enabled: true });
+  const { canPerform } = useAuth();
+  const canViewReport = canPerform('PROJECTS_EXPENSES', 'view')
+    && canPerform('PROJECTS_LIST', 'view')
+    && canPerform('PROJECTS_TASKS', 'view')
+    && canPerform('PROJECTS_MILESTONES', 'view')
+    && canPerform('PROJECTS_PROGRESS', 'view');
+  const canExport = canPerform('PROJECTS_EXPENSES', 'export');
+  const reportQuery = useTenantQuery<ProjectReport>(['projects', 'report', projectId], (s) => projectsService.report(projectId, s), { enabled: canViewReport });
   const report = reportQuery.data;
 
   const exportCsv = () => {
-    if (!report) return;
+    if (!report || !canExport) return;
     const { project, tasks, milestones, costsByCategory, summary, members } = report;
     const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines: string[] = [];
@@ -573,7 +602,7 @@ export function ProyectoReportePanel({ projectId }: PanelsProps) {
           <h3 className="flex items-center gap-2 text-lg font-black"><Receipt className="size-5 text-primary" /> Reporte ejecutivo — {project.name}</h3>
           <p className="text-xs text-muted-foreground">{project.code} · {project.status}</p>
         </div>
-        <Button variant="outline" size="sm" className="gap-2" onClick={exportCsv}><Download className="size-4" /> Exportar CSV</Button>
+        {canExport && <Button variant="outline" size="sm" className="gap-2" onClick={exportCsv}><Download className="size-4" /> Exportar CSV</Button>}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">

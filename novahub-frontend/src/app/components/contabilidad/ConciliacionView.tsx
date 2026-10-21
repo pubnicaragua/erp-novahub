@@ -44,6 +44,12 @@ const currentMonth = new Date().toISOString().slice(0, 7);
 
 export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }) {
   const { canPerform } = useAuth();
+  const canUpdateBalance = canPerform('ACCOUNTING_RECONCILIATION', 'updateBalance');
+  const canAutoMatch = canPerform('ACCOUNTING_RECONCILIATION', 'autoMatch');
+  const canAddMovement = canPerform('ACCOUNTING_RECONCILIATION', 'addMovement');
+  const canEditMovement = canPerform('ACCOUNTING_RECONCILIATION', 'editMovement');
+  const canMatchMovement = canPerform('ACCOUNTING_RECONCILIATION', 'matchMovement');
+  const canComplete = canPerform('ACCOUNTING_RECONCILIATION', 'complete');
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -143,6 +149,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
   };
 
   const handleCreate = async () => {
+    if (!canPerform('ACCOUNTING_RECONCILIATION', 'create')) return;
     if (!form.accountId) return void toast.error('Selecciona una cuenta bancaria');
     if (!/^\d{4}-\d{2}$/.test(form.period)) return void toast.error('Selecciona el mes de la conciliación');
     const actionToken = beginNotificationAction();
@@ -166,7 +173,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
   };
 
   const handleAutoMatch = async () => {
-    if (!detail?.id) return;
+    if (!detail?.id || !canAutoMatch) return;
     const actionToken = beginNotificationAction();
     try {
       setAutoMatchLoading(true);
@@ -184,7 +191,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
   };
 
   const handleComplete = async () => {
-    if (!detail?.id) return;
+    if (!detail?.id || !canComplete) return;
     const actionToken = beginNotificationAction();
     try {
       setCompleteLoading(true);
@@ -203,7 +210,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
   };
 
   const toggleMatched = (itemId: string, checked: boolean) => {
-    if (!detail) return;
+    if (!detail || !canMatchMovement) return;
     const updatedItems = (detail.items || []).map((item: any) =>
       item.id === itemId ? { ...item, matched: checked } : item
     );
@@ -213,6 +220,8 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
 
   const persistItem = async (itemId: string, patch: any) => {
     if (!detail) return;
+    if (Object.prototype.hasOwnProperty.call(patch || {}, 'matched') && !canMatchMovement) return;
+    if ((Object.prototype.hasOwnProperty.call(patch || {}, 'bankAmount') || Object.prototype.hasOwnProperty.call(patch || {}, 'notes')) && !canEditMovement) return;
     const actionToken = beginNotificationAction();
     try {
       const updated = await contabilidadService.updateReconciliationItem(detail.id, itemId, patch);
@@ -226,6 +235,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
   };
 
   const handleBankAmountBlur = (item: any) => {
+    if (!canEditMovement) return;
     const amount = Number(item.bankAmount);
     const next = Number.isFinite(amount) && amount > 0 ? amount : null;
     if (next === (item.bankAmount === null || item.bankAmount === undefined ? null : Number(item.bankAmount))) return;
@@ -233,7 +243,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
   };
 
   const handleEndBalanceBlur = async () => {
-    if (!detail) return;
+    if (!detail || !canUpdateBalance) return;
     const amount = Number(bankEndInput);
     const next = Number.isFinite(amount) ? amount : 0;
     if (next === Number(detail.endBalance || 0)) return;
@@ -251,7 +261,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
   };
 
   const handleAddItem = async () => {
-    if (!detail) return;
+    if (!detail || !canAddMovement) return;
     if (!addItemForm.description.trim()) return void toast.error('Describe el movimiento del estado de cuenta');
     const amount = Number(addItemForm.amount);
     if (!Number.isFinite(amount) || amount <= 0) return void toast.error('El monto debe ser mayor que cero');
@@ -296,8 +306,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {detail.status !== 'COMPLETED' && canPerform('ACCOUNTING_RECONCILIATION', 'approve') && (
-              <>
+            {detail.status !== 'COMPLETED' && canAutoMatch && (
                 <Button
                   variant="outline"
                   className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
@@ -307,6 +316,8 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                   <RefreshCw className={cn('size-3 mr-2', autoMatchLoading && 'animate-spin')} />
                   Auto-Match
                 </Button>
+            )}
+            {detail.status !== 'COMPLETED' && canComplete && (
                 <Button
                   className="rounded-xl bg-emerald-700 shadow-xl shadow-emerald-700/20 text-white font-black uppercase text-[10px] tracking-widest px-6 hover:bg-emerald-800"
                   onClick={handleComplete}
@@ -315,7 +326,6 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                   <CheckCircle2 className="size-3 mr-2" />
                   Completar
                 </Button>
-              </>
             )}
             <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-3 py-1', statusStyles[detail.status || 'PENDING'])}>
               {statusLabels[detail.status || 'PENDING']}
@@ -393,7 +403,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                     min="0"
                     step="0.01"
                     value={bankEndInput}
-                    disabled={detail.status === 'COMPLETED' || !canPerform('ACCOUNTING_RECONCILIATION', 'edit')}
+                    disabled={detail.status === 'COMPLETED' || !canUpdateBalance}
                     onChange={(e) => setBankEndInput(e.target.value)}
                     onBlur={handleEndBalanceBlur}
                     placeholder="0.00"
@@ -426,7 +436,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                   <Checkbox checked={onlyUnmatched} onCheckedChange={(c) => setOnlyUnmatched(!!c)} disabled={detail.status === 'COMPLETED'} />
                   Solo sin conciliar
                 </label>
-                {detail.status !== 'COMPLETED' && canPerform('ACCOUNTING_RECONCILIATION', 'edit') && (
+                {detail.status !== 'COMPLETED' && canAddMovement && (
                   <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest" onClick={() => setAddItemOpen(true)}>
                     <Plus className="mr-1.5 size-3" /> Movimiento del banco
                   </Button>
@@ -464,7 +474,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                           min="0"
                           step="0.01"
                           value={item.bankAmount ?? ''}
-                          disabled={detail.status === 'COMPLETED' || !canPerform('ACCOUNTING_RECONCILIATION', 'edit')}
+                          disabled={detail.status === 'COMPLETED' || !canEditMovement}
                           onChange={(e) => {
                             const updatedItems = (detail.items || []).map((i: any) => i.id === item.id ? { ...i, bankAmount: e.target.value === '' ? null : Number(e.target.value) } : i);
                             setDetail({ ...detail, items: updatedItems });
@@ -477,7 +487,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                       <TableCell className="text-center">
                         <Checkbox
                           checked={!!item.matched}
-                          disabled={detail.status === 'COMPLETED' || !canPerform('ACCOUNTING_RECONCILIATION', 'edit')}
+                          disabled={detail.status === 'COMPLETED' || !canMatchMovement}
                           onCheckedChange={(c) => toggleMatched(item.id, !!c)}
                         />
                       </TableCell>
@@ -531,7 +541,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
             </div>
             <DialogFooter>
             <Button variant="outline" onClick={() => setAddItemOpen(false)} disabled={addItemLoading} className="rounded-xl text-[10px] font-black uppercase tracking-widest">Cancelar</Button>
-              <Button onClick={handleAddItem} disabled={addItemLoading} className="rounded-xl bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest shadow-xl shadow-primary/20">
+              <Button onClick={handleAddItem} disabled={!canAddMovement || addItemLoading} className="rounded-xl bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest shadow-xl shadow-primary/20">
                 <Plus className="size-3 mr-2" /> Agregar Movimiento
               </Button>
             </DialogFooter>

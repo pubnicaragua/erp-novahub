@@ -3,6 +3,8 @@ import type { PdfDownloadFormat } from './pdfDownloadFormats';
 export type ManagerReportColumn = string | { key: string; label: string };
 
 export type ManagerReportOptions = {
+  /** Destino del diseño PDF asignado a este reporte consolidado. */
+  targetKey?: string;
   title: string;
   fileBase?: string;
   tenantName?: string;

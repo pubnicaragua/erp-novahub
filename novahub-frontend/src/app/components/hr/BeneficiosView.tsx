@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { HandHeart, Plus, Save, X, Trash2, Users, DollarSign, CheckCircle, Building2, Search, ChevronDown, ChevronUp, Edit2, Send } from 'lucide-react';
+import { HandHeart, Plus, Save, X, Trash2, Users, UserPlus, DollarSign, CheckCircle, Building2, Search, ChevronDown, ChevronUp, Edit2, Send } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -41,6 +41,10 @@ const BENEFIT_TYPE_LABELS: Record<string, string> = {
 };
 
 const EMPTY_FORM = { name: '', description: '', type: 'OTHER', provider: '', cost: '', currency: 'NIO', isActive: true, employeeIds: [] as string[] };
+const benefitEmployeeIds = (benefit: any): string[] => [...new Set([
+  ...(benefit?.employeeBenefits || []).map((item: any) => item.employeeId),
+  ...(benefit?.assignments || []).map((item: any) => item.employeeId),
+])];
 
 type BenefitFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
@@ -55,24 +59,33 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const [filter, setFilter] = useState<BenefitFilter>('ALL');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [assigningBenefit, setAssigningBenefit] = useState<any>(null);
+  const [assignmentEmployeeIds, setAssignmentEmployeeIds] = useState<string[]>([]);
+  const [assignmentStartDate, setAssignmentStartDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
+  const [isAssigning, setIsAssigning] = useState(false);
   const createInFlightRef = useRef(false);
 
   const colFilters = useColumnFilters();
 
   const handleCreate = async () => {
+    if (!canPerform('HR_BENEFITS', editingId ? 'edit' : 'create')) return;
     if (!form.name) { toast.error('El nombre es requerido'); return; }
     if (createInFlightRef.current) return;
     createInFlightRef.current = true;
     setIsCreating(true);
     const actionToken = beginNotificationAction();
     try {
-      const payload = {
+      const payload: any = {
         ...form,
         provider: form.provider?.trim() || null,
         cost: form.cost ? Number(form.cost) : null,
         currency: form.currency || 'USD',
         isActive: form.isActive !== false,
       };
+      if (!canPerform('HR_BENEFITS', 'assign')) delete payload.employeeIds;
       if (editingId) {
         await hrService.updateBenefit(editingId, payload);
         toast.success('Beneficio actualizado');
@@ -110,7 +123,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   };
 
   const handleRequestPayment = async (benefit: any) => {
-    if (!canPerform('HR_BENEFITS', 'approve')) return;
+    if (!canPerform('HR_BENEFITS', 'requestPayment')) return;
     const actionToken = beginNotificationAction();
     try {
       await hrService.createPaymentRequest({ requestType: 'BENEFIT', sourceId: benefit.id });
@@ -123,6 +136,47 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     }
   };
 
+  const openAssignDialog = (benefit: any) => {
+    if (!canPerform('HR_BENEFITS', 'assign')) return;
+    setAssigningBenefit(benefit);
+    setAssignmentEmployeeIds([]);
+    const today = new Date();
+    setAssignmentStartDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
+  };
+
+  const handleAssignEmployees = async () => {
+    if (!assigningBenefit || !canPerform('HR_BENEFITS', 'assign')) return;
+    if (!assignmentStartDate || assignmentEmployeeIds.length === 0) {
+      toast.error('Selecciona al menos un empleado y una fecha de inicio');
+      return;
+    }
+    setIsAssigning(true);
+    const actionToken = beginNotificationAction();
+    try {
+      const results = await Promise.allSettled(assignmentEmployeeIds.map((employeeId) => hrService.assignBenefit({
+        benefitId: assigningBenefit.id,
+        employeeId,
+        startDate: assignmentStartDate,
+      })));
+      const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
+      if (succeeded > 0) {
+        toast.success(`${succeeded} empleado(s) asignado(s)`);
+        completeNotificationAction(actionToken);
+        setAssigningBenefit(null);
+        setAssignmentEmployeeIds([]);
+        onRefresh();
+      } else {
+        const rejected = results.find((result) => result.status === 'rejected') as PromiseRejectedResult | undefined;
+        toast.error(rejected?.reason?.response?.data?.message || rejected?.reason?.message || 'No se pudieron asignar los empleados');
+        failNotificationAction(actionToken);
+      }
+      if (failed > 0 && succeeded > 0) toast.error(`${failed} asignación(es) no se pudieron guardar. Actualiza la lista para revisar el resultado.`);
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
   const openNew = () => {
     setEditingId(null);
     setForm({ ...EMPTY_FORM, currency: displayCurrency });
@@ -131,7 +185,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
 
   const openEdit = (b: any) => {
     setEditingId(b.id);
-    const existingEmployeeIds = b.employeeBenefits ? b.employeeBenefits.map((eb: any) => eb.employeeId) : (b.assignments ? b.assignments.map((eb: any) => eb.employeeId) : []);
+    const existingEmployeeIds = benefitEmployeeIds(b);
     setForm({ name: b.name, description: b.description || '', type: b.type, provider: b.provider || '', cost: b.cost ?? '', currency: b.currency || 'USD', isActive: b.isActive !== false, employeeIds: existingEmployeeIds });
     setShowForm(true);
   };
@@ -322,6 +376,11 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                       </button>
                     </div>
                     <div className="flex items-center gap-1">
+                      {canPerform('HR_BENEFITS', 'assign') && benefit.isActive !== false && (
+                        <button onClick={() => openAssignDialog(benefit)} className="size-7 rounded-lg hover:bg-primary/10 flex items-center justify-center text-muted-foreground hover:text-primary transition-colors" title="Asignar empleados" aria-label={`Asignar empleados a ${benefit.name}`}>
+                          <UserPlus className="size-3.5" />
+                        </button>
+                      )}
                       {canPerform('HR_BENEFITS', 'edit') && (
                         <button onClick={() => openEdit(benefit)} className="size-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Editar">
                           <Edit2 className="size-3.5" />
@@ -354,7 +413,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                   {Number(benefit.cost || 0) > 0 && assignedCount > 0 && benefit.paymentStatus !== 'PAID' && (
                     <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-warning/20 bg-warning/5 px-3 py-2">
                       <span className="text-[10px] font-black uppercase tracking-widest text-warning">Pago: {benefit.paymentStatus === 'REQUESTED' ? 'Solicitud enviada' : benefit.paymentStatus === 'APPROVED' ? 'Aprobado' : 'Pendiente'}</span>
-                      {(!benefit.paymentStatus || benefit.paymentStatus === 'PENDING') && canPerform('HR_BENEFITS', 'approve') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(benefit)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}
+                      {(!benefit.paymentStatus || benefit.paymentStatus === 'PENDING') && canPerform('HR_BENEFITS', 'requestPayment') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(benefit)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}
                     </div>
                   )}
                   {Number(benefit.cost || 0) > 0 && benefit.paymentStatus === 'PAID' && <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-success"><CheckCircle className="size-3.5" /> Pago contabilizado</div>}
@@ -372,6 +431,53 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           </div>
         )}
       </div>
+
+      <Dialog open={assigningBenefit !== null && canPerform('HR_BENEFITS', 'assign')} onOpenChange={(open) => { if (!open && !isAssigning) setAssigningBenefit(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Asignar empleados al beneficio</DialogTitle>
+          </DialogHeader>
+          {assigningBenefit && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-border/50 bg-muted/30 p-3 text-sm font-semibold">{assigningBenefit.name}</div>
+              <div className="space-y-1">
+                <Label htmlFor="hr-benefit-assignment-start-date">Fecha de inicio</Label>
+                <Input id="hr-benefit-assignment-start-date" type="date" value={assignmentStartDate} onChange={(event) => setAssignmentStartDate(event.target.value)} disabled={isAssigning} />
+              </div>
+              <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-border/50 p-3">
+                {(() => {
+                  const availableEmployees = (employees || []).filter((employee: any) => !benefitEmployeeIds(assigningBenefit).includes(employee.id));
+                  return availableEmployees.length > 0 ? availableEmployees.map((employee: any) => (
+                    <label key={employee.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/40">
+                      <input
+                        type="checkbox"
+                        checked={assignmentEmployeeIds.includes(employee.id)}
+                        disabled={isAssigning}
+                        onChange={(event) => setAssignmentEmployeeIds((current) => event.target.checked
+                          ? [...current, employee.id]
+                          : current.filter((id) => id !== employee.id))}
+                        className="size-4 rounded border-input text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">{employee.firstName} {employee.lastName}</span>
+                      {employee.employeeNumber && <span className="ml-auto text-xs text-muted-foreground">{employee.employeeNumber}</span>}
+                    </label>
+                  )) : (
+                    <p className="py-4 text-center text-sm text-muted-foreground">
+                      {(employees || []).length === 0 ? 'No hay empleados disponibles para asignar.' : 'Todos los empleados disponibles ya están asignados.'}
+                    </p>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <DialogClose asChild><Button variant="outline" disabled={isAssigning}>Cancelar</Button></DialogClose>
+            <Button onClick={handleAssignEmployees} disabled={isAssigning || assignmentEmployeeIds.length === 0}>
+              <UserPlus className="mr-2 size-4" />{isAssigning ? 'Asignando...' : 'Asignar seleccionados'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* New / Edit Dialog */}
       <Dialog open={showForm} onOpenChange={(open) => { if (!open) { setShowForm(false); setEditingId(null); } }}>
@@ -431,7 +537,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                 <span className="text-xs text-muted-foreground">{form.isActive === false ? 'Inactivo' : 'Activo'}</span>
               </div>
             </div>
-            <div className="md:col-span-3 space-y-1" data-tour="hr-benefit-form-items">
+            {canPerform('HR_BENEFITS', 'assign') && <div className="md:col-span-3 space-y-1" data-tour="hr-benefit-form-items">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                 Empleados Asignados ({form.employeeIds?.length || 0})
               </Label>
@@ -456,7 +562,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                   </label>
                 ))}
               </div>
-            </div>
+            </div>}
           </div>
           <DialogFooter className="gap-2" data-tour="hr-benefit-form-actions">
             <DialogClose asChild>

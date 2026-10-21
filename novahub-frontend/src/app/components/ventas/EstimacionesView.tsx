@@ -312,8 +312,8 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
     : showPriceListColumn ? 'sales-quote-line-product-layout--price-only' : 'sales-quote-line-product-layout--product-only';
 
   const handleConvertToOrder = async (estimate: Estimate) => {
-    if (!canPerform('SALES_QUOTES', 'approve')) {
-      toast.error('No tienes permiso para aprobar y enviar cotizaciones');
+    if (!canPerform('SALES_QUOTES', 'convert')) {
+      toast.error('No tienes permiso para convertir cotizaciones en órdenes');
       return;
     }
     if (convertingId) return;
@@ -434,6 +434,12 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
 
   const handleSaveEstimate = async (status: 'DRAFT' | 'IN_PROCESS') => {
     if (!localDoc) return;
+    const currentStatus = normalizeEstimateStatus(localDoc.status);
+    const isStatusTransition = isLocalEstimate(localDoc.id) || currentStatus !== normalizeEstimateStatus(status);
+    if (status === 'IN_PROCESS' && isStatusTransition && !canPerform('SALES_QUOTES', 'submit')) {
+      toast.error('No tienes permiso para enviar cotizaciones a proceso');
+      return;
+    }
     if (savingEstimateRef.current) return;
     if (status === 'IN_PROCESS') {
       const workflowIssues = getEstimateWorkflowIssues(localDoc);
@@ -879,12 +885,12 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                     onClick={() => void handleSaveEstimate('DRAFT')}>
                     Guardar Borrador
                   </Button>
-                  <Button className="w-full rounded-xl bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
+                  {canPerform('SALES_QUOTES', 'submit') && <Button className="w-full rounded-xl bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
                     onClick={() => void handleSaveEstimate('IN_PROCESS')}>
                     Guardar
-                  </Button>
+                  </Button>}
                 </>}
-                {normalizeEstimateStatus(localDoc?.status) === 'IN_PROCESS' && canPerform('SALES_QUOTES', 'approve') && <Button className="w-full rounded-xl bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
+                {normalizeEstimateStatus(localDoc?.status) === 'IN_PROCESS' && canPerform('SALES_QUOTES', 'convert') && <Button className="w-full rounded-xl bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
                   onClick={() => void handleConvertToOrder(localDoc)}>
                   Aprobar y enviar a Orden
                 </Button>}
@@ -1545,7 +1551,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                 documentLabel="cotización"
                 onSend={() => handleWhatsApp(row)}
               />
-              {canPerform('SALES_QUOTES', 'approve') &&
+              {canPerform('SALES_QUOTES', 'convert') &&
                 normalizeEstimateStatus(row.status) === 'IN_PROCESS' && (
                 <Button
                   variant="ghost"
@@ -1562,7 +1568,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
               <Button variant="ghost" title="Ver cotización completa" aria-label="Ver cotización completa" size="icon" className={actionButtonClass} onClick={() => { setDetailEstimate(null); setEditingId(row.id); }}>
                 <Eye className={actionIconClass} />
               </Button>
-              {canPerform('SALES_QUOTES', 'delete') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(row.status)) && (
+              {canPerform('SALES_QUOTES', 'cancel') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(row.status)) && (
                 <Button type="button" title="Cancelar cotización" variant="ghost" size="icon" className={actionButtonClass} onClick={() => setPendingCancelId(row.id)}>
                   <Ban className={actionIconClass} />
                 </Button>
@@ -1590,8 +1596,8 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
             documentLabel="cotización"
             onSend={() => handleWhatsApp(detailEstimate)}
           />
-          {canPerform('SALES_QUOTES', 'approve') && normalizeEstimateStatus(detailEstimate.status) === 'IN_PROCESS' && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertToOrder(estimate); }}><ArrowRightCircle className="mr-2 size-4" />Enviar a orden</Button>}
-          {canPerform('SALES_QUOTES', 'delete') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(detailEstimate.status)) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailEstimate(null); setPendingCancelId(detailEstimate.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {canPerform('SALES_QUOTES', 'convert') && normalizeEstimateStatus(detailEstimate.status) === 'IN_PROCESS' && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertToOrder(estimate); }}><ArrowRightCircle className="mr-2 size-4" />Enviar a orden</Button>}
+          {canPerform('SALES_QUOTES', 'cancel') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(detailEstimate.status)) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailEstimate(null); setPendingCancelId(detailEstimate.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_QUOTES', 'export') ? (format, _scope, _filter, options) => { if (detailEstimate) void handleExportPDF(detailEstimate, format, options); } : undefined}
       />
@@ -1605,6 +1611,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
         variant="destructive"
         loading={cancelLoading}
         onConfirm={async () => {
+          if (!canPerform('SALES_QUOTES', 'cancel')) return;
           if (!pendingCancelId) return;
           const cancelToastId = toast.loading('Cancelando cotización...');
           try {

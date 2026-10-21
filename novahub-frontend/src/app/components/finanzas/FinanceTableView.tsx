@@ -412,10 +412,10 @@ export function FinanceTableView({
       const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: filteredData, columns: reportColumns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), tableSummary: summary, fileName: buildDateFilteredLabeledPdfFileName(title, 'pdf', dateRange.start, dateRange.end) });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const pageWidth = doc.internal.pageSize.getWidth();
-      const primaryColor = themeConfig.colors.primary || '#10b981';
+      const primaryColor = pdfSettings.primaryColor || '#01422c';
       const rgbPrimary = primaryColor.startsWith('#') 
         ? [parseInt(primaryColor.slice(1,3), 16), parseInt(primaryColor.slice(3,5), 16), parseInt(primaryColor.slice(5,7), 16)]
-        : [16, 185, 129];
+        : [1, 66, 44];
 
       let currentY = 15;
       if (logoUrl) {
@@ -479,15 +479,16 @@ export function FinanceTableView({
         foot,
         showFoot: summary ? 'lastPage' : undefined,
         startY: currentY,
-        styles: { fontSize: 8, cellPadding: 3 },
+        styles: { fontSize: 8, cellPadding: 3, valign: 'middle' },
         headStyles: {
           fillColor: rgbPrimary as [number, number, number],
           textColor: [255, 255, 255],
           fontStyle: 'bold',
           halign: 'center',
+          valign: 'middle',
         },
         alternateRowStyles: { fillColor: [245, 245, 245] },
-        footStyles: { fillColor: [248, 250, 252], textColor: [60, 60, 60], fontStyle: 'bold' },
+        footStyles: { fillColor: [248, 250, 252], textColor: [60, 60, 60], fontStyle: 'bold', valign: 'middle' },
         margin: { left: 14, right: 14 },
       });
 

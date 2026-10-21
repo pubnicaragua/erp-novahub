@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { PdfAppearanceProfile, PdfAppearanceProfilePatch } from './pdf-appearance';
 
 /** Identificador de una salida PDF. Puede ser legacy (Ventas) o module.subview. */
 export type PdfDocumentType = string;
@@ -42,11 +43,16 @@ export interface PdfCompanyProfile {
   logo: string;
 }
 
+export type { PdfAppearanceOverrides, PdfAppearanceProfile } from './pdf-appearance';
+
 export const pdfDocumentDesignService = {
   list: () => api.get<PdfDocumentDesignRecord[]>('/pdf-document-designs'),
   listFolders: () => api.get<PdfDocumentDesignFolder[]>('/pdf-document-designs/folders'),
   getCompanyProfile: () => api.get<PdfCompanyProfile | null>('/pdf-document-designs/company-profile'),
   updateCompanyProfile: (data: PdfCompanyProfile) => api.patch<PdfCompanyProfile>('/pdf-document-designs/company-profile', data),
+  getAppearanceProfile: () => api.get<PdfAppearanceProfile>('/pdf-document-designs/appearance-profile'),
+  updateAppearanceProfile: (patch: PdfAppearanceProfilePatch) => api.patch<PdfAppearanceProfile>('/pdf-document-designs/appearance-profile', patch),
+  applyTemplate: (templateId: 'default-v1') => api.post<{ templateId: string; templateVersion: number; updatedDesignCount: number; alreadyApplied: boolean }>('/pdf-document-designs/apply-template', { templateId }),
   createFolder: (data: { name: string; color?: string }) => api.post<PdfDocumentDesignFolder>('/pdf-document-designs/folders', data),
   updateFolder: (id: string, data: { name?: string; color?: string }) => api.patch<PdfDocumentDesignFolder>(`/pdf-document-designs/folders/${id}`, data),
   removeFolder: (id: string) => api.delete(`/pdf-document-designs/folders/${id}`),

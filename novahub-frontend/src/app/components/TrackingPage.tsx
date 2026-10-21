@@ -68,14 +68,14 @@ const TRACKING_TABS: Array<{ id: TrackingTab; label: string }> = [
   { id: 'config', label: 'Configuración' },
 ];
 
-const TRACKING_TAB_PERMISSION: Record<TrackingTab, string> = {
-  transit: 'TRACKING_TRANSIT',
-  reception: 'TRACKING_RECEPTION',
-  batches: 'TRACKING_BATCHES',
-  packages: 'TRACKING_PACKAGES',
-  reconciliation: 'TRACKING_RECONCILIATION',
-  billing: 'TRACKING_BILLING',
-  config: 'TRACKING_CONFIG',
+const TRACKING_TAB_PERMISSION: Record<TrackingTab, string[]> = {
+  transit: ['TRACKING_TRANSIT'],
+  reception: ['TRACKING_RECEPTION'],
+  batches: ['TRACKING_BATCHES', 'TRACKING_RECEPTION'],
+  packages: ['TRACKING_PACKAGES'],
+  reconciliation: ['TRACKING_RECONCILIATION'],
+  billing: ['TRACKING_BILLING'],
+  config: ['TRACKING_CONFIG'],
 };
 
 const TRACKING_SIDEBAR_TAB: Record<TrackingTab, string> = {
@@ -139,13 +139,15 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupError, setLookupError] = useState<{ reason: TrackLookupErrorReason; message: string } | null>(null);
   const visibleTabs = useMemo(
-    () => TRACKING_TABS.filter(({ id }) => canPerform(TRACKING_TAB_PERMISSION[id], 'view')),
+    () => TRACKING_TABS.filter(({ id }) => TRACKING_TAB_PERMISSION[id].some((module) => canPerform(module, 'view'))),
     [canPerform],
   );
   const [tab, setTab] = useState<TrackingTab>('transit');
   const canReadTransit = canPerform('TRACKING_TRANSIT', 'view');
   const canCreateTransit = canPerform('TRACKING_TRANSIT', 'create');
-  const canEditTransit = canPerform('TRACKING_TRANSIT', 'edit');
+  const canLookupTransit = canReadTransit && canPerform('TRACKING_TRANSIT', 'lookup');
+  const canSyncTransit = canReadTransit && canPerform('TRACKING_TRANSIT', 'sync');
+  const canRegisterTransitEvent = canReadTransit && canPerform('TRACKING_TRANSIT', 'registerEvent');
   const canDeleteTransit = canPerform('TRACKING_TRANSIT', 'delete');
   const canExportTransit = tab === 'transit' && canPerform('TRACKING_TRANSIT', 'export');
 
@@ -244,7 +246,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
 
   /** Consulta el código de tracking en los providers y muestra el resultado. */
   const handleLookup = useCallback(async (rawCode?: string) => {
-    if (!canReadTransit) return;
+    if (!canLookupTransit) return;
     const code = (rawCode ?? lookupCode).trim();
     if (!code) {
       setLookupError({ reason: 'EMPTY', message: TRACK_LOOKUP_ERROR_LABELS.EMPTY });
@@ -277,7 +279,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       completeNotificationAction(actionToken);
       setLookupBusy(false);
     }
-  }, [canReadTransit, lookupCode, load]);
+  }, [canLookupTransit, lookupCode, load]);
 
   const counts = useMemo(() => ({
     total: shipments.length,
@@ -312,7 +314,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   };
 
   const handleSync = async () => {
-    if (!canEditTransit) return;
+    if (!canSyncTransit || !canReadTransit) return;
     if (!selected) return;
     const actionToken = beginNotificationAction();
     try {
@@ -334,7 +336,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   };
 
   const handleAddEvent = async () => {
-    if (!canEditTransit) return;
+    if (!canRegisterTransitEvent || !canReadTransit) return;
     if (!selected) return;
     const actionToken = beginNotificationAction();
     try {
@@ -410,7 +412,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-        <Card className="rounded-2xl border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 shadow-sm sm:p-5">
+        {canLookupTransit && <Card className="rounded-2xl border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-0 flex-1">
               <label htmlFor="lookup-tracking" className="mb-1.5 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
@@ -439,7 +441,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
           <p className="mt-2 text-[11px] text-muted-foreground">
             Consulta automática a API. El resultado se guarda en el historial; la recepción física se confirma más adelante.
           </p>
-        </Card>
+        </Card>}
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
@@ -637,7 +639,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
                   </div>
                 </Card>
 
-                <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
+                {canRegisterTransitEvent && <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
                   <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><MapPin className="size-4 text-primary" /> Registrar estado manualmente</h3>
                   <div className="mt-3 space-y-2">
                     <select
@@ -650,16 +652,16 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
                     </select>
                     <div className="flex gap-2">
                       <Input data-testid="tracking-event-location" placeholder="Ubicación (opcional)" value={eventForm.location} onChange={(e) => setEventForm((prev) => ({ ...prev, location: e.target.value }))} className="rounded-xl text-xs" />
-                  {canEditTransit && <Button data-testid="tracking-event-submit" className="rounded-xl text-xs" onClick={handleAddEvent}>Registrar</Button>}
+                      <Button data-testid="tracking-event-submit" className="rounded-xl text-xs" onClick={handleAddEvent}>Registrar evento</Button>
                     </div>
                   </div>
-                </Card>
+                </Card>}
 
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={() => { const url = `${window.location.origin}/public/tracking/${encodeURIComponent(selected.trackingCode)}`; navigator.clipboard.writeText(url); toast.success('Enlace público copiado: ' + url); }}>
                     <Truck className="size-4" /> Copiar enlace público
                   </Button>
-                  {canEditTransit && <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={handleSync} disabled={syncing}>
+                  {canSyncTransit && <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={handleSync} disabled={syncing}>
                     <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} /> Sincronizar con transportista
                   </Button>}
                   <Button

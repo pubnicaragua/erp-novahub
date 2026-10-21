@@ -31,16 +31,16 @@ interface ProyectoDetalleViewProps {
 }
 
 const TAB_DEFS = [
-  { id: 'resumen', label: 'Resumen', fullLabel: 'Resumen, Avance y Documentos', icon: LayoutDashboard, module: 'PROJECTS' },
-  { id: 'cotizaciones', label: 'Cotizaciones', fullLabel: 'Cotizaciones Materiales', icon: ShoppingCart, module: 'PROJECTS_EXPENSES' },
-  { id: 'planificacion', label: 'Planificación', fullLabel: 'Planificación y Tareas', icon: ListTodo, module: 'PROJECTS_TASKS' },
-  { id: 'costos', label: 'Presupuesto', fullLabel: 'Presupuesto y Costos', icon: Wallet, module: 'PROJECTS_EXPENSES' },
-  { id: 'costeo6d', label: 'Costeo 6D', fullLabel: 'Costeo 6D por Partida y Rubro', icon: Coins, module: 'PROJECTS' },
-  { id: 'evm', label: 'Control EVM', fullLabel: 'Control de Valor Ganado y Curva S', icon: Activity, module: 'PROJECTS' },
-  { id: 'memorias', label: 'Memorias', fullLabel: 'Memorias de Cálculo y Cubicaciones', icon: Calculator, module: 'PROJECTS' },
-  { id: 'exportar', label: 'Cotización', fullLabel: 'Cotización Ejecutiva para Cliente', icon: FileDown, module: 'PROJECTS' },
-  { id: 'parametros', label: 'Parámetros', fullLabel: 'Parámetros del Proyecto', icon: Sliders, module: 'PROJECTS' },
-  { id: 'actividades', label: 'Historial', fullLabel: 'Actividades e Historial de Auditoría', icon: History, module: 'PROJECTS' },
+  { id: 'resumen', label: 'Resumen', fullLabel: 'Resumen, Avance y Documentos', icon: LayoutDashboard, modules: ['PROJECTS_LIST'] },
+  { id: 'cotizaciones', label: 'Cotizaciones', fullLabel: 'Cotizaciones Materiales', icon: ShoppingCart, modules: ['PROJECTS_QUOTATIONS'] },
+  { id: 'planificacion', label: 'Planificación', fullLabel: 'Planificación y Tareas', icon: ListTodo, modules: ['PROJECTS_TASKS', 'PROJECTS_MILESTONES'] },
+  { id: 'costos', label: 'Presupuesto', fullLabel: 'Presupuesto y Costos', icon: Wallet, modules: ['PROJECTS_EXPENSES'] },
+  { id: 'costeo6d', label: 'Costeo 6D', fullLabel: 'Costeo 6D por Partida y Rubro', icon: Coins, modules: ['PROJECTS_EXPENSES'] },
+  { id: 'evm', label: 'Control EVM', fullLabel: 'Control de Valor Ganado y Curva S', icon: Activity, modules: ['PROJECTS_PROGRESS', 'PROJECTS_EXPENSES'] },
+  { id: 'memorias', label: 'Memorias', fullLabel: 'Memorias de Cálculo y Cubicaciones', icon: Calculator, modules: ['PROJECTS_EXPENSES'] },
+  { id: 'exportar', label: 'Cotización', fullLabel: 'Cotización Ejecutiva para Cliente', icon: FileDown, modules: ['PROJECTS_EXPENSES'] },
+  { id: 'parametros', label: 'Parámetros', fullLabel: 'Parámetros del Proyecto', icon: Sliders, modules: ['PROJECTS_EXPENSES'] },
+  { id: 'actividades', label: 'Historial', fullLabel: 'Actividades e Historial de Auditoría', icon: History, modules: ['PROJECTS_LIST'] },
 ];
 
 export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange }: ProyectoDetalleViewProps) {
@@ -57,9 +57,13 @@ export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange
   const pricingQuery = useTenantQuery<Record<string, unknown>>(
     ['projects', projectId, 'pricing-engine'],
     (signal) => projectsService.getProjectPricingEngine(projectId, signal),
-    { enabled: !!projectId },
+    { enabled: !!projectId && canPerform('PROJECTS_EXPENSES', 'view') },
   );
   const pricingEngine = pricingQuery.data;
+  const canViewProjectReport = canPerform('PROJECTS_LIST', 'view')
+    && canPerform('PROJECTS_TASKS', 'view')
+    && canPerform('PROJECTS_MILESTONES', 'view')
+    && canPerform('PROJECTS_PROGRESS', 'view');
 
   const handleTabChange = (val: string) => {
     setActiveTab(val);
@@ -127,9 +131,12 @@ export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange
         <div className="mb-4 w-full min-w-0 max-w-full overflow-x-auto pb-1.5 custom-scrollbar">
           <TabsList className="flex h-auto w-full min-w-max flex-nowrap items-center gap-1 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-1 [&>button]:min-w-fit [&>button]:justify-center [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
             {TAB_DEFS.map((tab) => {
-              const hasEnabled = user?.enabledModules?.includes(tab.module) || user?.enabledModules?.includes('PROJECTS');
+              const hasEnabled = user?.enabledModules?.includes('PROJECTS') || tab.modules.some((module) => user?.enabledModules?.includes(module));
               if (user?.enabledModules && !hasEnabled) return null;
-              if (!canPerform(tab.module, 'view')) return null;
+              const hasModuleRead = tab.id === 'planificacion'
+                ? tab.modules.some((module) => canPerform(module, 'view'))
+                : tab.modules.every((module) => canPerform(module, 'view'));
+              if (!hasModuleRead) return null;
               return (
                 <TabsTrigger key={tab.id} value={tab.id}
                   aria-label={tab.fullLabel || tab.label}
@@ -143,42 +150,42 @@ export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange
           </TabsList>
         </div>
 
-        {activeTab === 'resumen' && project ? (
+        {activeTab === 'resumen' && project && canPerform('PROJECTS_LIST', 'view') ? (
           <div className="space-y-6">
-            <ProyectoResumenPanel project={project} />
-            <ProyectoAvancePanel projectId={projectId} project={project} />
-            <ProyectoDocumentosPanel projectId={projectId} />
+            <ProyectoResumenPanel project={project} canViewCosts={canPerform('PROJECTS_EXPENSES', 'view')} canViewProgress={canPerform('PROJECTS_PROGRESS', 'view')} canViewTasks={canPerform('PROJECTS_TASKS', 'view')} canViewMilestones={canPerform('PROJECTS_MILESTONES', 'view')} />
+            {canPerform('PROJECTS_PROGRESS', 'view') && <ProyectoAvancePanel projectId={projectId} project={project} />}
+            {canPerform('PROJECTS_DOCUMENTS', 'view') && <ProyectoDocumentosPanel projectId={projectId} />}
           </div>
         ) : null}
-        {activeTab === 'cotizaciones' && project ? <ProyectoCotizacionesPanel projectId={projectId} project={project} /> : null}
-        {activeTab === 'planificacion' && <ProyectoPlanificacionPanel projectId={projectId} />}
-        {activeTab === 'costos' && (
+        {activeTab === 'cotizaciones' && project && canPerform('PROJECTS_QUOTATIONS', 'view') ? <ProyectoCotizacionesPanel projectId={projectId} project={project} /> : null}
+        {activeTab === 'planificacion' && (canPerform('PROJECTS_TASKS', 'view') || canPerform('PROJECTS_MILESTONES', 'view')) && <ProyectoPlanificacionPanel projectId={projectId} />}
+        {activeTab === 'costos' && canPerform('PROJECTS_EXPENSES', 'view') && (
           <div className="space-y-6">
             <ProyectoPresupuestoPanel projectId={projectId} />
             <ProyectoCostosPanel projectId={projectId} />
-            <ProyectoReportePanel projectId={projectId} />
+            {canViewProjectReport && <ProyectoReportePanel projectId={projectId} />}
           </div>
         )}
-        {activeTab === 'costeo6d' && project ? (
+        {activeTab === 'costeo6d' && project && canPerform('PROJECTS_EXPENSES', 'view') ? (
           <ProyectoCosteo6DPanel project={project} pricingEngine={pricingEngine} />
         ) : null}
-        {activeTab === 'evm' && project ? (
+        {activeTab === 'evm' && project && canPerform('PROJECTS_PROGRESS', 'view') && canPerform('PROJECTS_EXPENSES', 'view') ? (
           <ProyectoEVMControlPanel project={project} pricingEngine={pricingEngine} />
         ) : null}
-        {activeTab === 'memorias' && project ? (
+        {activeTab === 'memorias' && project && canPerform('PROJECTS_EXPENSES', 'view') ? (
           <ProyectoMemoriasCalculoPanel project={project} pricingEngine={pricingEngine} />
         ) : null}
-        {activeTab === 'exportar' && project ? (
+        {activeTab === 'exportar' && project && canPerform('PROJECTS_EXPENSES', 'view') ? (
           <ProyectoCotizacionExportView
             project={project}
             pricingEngine={pricingEngine}
             costsSummary={detailQuery.data?.budgetSummary}
           />
         ) : null}
-        {activeTab === 'parametros' && project ? (
+        {activeTab === 'parametros' && project && canPerform('PROJECTS_EXPENSES', 'view') ? (
           <ProyectoParametrosPanel projectId={projectId} project={project} />
         ) : null}
-        {activeTab === 'actividades' && (
+        {activeTab === 'actividades' && canPerform('PROJECTS_LIST', 'view') && (
           <div className="space-y-6">
             <ProyectoActividadesPanel projectId={projectId} />
             {project ? (
@@ -210,7 +217,13 @@ function KpiCard({ label, value, hint, tone = 'default' }: { label: string; valu
   );
 }
 
-export function ProyectoResumenPanel({ project }: { project: ProjectDetail }) {
+export function ProyectoResumenPanel({ project, canViewCosts, canViewProgress, canViewTasks, canViewMilestones }: {
+  project: ProjectDetail;
+  canViewCosts: boolean;
+  canViewProgress: boolean;
+  canViewTasks: boolean;
+  canViewMilestones: boolean;
+}) {
   const s = project.summary;
   const now = new Date();
   const nextWeek = new Date(now.getTime() + 7 * 86400000);
@@ -221,35 +234,35 @@ export function ProyectoResumenPanel({ project }: { project: ProjectDetail }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {canViewCosts && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard label="Presupuesto" value={money(s.plannedBudget, project.currency)} hint="Proyectado (base)" />
         <KpiCard label="Ejecutado" value={money(s.executedCost, project.currency)} hint="Costos ejecutados" />
         <KpiCard label="Saldo disponible" value={money(s.available, project.currency)} tone={s.available < 0 ? 'bad' : 'default'} hint="Presupuesto − ejecutado" />
         <KpiCard label="Variación" value={`${s.varianceAbs >= 0 ? '+' : ''}${money(s.varianceAbs, project.currency)}`} tone={s.overBudget ? 'bad' : 'good'} hint={`${s.variancePct >= 0 ? '+' : ''}${s.variancePct.toFixed(1)}%`} />
         <KpiCard label="Margen esperado" value={money(s.expectedMargin, project.currency)} tone={s.expectedMargin < 0 ? 'bad' : 'good'} hint="Ingresos − presupuesto" />
         <KpiCard label="Margen real" value={money(s.realMargin, project.currency)} tone={s.realMargin < 0 ? 'bad' : 'good'} hint={`Δ ${money(s.marginDelta, project.currency)}`} />
-      </div>
+      </div>}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="rounded-2xl border-border/60 shadow-sm lg:col-span-2">
           <CardHeader className="pb-2"><CardTitle className="text-sm">Resumen del proyecto</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div>
+            {canViewProgress && <div>
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold">Avance</span>
                 <span className="font-black text-primary">{Number(project.progress) || 0}%</span>
               </div>
               <Progress value={Number(project.progress) || 0} className="mt-1.5 h-2" />
-            </div>
+            </div>}
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+              {canViewTasks && <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tareas</p>
                 <p className="mt-1 text-lg font-black">{completedTasks}/{totalTasks} <span className="text-xs font-normal text-muted-foreground">completadas</span></p>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+              </div>}
+              {canViewMilestones && <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Hitos</p>
                 <p className="mt-1 text-lg font-black">{project.milestones.filter((m) => m.status === 'COMPLETED').length}/{project.milestones.length} <span className="text-xs font-normal text-muted-foreground">completados</span></p>
-              </div>
+              </div>}
               <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Miembros</p>
                 <p className="mt-1 text-lg font-black">{project.members.length}</p>
@@ -263,16 +276,16 @@ export function ProyectoResumenPanel({ project }: { project: ProjectDetail }) {
         <Card className="rounded-2xl border-border/60 shadow-sm">
           <CardHeader className="pb-2"><CardTitle className="text-sm">Alertas</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {s.overBudget ? <AlertRow tone="rose" text={`El proyecto superó el presupuesto por ${money(Math.abs(s.varianceAbs), project.currency)}.`} /> : null}
+            {canViewCosts && s.overBudget ? <AlertRow tone="rose" text={`El proyecto superó el presupuesto por ${money(Math.abs(s.varianceAbs), project.currency)}.`} /> : null}
             {overdue.length > 0 ? <AlertRow tone="rose" text={`${overdue.length} tarea(s) vencida(s).`} /> : null}
             {upcoming.length > 0 ? <AlertRow tone="amber" text={`${upcoming.length} tarea(s) vencen esta semana.`} /> : null}
             {project.tasks.some((t) => t.status === 'PENDING' && t.priority === 'URGENT') ? <AlertRow tone="amber" text="Hay tareas urgentes sin iniciar." /> : null}
-            {!s.overBudget && overdue.length === 0 && upcoming.length === 0 && <p className="text-sm text-muted-foreground">Sin alertas pendientes.</p>}
+            {(!canViewCosts || !s.overBudget) && overdue.length === 0 && upcoming.length === 0 && <p className="text-sm text-muted-foreground">Sin alertas pendientes.</p>}
           </CardContent>
         </Card>
       </div>
 
-      {overdue.length > 0 && (
+      {canViewTasks && overdue.length > 0 && (
         <Card className="rounded-2xl border-rose-200 bg-rose-50/40 shadow-sm dark:border-rose-800/40 dark:bg-rose-950/20">
           <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm text-rose-700 dark:text-rose-300">Fechas críticas vencidas</CardTitle></CardHeader>
           <CardContent>

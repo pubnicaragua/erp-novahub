@@ -15,7 +15,7 @@ import { AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
-import { buildHumanPdfFileName } from '../../utils/exportFileNames';
+import { buildDatedDownloadFileName, buildHumanPdfFileName } from '../../utils/exportFileNames';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -243,7 +243,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   };
 
   const handleOpenProcessPayroll = () => {
-    if (!canPerform('HR_PAYROLL', 'approve')) return;
+    if (!canPerform('HR_PAYROLL', 'process')) return;
     if (filterEmployee !== 'all') {
       const selectedEmployee = employees.find((employee: any) => employee.id === filterEmployee);
       const selectedFrequency = String(selectedEmployee?.payFrequency || '').toUpperCase();
@@ -269,7 +269,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const processPeriod = getCurrentPayrollPeriod(processFrequency === 'ALL' ? 'MONTHLY' : processFrequency);
 
   const handleProcessPayroll = async () => {
-    if (!canPerform('HR_PAYROLL', 'approve') || hasProcessFrequencyMismatch || selectedEmployeeUnsupported) return;
+    if (!canPerform('HR_PAYROLL', 'process') || hasProcessFrequencyMismatch || selectedEmployeeUnsupported) return;
     setProcessLoading(true);
     const actionToken = beginNotificationAction();
     try {
@@ -311,6 +311,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   };
 
   const handleRequestPayment = async (id: string) => {
+    if (!canPerform('HR_PAYROLL', 'requestPayment')) return;
     const actionToken = beginNotificationAction();
     try {
       await hrService.createPaymentRequest({ requestType: 'PAYROLL', sourceId: id });
@@ -341,6 +342,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   };
 
   const handleRequestAllPayments = async () => {
+    if (!canPerform('HR_PAYROLL', 'requestPayment')) return;
     const pendingPayrolls = filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING');
     if (pendingPayrolls.length === 0) {
       toast.info('No hay nóminas pendientes');
@@ -417,6 +419,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         startY: 28,
         head: [['Empleado', 'Periodo', 'Periodicidad', 'Bruto', 'Neto a Pagar', 'Costo Empresa', 'Estado']],
         body: tableData,
+        styles: { cellPadding: 2, overflow: 'linebreak', valign: 'middle' },
+        headStyles: { valign: 'middle' },
       });
 
       doc.save(buildHumanPdfFileName(`Reporte de nóminas ${new Date().toISOString().slice(0, 10)}`));
@@ -531,7 +535,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           {canPerform('HR_PAYROLL', 'export') && (
             <ExportMenu onPdf={() => void handleExportPDF()} onExcel={() => void handleExportExcel()} pdfDescription="Nóminas con la estructura configurada" excelDescription="Todas las nóminas filtradas" />
           )}
-          {pendingToRequestCount > 0 && canPerform('HR_PAYROLL', 'approve') && (
+          {pendingToRequestCount > 0 && canPerform('HR_PAYROLL', 'requestPayment') && (
             <Button size="sm" onClick={handleRequestAllPayments} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
               <Send className="size-4 mr-2" />
               Solicitar pagos ({pendingToRequestCount})
@@ -549,7 +553,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               Incluir Comisiones
             </label>
           </div>
-          {canPerform('HR_PAYROLL', 'approve') && (
+          {canPerform('HR_PAYROLL', 'process') && (
             <Button size="sm" onClick={handleOpenProcessPayroll} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="nominas-process">
               <Calculator className="size-4 mr-2" />
               Procesar Nómina
@@ -629,7 +633,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                       <div className="flex items-center justify-end gap-1">
                         {effectiveStatus !== 'PAID' && (
                           <>
-                            {effectiveStatus === 'PENDING' && canPerform('HR_PAYROLL', 'approve') && (
+                            {effectiveStatus === 'PENDING' && canPerform('HR_PAYROLL', 'requestPayment') && (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -780,7 +784,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                   </Button>
                   {effectiveStatus !== 'PAID' && (
                     <>
-                      {effectiveStatus === 'PENDING' && canPerform('HR_PAYROLL', 'approve') && (
+                      {effectiveStatus === 'PENDING' && canPerform('HR_PAYROLL', 'requestPayment') && (
                         <Button size="sm" onClick={() => handleRequestPayment(payroll.id)} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-[11px] h-8">
                           <Send className="size-3 mr-1" /> Solicitar pago
                         </Button>

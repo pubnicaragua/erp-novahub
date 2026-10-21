@@ -17,6 +17,7 @@ import { cn } from './ui/utils';
 import { toast } from '@/app/services/toast';
 import { useAuth } from '../contexts/AuthContext';
 import { financingService, type FinancingApplication, type PrefillData } from '../services/financing.service';
+import { getFinancingStatusTransitions, type FinancingWorkflowAction } from '../utils/financingWorkflow';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
 import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
@@ -187,6 +188,10 @@ export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange }: F
               app={selectedApp}
               onBack={() => setSelectedApp(null)}
               onRefresh={fetchApplications}
+              onUpdated={(updatedApp) => {
+                setSelectedApp(updatedApp);
+                setApplications((current) => current.map((application) => application.id === updatedApp.id ? updatedApp : application));
+              }}
               onHelp={() => setShowTutorial(true)}
             />
           </motion.div>
@@ -359,7 +364,7 @@ function PaymentCalculator() {
 }
 
 function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string; onBack: () => void; onComplete: (app: FinancingApplication) => void }) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [prefill, setPrefill] = useState<PrefillData | null>(null);
@@ -448,6 +453,7 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
   }, [form.requestedAmount, form.termMonths]);
 
   const handleSubmit = async () => {
+    if (!canPerform('FINANCING_APPLICATIONS', 'create')) return;
     setLoading(true);
     try {
       const res: any = await financingService.create({
@@ -714,13 +720,20 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
   );
 }
 
-function ApplicationDetail({ app, onBack, onRefresh, onHelp }: { app: FinancingApplication; onBack: () => void; onRefresh: () => void; onHelp: () => void }) {
+function ApplicationDetail({ app, onBack, onRefresh, onUpdated, onHelp }: {
+  app: FinancingApplication;
+  onBack: () => void;
+  onRefresh: () => void;
+  onUpdated: (updated: FinancingApplication) => void;
+  onHelp: () => void;
+}) {
   const { canPerform } = useAuth();
   const [note, setNote] = useState('');
   const [addingNote, setAddingNote] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
   const handleAddNote = async () => {
-    if (!note.trim()) return;
+    if (!canPerform('FINANCING_APPLICATIONS', 'addNote') || !note.trim()) return;
     setAddingNote(true);
     try {
       await financingService.addNote(app.id, note);
@@ -730,6 +743,25 @@ function ApplicationDetail({ app, onBack, onRefresh, onHelp }: { app: FinancingA
     } catch { toast.error('Error al agregar nota'); }
     finally { setAddingNote(false); }
   };
+
+  const handleStatusChange = async (status: FinancingApplication['status'], action: FinancingWorkflowAction) => {
+    if (!canPerform('FINANCING', action)) return;
+    setUpdatingStatus(status);
+    try {
+      const response: any = await financingService.updateStatus(app.id, status);
+      const updated = response?.data || response;
+      onUpdated(updated as FinancingApplication);
+      await onRefresh();
+      toast.success(`Solicitud ${financingService.getStatusLabel(status).toLowerCase()}`);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo actualizar el estado de la solicitud');
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
+
+  const availableStatusActions = getFinancingStatusTransitions(app.status)
+    .filter((transition) => canPerform('FINANCING', transition.permission));
 
   return (
     <Card className="border-border/50 shadow-sm">
@@ -774,7 +806,25 @@ function ApplicationDetail({ app, onBack, onRefresh, onHelp }: { app: FinancingA
           </div>
         )}
 
-        {canPerform('FINANCING', 'edit') && (
+        {availableStatusActions.length > 0 && (
+          <div className="flex flex-wrap gap-2 border-t border-border/30 pt-4">
+            {availableStatusActions.map((transition) => (
+              <Button
+                key={`${transition.status}-${transition.permission}`}
+                type="button"
+                variant={transition.permission === 'reject' ? 'outline' : 'default'}
+                onClick={() => void handleStatusChange(transition.status, transition.permission)}
+                disabled={updatingStatus !== null}
+                className={cn('gap-2 rounded-xl', transition.permission === 'reject' && 'text-destructive hover:text-destructive')}
+              >
+                {updatingStatus === transition.status ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
+                {transition.label}
+              </Button>
+            ))}
+          </div>
+        )}
+
+        {canPerform('FINANCING_APPLICATIONS', 'addNote') && (
           <div className="space-y-2">
             <Label className="text-[10px] uppercase font-black tracking-widest">Agregar nota</Label>
             <div className="flex gap-2">

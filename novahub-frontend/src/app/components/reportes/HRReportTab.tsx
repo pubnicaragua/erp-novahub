@@ -997,11 +997,11 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
         const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.hr');
-        const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
-        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
+        const primaryColor = pdfSettings.primaryColor || '#01422c';
+        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#01422c';
         const rgbPrimary = primaryHex.startsWith('#')
           ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)]
-          : [16, 185, 129];
+          : [1, 66, 44];
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
@@ -1057,11 +1057,11 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
 
         const boxH = 22;
         checkPage(boxH + 5);
-        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 6, gap: 3, boxHeight: boxH, labelFontSize: 6.5, valueFontSize: 9, detailFontSize: 5.8 });
+        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 6, gap: 3, boxHeight: boxH, labelFontSize: 6.5, valueFontSize: 9, detailFontSize: 5.8, primaryColor: pdfSettings.primaryColor, secondaryColor: pdfSettings.secondaryColor });
 
         const renderTable = (title: string, headers: string[], rows: (string | number)[][], widths: number[]) => {
-          reportSections.push({ title, headers, rows, color: [245, 158, 11] });
-          currentY = drawReportTable({ doc, title, headers, rows, color: [245, 158, 11], marginX, contentWidth, currentY, columnWidths: widths });
+          reportSections.push({ title, headers, rows, color: rgbPrimary });
+          currentY = drawReportTable({ doc, title, headers, rows, color: rgbPrimary, marginX, contentWidth, currentY, columnWidths: widths });
         };
 
         renderTable('Directorio de Colaboradores',

@@ -54,6 +54,12 @@ const HISTORY_ACTIONS = [
 export function InvoiceAuditView() {
   const { canPerform } = useAuth();
   const canViewInvoiceAudit = canPerform('ACCOUNTING_INVOICE_AUDIT', 'view');
+  const canAuditInvoices = canPerform('ACCOUNTING_INVOICE_AUDIT', 'audit');
+  const canSendToCorrect = canPerform('ACCOUNTING_INVOICE_AUDIT', 'sendToCorrect');
+  const canCancelAuditedInvoice = canPerform('ACCOUNTING_INVOICE_AUDIT', 'cancelInvoice');
+  const canReissueInvoice = canPerform('ACCOUNTING_INVOICE_AUDIT', 'reissueInvoice');
+  const canApproveCancellation = canPerform('ACCOUNTING_INVOICE_AUDIT', 'approveCancellation');
+  const canRejectCancellation = canPerform('ACCOUNTING_INVOICE_AUDIT', 'rejectCancellation');
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>('invoices');
   const [kind, setKind] = useState<AuditKind>('SALE');
@@ -68,6 +74,7 @@ export function InvoiceAuditView() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<{ invoiceId: string; number: string; reason: string; saving: boolean } | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{ id: string; number: string; decision: 'APPROVE' | 'REJECT'; reason: string; saving: boolean } | null>(null);
+  const [reissueTarget, setReissueTarget] = useState<{ invoiceId: string; number: string; kind: AuditKind; replacementSearch: string; newInvoiceId: string; observations: string; saving: boolean } | null>(null);
 
   const listQuery = useQuery({
     queryKey: ['invoice-audit', kind, search, auditStatus, dateFrom, dateTo, page],
@@ -99,6 +106,18 @@ export function InvoiceAuditView() {
     enabled: canViewInvoiceAudit && kind === 'SALE',
   });
 
+  const reissueCandidatesQuery = useQuery({
+    queryKey: ['invoice-audit-reissue-candidates', reissueTarget?.kind, reissueTarget?.replacementSearch || ''],
+    queryFn: ({ signal }) => contabilidadService.getInvoiceAuditList({
+      kind: reissueTarget!.kind,
+      search: reissueTarget!.replacementSearch.trim() || undefined,
+      page: 1,
+      pageSize: 50,
+    }, signal),
+    staleTime: 15_000,
+    enabled: Boolean(reissueTarget && canReissueInvoice),
+  });
+
   const data = listQuery.data as any;
   const items: any[] = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
   const total = Number(data?.total || 0);
@@ -108,10 +127,14 @@ export function InvoiceAuditView() {
   const histItems: any[] = Array.isArray(histData) ? histData : Array.isArray(histData?.items) ? histData.items : [];
   const histTotal = Number(histData?.total || 0);
   const histTotalPages = Math.max(1, Math.ceil(histTotal / 20));
+  const reissueCandidateData = reissueCandidatesQuery.data as any;
+  const reissueCandidates: any[] = (Array.isArray(reissueCandidateData) ? reissueCandidateData : Array.isArray(reissueCandidateData?.items) ? reissueCandidateData.items : [])
+    .filter((item: any) => item.id !== reissueTarget?.invoiceId && String(item.status || '').toUpperCase() !== 'CANCELLED');
 
   const allSelectedOnPage = items.length > 0 && items.every((item) => selected.has(item.id));
 
   const toggleAll = () => {
+    if (!canAuditInvoices) return;
     setSelected((current) => {
       const next = new Set(current);
       if (allSelectedOnPage) items.forEach((item) => next.delete(item.id));
@@ -120,6 +143,7 @@ export function InvoiceAuditView() {
     });
   };
   const toggleOne = (id: string) => {
+    if (!canAuditInvoices) return;
     setSelected((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -142,10 +166,13 @@ export function InvoiceAuditView() {
     queryClient.invalidateQueries({ queryKey: ['invoice-cancellation-requests'] });
   };
 
-  const openAuditModal = () => setAuditModal({ invoiceIds: [...selected], observations: '', results: null, saving: false });
+  const openAuditModal = () => {
+    if (!canAuditInvoices || selected.size === 0) return;
+    setAuditModal({ invoiceIds: [...selected], observations: '', results: null, saving: false });
+  };
 
   const runAudit = async () => {
-    if (!auditModal) return;
+    if (!auditModal || !canAuditInvoices) return;
     const actionToken = beginNotificationAction();
     try {
       setAuditModal((m) => (m ? { ...m, saving: true } : m));
@@ -166,6 +193,7 @@ export function InvoiceAuditView() {
   };
 
   const handleSendToCorrect = async (item: any) => {
+    if (!canSendToCorrect) return;
     const actionToken = beginNotificationAction();
     try {
       setBusyId(item.id);
@@ -182,13 +210,14 @@ export function InvoiceAuditView() {
   };
 
   const openCancelDialog = (item: { invoiceId?: string; id?: string; number?: string }) => {
+    if (!canCancelAuditedInvoice) return;
     const invoiceId = item.invoiceId || item.id;
     if (!invoiceId) return;
     setCancelTarget({ invoiceId, number: item.number || 'Factura', reason: '', saving: false });
   };
 
   const cancelAuditedInvoice = async () => {
-    if (!cancelTarget) return;
+    if (!cancelTarget || !canCancelAuditedInvoice) return;
     const actionToken = beginNotificationAction();
     try {
       setCancelTarget((target) => (target ? { ...target, saving: true } : target));
@@ -213,8 +242,40 @@ export function InvoiceAuditView() {
     }
   };
 
+  const openReissueDialog = (item: { id?: string; number?: string }) => {
+    if (!canReissueInvoice || !item.id) return;
+    setReissueTarget({ invoiceId: item.id, number: item.number || 'Factura', kind, replacementSearch: '', newInvoiceId: '', observations: '', saving: false });
+  };
+
+  const registerReissue = async () => {
+    if (!reissueTarget || !canReissueInvoice) return;
+    if (!reissueTarget.newInvoiceId) {
+      toast.error('Selecciona la factura corregida que reemplaza a la factura anulada.');
+      return;
+    }
+    const actionToken = beginNotificationAction();
+    try {
+      setReissueTarget((target) => (target ? { ...target, saving: true } : target));
+      await contabilidadService.registerReissue({
+        kind: reissueTarget.kind,
+        invoiceId: reissueTarget.invoiceId,
+        newInvoiceId: reissueTarget.newInvoiceId,
+        observations: reissueTarget.observations.trim() || undefined,
+      });
+      toast.success(`Reemisión de ${reissueTarget.number} registrada`);
+      completeNotificationAction(actionToken);
+      setReissueTarget(null);
+      refreshAll();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar la reemisión');
+      failNotificationAction(actionToken);
+      setReissueTarget((target) => (target ? { ...target, saving: false } : target));
+    }
+  };
+
   const reviewCancellationRequest = async () => {
     if (!reviewTarget) return;
+    if (reviewTarget.decision === 'APPROVE' ? !canApproveCancellation : !canRejectCancellation) return;
     if (reviewTarget.decision === 'REJECT' && !reviewTarget.reason.trim()) {
       toast.error('Escribe el motivo del rechazo');
       return;
@@ -341,9 +402,9 @@ export function InvoiceAuditView() {
             <Button variant="outline" size="icon" className="size-9 rounded-xl" onClick={() => { refreshAll(); listQuery.refetch(); }} title="Actualizar">
               <RefreshCw className={cn('size-4', listQuery.isFetching && 'animate-spin')} />
             </Button>
-            <Button onClick={openAuditModal} disabled={selected.size === 0} className="gap-2 rounded-xl bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest h-9 hover:bg-primary/90">
+            {canAuditInvoices && <Button onClick={openAuditModal} disabled={selected.size === 0} className="gap-2 rounded-xl bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest h-9 hover:bg-primary/90">
               <ShieldCheck className="size-4" /> Auditar seleccionadas ({selected.size})
-            </Button>
+            </Button>}
           </div>
 
           {kind === 'SALE' && (
@@ -376,14 +437,14 @@ export function InvoiceAuditView() {
                           </div>
                           <p className="mt-1 truncate text-xs text-muted-foreground" title={request.reason}>{request.reason}</p>
                         </div>
-                        {canPerform('ACCOUNTING_INVOICE_AUDIT', 'approve') && (
+                        {(canApproveCancellation || canRejectCancellation) && (
                           <div className="flex shrink-0 gap-2">
-                            <Button size="sm" className="h-8 rounded-lg bg-destructive px-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-destructive/90" onClick={() => setReviewTarget({ id: request.id, number: request.invoice?.number || '', decision: 'APPROVE', reason: '', saving: false })}>
+                            {canApproveCancellation && <Button size="sm" className="h-8 rounded-lg bg-destructive px-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-destructive/90" onClick={() => setReviewTarget({ id: request.id, number: request.invoice?.number || '', decision: 'APPROVE', reason: '', saving: false })}>
                               <CheckCircle2 className="mr-1.5 size-3.5" /> Aprobar y anular
-                            </Button>
-                            <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setReviewTarget({ id: request.id, number: request.invoice?.number || '', decision: 'REJECT', reason: '', saving: false })}>
+                            </Button>}
+                            {canRejectCancellation && <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setReviewTarget({ id: request.id, number: request.invoice?.number || '', decision: 'REJECT', reason: '', saving: false })}>
                               <X className="mr-1.5 size-3.5" /> Rechazar
-                            </Button>
+                            </Button>}
                           </div>
                         )}
                       </div>
@@ -400,7 +461,7 @@ export function InvoiceAuditView() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">
-                      <input type="checkbox" className="size-4 cursor-pointer rounded border-border accent-primary" checked={allSelectedOnPage} onChange={toggleAll} />
+                      {canAuditInvoices && <input type="checkbox" className="size-4 cursor-pointer rounded border-border accent-primary" checked={allSelectedOnPage} onChange={toggleAll} aria-label="Seleccionar todas las facturas de la página para auditar" />}
                     </TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest">Número</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest">Fecha</TableHead>
@@ -421,7 +482,7 @@ export function InvoiceAuditView() {
                     return (
                     <TableRow key={item.id} className={cn(selected.has(item.id) && 'bg-primary/5')}>
                       <TableCell>
-                        <input type="checkbox" className="size-4 cursor-pointer rounded border-border accent-primary" checked={selected.has(item.id)} onChange={() => toggleOne(item.id)} />
+                        {canAuditInvoices && <input type="checkbox" className="size-4 cursor-pointer rounded border-border accent-primary" checked={selected.has(item.id)} onChange={() => toggleOne(item.id)} aria-label={`Seleccionar factura ${item.number} para auditar`} />}
                       </TableCell>
                       <TableCell><span className="font-mono text-xs font-bold">{item.number}</span></TableCell>
                       <TableCell className="text-xs text-muted-foreground">
@@ -439,15 +500,20 @@ export function InvoiceAuditView() {
                         <div className="flex items-center justify-end gap-0.5 whitespace-nowrap">
                           {hasIssues && (
                             <>
-                              <Button variant="ghost" size="icon" className="size-8 rounded-lg text-sky-600 hover:bg-sky-500/10 hover:text-sky-600" disabled={busyId === item.id} onClick={() => handleSendToCorrect(item)} title="Enviar a corregir">
+                              {canSendToCorrect && <Button variant="ghost" size="icon" className="size-8 rounded-lg text-sky-600 hover:bg-sky-500/10 hover:text-sky-600" disabled={busyId === item.id} onClick={() => handleSendToCorrect(item)} title="Enviar a corregir" aria-label={`Enviar factura ${item.number} a corregir`}>
                                 {busyId === item.id ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-                              </Button>
-                              {canPerform('ACCOUNTING_INVOICE_AUDIT', 'approve') && (
-                                <Button variant="ghost" size="icon" className="size-8 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => openCancelDialog(item)} title="Anular y revertir">
+                              </Button>}
+                              {canCancelAuditedInvoice && (
+                                <Button variant="ghost" size="icon" className="size-8 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => openCancelDialog(item)} title="Anular y revertir" aria-label={`Anular factura ${item.number} y revertir`}>
                                   <Ban className="size-3.5" />
                                 </Button>
                               )}
                             </>
+                          )}
+                          {canReissueInvoice && String(item.status || '').toUpperCase() === 'CANCELLED' && item.audit?.action !== 'REISSUED' && (
+                            <Button variant="ghost" size="icon" className="size-8 rounded-lg text-violet-600 hover:bg-violet-500/10 hover:text-violet-600" onClick={() => openReissueDialog(item)} title="Registrar reemisión" aria-label={`Registrar reemisión de factura ${item.number}`}>
+                              <FilePlus2 className="size-3.5" />
+                            </Button>
                           )}
                         </div>
                       </TableCell>
@@ -581,7 +647,7 @@ export function InvoiceAuditView() {
                             {approved ? <CheckCircle2 className="size-3" /> : <FileWarning className="size-3" />}
                             {approved ? 'Sin anomalías' : 'Con anomalías'}
                           </Badge>
-                          {!approved && canPerform('ACCOUNTING_INVOICE_AUDIT', 'approve') && (
+                          {!approved && canCancelAuditedInvoice && (
                             <Button size="sm" className="h-7 rounded-lg bg-destructive px-2.5 text-[9px] font-black uppercase tracking-widest text-destructive-foreground hover:bg-destructive/90" onClick={() => openCancelDialog(result)}>
                               <Ban className="mr-1 size-3" /> Anular y revertir
                             </Button>
@@ -615,7 +681,7 @@ export function InvoiceAuditView() {
             ) : (
               <>
                 <Button variant="outline" className="rounded-xl" disabled={auditModal?.saving} onClick={() => setAuditModal(null)}>Cancelar</Button>
-                <Button className="gap-2 rounded-xl" disabled={auditModal?.saving} onClick={runAudit}>
+                <Button className="gap-2 rounded-xl" disabled={!canAuditInvoices || auditModal?.saving} onClick={runAudit}>
                   {auditModal?.saving ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
                   Registrar auditoría
                 </Button>
@@ -645,7 +711,7 @@ export function InvoiceAuditView() {
           </div>
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" disabled={cancelTarget?.saving} onClick={() => setCancelTarget(null)}>Cancelar</Button>
-            <Button className="gap-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={cancelTarget?.saving} onClick={cancelAuditedInvoice}>
+            <Button className="gap-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={!canCancelAuditedInvoice || cancelTarget?.saving} onClick={cancelAuditedInvoice}>
               {cancelTarget?.saving ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />}
               Anular y revertir
             </Button>
@@ -673,9 +739,44 @@ export function InvoiceAuditView() {
           </div>
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" disabled={reviewTarget?.saving} onClick={() => setReviewTarget(null)}>Cancelar</Button>
-            <Button className={cn('gap-2 rounded-xl', reviewTarget?.decision === 'APPROVE' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'bg-primary text-primary-foreground hover:bg-primary/90')} disabled={reviewTarget?.saving || (reviewTarget?.decision === 'REJECT' && !reviewTarget.reason.trim())} onClick={reviewCancellationRequest}>
+            <Button className={cn('gap-2 rounded-xl', reviewTarget?.decision === 'APPROVE' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'bg-primary text-primary-foreground hover:bg-primary/90')} disabled={reviewTarget?.saving || (reviewTarget?.decision === 'APPROVE' ? !canApproveCancellation : !canRejectCancellation) || (reviewTarget?.decision === 'REJECT' && !reviewTarget.reason.trim())} onClick={reviewCancellationRequest}>
               {reviewTarget?.saving ? <Loader2 className="size-4 animate-spin" /> : reviewTarget?.decision === 'APPROVE' ? <Ban className="size-4" /> : <X className="size-4" />}
               {reviewTarget?.decision === 'APPROVE' ? 'Aprobar y anular' : 'Rechazar solicitud'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!reissueTarget} onOpenChange={(open) => { if (!open && !reissueTarget?.saving) setReissueTarget(null); }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black uppercase tracking-tight">Registrar reemisión · {reissueTarget?.number}</DialogTitle>
+            <DialogDescription className="text-xs">Vincula la factura anulada con la factura corregida para conservar la trazabilidad de auditoría.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="reissue-invoice-search" className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Buscar factura corregida</Label>
+              <Input id="reissue-invoice-search" value={reissueTarget?.replacementSearch || ''} onChange={(event) => setReissueTarget((target) => target ? { ...target, replacementSearch: event.target.value, newInvoiceId: '' } : target)} placeholder="Número, cliente o proveedor…" className="h-9 rounded-xl text-xs" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Factura que reemplaza a {reissueTarget?.number}</Label>
+              <Select value={reissueTarget?.newInvoiceId || ''} onValueChange={(value) => setReissueTarget((target) => target ? { ...target, newInvoiceId: value } : target)}>
+                <SelectTrigger className="h-10 rounded-xl text-xs"><SelectValue placeholder={reissueCandidatesQuery.isFetching ? 'Buscando facturas…' : 'Seleccionar factura corregida'} /></SelectTrigger>
+                <SelectContent>
+                  {reissueCandidates.map((candidate) => <SelectItem key={candidate.id} value={candidate.id} className="text-xs">{candidate.number} · {candidate.partyName || 'Sin tercero'} · {STATUS_LABELS[String(candidate.status || '').toUpperCase()] || candidate.status}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {!reissueCandidatesQuery.isFetching && reissueCandidates.length === 0 && <p className="text-[10px] text-muted-foreground">No hay facturas activas con esta búsqueda. Ajusta el texto para localizar la factura corregida.</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="reissue-observations" className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Observaciones (opcional)</Label>
+              <textarea id="reissue-observations" value={reissueTarget?.observations || ''} onChange={(event) => setReissueTarget((target) => target ? { ...target, observations: event.target.value } : target)} rows={3} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary/50" placeholder="Motivo o referencia de la corrección…" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" disabled={reissueTarget?.saving} onClick={() => setReissueTarget(null)}>Cancelar</Button>
+            <Button className="gap-2 rounded-xl" disabled={!canReissueInvoice || !reissueTarget?.newInvoiceId || reissueTarget?.saving} onClick={registerReissue}>
+              {reissueTarget?.saving ? <Loader2 className="size-4 animate-spin" /> : <FilePlus2 className="size-4" />} Registrar reemisión
             </Button>
           </DialogFooter>
         </DialogContent>

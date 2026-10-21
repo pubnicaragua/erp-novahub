@@ -35,6 +35,8 @@ export interface PdfTemplateTarget {
   family?: PdfTemplateFamily;
   /** Formato que puede aparecer en Documentos PDF. Los físicos no se editan. */
   templateMode?: PdfTemplateMode;
+  /** Permite excluir destinos internos del editor por sucursal sin alterar su renderer. */
+  branchCustomizable?: boolean;
   /** Permiso de la vista que autoriza descargar la salida. */
   exportPermission?: string;
   capabilities?: {
@@ -55,6 +57,7 @@ export type PdfExportTarget = PdfTemplateTarget & {
   viewId: string;
   adapterId: string;
   templateMode: PdfTemplateMode;
+  branchCustomizable: boolean;
   exportPermission: string;
   capabilities: NonNullable<PdfTemplateTarget['capabilities']>;
 };
@@ -116,9 +119,11 @@ const BASE_PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'inventario.products', module: 'inventario', moduleLabel: 'Inventario', label: 'Listado de productos', structure: 'report', source: 'ProductosView.export' },
   { key: 'inventario.services', module: 'inventario', moduleLabel: 'Inventario', label: 'Listado de servicios', structure: 'report', source: 'ProductosView.export' },
   { key: 'inventario.assets', module: 'inventario', moduleLabel: 'Inventario', label: 'Mobiliario y equipos', structure: 'report', source: 'MobiliarioEquiposView.export' },
+  { key: 'inventario.manager-adjustments', module: 'inventario', moduleLabel: 'Inventario', label: 'Ajustes consolidados (Manager)', structure: 'report', branchCustomizable: false, source: 'ManagerInventoryAdjustmentsView.exportReport' },
 
   { key: 'finanzas.balance', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Balance general', structure: 'report', source: 'FinanceBalanceView.exportPDF' },
   { key: 'finanzas.transactions', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Tabla financiera', structure: 'report', source: 'FinanceTableView.exportPDF' },
+  { key: 'finanzas.manager-consolidated', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Finanzas consolidadas (Manager)', structure: 'report', branchCustomizable: false, source: 'ManagerFinanceModule.exportReport' },
   { key: 'contabilidad.trial-balance', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Balance de comprobación', structure: 'report', source: 'BalanceComprobacionView.handlePrint' },
   { key: 'contabilidad.balance-sheet', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Estado de situación financiera', structure: 'report', source: 'BalanceGeneralView.export' },
   { key: 'contabilidad.journal', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Libro Diario', structure: 'report', source: 'DiarioView.handleExportPDF' },
@@ -126,6 +131,7 @@ const BASE_PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'contabilidad.profit-loss', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Estado de resultados', structure: 'report', source: 'EstadoResultadosView.handleExportPDF' },
   { key: 'contabilidad.chart', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Plan de cuentas', structure: 'report', source: 'PlanCuentasView.handleExportPdf' },
   { key: 'contabilidad.fixed-assets', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Activos fijos', structure: 'report', source: 'ActivosFijosView.export' },
+  { key: 'contabilidad.manager-consolidated', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Contabilidad consolidada (Manager)', structure: 'report', branchCustomizable: false, source: 'ManagerAccountingModule.exportReport' },
   { key: 'recursos-humanos.payrolls', module: 'recursos-humanos', moduleLabel: 'Recursos Humanos', label: 'Reporte de nóminas', structure: 'report', source: 'NominasView.handleExportPDF' },
   { key: 'recursos-humanos.dashboard', module: 'recursos-humanos', moduleLabel: 'Recursos Humanos', label: 'Dashboard de RR. HH.', structure: 'dashboard', source: 'RecursosHumanosPage.export' },
   { key: 'recursos-humanos.employees', module: 'recursos-humanos', moduleLabel: 'Recursos Humanos', label: 'Directorio de empleados', structure: 'report', source: 'RecursosHumanosPage.export' },
@@ -274,10 +280,11 @@ function decoratePdfTemplateTarget(target: PdfTemplateTarget): PdfExportTarget {
     viewId: target.viewId || target.key,
     adapterId: target.adapterId || adapter.id,
     templateMode: fixed ? 'fixed' : 'editable',
+    branchCustomizable: target.branchCustomizable !== false,
     exportPermission,
     capabilities: {
-      editableCanvas: !fixed,
-      importable: !fixed,
+      editableCanvas: !fixed && target.branchCustomizable !== false,
+      importable: !fixed && target.branchCustomizable !== false,
       repeatableTable: tabular,
       exportPdf: true,
       exportExcel: adapter.excelRenderer !== 'none' && !fixed && tabular,
@@ -302,6 +309,7 @@ export function getPdfTemplateTarget(key: string | null | undefined): PdfExportT
     viewId: key,
     adapterId: PDF_EXPORT_ADAPTERS.administrative.id,
     templateMode: 'editable',
+    branchCustomizable: true,
     exportPermission: 'REPORTS',
     capabilities: {
       editableCanvas: true,
@@ -339,7 +347,8 @@ export function isPdfTemplateFixed(keyOrTarget: string | PdfTemplateTarget | nul
 }
 
 export function canEditPdfTemplate(keyOrTarget: string | PdfTemplateTarget | null | undefined): boolean {
-  return !isPdfTemplateFixed(keyOrTarget);
+  const target = typeof keyOrTarget === 'string' ? getPdfTemplateTarget(keyOrTarget) : keyOrTarget;
+  return Boolean(target && !isPdfTemplateFixed(target) && target.branchCustomizable !== false);
 }
 
 export type PdfTemplatePartyMode = 'customer' | 'supplier' | 'requester' | 'payee' | 'none';

@@ -37,6 +37,7 @@ import {
 } from '../../services/projects.service';
 import { suppliersService } from '../../services/compras.service';
 import { queryClient } from '../../services/query-client';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ProyectoCotizacionesPanelProps {
   projectId: string;
@@ -44,29 +45,38 @@ interface ProyectoCotizacionesPanelProps {
 }
 
 export function ProyectoCotizacionesPanel({ projectId, project: _project }: ProyectoCotizacionesPanelProps) {
+  const { canPerform } = useAuth();
+  const canRead = canPerform('PROJECTS_QUOTATIONS', 'view');
+  const canCreate = canPerform('PROJECTS_QUOTATIONS', 'create');
+  const canSendToSuppliers = canPerform('PROJECTS_QUOTATIONS', 'sendToSuppliers');
+  const canManualFill = canPerform('PROJECTS_QUOTATIONS', 'manualFill');
+  const canReviewOverwrite = canPerform('PROJECTS_QUOTATIONS', 'reviewOverwrite');
+  const canSelectOffers = canPerform('PROJECTS_QUOTATIONS', 'selectOffers');
   const [selectedQuotationId, setSelectedQuotationId] = useState<string | null>(null);
 
   // Queries
   const quotationsQuery = useTenantQuery<ProjectMaterialQuotation[]>(
     ['projects', projectId, 'materialQuotations'],
     (signal) => projectsService.materialQuotations(projectId, undefined, signal),
+    { enabled: Boolean(projectId) && canRead },
   );
 
   const detailQuery = useTenantQuery<ProjectMaterialQuotation>(
     ['projects', projectId, 'materialQuotations', selectedQuotationId],
     (signal) => projectsService.materialQuotation(projectId, selectedQuotationId!, signal),
-    { enabled: Boolean(selectedQuotationId) },
+    { enabled: Boolean(selectedQuotationId) && canRead },
   );
 
   const comparisonQuery = useTenantQuery<QuotationComparison>(
     ['projects', projectId, 'materialQuotations', selectedQuotationId, 'comparison'],
     (signal) => projectsService.quotationComparison(projectId, selectedQuotationId!, signal),
-    { enabled: Boolean(selectedQuotationId) },
+    { enabled: Boolean(selectedQuotationId) && canRead },
   );
 
   const suppliersQuery = useTenantQuery(
     ['purchases', 'suppliers', 'lookup'],
     (signal) => suppliersService.getLookup({ page: 1, pageSize: 200 }, signal).then((res: any) => asList(res)),
+    { enabled: Boolean(projectId) && canRead && canSendToSuppliers },
   );
 
   // Modal: Crear Cotización
@@ -110,6 +120,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
   // Material helpers for create form
   const addMaterialRow = () => {
+    if (!canCreate) return;
     setCreateForm((prev) => ({
       ...prev,
       materials: [...prev.materials, { description: '', quantity: 1, unit: 'UND', specifications: '' }],
@@ -117,6 +128,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
   };
 
   const removeMaterialRow = (idx: number) => {
+    if (!canCreate) return;
     setCreateForm((prev) => ({
       ...prev,
       materials: prev.materials.filter((_, i) => i !== idx),
@@ -133,7 +145,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
   // Submit Create Quotation
   const handleCreateQuotation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.name || createForm.materials.length === 0) return;
+    if (!canCreate || !createForm.name || createForm.materials.length === 0) return;
 
     try {
       setIsCreatingQuotation(true);
@@ -171,7 +183,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
   // Submit Create SubQuotation
   const handleCreateSubQuotation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedQuotationId || !subForm.supplierId) return;
+    if (!canSendToSuppliers || !selectedQuotationId || !subForm.supplierId) return;
 
     try {
       setIsCreatingSub(true);
@@ -195,6 +207,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
   // Open manual fill
   const handleOpenManualFill = (sub: ProjectSubQuotation) => {
+    if (!canManualFill) return;
     setManualSub(sub);
     const initial: { [id: string]: { unitPrice: number; deliveryDays?: number } } = {};
     (sub.offers || []).forEach((o) => {
@@ -209,7 +222,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
   // Submit manual fill
   const handleSaveManualFill = async () => {
-    if (!selectedQuotationId || !manualSub) return;
+    if (!canManualFill || !selectedQuotationId || !manualSub) return;
     try {
       setIsSavingManual(true);
       const offersPayload = Object.entries(manualOffers).map(([matId, vals]) => ({
@@ -237,7 +250,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
   // Dismiss overwrite
   const handleDismissOverwrite = async (subId: string) => {
-    if (!selectedQuotationId) return;
+    if (!canReviewOverwrite || !selectedQuotationId) return;
     try {
       await projectsService.dismissOverwrite(projectId, selectedQuotationId, subId);
       await invalidateTenantQueries(queryClient);
@@ -250,7 +263,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
   // View History Snapshots
   const handleViewHistory = async (subId: string) => {
-    if (!selectedQuotationId) return;
+    if (!canRead || !selectedQuotationId) return;
     setHistorySubId(subId);
     setLoadingHistory(true);
     try {
@@ -266,7 +279,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
   // Auto select lowest
   const handleAutoSelectLowest = async () => {
-    if (!selectedQuotationId) return;
+    if (!canSelectOffers || !selectedQuotationId) return;
     try {
       await projectsService.selectOffers(projectId, selectedQuotationId, { autoSelectLowest: true });
       await invalidateTenantQueries(queryClient);
@@ -280,7 +293,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
   // Manual toggle select offer
   const handleToggleSelectOffer = async (offerId: string) => {
-    if (!selectedQuotationId) return;
+    if (!canSelectOffers || !selectedQuotationId) return;
     try {
       // Tomar las ofertas seleccionadas actuales y reemplazar la del mismo material
       const currentSelectedIds: string[] = [];
@@ -324,9 +337,9 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
               Gestione listas de materiales requeridos y recolecte subcotizaciones de múltiples proveedores en simultáneo.
             </p>
           </div>
-          <Button size="sm" onClick={() => setShowCreateModal(true)} className="gap-1.5 text-xs font-bold">
+          {canCreate && <Button size="sm" onClick={() => setShowCreateModal(true)} className="gap-1.5 text-xs font-bold">
             <Plus className="size-4" /> Nueva Cotización de Materiales
-          </Button>
+          </Button>}
         </div>
 
         {quotationsQuery.isLoading ? (
@@ -385,7 +398,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
         )}
 
         {/* Modal: Crear Cotización Compuesta */}
-        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <Dialog open={showCreateModal && canCreate} onOpenChange={setShowCreateModal}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleCreateQuotation} className="space-y-4">
               <DialogHeader>
@@ -541,9 +554,9 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
         </div>
 
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={() => setShowSubModal(true)} className="gap-1.5 text-xs font-bold h-8">
+          {canSendToSuppliers && <Button size="sm" onClick={() => setShowSubModal(true)} className="gap-1.5 text-xs font-bold h-8">
             <Plus className="size-4" /> Asignar Proveedor
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -628,9 +641,9 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
             <Card className="border-dashed border-border/60 text-center p-8 text-muted-foreground space-y-2">
               <Users className="size-8 mx-auto text-muted-foreground/30" />
               <p className="text-xs">Aún no se han asignado proveedores a esta cotización.</p>
-              <Button size="sm" onClick={() => setShowSubModal(true)} className="gap-1.5 text-xs">
+              {canSendToSuppliers && <Button size="sm" onClick={() => setShowSubModal(true)} className="gap-1.5 text-xs">
                 <Plus className="size-3.5" /> Asignar Primer Proveedor
-              </Button>
+              </Button>}
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
@@ -684,14 +697,14 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
                             El proveedor envió su oferta y actualizó los valores que habían sido cargados manualmente.
                           </p>
                           <div className="flex items-center gap-2 pt-1">
-                            <Button
+                            {canReviewOverwrite && <Button
                               size="sm"
                               variant="outline"
                               onClick={() => handleViewHistory(sub.id)}
                               className="h-6 text-[10px] px-2 gap-1 border-amber-500/30"
                             >
                               <History className="size-3" /> Ver Datos Anteriores
-                            </Button>
+                            </Button>}
                             <Button
                               size="sm"
                               variant="secondary"
@@ -734,7 +747,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
                       {/* Actions */}
                       <div className="flex items-center justify-end gap-2 pt-1 border-t border-border/40">
-                        {sub.status !== 'RECEIVED' ? (
+                        {canManualFill && sub.status !== 'RECEIVED' ? (
                           <Button
                             size="sm"
                             variant="outline"
@@ -759,9 +772,9 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
             <p className="text-xs text-muted-foreground">
               Compare las ofertas de cada proveedor por material. La mejor oferta de menor precio está sugerida automáticamente.
             </p>
-            <Button size="sm" onClick={handleAutoSelectLowest} className="gap-1.5 text-xs font-bold h-8">
+            {canSelectOffers && <Button size="sm" onClick={handleAutoSelectLowest} className="gap-1.5 text-xs font-bold h-8">
               <Zap className="size-3.5" /> Seleccionar Mejores Precios
-            </Button>
+            </Button>}
           </div>
 
           <Card className="border-border/60 shadow-sm overflow-hidden">
@@ -794,8 +807,17 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
                               return (
                                 <div
                                   key={off.id}
-                                  onClick={() => isQuoted && handleToggleSelectOffer(off.id)}
-                                  className={`p-2 rounded-lg border text-xs cursor-pointer transition-all flex flex-col justify-between min-w-[150px] ${
+                                  role={canSelectOffers && isQuoted ? 'button' : undefined}
+                                  tabIndex={canSelectOffers && isQuoted ? 0 : undefined}
+                                  aria-pressed={canSelectOffers && isQuoted ? off.isSelected : undefined}
+                                  onClick={() => canSelectOffers && isQuoted && handleToggleSelectOffer(off.id)}
+                                  onKeyDown={(event) => {
+                                    if (canSelectOffers && isQuoted && (event.key === 'Enter' || event.key === ' ')) {
+                                      event.preventDefault();
+                                      void handleToggleSelectOffer(off.id);
+                                    }
+                                  }}
+                                  className={`p-2 rounded-lg border text-xs ${canSelectOffers && isQuoted ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring' : 'cursor-default'} transition-all flex flex-col justify-between min-w-[150px] ${
                                     off.isSelected
                                       ? 'border-primary bg-primary/10 shadow-sm'
                                       : off.isSuggestedLowestPrice
@@ -841,7 +863,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
       </Tabs>
 
       {/* Modal: Asignar Proveedor */}
-      <Dialog open={showSubModal} onOpenChange={setShowSubModal}>
+      <Dialog open={showSubModal && canSendToSuppliers} onOpenChange={setShowSubModal}>
         <DialogContent className="sm:max-w-md">
           {newSubLink ? (
             <div className="space-y-4 text-center py-2">
@@ -936,7 +958,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
       </Dialog>
 
       {/* Modal: Llenado Manual */}
-      <Dialog open={Boolean(manualSub)} onOpenChange={(open) => !open && setManualSub(null)}>
+      <Dialog open={Boolean(manualSub) && canManualFill} onOpenChange={(open) => !open && setManualSub(null)}>
         <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
           {manualSub && (
             <div className="space-y-4">
@@ -1023,9 +1045,9 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
                 <Button variant="ghost" onClick={() => setManualSub(null)} disabled={isSavingManual} className="h-8 text-xs">
                   Cancelar
                 </Button>
-                <Button onClick={handleSaveManualFill} disabled={isSavingManual} className="h-8 text-xs font-bold">
+                {canManualFill && <Button onClick={handleSaveManualFill} disabled={isSavingManual} className="h-8 text-xs font-bold">
                   {isSavingManual ? 'Guardando...' : 'Guardar Datos Manuales'}
-                </Button>
+                </Button>}
               </DialogFooter>
             </div>
           )}

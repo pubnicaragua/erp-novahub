@@ -62,7 +62,7 @@ function ChannelCard({ item, checked, onChange, disabled }: { item: typeof CHANN
   return <div className={`rounded-2xl border p-4 transition ${checked ? 'border-primary/40 bg-primary/[0.04]' : 'border-border/60 bg-background/40'}`}><div className="flex items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="size-5" /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><div><p className="font-bold">{item.label}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{item.description}</p></div><Toggle checked={checked} onChange={onChange} disabled={disabled} label={item.label} /></div>{checked && <button type="button" className="mt-3 inline-flex items-center gap-1 text-xs font-black text-primary" onClick={() => toast.info(`La configuración detallada de ${item.label.toLowerCase()} se abrirá desde su flujo operativo.`)}>Configurar <ExternalLink className="size-3" /></button>}</div></div></div>;
 }
 
-export function RestaurantConfigurationPage({ onSaved }: { onSaved?: (response: RestaurantConfigurationResponse) => void }) {
+export function RestaurantConfigurationPage({ canEdit, onSaved }: { canEdit: boolean; onSaved?: (response: RestaurantConfigurationResponse) => void }) {
   const { user, selectedBranchId } = useAuth();
   const [tab, setTab] = useState<ConfigurationTab>('profile');
   const [profile, setProfile] = useState<RestaurantConfigurationResponse['profile']>({ name: user?.tenantName || '', description: '', businessType: 'RESTAURANT', primaryColor: '#01422C', accentColor: '#74C044', address: '', phone: '', email: '', website: '', coverImage: null, social: {} });
@@ -75,8 +75,6 @@ export function RestaurantConfigurationPage({ onSaved }: { onSaved?: (response: 
   const [newUnit, setNewUnit] = useState({ name: '', abbreviation: '' });
   const logoInput = useRef<HTMLInputElement | null>(null);
   const coverInput = useRef<HTMLInputElement | null>(null);
-  const canEdit = Boolean(user?.isTenantAdmin || user?.isPlatformAdmin);
-
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([

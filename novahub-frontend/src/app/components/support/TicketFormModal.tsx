@@ -24,6 +24,7 @@ interface TicketFormModalProps {
   agentCatalog?: any[];
   invoiceCatalog?: any[];
   productCatalog?: any[];
+  canAddAttachments?: boolean;
 }
 
 const PRIORITY_OPTIONS = [
@@ -72,7 +73,7 @@ function getMinimumSlaDateTime() {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T00:00`;
 }
 
-export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, customerCatalog = [], categoryCatalog = [], agentCatalog = [], invoiceCatalog = [], productCatalog = [] }: TicketFormModalProps) {
+export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, customerCatalog = [], categoryCatalog = [], agentCatalog = [], invoiceCatalog = [], productCatalog = [], canAddAttachments = false }: TicketFormModalProps) {
   const { user, userBranches, selectedBranchId } = useAuth();
   const isEditing = Boolean(ticket?.id);
   const [saving, setSaving] = useState(false);
@@ -187,6 +188,7 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
       : !productsTouched && invoiceProducts.length === 1 ? [invoiceProducts[0].id] : [];
 
   const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canAddAttachments) return;
     const selected = Array.from(event.target.files || []);
     event.currentTarget.value = '';
     if (attachmentFiles.length + selected.length > MAX_TICKET_ATTACHMENTS) {
@@ -241,7 +243,7 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
         toast.success('Ticket creado');
       }
 
-      if (attachmentFiles.length > 0 && savedTicket?.id) {
+      if (canAddAttachments && attachmentFiles.length > 0 && savedTicket?.id) {
         const uploads = await Promise.all(attachmentFiles.map((file) => storageService.uploadFile('support-evidence', file, { folder: `tickets/${savedTicket.id}` })));
         await Promise.all(uploads.map((uploaded, index) => supportService.addAttachment(savedTicket.id, {
           uri: uploaded.uri,
@@ -502,7 +504,7 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
                 </label>
                 <p className="mt-1 text-[10px] text-muted-foreground">Hasta {MAX_TICKET_ATTACHMENTS} archivos de imagen, PDF, Word, Excel o texto; máximo 25 MB cada uno.</p>
               </div>
-              {attachmentFiles.length < MAX_TICKET_ATTACHMENTS && (
+              {canAddAttachments && attachmentFiles.length < MAX_TICKET_ATTACHMENTS && (
                 <label className="relative inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-3 text-[10px] font-black uppercase text-primary hover:bg-primary/15">
                   <ImagePlus className="size-4" /> Adjuntar
                   <input type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple className="absolute inset-0 cursor-pointer opacity-0" onChange={handleAttachmentChange} />

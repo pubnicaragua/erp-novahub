@@ -5,7 +5,7 @@ import { Event } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Plus, Search, CalendarDays, DollarSign, TrendingUp, TrendingDown, Copy, Mail, Users, Eye, CheckCircle2, Loader2, Video, Download, Share2, QrCode, Phone, ExternalLink, UserPlus, UserCheck, Trash2, Building2, Globe } from 'lucide-react';
+import { Plus, Search, CalendarDays, DollarSign, TrendingUp, TrendingDown, Copy, Mail, Users, Eye, CheckCircle2, Loader2, Video, Download, Share2, QrCode, Phone, ExternalLink, UserPlus, UserCheck, Trash2, Building2, Globe, Ban } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { eventsService } from '../../services/actividades.service';
 import { hrService } from '../../services/hr.service';
@@ -72,11 +72,42 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   const isMeetingMode = mode === 'reuniones';
   const [searchTerm, setSearchTerm] = useState('');
   const { currency, displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
-  const { canPerform } = useAuth();
-  const canPerformEventAction = (action: Parameters<typeof canPerform>[1]) => (
-    ['ACTIVITIES_EVENTS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS'].some((module) => canPerform(module, action))
-  );
-  const canCompleteEvent = canPerform('ACTIVITIES_EVENTS', 'approve') || canPerform('ACTIVITIES_MEETINGS', 'approve');
+  const { canPerform, user } = useAuth();
+  const eventModuleFor = (event?: Event) => event?.type === 'MEETING' || (!event?.type && isMeetingMode)
+    ? 'ACTIVITIES_MEETINGS'
+    : 'ACTIVITIES_EVENTS';
+  const hasExplicitEventAction = (module: string, action: Parameters<typeof canPerform>[1]) => {
+    const permission = user?.permissions?.find((item: any) => String(item.module || '').toUpperCase() === module);
+    if (!permission) return false;
+    const alias = `can${String(action).charAt(0).toUpperCase()}${String(action).slice(1)}`;
+    if (Object.prototype.hasOwnProperty.call(permission, action) || Object.prototype.hasOwnProperty.call(permission, alias)) return true;
+    const legacyFields: Record<string, string[]> = {
+      complete: ['approve'], cancel: ['edit'], manageGuests: ['edit'], sendInvitations: ['edit'], scheduleMeeting: ['edit'],
+    };
+    return (legacyFields[String(action)] || []).some((field) => Object.prototype.hasOwnProperty.call(permission, field));
+  };
+  const canPerformEventAction = (event: Event | undefined, action: Parameters<typeof canPerform>[1]) => {
+    const module = eventModuleFor(event);
+    return canPerform(module, action)
+      || (!hasExplicitEventAction(module, action) && canPerform('ACTIVITIES_CALENDAR', action));
+  };
+  const canPerformModeAction = (action: Parameters<typeof canPerform>[1]) => canPerformEventAction(undefined, action);
+  const canCreateFinancialExpense = canPerform('FINANCIAL_EXPENSES', 'create');
+  const canEditFinancialExpense = canPerform('FINANCIAL_EXPENSES', 'read')
+    && canPerform('FINANCIAL_EXPENSES', 'edit');
+  const canPayFinancialExpense = canPerform('FINANCIAL_EXPENSES', 'read')
+    && canPerform('FINANCIAL_EXPENSES', 'pay');
+  const canCreatePaidFinancialExpense = canPerform('FINANCIAL_EXPENSES', 'create')
+    && canPerform('FINANCIAL_EXPENSES', 'pay');
+  const canCreateFinancialIncome = canPerform('FINANCIAL_INCOMES', 'create');
+  const canEditFinancialIncome = canPerform('FINANCIAL_INCOMES', 'read')
+    && canPerform('FINANCIAL_INCOMES', 'edit');
+  const canCompleteEvent = (event: Event) => canPerformEventAction(event, 'complete') && (
+    Number(event.cost || 0) <= 0
+      || (event.expenseId
+        ? canPayFinancialExpense
+        : canCreatePaidFinancialExpense && Boolean((event as any).expense?.accountId || (event as any).expenseAccountId))
+  ) && (Number(event.income || 0) <= 0 || Boolean(event.incomeId) || canCreateFinancialIncome);
   const canViewFinance = canPerform('FINANCIAL', 'view');
   const canViewAccounts = canViewFinance
     || canPerform('FINANCIAL_ACCOUNTS', 'view')
@@ -136,6 +167,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   };
 
   const handleAddGuestToList = () => {
+    if (!canPerformModeAction('manageGuests')) return;
     if (guestTypeMode === 'INTERNAL') {
       if (!selectedInternalUserId) {
         toast.error('Selecciona un empleado de la empresa');
@@ -199,6 +231,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   };
 
   const handleRemoveGuestFromList = (index: number) => {
+    if (!canPerformModeAction('manageGuests')) return;
     setAddedGuests(prev => prev.filter((_, i) => i !== index));
   };
   const [invitation, setInvitation] = useState<{ text: string; guests: string[] } | null>(null);
@@ -206,6 +239,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   const [meetingLoadingId, setMeetingLoadingId] = useState<string | null>(null);
 
   const handleScheduleMeeting = async (event: Event, platform: 'GOOGLE_MEET' | 'TEAMS' | 'ZOOM') => {
+    if (!canPerformEventAction(event, 'scheduleMeeting')) return;
     try {
       setMeetingLoadingId(String(event.id));
       const detected = detectMeetingUrl(event.location) || detectMeetingUrl(event.meetingUrl) || detectMeetingUrl(event.description);
@@ -224,6 +258,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   };
 
   const handleDownloadIcs = async (event: Event) => {
+    if (!canPerformEventAction(event, 'export')) return;
     try {
       await eventsService.downloadIcs(String(event.id), event.title);
       toast.success('Archivo .ics descargado');
@@ -233,6 +268,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   };
 
   const handleSendInvitations = async (event: Event) => {
+    if (!canPerformEventAction(event, 'sendInvitations')) return;
     try {
       await eventsService.sendInvitations(String(event.id));
       toast.success('Invitaciones enviadas a la bandeja de notificaciones');
@@ -242,6 +278,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   };
 
   const handleShareWhatsapp = (event: Event) => {
+    if (!canPerformEventAction(event, 'sendInvitations')) return;
     const text = encodeURIComponent(
       `Invitación a Evento: ${event.title}\n\n` +
       `Inicio: ${event.startDate ? new Date(event.startDate).toLocaleString('es-NI') : 'Por definir'}\n` +
@@ -252,6 +289,18 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
       `\n¡Te esperamos!`
     );
     window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+  const handleDeleteEvent = async (id: string | number) => {
+    const event = data.find((candidate) => String(candidate.id) === String(id));
+    if (!event || !canPerformEventAction(event, 'delete')) return;
+    try {
+      await eventsService.delete(String(id));
+      toast.success(event.type === 'MEETING' || (!event.type && isMeetingMode) ? 'Reunión eliminada' : 'Evento eliminado');
+      if (selectedEvent?.id === event.id) setSelectedEvent(null);
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al eliminar');
+    }
   };
   const accountsQuery = useTenantQuery<any[]>(['finance', 'accounts-lookup'], () => fetchAllReportPages((filters) => accountsService.getLookup(filters), { page: 1, pageSize: 200 }), {
     enabled: canViewAccounts,
@@ -332,13 +381,15 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   });
 
   const columns: ColumnDef<Event>[] = [
-    { key: 'title', header: 'Título', width: '25%', editable: canPerformEventAction('edit') },
-    { key: 'location', header: 'Ubicación', width: '20%', editable: canPerformEventAction('edit') },
-    { key: 'startDate', header: 'Fecha Inicio', width: '130px', editable: canPerformEventAction('edit'), type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
-    { key: 'endDate', header: 'Fecha Fin', width: '130px', editable: canPerformEventAction('edit'), type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
+    { key: 'title', header: 'Título', width: '25%', editable: (row: Event) => canPerformEventAction(row, 'edit') },
+    { key: 'location', header: 'Ubicación', width: '20%', editable: (row: Event) => canPerformEventAction(row, 'edit') },
+    { key: 'startDate', header: 'Fecha Inicio', width: '130px', editable: (row: Event) => canPerformEventAction(row, 'edit'), type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
+    { key: 'endDate', header: 'Fecha Fin', width: '130px', editable: (row: Event) => canPerformEventAction(row, 'edit'), type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
     { key: 'status', header: 'Estado', width: '110px', editable: false, render: (val: any, row: Event) => { const status = completedEventIds.has(String(row.id)) ? 'COMPLETED' : String(val || 'PENDING').toUpperCase(); const label = status === 'COMPLETED' ? 'Completado' : status === 'CANCELLED' ? 'Cancelado' : 'Pendiente'; return <span className={cn('text-[10px] font-black uppercase', status === 'COMPLETED' ? 'text-emerald-600' : status === 'CANCELLED' ? 'text-rose-600' : 'text-amber-600')}>{label}</span>; } },
-    { key: 'cost', header: 'Costo', width: '100px', editable: canPerformEventAction('edit'), type: 'number', render: (val: any, row: Event) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency || 'USD'} sourceExchangeRate={row.exchangeRate} className="font-bold text-rose-500" /> },
-    { key: 'income', header: 'Ingreso', width: '100px', editable: canPerformEventAction('edit'), type: 'number', render: (val: any, row: Event) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency || 'USD'} sourceExchangeRate={row.exchangeRate} className="font-bold text-emerald-500" /> },
+    { key: 'cost', header: 'Costo', width: '100px', editable: (row: Event) => canPerformEventAction(row, 'edit') && (
+      row.expenseId ? canEditFinancialExpense : canCreatePaidFinancialExpense
+    ), type: 'number', render: (val: any, row: Event) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency || 'USD'} sourceExchangeRate={row.exchangeRate} className="font-bold text-rose-500" /> },
+    { key: 'income', header: 'Ingreso', width: '100px', editable: (row: Event) => canPerformEventAction(row, 'edit') && (row.incomeId ? canEditFinancialIncome : canCreateFinancialIncome), type: 'number', render: (val: any, row: Event) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency || 'USD'} sourceExchangeRate={row.exchangeRate} className="font-bold text-emerald-500" /> },
     { key: 'guestEmails', header: 'Invitados', width: '110px', render: (_: any, row: Event) => <span className="inline-flex items-center gap-1 text-[11px] font-bold"><Users className="size-3.5 text-primary" />{row.guestEmails?.length || row.attendees?.length || 0}</span> },
     { key: 'balance', header: 'Balance', width: '100px', render: (_: any, row: Event) => {
         const balance = (Number(row.income) || 0) - (Number(row.cost) || 0);
@@ -351,6 +402,9 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
     try { 
       const event = data.find(e => e.id === id);
       if (!event) return;
+      if (!canPerformEventAction(event, 'edit')) return;
+      const containsGuests = Object.prototype.hasOwnProperty.call(updates, 'guests') || Object.prototype.hasOwnProperty.call(updates, 'guestEmails');
+      if (containsGuests && !canPerformEventAction(event, 'manageGuests')) return;
 
       if (updates.cost !== undefined || updates.income !== undefined) {
         updates.currency = currency;
@@ -358,6 +412,10 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
 
       if (updates.cost !== undefined && updates.cost > 0) {
         if (event.expenseId) {
+          if (!canEditFinancialExpense) {
+            toast.error('Necesitas permiso para ver y editar el gasto financiero vinculado.');
+            return;
+          }
           await expensesService.update(event.expenseId, { 
             amount: Number(updates.cost), 
             currency: (updates.currency || event.currency || 'USD') as Currency,
@@ -365,6 +423,10 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
             description: updates.title || event.title || 'Evento',
           });
         } else if ((event as any).expense?.accountId || (event as any).expenseAccountId) {
+          if (!canCreatePaidFinancialExpense) {
+            toast.error('Necesitas permiso para crear y pagar el gasto financiero del evento.');
+            return;
+          }
           const existingExpenseAccountId = (event as any).expense?.accountId || (event as any).expenseAccountId;
           const expense = await expensesService.create({ 
             amount: Number(updates.cost), 
@@ -387,6 +449,10 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
 
       if (updates.income !== undefined && updates.income > 0) {
         if (event.incomeId) {
+          if (!canEditFinancialIncome) {
+            toast.error('Necesitas permiso para ver y editar el ingreso financiero vinculado.');
+            return;
+          }
           await incomeService.update(event.incomeId, { 
             amount: Number(updates.income), 
             currency: (updates.currency || event.currency || 'USD') as Currency,
@@ -394,6 +460,10 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
             description: updates.title || event.title || 'Evento'
           });
         } else if ((event as any).income?.accountId || (event as any).incomeAccountId) {
+          if (!canCreateFinancialIncome) {
+            toast.error('Necesitas permiso para crear el ingreso financiero del evento.');
+            return;
+          }
           const existingIncomeAccountId = (event as any).income?.accountId || (event as any).incomeAccountId;
           const inc = await incomeService.create({ 
             amount: Number(updates.income), 
@@ -420,7 +490,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   };
 
   const handleCompleteEvent = async (event: Event) => {
-    if (!canCompleteEvent || String(event.status || '').toUpperCase() === 'COMPLETED') return;
+    if (!canCompleteEvent(event) || ['COMPLETED', 'CANCELLED'].includes(String(event.status || '').toUpperCase())) return;
     const eventId = String(event.id);
     const cost = Number(event.cost || 0);
     const income = Number(event.income || 0);
@@ -485,11 +555,37 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
     }
   };
 
+  const handleCancelEvent = async (event: Event) => {
+    const status = String(event.status || '').toUpperCase();
+    if (!canPerformEventAction(event, 'cancel') || ['COMPLETED', 'CANCELLED'].includes(status)) return;
+    try {
+      const updated = await eventsService.update(String(event.id), { status: 'CANCELLED' } as any);
+      setSelectedEvent((current) => current?.id === event.id ? { ...current, ...(updated || {}), status: 'CANCELLED' } : current);
+      toast.success(isMeetingMode ? 'Reunión cancelada' : 'Evento cancelado');
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar');
+    }
+  };
+
   const handleAdd = async () => {
+    if (!canPerformModeAction('create')) return;
     if (!newEvent.title.trim()) { toast.error('El título del evento es obligatorio'); return; }
+    if (Number(newEvent.cost || 0) > 0 && !canCreateFinancialExpense) {
+      toast.error('Necesitas permiso para crear el gasto financiero del evento.');
+      return;
+    }
     const guestEmailsFromList = addedGuests.map(g => g.email).filter(Boolean);
     const manualGuestEmails = parseGuestEmails(newEvent.guestEmails);
     const allGuestEmails = [...new Set([...guestEmailsFromList, ...manualGuestEmails])];
+    if (allGuestEmails.length && !canPerformModeAction('manageGuests')) {
+      toast.error('Necesitas permiso para administrar invitados.');
+      return;
+    }
+    if (Number(newEvent.income || 0) > 0 && !canCreateFinancialIncome) {
+      toast.error('Necesitas permiso para crear el ingreso financiero del evento.');
+      return;
+    }
     if (hasCostAmount && !selectedExpenseAccountIsActive) {
       toast.error('Selecciona una cuenta de gasto activa para registrar el costo del evento.');
       return;
@@ -526,15 +622,14 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
         cost: newEvent.cost === '' ? 0 : Number(newEvent.cost),
         income: newEvent.income === '' ? 0 : Number(newEvent.income),
         currency,
-        guestEmails: allGuestEmails,
-        guests: addedGuests.map(g => ({
+        ...(canPerformModeAction('manageGuests') ? { guestEmails: allGuestEmails, guests: addedGuests.map(g => ({
           guestType: g.guestType,
           internalUserId: g.internalUserId,
           externalName: g.name,
           externalEmail: g.email || undefined,
           externalPhone: g.phone || undefined,
           role: g.role,
-        })),
+        })) } : {}),
         status: 'PENDING',
         meetingUrl: detectedLink?.url || undefined,
         meetingPlatform: detectedLink?.platform || undefined,
@@ -571,7 +666,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
         if (income?.id) await eventsService.update(createdId, { incomeId: income.id });
       }
       toast.success(isMeetingMode ? 'Reunión creada exitosamente' : 'Evento creado; completa el evento para contabilizar el costo');
-      if (allGuestEmails.length > 0) {
+      if (allGuestEmails.length > 0 && canPerformModeAction('sendInvitations')) {
         setInvitation({
           guests: allGuestEmails,
           text: buildInvitationText({ title: newEvent.title.trim(), startDate, endDate, location: newEvent.location.trim(), guests: allGuestEmails }),
@@ -668,7 +763,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
               }}
             />
             <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerformEventAction('create') && (
+            {canPerformModeAction('create') && (
               <Button data-toolbar-role="primary" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 bg-primary font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"><Plus className="size-4" /> {isMeetingMode ? 'Nueva Reunión' : 'Nuevo Evento'}</Button>
             )}
           </div>
@@ -676,27 +771,28 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
         <EditableDataTable 
           data={filtered} 
           columns={columns} 
-          onRowUpdate={canPerformEventAction('edit') ? handleUpdate : undefined}
+          onRowUpdate={filtered.some((row) => canPerformEventAction(row, 'edit')) ? handleUpdate : undefined}
           onRowClick={(row) => setSelectedEvent(row)}
           isLoading={loading} 
-          onRowDelete={canPerformEventAction('delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success(isMeetingMode ? 'Reunión eliminada' : 'Evento eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } } : undefined}
+          onRowDelete={filtered.some((row) => canPerformEventAction(row, 'delete')) ? handleDeleteEvent : undefined}
+          canDeleteRow={(row: Event) => canPerformEventAction(row, 'delete')}
           actions={(row: Event) => {
-            const isCompleted = completedEventIds.has(String(row.id)) || String(row.status || '').toUpperCase() === 'COMPLETED';
+            const isClosed = completedEventIds.has(String(row.id)) || ['COMPLETED', 'CANCELLED'].includes(String(row.status || '').toUpperCase());
             return (
               <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                 <Button type="button" variant="ghost" size="icon" title={isMeetingMode ? 'Ver detalle de la reunión' : 'Ver detalle del evento'} aria-label={isMeetingMode ? 'Ver detalle de la reunión' : 'Ver detalle del evento'} className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedEvent(row)}><Eye className="size-4" /></Button>
                 
                 {/* Download .ics */}
-                <Button type="button" variant="ghost" size="icon" title="Descargar .ics" aria-label="Descargar .ics" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => handleDownloadIcs(row)}><Download className="size-4" /></Button>
+                {canPerformEventAction(row, 'export') && <Button type="button" variant="ghost" size="icon" title="Descargar .ics" aria-label="Descargar .ics" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => handleDownloadIcs(row)}><Download className="size-4" /></Button>}
                 
                 {/* Share WhatsApp */}
-                <Button type="button" variant="ghost" size="icon" title="Compartir en WhatsApp" aria-label="Compartir en WhatsApp" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" onClick={() => handleShareWhatsapp(row)}><Phone className="size-4" /></Button>
+                {canPerformEventAction(row, 'sendInvitations') && <Button type="button" variant="ghost" size="icon" title="Compartir en WhatsApp" aria-label="Compartir en WhatsApp" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" onClick={() => handleShareWhatsapp(row)}><Phone className="size-4" /></Button>}
 
                 {/* QR Code */}
-                <Button type="button" variant="ghost" size="icon" title="Ver Código QR" aria-label="Ver Código QR" className="size-8 rounded-lg text-blue-600 hover:bg-blue-500/10" onClick={() => setQrModalEvent(row)}><QrCode className="size-4" /></Button>
+                {canPerformEventAction(row, 'sendInvitations') && <Button type="button" variant="ghost" size="icon" title="Ver Código QR" aria-label="Ver Código QR" className="size-8 rounded-lg text-blue-600 hover:bg-blue-500/10" onClick={() => setQrModalEvent(row)}><QrCode className="size-4" /></Button>}
 
                 {/* Schedule direct Meeting if not completed */}
-                {!isCompleted && canPerformEventAction('edit') && (
+                {!isClosed && canPerformEventAction(row, 'scheduleMeeting') && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button type="button" variant="ghost" size="icon" title="Agendar videollamada" aria-label="Agendar videollamada" className="size-8 rounded-lg text-purple-600 hover:bg-purple-500/10" disabled={meetingLoadingId === String(row.id)}>
@@ -718,15 +814,20 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
                 )}
 
                 {/* Complete Event */}
-                {!isCompleted && canCompleteEvent && (
+                {!isClosed && canCompleteEvent(row) && (
                   <Button type="button" variant="ghost" size="icon" title="Completar evento y generar asiento" aria-label="Completar evento y generar asiento" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" disabled={completingEventId === String(row.id)} onClick={() => { setSelectedEvent(null); void handleCompleteEvent(row); }}>
                     {completingEventId === String(row.id) ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                  </Button>
+                )}
+                {!isClosed && canPerformEventAction(row, 'cancel') && (
+                  <Button type="button" variant="ghost" size="icon" title={isMeetingMode ? 'Cancelar reunión' : 'Cancelar evento'} aria-label={isMeetingMode ? 'Cancelar reunión' : 'Cancelar evento'} className="size-8 rounded-lg text-destructive hover:bg-destructive/10" onClick={() => void handleCancelEvent(row)}>
+                    <Ban className="size-4" />
                   </Button>
                 )}
               </div>
             );
           }}
-          actionsWidth="w-56"
+          actionsWidth="w-72"
         />
       </Card>
 
@@ -743,41 +844,41 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
         extraActions={
           selectedEvent ? (
             <div className="flex flex-wrap gap-2">
-              <Button
+              {canPerformEventAction(selectedEvent, 'export') && <Button
                 type="button"
                 variant="outline"
                 className="rounded-xl"
                 onClick={() => handleDownloadIcs(selectedEvent)}
               >
                 <Download className="mr-1.5 size-4" /> .ics
-              </Button>
-              <Button
+              </Button>}
+              {canPerformEventAction(selectedEvent, 'sendInvitations') && <Button
                 type="button"
                 variant="outline"
                 className="rounded-xl border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
                 onClick={() => handleShareWhatsapp(selectedEvent)}
               >
                 <Phone className="mr-1.5 size-4" /> WhatsApp
-              </Button>
-              <Button
+              </Button>}
+              {canPerformEventAction(selectedEvent, 'sendInvitations') && <Button
                 type="button"
                 variant="outline"
                 className="rounded-xl border-blue-500/30 text-blue-600 hover:bg-blue-500/10"
                 onClick={() => setQrModalEvent(selectedEvent)}
               >
                 <QrCode className="mr-1.5 size-4" /> QR
-              </Button>
-              <Button
+              </Button>}
+              {canPerformEventAction(selectedEvent, 'sendInvitations') && <Button
                 type="button"
                 variant="outline"
                 className="rounded-xl border-primary/30 text-primary hover:bg-primary/10"
                 onClick={() => handleSendInvitations(selectedEvent)}
               >
                 <Mail className="mr-1.5 size-4" /> Enviar Invitaciones
-              </Button>
+              </Button>}
               {!completedEventIds.has(String(selectedEvent.id)) &&
-                String(selectedEvent.status || '').toUpperCase() !== 'COMPLETED' &&
-                canCompleteEvent && (
+                !['COMPLETED', 'CANCELLED'].includes(String(selectedEvent.status || '').toUpperCase()) &&
+                canCompleteEvent(selectedEvent) && (
                   <Button
                     type="button"
                     className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
@@ -792,19 +893,17 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
                     {isMeetingMode ? 'Completar reunión' : 'Completar evento'}
                   </Button>
                 )}
+              {!completedEventIds.has(String(selectedEvent.id)) &&
+                !['COMPLETED', 'CANCELLED'].includes(String(selectedEvent.status || '').toUpperCase()) &&
+                canPerformEventAction(selectedEvent, 'cancel') && (
+                  <Button type="button" variant="destructive" className="rounded-xl" onClick={() => void handleCancelEvent(selectedEvent)}>
+                    <Ban className="mr-2 size-4" /> {isMeetingMode ? 'Cancelar reunión' : 'Cancelar evento'}
+                  </Button>
+                )}
             </div>
           ) : undefined
         }
-        onDelete={canPerformEventAction('delete') && selectedEvent ? async () => {
-          try {
-            await eventsService.delete(String(selectedEvent.id));
-            toast.success(isMeetingMode ? 'Reunión eliminada' : 'Evento eliminado');
-            onRefresh();
-            setSelectedEvent(null);
-          } catch (e: any) {
-            toast.error(e?.response?.data?.message || e?.message || (isMeetingMode ? 'Error al eliminar reunión' : 'Error al eliminar evento'));
-          }
-        } : undefined}
+        onDelete={selectedEvent && canPerformEventAction(selectedEvent, 'delete') ? () => handleDeleteEvent(selectedEvent.id) : undefined}
         onOpenChange={(open) => { if (!open) setSelectedEvent(null); }}
       />
 
@@ -863,7 +962,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
               <div className="space-y-2 sm:col-span-2"><Label className="text-xs font-bold">Ubicación</Label><Input value={newEvent.location} onChange={e => setNewEvent({ ...newEvent, location: e.target.value })} placeholder={isMeetingMode ? "Enlace de Meet/Teams/Zoom o sala de reuniones" : "Sala, dirección o enlace virtual"} className="h-11 rounded-xl bg-background" /></div>
               <div className="space-y-2 sm:col-span-2"><Label>Descripción / notas</Label><textarea value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="min-h-24 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20" placeholder={isMeetingMode ? "Objetivo, agenda y temas de la reunión" : "Objetivo, agenda y notas del evento"} /></div>
               {/* Sección de Gestión de Invitados */}
-              <div className="space-y-3 sm:col-span-2 rounded-2xl border border-border/60 bg-muted/15 p-4">
+              {canPerformModeAction('manageGuests') && <div className="space-y-3 sm:col-span-2 rounded-2xl border border-border/60 bg-muted/15 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Users className="size-4 text-primary" />
@@ -1099,9 +1198,9 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
                     Aún no has agregado personas a la lista de invitados.
                   </p>
                 )}
-              </div>
-              <div className="space-y-2"><Label className="text-xs font-bold">Costo ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.cost} onChange={e => { const value = e.target.value; setNewEvent(current => ({ ...current, cost: value, ...(value.trim() === '' ? { expenseAccountId: '' } : {}) })); if (value.trim() === '') setCostReason(''); }} className="h-11 rounded-xl bg-background" /></div>
-              <div className="space-y-2"><Label className="text-xs font-bold">Ingreso ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.income} onChange={e => { const value = e.target.value; setNewEvent(current => ({ ...current, income: value, ...(value.trim() === '' ? { incomeAccountId: '' } : {}) })); }} className="h-11 rounded-xl bg-background" /></div>
+              </div>}
+              {canCreateFinancialExpense && <div className="space-y-2"><Label className="text-xs font-bold">Costo ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.cost} onChange={e => { const value = e.target.value; setNewEvent(current => ({ ...current, cost: value, ...(value.trim() === '' ? { expenseAccountId: '' } : {}) })); if (value.trim() === '') setCostReason(''); }} className="h-11 rounded-xl bg-background" /></div>}
+              {canCreateFinancialIncome && <div className="space-y-2"><Label className="text-xs font-bold">Ingreso ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.income} onChange={e => { const value = e.target.value; setNewEvent(current => ({ ...current, income: value, ...(value.trim() === '' ? { incomeAccountId: '' } : {}) })); }} className="h-11 rounded-xl bg-background" /></div>}
               {hasCostAmount && (
                 <>
                   <div className="space-y-2 sm:col-span-2">
@@ -1141,7 +1240,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
                   </div>
                 </>
               )}
-              {hasIncomeAmount && (
+              {canCreateFinancialIncome && hasIncomeAmount && (
                 <div className="space-y-2 sm:col-span-2">
                   <Label className="text-xs font-bold">Cuenta de ingreso <span className="text-destructive">*</span></Label>
                   <Combobox
@@ -1161,11 +1260,11 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
             </div>
             <p className="text-xs text-muted-foreground">Al completar el evento, el costo se marcará como pagado en efectivo para generar su asiento; el ingreso usa la cuenta seleccionada. Ambos movimientos quedan vinculados al evento.</p>
           </div>
-          <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8"><Button variant="outline" className="rounded-xl" onClick={() => setIsAddOpen(false)}>Cancelar</Button><Button className="rounded-xl px-5" onClick={handleAdd}>{isMeetingMode ? 'Crear reunión' : 'Crear evento'}</Button></DialogFooter>
+          <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8"><Button variant="outline" className="rounded-xl" onClick={() => setIsAddOpen(false)}>Cancelar</Button>{canPerformModeAction('create') && <Button className="rounded-xl px-5" onClick={handleAdd}>{isMeetingMode ? 'Crear reunión' : 'Crear evento'}</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(invitation)} onOpenChange={open => { if (!open) setInvitation(null); }}>
+      <Dialog open={Boolean(invitation && canPerformModeAction('sendInvitations'))} onOpenChange={open => { if (!open) setInvitation(null); }}>
         <DialogContent className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto !max-w-lg rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl">
           <DialogHeader className="border-b border-border/50 bg-gradient-to-br from-primary/10 via-background to-background px-6 py-5 sm:px-8">
             <DialogTitle className="flex items-center gap-2 font-black tracking-tight"><Mail className="size-5 text-primary" /> Invitación lista</DialogTitle>

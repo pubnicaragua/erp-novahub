@@ -292,7 +292,7 @@ async function uploadReceiptPaymentEvidence(files: File[], invoiceId: string, pa
   }
 }
 
-function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, accountingConnectionEnabled, financeConnectionEnabled }: { draft: ReceiptPaymentDraft | null; onClose: () => void; onSaved: () => void; onRegisterInvoice: (payload: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => Promise<any>; accountingConnectionEnabled: boolean; financeConnectionEnabled: boolean }) {
+function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, accountingConnectionEnabled, financeConnectionEnabled, canPay, canRegisterInvoice }: { draft: ReceiptPaymentDraft | null; onClose: () => void; onSaved: () => void; onRegisterInvoice: (payload: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => Promise<any>; accountingConnectionEnabled: boolean; financeConnectionEnabled: boolean; canPay: boolean; canRegisterInvoice: boolean }) {
   const { displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount, formatConvertedAmount, formatExplicitAmount } = useCurrency();
   const [paymentLines, setPaymentLines] = useState<ReceiptPaymentLine[]>([]);
   const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
@@ -333,6 +333,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
 
   const handleRegisterInvoice = async () => {
     if (!draft) return;
+    if (!canRegisterInvoice) return toast.error('Tu rol no permite registrar facturas de proveedor.');
     if (!invoiceNumber.trim()) return toast.error('Ingresa el número de factura del proveedor.');
     if (invoiceFiles.length === 0) return toast.error('Selecciona al menos una imagen o PDF de la factura.');
     setInvoiceSaving(true);
@@ -359,6 +360,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
 
   const handleSubmit = async () => {
     if (!draft) return;
+    if (!canPay) return toast.error('Tu rol no permite registrar pagos a proveedores.');
     const resolvedInvoiceId = invoiceId || draft.supplierInvoiceId;
     if (!resolvedInvoiceId) return toast.error('Registra primero la factura y su evidencia.');
     const effectiveLines = paymentLines
@@ -480,7 +482,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
                   <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Total factura · calculado ({getReceiptCurrencyMeta(draft.currency).code})</p><Input value={formatReceiptAmount(draft.amount, draft.currency)} readOnly aria-readonly="true" disabled={invoiceSaving} className="h-10 border-primary/30 bg-primary/5 font-black text-primary" /></div>
                 </div>
                 <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencia de factura *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf" onChange={(event) => setInvoiceFiles(Array.from(event.target.files || []))} disabled={invoiceSaving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen original hasta 10 MB; se optimiza. PDF hasta 10 MB.</p>{invoiceFiles.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{invoiceFiles.map((file) => file.name).join(', ')}</p>}</div>
-                <Button onClick={handleRegisterInvoice} disabled={invoiceSaving || invoiceFiles.length === 0} className="h-10 w-full rounded-xl font-black uppercase tracking-widest">{invoiceSaving ? 'Registrando factura...' : (draft.invoiceOnly ? 'Registrar compra a crédito' : 'Registrar evidencia y continuar')}</Button>
+                <Button onClick={handleRegisterInvoice} disabled={!canRegisterInvoice || invoiceSaving || invoiceFiles.length === 0} className="h-10 w-full rounded-xl font-black uppercase tracking-widest">{invoiceSaving ? 'Registrando factura...' : (draft.invoiceOnly ? 'Registrar compra a crédito' : 'Registrar evidencia y continuar')}</Button>
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
@@ -537,7 +539,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
         </div>
         <DialogFooter className="border-t border-border/60 bg-muted/[0.12] px-6 py-4" data-tour="purchases-payment-actions">
           <Button variant="outline" onClick={onClose} disabled={saving || invoiceSaving} className="rounded-xl font-black uppercase tracking-widest">Cancelar</Button>
-          {invoiceId && !draft?.invoiceOnly && <Button onClick={handleSubmit} disabled={saving || !draft || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (accountingConnectionEnabled && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) || paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0) > toBaseAmount(Number(draft?.amount || 0), draft?.currency, Number(draft?.exchangeRate || globalRate || 1)) + 0.01} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
+          {invoiceId && !draft?.invoiceOnly && <Button onClick={handleSubmit} disabled={!canPay || saving || !draft || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (accountingConnectionEnabled && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) || paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0) > toBaseAmount(Number(draft?.amount || 0), draft?.currency, Number(draft?.exchangeRate || globalRate || 1)) + 0.01} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -927,12 +929,8 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       const currentReceipt = data.find((x) => x.id === id);
       const previousStatus = String(currentReceipt?.status || '').toUpperCase();
       const requestedStatus = String(updates.status || currentReceipt?.status || '').toUpperCase();
-      const requiresApproval = !STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVING.includes(requestedStatus);
-      if (requiresApproval && !canPerform('PURCHASES_RECEIPTS', 'approve')) {
-        toast.error('Necesitas el permiso Aprobar para marcar esta recepción como recibida.');
-        return;
-      }
-      if (requiresApproval) {
+      const requiresReceive = !STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVING.includes(requestedStatus);
+      if (requiresReceive) {
         const missingWarehouseItems = getItemsMissingWarehouse(currentReceipt?.items || [], true);
         if (missingWarehouseItems.length > 0) {
           const labels = getWarehouseWarningLabels(currentReceipt?.items || []);
@@ -941,8 +939,10 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
         }
       }
       updateToastId = toast.loading('Actualizando recepción y sincronizando inventario...');
-      const updateResponse = await purchaseReceiptsService.update(id as string, requiresApproval ? { ...updates, deferApproval: true } as any : updates);
-      const inventoryResponse = requiresApproval ? await purchaseReceiptsService.approve(id as string) : updateResponse;
+      const updateResponse = await purchaseReceiptsService.update(id as string, requiresReceive ? { ...updates, deferApproval: true } as any : updates);
+      const inventoryResponse = requiresReceive && canPerform('PURCHASES_RECEIPTS', 'receive')
+        ? await purchaseReceiptsService.approve(id as string)
+        : updateResponse;
       const operations = getInventoryCostOperations(inventoryResponse);
       if (operations.length > 0) setInventoryCostOperations(operations);
       toast.success('Recepción actualizada', updateToastId ? { id: updateToastId } : undefined);
@@ -952,8 +952,25 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', updateToastId ? { id: updateToastId } : undefined); throw new Error('Update failed'); }
   };
 
+  const handleReceiveReceipt = async (receiptId: string) => {
+    if (!canPerform('PURCHASES_RECEIPTS', 'read') || !canPerform('PURCHASES_RECEIPTS', 'receive')) return;
+    const receiveToastId = toast.loading('Procesando recepción e inventario...');
+    try {
+      const response = await purchaseReceiptsService.approve(receiptId);
+      const operations = getInventoryCostOperations(response);
+      if (operations.length > 0) setInventoryCostOperations(operations);
+      toast.success('Recepción procesada', { id: receiveToastId });
+      setEditingId(null);
+      setDetailReceipt(null);
+      onRefresh();
+      void queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo procesar la recepción', { id: receiveToastId });
+    }
+  };
+
   const handleCancelConfirm = async () => {
-    if (!pendingCancelId || !cancelReason.trim()) return;
+    if (!pendingCancelId || !cancelReason.trim() || !canPerform('PURCHASES_RECEIPTS', 'read') || !canPerform('PURCHASES_RECEIPTS', 'cancel')) return;
     setCancelLoading(true);
     const cancelToastId = toast.loading('Cancelando recepción...');
     try {
@@ -971,6 +988,12 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
   };
 
   const openPaymentModal = (receipt: any, invoice?: any, invoiceOnly = false) => {
+    const canRegisterInvoice = canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
+    const canPay = canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'pay');
+    if (invoiceOnly ? !canRegisterInvoice : !canPay) {
+      toast.error(invoiceOnly ? 'Tu rol no permite registrar facturas de proveedor.' : 'Tu rol no permite registrar pagos a proveedores.');
+      return;
+    }
     const receiptStatus = getReceiptDisplayStatus(receipt);
     if (!['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus)) {
       toast.error('El pago solo se puede registrar cuando la recepción está recibida o recibida con incidencias.');
@@ -1021,7 +1044,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
   };
 
   const handleCreateCreditFromReceipt = async () => {
-    if (!creditDraft) return;
+    if (!creditDraft || !canPerform('PURCHASES_RECEIPTS', 'read') || !canPerform('PURCHASES_RETURNS', 'create')) return;
     const items = Object.entries(creditQuantities)
       .map(([receiptItemId, quantity]) => ({ receiptItemId, quantity: Math.trunc(Number(quantity || 0)) }))
       .filter((item) => Number.isInteger(item.quantity) && item.quantity > 0);
@@ -1055,6 +1078,11 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
   };
 
   const handleSaveDoc = async () => {
+    const canEdit = editingId === 'NEW'
+      ? canPerform('PURCHASES_RECEIPTS', 'create')
+      : canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'edit');
+    const canReceive = canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'receive');
+    if (!canEdit && !canReceive) return;
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
     if (!localDoc?.purchaseOrderId) return toast.error('Debe seleccionar una orden de compra');
     const linkedOrderForSave = orders.find((order) => String(order.id) === String(localDoc.purchaseOrderId));
@@ -1079,10 +1107,17 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
     const previousStatus = editingId !== 'NEW'
       ? String(data.find((receipt) => receipt.id === editingId)?.status || '').toUpperCase()
       : '';
-    const requiresApproval = isReceiving && (editingId === 'NEW' || !STATUS_OPTIONS_RECEIVING.includes(previousStatus));
-    if (requiresApproval && !canPerform('PURCHASES_RECEIPTS', 'approve')) {
-      return toast.error('Necesitas el permiso Aprobar para marcar esta recepción como recibida.');
-    }
+    const existingReceipt = editingId !== 'NEW' ? data.find((receipt) => receipt.id === editingId) : undefined;
+    const existingReceived = STATUS_OPTIONS_RECEIVING.includes(String(existingReceipt?.status || '').toUpperCase());
+    const quantitiesChanged = Boolean(existingReceipt && itemsToSave.some((item: any) => {
+      const oldItem = (existingReceipt.items || []).find((candidate: any) => String(candidate.id) === String(item.id));
+      return oldItem && (
+        Number(oldItem.quantityReceived || 0) !== Number(item.quantityReceived || 0)
+        || Number(oldItem.quantityRejected || 0) !== Number(item.quantityRejected || 0)
+      );
+    }));
+    const requiresReceive = (isReceiving && (editingId === 'NEW' || !STATUS_OPTIONS_RECEIVING.includes(previousStatus)))
+      || (existingReceived && quantitiesChanged);
     if (isReceiving) {
       const missingWarehouseItems = getItemsMissingWarehouse(itemsToSave, true);
       if (missingWarehouseItems.length > 0) {
@@ -1095,16 +1130,16 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       let inventoryResponse: any;
       let initialOperations: InventoryCostOperation[] = [];
       if (editingId === 'NEW') {
-        const createdResponse = await purchaseReceiptsService.create(requiresApproval ? { ...documentToSave, deferApproval: true } as any : documentToSave as any);
+        const createdResponse = await purchaseReceiptsService.create(requiresReceive ? { ...documentToSave, deferApproval: true } as any : documentToSave as any);
         const createdReceipt = (createdResponse as any)?.data || createdResponse;
         initialOperations = getInventoryCostOperations(createdResponse);
-        inventoryResponse = requiresApproval && createdReceipt?.id
+        inventoryResponse = requiresReceive && canReceive && createdReceipt?.id
           ? await purchaseReceiptsService.approve(createdReceipt.id)
           : createdResponse;
         toast.success('Recepción creada', { id: saveToastId });
       } else {
-        const updateResponse = await purchaseReceiptsService.update(editingId!, requiresApproval ? { ...documentToSave, deferApproval: true } as any : documentToSave as any);
-        inventoryResponse = requiresApproval ? await purchaseReceiptsService.approve(editingId!) : updateResponse;
+        const updateResponse = await purchaseReceiptsService.update(editingId!, requiresReceive ? { ...documentToSave, deferApproval: true } as any : documentToSave as any);
+        inventoryResponse = requiresReceive && canReceive ? await purchaseReceiptsService.approve(editingId!) : updateResponse;
         toast.success('Recepción guardada', { id: saveToastId });
       }
       const operations = getInventoryCostOperations(inventoryResponse);
@@ -1119,6 +1154,9 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
   };
 
   const registerInvoiceFromPaymentModal = async ({ draft, number, date, dueDate, files }: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => {
+    if (!canPerform('PURCHASES_RECEIPTS', 'read') || !canPerform('PURCHASES_RECEIPTS', 'registerInvoice')) {
+      throw new Error('Tu rol no permite registrar facturas de proveedor.');
+    }
     const receipt = data.find((item) => String(item.id) === String(draft.receiptId));
     if (!receipt) throw new Error('No se encontró la recepción seleccionada. Actualiza la lista e inténtalo nuevamente.');
     if (!['RECEIVED', 'WITH_INCIDENTS'].includes(getReceiptDisplayStatus(receipt))) {
@@ -1190,9 +1228,10 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
   };
 
   const handleRepairInventory = async (receipt: PurchaseReceipt) => {
+    if (!canPerform('PURCHASES_RECEIPTS', 'read') || !canPerform('PURCHASES_RECEIPTS', 'retryInventory')) return;
     const repairToastId = toast.loading('Sincronizando recepción con inventario...');
     try {
-      const response = await purchaseReceiptsService.approve(String(receipt.id));
+      const response = await purchaseReceiptsService.retryInventory(String(receipt.id));
       const operations = getInventoryCostOperations(response);
       if (operations.length > 0) setInventoryCostOperations(operations);
       toast.success('Inventario sincronizado correctamente', { id: repairToastId });
@@ -1301,7 +1340,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
 
   const currentAvailableOrders = orders.filter(o => o.supplierId === localDoc?.supplierId && ['APPROVED'].includes((o.status||'').toUpperCase()) && !(o.receipts || []).some((receipt: any) => String(receipt.status || '').toUpperCase() === 'PENDING'));
 
-  const paymentDialog = <ReceiptPaymentDialog draft={paymentDraft} onClose={() => setPaymentDraft(null)} onSaved={() => { onRefresh(); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); }} onRegisterInvoice={registerInvoiceFromPaymentModal} accountingConnectionEnabled={accountingConnectionEnabled} financeConnectionEnabled={financeConnectionEnabled} />;
+  const paymentDialog = <ReceiptPaymentDialog draft={paymentDraft} onClose={() => setPaymentDraft(null)} onSaved={() => { onRefresh(); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); }} onRegisterInvoice={registerInvoiceFromPaymentModal} accountingConnectionEnabled={accountingConnectionEnabled} financeConnectionEnabled={financeConnectionEnabled} canPay={canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'pay')} canRegisterInvoice={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'registerInvoice')} />;
   const creditDialog = (
     <Dialog open={Boolean(creditDraft)} onOpenChange={(open) => { if (!open && !creditLoading) { setCreditDraft(null); setCreditReason(''); setCreditQuantities({}); } }}>
       <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
@@ -1387,10 +1426,11 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
     const canEditCurrent = isNew
       ? canPerform('PURCHASES_RECEIPTS', 'create')
       : RECEIPT_EDITABLE_STATUSES.includes(persistedStatus) && canPerform('PURCHASES_RECEIPTS', 'edit') && !linkedInvoice;
-    const canReceiveCurrent = !isNew
-      && persistedStatus === 'PENDING'
-      && canEditCurrent
-      && canPerform('PURCHASES_RECEIPTS', 'approve');
+    const canReceiveCurrent = RECEIPT_EDITABLE_STATUSES.includes(persistedStatus)
+      && canPerform('PURCHASES_RECEIPTS', 'read')
+      && canPerform('PURCHASES_RECEIPTS', 'receive')
+      && !linkedInvoice;
+    const canChangeReceivingDetails = canReceiveCurrent;
     const displayStatus = getReceiptDisplayStatus(localDoc as PurchaseReceipt);
     const currentStatus = statusOpts.find(s => s.value === displayStatus);
     const linkedOrder = (localDoc as any)?.purchaseOrder
@@ -1427,12 +1467,22 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="receipts" context="form" />
-            {canReceiveCurrent && (
+            {!isNew && canReceiveCurrent && canEditCurrent && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 <PackageCheck className="mr-2 size-3.5" /> {persistedStatus === 'PENDING' ? 'Recepcionar' : 'Guardar recepción'}
               </Button>
             )}
+            {!isNew && canReceiveCurrent && !canEditCurrent && (
+              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                <PackageCheck className="mr-2 size-3.5" /> {persistedStatus === 'PENDING' ? 'Procesar recepción' : 'Guardar recepción'}
+              </Button>
+            )}
             {isNew && canPerform('PURCHASES_RECEIPTS', 'create') && (
+              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                {canReceiveCurrent && STATUS_OPTIONS_RECEIVING.includes(calcStatus(localDoc.items || [])) ? 'Guardar y recepcionar' : 'Guardar'}
+              </Button>
+            )}
+            {!isNew && canEditCurrent && !canReceiveCurrent && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar
               </Button>
@@ -1773,7 +1823,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     <div className="col-span-1 min-w-0 xl:col-span-1">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Cant. recibida</p>
                       <Input
-                        disabled={!canEditCurrent}
+                        disabled={!canChangeReceivingDetails}
                         type="number"
                         min="0"
                         value={item.quantityReceived === 0 ? '' : item.quantityReceived}
@@ -1785,7 +1835,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     <div className="col-span-1 min-w-0 xl:col-span-1">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Cant. rechazada</p>
                       <Input
-                        disabled={!canEditCurrent}
+                        disabled={!canChangeReceivingDetails}
                         type="number"
                         min="0"
                         value={item.quantityRejected === 0 ? '' : item.quantityRejected}
@@ -1843,7 +1893,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                         {missingWarehouse && <span className="rounded-full bg-rose-700 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">Requerido</span>}
                       </div>
                       <Combobox
-                        disabled={!canEditCurrent}
+                        disabled={!canEditCurrent && !canChangeReceivingDetails}
                         options={warehouses
                           .filter((w) => (w as any)?.isActive !== false)
                           .map((w) => ({
@@ -1945,8 +1995,8 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailReceipt(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_RECEIPTS', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
-          onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'delete') ? async (ids) => {
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailReceipt(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancel')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+          onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancel') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => {
               const receipt = data.find((candidate) => candidate.id === id);
               return !id.startsWith('new-') && Boolean(receipt) && getReceiptDisplayStatus(receipt as PurchaseReceipt) === 'PENDING';
@@ -1973,8 +2023,8 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
           actions={(row) => {
             const receiptStatus = getReceiptDisplayStatus(row);
             const canReceiveRow = receiptStatus === 'PENDING'
-              && canPerform('PURCHASES_RECEIPTS', 'approve')
-              && canPerform('PURCHASES_RECEIPTS', 'edit');
+              && canPerform('PURCHASES_RECEIPTS', 'read')
+              && canPerform('PURCHASES_RECEIPTS', 'receive');
             const isPayableReceipt = ['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus);
             const needsInventorySync = ['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus)
               && (!row.inventoryProcessedAt || (row.items || []).some((item: any) =>
@@ -1986,7 +2036,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
               : undefined;
             const payableInvoice = activeInvoice && Number(activeInvoice.balance || 0) > 0 ? activeInvoice : undefined;
             const canAccessCreditAction = isPayableReceipt
-              && canPerform('PURCHASES_RECEIPTS', 'approve')
+              && canPerform('PURCHASES_RECEIPTS', 'read')
               && canPerform('PURCHASES_RETURNS', 'create');
             const creditBlockedReason = !activeInvoice
               ? 'Registra primero la factura del proveedor'
@@ -1994,10 +2044,11 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                 ? 'Procesa primero la entrada en inventario'
                 : '';
             const canAccessPaymentAction = Boolean(payableInvoice)
-              && canPerform('PURCHASES_PAYMENTS', 'create')
-              && canPerform('PURCHASES_PAYMENTS', 'approve');
+              && canPerform('PURCHASES_PAYMENTS', 'read')
+              && canPerform('PURCHASES_PAYMENTS', 'pay');
             const canAccessInvoiceAction = isPayableReceipt && !activeInvoice
-              && canPerform('PURCHASES_RECEIPTS', 'edit');
+              && canPerform('PURCHASES_RECEIPTS', 'read')
+              && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
             return (
               <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                 <Button title="Ver detalle completo" aria-label={`Ver detalle completo de ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setDetailReceipt(null); setEditingId(String(row.id)); }}>
@@ -2010,7 +2061,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     variant="ghost"
                     size="icon"
                     className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                    onClick={() => setEditingId(row.id)}
+                    onClick={() => setEditingId(String(row.id))}
                   >
                     <PackageCheck className="size-4" />
                   </Button>
@@ -2052,7 +2103,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     <Send className="size-4" />
                   </Button>
                 )}
-                {needsInventorySync && canPerform('PURCHASES_RECEIPTS', 'approve') && (
+                {needsInventorySync && canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'retryInventory') && (
                   <Button
                     title="Reintentar sincronización con inventario"
                     aria-label={`Reintentar inventario de ${row.number || 'recepción'}`}
@@ -2064,7 +2115,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     <RefreshCw className="size-4" />
                   </Button>
                 )}
-                {canPerform('PURCHASES_RECEIPTS', 'delete') && receiptStatus === 'PENDING' && (
+                {canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancel') && receiptStatus === 'PENDING' && (
                   <Button
                     title="Cancelar recepción"
                     aria-label={`Cancelar ${row.number || 'recepción'}`}
@@ -2093,8 +2144,8 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
         extraActions={detailReceipt ? (() => {
           const receiptStatus = getReceiptDisplayStatus(detailReceipt);
           const canReceiveRow = receiptStatus === 'PENDING'
-            && canPerform('PURCHASES_RECEIPTS', 'approve')
-            && canPerform('PURCHASES_RECEIPTS', 'edit');
+            && canPerform('PURCHASES_RECEIPTS', 'read')
+            && canPerform('PURCHASES_RECEIPTS', 'receive');
           const isPayableReceipt = ['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus);
           const needsInventorySync = isPayableReceipt
             && (!detailReceipt.inventoryProcessedAt || (detailReceipt.items || []).some((item: any) =>
@@ -2106,7 +2157,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
             : undefined;
           const payableInvoice = activeInvoice && Number(activeInvoice.balance || 0) > 0 ? activeInvoice : undefined;
           const canAccessCreditAction = isPayableReceipt
-            && canPerform('PURCHASES_RECEIPTS', 'approve')
+            && canPerform('PURCHASES_RECEIPTS', 'read')
             && canPerform('PURCHASES_RETURNS', 'create');
           const creditBlockedReason = !activeInvoice
             ? 'Registra primero la factura del proveedor'
@@ -2114,17 +2165,18 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
               ? 'Procesa primero la entrada en inventario'
               : '';
           const canAccessPaymentAction = Boolean(payableInvoice)
-            && canPerform('PURCHASES_PAYMENTS', 'create')
-            && canPerform('PURCHASES_PAYMENTS', 'approve');
+            && canPerform('PURCHASES_PAYMENTS', 'read')
+            && canPerform('PURCHASES_PAYMENTS', 'pay');
           const canAccessInvoiceAction = isPayableReceipt && !activeInvoice
-            && canPerform('PURCHASES_RECEIPTS', 'edit');
+            && canPerform('PURCHASES_RECEIPTS', 'read')
+            && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
           return <>
             {canReceiveRow && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => { setDetailReceipt(null); setEditingId(detailReceipt.id); }}><PackageCheck className="mr-2 size-4" />Recepcionar</Button>}
             {canAccessInvoiceAction && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); openPaymentModal(detailReceipt, undefined, true); }}><FileText className="mr-2 size-4" />Registrar compra a crédito</Button>}
             {canAccessPaymentAction && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); openPaymentModal(detailReceipt, payableInvoice); }}><Banknote className="mr-2 size-4" />Registrar pago</Button>}
             {canAccessCreditAction && <Button type="button" variant="outline" className={cn('rounded-xl', creditBlockedReason && 'cursor-not-allowed opacity-50')} disabled={Boolean(creditBlockedReason)} onClick={() => openReceiptCredit(detailReceipt, activeInvoice)}><Send className="mr-2 size-4" />Crear nota de crédito</Button>}
-            {needsInventorySync && canPerform('PURCHASES_RECEIPTS', 'approve') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); void handleRepairInventory(detailReceipt); }}><RefreshCw className="mr-2 size-4" />Reintentar inventario</Button>}
-            {canPerform('PURCHASES_RECEIPTS', 'delete') && receiptStatus === 'PENDING' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReceipt(null); setPendingCancelId(detailReceipt.id); setCancelReason(''); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+            {needsInventorySync && canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'retryInventory') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); void handleRepairInventory(detailReceipt); }}><RefreshCw className="mr-2 size-4" />Reintentar inventario</Button>}
+            {canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancel') && receiptStatus === 'PENDING' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReceipt(null); setPendingCancelId(detailReceipt.id); setCancelReason(''); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
           </>;
         })() : undefined}
         onDownloadPdf={canPerform('PURCHASES_RECEIPTS', 'export') ? (format) => detailReceipt ? void handleDownloadReceiptPdf(detailReceipt, format) : undefined : undefined}

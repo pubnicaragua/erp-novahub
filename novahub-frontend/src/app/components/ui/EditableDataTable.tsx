@@ -29,7 +29,7 @@ export interface ColumnDef<T> {
   key: keyof T | string;
   header: string;
   width?: string;
-  editable?: boolean;
+  editable?: boolean | ((row: T) => boolean);
   type?: 'text' | 'number' | 'select' | 'date' | 'datetime-local' | 'badge';
   options?: { label: string; value: string; color?: string }[];
   render?: (value: any, row: T) => React.ReactNode;
@@ -70,6 +70,8 @@ interface EditableDataTableProps<T> {
   canEdit?: boolean;
   /** Optional row-level authorization for inline editing. */
   canEditRow?: (row: T) => boolean;
+  /** Optional row-level authorization for deletion controls. */
+  canDeleteRow?: (row: T) => boolean;
 }
 
 export function EditableDataTable<T extends { [key: string]: any }>({
@@ -98,12 +100,17 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   verticalScroll = true,
   canEdit,
   canEditRow,
+  canDeleteRow,
 }: EditableDataTableProps<T>) {
   const isBulkCancel = bulkAction === 'cancel';
   const isBulkReject = bulkAction === 'reject';
   const bulkActionLabel = isBulkCancel ? 'Cancelar' : isBulkReject ? 'Rechazar' : 'Eliminar';
   const isEditingAllowed = canEdit ?? Boolean(onRowUpdate);
-  const isCellEditable = (row: T, column: ColumnDef<T>) => Boolean(column.editable && isEditingAllowed && (canEditRow?.(row) ?? true));
+  const isCellEditable = (row: T, column: ColumnDef<T>) => Boolean(
+    (typeof column.editable === 'function' ? column.editable(row) : column.editable)
+      && isEditingAllowed
+      && (canEditRow?.(row) ?? true),
+  );
   const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
   const tableRootRef = useRef<HTMLDivElement>(null);
   const [isCompactTableContainer, setIsCompactTableContainer] = useState(false);
@@ -401,11 +408,12 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     
     const newData = [...data];
     let updatedCount = 0;
-    const editableColumns = columns.filter(col => col.editable);
-
     rows.forEach((rowValues, rowIndex) => {
       if (rowIndex < newData.length) {
         if (!(canEditRow?.(newData[rowIndex]) ?? true)) return;
+        const editableColumns = columns.filter((col) =>
+          typeof col.editable === 'function' ? col.editable(newData[rowIndex]) : col.editable,
+        );
         const itemUpdates: Partial<T> = {};
         rowValues.forEach((val, colIndex) => {
           if (colIndex < editableColumns.length) {
@@ -745,7 +753,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                         <Loader2 className="size-3 animate-spin" /> <span className="hidden 2xl:inline">Abriendo…</span>
                       </span>}
                       {actions?.(row)}
-                      {onRowDelete && (
+                      {onRowDelete && (canDeleteRow?.(row) ?? true) && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -903,7 +911,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               {(actions || onRowDelete) && (
                 <div data-action-group="true" className="flex min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-muted/10 p-3">
                   {actions?.(row)}
-                  {onRowDelete && (
+                  {onRowDelete && (canDeleteRow?.(row) ?? true) && (
                     <Button
                       type="button"
                       variant="destructive"
@@ -960,7 +968,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           </DialogHeader>
           <div className="flex flex-col gap-2 p-4" onClick={() => setMobileActionsRow(null)}>
             {mobileActionsRow && actions?.(mobileActionsRow)}
-            {mobileActionsRow && onRowDelete && (
+            {mobileActionsRow && onRowDelete && (canDeleteRow?.(mobileActionsRow) ?? true) && (
               <Button
                 type="button"
                 variant="destructive"

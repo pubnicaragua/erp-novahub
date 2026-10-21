@@ -187,6 +187,8 @@ function isAuditGeneratedAdjustment(adjustment: any): boolean {
 export function ControlStockView({ adjustments, warehouses, products, series = [], auditsForAdjustment = [], onRefresh, pagination, onSearchChange, onStatusChange }: ControlStockViewProps) {
   const { canPerform } = useAuth();
   const { openingId, startOpening } = useDetailOpeningFeedback();
+  const canCreateAdjustments = canPerform('INVENTORY_ADJUSTMENTS', 'create');
+  const canReadAudits = canPerform('INVENTORY_AUDITS', 'view');
   const canViewInventoryCost = canPerform('INVENTORY_ADJUSTMENTS', 'viewCost');
   const { baseCurrency } = useCurrency();
   const [showTutorial, setShowTutorial] = useState(false);
@@ -429,6 +431,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   };
 
   const requestCreateAdjustmentFromAudit = (audit: any) => {
+    if (!canCreateAdjustments || !canReadAudits) return;
     if (audit.adjustmentId) {
       toast.info('Esta auditoría ya tiene un ajuste borrador generado. Apruébalo desde la tabla de ajustes.');
       return;
@@ -439,7 +442,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
   const confirmCreateAdjustmentFromAudit = async () => {
     const audit = auditConfirmation;
-    if (!audit) return;
+    if (!audit || !canCreateAdjustments || !canReadAudits) return;
     const actionToken = beginNotificationAction();
     try {
       setAuditAdjustingId(audit.id);
@@ -653,7 +656,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               <SelectContent><SelectItem value="ALL">Todos</SelectItem><SelectItem value="DRAFT">Borrador</SelectItem><SelectItem value="APPROVED">Aprobado</SelectItem></SelectContent>
             </Select>
           </>}
-          {canPerform('INVENTORY_ADJUSTMENTS', 'create') && (
+          {canCreateAdjustments && (
             <>
               <Button type="button" variant="ghost" size="icon" onClick={() => setShowTutorial(true)} className="size-8 shrink-0 rounded-lg text-muted-foreground" aria-label="Cómo ajustar inventario" title="Cómo ajustar inventario">
                 <CircleHelp className="size-4" />
@@ -668,7 +671,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                   </Button>
                 </div>
               )}
-              <Button
+              {canReadAudits && <Button
                 type="button"
                 variant="outline"
                 size="sm"
@@ -679,7 +682,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 <ClipboardCheck className="size-3.5" />
                 Auditorías
                 {auditsForAdjustment.length > 0 && <Badge className="ml-0.5 h-5 min-w-5 border-0 bg-warning px-1 text-[9px] text-warning-foreground hover:bg-warning">{auditsForAdjustment.length}</Badge>}
-              </Button>
+              </Button>}
               <Button
                 size="sm"
                 variant="outline"

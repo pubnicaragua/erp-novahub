@@ -24,15 +24,18 @@ export function ProyectoRecursosPanel({ projectId }: PanelsProps) {
   const [addUserId, setAddUserId] = useState('');
   const [addRole, setAddRole] = useState('MEMBER');
   const [memberToDelete, setMemberToDelete] = useState<ProjectMember | null>(null);
-  const membersQuery = useTenantQuery<ProjectMember[]>(['projects', 'members', projectId], (s) => projectsService.members(projectId, s), { enabled: true });
-  const usersQuery = useTenantQuery<any[]>(['projects', 'users'], (s) => usersService.getLookup(undefined, s), { enabled: true });
+  const canReadMembers = canPerform('PROJECTS_LIST', 'view');
+  const canManageMembers = canPerform('PROJECTS_LIST', 'manageMembers');
+  const membersQuery = useTenantQuery<ProjectMember[]>(['projects', 'members', projectId], (s) => projectsService.members(projectId, s), { enabled: canReadMembers });
+  const usersQuery = useTenantQuery<any[]>(['projects', 'users'], (s) => usersService.getLookup(undefined, s), { enabled: canManageMembers });
   const members = asList(membersQuery.data) as ProjectMember[];
   const users = asList(usersQuery.data);
-  const canEdit = canPerform('PROJECTS', 'edit');
+  const canEdit = canManageMembers;
   const invalidate = () => invalidateTenantQueries(queryClient);
 
   const mutation = useMutation({
     mutationFn: (args: { type: 'add' | 'remove'; memberId?: string; payload?: any }) => {
+      if (!canEdit) throw new Error('No tienes permiso para administrar miembros.');
       if (args.type === 'add') return projectsService.addMember(projectId, args.payload);
       return projectsService.removeMember(projectId, args.memberId!);
     },
@@ -41,7 +44,7 @@ export function ProyectoRecursosPanel({ projectId }: PanelsProps) {
   });
 
   const add = () => {
-    if (!addUserId) return;
+    if (!addUserId || !canEdit) return;
     mutation.mutate({ type: 'add', payload: { userId: addUserId, role: addRole } });
     setAddUserId('');
     setAddRole('MEMBER');
@@ -138,20 +141,24 @@ export function ProyectoDocumentosPanel({ projectId }: PanelsProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [docToDelete, setDocToDelete] = useState<ProjectDocument | null>(null);
-  const docsQuery = useTenantQuery<ProjectDocument[]>(['projects', 'documents', projectId], (s) => projectsService.documents(projectId, s), { enabled: true });
+  const canReadDocuments = canPerform('PROJECTS_DOCUMENTS', 'view');
+  const docsQuery = useTenantQuery<ProjectDocument[]>(['projects', 'documents', projectId], (s) => projectsService.documents(projectId, s), { enabled: canReadDocuments });
   const docs = asList(docsQuery.data) as ProjectDocument[];
   const canCreate = canPerform('PROJECTS_DOCUMENTS', 'create');
   const canDelete = canPerform('PROJECTS_DOCUMENTS', 'delete');
   const invalidate = () => invalidateTenantQueries(queryClient);
 
   const removeMutation = useMutation({
-    mutationFn: (id: string) => projectsService.removeDocument(projectId, id),
+    mutationFn: (id: string) => {
+      if (!canDelete) throw new Error('No tienes permiso para eliminar documentos del proyecto.');
+      return projectsService.removeDocument(projectId, id);
+    },
     onSuccess: () => invalidate(),
     onError: (e: any) => toast.error(e?.message || 'No se pudo eliminar el documento'),
   });
 
   const onFile = async (file: File) => {
-    if (!file) return;
+    if (!file || !canCreate) return;
     setUploading(true);
     try {
       const uploaded = await storageService.uploadFile('documents', file, { folder: 'proyectos' });
@@ -203,7 +210,7 @@ export function ProyectoDocumentosPanel({ projectId }: PanelsProps) {
         </div>
       </CardContent>
       <ConfirmDialog
-        open={Boolean(docToDelete)}
+        open={Boolean(docToDelete) && canDelete}
         onOpenChange={(open) => !open && setDocToDelete(null)}
         title="Eliminar documento"
         description={docToDelete ? `¿Estás seguro de que deseas eliminar "${docToDelete.name}"?` : ''}
@@ -212,7 +219,7 @@ export function ProyectoDocumentosPanel({ projectId }: PanelsProps) {
         variant="destructive"
         loading={removeMutation.isPending}
         onConfirm={async () => {
-          if (!docToDelete) return;
+          if (!docToDelete || !canDelete) return;
           try {
             await removeMutation.mutateAsync(docToDelete.id);
             setDocToDelete(null);
@@ -229,13 +236,17 @@ export function ProyectoActividadesPanel({ projectId }: PanelsProps) {
   const { canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [comment, setComment] = useState('');
-  const activitiesQuery = useTenantQuery<ProjectActivity[]>(['projects', 'activities', projectId], (s) => projectsService.activities(projectId, s), { enabled: true });
+  const canReadActivities = canPerform('PROJECTS_LIST', 'view');
+  const activitiesQuery = useTenantQuery<ProjectActivity[]>(['projects', 'activities', projectId], (s) => projectsService.activities(projectId, s), { enabled: canReadActivities });
   const activities = asList(activitiesQuery.data) as ProjectActivity[];
-  const canComment = canPerform('PROJECTS', 'create');
+  const canComment = canPerform('PROJECTS_LIST', 'comment');
   const invalidate = () => invalidateTenantQueries(queryClient);
 
   const commentMutation = useMutation({
-    mutationFn: (text: string) => projectsService.addActivity(projectId, { type: 'COMMENT', description: text }),
+    mutationFn: (text: string) => {
+      if (!canComment) throw new Error('No tienes permiso para comentar en el proyecto.');
+      return projectsService.addActivity(projectId, { type: 'COMMENT', description: text });
+    },
     onSuccess: () => { invalidate(); setComment(''); },
     onError: (e: any) => toast.error(e?.message || 'No se pudo enviar el comentario'),
   });

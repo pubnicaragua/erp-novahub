@@ -51,7 +51,8 @@ export function ActivosFijosDepreciationTab() {
   const { displayCurrency, formatConvertedAmount, convertAmount, toBaseAmount, baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
   const canExportAssets = canPerform('ACCOUNTING_ASSETS', 'export');
-  const canProcessDepreciation = canPerform('ACCOUNTING_ASSETS', 'approve');
+  const canGenerateProjection = canPerform('ACCOUNTING_ASSETS', 'generateProjection');
+  const canProcessDepreciation = canPerform('ACCOUNTING_ASSETS', 'processDepreciation');
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -139,7 +140,7 @@ export function ActivosFijosDepreciationTab() {
   }
 
   async function handleGenerate(id: string) {
-    if (!canProcessDepreciation) return;
+    if (!canGenerateProjection) return;
     setGeneratingId(id);
     try {
       await contabilidadService.generateFixedAssetProjection(id);
@@ -371,7 +372,7 @@ export function ActivosFijosDepreciationTab() {
                                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                                         Proyección ({projection.length} períodos · {processedCount} procesados)
                                       </p>
-                                      {canProcessDepreciation && (
+                                      {canGenerateProjection && (
                                         <Button variant="outline" size="sm" onClick={() => handleGenerate(asset.id)} disabled={generatingId === asset.id} className="h-7 gap-1.5">
                                           <RefreshCw className={generatingId === asset.id ? 'size-3 animate-spin' : 'size-3'} /> Generar proyección
                                         </Button>

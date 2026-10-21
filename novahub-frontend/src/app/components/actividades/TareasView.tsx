@@ -177,8 +177,18 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     return Boolean(assigneeId) && assigneeId === currentUserId;
   };
 
+  const canMoveTaskToStatus = (task: Task, targetStatus: string): boolean => {
+    const currentStatus = String(task.status || 'PENDING').toUpperCase();
+    if (currentStatus === 'PENDING' && targetStatus === 'IN_PROGRESS') return canPerform('ACTIVITIES_TASKS', 'startTask');
+    if (currentStatus === 'IN_PROGRESS' && targetStatus === 'PENDING') return canPerform('ACTIVITIES_TASKS', 'returnTaskToPending');
+    if (['PENDING', 'IN_PROGRESS'].includes(currentStatus) && targetStatus === 'WAITING_APPROVAL') return canPerform('ACTIVITIES_TASKS', 'submit');
+    if (currentStatus === 'WAITING_APPROVAL' && targetStatus === 'COMPLETED') return canPerform('ACTIVITIES_TASKS', 'approve');
+    if (['PENDING', 'IN_PROGRESS'].includes(currentStatus) && targetStatus === 'COMPLETED') return canPerform('ACTIVITIES_TASKS', 'complete');
+    return false;
+  };
+
   const handleClaimTask = async (task: Task) => {
-    if (!task?.id || !canPerform('ACTIVITIES_TASKS', 'edit')) return;
+    if (!task?.id || !canPerform('ACTIVITIES_TASKS', 'claim')) return;
     try {
       setClaimingId(task.id);
       await tasksService.claim(task.id);
@@ -193,7 +203,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   };
 
   const handleOpenReassign = (task: Task) => {
-    if (!task?.id || !canPerform('ACTIVITIES_TASKS', 'edit')) return;
+    if (!task?.id || !canPerform('ACTIVITIES_TASKS', 'reassign')) return;
     setReassignTask(task);
     setIsReassignOpen(true);
   };
@@ -256,6 +266,11 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Task>) => {
+    const current = data.find((task) => String(task.id) === String(id));
+    if (!current) return;
+    if (Object.prototype.hasOwnProperty.call(updates || {}, 'status')) {
+      if (!canMoveTaskToStatus(current, String(updates.status || ''))) return;
+    } else if (!canPerform('ACTIVITIES_TASKS', 'edit')) return;
     try {
       await tasksService.update(id as string, updates);
       toast.success('Tarea actualizada');
@@ -302,7 +317,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   };
 
   const handleCompleteTask = async () => {
-    if (!selectedTask || !canPerform('ACTIVITIES_TASKS', 'approve')) return;
+    if (!selectedTask || !canPerform('ACTIVITIES_TASKS', 'complete')) return;
     try {
       setActionLoading(true);
       let fileUrl = evidenceUrl.trim();
@@ -327,7 +342,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   };
 
   const handleSubmitApproval = async () => {
-    if (!selectedTask) return;
+    if (!selectedTask || !canPerform('ACTIVITIES_TASKS', 'submit')) return;
     try {
       setActionLoading(true);
       let fileUrl = evidenceUrl.trim();
@@ -368,7 +383,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   };
 
   const handleRejectTask = async () => {
-    if (!selectedTask || !rejectReason.trim()) {
+    if (!selectedTask || !canPerform('ACTIVITIES_TASKS', 'reject')) return;
+    if (!rejectReason.trim()) {
       toast.error('Indica el motivo del rechazo');
       return;
     }
@@ -423,7 +439,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       key: 'priority',
       header: 'Prioridad',
       width: '100px',
-      editable: canPerform('ACTIVITIES_TASKS', 'edit'),
+      editable: false,
       type: 'select' as const,
       options: priorityOpts,
       render: (val: any) => {
@@ -787,6 +803,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           <TareasKanban
             data={filtered}
             onViewDetail={(task) => setDetailTask(task)}
+            canMoveToStatus={canMoveTaskToStatus}
             onStatusChange={async (taskId, status) => {
               await handleUpdate(taskId, { status: status as any });
             }}
@@ -795,8 +812,11 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               setIsApprovalOpen(true);
             }}
             onApprove={(task) => handleApproveTask(task)}
-            canEdit={canPerform('ACTIVITIES_TASKS', 'edit')}
-            canApprove={canPerform('ACTIVITIES_TASKS', 'approve')}
+            onComplete={(task) => {
+              setDetailTask(null);
+              setSelectedTask(task);
+              setIsCompleteOpen(true);
+            }}
           />
         ) : viewLayout === 'cards' ? (
           <TareasCardsView
@@ -816,8 +836,12 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               setSelectedTask(task);
               setIsCompleteOpen(true);
             }}
-            canEdit={canPerform('ACTIVITIES_TASKS', 'edit')}
+            canSubmitApproval={canPerform('ACTIVITIES_TASKS', 'submit')}
             canApprove={canPerform('ACTIVITIES_TASKS', 'approve')}
+            canReject={canPerform('ACTIVITIES_TASKS', 'reject')}
+            canComplete={canPerform('ACTIVITIES_TASKS', 'complete')}
+            canClaimAction={canPerform('ACTIVITIES_TASKS', 'claim')}
+            canReassignAction={canPerform('ACTIVITIES_TASKS', 'reassign')}
             getTaskDisplayStatus={getTaskDisplayStatus}
             categoryFilter={categoryFilter}
             onCategoryFilterChange={setCategoryFilter}
@@ -851,7 +875,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             }
             bulkActions={(selectedIds) => (
               <div className="flex flex-wrap items-center gap-2">
-                {canPerform('ACTIVITIES_TASKS', 'edit') && (
+                {canPerform('ACTIVITIES_TASKS', 'submit') && filtered.filter((task) => selectedIds.includes(task.id)).every((task) => ['PENDING', 'IN_PROGRESS'].includes(String(task.status || '').toUpperCase())) && (
                   <Button
                     type="button"
                     variant="outline"
@@ -870,7 +894,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                     <Send className="mr-1.5 size-3" /> Enviar a Aprobación ({selectedIds.length})
                   </Button>
                 )}
-                {canPerform('ACTIVITIES_TASKS', 'approve') && (
+                {canPerform('ACTIVITIES_TASKS', 'complete') && filtered.filter((task) => selectedIds.includes(task.id)).every((task) => ['PENDING', 'IN_PROGRESS'].includes(String(task.status || '').toUpperCase())) && (
                   <Button
                     type="button"
                     variant="outline"
@@ -926,7 +950,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                   </Button>
 
                   {/* Tomar Tarea: solo si la tarea no es del usuario actual (§2.2) */}
-                  {canClaimTask(row) && canPerform('ACTIVITIES_TASKS', 'edit') && (
+                  {canClaimTask(row) && canPerform('ACTIVITIES_TASKS', 'claim') && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -947,7 +971,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                   )}
 
                   {/* Reasignar responsable */}
-                  {!isClosedTaskStatus(row) && canPerform('ACTIVITIES_TASKS', 'edit') && (
+                  {!isClosedTaskStatus(row) && canPerform('ACTIVITIES_TASKS', 'reassign') && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -963,7 +987,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                   )}
 
                   {/* Send to approval button */}
-                  {['PENDING', 'IN_PROGRESS'].includes(status) && canPerform('ACTIVITIES_TASKS', 'edit') && (
+                  {['PENDING', 'IN_PROGRESS'].includes(status) && canPerform('ACTIVITIES_TASKS', 'submit') && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -981,9 +1005,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                   )}
 
                   {/* Approve / Reject buttons for Authorizers */}
-                  {status === 'WAITING_APPROVAL' && canPerform('ACTIVITIES_TASKS', 'approve') && (
+                  {status === 'WAITING_APPROVAL' && (canPerform('ACTIVITIES_TASKS', 'approve') || canPerform('ACTIVITIES_TASKS', 'reject')) && (
                     <>
-                      <Button
+                      {canPerform('ACTIVITIES_TASKS', 'approve') && <Button
                         type="button"
                         variant="ghost"
                         size="icon"
@@ -993,8 +1017,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                         onClick={() => handleApproveTask(row)}
                       >
                         <CheckCircle2 className="size-4" />
-                      </Button>
-                      <Button
+                      </Button>}
+                      {canPerform('ACTIVITIES_TASKS', 'reject') && <Button
                         type="button"
                         variant="ghost"
                         size="icon"
@@ -1007,12 +1031,12 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                         }}
                       >
                         <XCircle className="size-4" />
-                      </Button>
+                      </Button>}
                     </>
                   )}
 
                   {/* Direct complete with evidence for non-approval flow */}
-                  {status !== 'COMPLETED' && status !== 'WAITING_APPROVAL' && canPerform('ACTIVITIES_TASKS', 'approve') && (
+                  {status !== 'COMPLETED' && status !== 'WAITING_APPROVAL' && canPerform('ACTIVITIES_TASKS', 'complete') && (
                     <Button
                       type="button"
                       data-testid={`activities-complete-${row.id}`}
@@ -1058,7 +1082,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         extraActions={
           detailTask && (
             <div className="flex flex-wrap gap-2">
-              {canClaimTask(detailTask) && canPerform('ACTIVITIES_TASKS', 'edit') && (
+              {canClaimTask(detailTask) && canPerform('ACTIVITIES_TASKS', 'claim') && (
                 <Button
                   type="button"
                   variant="outline"
@@ -1075,7 +1099,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                 </Button>
               )}
 
-              {!isClosedTaskStatus(detailTask) && canPerform('ACTIVITIES_TASKS', 'edit') && (
+              {!isClosedTaskStatus(detailTask) && canPerform('ACTIVITIES_TASKS', 'reassign') && (
                 <Button
                   type="button"
                   variant="outline"
@@ -1087,7 +1111,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               )}
 
               {['PENDING', 'IN_PROGRESS'].includes(String(detailTask.status || '').toUpperCase()) &&
-                canPerform('ACTIVITIES_TASKS', 'edit') && (
+                canPerform('ACTIVITIES_TASKS', 'submit') && (
                   <Button
                     type="button"
                     variant="outline"
@@ -1102,16 +1126,16 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                 )}
 
               {String(detailTask.status || '').toUpperCase() === 'WAITING_APPROVAL' &&
-                canPerform('ACTIVITIES_TASKS', 'approve') && (
+                (canPerform('ACTIVITIES_TASKS', 'approve') || canPerform('ACTIVITIES_TASKS', 'reject')) && (
                   <>
-                    <Button
+                    {canPerform('ACTIVITIES_TASKS', 'approve') && <Button
                       type="button"
                       className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
                       onClick={() => handleApproveTask(detailTask)}
                     >
                       <CheckCircle2 className="mr-1.5 size-4" /> Aprobar
-                    </Button>
-                    <Button
+                    </Button>}
+                    {canPerform('ACTIVITIES_TASKS', 'reject') && <Button
                       type="button"
                       variant="outline"
                       className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10"
@@ -1121,13 +1145,13 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                       }}
                     >
                       <XCircle className="mr-1.5 size-4" /> Rechazar
-                    </Button>
+                    </Button>}
                   </>
                 )}
 
               {String(detailTask.status || '').toUpperCase() !== 'COMPLETED' &&
                 String(detailTask.status || '').toUpperCase() !== 'WAITING_APPROVAL' &&
-                canPerform('ACTIVITIES_TASKS', 'approve') && (
+                canPerform('ACTIVITIES_TASKS', 'complete') && (
                   <Button
                     type="button"
                     className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
@@ -1396,7 +1420,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             <Button variant="outline" className="rounded-xl" onClick={() => setIsCompleteOpen(false)} disabled={actionLoading}>
               Cancelar
             </Button>
-            {canPerform('ACTIVITIES_TASKS', 'approve') && (
+            {canPerform('ACTIVITIES_TASKS', 'complete') && (
               <Button
                 data-testid="activities-task-complete-submit"
                 onClick={handleCompleteTask}
@@ -1461,14 +1485,14 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             <Button variant="outline" className="rounded-xl" onClick={() => setIsApprovalOpen(false)} disabled={actionLoading}>
               Cancelar
             </Button>
-            <Button
+            {canPerform('ACTIVITIES_TASKS', 'submit') && <Button
               onClick={handleSubmitApproval}
               disabled={actionLoading}
               className="rounded-xl px-5"
             >
               {actionLoading ? <Loader2 className="size-4 animate-spin mr-2" /> : <Send className="mr-1.5 size-4" />}
               Enviar entregable
-            </Button>
+            </Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1510,7 +1534,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             <Button variant="outline" className="rounded-xl" onClick={() => setIsRejectOpen(false)} disabled={actionLoading}>
               Cancelar
             </Button>
-            <Button
+            {canPerform('ACTIVITIES_TASKS', 'reject') && <Button
               variant="destructive"
               onClick={handleRejectTask}
               disabled={actionLoading || !rejectReason.trim()}
@@ -1518,7 +1542,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             >
               {actionLoading ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
               Confirmar Rechazo
-            </Button>
+            </Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

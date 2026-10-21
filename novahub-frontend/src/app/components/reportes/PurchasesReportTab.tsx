@@ -944,10 +944,10 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || user?.tenantName || 'Mi Empresa');
         const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.purchases');
-        const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
+        const primaryColor = pdfSettings.primaryColor || '#01422c';
         const rgbPrimary = primaryColor.startsWith('#')
           ? [parseInt(primaryColor.slice(1, 3), 16), parseInt(primaryColor.slice(3, 5), 16), parseInt(primaryColor.slice(5, 7), 16)]
-          : [249, 115, 22];
+          : [1, 66, 44];
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
@@ -1007,11 +1007,11 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         const boxH = 24;
         checkPage(boxH + 5);
-        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 4, boxHeight: boxH, labelFontSize: 7, valueFontSize: 11, detailFontSize: 6.5 });
+        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 4, boxHeight: boxH, labelFontSize: 7, valueFontSize: 11, detailFontSize: 6.5, primaryColor: pdfSettings.primaryColor, secondaryColor: pdfSettings.secondaryColor });
 
-        const renderSection = (title: string, headers: string[], rows: (string | number)[][], color: number[]) => {
-          reportSections.push({ title, headers, rows, color });
-          currentY = drawReportTable({ doc, title, headers, rows, color, marginX, contentWidth, currentY });
+        const renderSection = (title: string, headers: string[], rows: (string | number)[][], _color: number[]) => {
+          reportSections.push({ title, headers, rows, color: rgbPrimary });
+          currentY = drawReportTable({ doc, title, headers, rows, color: rgbPrimary, marginX, contentWidth, currentY });
         };
         const money = (value: unknown) => formatConvertedAmount(Number(value || 0), 'NIO');
         const pct = (value: unknown) => `${Number(value || 0).toFixed(1)}%`;

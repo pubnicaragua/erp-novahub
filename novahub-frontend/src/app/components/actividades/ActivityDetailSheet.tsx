@@ -379,7 +379,17 @@ function TaskCustomFieldsSection({ task, canEdit, onTaskSaved }: { task: Pick<Ta
   );
 }
 
-function TaskDetails({ item, onUpdate, canEdit, onReassign }: { item: any; onUpdate?: () => void; canEdit: boolean; onReassign?: () => void }) {
+function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, canStartTimeTracking, canStopTimeTracking, canAddManualTimeEntry, onReassign }: {
+  item: any;
+  onUpdate?: () => void;
+  canEdit: boolean;
+  canReassign: boolean;
+  canManageSubtasks: boolean;
+  canStartTimeTracking: boolean;
+  canStopTimeTracking: boolean;
+  canAddManualTimeEntry: boolean;
+  onReassign?: () => void;
+}) {
   const now = new Date();
   const assignments = item.assignments || [];
   const evidence = item.evidences?.[0];
@@ -423,6 +433,7 @@ function TaskDetails({ item, onUpdate, canEdit, onReassign }: { item: any; onUpd
           taskId={String(item.id)}
           subtasks={subtasks}
           onSubtasksChange={() => onUpdate?.()}
+          canEdit={canManageSubtasks}
         />
       </DetailSection>
 
@@ -431,6 +442,9 @@ function TaskDetails({ item, onUpdate, canEdit, onReassign }: { item: any; onUpd
           taskId={String(item.id)}
           timeEntries={timeEntries}
           onEntriesChange={() => onUpdate?.()}
+          canStart={canStartTimeTracking}
+          canStop={canStopTimeTracking}
+          canAddManual={canAddManualTimeEntry}
         />
       </DetailSection>
 
@@ -438,7 +452,7 @@ function TaskDetails({ item, onUpdate, canEdit, onReassign }: { item: any; onUpd
 
       <DetailSection title="Responsables" icon={Users}>
         {assignments.length > 0 ? <div className="flex flex-wrap gap-2">{assignments.map((assignment: any) => <Badge key={assignment.id || assignment.userId} variant="secondary" className="rounded-lg px-2.5 py-1 text-xs">{assignment.user?.name || assignment.user?.email || assignment.userId || 'Usuario'}</Badge>)}</div> : <p className="text-sm text-muted-foreground">Sin usuarios asignados.</p>}
-        {canEdit && onReassign && (
+        {canReassign && onReassign && (
           <Button type="button" variant="outline" onClick={onReassign} className="mt-3 w-full rounded-xl border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 sm:w-auto">
             <UserCog className="mr-2 size-4" />
             Reasignar
@@ -814,6 +828,11 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
   const { canPerform } = useAuth();
   const isTask = kind === 'task';
   const canEditTask = isTask && canPerform('ACTIVITIES_TASKS', 'edit');
+  const canManageSubtasks = isTask && canPerform('ACTIVITIES_TASKS', 'manageSubtasks');
+  const canStartTimeTracking = isTask && canPerform('ACTIVITIES_TASKS', 'startTimeTracking');
+  const canStopTimeTracking = isTask && canPerform('ACTIVITIES_TASKS', 'stopTimeTracking');
+  const canAddManualTimeEntry = isTask && canPerform('ACTIVITIES_TASKS', 'addManualTimeEntry');
+  const canReassignTask = isTask && canPerform('ACTIVITIES_TASKS', 'reassign');
   const config = labels[kind];
   const title = item?.title || (kind === 'log' ? formatLabel(item?.entity) : item?.entity) || config.singular;
   const displayStatus = kind === 'task' ? getTaskDisplayStatus(item) : item?.status;
@@ -831,12 +850,12 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>
           {(extraActions || onDelete) && <div className="flex flex-wrap gap-2" data-tour="activity-detail-actions">{extraActions}{onDelete && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => setDeleteOpen(true)}><Trash2 className="mr-2 size-4" />Eliminar</Button>}</div>}
         </SheetHeader>
-        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} canEdit={canEditTask} onReassign={() => setReassignOpen(true)} />}{item && (kind === 'event' || kind === 'meeting') && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
+        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} canEdit={canEditTask} canReassign={canReassignTask} canManageSubtasks={canManageSubtasks} canStartTimeTracking={canStartTimeTracking} canStopTimeTracking={canStopTimeTracking} canAddManualTimeEntry={canAddManualTimeEntry} onReassign={() => setReassignOpen(true)} />}{item && (kind === 'event' || kind === 'meeting') && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
         <SheetFooter className="border-t border-border/50 px-5 py-3 sm:px-6"><Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}><XCircle className="mr-2 size-4" />Cerrar</Button></SheetFooter>
       </SheetContent>
     </Sheet>
     <ConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} title={`¿Eliminar ${config.singular.toLowerCase()}?`} description="Esta acción eliminará el registro y no se puede deshacer." confirmLabel="Eliminar" onConfirm={async () => { await onDelete?.(); setDeleteOpen(false); }} />
-    {canEditTask && (
+    {canReassignTask && (
       <ReassignTaskModal
         open={reassignOpen}
         task={(item as Task) || null}

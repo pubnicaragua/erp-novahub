@@ -37,11 +37,15 @@ interface ProyectosListViewProps {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canChangeStatus: boolean;
+  canComplete: boolean;
+  canCancel: boolean;
+  canManageMembers: boolean;
   canViewCosts: boolean;
   canViewTimeline: boolean;
 }
 
-export function ProyectosListView({ loading, onSelect, onChanged, canCreate, canEdit, canDelete, canViewCosts, canViewTimeline }: ProyectosListViewProps) {
+export function ProyectosListView({ loading, onSelect, onChanged, canCreate, canEdit, canDelete, canChangeStatus, canComplete, canCancel, canManageMembers, canViewCosts, canViewTimeline }: ProyectosListViewProps) {
   const { userBranches, user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -78,6 +82,11 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const users = asList(usersQuery.data);
   const canExport = canPerform('PROJECTS_LIST', 'export');
+  const canSetProjectStatus = (value: unknown) => value === 'COMPLETED'
+    ? canComplete
+    : value === 'CANCELLED'
+      ? canCancel
+      : canChangeStatus;
 
   const exportProjects = async (format: 'pdf' | 'xlsx') => {
     if (!canExport) return;
@@ -122,9 +131,25 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
   };
 
   const saveMutation = useMutation({
-    mutationFn: (payload: any) => editing
-      ? projectsService.update(editing.id, payload)
-      : projectsService.create(payload),
+    mutationFn: (payload: any) => {
+      const entries = Object.entries(payload || {}).filter(([, value]) => value !== undefined);
+      const hasStatus = entries.some(([key]) => key === 'status');
+      const hasMembers = entries.some(([key]) => key === 'memberUserIds');
+      const financialFields = new Set(['plannedBudget', 'plannedIncome', 'currency', 'exchangeRate']);
+      const hasFinancials = entries.some(([key]) => financialFields.has(key));
+      const hasProjectData = entries.some(([key]) => key !== 'status' && key !== 'memberUserIds' && !financialFields.has(key));
+      if (hasStatus && !canSetProjectStatus(payload.status)) throw new Error('No tienes permiso para cambiar al estado solicitado.');
+      if (hasMembers && !canManageMembers) throw new Error('No tienes permiso para administrar los miembros del proyecto.');
+      if (editing) {
+        if (hasProjectData && !canEdit) throw new Error('No tienes permiso para editar los datos del proyecto.');
+        if (hasFinancials && (!canViewCosts || !canPerform('PROJECTS_EXPENSES', 'edit'))) throw new Error('No tienes permiso para editar los datos financieros del proyecto.');
+        if (!entries.length) throw new Error('No hay cambios autorizados para guardar.');
+        return projectsService.update(editing.id, payload);
+      }
+      if (!canCreate) throw new Error('No tienes permiso para crear proyectos.');
+      if (hasFinancials && !canPerform('PROJECTS_EXPENSES', 'create')) throw new Error('No tienes permiso para crear los datos financieros del proyecto.');
+      return projectsService.create(payload);
+    },
     onSuccess: () => {
       toast.success(editing ? 'Proyecto actualizado' : 'Proyecto creado');
       setDialogOpen(false);
@@ -139,8 +164,10 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
   const [deleteImpact, setDeleteImpact] = useState<ProjectDeleteImpact | null>(null);
 
   const deleteMutation = useMutation({
-    mutationFn: (args: { id: string; cascadeFiles: boolean }) =>
-      projectsService.remove(args.id, args.cascadeFiles),
+    mutationFn: (args: { id: string; cascadeFiles: boolean }) => {
+      if (!canDelete || !canPerform('PROJECTS_LIST', 'view')) throw new Error('No tienes permiso para eliminar este proyecto.');
+      return projectsService.remove(args.id, args.cascadeFiles);
+    },
     onSuccess: (_data, args) => {
       setDeleting(null);
       setDeleteImpact(null);
@@ -162,6 +189,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
   // Antes de borrar se pide el desglose: el backend responde cuántos archivos
   // se perderían para que la persona decida con los números a la vista.
   const openDelete = (row: ProjectListItem) => {
+    if (!canDelete || !canPerform('PROJECTS_LIST', 'view')) return;
     setDeleting(row);
     setDeleteImpact(null);
     projectsService
@@ -170,8 +198,12 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
       .catch(() => setDeleteImpact(null));
   };
 
-  const openCreate = () => { setEditing(null); setDialogOpen(true); };
-  const openEdit = (row: ProjectListItem) => { setEditing(row); setDialogOpen(true); };
+  const openCreate = () => { if (!canCreate) return; setEditing(null); setDialogOpen(true); };
+  const openEdit = (row: ProjectListItem) => {
+    if (!(canEdit || canChangeStatus || canComplete || canCancel || canManageMembers) || !canPerform('PROJECTS_LIST', 'view')) return;
+    setEditing(row);
+    setDialogOpen(true);
+  };
 
   return (
     <div className="space-y-4">
@@ -282,7 +314,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
                     <TableCell>
                       <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                         <Button size="icon" variant="ghost" className="size-8" title="Abrir" onClick={() => onSelect(row.id)}><ExternalLink className="size-4" /></Button>
-                        {canEdit && <Button size="icon" variant="ghost" className="size-8" title="Editar" onClick={() => openEdit(row)}><Pencil className="size-4" /></Button>}
+                        {(canEdit || canChangeStatus || canComplete || canCancel || canManageMembers) && <Button size="icon" variant="ghost" className="size-8" title="Editar proyecto" aria-label="Editar proyecto" onClick={() => openEdit(row)}><Pencil className="size-4" /></Button>}
                         {canDelete && (
                           <Button size="icon" variant="ghost" className="size-8 text-rose-500" title="Eliminar"
                             onClick={() => openDelete(row)}>
@@ -320,6 +352,14 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
         customers={asList(customersQuery.data)}
         branches={userBranches || []}
         saving={saveMutation.isPending}
+        canCreate={canCreate}
+        canEdit={canEdit}
+        canChangeStatus={canChangeStatus}
+        canComplete={canComplete}
+        canCancel={canCancel}
+        canManageMembers={canManageMembers}
+        canCreateCosts={canPerform('PROJECTS_EXPENSES', 'create')}
+        canEditCosts={canPerform('PROJECTS_EXPENSES', 'edit')}
         onSubmit={(payload) => saveMutation.mutate(payload)}
       />
 
@@ -329,7 +369,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
         saving={deleteMutation.isPending}
         onCancel={() => { setDeleting(null); setDeleteImpact(null); }}
         onConfirm={(cascadeFiles) => {
-          if (deleting) deleteMutation.mutate({ id: deleting.id, cascadeFiles });
+          if (deleting && canDelete) deleteMutation.mutate({ id: deleting.id, cascadeFiles });
         }}
       />
     </div>
@@ -435,7 +475,7 @@ function ProjectDeleteDialog({ project, impact, saving, onCancel, onConfirm }: {
   );
 }
 
-function ProjectFormDialog({ open, onOpenChange, editing, users, customers, branches, saving, onSubmit, canViewCosts }: {
+function ProjectFormDialog({ open, onOpenChange, editing, users, customers, branches, saving, onSubmit, canCreate, canEdit, canChangeStatus, canComplete, canCancel, canManageMembers, canViewCosts, canCreateCosts, canEditCosts }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: ProjectListItem | null;
@@ -443,7 +483,15 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
   customers: any[];
   branches: any[];
   saving: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canChangeStatus: boolean;
+  canComplete: boolean;
+  canCancel: boolean;
+  canManageMembers: boolean;
   canViewCosts: boolean;
+  canCreateCosts: boolean;
+  canEditCosts: boolean;
   onSubmit: (payload: any) => void;
 }) {
   const detailQuery = useTenantQuery<ProjectDetail | null>(
@@ -470,6 +518,9 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
     notes: detail?.notes || item?.notes || '',
     memberUserIds: detail?.members ? detail.members.map((m: any) => m.user?.id || m.userId).filter(Boolean) : [],
   });
+  const canManageFinancials = editing
+    ? canViewCosts && canEditCosts
+    : canCreateCosts;
 
   const [form, setForm] = useState<any>(() => buildInitialState(editing));
   const [syncedDetail, setSyncedDetail] = useState<ProjectDetail | null>(null);
@@ -487,28 +538,48 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
 
   const valid = form.name?.trim() && form.startDate;
 
+  const maySetStatus = (value: string) => value === 'COMPLETED'
+    ? canComplete
+    : value === 'CANCELLED'
+      ? canCancel
+      : canChangeStatus;
+  const statusChanged = Boolean(editing && form.status !== editing.status);
+  const membersChanged = Boolean(editing && canManageMembers && detailQuery.data?.members
+    && JSON.stringify(form.memberUserIds || []) !== JSON.stringify(detailQuery.data.members.map((m: any) => m.user?.id || m.userId).filter(Boolean)));
+  const financialSource = detailQuery.data || editing;
+  const financialFieldsChanged = Boolean(editing && canManageFinancials && (
+    Number(form.plannedBudget || 0) !== Number(financialSource?.plannedBudget || 0)
+    || Number(form.plannedIncome || 0) !== Number(financialSource?.plannedIncome || 0)
+    || String(form.currency || '') !== String(financialSource?.currency || '')
+    || Number(form.exchangeRate || 1) !== Number(financialSource?.exchangeRate || 1)
+  ));
+  const canSave = editing
+    ? canEdit || (statusChanged && maySetStatus(form.status)) || membersChanged || financialFieldsChanged
+    : canCreate;
+
   const submit = () => {
-    if (!valid || saving) return;
-    const payload: any = {
+    if (!valid || saving || !canSave) return;
+    const payload: any = {};
+    if (!editing || canEdit) Object.assign(payload, {
       code: form.code?.trim() || undefined,
       name: form.name.trim(),
       description: form.description?.trim() || undefined,
       customerId: form.customerId || undefined,
       branchId: form.branchId || undefined,
       managerId: form.managerId || undefined,
-      status: form.status,
       priority: form.priority,
       startDate: fromLocalDate(form.startDate),
       endDate: fromLocalDate(form.endDate),
-      ...(canViewCosts ? {
-        plannedBudget: form.plannedBudget === '' ? 0 : Number(form.plannedBudget),
-        plannedIncome: form.plannedIncome === '' ? 0 : Number(form.plannedIncome),
-      } : {}),
+      notes: form.notes?.trim() || undefined,
+    });
+    if (canManageFinancials) Object.assign(payload, {
+      plannedBudget: form.plannedBudget === '' ? 0 : Number(form.plannedBudget),
+      plannedIncome: form.plannedIncome === '' ? 0 : Number(form.plannedIncome),
       currency: form.currency,
       exchangeRate: form.exchangeRate === '' ? undefined : Number(form.exchangeRate),
-      notes: form.notes?.trim() || undefined,
-      memberUserIds: Array.isArray(form.memberUserIds) ? form.memberUserIds : [],
-    };
+    });
+    if ((!editing && canChangeStatus && maySetStatus(form.status)) || (editing && statusChanged && maySetStatus(form.status))) payload.status = form.status;
+    if (canManageMembers && (!editing || membersChanged)) payload.memberUserIds = Array.isArray(form.memberUserIds) ? form.memberUserIds : [];
     onSubmit(payload);
   };
 
@@ -521,34 +592,34 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
         <div className="grid gap-4 py-2 sm:grid-cols-2">
           <div className="sm:col-span-1">
             <Label>Código del proyecto (Opcional)</Label>
-            <Input value={form.code || ''} onChange={(e) => setForm((f: any) => ({ ...f, code: e.target.value }))} placeholder="Ej. PRJ-2026-NICA-01" />
+            <Input disabled={Boolean(editing) && !canEdit} value={form.code || ''} onChange={(e) => setForm((f: any) => ({ ...f, code: e.target.value }))} placeholder="Ej. PRJ-2026-NICA-01" />
           </div>
           <div className="sm:col-span-1">
             <Label>Nombre del proyecto *</Label>
-            <Input data-testid="projects-form-name" value={form.name || ''} onChange={(e) => setForm((f: any) => ({ ...f, name: e.target.value }))} placeholder="Ej. Remodelación de sucursal Managua" />
+            <Input disabled={Boolean(editing) && !canEdit} data-testid="projects-form-name" value={form.name || ''} onChange={(e) => setForm((f: any) => ({ ...f, name: e.target.value }))} placeholder="Ej. Remodelación de sucursal Managua" />
           </div>
           <div className="sm:col-span-2">
             <Label>Descripción</Label>
-            <Textarea data-testid="projects-form-description" rows={2} value={form.description || ''} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} placeholder="Alcance, entregables, contexto..." />
+            <Textarea disabled={Boolean(editing) && !canEdit} data-testid="projects-form-description" rows={2} value={form.description || ''} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} placeholder="Alcance, entregables, contexto..." />
           </div>
-          <div>
+          {(canChangeStatus || canComplete || canCancel) && <div>
             <Label>Estado</Label>
             <Select value={form.status} onValueChange={(v) => setForm((f: any) => ({ ...f, status: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{PROJECT_STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+              <SelectContent>{PROJECT_STATUS_OPTIONS.filter((o) => o.value === form.status || maySetStatus(o.value)).map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
             </Select>
-          </div>
+          </div>}
           <div>
             <Label>Prioridad</Label>
             <Select value={form.priority} onValueChange={(v) => setForm((f: any) => ({ ...f, priority: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger disabled={Boolean(editing) && !canEdit}><SelectValue /></SelectTrigger>
               <SelectContent>{PRIORITY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label>Responsable</Label>
             <Select value={form.managerId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, managerId: v === EMPTY_SELECT_VALUE ? '' : v }))}>
-              <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+              <SelectTrigger disabled={Boolean(editing) && !canEdit}><SelectValue placeholder="Seleccionar" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={EMPTY_SELECT_VALUE}>Sin asignar</SelectItem>
                 {users.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
@@ -558,7 +629,7 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
           <div>
             <Label>Sucursal</Label>
             <Select value={form.branchId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, branchId: v === EMPTY_SELECT_VALUE ? '' : v }))}>
-              <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+              <SelectTrigger disabled={Boolean(editing) && !canEdit}><SelectValue placeholder="Seleccionar" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={EMPTY_SELECT_VALUE}>Sin sucursal</SelectItem>
                 {branches.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
@@ -568,7 +639,7 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
           <div>
             <Label>Cliente relacionado</Label>
             <Select value={form.customerId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, customerId: v === EMPTY_SELECT_VALUE ? '' : v }))}>
-              <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+              <SelectTrigger disabled={Boolean(editing) && !canEdit}><SelectValue placeholder="Seleccionar" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={EMPTY_SELECT_VALUE}>Sin cliente</SelectItem>
                 {customers.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -578,33 +649,33 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
           <div className="grid grid-cols-2 gap-3 sm:col-span-2">
             <div>
               <Label>Fecha de inicio *</Label>
-              <DateField id="projects-form-start-date" value={form.startDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, startDate: v }))} />
+              <DateField id="projects-form-start-date" value={form.startDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, startDate: v }))} disabled={Boolean(editing) && !canEdit} />
             </div>
             <div>
               <Label>Fecha de fin</Label>
-              <DateField value={form.endDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, endDate: v }))} />
+              <DateField value={form.endDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, endDate: v }))} disabled={Boolean(editing) && !canEdit} />
             </div>
           </div>
-          {canViewCosts && <div>
+          {canManageFinancials && <div>
             <Label>Presupuesto proyectado</Label>
-            <Input data-testid="projects-form-planned-budget" type="number" min={0} value={form.plannedBudget} onChange={(e) => setForm((f: any) => ({ ...f, plannedBudget: e.target.value }))} placeholder="0.00" />
+            <Input disabled={Boolean(editing) && !canEditCosts} data-testid="projects-form-planned-budget" type="number" min={0} value={form.plannedBudget} onChange={(e) => setForm((f: any) => ({ ...f, plannedBudget: e.target.value }))} placeholder="0.00" />
           </div>}
-          {canViewCosts && <div>
+          {canManageFinancials && <div>
             <Label>Ingresos proyectados</Label>
-            <Input type="number" min={0} value={form.plannedIncome} onChange={(e) => setForm((f: any) => ({ ...f, plannedIncome: e.target.value }))} placeholder="0.00" />
+            <Input disabled={Boolean(editing) && !canEditCosts} type="number" min={0} value={form.plannedIncome} onChange={(e) => setForm((f: any) => ({ ...f, plannedIncome: e.target.value }))} placeholder="0.00" />
           </div>}
-          <div>
+          {canManageFinancials && <div>
             <Label>Moneda</Label>
             <Select value={form.currency} onValueChange={(v) => setForm((f: any) => ({ ...f, currency: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger disabled={Boolean(editing) && !canEditCosts}><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="NIO">NIO (Córdobas)</SelectItem><SelectItem value="USD">USD (Dólares)</SelectItem></SelectContent>
             </Select>
-          </div>
-          <div>
+          </div>}
+          {canManageFinancials && <div>
             <Label>Tasa de cambio (si no es NIO)</Label>
-            <Input type="number" min={0} step="0.01" value={form.exchangeRate} onChange={(e) => setForm((f: any) => ({ ...f, exchangeRate: e.target.value }))} placeholder="36.50" />
-          </div>
-          <div className="sm:col-span-2">
+            <Input disabled={Boolean(editing) && !canEditCosts} type="number" min={0} step="0.01" value={form.exchangeRate} onChange={(e) => setForm((f: any) => ({ ...f, exchangeRate: e.target.value }))} placeholder="36.50" />
+          </div>}
+          {canManageMembers && <div className="sm:col-span-2">
             <Label>Miembros del equipo</Label>
             <Select value="" onValueChange={(v) => { if (v && !(form.memberUserIds || []).includes(v)) setForm((f: any) => ({ ...f, memberUserIds: [...(f.memberUserIds || []), v] })); }}>
               <SelectTrigger><SelectValue placeholder="Agregar miembro..." /></SelectTrigger>
@@ -625,10 +696,10 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
                 })}
               </div>
             )}
-          </div>
+          </div>}
           <div className="sm:col-span-2">
             <Label>Notas</Label>
-            <Textarea rows={2} value={form.notes || ''} onChange={(e) => setForm((f: any) => ({ ...f, notes: e.target.value }))} placeholder="Observaciones generales..." />
+            <Textarea disabled={Boolean(editing) && !canEdit} rows={2} value={form.notes || ''} onChange={(e) => setForm((f: any) => ({ ...f, notes: e.target.value }))} placeholder="Observaciones generales..." />
           </div>
         </div>
         <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -637,9 +708,9 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-            <Button data-testid="projects-form-submit" onClick={submit} disabled={!valid || saving} className="gap-2">
+            {canSave && <Button data-testid="projects-form-submit" onClick={submit} disabled={!valid || saving || (editing && !canEdit && !statusChanged && !membersChanged)} className="gap-2">
               {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear proyecto'}
-            </Button>
+            </Button>}
           </div>
         </DialogFooter>
       </DialogContent>
