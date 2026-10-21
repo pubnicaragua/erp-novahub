@@ -601,6 +601,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     headers: string[],
     values: Array<Array<string | number>> = [],
     columnWidths?: number[],
+    columnAlignments?: Array<PdfTemplateColumn['align']>,
   ): PdfTemplateReportSection => {
     const sampleValue = (header: string, rowIndex: number) => {
       const label = header.toLocaleLowerCase('es-NI');
@@ -630,7 +631,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       label,
       token: `column-${index}`,
       width: columnWidths?.[index] || 100 / headers.length,
-      align: index === 0 ? 'left' : 'right',
+      align: columnAlignments?.[index] || (index === 0 ? 'left' : 'right'),
     })),
     rows: rows.map((row) =>
       Object.fromEntries(row.map((value, index) => [`column-${index}`, value])),
@@ -744,6 +745,98 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       items: reportSections[2].rows,
       rows: reportSections[2].rows,
     };
+  }
+  if (target.module === 'inventario') {
+    const sectionsByTarget: Record<string, PdfTemplateReportSection> = {
+      'inventario.products': reportSection('inventory-products', 'Productos', ['Código', 'Nombre', 'Categoría', 'Unidad', 'Stock', 'Precio', 'Estado'], [
+        ['PROD-001', 'Tóner compatible TN-450', 'Impresión', 'Unidad', '24', 'C$ 850.00', 'Activo'],
+        ['PROD-002', 'Papel carta Premium', 'Papelería', 'Resma', '8', 'C$ 245.00', 'Activo'],
+      ], [14, 24, 14, 11, 9, 14, 14], ['left', 'left', 'left', 'left', 'right', 'right', 'center']),
+      'inventario.services': reportSection('inventory-services', 'Servicios', ['Código', 'Nombre', 'Categoría', 'Unidad', 'Precio', 'Estado'], [
+        ['SERV-001', 'Instalación de equipo', 'Soporte técnico', 'Servicio', 'C$ 1,250.00', 'Activo'],
+        ['SERV-002', 'Mantenimiento preventivo', 'Mantenimiento', 'Servicio', 'C$ 950.00', 'Activo'],
+      ], [16, 25, 17, 14, 15, 13], ['left', 'left', 'left', 'left', 'right', 'center']),
+      'inventario.assets': reportSection('inventory-assets', 'Mobiliario y equipos', ['Código', 'Nombre', 'Categoría', 'Ubicación', 'Responsable', 'Adquisición', 'Costo', 'Moneda', 'Estado'], [
+        ['ACT-0001', 'Computadora de caja 1', 'Equipo informático', 'Tienda principal', 'Gabriel Tinoco', '15/03/2026', 'USD 750.00', 'USD', 'Activo'],
+        ['ACT-0002', 'Estantería metálica', 'Mobiliario', 'Bodega central', 'Ana Martínez', '10/02/2026', 'C$ 12,500.00', 'NIO', 'Activo'],
+      ], [12, 18, 11, 12, 14, 10, 10, 6, 7], ['left', 'left', 'left', 'left', 'left', 'center', 'right', 'center', 'center']),
+      'inventario.movements': reportSection('inventory-movements', 'Movimientos de inventario', ['Fecha', 'Tipo', 'Código', 'Producto', 'Almacén', 'Cantidad', 'Stock anterior', 'Stock resultante', 'Usuario', 'Referencia'], [
+        ['08/09/2026', 'Entrada', 'PROD-001', 'Tóner compatible TN-450', 'Bodega Central', '12', '4', '16', 'Ana Martínez', 'COMP-00124'],
+        ['07/09/2026', 'Salida', 'PROD-002', 'Papel carta Premium', 'Tienda principal', '2', '10', '8', 'Gabriel Tinoco', 'FAC-001245'],
+      ], [10, 9, 10, 19, 12, 7, 8, 8, 9, 8], ['center', 'left', 'left', 'left', 'left', 'right', 'right', 'right', 'left', 'left']),
+      'inventario.manager-adjustments': reportSection('manager-inventory-adjustments', 'Ajustes consolidados', ['Sucursal', 'Ajuste', 'Fecha', 'Rubro', 'Almacén', 'Motivo', 'Productos', 'Unidades aumentadas', 'Unidades disminuidas', 'Impacto monetario', 'Estado'], [
+        ['Tienda principal', 'AJU-000124', '08/09/2026', 'Ventas', 'Bodega Central', 'Conteo físico', '4', '12', '2', 'C$ 1,250.00', 'Aprobado'],
+        ['Sucursal norte', 'AJU-000123', '07/09/2026', 'Operaciones', 'Tienda norte', 'Daño de producto', '1', '0', '1', 'C$ 850.00', 'Pendiente'],
+      ], undefined, ['left', 'left', 'center', 'left', 'left', 'left', 'right', 'right', 'right', 'right', 'center']),
+    };
+    const section = sectionsByTarget[target.key] || reportSection('inventory-summary', target.label, ['Indicador', 'Valor', 'Detalle']);
+    return {
+      ...base,
+      party: undefined,
+      document: { ...base.document, title: target.label.toUpperCase(), number: '', date: '', status: '', period: 'Registros de ejemplo para la vista seleccionada', notes: '' },
+      reportSections: [section],
+      items: section.rows,
+      rows: section.rows,
+    };
+  }
+  if (target.key === 'finanzas.manager-consolidated') {
+    const section = reportSection('manager-finance', 'Finanzas consolidadas', ['Sucursal', 'Vista', 'Identificador', 'Fecha', 'Descripción', 'Estado', 'Monto', 'Tasa aplicada', 'Rubro'], [
+      ['Tienda principal', 'Ingresos', 'REC-000124', '08/09/2026', 'Cobro de factura FAC-001245', 'Recibido', 'C$ 4,850.00', '1.0000', 'Ventas'],
+      ['Sucursal norte', 'Gastos', 'GAS-000031', '07/09/2026', 'Compra de suministros', 'Pagado', 'C$ 1,250.00', '1.0000', 'Operaciones'],
+    ], undefined, ['left', 'left', 'left', 'center', 'left', 'center', 'right', 'right', 'left']);
+    return { ...base, party: undefined, document: { ...base.document, title: 'FINANZAS CONSOLIDADAS', number: '', date: '', status: '', notes: '' }, reportSections: [section], items: section.rows, rows: section.rows };
+  }
+  if (target.module === 'finanzas') {
+    const sectionsByTarget: Record<string, PdfTemplateReportSection> = {
+      'finanzas.balance': reportSection('finance-balance', 'Balance general', ['Concepto', 'Tipo', 'Fecha', 'Monto'], [
+        ['Caja general', 'Activo', '08/09/2026', 'C$ 8,500.00'],
+        ['Proveedores por pagar', 'Pasivo', '08/09/2026', 'C$ 2,300.00'],
+        ['Capital de operación', 'Patrimonio', '08/09/2026', 'C$ 6,200.00'],
+      ], [42, 19, 19, 20], ['left', 'left', 'center', 'right']),
+      'finanzas.transactions': reportSection('finance-transactions', 'Movimientos financieros', ['No. Recibo', 'Fecha Reg.', 'Origen', 'Descripción', 'Categoría', 'Monto', 'Notas'], [
+        ['INC-803839', '07/10/2026 22:07', 'Ventas · Pagos', 'Cobro de factura FAC-TIENDA-m-050 · Cliente: Flores Ríos', 'VENTAS', 'C$ 736.94', 'Pago mixto · 2 movimientos. Consultar desglose.'],
+        ['INC-824607', '07/10/2026 22:07', 'Ventas · Pagos', 'Cobro de factura FAC-TIENDA-m-042 · Cliente: Enrique Reyes', 'VENTAS', 'C$ 36.62', 'Ingreso automático por pago recibido PAG-081'],
+        ['INC-061791', '07/10/2026 22:07', 'Ventas · Caja', 'Venta en efectivo FAC-TIENDA-m-044', 'VENTAS', 'C$ 1,250.00', 'Registrado en Caja 1'],
+      ], [14, 13, 13, 27, 10, 12, 11], ['left', 'center', 'left', 'left', 'left', 'right', 'left']),
+    };
+    const section = sectionsByTarget[target.key] || reportSection('finance-summary', target.label, ['Indicador', 'Valor', 'Detalle']);
+    return { ...base, party: undefined, document: { ...base.document, title: target.label.toUpperCase(), number: '', date: '', status: '', notes: '' }, reportSections: [section], items: section.rows, rows: section.rows };
+  }
+  if (target.key === 'contabilidad.manager-consolidated') {
+    const section = reportSection('manager-accounting', 'Contabilidad consolidada', ['Sucursal', 'Vista', 'Identificador', 'Fecha', 'Cuenta', 'Debe', 'Haber', 'Saldo', 'Moneda', 'Estado', 'Rubro'], [
+      ['Tienda principal', 'Libro Diario', 'AS-000124', '08/09/2026', 'Caja general', 'C$ 4,850.00', 'C$ 0.00', 'C$ 4,850.00', 'NIO', 'Contabilizado', 'Ventas'],
+      ['Sucursal norte', 'Balance', 'AS-000123', '07/09/2026', 'Proveedores', 'C$ 0.00', 'C$ 2,300.00', 'C$ 2,300.00', 'NIO', 'Contabilizado', 'Operaciones'],
+    ], undefined, ['left', 'left', 'left', 'center', 'left', 'right', 'right', 'right', 'center', 'center', 'left']);
+    return { ...base, party: undefined, document: { ...base.document, title: 'CONTABILIDAD CONSOLIDADA', number: '', date: '', status: '', notes: '' }, reportSections: [section], items: section.rows, rows: section.rows };
+  }
+  if (target.module === 'contabilidad') {
+    const sectionsByTarget: Record<string, PdfTemplateReportSection> = {
+      'contabilidad.trial-balance': reportSection('accounting-trial-balance', 'Balance de comprobación', ['Código', 'Cuenta', 'Tipo', 'Débitos', 'Créditos', 'Saldo'], [
+        ['1101', 'Caja general', 'Activo', 'C$ 8,500.00', 'C$ 0.00', 'C$ 8,500.00'], ['1102', 'Bancos nacionales', 'Activo', 'C$ 42,100.00', 'C$ 0.00', 'C$ 42,100.00'], ['4101', 'Ventas', 'Ingreso', 'C$ 0.00', 'C$ 50,600.00', '-C$ 50,600.00'],
+      ], [13, 29, 15, 14, 14, 15], ['left', 'left', 'left', 'right', 'right', 'right']),
+      'contabilidad.journal': reportSection('accounting-journal', 'Libro Diario', ['# Asiento', 'Fecha', 'Descripción', 'Estado', 'Debe', 'Haber', 'Ref. Tipo', 'Referencia'], [
+        ['AS-000124', '08/09/2026', 'Venta de factura FAC-001245', 'Contabilizado', 'C$ 4,850.00', 'C$ 4,850.00', 'Factura', 'FAC-001245'],
+        ['AS-000123', '07/09/2026', 'Pago a proveedor PRO-00088', 'Contabilizado', 'C$ 2,300.00', 'C$ 2,300.00', 'Pago', 'PAG-00088'],
+      ], [12, 11, 25, 14, 12, 12, 8, 6], ['left', 'center', 'left', 'center', 'right', 'right', 'left', 'left']),
+      'contabilidad.ledger': reportSection('accounting-ledger', 'Libro Mayor', ['Fecha', 'Código', 'Cuenta', 'Tipo', 'Descripción', 'Referencia', 'Débito', 'Crédito', 'Saldo'], [
+        ['08/09/2026', '1101', 'Caja general', 'Activo', 'Venta de factura FAC-001245', 'FAC-001245', 'C$ 4,850.00', 'C$ 0.00', 'C$ 12,350.00'],
+        ['07/09/2026', '2101', 'Proveedores', 'Pasivo', 'Pago a proveedor PRO-00088', 'PAG-00088', 'C$ 2,300.00', 'C$ 0.00', 'C$ 9,700.00'],
+      ], [10, 10, 17, 10, 20, 11, 8, 7, 7], ['center', 'left', 'left', 'left', 'left', 'left', 'right', 'right', 'right']),
+      'contabilidad.balance-sheet': reportSection('accounting-balance-sheet', 'Estado de situación financiera', ['Código', 'Cuenta', 'Tipo', 'Saldo'], [
+        ['1101', 'Caja general', 'Activo', 'C$ 8,500.00'], ['2101', 'Proveedores', 'Pasivo', 'C$ 2,300.00'], ['3101', 'Capital', 'Patrimonio', 'C$ 6,200.00'],
+      ], [16, 42, 20, 22], ['left', 'left', 'left', 'right']),
+      'contabilidad.profit-loss': reportSection('accounting-profit-loss', 'Estado de resultados', ['Cuenta', 'Tipo', 'Ingresos', 'Gastos', 'Resultado'], [
+        ['Ventas de productos', 'Ingreso', 'C$ 24,500.00', '—', 'C$ 24,500.00'], ['Costo de ventas', 'Costo', '—', 'C$ 9,800.00', '-C$ 9,800.00'], ['Gastos operativos', 'Gasto', '—', 'C$ 4,250.00', '-C$ 4,250.00'],
+      ], [28, 16, 19, 19, 18], ['left', 'left', 'right', 'right', 'right']),
+      'contabilidad.chart': reportSection('accounting-chart', 'Plan de cuentas', ['Código', 'Nombre', 'Tipo', 'Naturaleza', 'Estado'], [
+        ['1101', 'Caja general', 'Activo', 'Deudora', 'Activa'], ['2101', 'Proveedores', 'Pasivo', 'Acreedora', 'Activa'], ['4101', 'Ventas', 'Ingreso', 'Acreedora', 'Activa'],
+      ], [16, 35, 18, 18, 13], ['left', 'left', 'left', 'left', 'center']),
+      'contabilidad.fixed-assets': reportSection('accounting-fixed-assets', 'Activos fijos', ['Código', 'Activo', 'Categoría', 'Adquisición', 'Costo', 'Depreciación acumulada', 'Valor en libros', 'Estado'], [
+        ['AF-0001', 'Computadora de caja 1', 'Equipo informático', '15/03/2026', 'USD 750.00', 'USD 75.00', 'USD 675.00', 'Activo'], ['AF-0002', 'Estantería metálica', 'Mobiliario', '10/02/2026', 'C$ 12,500.00', 'C$ 625.00', 'C$ 11,875.00', 'Activo'],
+      ], [12, 20, 14, 11, 12, 13, 12, 6], ['left', 'left', 'left', 'center', 'right', 'right', 'right', 'center']),
+    };
+    const section = sectionsByTarget[target.key] || reportSection('accounting-summary', target.label, ['Indicador', 'Valor', 'Detalle']);
+    return { ...base, party: undefined, document: { ...base.document, title: target.label.toUpperCase(), number: '', date: '', status: '', notes: '' }, reportSections: [section], items: section.rows, rows: section.rows };
   }
   if (target.key === 'dashboard.tenant-overview') {
     const dashboardCharts: PdfTemplateChart[] = [
@@ -1948,7 +2041,9 @@ export function createSystemDefaultPdfDesign(targetKey: string, overrides?: Reco
     id: `system-default:${target.key}`,
     clientTenantId: undefined,
     name: `Predeterminado del ERP · ${target.label}`,
-    description: 'Diseño nativo de NovaHub. Se puede personalizar y guardar para esta sucursal.',
+    description: target.branchCustomizable === false
+      ? 'Diseño nativo de NovaHub. Este reporte conserva el formato predeterminado del sistema.'
+      : 'Diseño nativo de NovaHub. Se puede personalizar y guardar para esta sucursal.',
     templateKey: 'system-default',
     documentTypes: [target.key],
     folderId: null,

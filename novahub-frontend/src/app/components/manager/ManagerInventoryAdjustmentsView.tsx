@@ -137,6 +137,7 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
       }));
       const scopeGroupName = branches.length === 1 ? branches[0].name : 'Grupo empresarial';
       const options = {
+        targetKey: 'inventario.manager-adjustments',
         title: 'Ajustes de inventario',
         fileBase: 'reporte_ajustes_inventario',
         tenantName: scopeGroupName,

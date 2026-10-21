@@ -80,6 +80,7 @@ export function ManagerFinanceModule({ view, onViewChange, groupId, businessUnit
         return { Sucursal: row.branchName || 'Sucursal no identificada', Vista: labels[view], Identificador: row.number || row.name || row.id, Fecha: formatDate(row.date || row.createdAt || row.nextExecutionDate), Descripción: row.description || row.source || row.category || '', Estado: statusLabel(row.status), Monto: amount, 'Tasa aplicada': row.reportRateLabel || '', Rubro: row.businessUnitName || '' };
       });
       const options = {
+        targetKey: 'finanzas.manager-consolidated',
         title: `Finanzas consolidadas · ${labels[view]}`,
         fileBase: `reporte_finanzas_${labels[view]}`,
         tenantName: branches.length === 1 ? branches[0].name : 'Grupo empresarial',

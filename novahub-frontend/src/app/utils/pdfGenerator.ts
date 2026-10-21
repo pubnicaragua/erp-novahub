@@ -330,7 +330,8 @@ async function loadPdfDesign(targetKey: string) {
 }
 
 export async function getPdfDesign(targetKey: string) {
-  const normalizedTarget = getPdfTemplateTarget(targetKey).key;
+  const target = getPdfTemplateTarget(targetKey);
+  const normalizedTarget = target.key;
   const scope = pdfDesignCacheScope();
   if (activePdfDesignScope && activePdfDesignScope !== scope) {
     pdfDesignCache.clear();
@@ -340,6 +341,12 @@ export async function getPdfDesign(targetKey: string) {
   }
   activePdfDesignScope = scope;
   const cacheKey = `${scope}:${normalizedTarget}`;
+  if (target.branchCustomizable === false) {
+    const design = createSystemDefaultPdfDesign(normalizedTarget);
+    pdfDesignRequests.delete(cacheKey);
+    pdfDesignCache.set(cacheKey, { value: design, expiresAt: Date.now() + PDF_DESIGN_CACHE_TTL_MS });
+    return design;
+  }
   const cached = pdfDesignCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   if (cached) pdfDesignCache.delete(cacheKey);

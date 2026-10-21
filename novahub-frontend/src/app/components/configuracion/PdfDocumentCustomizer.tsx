@@ -27,7 +27,7 @@ import { PdfLivePreview } from './PdfLivePreview';
 import { PdfAppearanceSettingsPanel } from './PdfAppearanceSettingsPanel';
 import { clearPdfAppearanceFallback, PDF_DEFAULT_TEMPLATE_ID, resetPdfAppearanceOverride, resolvePdfDesignAppearance, updatePdfAppearanceDraft, type PdfAppearanceDraftKey, type PdfAppearanceDraftScope, type PdfAppearanceOverrides, type PdfAppearanceProfile } from '../../services/pdf-appearance';
 
-const DOCUMENTS = PDF_TEMPLATE_TARGETS;
+const DOCUMENTS = PDF_TEMPLATE_TARGETS.filter(target => target.branchCustomizable !== false);
 
 type PdfSettings = {
   paperSize: 'LETTER' | 'A4' | 'OFICIO' | 'LEGAL' | 'LABEL' | 'ROLL-80'; orientation: 'portrait' | 'landscape';
@@ -138,7 +138,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const [documentType, setDocumentType] = useState<PdfDocumentType>(() => {
     try {
       const stored = window.localStorage.getItem(documentViewStorageKey);
-      return stored && PDF_TEMPLATE_TARGETS.some(target => target.key === stored) ? stored as PdfDocumentType : 'ventas.estimate';
+      return stored && DOCUMENTS.some(target => target.key === stored) ? stored as PdfDocumentType : 'ventas.estimate';
     } catch {
       return 'ventas.estimate';
     }
@@ -160,7 +160,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const [assignedDocuments, setAssignedDocuments] = useState<PdfDocumentType[]>(() => {
     try {
       const stored = window.localStorage.getItem(documentViewStorageKey);
-      return stored && PDF_TEMPLATE_TARGETS.some(target => target.key === stored) ? [stored as PdfDocumentType] : ['ventas.estimate'];
+      return stored && DOCUMENTS.some(target => target.key === stored) ? [stored as PdfDocumentType] : ['ventas.estimate'];
     } catch {
       return ['ventas.estimate'];
     }
@@ -181,7 +181,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     let initialType: PdfDocumentType = 'ventas.estimate';
     try {
       const stored = window.localStorage.getItem(documentViewStorageKey);
-      if (stored && PDF_TEMPLATE_TARGETS.some(target => target.key === stored)) initialType = stored as PdfDocumentType;
+      if (stored && DOCUMENTS.some(target => target.key === stored)) initialType = stored as PdfDocumentType;
     } catch { /* almacenamiento no disponible */ }
     return createEditorDefaultDefinition(initialType, { ...DEFAULT_SETTINGS, companyName }, logo);
   });
@@ -235,7 +235,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     let storedDocumentType: PdfDocumentType | undefined;
     try {
       const stored = window.localStorage.getItem(documentViewStorageKey);
-      if (stored && PDF_TEMPLATE_TARGETS.some(target => target.key === stored)) storedDocumentType = stored as PdfDocumentType;
+      if (stored && DOCUMENTS.some(target => target.key === stored)) storedDocumentType = stored as PdfDocumentType;
     } catch { /* almacenamiento no disponible */ }
     const target = getPdfTemplateTarget(preferredDocumentType || storedDocumentType || 'ventas.estimate');
     const nextSettings = {
@@ -360,21 +360,22 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       if (!appearanceScopeChosen.current) setAppearanceScope(Object.keys(normalizedAppearanceProfile).length ? 'branch' : 'document');
       setHasSavedCompanyProfile(Boolean(savedCompanyProfile));
       setCompanyProfile(savedCompanyProfile || createDefaultPdfCompanyProfile(companyName, logo || ''));
-      setDesigns(records || []);
+      const editableRecords = (records || []).filter(record => !(record.documentTypes || []).some(type => getPdfTemplateTarget(type).branchCustomizable === false));
+      setDesigns(editableRecords);
       setFolders(folderRecords || []);
       let storedDocumentType: PdfDocumentType | undefined;
       try {
         const stored = window.localStorage.getItem(documentViewStorageKey);
-        if (stored && PDF_TEMPLATE_TARGETS.some(target => target.key === stored)) storedDocumentType = stored as PdfDocumentType;
+        if (stored && DOCUMENTS.some(target => target.key === stored)) storedDocumentType = stored as PdfDocumentType;
       } catch { /* almacenamiento no disponible */ }
-      const preferredRecord = storedDocumentType && records?.find(record => normalizePdfTemplateKey(record.documentTypes?.[0] || '') === storedDocumentType);
+      const preferredRecord = storedDocumentType && editableRecords.find(record => normalizePdfTemplateKey(record.documentTypes?.[0] || '') === storedDocumentType);
       if (preferredRecord) loadDesign(preferredRecord, normalizedAppearanceProfile);
       else if (storedDocumentType) {
         resetDraftForScope(storedDocumentType);
         setAppearanceOverrides({});
         setAppearanceOverridesExplicit(false);
       }
-      else if (records?.length) loadDesign(records[0], normalizedAppearanceProfile);
+      else if (editableRecords.length) loadDesign(editableRecords[0], normalizedAppearanceProfile);
       else {
         resetDraftForScope();
         setAppearanceOverrides({});
@@ -558,7 +559,12 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   };
 
   const saveDesign = async () => {
-    if (isPdfTemplateFixed(previewDocument)) { toast.error('Este formato físico se genera con un renderer fijo y no admite diseños editables.'); return; }
+    if (!canEditPdfTemplate(previewDocument)) {
+      toast.error(isPdfTemplateFixed(previewDocument)
+        ? 'Este formato físico se genera con un renderer fijo y no admite diseños editables.'
+        : 'Los reportes Manager usan el formato predeterminado y no admiten diseños por sucursal.');
+      return;
+    }
     if (activeId === 'draft' ? !canCreate : !canEdit) return;
     if (!hasActiveBranchScope) { toast.error('Selecciona o abre una sucursal activa antes de guardar el diseño.'); return; }
     if (!name.trim() || !assignedDocuments.length) { toast.error('Agrega un nombre y al menos un tipo de documento'); return; }
@@ -599,7 +605,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     if (!hasActiveBranchScope || !canCreate) return;
     const nextDocumentType = firstAvailableDocumentType(documentType, 'draft');
     const target = getPdfTemplateTarget(nextDocumentType);
-    if (isPdfTemplateFixed(target)) return;
+    if (!canEditPdfTemplate(target)) return;
     const nextSettings = applyStandardPdfLayoutSettings(nextDocumentType, { ...DEFAULT_SETTINGS, companyName, primaryColor: corporateColor || DEFAULT_SETTINGS.primaryColor });
     const nextDefinition = createEditorDefaultDefinition(nextDocumentType, nextSettings, logo);
     setActiveId('draft'); setName(`Nuevo diseño · ${target.label}`); setDescription(`Datos y asignación para ${target.label}; editable para esta sucursal.`); setAssignedDocuments([nextDocumentType]); setDocumentType(nextDocumentType); setSelectedModule(target.module); setSourceMetadata(null); setTemplateFields(createTemplateFields(companyName)); setTemplateDefinition(nextDefinition); setAppearanceOverrides({}); setAppearanceOverridesExplicit(false); setSettings(nextSettings);
@@ -697,7 +703,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
             <Field label="Vista / acción PDF"><select aria-label="Vista o acción del documento" value={previewDocument} onChange={event => { const selectedType = event.target.value; const reservedBy = reservedDocumentDesign(selectedType); if (reservedBy) { loadDesign(reservedBy); toast.info(`Se abrió el diseño «${reservedBy.name}» para esta vista.`); return; } selectTarget(selectedType); }} className="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm">{moduleTargets.map(item => { const reservedBy = reservedDocumentDesign(item.key); return <option key={item.key} value={item.key}>{item.label}{reservedBy ? ' · Abrir diseño: ' + reservedBy.name : ''}</option>; })}</select></Field>
             <Field label="Carpeta"><div className="flex gap-2"><select aria-label="Carpeta del diseño" value={selectedFolderId || ''} onChange={event => setSelectedFolderId(event.target.value || null)} disabled={!canModifyActive} className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm"><option value="">Sin carpeta</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><Button type="button" variant="outline" size="icon" title="Nueva carpeta" className="size-9 shrink-0 cursor-pointer" onClick={openNewFolder} disabled={!canModifyActive}><FolderPlus className="size-4" /></Button></div></Field>
             <Field label="Descripción"><Textarea value={description} onChange={event => setDescription(event.target.value)} disabled={!canModifyActive} placeholder="Describe cuándo debe utilizarse" rows={2} /></Field>
-            <div className="rounded-lg border border-primary/15 bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground"><span className="font-semibold text-primary">{selectedTarget.moduleLabel} · {selectedTarget.label}</span><br />{selectedTargetEditable ? 'Este diseño se guarda para esta vista y sucursal.' : 'Formato físico fijo del sistema.'}</div>
+            <div className="rounded-lg border border-primary/15 bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground"><span className="font-semibold text-primary">{selectedTarget.moduleLabel} · {selectedTarget.label}</span><br />{selectedTargetEditable ? 'Este diseño se guarda para esta vista y sucursal.' : isPdfTemplateFixed(selectedTarget) ? 'Formato físico fijo del sistema.' : 'Este reporte usa el formato predeterminado del ERP y no admite personalización por sucursal.'}</div>
           </CardContent>
         </details>
 

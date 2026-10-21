@@ -313,7 +313,7 @@ try {
     '<img src="https://example.com/logo.png" onerror="alert(1)">',
   ]) assert.throws(() => styles.parsePdfHtmlShell(maliciousHtml), /scripts|recursos remotos|etiquetas no admitidas/i, 'El importador debe rechazar scripts, iframes, eventos y recursos remotos.');
 
-  assert.equal(targets.length, 81, 'El catálogo debe incluir todas las salidas PDF activas encontradas en los módulos.');
+  assert.equal(targets.length, 84, 'El catálogo debe incluir todas las salidas PDF activas encontradas en los módulos.');
   assert.equal(new Set(targets.map(({ key }) => key)).size, targets.length, 'Las claves del catálogo deben ser únicas.');
   assert.ok(targets.some(target => target.key === 'contabilidad.balance-sheet'), 'El balance general de Contabilidad debe tener un destino propio.');
   assert.ok(targets.some(target => target.key === 'restaurante.menu'), 'La carta del Restaurante debe tener un destino propio.');
@@ -333,6 +333,16 @@ try {
   }
   for (const key of ['contabilidad.journal', 'contabilidad.ledger', 'portal.customer-summary']) {
     assert.ok(targets.some(target => target.key === key), `Falta el destino ${key}.`);
+  }
+  for (const [key, module] of [
+    ['inventario.manager-adjustments', 'inventario'],
+    ['finanzas.manager-consolidated', 'finanzas'],
+    ['contabilidad.manager-consolidated', 'contabilidad'],
+  ]) {
+    const target = targets.find(item => item.key === key);
+    assert.ok(target, `El PDF consolidado ${key} debe aparecer en la asignación de documentos.`);
+    assert.equal(target.module, module, `${key} debe quedar asignado a su módulo de negocio.`);
+    assert.equal(target.templateMode, 'editable', `${key} debe permitir personalizar su diseño.`);
   }
   assert.equal(catalog.getPdfTemplateTarget('ventas.cash-ticket').family, 'cash-ticket');
   assert.equal(catalog.getPdfTemplateTarget('inventario.product-labels').family, 'label');
@@ -483,6 +493,7 @@ try {
   assert.deepEqual(renderer.getPdfTableHeaderCellLayout(true, true), { padding: '2px 5px', lineHeight: '1.25', contentDisplay: 'flex', contentAlignItems: 'center', contentMinHeight: '1.25em' }, 'El rótulo debe centrarse dentro de un contenedor propio para que el rasterizador no lo empuje contra el borde inferior de la celda.');
   assert.equal(renderer.getPdfStandardContinuationY(13.5), 16, 'La tabla de continuación debe comenzar poco después del logo y el marco que se repiten.');
   assert.equal(renderer.getPdfStandardContinuationY(21), 23.5, 'La continuación debe respetar el encabezado repetible de diseños que usan una banda más alta.');
+  assert.equal(renderer.getPdfStandardContinuationY(4.5), 10, 'Sin un logo alto, la continuación no debe reservar un margen superior excesivo.');
   assert.equal(renderer.shouldRenderPdfNodeOnPage('company-logo', true, 2), true, 'El logo debe repetirse aunque un diseño antiguo lo haya marcado como solo primera página.');
   assert.equal(renderer.shouldRenderPdfNodeOnPage('company-name', true, 2), false, 'La información de empresa no debe repetirse al pasar de página.');
   const customCashDefinition = {
@@ -579,6 +590,73 @@ try {
   const ledger = definitions.createPdfTemplateSampleData('contabilidad.ledger');
   assert.ok(journal.rows.length > 0, 'Libro Diario debe mostrar asientos de ejemplo.');
   assert.ok(ledger.rows.length > 0, 'Libro Mayor debe mostrar movimientos de ejemplo.');
+
+  const inventoryProducts = definitions.createPdfTemplateSampleData('inventario.products');
+  assert.deepEqual(inventoryProducts.reportSections?.[0]?.columns.map(column => column.label), ['Código', 'Nombre', 'Categoría', 'Unidad', 'Stock', 'Precio', 'Estado'], 'La muestra de productos debe usar las columnas reales del inventario.');
+  assert.ok(inventoryProducts.reportSections?.[0]?.rows.some(row => String(row['column-0']).startsWith('PROD-')), 'La primera columna de inventario debe mostrar códigos y no descripciones de venta.');
+  assert.ok(!inventoryProducts.reportSections?.[0]?.rows.some(row => String(row['column-0']).includes('SKU variante')), 'El preview de inventario no debe reutilizar una descripción de cotización.');
+  for (const [key, module] of [
+    ['inventario.manager-adjustments', 'inventario'],
+    ['finanzas.manager-consolidated', 'finanzas'],
+    ['contabilidad.manager-consolidated', 'contabilidad'],
+  ]) {
+    const target = targets.find(item => item.key === key);
+    const source = await readFile(new URL(`../src/app/components/manager/${key.startsWith('inventario.') ? 'ManagerInventoryAdjustmentsView.tsx' : key.startsWith('finanzas.') ? 'ManagerFinanceModule.tsx' : 'ManagerAccountingModule.tsx'}`, import.meta.url), 'utf8');
+    assert.ok(source.includes(`'${key}'`), `${module} debe enviar su clave de diseño al exportador PDF.`);
+  }
+
+  const inventoryColumns = [
+    { id: 'code', label: 'Código', token: 'code', width: 14 },
+    { id: 'name', label: 'Nombre', token: 'name', width: 14 },
+    { id: 'description', label: 'Descripción', token: 'description', width: 14 },
+    { id: 'notes', label: 'Notas', token: 'notes', width: 14 },
+    { id: 'amount', label: 'Monto', token: 'amount', width: 14 },
+    { id: 'status', label: 'Estado', token: 'status', width: 14 },
+    { id: 'date', label: 'Fecha', token: 'date', width: 14 },
+  ];
+  const adaptedInventoryColumns = renderer.adaptReportColumnWidths(inventoryColumns, renderer.shouldAdaptReportWidths('inventario.products'));
+  assert.ok(adaptedInventoryColumns.find(column => column.id === 'description').width > inventoryColumns[0].width, 'Las columnas de descripción deben ganar espacio en reportes anchos.');
+  assert.ok(Math.abs(adaptedInventoryColumns.reduce((sum, column) => sum + column.width, 0) - 100) < 0.01, 'Los anchos adaptados deben ocupar exactamente el ancho de la tabla.');
+  for (const key of ['inventario.products', 'finanzas.transactions', 'contabilidad.ledger']) {
+    const pagination = renderer.getPdfReportPagination(key);
+    assert.ok(pagination.firstPageCapacity > 15 && pagination.continuationPageCapacity > 15, `${key} debe aprovechar el alto disponible y reservar espacio suficiente para el pie.`);
+  }
+  assert.deepEqual(renderer.getPdfTableCellWrapping(false, false), { whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }, 'Los valores numéricos y cortos de columnas angostas deben poder envolver para no desbordarse.');
+  assert.deepEqual(renderer.getPdfTableCellWrapping(true, false), { whiteSpace: 'nowrap', overflowWrap: 'normal', wordBreak: 'normal' }, 'Los formatos físicos de rollo deben conservar sus reglas de impresión.');
+
+  const wideReportRows = Array.from({ length: 60 }, (_, index) => ({
+    receipt: `INC-${String(index + 1).padStart(6, '0')}`,
+    date: '2026-10-07T22:07:04.608Z',
+    source: 'Ventas - Pagos',
+    description: 'Cobro de factura FAC-TIENDA-m-044 · Cliente: Enrique Reyes',
+    category: 'VENTAS',
+    amount: 'C$ 736.62',
+    notes: 'Ingreso automático por pago recibido PAG-081',
+  }));
+  const financeColumns = [
+    { id: 'receipt', label: 'No. Recibo', token: 'receipt', width: 14, align: 'left' },
+    { id: 'date', label: 'Fecha Reg.', token: 'date', width: 14, align: 'center' },
+    { id: 'source', label: 'Origen', token: 'source', width: 14, align: 'left' },
+    { id: 'description', label: 'Descripción', token: 'description', width: 14, align: 'left' },
+    { id: 'category', label: 'Categoría', token: 'category', width: 14, align: 'left' },
+    { id: 'amount', label: 'Monto', token: 'amount', width: 14, align: 'right' },
+    { id: 'notes', label: 'Notas', token: 'notes', width: 14, align: 'left' },
+  ];
+  const adaptedFinanceColumns = renderer.adaptReportColumnWidths(financeColumns, renderer.shouldAdaptReportWidths('finanzas.transactions'));
+  const wideReport = [{
+    id: 'finance-receipts', title: 'Movimientos financieros',
+    columns: adaptedFinanceColumns,
+    rows: wideReportRows,
+  }];
+  const wideReportPages = renderer.paginatePdfReportSections(wideReport, renderer.getPdfReportPagination('finanzas.transactions'));
+  assert.equal(wideReportPages.flatMap(page => page.flatMap(section => section.rows)).length, wideReportRows.length, 'La paginación ampliada debe conservar todas las filas.');
+  assert.ok(wideReportPages[1][0].rows.length >= 6, 'Las páginas de continuación deben usar el espacio disponible sin dejar grandes áreas vacías.');
+  assert.ok(wideReportPages[0].flatMap(section => section.rows).length <= 9, 'La primera página puede aprovechar el espacio extra disponible bajo el título.');
+  assert.ok(wideReportPages.slice(1).every(page => page.flatMap(section => section.rows).length <= 8), 'Las páginas de continuación deben reservar espacio al pie para que las últimas filas no se monten con el footer.');
+  const wideTablePages = renderer.paginatePdfTableRows(wideReportRows, adaptedFinanceColumns, 27, 25);
+  assert.equal(wideTablePages.flat().length, wideReportRows.length, 'La paginación de tablas estándar también debe conservar todas las filas.');
+  assert.ok(wideTablePages[1].length >= 7, 'Las tablas de continuación deben ocupar la mayor parte del espacio imprimible.');
+  assert.ok(wideTablePages.every(page => page.length <= 9), 'Las tablas estándar deben acotar las filas que pueden invadir el pie cuando envuelven varias líneas.');
 
   const sampleRows = Array.from({ length: 40 }, (_, index) => ({ description: `Movimiento ${index + 1} con una descripción suficientemente larga para ocupar varias líneas`, amount: index + 1 }));
   const pages = renderer.paginatePdfReportSections([{ id: 'long-report', title: 'Reporte largo', columns: [{ id: 'description', label: 'Descripción', token: 'description', width: 70 }, { id: 'amount', label: 'Monto', token: 'amount', width: 30 }], rows: sampleRows }]);

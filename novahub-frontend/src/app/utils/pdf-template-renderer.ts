@@ -224,7 +224,7 @@ export function resolvePdfReportTableBorderColor(targetKey: string, nodeBorderCo
 /** Place continuation content just below the header elements that actually repeat. */
 export function getPdfStandardContinuationY(repeatedHeaderBottom: number) {
   const headerBottom = Number.isFinite(Number(repeatedHeaderBottom)) ? Math.max(0, Number(repeatedHeaderBottom)) : 13.5;
-  return Math.min(82, Math.max(16, headerBottom + 2.5));
+  return Math.min(82, Math.max(10, headerBottom + 2.5));
 }
 
 function generatedMetadataParts(value: unknown) {
@@ -340,21 +340,25 @@ export async function capturePdfChartSnapshot(element: HTMLElement, scale = 2.5)
  * La definición visual sigue siendo reutilizable, pero no debe reducir una
  * tabla de 6 o 7 columnas a las 4 columnas de la plantilla de transacciones.
  */
-function shouldAdaptReportWidths(targetKey: string) {
+export function shouldAdaptReportWidths(targetKey: string) {
   return targetKey.startsWith('compras.')
-    || targetKey.startsWith('reportes.');
+    || targetKey.startsWith('reportes.')
+    || targetKey.startsWith('inventario.')
+    || targetKey.startsWith('finanzas.')
+    || targetKey.startsWith('contabilidad.');
 }
 
 function reportColumnWeight(label: string) {
   const normalized = label.toLocaleLowerCase('es-NI');
   if (/descrip|detalle|concepto/.test(normalized)) return 2.4;
-  if (/proveedor|nombre|direcci[oó]n/.test(normalized)) return 1.5;
-  if (/categor[ií]a/.test(normalized)) return 0.75;
-  if (/referencia|orden|solicitud|factura|c[oó]digo|documento/.test(normalized)) return 1.15;
-  if (/total|monto|pagado|comprometido|saldo|precio|ventas|diferencia/.test(normalized)) return 1;
-  if (/fecha/.test(normalized)) return 0.65;
-  if (/estado/.test(normalized)) return 0.55;
-  if (/m[eé]todo|tipo|[íi]tems?|cantidad|frecuencia/.test(normalized)) return 0.55;
+  if (/notas?|observaciones?|motivo/.test(normalized)) return 1.6;
+  if (/proveedor|cliente|producto|nombre|cuenta|responsable|direcci[oó]n/.test(normalized)) return 1.55;
+  if (/categor[ií]a|segmento/.test(normalized)) return 0.8;
+  if (/referencia|recibo|orden|solicitud|factura|c[oó]digo|documento|identificador|n[uú]mero/.test(normalized)) return 1.15;
+  if (/total|monto|pagado|comprometido|saldo|precio|ventas|diferencia|costo|debe|haber|d[eé]bito|cr[eé]dito/.test(normalized)) return 1;
+  if (/fecha/.test(normalized)) return 0.85;
+  if (/estado|status/.test(normalized)) return 0.6;
+  if (/unidad|moneda|m[eé]todo|tipo|[íi]tems?|cantidad|stock|frecuencia|operaciones/.test(normalized)) return 0.7;
   if (/sucursal|cajero|caja/.test(normalized)) return 1.1;
   return 0.9;
 }
@@ -365,7 +369,7 @@ function reportColumnWeight(label: string) {
  * especialmente para descripción/proveedor, que son las columnas que más se
  * cortan cuando el diseño fue creado para un reporte individual.
  */
-function adaptReportColumnWidths(columns: PdfTemplateColumn[], enabled: boolean) {
+export function adaptReportColumnWidths(columns: PdfTemplateColumn[], enabled: boolean) {
   if (!enabled || columns.length < 5) return columns;
   const weights = columns.map(column => reportColumnWeight(column.label));
   const total = weights.reduce((sum, weight) => sum + weight, 0) || 1;
@@ -409,7 +413,7 @@ function reportRowUnits(section: PdfTemplateReportSection, row: Record<string, u
   return Math.max(1.15, 0.35 + lineCount * 0.8);
 }
 
-function chunkTableRows(rows: Array<Record<string, unknown>>, columns: PdfTemplateColumn[], firstPageCapacity: number, continuationPageCapacity = firstPageCapacity) {
+export function paginatePdfTableRows(rows: Array<Record<string, unknown>>, columns: PdfTemplateColumn[], firstPageCapacity: number, continuationPageCapacity = firstPageCapacity) {
   const section = { id: 'table', title: '', columns, rows };
   const chunks: Array<Array<Record<string, unknown>>> = [];
   let current: Array<Record<string, unknown>> = [];
@@ -495,7 +499,23 @@ export function getPdfReportPagination(targetKey: string) {
   if (targetKey === 'ventas.cash-session') return { firstPageCapacity: 16, continuationPageCapacity: 24 };
   if (targetKey === 'ventas.cash-historical-report') return { firstPageCapacity: 20, continuationPageCapacity: 24 };
   if (targetKey === 'ventas.customers') return { firstPageCapacity: 11, continuationPageCapacity: 17 };
+  const target = getPdfTemplateTarget(targetKey);
+  if (target.structure === 'report' && ['inventario', 'finanzas', 'contabilidad'].includes(target.module)) {
+    // Las filas de estos reportes suelen envolver descripción, fecha y notas.
+    // La estimación por caracteres no refleja por completo la altura real de
+    // esas celdas; dejar margen evita que las últimas filas invadan el footer.
+    return { firstPageCapacity: 27, continuationPageCapacity: 22 };
+  }
   return undefined;
+}
+
+export function getPdfTableCellWrapping(isRollPaper: boolean, isDescription: boolean) {
+  if (isRollPaper) return { whiteSpace: 'nowrap' as const, overflowWrap: 'normal' as const, wordBreak: 'normal' as const };
+  return {
+    whiteSpace: isDescription ? 'pre-wrap' as const : 'normal' as const,
+    overflowWrap: 'anywhere' as const,
+    wordBreak: 'break-word' as const,
+  };
 }
 
 function normalizeData(data: PdfTemplateData | undefined, settings: PdfTemplateRenderSettings, targetKey: string, pageNumber: number, pageCount: number): PdfTemplateData {
@@ -1129,13 +1149,13 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
       cell.style.maxWidth = '100%';
       cell.style.textAlign = column.align || 'left';
       const isDescription = column.token === 'description' || column.id === 'description' || /descrip|concepto|detalle/i.test(`${column.label || ''} ${column.token || ''} ${column.id || ''}`) || String(rawValue ?? '').includes('\n');
-      const isNumericCell = column.align === 'right' && !isDescription;
+      const wrapping = getPdfTableCellWrapping(isRollPaper, isDescription);
       cell.style.verticalAlign = getPdfTableCellVerticalAlignment('body');
       cell.style.lineHeight = compact ? '1.25' : '1.35';
-      cell.style.whiteSpace = isDescription ? 'pre-wrap' : isNumericCell ? 'nowrap' : 'normal';
+      cell.style.whiteSpace = wrapping.whiteSpace;
       cell.style.overflow = 'visible';
-      cell.style.overflowWrap = isNumericCell ? 'normal' : 'anywhere';
-      cell.style.wordBreak = isNumericCell ? 'normal' : 'break-word';
+      cell.style.overflowWrap = wrapping.overflowWrap;
+      cell.style.wordBreak = wrapping.wordBreak;
       cell.style.color = rowTextColor;
       cell.style.backgroundColor = safeHtml2CanvasColor(resolvePdfTableRowBackground(pdfTableStyle, { tableRow: node.tableRowColor || '#ffffff', tableStripe: node.tableStripeColor || rowBackground }, rowIndex), '#ffffff');
       Object.assign(cell.style, getPdfTableCellBorders(pdfTableStyle, columnIndex, columns.length, tableBorderColor, primaryColor));
@@ -1733,7 +1753,7 @@ function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRend
   const detailChartNodes = definition.nodes.filter(node => node.type === 'chart' && !isDashboardTrendNode(node) && activeChartIds.has(String(node.token || '')));
   const styleConfig = normalizePdfStyleConfig(definition.metadata?.pdfStyleConfig);
   const isStandardLayout = isStandardPdfLayoutTarget(targetKey);
-  const fallbackRepeatedHeaderBottom = styleConfig?.htmlTemplate?.headerHtml.trim() ? 17 : 13.5;
+  const fallbackRepeatedHeaderBottom = styleConfig?.htmlTemplate?.headerHtml.trim() ? 17 : 8;
   const repeatedHeaderBottom = definition.nodes
     .filter(node => node.enabled !== false && isPdfFrameHeaderNode(node) && !isPdfFirstPageOnlyInfoNode(node.id))
     .reduce((bottom, node) => Math.max(bottom, Number(node.y || 0) + Number(node.height || 0)), fallbackRepeatedHeaderBottom);
@@ -2531,16 +2551,18 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
     const denseTable = Boolean(tableNode && (tableNode.columns?.length || 0) >= 6);
     const purchaseDocument = isPurchasePdfLayoutTarget(target.key)
       && !['compras.list', 'compras.supplier', 'compras.supplier-history'].includes(target.key);
+    const expandedReportCapacity = target.structure === 'report'
+      && ['inventario', 'finanzas', 'contabilidad'].includes(target.module);
     // La tabla ya reacomoda el bloque de proveedor, los totales y el pie según
     // su altura real. Por eso puede usar el espacio disponible completo; el
     // límite reducido anterior dejaba páginas con solo dos filas y demasiado
     // espacio vacío aunque todavía cupieran más registros.
     const chunks = tableNode && rows.length
-      ? chunkTableRows(
+      ? paginatePdfTableRows(
         rows,
         tableNode.columns?.length ? tableNode.columns : [],
-        purchaseDocument ? (denseTable ? 12 : 15) : denseTable ? 12 : 14,
-        purchaseDocument ? (denseTable ? 18 : 22) : denseTable ? 18 : 20,
+        expandedReportCapacity ? 27 : purchaseDocument ? (denseTable ? 12 : 15) : denseTable ? 12 : 14,
+        expandedReportCapacity ? 25 : purchaseDocument ? (denseTable ? 18 : 22) : denseTable ? 18 : 20,
       )
       : [[]];
     const renderChunks = isRepeatedLabel && rows.length ? rows.map(row => [row]) : chunks;
