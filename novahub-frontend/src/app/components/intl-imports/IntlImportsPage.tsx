@@ -30,19 +30,47 @@ export function IntlImportsPage({ activeSubModule, onSubModuleChange }: IntlImpo
     : undefined;
 
   const [localTab, setLocalTab] = useState<IntlImportsSubModule>('bodega-origen');
-  const currentTab = targetTab || localTab;
+  const canReadByTab: Record<IntlImportsSubModule, boolean> = {
+    'bodega-origen': canPerform('IMPORT_INTL_ORIGIN', 'view'),
+    'bodega-panama': canPerform('IMPORT_INTL_ORIGIN', 'view'),
+    contenedores: canPerform('IMPORT_INTL_CONTAINERS', 'view'),
+    'aduana-prorrateo': canPerform('IMPORT_INTL_CUSTOMS', 'view'),
+    configuracion: canPerform('IMPORT_INTL_CONFIG', 'view'),
+  };
+  const visibleTabs = INTL_SUBMODULE_TABS.filter((tab) => canReadByTab[tab.id]);
+  const requestedTab = targetTab || localTab;
+  const currentTab = visibleTabs.some((tab) => tab.id === requestedTab)
+    ? requestedTab
+    : visibleTabs[0]?.id;
 
   const handleTabChange = (tabId: IntlImportsSubModule) => {
+    if (!canReadByTab[tabId]) return;
     setLocalTab(tabId);
     onSubModuleChange?.(tabId);
   };
 
-  const canCreate = canPerform('IMPORT_INTL', 'create');
-  const canEdit = canPerform('IMPORT_INTL', 'edit');
-  const canApprove = canPerform('IMPORT_INTL', 'approve');
-  // Permisos dedicados: no se heredan de `approve` ni de `edit`.
-  const canCloseByException = canPerform('IMPORT_INTL', 'closeByException');
-  const canReopen = canPerform('IMPORT_INTL', 'reopenContainer');
+  const canOriginCreate = canPerform('IMPORT_INTL_ORIGIN', 'create');
+  const canOriginEdit = canPerform('IMPORT_INTL_ORIGIN', 'edit');
+  const canOriginDelete = canPerform('IMPORT_INTL_ORIGIN', 'delete');
+  const canRegisterPackageEvent = canPerform('IMPORT_INTL_ORIGIN', 'registerEvent');
+  const canDeliverPackage = canPerform('IMPORT_INTL_ORIGIN', 'deliver');
+  const canCancelPackage = canPerform('IMPORT_INTL_ORIGIN', 'cancel');
+  const canContainerCreate = canPerform('IMPORT_INTL_CONTAINERS', 'create');
+  const canContainerDelete = canPerform('IMPORT_INTL_CONTAINERS', 'delete');
+  const canAssignPackages = canPerform('IMPORT_INTL_CONTAINERS', 'assignPackages');
+  const canUnassignPackages = canPerform('IMPORT_INTL_CONTAINERS', 'unassignPackages');
+  const canMovePackages = canPerform('IMPORT_INTL_CONTAINERS', 'movePackages');
+  const canConsolidateContainer = canPerform('IMPORT_INTL_CONTAINERS', 'consolidate');
+  const canDispatchContainer = canPerform('IMPORT_INTL_CONTAINERS', 'dispatch');
+  const canSendContainerToCustoms = canPerform('IMPORT_INTL_CONTAINERS', 'sendToCustoms');
+  const canCancelContainer = canPerform('IMPORT_INTL_CONTAINERS', 'cancel');
+  const canAddExpense = canPerform('IMPORT_INTL_CUSTOMS', 'addExpense');
+  const canClose = canPerform('IMPORT_INTL_CUSTOMS', 'close');
+  const canCloseByException = canPerform('IMPORT_INTL_CUSTOMS', 'closeByException');
+  const canReopen = canPerform('IMPORT_INTL_CUSTOMS', 'reopenContainer');
+  const canEditConfig = canPerform('IMPORT_INTL_CONFIG', 'edit');
+  const canCreateConfig = canPerform('IMPORT_INTL_CONFIG', 'create');
+  const canDeleteConfig = canPerform('IMPORT_INTL_CONFIG', 'delete');
 
   return (
     <div className="intl-imports-module space-y-4 sm:space-y-6 min-w-0 max-w-full">
@@ -72,6 +100,7 @@ export function IntlImportsPage({ activeSubModule, onSubModuleChange }: IntlImpo
           className="inline-flex h-11 w-full sm:w-auto items-center justify-start rounded-2xl border border-border/60 bg-muted/40 dark:bg-muted/20 p-1 text-muted-foreground gap-1"
         >
           {INTL_SUBMODULE_TABS.map((tab) => {
+            if (!canReadByTab[tab.id]) return null;
             const isActive = currentTab === tab.id || (tab.id === 'bodega-origen' && currentTab === 'bodega-panama');
             return (
               <button
@@ -98,17 +127,40 @@ export function IntlImportsPage({ activeSubModule, onSubModuleChange }: IntlImpo
 
       {/* Contenido Dinámico de la Pestaña Activa */}
       <div className="min-w-0 max-w-full">
-        {(currentTab === 'bodega-origen' || currentTab === 'bodega-panama') && <OriginWarehouseTab canCreate={canCreate} />}
-        {currentTab === 'contenedores' && <ContainersTab canCreate={canCreate} canEdit={canEdit} />}
+        {!currentTab && <p className="rounded-xl border border-border/60 p-5 text-sm text-muted-foreground">No tienes permiso de lectura para las áreas de Importaciones Internacionales.</p>}
+        {(currentTab === 'bodega-origen' || currentTab === 'bodega-panama') && (
+          <OriginWarehouseTab
+            canCreate={canOriginCreate}
+            canEdit={canOriginEdit}
+            canDelete={canOriginDelete}
+            canRegisterEvent={canRegisterPackageEvent}
+            canDeliver={canDeliverPackage}
+            canCancel={canCancelPackage}
+          />
+        )}
+        {currentTab === 'contenedores' && (
+          <ContainersTab
+            canCreate={canContainerCreate}
+            canDelete={canContainerDelete}
+            canAssignPackages={canAssignPackages}
+            canUnassignPackages={canUnassignPackages}
+            canMovePackages={canMovePackages}
+            canConsolidate={canConsolidateContainer}
+            canDispatch={canDispatchContainer}
+            canSendToCustoms={canSendContainerToCustoms}
+            canCancel={canCancelContainer}
+          />
+        )}
         {currentTab === 'aduana-prorrateo' && (
           <CustomsProrationTab
-            canApprove={canApprove}
+            canAddExpense={canAddExpense}
+            canClose={canClose}
             canCloseByException={canCloseByException}
             canReopen={canReopen}
           />
         )}
         {currentTab === 'configuracion' && (
-          <IntlConfigTab canEdit={canEdit} canCreate={canCreate} canDelete={canEdit} />
+          <IntlConfigTab canEdit={canEditConfig} canCreate={canCreateConfig} canDelete={canDeleteConfig} />
         )}
       </div>
     </div>

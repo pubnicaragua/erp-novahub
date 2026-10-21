@@ -490,7 +490,7 @@ export function ImportDataModal({
     const newPosNames = new Set<string>();
 
     // Normalize rows to objects with internal keys
-    const normalized: any[] = rawRows.map((row, idx) => {
+    const normalized: any[] = rawRows.map((row) => {
       const mapped: any = {};
       if (headerKeys) {
         // PDF: ordered columns
@@ -528,8 +528,10 @@ export function ImportDataModal({
     for (const name of newDeptNames) {
       try {
         const code = name.replace(/\s+/g, '').substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 10000);
-        const res = await hrService.createDepartment({ name, code });
-        createdDepts[name.toLowerCase()] = res.data?.id || res.id;
+        const res = await hrService.createDepartment({ name, code }) as { data?: { id?: string }; id?: string };
+        const createdId = res.data?.id || res.id;
+        if (!createdId) throw new Error('La respuesta no incluyó el identificador del departamento');
+        createdDepts[name.toLowerCase()] = createdId;
         parseWarnings.push(`Departamento "${name}" creado automáticamente`);
       } catch { parseErrors.push(`No se pudo crear el departamento "${name}"`); }
     }
@@ -539,8 +541,10 @@ export function ImportDataModal({
         const code = title.replace(/\s+/g, '').substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 10000);
         const deptId = departments[0]?.id || Object.values(createdDepts)[0] || '';
         if (!deptId) { parseErrors.push(`No se pudo crear el puesto "${title}": sin departamentos`); continue; }
-        const res = await hrService.createPosition({ title, departmentId: deptId, code });
-        createdPos[title.toLowerCase()] = res.data?.id || res.id;
+        const res = await hrService.createPosition({ title, departmentId: deptId, code }) as { data?: { id?: string }; id?: string };
+        const createdId = res.data?.id || res.id;
+        if (!createdId) throw new Error('La respuesta no incluyó el identificador del puesto');
+        createdPos[title.toLowerCase()] = createdId;
         parseWarnings.push(`Puesto "${title}" creado automáticamente`);
       } catch { parseErrors.push(`No se pudo crear el puesto "${title}"`); }
     }

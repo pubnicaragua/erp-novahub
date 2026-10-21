@@ -22,6 +22,8 @@ export interface IntlPackageModalProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: (pkg: IntlImportPackage) => void;
   packageToEdit?: IntlImportPackage | null;
+  canCreate?: boolean;
+  canEdit?: boolean;
   /**
    * @deprecated El factor ya no se aplica en el cliente: lo resuelve el backend
    * con las reglas vigentes del tenant. Se conserva la prop para no romper los
@@ -35,8 +37,11 @@ export function IntlPackageModal({
   onOpenChange,
   onSuccess,
   packageToEdit = null,
+  canCreate = false,
+  canEdit = false,
 }: IntlPackageModalProps) {
   const isEditing = Boolean(packageToEdit);
+  const canSave = isEditing ? canEdit : canCreate;
   const [loading, setLoading] = useState(false);
   const [fetchingCustomers, setFetchingCustomers] = useState(false);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string; code?: string }>>([]);
@@ -147,7 +152,7 @@ export function IntlPackageModal({
   }, [suppliers]);
 
   useEffect(() => {
-    if (open) {
+    if (open && canSave) {
       /* eslint-disable react-hooks/set-state-in-effect */
       if (packageToEdit) {
         const custName = packageToEdit.customer?.name || packageToEdit.customerName || '';
@@ -209,7 +214,7 @@ export function IntlPackageModal({
       void loadVolumetricRules();
       /* eslint-enable react-hooks/set-state-in-effect */
     }
-  }, [open, packageToEdit, loadVolumetricRules]);
+  }, [open, canSave, packageToEdit, loadVolumetricRules]);
 
   const isUnregisteredCustomer = Boolean(form.customerName.trim()) && !form.customerId;
 
@@ -296,6 +301,7 @@ export function IntlPackageModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canSave) return;
     if (numericWeightKg <= 0) {
       toast.error('El peso real debe ser mayor a 0 kg');
       return;
@@ -397,7 +403,7 @@ export function IntlPackageModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open && canSave} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-2 text-primary font-semibold">
@@ -829,7 +835,7 @@ export function IntlPackageModal({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !canSave}>
               {loading ? 'Guardando...' : isEditing ? 'Guardar Cambios' : 'Registrar Paquete'}
             </Button>
           </DialogFooter>
@@ -846,11 +852,13 @@ export function EditIntlPackageModal({
   open,
   onOpenChange,
   onSuccess,
+  canEdit = false,
 }: {
   packageData?: IntlImportPackage | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: (pkg: IntlImportPackage) => void;
+  canEdit?: boolean;
 }) {
   return (
     <IntlPackageModal
@@ -858,6 +866,7 @@ export function EditIntlPackageModal({
       onOpenChange={onOpenChange}
       onSuccess={onSuccess}
       packageToEdit={packageData}
+      canEdit={canEdit}
     />
   );
 }

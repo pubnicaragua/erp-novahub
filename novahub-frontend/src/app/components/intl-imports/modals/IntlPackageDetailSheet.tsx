@@ -53,6 +53,11 @@ interface IntlPackageDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   onRefresh?: () => void;
   onDeleteSuccess?: () => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canRegisterEvent?: boolean;
+  canDeliver?: boolean;
+  canCancel?: boolean;
 }
 
 const statusBadgeColors: Record<IntlImportPackageStatus, string> = {
@@ -106,6 +111,11 @@ export function IntlPackageDetailSheet({
   onOpenChange,
   onRefresh,
   onDeleteSuccess,
+  canEdit = false,
+  canDelete: permissionCanDelete = false,
+  canRegisterEvent = false,
+  canDeliver = false,
+  canCancel = false,
 }: IntlPackageDetailSheetProps) {
   const [activeTab, setActiveTab] = useState('general');
   const [addingEvent, setAddingEvent] = useState(false);
@@ -149,6 +159,14 @@ export function IntlPackageDetailSheet({
 
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
+    const hasEventPermission = newEventStatus === packageData.status
+      ? canRegisterEvent
+      : newEventStatus === 'DELIVERED'
+        ? canDeliver
+        : newEventStatus === 'CANCELLED'
+          ? canCancel
+          : false;
+    if (!hasEventPermission) return;
     try {
       setLoadingEvent(true);
       await intlImportsService.addPackageEvent(packageData.id, {
@@ -186,11 +204,25 @@ export function IntlPackageDetailSheet({
     }
   };
 
-  const canDelete =
+  const canDelete = permissionCanDelete &&
     packageData.status !== 'DELIVERED' &&
     !packageData.container?.containerNumber &&
     !packageData.container?.isClosed &&
     packageData.container?.status !== 'COMPLETED';
+  const canEditRecord = canEdit && canEditPackage(packageData);
+  const availableEventStatuses = [
+    ...(canRegisterEvent ? [[packageData.status, INTL_PACKAGE_STATUS_LABELS[packageData.status]] as const] : []),
+    ...(canDeliver && packageData.status !== 'DELIVERED' ? [['DELIVERED', INTL_PACKAGE_STATUS_LABELS.DELIVERED] as const] : []),
+    ...(canCancel && packageData.status !== 'CANCELLED' ? [['CANCELLED', INTL_PACKAGE_STATUS_LABELS.CANCELLED] as const] : []),
+  ];
+  const canAddEvent = availableEventStatuses.length > 0;
+  const openEventForm = () => {
+    const nextStatus = availableEventStatuses[0]?.[0];
+    if (!nextStatus) return;
+    setNewEventStatus(nextStatus);
+    setActiveTab('historial');
+    setAddingEvent(true);
+  };
 
   const sortedEvents = [...(packageData.events || [])].sort(
     (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
@@ -278,7 +310,7 @@ export function IntlPackageDetailSheet({
 
                 {/* Acciones directas */}
                 <section className="flex flex-wrap gap-2">
-                  {canEditPackage(packageData) && (
+                  {canEditRecord && (
                     <Button
                       type="button"
                       variant="outline"
@@ -289,17 +321,16 @@ export function IntlPackageDetailSheet({
                     </Button>
                   )}
 
-                  <Button
+                  {canAddEvent && <Button
                     type="button"
                     variant="outline"
                     className="flex-1 sm:flex-initial gap-2 rounded-xl text-xs"
                     onClick={() => {
-                      setActiveTab('historial');
-                      setAddingEvent(true);
+                      openEventForm();
                     }}
                   >
                     <Plus className="size-4 shrink-0 text-primary" /> Registrar evento
-                  </Button>
+                  </Button>}
 
                   {canDelete && (
                     <Button
@@ -460,14 +491,14 @@ export function IntlPackageDetailSheet({
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     Línea de tiempo de eventos
                   </p>
-                  {!addingEvent && (
-                    <Button size="sm" variant="outline" onClick={() => setAddingEvent(true)} className="rounded-lg text-xs gap-1 h-8">
+                  {!addingEvent && canAddEvent && (
+                    <Button size="sm" variant="outline" onClick={openEventForm} className="rounded-lg text-xs gap-1 h-8">
                       <Plus className="size-3.5" /> Nuevo Evento
                     </Button>
                   )}
                 </div>
 
-                {addingEvent && (
+                {addingEvent && canAddEvent && (
                   <form onSubmit={handleAddEvent} className="rounded-2xl border border-primary/20 bg-muted/30 p-4 space-y-3">
                     <p className="text-xs font-bold text-foreground">Registrar Nuevo Estado / Hito</p>
 
@@ -479,7 +510,7 @@ export function IntlPackageDetailSheet({
                           value={newEventStatus}
                           onChange={(e) => setNewEventStatus(e.target.value as IntlImportPackageStatus)}
                         >
-                          {Object.entries(INTL_PACKAGE_STATUS_LABELS).map(([k, label]) => (
+                          {availableEventStatuses.map(([k, label]) => (
                             <option key={k} value={k}>{label}</option>
                           ))}
                         </select>
@@ -636,7 +667,7 @@ export function IntlPackageDetailSheet({
       </Sheet>
 
       <ConfirmDialog
-        open={confirmDeleteOpen}
+        open={canDelete && confirmDeleteOpen}
         onOpenChange={setConfirmDeleteOpen}
         title={`¿Eliminar paquete ${packageData.trackingCode}?`}
         description="Esta acción eliminará el paquete y todos sus registros de trazabilidad de forma permanente."
@@ -648,9 +679,10 @@ export function IntlPackageDetailSheet({
 
       <EditIntlPackageModal
         packageData={packageData}
-        open={editModalOpen}
+        open={canEditRecord && editModalOpen}
         onOpenChange={setEditModalOpen}
         onSuccess={() => onRefresh?.()}
+        canEdit={canEdit}
       />
     </>
   );

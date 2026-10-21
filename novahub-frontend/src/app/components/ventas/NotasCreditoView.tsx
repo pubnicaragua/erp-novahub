@@ -496,7 +496,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   };
 
   const handleIssue = async (id: string) => {
-    if (!canPerform('SALES_CREDIT_NOTES', 'approve')) return;
+    if (!canPerform('SALES_CREDIT_NOTES', 'issue')) return;
     const issueToastId = toast.loading('Emitiendo crédito y validando el límite disponible...');
     try {
       await creditNotesService.issue(id);
@@ -521,7 +521,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   };
 
   const handlePayment = async () => {
-    if (!canPerform('SALES_CREDIT_NOTES', 'approve')) return;
+    if (!canPerform('SALES_CREDIT_NOTES', 'pay')) return;
     if (!paymentCredit) return;
     const effectiveLines = paymentLines
       .map((line) => ({ ...line, amount: String(line.amount || '').replace(/,/g, ''), reference: String(line.reference || '').trim() }))
@@ -615,7 +615,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   };
 
   const handleSendToCash = async (credit: CreditNote) => {
-    if (!canPerform('SALES_CREDIT_NOTES', 'approve')) return;
+    if (!canPerform('SALES_CREDIT_NOTES', 'send')) return;
     const status = normalizeStatus(credit.status);
     const balance = Number(credit.balance ?? Number(credit.total || 0) - Number(credit.amountPaid || 0));
     if (!['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) || balance <= 0.01) {
@@ -769,7 +769,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4"><Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button><div><h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nuevo Crédito' : `Crédito ${localDoc.number}`}</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Productos y servicios entregados a crédito</p></div></div>
-          <div className="flex flex-wrap items-center gap-3">{canEditDocument && canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest" onClick={handleSave}>Guardar Borrador</Button>{canIssue && canPerform('SALES_CREDIT_NOTES', 'approve') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest" onClick={() => handleIssue(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Emitir Crédito</Button>}</>}</div>
+          <div className="flex flex-wrap items-center gap-3">{canEditDocument && canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest" onClick={handleSave}>Guardar Borrador</Button>{canIssue && canPerform('SALES_CREDIT_NOTES', 'issue') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest" onClick={() => handleIssue(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Emitir Crédito</Button>}</>}</div>
         </div>
         {!canEditDocument && <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">Este crédito ya fue emitido o aplicado. Se muestra en modo consulta para proteger el saldo y la trazabilidad.</div>}
         <fieldset disabled={!canEditDocument} className="contents">
@@ -1026,9 +1026,10 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           data={filteredData}
           pagination={pagination}
           bulkAction="cancel"
-          showSelection={canPerform('SALES_CREDIT_NOTES', 'delete')}
-          isRowSelectable={(row) => canPerform('SALES_CREDIT_NOTES', 'delete') && normalizeStatus(row.status) === 'DRAFT'}
-          onBulkDelete={canPerform('SALES_CREDIT_NOTES', 'delete') ? async (ids) => {
+          showSelection={canPerform('SALES_CREDIT_NOTES', 'cancel')}
+          isRowSelectable={(row) => canPerform('SALES_CREDIT_NOTES', 'cancel') && normalizeStatus(row.status) === 'DRAFT'}
+          onBulkDelete={canPerform('SALES_CREDIT_NOTES', 'cancel') ? async (ids) => {
+            if (!canPerform('SALES_CREDIT_NOTES', 'cancel')) return;
             const id = toast.loading(`Cancelando ${ids.length} crédito${ids.length === 1 ? '' : 's'}...`);
             try {
               for (const recordId of ids) await creditNotesService.cancel(recordId as string);
@@ -1051,11 +1052,11 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
             const status = normalizeStatus(row.status);
             const activeQueue = ['PENDING', 'CLAIMED'].includes(normalizeStatus(row.cashQueue?.status));
             return <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-              {canPerform('SALES_CREDIT_NOTES', 'approve') && status === 'DRAFT' && <Button title="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}
-              {canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) && Number(row.balance ?? row.total) > 0.01 && <Button title={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} aria-label={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} variant="ghost" size="icon" className={cn('size-8 rounded-lg', activeQueue ? 'text-amber-500' : 'text-emerald-500')} onClick={() => void handleSendToCash(row)} disabled={activeQueue}><Send className="size-4" /></Button>}
-              {canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) && Number(row.balance ?? row.total) > 0.01 && <Button title="Registrar pago" variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}
+              {canPerform('SALES_CREDIT_NOTES', 'issue') && status === 'DRAFT' && <Button title="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}
+              {canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) && Number(row.balance ?? row.total) > 0.01 && <Button title={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} aria-label={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} variant="ghost" size="icon" className={cn('size-8 rounded-lg', activeQueue ? 'text-amber-500' : 'text-emerald-500')} onClick={() => void handleSendToCash(row)} disabled={activeQueue}><Send className="size-4" /></Button>}
+              {canPerform('SALES_CREDIT_NOTES', 'pay') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) && Number(row.balance ?? row.total) > 0.01 && <Button title="Registrar pago" variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}
               <Button title="Ver crédito completo" aria-label="Ver crédito completo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => { setDetailCredit(null); startEdit(row.id); }}><Eye className="size-4" /></Button>
-              {canPerform('SALES_CREDIT_NOTES', 'delete') && status === 'DRAFT' && <Button title="Cancelar crédito" aria-label="Cancelar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>}
+              {canPerform('SALES_CREDIT_NOTES', 'cancel') && status === 'DRAFT' && <Button title="Cancelar crédito" aria-label="Cancelar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>}
             </div>;
           }}
         />
@@ -1073,15 +1074,15 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           startEdit(detailCredit.id);
         }}
         extraActions={detailCredit ? <>
-          {canPerform('SALES_CREDIT_NOTES', 'approve') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Emitir crédito</Button>}
-          {canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={['PENDING', 'CLAIMED'].includes(normalizeStatus(detailCredit.cashQueue?.status))} onClick={() => void handleSendToCash(detailCredit)}><Send className="mr-2 size-4" />Enviar a Caja</Button>}
-          {canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => openPayment(detailCredit)}><CreditCard className="mr-2 size-4" />Registrar pago</Button>}
-          {canPerform('SALES_CREDIT_NOTES', 'delete') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailCredit(null); setPendingDeleteId(detailCredit.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Emitir crédito</Button>}
+          {canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={['PENDING', 'CLAIMED'].includes(normalizeStatus(detailCredit.cashQueue?.status))} onClick={() => void handleSendToCash(detailCredit)}><Send className="mr-2 size-4" />Enviar a Caja</Button>}
+          {canPerform('SALES_CREDIT_NOTES', 'pay') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => openPayment(detailCredit)}><CreditCard className="mr-2 size-4" />Registrar pago</Button>}
+          {canPerform('SALES_CREDIT_NOTES', 'cancel') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailCredit(null); setPendingDeleteId(detailCredit.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_CREDIT_NOTES', 'export') ? (format) => { if (detailCredit) void handleExportPDF(detailCredit, format); } : undefined}
       />
 
-      <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="¿Cancelar crédito?" description="El crédito quedará cancelado y se conservará el registro. Solo pueden cancelarse créditos pendientes de aprobación; los emitidos, aplicados o pagados no se modifican." confirmLabel="Cancelar crédito" variant="destructive" loading={deleteLoading} onConfirm={async () => { if (!pendingDeleteId) return; const id = toast.loading('Cancelando crédito...'); try { setDeleteLoading(true); await creditNotesService.cancel(pendingDeleteId); toast.success('Crédito cancelado', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar', { id }); } finally { setDeleteLoading(false); setPendingDeleteId(null); } }} />
+      <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="¿Cancelar crédito?" description="El crédito quedará cancelado y se conservará el registro. Solo pueden cancelarse créditos pendientes de aprobación; los emitidos, aplicados o pagados no se modifican." confirmLabel="Cancelar crédito" variant="destructive" loading={deleteLoading} onConfirm={async () => { if (!canPerform('SALES_CREDIT_NOTES', 'cancel') || !pendingDeleteId) return; const id = toast.loading('Cancelando crédito...'); try { setDeleteLoading(true); await creditNotesService.cancel(pendingDeleteId); toast.success('Crédito cancelado', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar', { id }); } finally { setDeleteLoading(false); setPendingDeleteId(null); } }} />
 
       <Dialog open={Boolean(paymentCredit)} onOpenChange={(open) => !open && !paymentLoading && setPaymentCredit(null)}>
         <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">

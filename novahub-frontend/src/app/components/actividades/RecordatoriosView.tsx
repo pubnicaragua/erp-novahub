@@ -66,7 +66,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
     { key: 'description', header: 'Mensaje', width: '35%', editable: canPerform('ACTIVITIES_REMINDERS', 'edit') },
     { key: 'reminderDate', header: 'Fecha Aviso', width: '150px', editable: canPerform('ACTIVITIES_REMINDERS', 'edit'), type: 'datetime-local' as const, render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
     {
-      key: 'status', header: 'Estado', width: '120px', editable: canPerform('ACTIVITIES_REMINDERS', 'edit'), type: 'select' as const, options: statusOpts,
+      key: 'status', header: 'Estado', width: '120px', editable: canPerform('ACTIVITIES_REMINDERS', 'changeStatus'), type: 'select' as const, options: statusOpts,
       render: (val: any) => { const o = statusOpts.find(x => x.value === (val || '').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color || 'bg-muted/20 text-muted-foreground')}>{o?.label || val}</Badge>; }
     },
     {
@@ -80,6 +80,10 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Reminder>) => {
+    const hasStatus = Object.prototype.hasOwnProperty.call(updates, 'status');
+    const hasOtherFields = Object.keys(updates).some((key) => key !== 'status');
+    if ((hasStatus && !canPerform('ACTIVITIES_REMINDERS', 'changeStatus'))
+      || (hasOtherFields && !canPerform('ACTIVITIES_REMINDERS', 'edit'))) return;
     try { await remindersService.update(id as string, updates); toast.success('Recordatorio actualizado'); onRefresh(); }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar recordatorio'); }
   };
@@ -160,7 +164,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
         <EditableDataTable 
           data={filtered} 
           columns={columns} 
-          onRowUpdate={canPerform('ACTIVITIES_REMINDERS', 'edit') ? handleUpdate : undefined} 
+          onRowUpdate={canPerform('ACTIVITIES_REMINDERS', 'edit') || canPerform('ACTIVITIES_REMINDERS', 'changeStatus') ? handleUpdate : undefined}
           onRowClick={(row) => setSelectedReminder(row)}
           isLoading={loading} 
           onRowDelete={canPerform('ACTIVITIES_REMINDERS', 'delete') ? async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar recordatorio'); } } : undefined} 

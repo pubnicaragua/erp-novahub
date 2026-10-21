@@ -27,6 +27,7 @@ import { Progress } from '../ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { toast } from '@/app/services/toast';
+import { useAuth } from '../../contexts/AuthContext';
 import { money } from './shared';
 import { projectsService, type BudgetByLine, type EvmResponse, type PlannedCurvePoint, type SeriesPoint } from '../../services/projects.service';
 import { invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
@@ -103,6 +104,10 @@ function CurveChart({ rows, currency, plannedOnly = false }: { rows: SeriesPoint
 }
 
 export function ProyectoEVMControlPanel({ project, pricingEngine }: ProyectoEVMControlPanelProps) {
+  const { canPerform } = useAuth();
+  const canViewEvm = canPerform('PROJECTS_PROGRESS', 'view') && canPerform('PROJECTS_EXPENSES', 'view');
+  const canRecordProgress = canPerform('PROJECTS_PROGRESS', 'recordProgress');
+  const canEditCurvePermission = canPerform('PROJECTS_PROGRESS', 'editCurve');
   const queryClient = useQueryClient();
   const projectId = String(project?.id || '');
   const currency = project?.currency || 'USD';
@@ -115,18 +120,18 @@ export function ProyectoEVMControlPanel({ project, pricingEngine }: ProyectoEVMC
   const evmQuery = useTenantQuery<EvmResponse>(
     ['projects', projectId, 'evm', granularity],
     (signal) => projectsService.getEvm(projectId, granularity, signal),
-    { enabled: Boolean(projectId) },
+    { enabled: Boolean(projectId) && canViewEvm },
   );
   const evmData = evmQuery.data;
   const curveQuery = useTenantQuery<{ baselineVersion: number; points: PlannedCurvePoint[] }>(
     ['projects', projectId, 'evm', 'curve'],
     (signal) => projectsService.getEvmCurve(projectId, signal),
-    { enabled: Boolean(projectId) },
+    { enabled: Boolean(projectId) && canViewEvm },
   );
   const baselinesQuery = useTenantQuery<CostBaseline[]>(
     ['projects', projectId, 'costing-baselines'],
     (signal) => projectsService.getCostBaselines(projectId, signal),
-    { enabled: Boolean(projectId) },
+    { enabled: Boolean(projectId) && canViewEvm },
   );
 
   const [curveDraftState, setCurveDraftState] = useState<{ updatedAt: number; points: PlannedCurvePoint[] } | null>(null);
@@ -158,7 +163,7 @@ export function ProyectoEVMControlPanel({ project, pricingEngine }: ProyectoEVMC
   }, [activeBaseline, pricingEngine]);
 
   const isBaselineApproved = Boolean(evmData && evmData.status !== 'NO_BASELINE');
-  const canEditCurve = evmData?.status === 'NO_BASELINE';
+  const canEditCurve = evmData?.status === 'NO_BASELINE' && canEditCurvePermission;
   const curveRows = evmData && evmData.status !== 'NO_BASELINE' ? evmData.curve : [];
   const evidenceCount = curveRows.filter((row) => row.earnedValue !== null || row.actualValue !== null).length;
   const plannedCurveIsValid = curveDraft.length > 0
@@ -178,7 +183,7 @@ export function ProyectoEVMControlPanel({ project, pricingEngine }: ProyectoEVMC
   };
 
   const handleSaveProgress = async () => {
-    if (!projectId) return;
+    if (!projectId || !canRecordProgress) return;
     setIsSavingProgress(true);
     try {
       await projectsService.recordProgress(projectId, { physicalProgressPct: physicalProgress });
@@ -206,6 +211,7 @@ export function ProyectoEVMControlPanel({ project, pricingEngine }: ProyectoEVMC
   };
 
   const addCurveWeek = () => {
+    if (!canEditCurve) return;
     const lastPoint = curveDraft[curveDraft.length - 1];
     const start = lastPoint
       ? new Date(lastPoint.periodStart)
@@ -222,6 +228,7 @@ export function ProyectoEVMControlPanel({ project, pricingEngine }: ProyectoEVMC
   };
 
   const updateCurvePoint = (index: number, patch: Partial<PlannedCurvePoint>) => {
+    if (!canEditCurve) return;
     replaceCurveDraft(curveDraft.map((point, rowIndex) => rowIndex === index ? { ...point, ...patch } : point));
   };
 
@@ -251,7 +258,7 @@ export function ProyectoEVMControlPanel({ project, pricingEngine }: ProyectoEVMC
             </div>
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/80 p-2">
               <label htmlFor="evm-physical-progress" className="text-xs font-bold text-muted-foreground">Avance físico:</label>
-              <Input
+              {canRecordProgress ? <Input
                 id="evm-physical-progress"
                 type="number"
                 min={0}
@@ -259,12 +266,12 @@ export function ProyectoEVMControlPanel({ project, pricingEngine }: ProyectoEVMC
                 value={physicalProgress}
                 onChange={(event) => setProgressState({ projectId, value: Math.min(100, Math.max(0, Number(event.target.value) || 0)) })}
                 className="h-8 w-20 text-center font-mono text-xs font-bold"
-              />
+              /> : <span className="text-sm font-black">{physicalProgress.toFixed(1)}%</span>}
               <span className="text-xs font-bold text-muted-foreground">%</span>
-              <Button size="sm" onClick={handleSaveProgress} disabled={isSavingProgress || !projectId} className="h-8 gap-1.5 text-xs">
+              {canRecordProgress && <Button size="sm" onClick={handleSaveProgress} disabled={isSavingProgress || !projectId} className="h-8 gap-1.5 text-xs">
                 <Save className="size-3.5" />
                 {isSavingProgress ? 'Guardando…' : 'Guardar avance'}
-              </Button>
+              </Button>}
             </div>
           </div>
         </CardHeader>
@@ -389,10 +396,10 @@ export function ProyectoEVMControlPanel({ project, pricingEngine }: ProyectoEVMC
                 </div>
                 {canEditCurve && (
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={addCurveWeek} disabled={curveQuery.isLoading}>Agregar semana</Button>
-                    <Button size="sm" onClick={handleSaveCurve} disabled={isSavingCurve || !plannedCurveIsValid}>
+                    {canEditCurve && <Button variant="outline" size="sm" onClick={addCurveWeek} disabled={curveQuery.isLoading}>Agregar semana</Button>}
+                    {canEditCurve && <Button size="sm" onClick={handleSaveCurve} disabled={isSavingCurve || !plannedCurveIsValid}>
                       <Save className="mr-2 size-4" />{isSavingCurve ? 'Guardando…' : 'Guardar plan'}
-                    </Button>
+                    </Button>}
                   </div>
                 )}
               </div>

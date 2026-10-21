@@ -23,6 +23,7 @@ interface AssignPackagesModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  canAssign?: boolean;
 }
 
 export function AssignPackagesModal({
@@ -30,6 +31,7 @@ export function AssignPackagesModal({
   open,
   onOpenChange,
   onSuccess,
+  canAssign = false,
 }: AssignPackagesModalProps) {
   const [packages, setPackages] = useState<IntlImportPackage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -117,7 +119,7 @@ export function AssignPackagesModal({
   const hasCapacityError = exceedsCbm || exceedsWeight;
 
   const handleAssign = async () => {
-    if (!container || selectedIds.size === 0 || hasCapacityError) return;
+    if (!canAssign || !container || selectedIds.size === 0 || hasCapacityError) return;
     try {
       setAssigning(true);
       const res = await intlImportsService.assignPackages(container.id, Array.from(selectedIds));
@@ -136,7 +138,7 @@ export function AssignPackagesModal({
   const allSelected = selectedIds.size === filteredPackages.length && filteredPackages.length > 0;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open && canAssign} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-2 text-primary font-semibold">
@@ -338,7 +340,7 @@ export function AssignPackagesModal({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={assigning}>
             Cancelar
           </Button>
-          <Button type="button" onClick={handleAssign} disabled={assigning || selectedIds.size === 0 || hasCapacityError}>
+          <Button type="button" onClick={handleAssign} disabled={!canAssign || assigning || selectedIds.size === 0 || hasCapacityError}>
             {assigning ? 'Asignando...' : `Consolidar ${selectedIds.size} Paquete(s)`}
           </Button>
         </DialogFooter>

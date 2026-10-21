@@ -39,7 +39,7 @@ const formatInputDate = (value?: string | Date) => (value ? format(new Date(valu
 export function Reconciliation() {
   const { canPerform, user } = useAuth();
   const canReadReconciliation = canPerform('TRACKING_RECONCILIATION', 'view');
-  const canApproveReconciliation = canPerform('TRACKING_RECONCILIATION', 'approve');
+  const canConfirmReconciliation = canPerform('TRACKING_RECONCILIATION', 'confirm');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -163,7 +163,7 @@ export function Reconciliation() {
   }, [canReadReconciliation, selected, supplierId, orderId, receptionBatchId, invoiceNumber, date, dueDate, notes]);
 
   const confirm = useCallback(async () => {
-    if (!canApproveReconciliation || !preview) return;
+    if (!canConfirmReconciliation || !preview) return;
     setConfirming(true);
     const actionToken = beginNotificationAction();
     try {
@@ -190,7 +190,7 @@ export function Reconciliation() {
       completeNotificationAction(actionToken);
       setConfirming(false);
     }
-  }, [canApproveReconciliation, preview, supplierId, orderId, receptionBatchId, invoiceNumber, date, dueDate, notes]);
+  }, [canConfirmReconciliation, preview, supplierId, orderId, receptionBatchId, invoiceNumber, date, dueDate, notes]);
 
   const reset = useCallback(() => {
     setResult(null);
@@ -382,7 +382,7 @@ export function Reconciliation() {
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Costo total</p><p className="font-black text-primary">${preview.totalAmount.toFixed(2)}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Factura</p><p className="font-black">{preview.invoiceNumber}</p></div>
           </div>
-          {canApproveReconciliation && <Button className="mt-3 rounded-xl text-xs" onClick={confirm} disabled={confirming}>
+          {canConfirmReconciliation && <Button className="mt-3 rounded-xl text-xs" onClick={confirm} disabled={confirming}>
             {confirming ? 'Confirmando…' : `Confirmar conciliación (${preview.packageCount})`}
           </Button>}
         </Card>

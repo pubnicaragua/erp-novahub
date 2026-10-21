@@ -27,7 +27,7 @@ const EMPTY_FACTOR = {
   priority: '0',
 };
 
-export function IntlConfigTab({ canEdit = true, canCreate = false, canDelete = false }: IntlConfigTabProps) {
+export function IntlConfigTab({ canEdit = false, canCreate = false, canDelete = false }: IntlConfigTabProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<IntlImportConfig>({
@@ -91,6 +91,7 @@ export function IntlConfigTab({ canEdit = true, canCreate = false, canDelete = f
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEdit) return;
     try {
       setSaving(true);
       const parsedMinCbm = formState.minCloseCbm.trim() !== '' ? parseFloat(formState.minCloseCbm) : undefined;
@@ -125,6 +126,7 @@ export function IntlConfigTab({ canEdit = true, canCreate = false, canDelete = f
 
   const handleSaveFactor = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingFactorId ? !canEdit : !canCreate) return;
     const factor = parseFloat(factorForm.factorKgPerCbm);
     if (!factorForm.label.trim()) {
       toast.error('Indique un nombre para la regla');
@@ -164,6 +166,7 @@ export function IntlConfigTab({ canEdit = true, canCreate = false, canDelete = f
   };
 
   const handleEditFactor = (factor: IntlVolumetricFactor) => {
+    if (!canEdit) return;
     setEditingFactorId(factor.id);
     setFactorForm({
       label: factor.label,
@@ -176,6 +179,7 @@ export function IntlConfigTab({ canEdit = true, canCreate = false, canDelete = f
   };
 
   const handleDeleteFactor = async (factor: IntlVolumetricFactor) => {
+    if (!canDelete) return;
     try {
       const res = await intlImportsService.deleteVolumetricFactor(factor.id);
       toast.success(
@@ -188,6 +192,8 @@ export function IntlConfigTab({ canEdit = true, canCreate = false, canDelete = f
       toast.error(getApiErrorMessage(error, 'Error al eliminar la regla volumétrica'));
     }
   };
+
+  const canSaveFactor = editingFactorId ? canEdit : canCreate;
 
   if (loading) {
     return <div className="text-center py-12 text-muted-foreground text-xs">Cargando configuración...</div>;
@@ -373,7 +379,7 @@ export function IntlConfigTab({ canEdit = true, canCreate = false, canDelete = f
 
           {canEdit && (
             <div className="pt-3 border-t border-border flex justify-end">
-              <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+              <Button type="submit" disabled={saving || !canEdit} className="w-full sm:w-auto">
                 <Save className="size-4 mr-1.5" />
                 {saving ? 'Guardando...' : 'Guardar Configuración'}
               </Button>
@@ -484,7 +490,7 @@ export function IntlConfigTab({ canEdit = true, canCreate = false, canDelete = f
                   Cancelar
                 </Button>
               )}
-              <Button type="submit" size="sm" disabled={factorSaving} className="w-full sm:w-auto">
+              <Button type="submit" size="sm" disabled={factorSaving || !canSaveFactor} className="w-full sm:w-auto">
                 {factorSaving ? 'Guardando...' : editingFactorId ? 'Actualizar regla' : 'Crear regla'}
               </Button>
             </div>

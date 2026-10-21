@@ -55,6 +55,7 @@ import { projectsService } from '../../services/projects.service';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useAuth } from '../../contexts/AuthContext';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface ProyectoCosteo6DPanelProps {
@@ -78,6 +79,12 @@ export function ProyectoCosteo6DPanel({
   project,
   pricingEngine,
 }: ProyectoCosteo6DPanelProps) {
+  const { canPerform } = useAuth();
+  const canEditLines = canPerform('PROJECTS_EXPENSES', 'edit');
+  const canCreateLine = canPerform('PROJECTS_EXPENSES', 'create');
+  const canDeleteLine = canPerform('PROJECTS_EXPENSES', 'delete');
+  const canApplyTemplate = canPerform('PROJECTS_EXPENSES', 'applyCostTemplate');
+  const canApproveBaseline = canPerform('PROJECTS_EXPENSES', 'approve');
   const queryClient = useQueryClient();
   const projectId = project?.id || 'default';
   const currency = project?.currency || 'USD';
@@ -129,6 +136,7 @@ export function ProyectoCosteo6DPanel({
     field: keyof Omit<Cost6DRow, 'lineId' | 'lineName'>,
     value: string,
   ) => {
+    if (!canEditLines) return;
     const current = matrix[lineIndex];
     if (!current) return;
     const key = `${current.lineId}_${field}`;
@@ -142,6 +150,7 @@ export function ProyectoCosteo6DPanel({
 
   // Manejo de edición del nombre de la partida
   const handleLineNameChange = (lineIndex: number, newName: string) => {
+    if (!canEditLines) return;
     const current = matrix[lineIndex];
     if (!current) return;
     const key = `${current.lineId}_lineName`;
@@ -152,6 +161,7 @@ export function ProyectoCosteo6DPanel({
 
   // Añadir nueva partida dinámica con costos en 0
   const handleAddRow = async () => {
+    if (!canCreateLine) return;
     await projectsService.createCostLine(projectId, { name: `Partida ${matrix.length + 1}` });
     await costLinesQuery.refetch();
     toast.success('Nueva partida guardada en el proyecto.');
@@ -159,11 +169,12 @@ export function ProyectoCosteo6DPanel({
 
   // Eliminar partida con confirmación modal
   const handleDeleteRow = (lineIndex: number) => {
+    if (!canDeleteLine) return;
     setPendingDeleteIndex(lineIndex);
   };
 
   const confirmDeleteRow = async () => {
-    if (pendingDeleteIndex === null) return;
+    if (pendingDeleteIndex === null || !canDeleteLine) return;
     const target = matrix[pendingDeleteIndex];
     if (!target) return;
     const name = target.lineName || 'Partida';
@@ -185,6 +196,7 @@ export function ProyectoCosteo6DPanel({
 
   // Cargar plantilla por rubro de industria
   const handleSelectTemplate = (template: PersistedCostTemplate) => {
+    if (!canApplyTemplate) return;
     if (matrix.length > 0) {
       setPendingTemplate(template);
     } else {
@@ -193,6 +205,7 @@ export function ProyectoCosteo6DPanel({
   };
 
   const confirmApplyTemplate = async (template: PersistedCostTemplate) => {
+    if (!canApplyTemplate) return;
     setIsApplyingTemplate(true);
     try {
       const overwrite = matrix.length > 0;
@@ -212,6 +225,7 @@ export function ProyectoCosteo6DPanel({
 
   // Limpiar / reiniciar matriz a ceros
   const handleResetMatrix = async () => {
+    if (!canEditLines) return;
     const blank = matrix.map((row) => ({
       ...row,
       materiales: 0,
@@ -228,6 +242,7 @@ export function ProyectoCosteo6DPanel({
   };
 
   const saveLine = async (line: Cost6DRow) => {
+    if (!canEditLines) return;
     const keyPrefix = `${line.lineId}_`;
     await projectsService.updateCostLine(projectId, String(line.lineId), { ...line, name: line.lineName });
     setRawInputMap((prev) => {
@@ -242,6 +257,7 @@ export function ProyectoCosteo6DPanel({
 
   // Sincronizar presupuesto con Costeo 6D
   const handleSyncPresupuesto = async () => {
+    if (!canApproveBaseline) return;
     setIsSyncing(true);
     try {
       if (project?.id) {
@@ -285,7 +301,7 @@ export function ProyectoCosteo6DPanel({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button
+          {canEditLines && <Button
             type="button"
             variant="outline"
             size="sm"
@@ -295,9 +311,9 @@ export function ProyectoCosteo6DPanel({
           >
             <RotateCcw className="size-3.5" />
             <span>Limpiar</span>
-          </Button>
+          </Button>}
 
-          <DropdownMenu>
+          {canApplyTemplate && <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
@@ -332,9 +348,9 @@ export function ProyectoCosteo6DPanel({
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu>}
 
-          <Button
+          {canApproveBaseline && <Button
             type="button"
             size="sm"
             onClick={handleSyncPresupuesto}
@@ -343,7 +359,7 @@ export function ProyectoCosteo6DPanel({
           >
             <RefreshCw className={cn('size-3.5', isSyncing && 'animate-spin')} />
             <span>{isSyncing ? 'Sincronizando…' : 'Sincronizar Presupuesto con Costeo 6D'}</span>
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -494,7 +510,7 @@ export function ProyectoCosteo6DPanel({
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button
+              {canCreateLine && <Button
                 type="button"
                 size="sm"
                 variant="outline"
@@ -504,7 +520,7 @@ export function ProyectoCosteo6DPanel({
               >
                 <Plus className="size-3.5" />
                 <span>+ Añadir Partida</span>
-              </Button>
+              </Button>}
               <Badge variant="outline" className="border-border/60 font-mono text-xs">
                 Total CD: <span className="ml-1 font-bold text-primary">{formatMoney(totalsByNature.totalDirectCost, currency)}</span>
               </Badge>
@@ -535,6 +551,7 @@ export function ProyectoCosteo6DPanel({
                       <div className="flex items-center gap-1.5">
                         <span className="size-2 rounded-full bg-primary/70 shrink-0" />
                         <Input
+                          disabled={!canEditLines}
                           type="text"
                           value={rawInputMap[`${line.lineId}_lineName`] ?? line.lineName}
                           onChange={(e) => handleLineNameChange(idx, e.target.value)}
@@ -548,6 +565,7 @@ export function ProyectoCosteo6DPanel({
                     {/* 1. Materiales */}
                     <TableCell className="p-1.5 text-right">
                       <Input
+                        disabled={!canEditLines}
                         type="number"
                         step="10"
                         min="0"
@@ -561,6 +579,7 @@ export function ProyectoCosteo6DPanel({
                     {/* 2. Consumibles */}
                     <TableCell className="p-1.5 text-right">
                       <Input
+                        disabled={!canEditLines}
                         type="number"
                         step="5"
                         min="0"
@@ -574,6 +593,7 @@ export function ProyectoCosteo6DPanel({
                     {/* 3. Mano de Obra */}
                     <TableCell className="p-1.5 text-right">
                       <Input
+                        disabled={!canEditLines}
                         type="number"
                         step="10"
                         min="0"
@@ -587,6 +607,7 @@ export function ProyectoCosteo6DPanel({
                     {/* 4. Andamios/Equipos */}
                     <TableCell className="p-1.5 text-right">
                       <Input
+                        disabled={!canEditLines}
                         type="number"
                         step="5"
                         min="0"
@@ -600,6 +621,7 @@ export function ProyectoCosteo6DPanel({
                     {/* 5. Fletes */}
                     <TableCell className="p-1.5 text-right">
                       <Input
+                        disabled={!canEditLines}
                         type="number"
                         step="5"
                         min="0"
@@ -613,6 +635,7 @@ export function ProyectoCosteo6DPanel({
                     {/* 6. Viáticos */}
                     <TableCell className="p-1.5 text-right">
                       <Input
+                        disabled={!canEditLines}
                         type="number"
                         step="5"
                         min="0"
@@ -635,7 +658,7 @@ export function ProyectoCosteo6DPanel({
 
                     {/* Acción Eliminar */}
                     <TableCell className="p-1.5 text-center">
-                      <Button
+                      {canDeleteLine && <Button
                         type="button"
                         variant="ghost"
                         size="icon"
@@ -644,7 +667,7 @@ export function ProyectoCosteo6DPanel({
                         className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"
                       >
                         <Trash2 className="size-3.5" />
-                      </Button>
+                      </Button>}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -680,7 +703,7 @@ export function ProyectoCosteo6DPanel({
             </Table>
           </div>
           <div className="p-2.5 border-t border-border/40 bg-muted/10 flex items-center justify-between">
-            <Button
+            {canCreateLine && <Button
               type="button"
               variant="outline"
               size="sm"
@@ -689,7 +712,7 @@ export function ProyectoCosteo6DPanel({
             >
               <Plus className="size-3.5" />
               <span>+ Añadir Partida</span>
-            </Button>
+            </Button>}
             <span className="text-[11px] text-muted-foreground">
               {matrix.length} {matrix.length === 1 ? 'partida activa' : 'partidas activas'} en el desglose 6D
             </span>

@@ -323,12 +323,12 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 <div class="modal-backdrop" id="zoneModal" hidden>
  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="zoneTitle">
   <h2 id="zoneTitle">Zonas y vendedores</h2>
-  <p>Visualiza las zonas operativas y asigna sus prospectos cargados a un vendedor. Las zonas son operativas y se guardan en los prospectos del ERP.</p>
+  <p id="zoneAssignmentDescription">Visualiza las zonas operativas y asigna sus prospectos cargados a un vendedor. Las zonas son operativas y se guardan en los prospectos del ERP.</p>
   <label for="zoneAssignmentZone">Zona comercial</label>
   <select id="zoneAssignmentZone"></select>
   <label for="zoneAssignmentCell">Cuadrante hexagonal</label>
   <select id="zoneAssignmentCell"><option value="">Toda la zona</option></select>
-  <label for="zoneAssignmentAssignee">Vendedor responsable</label>
+  <label for="zoneAssignmentAssignee" id="zoneAssignmentAssigneeLabel">Vendedor responsable</label>
   <select id="zoneAssignmentAssignee"><option value="">Mi zona</option></select>
   <div class="meta" id="zoneAssignmentSummary"></div>
   <div class="confirm-modal-actions"><button class="cancel" id="zoneClose" type="button">Cerrar</button><button class="cancel" id="zoneTogglePolygons" type="button">Mostrar zonas</button><button class="save" id="zoneAssign" type="button">Asignar prospectos</button></div>
@@ -428,6 +428,17 @@ const OFFLINE_STORE = 'outbox';
 let offlineDbPromise = null;
 let flushingOutbox = false;
 const mapQuery = new URLSearchParams(location.search);
+let forceSalesPermissions = {};
+try {
+  const parsedPermissions = JSON.parse(mapQuery.get('permissions') || '{}');
+  if (parsedPermissions && typeof parsedPermissions === 'object' && !Array.isArray(parsedPermissions)) forceSalesPermissions = parsedPermissions;
+} catch { /* A session without the granular action payload fails closed in the UI. */ }
+function canForceSales(action){return forceSalesPermissions[action]===true}
+function requireForceSales(action){
+  if(canForceSales(action))return true;
+  toast('Tu rol no tiene permiso para esta acción');
+  return false;
+}
 let viewportResizeTimer = null;
 function syncNovaViewport(){
   const height=Math.max(320,Math.round(window.visualViewport?.height || window.innerHeight || 0));
@@ -450,7 +461,32 @@ let ROUTE_LOGO_URI = mapQuery.get('companyLogo') || NOVAHUB_ISOTIPO_URL;
 const CURRENT_USER_ID = mapQuery.get('userId') || '';
 const CURRENT_TENANT_ID = mapQuery.get('tenantId') || '';
 const IS_PLATFORM_ADMIN = mapQuery.get('platformAdmin') === 'true';
+const CAN_ASSIGN_TEAM = mapQuery.get('canAssignTeam') === 'true';
 const CAN_DELETE_TEST = IS_PLATFORM_ADMIN;
+function applyForceSalesPermissionVisibility(){
+  const visibility = {
+    refresh: 'importProspects', searchGoogle: 'importProspects', searchViewport: 'importProspects', newPoint: 'importProspects',
+    zoneManager: 'assignProspect', bulkKanban: 'changeStage', bulkRoute: 'createRoute', bulkVisit: 'registerVisit', bulkWhatsApp: 'send', bulkDiscard: 'discardProspect',
+    routeClear: 'editRoute', routeOptimize: 'editRoute', routeCompleteStop: 'completeRouteStop', routeSave: ['createRoute', 'editRoute'],
+    routeAssignee: 'assignRoute', zoneAssign: 'assignProspect', quickCaptureTakePhoto: 'attachEvidence', quickCaptureRetake: 'attachEvidence',
+    quickCaptureSave: 'importProspects',
+  };
+  Object.entries(visibility).forEach(([id, action])=>{
+    const element=document.getElementById(id);
+    if(!element)return;
+    const allowed=Array.isArray(action)?action.some(canForceSales):canForceSales(action);
+    element.hidden=!allowed;
+  });
+  const routeTop=document.getElementById('routeTop');
+  if(routeTop)routeTop.hidden=!canForceSales('createRoute');
+  const locationSettings=document.getElementById('locationSettings');
+  if(locationSettings)locationSettings.hidden=!(canForceSales('updatePresence')||canForceSales('hidePresence'));
+  const togglePresence=document.getElementById('togglePresence');
+  if(togglePresence)togglePresence.hidden=!(canForceSales('updatePresence')||canForceSales('hidePresence'));
+  const discardConfirm=document.getElementById('discardConfirm');
+  if(discardConfirm)discardConfirm.hidden=!canForceSales('discardProspect');
+}
+applyForceSalesPermissionVisibility();
 // Todos los usuarios que llegan a este módulo ya fueron autorizados por
 // Fuerza Comercial. La privacidad siempre es de la propia ubicación; nunca
 // permite administrar la presencia de otro vendedor.
@@ -722,6 +758,13 @@ function populateZoneAssignment(){
   const zoneSelect=document.getElementById('zoneAssignmentZone');
   const cellSelect=document.getElementById('zoneAssignmentCell');
   const assigneeSelect=document.getElementById('zoneAssignmentAssignee');
+  const assigneeLabel=document.getElementById('zoneAssignmentAssigneeLabel');
+  const description=document.getElementById('zoneAssignmentDescription');
+  if(assigneeSelect)assigneeSelect.hidden=!IS_PLATFORM_ADMIN;
+  if(assigneeLabel)assigneeLabel.hidden=!IS_PLATFORM_ADMIN;
+  if(description)description.textContent=IS_PLATFORM_ADMIN
+    ? 'Visualiza las zonas operativas y asigna prospectos cargados a un vendedor. La asignación queda guardada en NovaHub.'
+    : 'Visualiza las zonas y asigna cuadrantes a los prospectos de tu cartera. La asignación queda guardada en NovaHub.';
   const currentZone=zoneSelect?.value || selectedZone;
   if(zoneSelect)zoneSelect.innerHTML=Object.keys(zoneShapes).map(zone=>`<option value="${esc(zone)}" ${zone===currentZone?'selected':''}>${esc(zone)}</option>`).join('');
   const zone=zoneSelect?.value || selectedZone;
@@ -735,17 +778,22 @@ function populateZoneAssignment(){
 }
 function openZoneManager(){populateZoneAssignment();document.getElementById('zoneModal').hidden=false}
 async function assignZoneProspects(){
+  if(!requireForceSales('assignProspect'))return;
   const zone=document.getElementById('zoneAssignmentZone')?.value || selectedZone;
   const cell=document.getElementById('zoneAssignmentCell')?.value || '';
-  const assigneeId=document.getElementById('zoneAssignmentAssignee')?.value || CURRENT_USER_ID || null;
+  const assigneeId=IS_PLATFORM_ADMIN?(document.getElementById('zoneAssignmentAssignee')?.value || CURRENT_USER_ID || null):(CURRENT_USER_ID || null);
   const selected=businesses.filter(b=>b.zone===zone&&!isDiscarded(b)&&(!cell || nearestZoneCell(b)?.id===cell));
   if(!selected.length){toast('No hay prospectos cargados en esta zona');return}
-  selected.forEach(b=>{const state=stateOf(b);state.assignedToId=assigneeId;state.assignedCellId=cell || nearestZoneCell(b)?.id || null});
-  persistCommercial();
   document.getElementById('zoneModal').hidden=true;
-  render();
-  await syncProspects(selected);
-  toast(`${selected.length} prospectos asignados a ${assigneeId ? 'un vendedor' : 'tu zona'} · ${cell || 'zona completa'}`);
+  let assignedCount=0;
+  for(const business of selected){
+    const assignedCellId=cell || nearestZoneCell(business)?.id || null;
+    const saved=await persistProspectAction(business,'assignProspect','',{assignedToId:assigneeId,zoneCellId:assignedCellId});
+    if(!saved)continue;
+    const state=stateOf(business);state.assignedToId=assigneeId;state.assignedCellId=assignedCellId;assignedCount++;
+  }
+  persistCommercial();render();
+  toast(`${assignedCount} de ${selected.length} prospectos asignados · ${cell || 'zona completa'}`);
 }
 
 function norm(s=''){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
@@ -868,10 +916,18 @@ function offlineTransaction(mode, operation){
     tx.onerror=()=>reject(tx.error);
   }));
 }
-async function saveOfflineProspect(b, evidenceFile){
-  const entry={sourceKey:keyOf(b),payload:prospectPayload(b),evidence:evidenceFile?{name:evidenceFile.name,type:evidenceFile.type,size:evidenceFile.size,blob:evidenceFile}:null,queuedAt:new Date().toISOString()};
+async function saveOfflineProspect(b, evidenceFile, operations=[], syncProfile=true){
+  const sourceKey=keyOf(b);
   try{
     if(!await openOfflineDb()) return false;
+    const previous=await offlineTransaction('readonly',store=>store.get(sourceKey));
+    const entry={
+      ...(previous || {}), sourceKey, remoteId:stateOf(b).remoteId || previous?.remoteId || null,
+      payload:prospectPayload(b), syncProfile:syncProfile || previous?.syncProfile===true,
+      pendingOperations:[...(previous?.pendingOperations || []),...operations],
+      evidence:evidenceFile?{name:evidenceFile.name,type:evidenceFile.type,size:evidenceFile.size,blob:evidenceFile}:previous?.evidence || null,
+      queuedAt:new Date().toISOString(),
+    };
     await offlineTransaction('readwrite',store=>store.put(entry));
     return true;
   }catch(error){
@@ -886,6 +942,7 @@ async function readOfflineProspects(){
   try{return (await offlineTransaction('readonly',store=>store.getAll())) || []}catch(error){console.warn('No se pudo leer la cola offline',error);return []}
 }
 async function uploadEvidence(file){
+  if(!requireForceSales('attachEvidence'))throw new Error('No tienes permiso para adjuntar evidencia');
   const metadata=await forceSalesRequest('/storage/uploads/force-sales-evidence',{method:'POST',body:JSON.stringify({fileName:file.name,mimeType:file.type || 'application/octet-stream',size:file.size})});
   if(!metadata?.signedUrl || !metadata?.uri) throw new Error('El ERP no autorizó la subida de evidencia');
   const upload=await fetch(metadata.signedUrl,{method:'PUT',headers:{'Content-Type':file.type || 'application/octet-stream'},body:file});
@@ -901,15 +958,30 @@ async function flushOutbox(){
     for(const entry of entries){
       const payload={...(entry.payload || {})};
       try{
-        if(entry.evidence?.blob && !payload.evidenceUri){
+        const business=businesses.find(item=>keyOf(item)===entry.sourceKey);
+        let remoteId=entry.remoteId || (business && stateOf(business).remoteId) || null;
+        if(entry.syncProfile!==false){
+          if(remoteId){
+            if(!canForceSales('updateProspect'))continue;
+            await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(remoteId)}`,{method:'PATCH',body:JSON.stringify(profilePayloadFromPayload(payload))});
+          }else{
+            if(!canForceSales('importProspects'))continue;
+            const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[payload]})});
+            remoteId=result?.prospects?.[0]?.id || null;
+          }
+        }
+        if(!remoteId && (entry.evidence?.blob || entry.pendingOperations?.length))continue;
+        if(entry.evidence?.blob){
+          if(!canForceSales('attachEvidence'))continue;
           const uploaded=await uploadEvidence(entry.evidence.blob);
-          payload.evidenceUri=uploaded.uri;
-          const business=businesses.find(item=>keyOf(item)===entry.sourceKey);
+          await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(remoteId)}`,{method:'PATCH',body:JSON.stringify({evidenceUri:uploaded.uri,evidenceName:entry.evidence.name,evidenceType:entry.evidence.type})});
           if(business){const state=stateOf(business);state.evidenceUri=uploaded.uri;state.evidencePending=false;persistCommercial()}
         }
-        const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[payload]})});
-        const saved=result?.prospects?.[0];
-        if(saved){const business=businesses.find(item=>keyOf(item)===entry.sourceKey);if(business)stateOf(business).remoteId=saved.id}
+        if((entry.pendingOperations || []).some(operation=>(operation.actions || [operation.action]).some(action=>!canForceSales(action))))continue;
+        for(const operation of entry.pendingOperations || []){
+          await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(remoteId)}${operation.suffix || ''}`,{method:operation.method || 'PATCH',body:JSON.stringify(operation.body || {})});
+        }
+        if(business && remoteId)stateOf(business).remoteId=remoteId;
         await removeOfflineProspect(entry.sourceKey);
         syncedAny=true;
       }catch(error){console.warn('La cola offline seguirá pendiente',error)}
@@ -921,6 +993,9 @@ async function flushOutbox(){
       render();
     }
   }
+}
+function profilePayloadFromPayload(payload){
+  return {name:payload.name,phone:payload.phone || null,website:payload.website || null,address:payload.address || null,zone:payload.zone || null,category:payload.category || null,priority:payload.priority || 'C',notes:payload.notes || null};
 }
 function prospectPayload(b){
   const c=stateOf(b);
@@ -937,45 +1012,96 @@ function prospectPayload(b){
     whatsappOptInSource:c.whatsappOptInSource || null,
   };
 }
+function prospectProfilePayload(b){
+  const followup=followups[b.id] || {};
+  return {
+    name:b.name, phone:b.phone || null, website:b.website || null, address:b.address || null,
+    zone:b.zone || null, category:b.category || null, priority:b.priority || 'C',
+    notes:followup.note || null,
+  };
+}
 async function syncProspects(list, evidenceFile=null){
-  const prospects=list.filter(Boolean).map(prospectPayload);
-  let pendingEvidence=evidenceFile;
-  if(!prospects.length) return null;
+  const items=list.filter(Boolean);
+  if(!items.length) return null;
+  const pendingEvidence=evidenceFile;
+  if(pendingEvidence && !requireForceSales('attachEvidence'))return null;
+  const syncable=items.filter(item=>{
+    const state=stateOf(item);
+    return state.remoteId ? canForceSales('updateProspect') || Boolean(pendingEvidence&&canForceSales('attachEvidence')) : canForceSales('importProspects');
+  });
+  if(syncable.length<items.length)toast('Se omitieron perfiles que tu rol no puede editar o importar');
+  if(!syncable.length)return null;
   if(!navigator.onLine || !localStorage.getItem('nh-auth-token')){
-    const queued=await Promise.all(list.filter(Boolean).map(item=>saveOfflineProspect(item,evidenceFile)));
+    const queued=await Promise.all(syncable.map(item=>{
+      const state=stateOf(item);
+      const syncProfile=state.remoteId ? canForceSales('updateProspect') : canForceSales('importProspects');
+      return saveOfflineProspect(item,evidenceFile,[],syncProfile);
+    }));
     if(queued.every(Boolean)) toast('Guardado offline · se sincronizará al recuperar conexión');
     return null;
   }
   try{
-    if(pendingEvidence){
-      const uploaded=await uploadEvidence(pendingEvidence);
-      const business=list[0]; const state=stateOf(business);
-      state.evidenceUri=uploaded.uri; state.evidencePending=false;
-      prospects[0].evidenceUri=uploaded.uri;
-      persistCommercial();
-      pendingEvidence=null;
+    const saved=[];
+    for(const business of syncable){
+      const state=stateOf(business);
+      if(!state.remoteId){
+        const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[prospectPayload(business)]})});
+        const prospect=result?.prospects?.[0];
+        if(prospect){state.remoteId=prospect.id;saved.push(prospect)}
+      }else if(canForceSales('updateProspect')){
+        const prospect=await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(state.remoteId)}`,{method:'PATCH',body:JSON.stringify(prospectProfilePayload(business))});
+        if(prospect)saved.push(prospect);
+      }
+      if(pendingEvidence){
+        const uploaded=await uploadEvidence(pendingEvidence);
+        state.evidenceUri=uploaded.uri;state.evidencePending=false;
+        if(state.remoteId){
+          const evidence=await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(state.remoteId)}`,{method:'PATCH',body:JSON.stringify({evidenceUri:uploaded.uri,evidenceName:pendingEvidence.name,evidenceType:pendingEvidence.type})});
+          if(evidence)saved.push(evidence);
+        }
+      }
     }
-    const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects})});
-    (result?.prospects || []).forEach(prospect=>{
-      const business=list.find(item=>keyOf(item)===prospect.sourceKey);
-      if(business) stateOf(business).remoteId=prospect.id;
-    });
     persistCommercial();
-    return result;
+    return {total:saved.length,prospects:saved};
   }catch(e){
     console.warn('Fuerza Comercial local: no se pudo sincronizar con el ERP',e);
-    const queued=await Promise.all(list.filter(Boolean).map(item=>saveOfflineProspect(item,pendingEvidence)));
+    const queued=await Promise.all(syncable.map(item=>{
+      const state=stateOf(item);
+      const syncProfile=state.remoteId ? canForceSales('updateProspect') : canForceSales('importProspects');
+      return saveOfflineProspect(item,pendingEvidence,[],syncProfile);
+    }));
     if(queued.every(Boolean)) toast('Cambios guardados offline · se sincronizarán automáticamente');
     return null;
   }
 }
-async function syncProspectsBatched(list,evidenceFile=null){
-  const items=list.filter(Boolean);
-  const results=[];
-  for(let index=0;index<items.length;index+=400){
-    results.push(await syncProspects(items.slice(index,index+400),index===0?evidenceFile:null));
+async function persistProspectAction(b,action,suffix,body,evidenceFile=null){
+  const actions=Array.isArray(action)?action:[action];
+  for(const requiredAction of actions)if(!canForceSales(requiredAction))return requireForceSales(requiredAction);
+  const state=stateOf(b);
+  if(!localStorage.getItem('nh-auth-token')){toast('Inicia sesión para sincronizar esta acción');return false}
+  const method=suffix==='/visit'||suffix==='/discard'? 'POST':'PATCH';
+  if(!navigator.onLine){
+    if(!state.remoteId && !requireForceSales('importProspects'))return false;
+    const queued=await saveOfflineProspect(b,evidenceFile,[{actions,suffix,method,body}],!state.remoteId);
+    if(queued)toast('Acción guardada offline · se sincronizará automáticamente');
+    return queued;
   }
-  return results.some(Boolean) ? results : null;
+  if(!state.remoteId){
+    if(!requireForceSales('importProspects'))return false;
+    await syncProspects([b]);
+  }
+  if(!state.remoteId){toast('El prospecto todavía no está sincronizado con el ERP');return false}
+  const requestBody={...(body || {})};
+  if(evidenceFile){
+    if(!requireForceSales('attachEvidence'))return false;
+    const uploaded=await uploadEvidence(evidenceFile);
+    requestBody.evidenceUri=uploaded.uri;requestBody.evidenceName=evidenceFile.name;requestBody.evidenceType=evidenceFile.type;
+    state.evidenceUri=uploaded.uri;state.evidencePending=false;persistCommercial();
+  }
+  try{
+    await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(state.remoteId)}${suffix}`,{method,body:JSON.stringify(requestBody)});
+    return true;
+  }catch(error){console.warn('No se pudo sincronizar la acción comercial',error);toast('El ERP rechazó la acción comercial');return false}
 }
 function remoteBusiness(prospect){
   const id=prospect.googlePlaceId ? `google-${prospect.googlePlaceId}` : prospect.sourceKey || `remote-${prospect.id}`;
@@ -1127,34 +1253,43 @@ function popupHtml(b){
     </div>
     <div class="popquick">
       <button class="${c.selected?'primary-action':''}" onclick="toggleSelected('${b.id}')">${c.selected?'✓ Seleccionado':'Seleccionar'}</button>
-      ${c.kanban ? '<button disabled>✓ Ya en Fuerza Comercial</button>' : `<button class="primary-action" onclick="addToKanban('${b.id}')">Agregar al Kanban</button>`}
-      <button class="visit-action" onclick="registerVisit('${b.id}')">⌖ Registrar visita</button>
-      <button onclick="discardBusiness('${b.id}')">Descartar</button>
+      ${canForceSales('changeStage') ? (c.kanban ? '<button disabled>✓ Ya en Fuerza Comercial</button>' : `<button class="primary-action" onclick="addToKanban('${b.id}')">Agregar al Kanban</button>`) : ''}
+      ${canForceSales('registerVisit') ? `<button class="visit-action" onclick="registerVisit('${b.id}')">⌖ Registrar visita</button>` : ''}
+      ${canForceSales('discardProspect') ? `<button onclick="discardBusiness('${b.id}')">Descartar</button>` : ''}
       ${CAN_DELETE_TEST ? `<button onclick="deleteBusiness('${b.id}')">Eliminar negocio</button>` : ''}
     </div>
     ${c.visitedAt ? `<div class="visit-readout">Visita registrada ${new Date(c.visitedAt).toLocaleString('es-NI')} · ${c.visitLat?.toFixed?.(5) || '—'}, ${c.visitLng?.toFixed?.(5) || '—'}</div>` : ''}
-    <div class="crm">
+    ${(canForceSales('updateProspect') || canForceSales('changeStage') || canForceSales('attachEvidence') || canForceSales('manageConsent')) ? `<div class="crm">
       <div class="quick-heading">Seguimiento rápido</div>
+      ${canForceSales('updateProspect') ? `
       <label>Dueño o decisor</label>
       <input id="owner-${sid}" maxlength="120" value="${esc(c.ownerName || '')}" placeholder="Nombre del dueño o decisor">
       <label>Persona de contacto</label>
       <input id="contact-${sid}" maxlength="120" value="${esc(c.contactName || '')}" placeholder="Nombre del contacto">
       <label>Teléfono / WhatsApp</label>
       <input id="phone-${sid}" maxlength="40" value="${esc(c.contactPhone || b.phone || '')}" placeholder="+505 8888 8888">
+      ` : ''}
+      ${canForceSales('changeStage') ? `
       <label>Estado comercial</label>
       <select id="st-${sid}">
-        ${['Nuevo','Contactado','Visitado','Interesado','Demo','Negociación','Cliente','Descartado'].map(x => `<option ${statusOf(b)===x?'selected':''}>${x}</option>`).join('')}
+        ${['Nuevo','Contactado','Visitado','Interesado','Demo','Negociación','Cliente'].map(x => `<option ${statusOf(b)===x?'selected':''}>${x}</option>`).join('')}
       </select>
+      ` : ''}
+      ${canForceSales('updateProspect') ? `
       <label>Próximo contacto</label>
       <input id="dt-${sid}" type="date" value="${esc(f.date||'')}">
       <label>Notas</label>
       <textarea id="nt-${sid}" placeholder="Contacto, tamaño, necesidad, decisión...">${esc(f.note||'')}</textarea>
+      ` : ''}
+      ${canForceSales('attachEvidence') ? `
       <label>Evidencia opcional</label>
       <input id="ev-${sid}" type="file" accept="image/*,.pdf" capture="environment">
       <div class="evidence-preview" id="ev-preview-${sid}" hidden></div>
+      ` : ''}
       ${c.evidenceName ? `<div class="meta">Evidencia: ${esc(c.evidenceName)}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</div>` : ''}
       ${c.evidenceUri ? `<button type="button" onclick="openEvidence('${b.id}')">Ver evidencia</button>` : ''}
-      <button onclick="saveFollowup('${b.id}')">Guardar seguimiento</button>
+      ${(canForceSales('updateProspect') || canForceSales('changeStage') || canForceSales('attachEvidence')) ? `<button onclick="saveFollowup('${b.id}')">Guardar seguimiento</button>` : ''}
+      ${canForceSales('manageConsent') ? `
       <details class="advanced-crm">
         <summary>Opcional: WhatsApp y consentimiento</summary>
         <div class="advanced-content">
@@ -1166,7 +1301,8 @@ function popupHtml(b){
           ${c.whatsappOptIn ? `<div class="meta">Apto para plantilla oficial de Meta · ${esc(c.whatsappOptInSource || 'fuente no indicada')}</div>` : '<div class="meta">Sin opt-in: no se habilita envío automatizado.</div>'}
         </div>
       </details>
-    </div>
+      ` : ''}
+    </div>` : ''}
   </div>`;
 }
 function findBusiness(id){return businesses.find(x=>x.id===id)}
@@ -1208,10 +1344,11 @@ function resetQuickCapture(){
   const save=document.getElementById('quickCaptureSave');
   if(photo)photo.hidden=true;
   if(image)image.removeAttribute('src');
-  if(save)save.disabled=true;
+  if(save)save.disabled=false;
   if(panel)panel.hidden=true;
 }
 function beginQuickPointCapture(){
+  if(!requireForceSales('attachEvidence'))return;
   const input=document.getElementById('quickEvidenceInput');
   if(!input){toast('La cámara no está disponible en este dispositivo');return}
   pendingQuickPointPhoto=true;
@@ -1230,6 +1367,7 @@ function renderQuickPointPhoto(file){
   save.disabled=false;
 }
 function openQuickPointAt(lat,lng,source='mapa'){
+  if(!requireForceSales('importProspects'))return;
   pendingPointCoords={lat:Number(lat),lng:Number(lng)};
   const panel=document.getElementById('quickCapture');
   const nameInput=document.getElementById('quickCaptureName');
@@ -1252,29 +1390,29 @@ function openQuickPointFromDevice(){
   },'No se pudo capturar la ubicación para marcar el negocio');
 }
 function saveQuickPoint(){
+  if(!requireForceSales('importProspects'))return;
   if(!pendingPointCoords)return;
   const nameInput=document.getElementById('quickCaptureName');
   const coords={...pendingPointCoords};
   const name=(nameInput?.value || '').trim();
   if(!name){nameInput?.focus();toast('Escribe el nombre del negocio para continuar');return}
-  if(!pendingQuickPointFile){toast('Toma primero la foto del negocio');return}
+  if(pendingQuickPointFile && !requireForceSales('attachEvidence'))return;
   pendingPointCoords=null;
   createQuickPointAt(coords.lat,coords.lng,name,{},pendingQuickPointFile);
 }
 function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',details={},evidenceFile=null){
+  if(!requireForceSales('importProspects'))return;
+  if(evidenceFile && !requireForceSales('attachEvidence'))return;
   const coords={lat:Number(lat),lng:Number(lng)};
   if(!Number.isFinite(coords.lat)||!Number.isFinite(coords.lng))return;
   const id=`quick-${Date.now()}`;
   const name=customName || 'Negocio capturado en visita';
-  const now=new Date().toISOString();
   const address='Punto capturado · ' + coords.lat.toFixed(6) + ', ' + coords.lng.toFixed(6);
   const business={id,name,zone:nearestZone(coords.lat,coords.lng),category:'Prospecto por validar',address,source:'Captura móvil NovaHub',sourceUrl:'',lat:coords.lat,lng:coords.lng,precision:'Coordenada exacta capturada por el vendedor',score:0,priority:'C',owner:'Fuerza Comercial',phone:'',website:'',rating:null,reviews:0};
   localPoints.unshift(business);
   localStorage.setItem('novaFuerzaLocalPointsV1',JSON.stringify(localPoints.slice(0,2000)));
-  const c=stateOf(business); Object.assign(c,{selected:true,kanban:true,stage:'Nuevo',visitedAt:now,visitLat:business.lat,visitLng:business.lng});
+  const c=stateOf(business); Object.assign(c,{selected:true,stage:'Nuevo'});
   if(evidenceFile){c.evidenceName=evidenceFile.name;c.evidenceType=evidenceFile.type;c.evidencePending=true}
-  followups[business.id]={status:'Visitado',updatedAt:now,note:'Punto creado desde el mapa'};
-  localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));
   persistCommercial();
   mergeBusinesses(); populateFilters();
   document.getElementById('quickCapture').hidden=true;
@@ -1283,7 +1421,14 @@ function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',det
   updateView(); render();
   map.flyTo([business.lat,business.lng],17);
   toast(evidenceFile?'Punto y foto guardados':'Punto registrado');
-  syncProspects([business],evidenceFile);
+  void (async()=>{
+    await syncProspects([business],evidenceFile);
+    if(canForceSales('registerVisit')){
+      const visitedAt=new Date().toISOString();
+      const saved=await persistProspectAction(business,'registerVisit','/visit',{visitLat:business.lat,visitLng:business.lng,visitedAt});
+      if(saved){Object.assign(c,{visitedAt,visitLat:business.lat,visitLng:business.lng,stage:'Visitado'});followups[business.id]={status:'Visitado',updatedAt:visitedAt,note:'Punto creado desde el mapa'};localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();render()}
+    }
+  })();
 }
 document.getElementById('newPoint').addEventListener('click',openQuickPointFromDevice);
 document.getElementById('quickCaptureCancel').addEventListener('click',()=>{pendingPointCoords=null;resetQuickCapture()});
@@ -1306,7 +1451,7 @@ document.getElementById('routeOpenMaps').addEventListener('click',openRouteInMap
 document.getElementById('routeCompleteStop').addEventListener('click',completeCurrentRouteStop);
 document.getElementById('routeSave').addEventListener('click',()=>{void saveRouteAssignment()});
 document.getElementById('routeModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
-document.getElementById('routeTop').addEventListener('click',()=>{if(selectedBusinesses().length)addSelectedToRoute();else openRoutePlanner([])});
+document.getElementById('routeTop').addEventListener('click',()=>{if(selectedBusinesses().length&&canForceSales('createRoute'))addSelectedToRoute();else openRoutePlanner([])});
 document.getElementById('searchNearby').addEventListener('click',searchNearbyFromDevice);
 document.getElementById('toggle3d').addEventListener('click',toggleMap3D);
 document.getElementById('zoneManager').addEventListener('click',openZoneManager);
@@ -1354,30 +1499,38 @@ function toggleSelected(id, value){
 }
 window.toggleSelected = toggleSelected;
 function addToKanban(id){
+  if(!requireForceSales('changeStage'))return;
   const b=findBusiness(id); if(!b) return;
   if(isKanban(b)){toast('Este negocio ya pertenece a Fuerza Comercial');return}
   const c=stateOf(b); c.kanban=true; c.stage=c.stage || 'Nuevo'; persistCommercial(); rerenderKeepingPopup(b);
-  syncProspects([b]); toast('Negocio agregado a Fuerza Comercial');
+  void persistProspectAction(b,'changeStage','',{stage:stageToApi(c.stage)}); toast('Negocio agregado a Fuerza Comercial');
 }
 window.addToKanban = addToKanban;
 function addSelectedToKanban(){
+  if(!requireForceSales('changeStage'))return;
   const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona al menos un negocio');return}
   let added=0, existing=0;
   const addedBusinesses=[];
   chosen.forEach(b=>{if(isKanban(b)){existing++;return} const c=stateOf(b);c.kanban=true;c.stage=c.stage||'Nuevo';addedBusinesses.push(b);added++});
-  persistCommercial(); render(); void syncProspectsBatched(addedBusinesses); toast(`${added} agregados · ${existing} ya existían`);
+  persistCommercial(); render(); void Promise.all(addedBusinesses.map(b=>persistProspectAction(b,'changeStage','',{stage:stageToApi(stateOf(b).stage)}))); toast(`${added} agregados · ${existing} ya existían`);
 }
 function registerVisit(id){
+  if(!requireForceSales('registerVisit'))return;
   const b=findBusiness(id); if(!b) return;
   toast('Solicitando ubicación del dispositivo…');
   withLocationAccess(position=>{
     showUserLocation(position.coords);
     googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
     googleMap.setZoom(17);
-    const c=stateOf(b); c.visitedAt=new Date().toISOString(); c.visitLat=position.coords.latitude; c.visitLng=position.coords.longitude; c.stage='Visitado'; c.kanban=true;
-    followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:new Date().toISOString()};
-  localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups)); persistCommercial(); rerenderKeepingPopup(b); void syncProspects([b]); toast('Visita registrada con ubicación · abre la cámara para guardar evidencia');
-    window.setTimeout(()=>requestEvidenceCapture(id),120);
+    const visitedAt=new Date().toISOString();
+    void persistProspectAction(b,'registerVisit','/visit',{visitLat:position.coords.latitude,visitLng:position.coords.longitude,visitedAt}).then(saved=>{
+      if(!saved)return;
+      const c=stateOf(b);c.visitedAt=visitedAt;c.visitLat=position.coords.latitude;c.visitLng=position.coords.longitude;c.stage='Visitado';c.kanban=true;
+      followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:visitedAt};
+      localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();rerenderKeepingPopup(b);
+      toast('Visita registrada con ubicación');
+      if(canForceSales('attachEvidence'))window.setTimeout(()=>requestEvidenceCapture(id),120);
+    });
   },'No se pudo obtener la ubicación para registrar la visita');
 }
 window.registerVisit = registerVisit;
@@ -1397,6 +1550,7 @@ function closeDiscardDialog(){
   if(modal)modal.hidden=true;
 }
 function confirmDiscardDialog(){
+  if(!requireForceSales('discardProspect'))return;
   const reason=document.getElementById('discardReason')?.value || '';
   const note=(document.getElementById('discardNote')?.value || '').trim();
   if(!reason)return;
@@ -1406,9 +1560,12 @@ function confirmDiscardDialog(){
     const c=stateOf(b); c.discarded=true;c.discardReason=note ? reason + ' · ' + note : reason;c.discardedAt=now;c.stage='Descartado';
     followups[b.id]={...(followups[b.id]||{}),status:'Descartado',updatedAt:now,note:note || reason};
   });
-  localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();closeDiscardDialog();render();void syncProspectsBatched(chosen);toast(`${chosen.length} ${chosen.length===1?'prospecto descartado':'prospectos descartados'}`);
+  localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();closeDiscardDialog();render();
+  void Promise.all(chosen.map(b=>persistProspectAction(b,'discardProspect','/discard',{reason:stateOf(b).discardReason})));
+  toast(`${chosen.length} ${chosen.length===1?'prospecto descartado':'prospectos descartados'}`);
 }
 function discardBusiness(id){
+  if(!requireForceSales('discardProspect'))return;
   openDiscardDialog([id]);
 }
 window.discardBusiness = discardBusiness;
@@ -1468,6 +1625,7 @@ document.addEventListener('change',event=>{
   if(event.target instanceof HTMLInputElement && event.target.type==='file' && event.target.id.startsWith('ev-')) previewEvidence(event.target);
 });
 function requestEvidenceCapture(id){
+  if(!requireForceSales('attachEvidence'))return;
   const input=document.getElementById('quickEvidenceInput');
   const b=findBusiness(id);
   if(!input || !b)return;
@@ -1480,6 +1638,7 @@ document.getElementById('quickEvidenceInput')?.addEventListener('change',async e
   const file=input.files?.[0];
   if(pendingQuickPointPhoto){
     pendingQuickPointPhoto=false;
+    if(!requireForceSales('attachEvidence'))return;
     if(!file){toast('Toma una foto para registrar el punto');return}
     if(!file.type.startsWith('image/')){toast('Para un punto nuevo toma una foto desde la cámara');return}
     if(file.size>10*1024*1024){toast('La evidencia supera el límite de 10 MB');return}
@@ -1492,6 +1651,7 @@ document.getElementById('quickEvidenceInput')?.addEventListener('change',async e
   const id=pendingEvidenceBusinessId;
   pendingEvidenceBusinessId=null;
   if(!file || !id)return;
+  if(!requireForceSales('attachEvidence'))return;
   if(file.size>10*1024*1024){toast('La evidencia supera el límite de 10 MB');return}
   const b=findBusiness(id);
   if(!b)return;
@@ -1502,7 +1662,8 @@ document.getElementById('quickEvidenceInput')?.addEventListener('change',async e
   persistCommercial();
   render();
   toast('Guardando evidencia…');
-  await syncProspects([b],file);
+  const saved=await persistProspectAction(b,'attachEvidence','',{},file);
+  if(!saved)return;
   render();
   toast(navigator.onLine?'Evidencia guardada':'Evidencia guardada offline; se sincronizará al volver la conexión');
 });
@@ -1519,7 +1680,7 @@ function showUserLocation(coords){
   userLocationMarker.setPosition(position);
   userLocationCircle?.setCenter(position);
   userLocationCircle?.setRadius(Math.max(18,Math.min(Number(coords.accuracy)||40,160)));
-  presenceWatchRequested=true;
+  presenceWatchRequested=canForceSales('updatePresence');
   startPresenceWatch();
   syncSellerPresence(coords);
 }
@@ -1576,7 +1737,7 @@ function stopPresenceWatch(){
   presenceWatchId=null;
 }
 function startPresenceWatch(){
-  if(!presenceWatchRequested||!presenceSharingEnabled||presenceWatchId!==null||!navigator.geolocation)return;
+  if(!canForceSales('updatePresence')||!presenceWatchRequested||!presenceSharingEnabled||presenceWatchId!==null||!navigator.geolocation)return;
   presenceWatchId=navigator.geolocation.watchPosition(
     position=>showUserLocation(position.coords),
     error=>console.warn('No se pudo actualizar la ubicación en vivo',error),
@@ -1602,7 +1763,7 @@ function distanceBetweenPresencePoints(a,b){
   return 2*earthRadius*Math.asin(Math.sqrt(h));
 }
 async function syncSellerPresence(coords){
-  if(!presenceSharingEnabled || !localStorage.getItem('nh-auth-token'))return;
+  if(!canForceSales('updatePresence')||!presenceSharingEnabled || !localStorage.getItem('nh-auth-token'))return;
   const now=Date.now();
   const point={lat:Number(coords.latitude),lng:Number(coords.longitude)};
   const moved=distanceBetweenPresencePoints(lastSentPresenceCoords,point)>=12;
@@ -1622,14 +1783,18 @@ function updatePresenceToggle(){
   const button=document.getElementById('togglePresence');
   const privacy=document.getElementById('locationPrivacy');
   const settings=document.getElementById('locationSettings');
-  if(privacy)privacy.hidden=false;
-  if(settings)settings.hidden=!CAN_SHARE_PRESENCE;
+  if(privacy)privacy.hidden=!(canForceSales('updatePresence')||canForceSales('hidePresence'));
+  if(settings)settings.hidden=!(canForceSales('updatePresence')||canForceSales('hidePresence'));
   if(!button)return;
+  const canHide=presenceSharingEnabled&&canForceSales('hidePresence');
+  const canShow=!presenceSharingEnabled&&canForceSales('updatePresence');
+  button.hidden=!(canHide||canShow);
   button.disabled=LOCATION_REQUIRED && !CAN_SHARE_PRESENCE;
   button.textContent=LOCATION_REQUIRED && !CAN_SHARE_PRESENCE ? 'Ubicación obligatoria' : (presenceSharingEnabled?'Ocultar mi ubicación':'Mostrar mi ubicación');
   button.title=button.disabled?'La empresa exige ubicación durante el horario configurado':(presenceSharingEnabled?'Tu última ubicación puede verse por vendedores autorizados':'Tu ubicación está oculta para otros vendedores');
 }
 async function setPresenceSharing(enabled){
+  if(!requireForceSales(enabled?'updatePresence':'hidePresence'))return;
   if(!enabled && LOCATION_REQUIRED && !CAN_SHARE_PRESENCE){toast('La empresa exige compartir ubicación durante la operación');return}
   presenceSharingEnabled=enabled;
   localStorage.setItem(PRESENCE_STORAGE_KEY,String(enabled));
@@ -1675,25 +1840,42 @@ window.saveFollowup = async function(id){
   const sid = safeId(id);
   const b = findBusiness(id);
   if(!b) return;
-  const status = document.getElementById('st-' + sid).value;
-  followups[id] = {
-    status,
-    date: document.getElementById('dt-' + sid).value,
-    note: document.getElementById('nt-' + sid).value,
-    updatedAt: new Date().toISOString()
-  };
-  const c=stateOf(b); c.stage=status; c.discarded=status==='Descartado'; c.ownerName=document.getElementById('owner-' + sid)?.value.trim() || ''; c.contactName=document.getElementById('contact-' + sid)?.value.trim() || ''; c.contactPhone=document.getElementById('phone-' + sid)?.value.trim() || ''; if(c.contactPhone)b.phone=c.contactPhone; followups[id].note=[followups[id].note,c.ownerName && 'Dueño/decisor: ' + c.ownerName,c.contactName && 'Contacto: ' + c.contactName].filter(Boolean).join(' · '); if(status==='Visitado'&&!c.visitedAt)c.visitedAt=new Date().toISOString();
-  const file=document.getElementById('ev-' + sid)?.files?.[0];
+  const c=stateOf(b);
+  const actions=[];
+  const body={};
+  const updatedAt=new Date().toISOString();
+  if(canForceSales('updateProspect')){
+    const ownerName=document.getElementById('owner-' + sid)?.value.trim() || '';
+    const contactName=document.getElementById('contact-' + sid)?.value.trim() || '';
+    const contactPhone=document.getElementById('phone-' + sid)?.value.trim() || '';
+    const note=document.getElementById('nt-' + sid)?.value || '';
+    const date=document.getElementById('dt-' + sid)?.value || '';
+    c.ownerName=ownerName;c.contactName=contactName;c.contactPhone=contactPhone;
+    if(contactPhone)b.phone=contactPhone;
+    followups[id]={...(followups[id]||{}),date,note,updatedAt};
+    followups[id].note=[note,ownerName&&'Dueño/decisor: '+ownerName,contactName&&'Contacto: '+contactName].filter(Boolean).join(' · ');
+    body.phone=contactPhone || b.phone || null;body.notes=followups[id].note;
+    actions.push('updateProspect');
+  }
+  if(canForceSales('changeStage')){
+    const status=document.getElementById('st-' + sid)?.value;
+    if(status){c.stage=status;c.discarded=false;followups[id]={...(followups[id]||{}),status,updatedAt};body.stage=stageToApi(status);actions.push('changeStage')}
+  }
+  const file=canForceSales('attachEvidence') ? document.getElementById('ev-' + sid)?.files?.[0] : null;
   const validFile=file && file.size <= 10 * 1024 * 1024 ? file : null;
   if(file && !validFile){toast('La evidencia supera el límite de 10 MB');return}
-  if(validFile){c.evidenceName=validFile.name;c.evidenceType=validFile.type;c.evidencePending=true}
+  if(validFile){c.evidenceName=validFile.name;c.evidenceType=validFile.type;c.evidencePending=true;actions.push('attachEvidence')}
   localStorage.setItem('novaManaguaFollowupsV4', JSON.stringify(followups));
   persistCommercial();
-  await syncProspects([b],validFile);
+  if(actions.length){
+    const saved=await persistProspectAction(b,actions,'',body,validFile);
+    if(!saved)return;
+  }
   if(!validFile)toast('Seguimiento guardado');
   rerenderKeepingPopup(b);
 };
 window.saveWhatsAppConsent = async function(id){
+  if(!requireForceSales('manageConsent'))return;
   const sid=safeId(id); const b=findBusiness(id); if(!b)return;
   const optedIn=Boolean(document.getElementById('wa-optin-'+sid)?.checked);
   const phone=(document.getElementById('wa-'+sid)?.value || '').trim();
@@ -1702,7 +1884,7 @@ window.saveWhatsAppConsent = async function(id){
   const c=stateOf(b); c.whatsappPhone=phone || b.phone || ''; c.whatsappOptIn=optedIn; c.whatsappOptInSource=optedIn ? source : '';
   persistCommercial();
   if(localStorage.getItem('nh-auth-token')){
-    try{await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[prospectPayload(b)]})});toast(optedIn?'Consentimiento guardado en el ERP':'Consentimiento retirado')}catch(error){console.warn(error);toast('No se pudo guardar el consentimiento en el ERP')}
+    await persistProspectAction(b,'manageConsent','/whatsapp-consent',{optIn:optedIn,phone,source});
   }else toast(optedIn?'Consentimiento guardado localmente':'Consentimiento retirado localmente');
   rerenderKeepingPopup(b);
 };
@@ -1723,14 +1905,16 @@ function renderKanban(){
     const cards=kanbanBusinesses.filter(b=>statusOf(b)===stage);
     return `<section class="kanban-column"><div class="kanban-column-head"><strong>${stage}</strong><span>${cards.length}</span></div><div class="kanban-cards">${cards.length ? cards.map(b=>{
       const sid=safeId(b.id);
-      return `<article class="kanban-card"><b>${esc(b.name)}</b><div class="meta">${esc(b.zone)} · ${esc(b.category)}</div><div class="meta">${b.score}% afinidad${b.phone ? ` · ${esc(b.phone)}` : ''}</div><select data-kanban-stage="${esc(b.id)}" aria-label="Cambiar etapa de ${esc(b.name)}">${stages.filter(x=>x!=='Descartado').map(x=>`<option ${x===stage?'selected':''}>${x}</option>`).join('')}</select><button data-kanban-open="${esc(b.id)}">Ver en mapa</button></article>`;
+      const stageControl=canForceSales('changeStage') ? `<select data-kanban-stage="${esc(b.id)}" aria-label="Cambiar etapa de ${esc(b.name)}">${stages.filter(x=>x!=='Descartado').map(x=>`<option ${x===stage?'selected':''}>${x}</option>`).join('')}</select>` : `<span class="meta">${esc(stage)}</span>`;
+      return `<article class="kanban-card"><b>${esc(b.name)}</b><div class="meta">${esc(b.zone)} · ${esc(b.category)}</div><div class="meta">${b.score}% afinidad${b.phone ? ` · ${esc(b.phone)}` : ''}</div>${stageControl}<button data-kanban-open="${esc(b.id)}">Ver en mapa</button></article>`;
     }).join('') : '<div class="meta">Sin prospectos</div>'}</div></section>`;
   }).join('') + (kanbanBusinesses.length ? '' : '<div class="kanban-empty">Todavía no hay negocios en Fuerza Comercial. Selecciona negocios en el mapa y pulsa <b>Kanban</b>.</div>');
   board.querySelectorAll('[data-kanban-stage]').forEach(el=>el.addEventListener('change',()=>{
+    if(!requireForceSales('changeStage'))return;
     const b=findBusiness(el.dataset.kanbanStage); if(!b)return;
     const c=stateOf(b); c.kanban=true; c.stage=el.value; if(el.value==='Visitado'&&!c.visitedAt)c.visitedAt=new Date().toISOString();
     followups[b.id]={...(followups[b.id]||{}),status:el.value,updatedAt:new Date().toISOString()};
-    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();syncProspects([b]);render();toast(`Etapa actualizada: ${el.value}`);
+    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();void persistProspectAction(b,'changeStage','',{stage:stageToApi(el.value)});render();toast(`Etapa actualizada: ${el.value}`);
   }));
   board.querySelectorAll('[data-kanban-open]').forEach(el=>el.addEventListener('click',()=>{
     const b=findBusiness(el.dataset.kanbanOpen); if(!b)return;
@@ -1815,7 +1999,7 @@ function render(){
   const selectedCount=selectedBusinesses().length;
   const routeCount=routeBusinessesFromStore().length;
   const routeTop=document.getElementById('routeTop');
-  if(routeTop)routeTop.textContent=selectedCount ? `Armar ruta (${selectedCount})` : routeCount ? `Ruta (${routeCount})` : 'Armar ruta';
+  if(routeTop)routeTop.textContent=selectedCount&&canForceSales('createRoute') ? `Armar ruta (${selectedCount})` : routeCount ? `Ruta (${routeCount})` : 'Armar ruta';
   document.getElementById('bulkbar')?.classList.toggle('is-empty',selectedCount===0);
 
   const list = document.getElementById('list');
@@ -1832,8 +2016,8 @@ function render(){
       <span class="status">${esc(isKanban(b)?'En Kanban':statusOf(b))} · ${b.score}% afinidad</span>
        <div class="item-actions">
          <button data-action="select" data-id="${esc(b.id)}">${isSelected(b)?'✓ Seleccionado':'Seleccionar'}</button>
-         <button class="primary-action" data-action="kanban" data-id="${esc(b.id)}">${isKanban(b)?'✓ Kanban':'Kanban'}</button>
-         <button class="visit-action" data-action="visit" data-id="${esc(b.id)}">Visitar</button>
+         ${canForceSales('changeStage') ? `<button class="primary-action" data-action="kanban" data-id="${esc(b.id)}">${isKanban(b)?'✓ Kanban':'Kanban'}</button>` : ''}
+         ${canForceSales('registerVisit') ? `<button class="visit-action" data-action="visit" data-id="${esc(b.id)}">Visitar</button>` : ''}
          ${CAN_DELETE_TEST ? `<button data-action="delete" data-id="${esc(b.id)}">Eliminar</button>` : ''}
        </div>
     </div>`).join('') + (filtered.length > listLimit ? `<div class="item"><button class="show-more-results" id="showMoreResults" type="button">Mostrar más resultados (${filtered.length - listLimit} disponibles)</button></div>` : '');
@@ -2060,8 +2244,32 @@ function routeWazeUrl(b){
   const query=[b.name,b.address].filter(Boolean).join(' ');
   return `https://waze.com/ul?ll=${encodeURIComponent(`${lat},${lng}`)}&navigate=yes&q=${encodeURIComponent(query)}&utm_source=novahub`;
 }
+function routeManageAction(){return activeRemoteRouteId?'editRoute':'createRoute'}
+function canManageCurrentRoute(){return canForceSales(routeManageAction())}
+function refreshRoutePermissionVisibility(){
+  const canManage=canManageCurrentRoute();
+  const canAssign=canForceSales('assignRoute')&&CAN_ASSIGN_TEAM;
+  const clear=document.getElementById('routeClear');
+  const optimize=document.getElementById('routeOptimize');
+  const assignee=document.getElementById('routeAssignee');
+  const complete=document.getElementById('routeCompleteStop');
+  const save=document.getElementById('routeSave');
+  if(clear)clear.hidden=!canForceSales('createRoute')||Boolean(activeRemoteRouteId);
+  if(optimize)optimize.hidden=!canManage;
+  if(assignee)assignee.hidden=!(canAssign&&(Boolean(activeRemoteRouteId)||canForceSales('createRoute')));
+  if(complete)complete.hidden=!canForceSales('completeRouteStop');
+  if(save){
+    save.hidden=!(canManage || (Boolean(activeRemoteRouteId)&&canAssign));
+    save.textContent=activeRemoteRouteId ? (canManage?(canAssign?'Guardar y asignar cambios':'Guardar cambios'):'Reasignar ruta') : (canAssign?'Guardar y asignar ruta':'Guardar ruta');
+  }
+  const top=document.getElementById('routeTop');
+  if(top)top.hidden=!(canForceSales('createRoute')||(Boolean(activeRemoteRouteId)&&(canForceSales('editRoute')||(canForceSales('assignRoute')&&CAN_ASSIGN_TEAM)||canForceSales('completeRouteStop'))));
+}
 function renderRoutePlanner(){
   routeProgress=Math.max(0,Math.min(routeProgress,routeBusinesses.length));
+  refreshRoutePermissionVisibility();
+  const canManage=canManageCurrentRoute();
+  const canRemoveStops=!activeRemoteRouteId&&canForceSales('createRoute');
   const select=document.getElementById('routeAssignee');
   if(select){
     const current=select.value;
@@ -2083,13 +2291,17 @@ function renderRoutePlanner(){
       const isCurrent=index===routeProgress;
       const isCompleted=index<routeProgress;
       const tag=isCompleted?'✓ Visitada':isCurrent?'Siguiente parada':'Pendiente';
-      return `<div class="route-stop ${isCurrent?'current ':''}${isCompleted?'completed':''}"><span class="route-number">${index+1}</span><div class="route-stop-copy"><b>${esc(b.name)}</b><span>${esc(b.address || b.zone || 'Ubicación disponible')}</span><span class="route-stop-tag">${tag}</span></div><div class="route-stop-actions"><button type="button" title="Subir parada" onclick="moveRouteStop(${index},-1)">↑</button><button type="button" title="Bajar parada" onclick="moveRouteStop(${index},1)">↓</button><button type="button" title="Abrir esta parada en Waze" onclick="openRouteStop(${index})">W</button><button class="danger" type="button" title="Quitar parada" onclick="removeRouteStop(${index})">×</button></div></div>`;
+      const reorder=canManage?`<button type="button" title="Subir parada" onclick="moveRouteStop(${index},-1)">↑</button><button type="button" title="Bajar parada" onclick="moveRouteStop(${index},1)">↓</button>`:'';
+      const remove=canRemoveStops?`<button class="danger" type="button" title="Quitar parada" onclick="removeRouteStop(${index})">×</button>`:'';
+      return `<div class="route-stop ${isCurrent?'current ':''}${isCompleted?'completed':''}"><span class="route-number">${index+1}</span><div class="route-stop-copy"><b>${esc(b.name)}</b><span>${esc(b.address || b.zone || 'Ubicación disponible')}</span><span class="route-stop-tag">${tag}</span></div><div class="route-stop-actions">${reorder}<button type="button" title="Abrir esta parada en Waze" onclick="openRouteStop(${index})">W</button>${remove}</div></div>`;
     }).join('') : '<div class="history-empty">Selecciona prospectos para comenzar una ruta.</div>';
   }
   const description=document.getElementById('routeDescription');
   if(description)description.textContent=routeBusinesses.length ? `${routeBusinesses.length} parada${routeBusinesses.length===1?'':'s'} · inicia en tu ubicación actual y avanza en el orden indicado. Waze se abre una parada a la vez.` : 'Organiza hasta 30 prospectos, define el orden de visita y abre cada parada directamente en Waze.';
   const completeButton=document.getElementById('routeCompleteStop');
-  if(completeButton)completeButton.disabled=routeProgress>=routeBusinesses.length;
+  const nextBusiness=routeBusinesses[routeProgress];
+  const nextStopId=nextBusiness?routeStopIds.get(String(stateOf(nextBusiness).remoteId||'')):null;
+  if(completeButton)completeButton.disabled=routeProgress>=routeBusinesses.length||!activeRemoteRouteId||!nextStopId;
   const wazeButton=document.getElementById('routeOpenMaps');
   if(wazeButton)wazeButton.disabled=routeProgress>=routeBusinesses.length;
   renderRouteMarkers();
@@ -2097,6 +2309,7 @@ function renderRoutePlanner(){
 }
 function openRoutePlanner(ids){
   const requested=(ids || []).map(findBusiness).filter(Boolean);
+  if(requested.length&&!requireForceSales('createRoute'))return;
   routeBusinesses=(requested.length ? requested : routeBusinessesFromStore()).slice(0,ROUTE_MAX_STOPS);
   if(!routeBusinesses.length){toast('Selecciona negocios para armar una ruta');return}
   if(requested.length){routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=null;routeStopIds=new Map()}
@@ -2105,6 +2318,7 @@ function openRoutePlanner(ids){
 }
 function routeDistance(a,b){return Math.hypot(Number(a.lat)-Number(b.lat),Number(a.lng)-Number(b.lng))}
 function optimizeRoute(){
+  if(!requireForceSales(routeManageAction()))return;
   if(routeBusinesses.length<3){toast('La ruta ya tiene pocas paradas');return}
   const pending=routeBusinesses.slice(1); const ordered=[routeBusinesses[0]];
   while(pending.length){
@@ -2135,32 +2349,33 @@ function openRouteStop(index){
   toast(`Waze abierto · parada ${index+1} de ${routeBusinesses.length}`);
 }
 function openRouteInMaps(){openRouteStop(routeProgress)}
-function completeCurrentRouteStop(){
+async function completeCurrentRouteStop(){
+  if(!requireForceSales('completeRouteStop'))return;
   if(routeProgress>=routeBusinesses.length){toast('Ruta completada');return}
+  if(!activeRemoteRouteId){toast('Guarda la ruta en el ERP antes de completar una parada');return}
   const business=routeBusinesses[routeProgress];
-  const state=stateOf(business); state.routeCompletedAt=new Date().toISOString(); state.visitedAt=state.visitedAt || state.routeCompletedAt; state.stage='Visitado'; state.kanban=true;
-  routeProgress+=1; persistCommercial(); persistRoute(); renderRoutePlanner();
-  void (async()=>{
-    await syncProspects([business]);
-    const stopId=routeStopIds.get(String(stateOf(business).remoteId||''));
-    if(activeRemoteRouteId && stopId){
-      try{
-        await forceSalesRequest(`/force-sales/routes/${encodeURIComponent(activeRemoteRouteId)}/stops/${encodeURIComponent(stopId)}/complete`,{method:'POST',body:JSON.stringify({lat:lastKnownCoords?.latitude,lng:lastKnownCoords?.longitude,notes:'Visita completada desde la ruta'})});
-      }catch(error){console.warn('No se pudo persistir la parada de ruta',error)}
-    }
-    if(lastKnownCoords && presenceSharingEnabled){
-      try{await forceSalesRequest('/force-sales/presence',{method:'POST',body:JSON.stringify({lat:lastKnownCoords.latitude,lng:lastKnownCoords.longitude,accuracy:lastKnownCoords.accuracy,heading:lastKnownCoords.heading,currentProspectId:routeProgress<routeBusinesses.length?stateOf(routeBusinesses[routeProgress]).remoteId:null,currentActivity:routeProgress<routeBusinesses.length?'En ruta':'Disponible'})})}catch(error){console.warn('No se pudo actualizar la actividad del vendedor',error)}
-    }
-  })();
+  const stopId=routeStopIds.get(String(stateOf(business).remoteId||''));
+  if(!stopId){toast('No se encontró la parada persistida en el ERP');return}
+  try{
+    const saved=await forceSalesRequest(`/force-sales/routes/${encodeURIComponent(activeRemoteRouteId)}/stops/${encodeURIComponent(stopId)}/complete`,{method:'POST',body:JSON.stringify({lat:lastKnownCoords?.latitude,lng:lastKnownCoords?.longitude,notes:'Visita completada desde la ruta'})});
+    remoteRoutes=[saved,...remoteRoutes.filter(route=>route.id!==saved?.id)].filter(Boolean);
+    routeStopIds=new Map((saved?.stops || []).map(stop=>[String(stop.prospectId),String(stop.id)]));
+    routeProgress=(saved?.stops || []).filter(stop=>String(stop.status).toUpperCase()==='COMPLETED').length;
+    const state=stateOf(business);state.routeCompletedAt=new Date().toISOString();state.visitedAt=state.visitedAt||state.routeCompletedAt;state.stage='Visitado';state.kanban=true;
+    followups[business.id]={...(followups[business.id]||{}),status:'Visitado',updatedAt:state.routeCompletedAt};
+    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();persistRoute();renderRoutePlanner();
+  }catch(error){console.warn('No se pudo persistir la parada de ruta',error);toast('El ERP rechazó completar esta parada');return}
   toast(routeProgress<routeBusinesses.length ? `Parada completada · sigue ${routeProgress+1}/${routeBusinesses.length}` : 'Ruta completada');
 }
 function moveRouteStop(index,direction){
+  if(!requireForceSales(routeManageAction()))return;
   const next=index+direction;
   if(index<0||next<0||next>=routeBusinesses.length)return;
   [routeBusinesses[index],routeBusinesses[next]]=[routeBusinesses[next],routeBusinesses[index]];
   renderRoutePlanner();
 }
 function removeRouteStop(index){
+  if(activeRemoteRouteId||!requireForceSales('createRoute'))return;
   if(index<0||index>=routeBusinesses.length)return;
   routeBusinesses.splice(index,1);
   if(index<routeProgress)routeProgress-=1;
@@ -2168,6 +2383,7 @@ function removeRouteStop(index){
   toast('Parada retirada de la ruta');
 }
 function clearRoute(){
+  if(activeRemoteRouteId||!requireForceSales('createRoute'))return;
   routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=null;routeStopIds=new Map();persistRoute();routePolyline?.setMap(null);routePolyline=null;clearRouteMarkers();
   document.getElementById('routeModal').hidden=true;
   render();
@@ -2177,39 +2393,76 @@ window.openRouteStop=openRouteStop;
 window.moveRouteStop=moveRouteStop;
 window.removeRouteStop=removeRouteStop;
 async function saveRouteAssignment(){
-  const assigneeId=document.getElementById('routeAssignee')?.value || CURRENT_USER_ID || null;
-  activeRouteAssigneeId=assigneeId;
-  routeBusinesses.forEach(b=>{const c=stateOf(b);c.assignedToId=assigneeId;c.kanban=true;c.stage=c.stage || 'Nuevo'});
-  persistCommercial();
-  await syncProspects(routeBusinesses);
-  const prospectIds=routeBusinesses.map(b=>stateOf(b).remoteId).filter(Boolean);
-  if(prospectIds.length){
-    try{
-      const currentStopIds=routeBusinesses.map(b=>routeStopIds.get(String(stateOf(b).remoteId||''))).filter(Boolean);
-      const canUpdateExisting=Boolean(activeRemoteRouteId && currentStopIds.length===routeBusinesses.length);
-      const payload={name:`Ruta ${new Date().toLocaleDateString('es-NI')}`,assignedToId:assigneeId,logoUri:ROUTE_LOGO_URI || null,...(canUpdateExisting ? {stopIds:currentStopIds} : {prospectIds})};
-      const saved=await forceSalesRequest(canUpdateExisting ? `/force-sales/routes/${encodeURIComponent(activeRemoteRouteId)}` : '/force-sales/routes',{method:canUpdateExisting?'PATCH':'POST',body:JSON.stringify(payload)});
-      activeRemoteRouteId=saved?.id || null;
-      routeStopIds=new Map((saved?.stops || []).map(stop=>[String(stop.prospectId),String(stop.id)]));
-      remoteRoutes=[saved,...remoteRoutes.filter(route=>route.id!==saved?.id)].filter(Boolean);
-      routeBusinesses.forEach((business)=>{stateOf(business).routeId=activeRemoteRouteId});
-    }catch(error){console.warn('No se pudo persistir la ruta en el ERP',error);toast('La ruta quedó local; el ERP rechazó la persistencia');}
+  const isExisting=Boolean(activeRemoteRouteId);
+  const canManage=canManageCurrentRoute();
+  const canAssign=canForceSales('assignRoute')&&CAN_ASSIGN_TEAM;
+  if(!canManage&&!(isExisting&&canAssign)){
+    if(isExisting&&canForceSales('assignRoute')&&!CAN_ASSIGN_TEAM)toast('Tu rol puede reasignar rutas solo con el alcance de administrador de equipo');
+    else requireForceSales(isExisting?'assignRoute':'createRoute');
+    return;
   }
-  persistRoute();document.getElementById('routeModal').hidden=true;toast(activeRemoteRouteId?'Ruta guardada y asignada en el ERP':'Ruta guardada localmente');
+  if(!isExisting&&!requireForceSales('createRoute'))return;
+  if(!routeBusinesses.length){toast('Agrega al menos una parada para guardar la ruta');return}
+  const unsynced=routeBusinesses.filter(b=>!stateOf(b).remoteId);
+  if(unsynced.length){
+    if(!requireForceSales('importProspects'))return;
+    const imported=await syncProspects(unsynced);
+    if(!imported||unsynced.some(b=>!stateOf(b).remoteId)){toast('No se pudieron preparar todas las paradas en el ERP');return}
+  }
+  const assigneeId=document.getElementById('routeAssignee')?.value || CURRENT_USER_ID || null;
+  const payload={};
+  if(isExisting){
+    if(canManage){
+      const stopIds=routeBusinesses.map(b=>routeStopIds.get(String(stateOf(b).remoteId||'')));
+      if(stopIds.some(id=>!id)){toast('La ruta contiene paradas que el ERP aún no reconoce');return}
+      payload.stopIds=stopIds;
+    }
+    if(canAssign&&String(assigneeId||'')!==String(activeRouteAssigneeId||''))payload.assignedToId=assigneeId;
+    if(!Object.keys(payload).length){toast('No hay cambios autorizados para guardar');return}
+  }else{
+    payload.name=`Ruta ${new Date().toLocaleDateString('es-NI')}`;
+    payload.prospectIds=routeBusinesses.map(b=>stateOf(b).remoteId).filter(Boolean);
+    payload.logoUri=ROUTE_LOGO_URI || null;
+    if(canAssign)payload.assignedToId=assigneeId;
+  }
+  try{
+    const saved=await forceSalesRequest(isExisting?`/force-sales/routes/${encodeURIComponent(activeRemoteRouteId)}`:'/force-sales/routes',{method:isExisting?'PATCH':'POST',body:JSON.stringify(payload)});
+    activeRemoteRouteId=saved?.id || activeRemoteRouteId;
+    activeRouteAssigneeId=saved?.assignedToId || assigneeId;
+    routeStopIds=new Map((saved?.stops || []).map(stop=>[String(stop.prospectId),String(stop.id)]));
+    remoteRoutes=[saved,...remoteRoutes.filter(route=>route.id!==saved?.id)].filter(Boolean);
+    routeBusinesses.forEach(business=>{stateOf(business).routeId=activeRemoteRouteId});
+    persistCommercial();persistRoute();document.getElementById('routeModal').hidden=true;
+    toast(isExisting?'Ruta actualizada en el ERP':'Ruta guardada en el ERP');
+  }catch(error){console.warn('No se pudo persistir la ruta en el ERP',error);toast('El ERP rechazó guardar la ruta');}
 }
 function addSelectedToRoute(){
+  if(!requireForceSales('createRoute'))return;
   const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona negocios para armar una ruta');return}
-  const current=routeBusinessesFromStore(); const keys=new Set(current.map(keyOf));
+  const startsNewRoute=Boolean(activeRemoteRouteId);
+  if(startsNewRoute){routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=null;routeStopIds=new Map()}
+  const current=startsNewRoute?[]:routeBusinessesFromStore(); const keys=new Set(current.map(keyOf));
   chosen.forEach(b=>{if(!keys.has(keyOf(b))&&current.length<ROUTE_MAX_STOPS){current.push(b)}});
   if(chosen.some(b=>!keys.has(keyOf(b)))&&current.length>=ROUTE_MAX_STOPS)toast('La ruta admite como máximo 30 paradas');
   routeBusinesses=current.slice(0,ROUTE_MAX_STOPS);renderRoutePlanner();document.getElementById('routeModal').hidden=false;
 }
 function visitSelected(){
+  if(!requireForceSales('registerVisit'))return;
   const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona negocios para registrar visitas');return}
   toast('Capturando ubicación para la visita…');
   withLocationAccess(position=>{
-    const now=new Date().toISOString(); chosen.forEach(b=>{const c=stateOf(b);c.visitedAt=now;c.visitLat=position.coords.latitude;c.visitLng=position.coords.longitude;c.stage='Visitado';c.kanban=true;followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:now}});
-    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();render();void syncProspectsBatched(chosen);toast(`${chosen.length} visitas registradas con ubicación`);
+    void (async()=>{
+      let savedCount=0;
+      for(const b of chosen){
+        const visitedAt=new Date().toISOString();
+        const saved=await persistProspectAction(b,'registerVisit','/visit',{visitLat:position.coords.latitude,visitLng:position.coords.longitude,visitedAt});
+        if(!saved)continue;
+        const c=stateOf(b);c.visitedAt=visitedAt;c.visitLat=position.coords.latitude;c.visitLng=position.coords.longitude;c.stage='Visitado';c.kanban=true;
+        followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:visitedAt};savedCount++;
+      }
+      localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();render();
+      toast(`${savedCount} de ${chosen.length} visitas registradas con ubicación`);
+    })();
   },'No se pudo obtener la ubicación para registrar las visitas');
 }
 function discardSelected(){
@@ -2217,6 +2470,7 @@ function discardSelected(){
   openDiscardDialog(chosen.map(b=>b.id));
 }
 async function sendSelectedWhatsApp(){
+  if(!requireForceSales('send'))return;
   const chosen=selectedBusinesses().filter(b=>stateOf(b).whatsappOptIn && (stateOf(b).whatsappPhone || b.phone));
   if(!chosen.length){toast('Selecciona negocios con teléfono y opt-in de WhatsApp');return}
   if(!localStorage.getItem('nh-auth-token')){toast('Inicia sesión para usar WhatsApp oficial');return}
@@ -2225,10 +2479,14 @@ async function sendSelectedWhatsApp(){
   const languageCode=prompt('Código de idioma de la plantilla','es');
   if(!languageCode)return;
   const consented=chosen.slice(0,50);
-  toast('Sincronizando prospectos con el ERP…');
-  const synced=await syncProspects(consented);
+  const unsynced=consented.filter(b=>!stateOf(b).remoteId);
+  if(unsynced.length){
+    if(!requireForceSales('importProspects'))return;
+    toast('Preparando prospectos nuevos en el ERP…');
+    await syncProspects(unsynced);
+  }
   const ids=consented.map(b=>stateOf(b).remoteId).filter(Boolean);
-  if(!synced || ids.length!==consented.length){toast('No se pudieron preparar todos los prospectos para el envío');return}
+  if(ids.length!==consented.length){toast('No se pudieron preparar todos los prospectos para el envío');return}
   if(!confirm(`Se enviará la plantilla ${templateName} a ${ids.length} prospecto(s) con opt-in. ¿Continuar?`))return;
   try{
     const result=await forceSalesRequest('/force-sales/whatsapp/bulk',{method:'POST',body:JSON.stringify({ids,templateName,languageCode})});

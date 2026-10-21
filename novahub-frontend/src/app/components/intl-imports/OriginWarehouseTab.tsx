@@ -41,6 +41,11 @@ import { IntlPackageDetailSheet } from './modals/IntlPackageDetailSheet';
 
 interface OriginWarehouseTabProps {
   canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canRegisterEvent?: boolean;
+  canDeliver?: boolean;
+  canCancel?: boolean;
 }
 
 const statusBadgeVariant = (status: IntlImportPackageStatus) => {
@@ -80,7 +85,14 @@ const getSupplierDisplayName = (pkg: IntlImportPackage) => {
   return pkg.senderName || 'No especificado';
 };
 
-export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps) {
+export function OriginWarehouseTab({
+  canCreate = false,
+  canEdit = false,
+  canDelete = false,
+  canRegisterEvent = false,
+  canDeliver = false,
+  canCancel = false,
+}: OriginWarehouseTabProps) {
   const [packages, setPackages] = useState<IntlImportPackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -108,7 +120,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
   }, []);
 
   const handleDeletePackage = async () => {
-    if (!packageToDelete) return;
+    if (!packageToDelete || !canDelete) return;
     try {
       setDeleting(true);
       await intlImportsService.deletePackage(packageToDelete.id);
@@ -403,7 +415,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
                         <Eye className="size-3.5" />
                       </Button>
 
-                      {canEditPackage(pkg) && (
+                      {canEdit && canEditPackage(pkg) && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -418,7 +430,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
                           <Pencil className="size-3.5" />
                         </Button>
                       )}
-                      {pkg.status !== 'DELIVERED' && pkg.container?.status !== 'COMPLETED' && (
+                      {canDelete && pkg.status !== 'DELIVERED' && pkg.container?.status !== 'COMPLETED' && !pkg.container?.containerNumber && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -473,6 +485,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
         open={newModalOpen}
         onOpenChange={setNewModalOpen}
         onSuccess={() => fetchPackages()}
+        canCreate={canCreate}
         volumetricFactor={config?.volumetricFactorKgPerCbm || 167}
       />
 
@@ -481,10 +494,15 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
         open={detailSheetOpen}
         onOpenChange={setDetailSheetOpen}
         onRefresh={() => fetchPackages()}
+        canEdit={canEdit}
+        canDelete={canDelete}
+        canRegisterEvent={canRegisterEvent}
+        canDeliver={canDeliver}
+        canCancel={canCancel}
       />
 
       <ConfirmDialog
-        open={Boolean(packageToDelete)}
+        open={canDelete && Boolean(packageToDelete)}
         onOpenChange={(open) => !open && setPackageToDelete(null)}
         title={`¿Eliminar paquete ${packageToDelete?.trackingCode}?`}
         description="Esta acción eliminará el paquete y todo su historial de eventos de forma permanente."
@@ -499,6 +517,7 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
         open={editModalOpen}
         onOpenChange={setEditModalOpen}
         onSuccess={() => fetchPackages()}
+        canEdit={canEdit}
         volumetricFactor={config?.volumetricFactorKgPerCbm || 167}
       />
     </div>

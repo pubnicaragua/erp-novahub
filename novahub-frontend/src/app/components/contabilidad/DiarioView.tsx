@@ -17,7 +17,6 @@ import {
   SelectValue,
 } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { cn } from '../ui/utils';
 import type { JournalEntry } from '../../types';
 import type { ChartAccount } from '../../types/accounting';
@@ -26,10 +25,9 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { REFERENCE_TYPES, accountingDescriptionLabel, referenceTypeLabel } from '../../utils/accountingLabels';
 import { generateJournalPDF } from '../../utils/pdfGenerator';
-import { PdfDownloadButton, type PdfExportScope } from '../ui/PdfDownloadButton';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
-import { Loader2 } from 'lucide-react';
 import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
@@ -179,6 +177,8 @@ export function DiarioView() {
   const formatCurrency = (value: number) => formatAmount(Number(value || 0), baseCurrency);
 
   const canExport = canPerform('ACCOUNTING_JOURNAL', 'export');
+  const canPostJournal = canPerform('ACCOUNTING_JOURNAL', 'post');
+  const canVoidJournal = canPerform('ACCOUNTING_JOURNAL', 'void');
 
   const handleExportPDF = async (format: PdfDownloadFormat = 'configured', scope?: PdfExportScope) => {
     if (!canExport) return;
@@ -526,6 +526,7 @@ export function DiarioView() {
   const refTypeOptions = REFERENCE_TYPES.map((r) => ({ label: r.label, value: r.value }));
 
   async function handlePost(journal: JournalEntry) {
+    if (!canPostJournal) return;
     const actionToken = beginNotificationAction();
     try {
       await contabilidadService.postJournal(journal.id);
@@ -539,6 +540,7 @@ export function DiarioView() {
   }
 
   async function handleVoid(journal: JournalEntry) {
+    if (!canVoidJournal) return;
     const actionToken = beginNotificationAction();
     try {
       await contabilidadService.voidJournal(journal.id);
@@ -567,7 +569,7 @@ export function DiarioView() {
     const statusKey = journal.status?.toLowerCase();
     return (
       <div className="flex items-center justify-end gap-1">
-        {statusKey === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'approve') && (
+        {statusKey === 'draft' && canPostJournal && (
           <Button
             variant="ghost"
             size="icon"
@@ -578,7 +580,7 @@ export function DiarioView() {
             <Send className="size-3.5" />
           </Button>
         )}
-        {statusKey === 'posted' && canPerform('ACCOUNTING_JOURNAL', 'delete') && (
+        {statusKey === 'posted' && canVoidJournal && (
           <Button
             variant="ghost"
             size="icon"
@@ -958,12 +960,12 @@ export function DiarioView() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {viewJournal.status?.toLowerCase() === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'approve') && (
+                    {viewJournal.status?.toLowerCase() === 'draft' && canPostJournal && (
                       <Button className="flex-1" size="sm" onClick={() => { void handlePost(viewJournal); }}>
                         <Send className="mr-1 size-3.5" /> Contabilizar
                       </Button>
                     )}
-                    {viewJournal.status?.toLowerCase() === 'posted' && canPerform('ACCOUNTING_JOURNAL', 'delete') && (
+                    {viewJournal.status?.toLowerCase() === 'posted' && canVoidJournal && (
                       <Button variant="outline" size="sm" className="flex-1" onClick={() => { void handleVoid(viewJournal); }}>
                         <Ban className="mr-1 size-3.5" /> Anular
                       </Button>

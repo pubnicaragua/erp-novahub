@@ -50,6 +50,10 @@ export interface HotelReservation {
   restaurantOrders?: Array<{ id: string; number: string; status: string; total: number; currency: string; createdAt: string }>;
 }
 
+export interface HotelCheckoutContext {
+  registers: Array<{ id: string; name: string; branchId: string | null; sessionId: string | null }>;
+}
+
 export const hotelService = {
   listRoomTypes: (branchId: string, signal?: AbortSignal) => api.get<HotelRoomType[]>('/hotel/room-types', { params: { branchId }, signal }),
   createRoomType: (body: { branchId: string; rateProductId: string; code: string; name: string; capacity: number }) => api.post<HotelRoomType>('/hotel/room-types', body),
@@ -60,6 +64,7 @@ export const hotelService = {
   availability: (params: { branchId: string; checkIn: string; checkOut: string }, signal?: AbortSignal) => api.get<HotelRoom[]>('/hotel/availability', { params, signal }),
   listReservations: (params?: { branchId?: string; checkInFrom?: string; checkInTo?: string; status?: string }, signal?: AbortSignal) => api.get<HotelReservation[]>('/hotel/reservations', { params, signal }),
   getReservation: (id: string, signal?: AbortSignal) => api.get<HotelReservation>(`/hotel/reservations/${id}`, { signal }),
+  getCheckoutContext: (id: string, signal?: AbortSignal) => api.get<HotelCheckoutContext>(`/hotel/reservations/${id}/checkout-context`, { signal }),
   createReservation: (body: { branchId: string; roomId: string; guestName: string; guestEmail?: string; guestPhone?: string; checkIn: string; checkOut: string }) => api.idempotentPost<HotelReservation>('/hotel/reservations', body),
   updateReservation: (id: string, body: Partial<Pick<HotelReservation, 'roomId' | 'guestName' | 'guestEmail' | 'guestPhone' | 'checkIn' | 'checkOut'>>) => api.patch<HotelReservation>(`/hotel/reservations/${id}`, body),
   checkIn: (id: string) => api.idempotentPost<HotelReservation>(`/hotel/reservations/${id}/check-in`, {}),

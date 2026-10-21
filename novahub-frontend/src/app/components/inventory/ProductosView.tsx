@@ -1074,7 +1074,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   const { openingId, startOpening } = useDetailOpeningFeedback();
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
-  const canCreatePurchaseRequest = canPerform('PURCHASES', 'create');
+  const canCreatePurchaseRequest = canPerform('PURCHASES_REQUESTS', 'create');
   const catalogItemType = itemType || 'PRODUCT';
   const isServiceView = catalogItemType === 'SERVICE';
   const catalogPermissionModule: 'INVENTORY_PRODUCTS' | 'INVENTORY_SERVICES' = isServiceView
@@ -1600,6 +1600,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   });
 
   const openLowStockSolicitud = () => {
+    if (!canCreatePurchaseRequest) return;
     clearSolicitudPreparation();
     loadSolicitudEmployees();
     setSolicitudWarehouseId('');
@@ -1635,6 +1636,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   };
 
   const openSelectedSolicitud = () => {
+    if (!canCreatePurchaseRequest) return;
     if (selectedIds.size === 0) { toast.error('Selecciona al menos un producto'); return; }
     loadSolicitudEmployees();
     // La selección puede contener productos de distintas páginas. El listado
@@ -1731,6 +1733,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   };
 
   const handleCreateSolicitud = async () => {
+    if (!canCreatePurchaseRequest) return;
     if (solicitudProducts.length === 0) { toast.error('No hay productos en la solicitud'); return; }
     if (!solicitudWarehouseId) { toast.error('Selecciona una bodega'); return; }
     setSolicitudCreating(true);

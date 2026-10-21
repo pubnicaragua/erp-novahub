@@ -318,6 +318,8 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
   const handleStatusAction = async (row: RecurringSupplierInvoice) => {
     const current = String((row as any).status || '').toUpperCase();
     const status = current === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    const action = status === 'ACTIVE' ? 'resume' : 'pause';
+    if (!canPerform('PURCHASES_INVOICES_REC', 'read') || !canPerform('PURCHASES_INVOICES_REC', action)) return;
     const statusToastId = toast.loading(status === 'ACTIVE' ? 'Activando compra recurrente...' : 'Pausando compra recurrente...');
     try {
       if (status === 'ACTIVE') await recurringSupplierInvoicesService.resume(row.id);
@@ -371,6 +373,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
         notes: String(localDoc.notes || '').trim(),
         items: normalizedItems,
       };
+      if (editingId !== 'NEW') delete (finalDoc as any).status;
 
       if (editingId === 'NEW') {
         await recurringSupplierInvoicesService.create(finalDoc as any);
@@ -525,7 +528,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
           </div>
           <div className="flex max-w-full flex-wrap items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="recurring-invoices" context="form" />
-            {!isNew && canPerform('PURCHASES_INVOICES_REC', 'delete') && (
+            {!isNew && canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'cancel') && (
               <Button variant="outline" className="rounded-xl border-rose-500/50 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-700 hover:text-white" onClick={() => setPendingDeleteId(editingId)}>
                 <Ban className="mr-2 size-3" /> Anular
               </Button>
@@ -761,8 +764,8 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_INVOICES_REC', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
-          onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'delete') ? async (ids) => {
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'cancel')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+          onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'cancel') ? async (ids) => {
             const deleteToastId = toast.loading(`Anulando ${ids.length} compra${ids.length === 1 ? '' : 's'} recurrente${ids.length === 1 ? '' : 's'}...`);
             try {
               for (const id of ids) {
@@ -814,8 +817,8 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
             const status = String(detailInvoice.status || '').toUpperCase();
             return <>
               {canPerform('PURCHASES_INVOICES_REC', 'edit') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailInvoice(null); openEditor(detailInvoice.id); }}><Pencil className="size-4" /> Editar</Button>}
-              {canPerform('PURCHASES_INVOICES_REC', 'edit') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailInvoice)}>{status === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />} {status === 'ACTIVE' ? 'Pausar' : 'Activar'}</Button>}
-              {canPerform('PURCHASES_INVOICES_REC', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailInvoice.id)}><Ban className="size-4" /> Anular</Button>}
+              {canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', status === 'ACTIVE' ? 'pause' : 'resume') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailInvoice)}>{status === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />} {status === 'ACTIVE' ? 'Pausar' : 'Activar'}</Button>}
+              {canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'cancel') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailInvoice.id)}><Ban className="size-4" /> Anular</Button>}
             </>;
           })()}
           onDownloadPdf={canPerform('PURCHASES_INVOICES_REC', 'export') ? (format) => detailInvoice ? void handleDownloadRecurringInvoicePdf(detailInvoice, format) : undefined : undefined}

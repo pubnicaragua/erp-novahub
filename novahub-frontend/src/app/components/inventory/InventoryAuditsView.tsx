@@ -368,7 +368,11 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const isMobile = useIsMobile();
   const canViewUsers = canPerform('CONFIG_USERS', 'view');
   const canCreateAudits = canPerform('INVENTORY_AUDITS', 'create');
+  const canStartAudits = canPerform('INVENTORY_AUDITS', 'start');
+  const canCloseAudits = canPerform('INVENTORY_AUDITS', 'close');
   const canApproveAudits = canPerform('INVENTORY_AUDITS', 'approve');
+  const canReopenAudits = canPerform('INVENTORY_AUDITS', 'reopen');
+  const canCancelAudits = canPerform('INVENTORY_AUDITS', 'cancel');
   const canDeleteAudits = canPerform('INVENTORY_AUDITS', 'delete');
   const [isCreating, setIsCreating] = useState(false);
   const [detailAudit, setDetailAudit] = useState<any | null>(null);
@@ -774,7 +778,14 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   };
 
   const handleWorkflow = async (audit: any, targetStatus: string) => {
-    if (targetStatus === 'CANCELLED' ? !canDeleteAudits : !canApproveAudits) return;
+    const canRunAction: Record<string, boolean> = {
+      IN_PROGRESS: canStartAudits,
+      CLOSED: canCloseAudits,
+      APPROVED: canApproveAudits,
+      REOPENED: canReopenAudits,
+      CANCELLED: canCancelAudits,
+    };
+    if (!canRunAction[targetStatus]) return;
     const labels: Record<string, string> = {
       IN_PROGRESS: 'iniciar el conteo',
       CLOSED: 'cerrar el conteo',
@@ -829,8 +840,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
 
   const confirmCloseAndApprove = async () => {
     if (!comparisonAudit) return;
+    if (!canApproveAudits || (comparisonAudit.status !== 'CLOSED' && !canCloseAudits)) return;
     if (hasMissingComparisonReasons()) {
-      toast.error('Selecciona el motivo de cada diferencia antes de aplicar el ajuste');
+      toast.error('Selecciona el motivo de cada diferencia antes de generar el borrador de ajuste');
       return;
     }
     const adjustmentItems = getComparisonAdjustmentItems();
@@ -861,6 +873,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
 
   const confirmCloseOnly = async () => {
     if (!comparisonAudit) return;
+    if (!canCloseAudits) return;
     if (hasMissingComparisonReasons()) {
       toast.error('Selecciona el motivo de cada diferencia antes de cerrar el conteo');
       return;
@@ -1109,7 +1122,17 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
 
   const renderAuditActions = (audit: any, mobile = false, includeView = true) => (
     <div className={cn('flex items-center gap-1', mobile ? 'flex-wrap justify-start' : 'justify-end')}>
-      {canDeleteAudits && (audit.status === 'OPEN' || audit.status === 'COMPLETED') && (
+      {canStartAudits && (audit.status === 'OPEN' || audit.status === 'COMPLETED' || audit.status === 'REOPENED') && (
+        <Button
+          variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
+          disabled={workflowLoading === audit.id}
+          onClick={() => handleWorkflow(audit, 'IN_PROGRESS')}
+          title="Iniciar conteo" aria-label="Iniciar conteo de auditoría"
+        >
+          <PlayCircle className="size-4" />
+        </Button>
+      )}
+      {canCancelAudits && (audit.status === 'OPEN' || audit.status === 'COMPLETED' || audit.status === 'CLOSED') && (
         <Button
             variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive hover:text-destructive-foreground"
             disabled={workflowLoading === audit.id}
@@ -1119,7 +1142,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             <XCircle className="size-4" />
         </Button>
       )}
-      {canApproveAudits && audit.status === 'IN_PROGRESS' && (
+      {canCloseAudits && audit.status === 'IN_PROGRESS' && (
         <Button
           variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-warning hover:text-warning-foreground"
           disabled={workflowLoading === audit.id}
@@ -1129,24 +1152,24 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
           <PauseCircle className="size-4" />
         </Button>
       )}
-      {canApproveAudits && audit.status === 'CLOSED' && (
+      {audit.status === 'CLOSED' && (
         <>
-          <Button
+          {canApproveAudits && <Button
             variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-success hover:text-success-foreground"
             disabled={workflowLoading === audit.id}
             onClick={() => handleWorkflow(audit, 'APPROVED')}
             title="Aprobar diferencias" aria-label="Aprobar diferencias"
           >
             <CheckCircle2 className="size-4" />
-          </Button>
-          <Button
+          </Button>}
+          {canReopenAudits && <Button
             variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-info hover:text-info-foreground"
             disabled={workflowLoading === audit.id}
             onClick={() => handleWorkflow(audit, 'REOPENED')}
             title="Reabrir" aria-label="Reabrir auditoría"
           >
             <RotateCcw className="size-4" />
-          </Button>
+          </Button>}
         </>
       )}
       {includeView && <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailAudit(audit)} title="Ver detalle" aria-label="Ver detalle">
@@ -1667,16 +1690,18 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 </Table>
               </div>
 
-              <div className="flex flex-col-reverse gap-2 border-t border-border/40 pt-4 sm:flex-row sm:items-center sm:justify-end">
+      <div className="flex flex-col-reverse gap-2 border-t border-border/40 pt-4 sm:flex-row sm:items-center sm:justify-end">
                 <Button variant="outline" onClick={closeWithoutApproval} disabled={Boolean(workflowLoading)} className="text-xs">
                   {comparisonTargetStatus === 'APPROVED' ? 'Volver' : 'Cerrar sin aprobar'}
                 </Button>
-                <Button onClick={confirmCloseAndApprove} disabled={Boolean(workflowLoading)} className="gap-2 bg-primary text-xs text-primary-foreground hover:bg-primary/90">
-                  {workflowLoading ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
-                  {comparisonDifferences.length > 0
-                    ? (comparisonTargetStatus === 'APPROVED' ? 'Aprobar y aplicar ajuste' : 'Cerrar y aplicar ajuste')
-                    : 'Aprobar auditoría'}
-                </Button>
+                {canApproveAudits && (comparisonAudit.status === 'CLOSED' || canCloseAudits) && (
+                  <Button onClick={confirmCloseAndApprove} disabled={Boolean(workflowLoading)} className="gap-2 bg-primary text-xs text-primary-foreground hover:bg-primary/90">
+                    {workflowLoading ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                    {comparisonDifferences.length > 0
+                      ? (comparisonTargetStatus === 'APPROVED' ? 'Aprobar y generar borrador' : 'Cerrar y generar borrador')
+                      : 'Aprobar auditoría'}
+                  </Button>
+                )}
               </div>
             </div>
           )}

@@ -7,6 +7,7 @@ import { clearStorageUrlCache } from '../services/storage.service';
 import { BrandLogoLoader } from '../components/BrandLogo';
 import { LEGACY_VIEW_PERMISSION_ALIASES, SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_PARENT_ORDER, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
 import { canAccessModuleShell, canAccessModuleView, type ModuleViewPolicies } from '../utils/moduleViewAccess';
+import { approvalActionValue } from '../utils/permissions';
 import type { UserThemeSettings } from '../services/branding.service';
 
 const SIDEBAR_PERMISSION_PARENT_MODULE_IDS = new Set<string>(SIDEBAR_PERMISSION_PARENT_ORDER);
@@ -136,18 +137,36 @@ export interface Permission {
 export type PermissionAction =
   | 'view' | 'create' | 'edit' | 'delete' | 'deactivate' | 'cancel'
   | 'import' | 'export' | 'approve' | 'reject' | 'authorize' | 'reopen'
-  | 'close' | 'closeByException' | 'reopenContainer'
-  | 'confirm' | 'process' | 'pay' | 'apply' | 'reconcile'
+  | 'close' | 'start' | 'lookup' | 'sync' | 'registerEvent' | 'bill' | 'closeByException' | 'reopenContainer'
+  | 'confirm' | 'process' | 'pay' | 'submit' | 'apply' | 'reconcile'
+  | 'assignPackages' | 'unassignPackages' | 'movePackages' | 'consolidate' | 'dispatch' | 'sendToCustoms' | 'addExpense'
+  | 'receive' | 'retryInventory' | 'registerInvoice' | 'cancelInvoice' | 'issue' | 'void' | 'pause' | 'resume'
   | 'reverse' | 'duplicate' | 'convert' | 'assign' | 'download'
-  | 'generate' | 'send' | 'print' | 'manage' | 'viewCost' | 'viewOtherLocations';
+  | 'generate' | 'send' | 'print' | 'manage' | 'viewCost' | 'viewOtherLocations'
+  | 'post' | 'saveRun' | 'createJournal' | 'createReversal' | 'generateProjection' | 'processDepreciation' | 'requestPayment' | 'enroll'
+  | 'updateBalance' | 'autoMatch' | 'addMovement' | 'editMovement' | 'matchMovement' | 'complete' | 'lock'
+  | 'audit' | 'sendToCorrect' | 'reissueInvoice' | 'approveCancellation' | 'rejectCancellation' | 'completeEnrollment'
+  | 'startReview' | 'disburse' | 'addDocument' | 'addNote'
+  | 'importProspects' | 'updateProspect' | 'changeStage' | 'registerVisit' | 'discardProspect' | 'assignProspect'
+  | 'attachEvidence' | 'manageConsent' | 'createRoute' | 'editRoute' | 'assignRoute' | 'changeRouteStatus'
+  | 'completeRouteStop' | 'updatePresence' | 'hidePresence' | 'configureLocation'
+  | 'startTask' | 'returnTaskToPending' | 'reassign' | 'manageSubtasks'
+  | 'startTimeTracking' | 'stopTimeTracking' | 'addManualTimeEntry'
+  | 'manageGuests' | 'sendInvitations' | 'scheduleMeeting' | 'changeStatus'
+  | 'manageMembers' | 'comment' | 'reorder' | 'react' | 'linkErp' | 'autoPlan'
+  | 'updateProgress' | 'manageMaterials' | 'sendToSuppliers' | 'manualFill' | 'reviewOverwrite' | 'selectOffers'
+  | 'applyCostTemplate' | 'editPricing' | 'syncPricing' | 'manageCalculationMemory'
+  | 'recordProgress' | 'editCurve' | 'createCapture' | 'deleteCapture' | 'managePublicLinks'
+  | 'startTicket' | 'returnTicketToOpen' | 'resolveTicket' | 'closeTicket' | 'reopenTicket' | 'commentTicket'
+  | 'startCase' | 'requestCaseDocuments' | 'returnCaseToPending' | 'completeCase' | 'cancelCase' | 'assignCase'
+  | 'addCaseNote' | 'attachCaseDocument' | 'sendCaseMessage';
 
-// La matriz de roles expone CRUD, importación/exportación y una acción de
-// flujo. Las acciones operativas legacy se resuelven contra "Aprobar" cuando
-// la vista la declara; editar un registro no concede avanzar el flujo.
+// Las acciones operativas legacy siguen resolviéndose contra "Aprobar" si no
+// existe una decisión específica para conservar roles antiguos.
 const DELETE_COMPATIBLE_ACTIONS: PermissionAction[] = ['deactivate', 'cancel', 'reject', 'reverse'];
 const CREATE_COMPATIBLE_ACTIONS: PermissionAction[] = ['duplicate'];
 const APPROVAL_COMPATIBLE_ACTIONS: PermissionAction[] = [
-  'approve', 'authorize', 'reopen', 'close', 'confirm', 'process', 'pay', 'apply', 'reconcile', 'convert', 'generate', 'send',
+  'approve', 'authorize', 'reopen', 'close', 'confirm', 'process', 'pay', 'submit', 'apply', 'reconcile', 'convert', 'generate', 'send',
 ];
 const EXPORT_COMPATIBLE_ACTIONS: PermissionAction[] = ['download', 'print'];
 
@@ -244,7 +263,7 @@ const TENANT_SYSTEM_PERMISSION_MODULES = new Set([
   'CONFIG_CURRENCY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DOMAINS',
   'CONFIG_DEPARTMENTS', 'CONFIG_NOVA_PULSE', 'AUDIT_LOGS',
   'PROJECTS', 'PROYECTOS', 'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES',
-  'PROJECTS_QUOTATIONS', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_TIME',
+  'PROJECTS_QUOTATIONS', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_TIME', 'PROJECTS_PROGRESS',
 ]);
 
 const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
@@ -254,7 +273,7 @@ const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
   RETAIL_CASH_CONTROL: ['RETAIL_CASH_CONTROL', 'RETAIL_POS', 'SALES_POS', 'SALES', 'CAJA'],
   RESTAURANT_SALON: ['RESTAURANT_SALON', 'RESTAURANT_TABLES', 'RESTAURANT'],
   RESTAURANT_ORDERS: ['RESTAURANT_ORDERS', 'RESTAURANT_TABLES', 'RESTAURANT'],
-  TICKETS_LIST: ['TICKETS_LIST', 'TICKETS'],
+  TICKETS_LIST: ['TICKETS_LIST', 'TICKETS_VIEW', 'TICKETS'],
   TICKETS_KNOWLEDGE_BASE: ['TICKETS_KNOWLEDGE_BASE', 'TICKETS_FAQS', 'TICKETS'],
   DOCUMENTS_STORAGE_PLANS: ['DOCUMENTS_STORAGE_PLANS', 'DOCUMENTS'],
   HR_DEPARTMENTS: ['HR_DEPARTMENTS', 'HR_EMPLOYEES', 'HR'],
@@ -283,6 +302,7 @@ const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
   PROJECTS_EXPENSES: ['PROJECTS_EXPENSES', 'PROJECTS', 'PROYECTOS'],
   PROJECTS_DOCUMENTS: ['PROJECTS_DOCUMENTS', 'PROJECTS', 'PROYECTOS'],
   PROJECTS_TIME: ['PROJECTS_TIME', 'PROJECTS', 'PROYECTOS'],
+  PROJECTS_PROGRESS: ['PROJECTS_PROGRESS', 'PROJECTS_DOCUMENTS', 'PROJECTS', 'PROYECTOS'],
 };
 
 function tenantPermissionSubscriptionCandidates(module: string): string[] {
@@ -535,17 +555,32 @@ const createUserObject = (apiPayload: any): User => {
 
   const defaultPermissions = getPermissionsByRole(role);
   const specialPermissionActions = [
-    'approve', 'reject', 'authorize', 'reopen', 'close', 'confirm', 'process', 'pay',
+    'approve', 'reject', 'authorize', 'reopen', 'close', 'confirm', 'process', 'pay', 'submit', 'requestPayment', 'enroll',
     'apply', 'reconcile', 'reverse', 'duplicate', 'convert', 'assign', 'download',
-    'generate', 'send', 'print', 'manage',
+    'receive', 'retryInventory', 'registerInvoice', 'cancelInvoice', 'issue', 'void', 'pause', 'resume',
+    'generate', 'send', 'print', 'manage', 'start',
+    'lookup', 'sync', 'registerEvent', 'bill', 'assignPackages', 'unassignPackages', 'movePackages',
+    'consolidate', 'dispatch', 'sendToCustoms', 'addExpense', 'deliver',
+    'post', 'saveRun', 'createJournal', 'createReversal', 'generateProjection', 'processDepreciation',
+    'updateBalance', 'autoMatch', 'addMovement', 'editMovement', 'matchMovement', 'complete', 'lock',
+    'audit', 'sendToCorrect', 'reissueInvoice', 'approveCancellation', 'rejectCancellation', 'completeEnrollment',
+    'startReview', 'disburse', 'addDocument', 'addNote',
+    'importProspects', 'updateProspect', 'changeStage', 'registerVisit', 'discardProspect', 'assignProspect',
+    'attachEvidence', 'manageConsent', 'createRoute', 'editRoute', 'assignRoute', 'changeRouteStatus',
+    'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation',
+    'startCase', 'requestCaseDocuments', 'returnCaseToPending', 'completeCase', 'cancelCase', 'assignCase',
+    'addCaseNote', 'attachCaseDocument', 'sendCaseMessage',
     // Acciones dedicadas: no se derivan de `approve` ni de `edit`.
     'closeByException', 'reopenContainer',
   ] as const;
   const mapSpecialPermissionFlags = (permission: any) => Object.fromEntries(
-    specialPermissionActions.map(action => [
-      `can${action.charAt(0).toUpperCase()}${action.slice(1)}`,
-      permission?.[action] === true,
-    ]),
+    specialPermissionActions.flatMap(action => {
+      const frontendKey = `can${action.charAt(0).toUpperCase()}${action.slice(1)}`;
+      if (permission?.[action] === undefined && permission?.[frontendKey] === undefined) return [];
+      return [[frontendKey, permission?.[action] !== undefined
+        ? permission[action] === true
+        : permission[frontendKey] === true]];
+    }),
   );
   const mapPriceListScope = (permission: any) => Object.prototype.hasOwnProperty.call(permission || {}, 'allowedPriceListIds')
     ? {
@@ -953,7 +988,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       asana: ['ASANA', 'ASANA_TASKS'],
       proyectos: [
         'PROJECTS', 'PROYECTOS',
-        'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_QUOTATIONS', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_TIME',
+        'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_QUOTATIONS', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_TIME', 'PROJECTS_PROGRESS',
       ],
       documentos: [
         'DOCUMENTS',
@@ -1171,6 +1206,77 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     if (!permission) return false;
     if (action === 'manage') return permission.canManage === true;
+    if ((upperModule === 'PURCHASES_REQUESTS' && ['submit', 'approve', 'cancel', 'reject', 'convert'].includes(action))
+      || (upperModule.startsWith('PURCHASES_') && ['submit', 'pay', 'cancel', 'cancelInvoice', 'reject', 'receive', 'retryInventory', 'registerInvoice', 'issue', 'apply', 'void', 'pause', 'resume'].includes(action))) {
+      return approvalActionValue(permission, action, upperModule);
+    }
+    if (upperModule === 'INVENTORY_AUDITS' && ['start', 'close', 'approve', 'reopen', 'cancel'].includes(action)) {
+      return approvalActionValue(permission, action, upperModule);
+    }
+    const trackingActions: Record<string, string[]> = {
+      TRACKING_TRANSIT: ['lookup', 'sync', 'registerEvent'],
+      TRACKING_RECEPTION: ['receive'],
+      TRACKING_PACKAGES: ['import'],
+      TRACKING_BATCHES: ['confirm'],
+      TRACKING_RECONCILIATION: ['confirm'],
+      TRACKING_BILLING: ['bill', 'deliver', 'send', 'issue', 'cancel'],
+    };
+    if (trackingActions[upperModule]?.includes(action)) {
+      return approvalActionValue(permission, action, upperModule);
+    }
+    const intlImportActions: Record<string, string[]> = {
+      IMPORT_INTL_ORIGIN: ['registerEvent', 'deliver', 'cancel'],
+      IMPORT_INTL_CONTAINERS: ['assignPackages', 'unassignPackages', 'movePackages', 'consolidate', 'dispatch', 'sendToCustoms', 'cancel'],
+      IMPORT_INTL_CUSTOMS: ['addExpense', 'close'],
+    };
+    if (intlImportActions[upperModule]?.includes(action)) {
+      return approvalActionValue(permission, action, upperModule);
+    }
+    const accountingActions: Record<string, string[]> = {
+      ACCOUNTING_JOURNAL: ['post', 'void'],
+      ACCOUNTING_HR_PAYMENT_REQUESTS: ['reject', 'pay'],
+      ACCOUNTING_EXCHANGE_DIFFERENCES: ['saveRun', 'createJournal', 'post', 'createReversal'],
+      ACCOUNTING_ASSETS: ['generateProjection', 'processDepreciation'],
+      ACCOUNTING_RECONCILIATION: ['updateBalance', 'autoMatch', 'addMovement', 'editMovement', 'matchMovement', 'complete'],
+      ACCOUNTING_PERIODS: ['close', 'reopen', 'lock'],
+      ACCOUNTING_INVOICE_AUDIT: ['audit', 'sendToCorrect', 'cancelInvoice', 'reissueInvoice', 'approveCancellation', 'rejectCancellation'],
+    };
+    if (accountingActions[upperModule]?.includes(action)) {
+      return approvalActionValue(permission, action, upperModule);
+    }
+    const hrActions: Record<string, string[]> = {
+      HR_EMPLOYEES: ['submit', 'approve', 'reject'],
+      HR_PAYROLL: ['process', 'requestPayment'],
+      HR_LEAVES: ['approve', 'reject'],
+      HR_TRAINING: ['enroll', 'start', 'complete', 'completeEnrollment', 'cancel', 'requestPayment'],
+      HR_BENEFITS: ['assign', 'requestPayment'],
+    };
+    if (hrActions[upperModule]?.includes(action)) {
+      return approvalActionValue(permission, action, upperModule);
+    }
+    const financingActions: Record<string, string[]> = {
+      FINANCING: ['startReview', 'approve', 'reject', 'disburse', 'reopen'],
+      FINANCING_APPLICATIONS: ['addDocument', 'addNote'],
+    };
+    if (financingActions[upperModule]?.includes(action)) {
+      return approvalActionValue(permission, action, upperModule);
+    }
+    const forceSalesActions = [
+      'importProspects', 'updateProspect', 'changeStage', 'registerVisit', 'discardProspect', 'assignProspect',
+      'attachEvidence', 'manageConsent', 'createRoute', 'editRoute', 'assignRoute', 'changeRouteStatus',
+      'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation',
+    ];
+    if (upperModule === 'FORCE_SALES' && forceSalesActions.includes(action)) {
+      return approvalActionValue(permission, action, upperModule);
+    }
+    const activitiesActions = [
+      'startTask', 'returnTaskToPending', 'submit', 'complete', 'approve', 'reject', 'claim', 'reassign',
+      'manageSubtasks', 'startTimeTracking', 'stopTimeTracking', 'addManualTimeEntry', 'cancel',
+      'manageGuests', 'sendInvitations', 'scheduleMeeting', 'changeStatus',
+    ];
+    if (upperModule.startsWith('ACTIVITIES_') && activitiesActions.includes(action)) {
+      return approvalActionValue(permission, action, upperModule);
+    }
     if (permission.canManage === true) return true;
     const legacyActionAllowed = (permission as any)[`can${action.charAt(0).toUpperCase()}${action.slice(1)}`] === true;
     switch (action) {
@@ -1191,9 +1297,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (DELETE_COMPATIBLE_ACTIONS.includes(action)) return permission.canDelete || permission.canDeactivate || permission.canCancel || legacyActionAllowed;
         if (EXPORT_COMPATIBLE_ACTIONS.includes(action)) return permission.canExport;
         if (APPROVAL_COMPATIBLE_ACTIONS.includes(action)) {
-          return (permission as any).approve !== undefined
-            ? (permission as any).approve === true
-            : (permission as any)[action] === true || legacyActionAllowed;
+          return approvalActionValue(permission, action, upperModule);
         }
         if (CREATE_COMPATIBLE_ACTIONS.includes(action)) return permission.canCreate || legacyActionAllowed;
         return permission.canEdit || legacyActionAllowed;

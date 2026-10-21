@@ -50,10 +50,18 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
   // Cada pestaña consulta solo sus datos cuando se activa. React Query conserva
   // los resultados por tenant y aborta la petición anterior al cambiar rápido.
   const reportFilters = { pageSize: 5000, report: true };
-  const tasksQuery = useTenantQuery<any[]>(['activities', 'tasks'], signal => fetchAllReportPages((filters) => tasksService.getAll(signal, filters), reportFilters, signal), {
-    enabled: (activeTab === 'tareas' || activeTab === 'calendario') && canPerform('ACTIVITIES_TASKS', 'view'),
+  const tasksQuery = useTenantQuery<any[]>(['activities', 'tasks', activeTab], signal => fetchAllReportPages((filters) => tasksService.getAll(signal, {
+    ...filters,
+    ...(activeTab === 'calendario' ? { view: 'calendar' } : {}),
+  }), reportFilters, signal), {
+    enabled: (activeTab === 'tareas' || activeTab === 'calendario')
+      && canPerform('ACTIVITIES_TASKS', 'view')
+      && (activeTab !== 'calendario' || canPerform('ACTIVITIES_CALENDAR', 'view')),
   });
-  const eventsQuery = useTenantQuery<any[]>(['activities', 'events'], signal => fetchAllReportPages((filters) => eventsService.getAll(signal, filters), reportFilters, signal), {
+  const eventsQuery = useTenantQuery<any[]>(['activities', 'events', activeTab], signal => fetchAllReportPages((filters) => eventsService.getAll(signal, {
+    ...filters,
+    ...(activeTab === 'calendario' ? { view: 'calendar' } : activeTab === 'reuniones' ? { view: 'MEETING' } : { view: 'EVENT' }),
+  }), reportFilters, signal), {
     enabled: ['eventos', 'calendario', 'reuniones'].includes(activeTab)
       && canPerform(activeTab === 'calendario' ? 'ACTIVITIES_CALENDAR' : activeTab === 'reuniones' ? 'ACTIVITIES_MEETINGS' : 'ACTIVITIES_EVENTS', 'view'),
   });
@@ -95,20 +103,27 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
   const loading = activeQuery.isLoading || activeQuery.isFetching;
   const fetchData = () => queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
   const activeExportTarget = ACTIVITY_EXPORT_TARGETS[activeTab];
-  const canExportActive = Boolean(activeExportTarget && canPerform(activeExportTarget.permission, 'export'));
+  const canExportActive = Boolean(activeExportTarget
+    && canPerform(activeExportTarget.permission, 'view')
+    && canPerform(activeExportTarget.permission, 'export'));
 
   const exportActivities = async (format: 'pdf' | 'xlsx') => {
     if (!activeExportTarget || !canExportActive) return;
     const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de ${activeExportTarget.label}…`);
     try {
-      const params = { report: true, export: true };
+      const exportParams = { report: true, export: true };
       const [tasks, events, reminders, logs] = await Promise.all([
-        activeTab === 'calendario' ? tasksService.getAll(undefined, params) : Promise.resolve([]),
-        ['eventos', 'calendario', 'reuniones'].includes(activeTab) ? eventsService.getAll(undefined, params) : Promise.resolve([]),
-        activeTab === 'recordatorios' ? remindersService.getAll(undefined, params) : Promise.resolve([]),
-        activeTab === 'bitacora' ? activityLogsService.getAll(undefined, params) : Promise.resolve([]),
+        activeTab === 'calendario' && canPerform('ACTIVITIES_TASKS', 'view')
+          ? tasksService.getAll(undefined, { ...exportParams, view: 'calendar' })
+          : Promise.resolve([]),
+        ['eventos', 'calendario', 'reuniones'].includes(activeTab) ? eventsService.getAll(undefined, {
+          ...exportParams,
+          ...(activeTab === 'calendario' ? { view: 'calendar' } : activeTab === 'reuniones' ? { view: 'MEETING' } : { view: 'EVENT' }),
+        }) : Promise.resolve([]),
+        activeTab === 'recordatorios' ? remindersService.getAll(undefined, exportParams) : Promise.resolve([]),
+        activeTab === 'bitacora' ? activityLogsService.getAll(undefined, exportParams) : Promise.resolve([]),
       ]);
-      const sourceRows = activeTab === 'tareas' ? asList(await tasksService.getAll(undefined, params))
+      const sourceRows = activeTab === 'tareas' ? asList(await tasksService.getAll(undefined, exportParams))
         : activeTab === 'eventos' || activeTab === 'reuniones' ? asList(events)
           : activeTab === 'calendario' ? [...asList(tasks), ...asList(events)]
             : activeTab === 'recordatorios' ? asList(reminders)
@@ -228,14 +243,14 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                     tareas={data.tareas}
                     loading={loading}
                     onRefresh={fetchData}
-                    onNewEventClick={() => {
+                    onNewEventClick={canPerform('ACTIVITIES_EVENTS', 'create') ? () => {
                       setInternalActiveTab('eventos');
                       onSubModuleChange?.('eventos');
-                    }}
-                    onNewMeetingClick={() => {
+                    } : undefined}
+                    onNewMeetingClick={canPerform('ACTIVITIES_MEETINGS', 'create') ? () => {
                       setInternalActiveTab('reuniones');
                       onSubModuleChange?.('reuniones');
-                    }}
+                    } : undefined}
                   />
                 )}
                 {activeTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} />}

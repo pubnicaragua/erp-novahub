@@ -1248,6 +1248,8 @@ export interface Income {
 // ---- Expenses ----
 export interface Expense {
   id: string;
+  /** Database-derived source permission row for merged Compras > Gastos lists. */
+  originModule?: 'PURCHASES_EXPENSES' | 'FINANCIAL_EXPENSES';
   tenantId: string;
   number: string;
   accountId?: string | null;

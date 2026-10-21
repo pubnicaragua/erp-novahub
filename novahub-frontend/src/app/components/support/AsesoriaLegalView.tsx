@@ -21,6 +21,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { LegalChatPanel } from './LegalChatPanel';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
+import { getLegalCaseStatusPermissionAction, LEGAL_CASE_STATUS_OPTIONS } from '../../utils/legalWorkflow';
 
 interface AsesoriaLegalViewProps {
   activeSubModule?: string;
@@ -32,6 +33,8 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
   const { canPerform } = useAuth();
   const canViewCases = canPerform('LEGAL_CASES', 'view');
   const canViewReminders = canPerform('LEGAL_REMINDERS', 'view');
+  const canCreateCase = canPerform('LEGAL_CASES', 'create');
+  const canAssignCase = canPerform('LEGAL_CASES', 'assignCase');
   const tabs = [
     { id: 'cases', label: 'Casos', icon: FileText, canView: canViewCases },
     { id: 'reminders', label: 'Recordatorios', icon: Bell, canView: canViewReminders },
@@ -47,7 +50,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
   const casesQuery = useTenantQuery<LegalCase[]>(
     ['legal', 'cases', filterType, filterStatus],
     signal => legalService.listCases(filterType !== 'all' ? filterType : undefined, filterStatus !== 'all' ? filterStatus : undefined, signal),
-    { enabled: canViewCases && activeTab === 'cases' },
+    { enabled: canViewCases && (activeTab === 'cases' || showNewReminder) },
   );
   const remindersQuery = useTenantQuery<LegalReminder[]>(['legal', 'reminders'], signal => legalService.listReminders(signal), {
     enabled: canViewReminders && activeTab === 'reminders',
@@ -236,6 +239,8 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
           </div>
           <div className="p-4 sm:p-6">
             <NewCaseForm
+              canCreateCase={canCreateCase}
+              canAssignCase={canAssignCase}
               onComplete={() => { void casesQuery.refetch(); setShowNewCase(false); toast.success('Caso creado'); }}
               onCancel={() => setShowNewCase(false)}
             />
@@ -254,6 +259,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
           <div className="p-4 sm:p-6">
             <NewReminderForm
               cases={cases}
+              canCreateReminder={canPerform('LEGAL_REMINDERS', 'create')}
               onComplete={() => { void remindersQuery.refetch(); setShowNewReminder(false); toast.success('Recordatorio creado'); }}
               onCancel={() => setShowNewReminder(false)}
             />
@@ -264,15 +270,16 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
   );
 }
 
-function NewCaseForm({ onComplete, onCancel }: { onComplete: (c: LegalCase) => void; onCancel: () => void }) {
+function NewCaseForm({ onComplete, onCancel, canCreateCase, canAssignCase }: { onComplete: (c: LegalCase) => void; onCancel: () => void; canCreateCase: boolean; canAssignCase: boolean }) {
   const [form, setForm] = useState({ type: 'OTHER', description: '', urgency: 'NORMAL', desiredDate: '', assignedTo: '' });
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
+    if (!canCreateCase) return;
     if (!form.description.trim()) { toast.error('Descripción requerida'); return; }
     setLoading(true);
     try {
-      const res: any = await legalService.createCase(form);
+      const res: any = await legalService.createCase({ ...form, assignedTo: canAssignCase ? form.assignedTo : undefined });
       onComplete(res?.data || res);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al crear caso');
@@ -312,13 +319,13 @@ function NewCaseForm({ onComplete, onCancel }: { onComplete: (c: LegalCase) => v
           <Input type="date" value={form.desiredDate} onChange={(e) => setForm({ ...form, desiredDate: e.target.value })} className="h-11 rounded-xl" />
         </div>
       </div>
-      <div className="space-y-1.5">
+      {canAssignCase && <div className="space-y-1.5">
         <Label className="text-[10px] uppercase font-black tracking-widest">Asignar a (opcional)</Label>
         <Input value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })} placeholder="Nombre del abogado o responsable" className="h-11 rounded-xl" />
-      </div>
+      </div>}
       <div className="flex gap-3 pt-2">
         <Button variant="outline" onClick={onCancel} className="h-11 rounded-xl font-bold gap-2 flex-1">Cancelar</Button>
-        <Button data-testid="legal-case-submit" onClick={handleSubmit} disabled={loading || !form.description.trim()} className="h-11 rounded-xl font-bold gap-2 flex-1">
+        <Button data-testid="legal-case-submit" onClick={handleSubmit} disabled={!canCreateCase || loading || !form.description.trim()} className="h-11 rounded-xl font-bold gap-2 flex-1">
           {loading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
           Crear Caso
         </Button>
@@ -336,10 +343,15 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const c = detailQuery.data || caseData;
+  const statusOptions = LEGAL_CASE_STATUS_OPTIONS.filter((status) => status !== c.status
+    && canPerform('LEGAL_CASES', getLegalCaseStatusPermissionAction(status)!));
+  const canAddCaseNote = canPerform('LEGAL_CASES', 'addCaseNote');
+  const canSendCaseMessage = canPerform('LEGAL_CASES', 'sendCaseMessage');
   const documents = Array.isArray(c.documents) ? c.documents : [];
   const notes = Array.isArray(c.notes) ? c.notes : [];
 
   const handleAddNote = async () => {
+    if (!canAddCaseNote) return;
     if (!note.trim()) return;
     setAddingNote(true);
     try {
@@ -353,7 +365,8 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
   };
 
   const handleStatusChange = async (newStatus: string) => {
-    if (!canPerform('LEGAL_CASES', 'approve')) return;
+    const action = getLegalCaseStatusPermissionAction(newStatus);
+    if (!action || !canPerform('LEGAL_CASES', action)) return;
     try {
       await legalService.updateStatus(c.id, newStatus);
       toast.success('Estado actualizado');
@@ -364,7 +377,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
   };
 
   if (showChat) {
-    return <LegalChatPanel caseId={c.id} caseNumber={c.number} onBack={() => setShowChat(false)} />;
+    return <LegalChatPanel caseId={c.id} caseNumber={c.number} canSendMessages={canSendCaseMessage} onBack={() => setShowChat(false)} />;
   }
 
   return (
@@ -387,7 +400,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
             <Button variant="outline" onClick={() => setShowChat(true)} className="gap-2 rounded-xl text-xs font-bold">
               <MessageCircle className="size-3" /> Chat
             </Button>
-            {canPerform('LEGAL_CASES', 'approve') && (
+            {statusOptions.length > 0 && (
               <Button variant="outline" onClick={() => setShowStatusDialog(true)} className="gap-2 rounded-xl text-xs font-bold">
                 <AlertTriangle className="size-3" /> Cambiar Estado
               </Button>
@@ -435,7 +448,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
               </div>
             ))}
           </div>
-          <div className="space-y-2 pt-2 border-t border-border/30">
+          {canAddCaseNote && <div className="space-y-2 pt-2 border-t border-border/30">
             <Label className="text-[10px] uppercase font-black tracking-widest">Agregar nota</Label>
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Escribí una nota..." rows={2} className="rounded-xl resize-none" />
             <div className="flex items-center justify-between">
@@ -444,11 +457,11 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
                   className="size-3.5 rounded border-border bg-background text-primary" />
                 <span className="text-xs text-muted-foreground">Nota interna</span>
               </label>
-              <Button onClick={handleAddNote} disabled={addingNote || !note.trim() || !canPerform('LEGAL_CASES', 'edit')} className="h-9 rounded-xl gap-2 text-xs font-bold">
+              <Button onClick={handleAddNote} disabled={addingNote || !note.trim() || !canAddCaseNote} className="h-9 rounded-xl gap-2 text-xs font-bold">
                 {addingNote ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />} Agregar
               </Button>
             </div>
-          </div>
+          </div>}
         </div>
       </CardContent>
 
@@ -456,7 +469,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
         <DialogContent className="w-[95vw] !max-w-sm p-0 rounded-3xl border-none">
           <div className="p-4 sm:p-6 space-y-3">
             <DialogTitle className="text-lg font-black">Cambiar Estado</DialogTitle>
-            {['PENDING', 'IN_PROGRESS', 'WAITING_DOCS', 'COMPLETED', 'CANCELLED'].map((s) => (
+            {statusOptions.map((s) => (
               <button key={s} onClick={() => handleStatusChange(s)}
                 className={cn('w-full text-left px-4 py-3 rounded-xl border text-sm font-bold transition-all hover:border-primary/50',
                   c.status === s ? 'border-primary bg-primary/10 text-primary' : 'border-border/50')}>
@@ -476,6 +489,7 @@ function RemindersTab({ reminders, onRefresh, onNew, canPerform }: { reminders: 
   const past = reminders.filter((r) => new Date(r.dueDate) < cutoff).sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
 
   const handleDelete = async (id: string) => {
+    if (!canPerform('LEGAL_REMINDERS', 'delete')) return;
     try {
       await legalService.deleteReminder(id);
       toast.success('Recordatorio eliminado');
@@ -555,12 +569,13 @@ function RemindersTab({ reminders, onRefresh, onNew, canPerform }: { reminders: 
   );
 }
 
-function NewReminderForm({ cases, onComplete, onCancel }: { cases: LegalCase[]; onComplete: (r: LegalReminder) => void; onCancel: () => void }) {
+function NewReminderForm({ cases, onComplete, onCancel, canCreateReminder }: { cases: LegalCase[]; onComplete: (r: LegalReminder) => void; onCancel: () => void; canCreateReminder: boolean }) {
   const NO_CASE_VALUE = '__no_legal_case__';
   const [form, setForm] = useState({ title: '', description: '', dueDate: '', caseId: '' });
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
+    if (!canCreateReminder) return;
     if (!form.title.trim() || !form.dueDate) { toast.error('Título y fecha requeridos'); return; }
     setLoading(true);
     try {
@@ -607,7 +622,7 @@ function NewReminderForm({ cases, onComplete, onCancel }: { cases: LegalCase[]; 
       </div>
       <div className="flex gap-3 pt-2">
         <Button variant="outline" onClick={onCancel} className="h-11 rounded-xl font-bold flex-1">Cancelar</Button>
-        <Button onClick={handleSubmit} disabled={loading || !form.title.trim() || !form.dueDate} className="h-11 rounded-xl font-bold gap-2 flex-1">
+        <Button onClick={handleSubmit} disabled={!canCreateReminder || loading || !form.title.trim() || !form.dueDate} className="h-11 rounded-xl font-bold gap-2 flex-1">
           {loading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Crear
         </Button>
       </div>

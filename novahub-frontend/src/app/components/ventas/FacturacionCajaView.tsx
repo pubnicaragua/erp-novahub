@@ -444,17 +444,17 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const loggedInSellerId = getLoggedInSellerEmployeeId(user);
   const canCreatePosInvoice = canPerform('RETAIL_POS', 'create');
   const canViewPosOtherLocations = canPerform('RETAIL_POS', 'viewOtherLocations');
-  const canPayPos = canCreatePosInvoice;
-  const canApprovePosQueue = canPerform('RETAIL_POS', 'approve');
-  const canClaimPosQueue = canPerform('RETAIL_POS', 'edit');
-  const canReleasePosQueue = canPerform('RETAIL_POS', 'delete');
-  const canReconcilePosQueue = canPerform('RETAIL_POS', 'approve');
+  const canPayPos = canCreatePosInvoice && canPerform('RETAIL_POS', 'pay');
+  const canPayPosQueue = canPerform('RETAIL_POS', 'pay');
+  const canClaimPosQueue = canPerform('RETAIL_POS', 'claim');
+  const canReleasePosQueue = canPerform('RETAIL_POS', 'release');
+  const canReconcilePosQueue = canPerform('RETAIL_POS', 'reconcile');
   const canCreatePosHold = canPerform('RETAIL_POS', 'create');
   const canManagePosRegisters = canPerform('RETAIL_CASH_CONTROL', 'manage');
   // El comprobante se genera localmente después de un cobro POS exitoso.
   // Todo usuario que puede cobrar debe poder imprimir su voucher/ticket,
   // aunque su rol granular no tenga el flag histórico `print`.
-  const canPrintPos = canCreatePosInvoice || canApprovePosQueue || canPerform('RETAIL_POS', 'print');
+  const canPrintPos = canPayPos || canPayPosQueue || canPerform('RETAIL_POS', 'print');
   const queryClient = useQueryClient();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [manageCajasOpen, setManageCajasOpen] = useState(false);
@@ -859,7 +859,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   };
 
   const submitCashQueuePayment = async () => {
-    if (!canApprovePosQueue) return;
+    if (!canPayPosQueue) return;
     if (!queueInvoice || !activeSession || !selectedRegisterId || queueSubmittingRef.current) return;
     const queueReceipt = queueInvoice;
     const document = getQueueDocument(queueReceipt);
@@ -2245,7 +2245,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                     <div className="flex items-center gap-2">
                       {canClaimPosQueue && queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black text-primary-foreground hover:bg-primary/90" onClick={() => void handleClaimCashQueue(queue)} disabled={queueClaimingId !== null}><CheckCircle2 className={cn('mr-1.5 size-4', queueClaimingId === queue.id && 'animate-pulse')} /> {queueClaimingId === queue.id ? 'Tomando…' : `Tomar ${isCreditQueue ? 'crédito' : 'factura'}`}</Button>}
                        {canReleasePosQueue && queue.status === 'CLAIMED' && canRelease && <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg border-primary/40 text-xs font-black text-primary" onClick={() => void handleReleaseCashQueue(queue)} disabled={queueReleasingId !== null}>{queueReleasingId === queue.id ? 'Liberando…' : 'Liberar'}</Button>}
-                      {canApprovePosQueue && isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]); setQueueMixedPaymentEnabled(false); setQueuePartialPaymentEnabled(false); }}>Cobrar ahora</Button>}
+                      {canPayPosQueue && isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]); setQueueMixedPaymentEnabled(false); setQueuePartialPaymentEnabled(false); }}>Cobrar ahora</Button>}
                     </div>
                   </div>
                 );

@@ -12,14 +12,18 @@ interface TimeTrackerProps {
   taskId: string;
   timeEntries: ActivityTimeEntry[];
   onEntriesChange: () => void;
-  canEdit?: boolean;
+  canStart?: boolean;
+  canStop?: boolean;
+  canAddManual?: boolean;
 }
 
 export const TimeTracker: React.FC<TimeTrackerProps> = ({
   taskId,
   timeEntries = [],
   onEntriesChange,
-  canEdit = true,
+  canStart = false,
+  canStop = false,
+  canAddManual = false,
 }) => {
   const [runningEntry, setRunningEntry] = useState<ActivityTimeEntry | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -65,7 +69,7 @@ export const TimeTracker: React.FC<TimeTrackerProps> = ({
   const totalLoggedHours = (totalLoggedSeconds / 3600).toFixed(1);
 
   const handleStartTimer = async () => {
-    if (!canEdit) return;
+    if (!canStart) return;
     try {
       setLoading(true);
       await tasksService.startTimeEntry(taskId, timerDescription);
@@ -80,7 +84,7 @@ export const TimeTracker: React.FC<TimeTrackerProps> = ({
   };
 
   const handleStopTimer = async () => {
-    if (!runningEntry || !canEdit) return;
+    if (!runningEntry || !canStop) return;
     try {
       setLoading(true);
       await tasksService.stopTimeEntry(taskId, runningEntry.id);
@@ -96,6 +100,7 @@ export const TimeTracker: React.FC<TimeTrackerProps> = ({
   const handleAddManual = async (e: React.FormEvent) => {
     e.preventDefault();
     const mins = parseFloat(manualMinutes);
+    if (!canAddManual) return;
     if (isNaN(mins) || mins <= 0) {
       toast.error('Ingresa una duración válida en minutos');
       return;
@@ -129,7 +134,7 @@ export const TimeTracker: React.FC<TimeTrackerProps> = ({
             Total acumulado: <strong className="text-foreground">{totalLoggedHours} horas</strong> ({timeEntries.length} registros)
           </p>
         </div>
-        {canEdit && (
+        {canAddManual && (
           <Button
             type="button"
             variant="outline"
@@ -143,7 +148,7 @@ export const TimeTracker: React.FC<TimeTrackerProps> = ({
       </div>
 
       {/* Active Timer Bar */}
-      {canEdit && (
+      {(runningEntry ? canStop : canStart) && (
         <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-card p-2.5 shadow-sm">
           {runningEntry ? (
             <>
@@ -196,7 +201,7 @@ export const TimeTracker: React.FC<TimeTrackerProps> = ({
       )}
 
       {/* Manual Entry Form */}
-      {showManual && (
+      {showManual && canAddManual && (
         <form onSubmit={handleAddManual} className="space-y-3 rounded-xl border border-border/60 bg-card p-3 animate-in fade-in">
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">

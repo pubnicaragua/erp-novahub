@@ -114,10 +114,12 @@ function buildInitialFormData(data: Record<string, unknown> | undefined, project
 }
 
 export function ProyectoParametrosPanel({ projectId, project }: ProyectoParametrosPanelProps) {
+  const { canPerform } = useAuth();
+  const canReadPricing = canPerform('PROJECTS_EXPENSES', 'view');
   const pricingQuery = useTenantQuery<Record<string, unknown>>(
     ['projects', projectId, 'pricing-engine'],
     (signal) => projectsService.getProjectPricingEngine(projectId, signal),
-    { enabled: !!projectId },
+    { enabled: !!projectId && canReadPricing },
   );
 
   if (pricingQuery.isLoading) {
@@ -135,6 +137,8 @@ export function ProyectoParametrosPanel({ projectId, project }: ProyectoParametr
       projectId={projectId}
       project={project}
       initialData={pricingQuery.data}
+      canEditPricing={canPerform('PROJECTS_EXPENSES', 'editPricing')}
+      canSyncPricing={canPerform('PROJECTS_EXPENSES', 'syncPricing')}
       onRefetch={async () => {
         await pricingQuery.refetch();
       }}
@@ -146,10 +150,12 @@ interface ProyectoParametrosFormProps {
   projectId: string;
   project: ProjectDetail;
   initialData?: Record<string, unknown>;
+  canEditPricing: boolean;
+  canSyncPricing: boolean;
   onRefetch: () => Promise<void>;
 }
 
-function ProyectoParametrosForm({ projectId, project, initialData, onRefetch }: ProyectoParametrosFormProps) {
+function ProyectoParametrosForm({ projectId, project, initialData, canEditPricing, canSyncPricing, onRefetch }: ProyectoParametrosFormProps) {
   const queryClient = useQueryClient();
   const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'margenes' | 'rendimientos' | 'cotizacion'>('fiscal');
   const [showSyncConfirm, setShowSyncConfirm] = useState(false);
@@ -186,6 +192,7 @@ function ProyectoParametrosForm({ projectId, project, initialData, onRefetch }: 
   };
 
   const handleSyncGlobal = async () => {
+    if (!canSyncPricing) return;
     setIsSyncing(true);
     try {
       await projectsService.syncProjectPricingEngine(projectId);
@@ -203,6 +210,7 @@ function ProyectoParametrosForm({ projectId, project, initialData, onRefetch }: 
   };
 
   const handleSave = async () => {
+    if (!canEditPricing) return;
     setIsSaving(true);
     try {
       // Preparamos payload convirtiendo porcentajes a factores decimales para backend
@@ -294,7 +302,7 @@ function ProyectoParametrosForm({ projectId, project, initialData, onRefetch }: 
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button
+          {canSyncPricing && <Button
             type="button"
             variant="outline"
             size="sm"
@@ -304,8 +312,8 @@ function ProyectoParametrosForm({ projectId, project, initialData, onRefetch }: 
           >
             <RefreshCw className={cn('size-3.5', isSyncing && 'animate-spin text-primary')} />
             <span>Sincronizar con Configuración Global</span>
-          </Button>
-          <Button
+          </Button>}
+          {canEditPricing && <Button
             type="button"
             size="sm"
             onClick={handleSave}
@@ -314,7 +322,7 @@ function ProyectoParametrosForm({ projectId, project, initialData, onRefetch }: 
           >
             <Save className="size-3.5" />
             <span>{isSaving ? 'Guardando…' : 'Guardar Parámetros'}</span>
-          </Button>
+          </Button>}
         </div>
       </div>
 

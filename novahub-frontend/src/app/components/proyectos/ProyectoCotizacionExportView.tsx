@@ -211,13 +211,15 @@ export function ProyectoCotizacionExportView({
   costsSummary: _costsSummary,
 }: ProyectoCotizacionExportViewProps) {
   const [copied, setCopied] = useState(false);
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canReadCosts = canPerform('PROJECTS_EXPENSES', 'view');
+  const canExport = canPerform('PROJECTS_EXPENSES', 'export');
 
   const projectId = project?.id;
   const costLinesQuery = useTenantQuery<any[]>(
     ['projects', projectId, 'costing-lines'],
     (signal) => projectsService.getCostLines(projectId, signal),
-    { enabled: Boolean(projectId) },
+    { enabled: Boolean(projectId) && canReadCosts },
   );
 
   // La cotización siempre parte de la matriz persistida del proyecto.
@@ -334,6 +336,7 @@ export function ProyectoCotizacionExportView({
 
   // Manejador de copia comercial
   const handleCopySummary = async () => {
+    if (!canExport) return;
     const summaryText = `*COTIZACIÓN EJECUTIVA — NOVAHUB S.A.*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   N° Cotización: ${quoteNumber}
@@ -379,6 +382,7 @@ Quedamos a su disposición para la formalización del contrato.`;
   };
 
   const handlePrint = async () => {
+    if (!canExport) return;
     const sections = [
       {
         id: 'project-quote-summary',
@@ -515,7 +519,7 @@ Quedamos a su disposición para la formalización del contrato.`;
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
+          {canExport && <Button
             variant="outline"
             size="sm"
             onClick={handleCopySummary}
@@ -532,9 +536,9 @@ Quedamos a su disposición para la formalización del contrato.`;
                 <span>Copiar Resumen Comercial</span>
               </>
             )}
-          </Button>
+          </Button>}
 
-          <Button
+          {canExport && <Button
             variant="default"
             size="sm"
             onClick={handlePrint}
@@ -542,7 +546,7 @@ Quedamos a su disposición para la formalización del contrato.`;
           >
             <Printer className="mr-1.5 size-4" />
             <span>Imprimir / Exportar PDF</span>
-          </Button>
+          </Button>}
         </div>
       </div>
 

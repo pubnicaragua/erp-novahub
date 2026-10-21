@@ -21,6 +21,7 @@ interface CloseContainerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  canClose?: boolean;
 }
 
 export function CloseContainerModal({
@@ -30,6 +31,7 @@ export function CloseContainerModal({
   open,
   onOpenChange,
   onSuccess,
+  canClose = false,
 }: CloseContainerModalProps) {
   const [confirmText, setConfirmText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,6 +41,7 @@ export function CloseContainerModal({
   const costPerCbm = totalVolume > 0 ? totalExpenses / totalVolume : 0;
 
   const handleClose = async () => {
+    if (!canClose) return;
     if (confirmText.trim() !== 'CERRAR') {
       toast.error('Escribe la palabra CERRAR para confirmar');
       return;
@@ -59,7 +62,7 @@ export function CloseContainerModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open && canClose} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2 text-destructive font-semibold">
@@ -119,7 +122,7 @@ export function CloseContainerModal({
             type="button"
             variant="destructive"
             onClick={handleClose}
-            disabled={loading || confirmText.trim() !== 'CERRAR'}
+            disabled={!canClose || loading || confirmText.trim() !== 'CERRAR'}
           >
             {loading ? 'Aplicando Prorrateo...' : 'Confirmar Cierre y Prorrateo'}
           </Button>

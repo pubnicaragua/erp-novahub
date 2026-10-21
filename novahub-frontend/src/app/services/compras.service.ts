@@ -24,6 +24,7 @@ export const purchaseOrdersService = {
   getById: (id: string) => api.get<PurchaseOrder>(`/purchases/orders/${id}`),
   create: (data: Partial<PurchaseOrder>, idempotencyKey?: string) => api.idempotentPost<PurchaseOrder>('/purchases/orders', data, idempotencyKey),
   update: (id: string, data: Partial<PurchaseOrder>) => api.patch<PurchaseOrder>(`/purchases/orders/${id}`, data),
+  submit: (id: string) => api.post<PurchaseOrder>(`/purchases/orders/${id}/submit`, {}),
   approve: (id: string, idempotencyKey?: string) => api.idempotentPatch<{ order: PurchaseOrder; receipt: PurchaseReceipt }>(`/purchases/orders/${id}/approve`, {}, idempotencyKey),
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<PurchaseOrder, 'id' | 'number' | 'status'> }>(`/purchases/orders/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
@@ -39,6 +40,7 @@ export const purchaseReceiptsService = {
   create: (data: Partial<PurchaseReceipt>, idempotencyKey?: string) => api.idempotentPost<PurchaseReceipt>('/purchases/receipts', data, idempotencyKey),
   update: (id: string, data: Partial<PurchaseReceipt>, idempotencyKey?: string) => api.idempotentPatch<PurchaseReceipt>(`/purchases/receipts/${id}`, data, idempotencyKey),
   approve: (id: string, idempotencyKey?: string) => api.idempotentPost<PurchaseReceipt>(`/purchases/receipts/${id}/approve`, {}, idempotencyKey),
+  retryInventory: (id: string) => api.post<PurchaseReceipt>(`/purchases/receipts/${id}/retry-inventory`, {}),
   createCredit: (id: string, data: { date?: string; reason: string; items: Array<{ receiptItemId: string; quantity: number }> }) => api.post<SupplierCredit>(`/purchases/receipts/${id}/credit`, data),
   cancel: (id: string, reason?: string) => api.post<PurchaseReceipt>(`/purchases/receipts/${id}/cancel`, { reason }),
   registerInvoice: (id: string, data: { number: string; date?: string; dueDate?: string; subtotal?: number; taxAmount?: number; withholdingTotal?: number; withholdingBase?: number; total?: number; currency?: string; exchangeRate?: number; status?: 'PENDING' | 'CREDIT'; notes?: string; attachments: Array<{ fileName: string; fileType: string; fileSize: number; fileUrl: string }> }) =>
@@ -181,6 +183,8 @@ export const recurringExpensesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<RecurringExpense>>('/purchases/recurring-expenses', { params: filters as any, signal }),
   create: (data: Partial<RecurringExpense>) => api.post<RecurringExpense>('/purchases/recurring-expenses', data),
   update: (id: string, data: Partial<RecurringExpense>) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}`, data),
+  pause: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/pause`, {}),
+  resume: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/resume`, {}),
   delete: (id: string) => api.delete<void>(`/purchases/recurring-expenses/${id}`),
 };
 
@@ -212,6 +216,7 @@ export const purchaseManagementService = {
   create: (data: Partial<PurchaseManagement>) => api.post<PurchaseManagement>('/purchases/management', data),
   update: (id: string, data: Partial<PurchaseManagement>) => api.patch<PurchaseManagement>(`/purchases/management/${id}`, data),
   delete: (id: string) => api.delete<void>(`/purchases/management/${id}`),
+  submit: (id: string) => api.post<PurchaseManagement>(`/purchases/management/${id}/submit`, {}),
   approve: (id: string) => api.post<PurchaseManagement>(`/purchases/management/${id}/approve`, {}),
   reject: (id: string, reason?: string) => api.post<PurchaseManagement>(`/purchases/management/${id}/reject`, { reason }),
   convertToOrder: (id: string) => api.post<PurchaseOrder>(`/purchases/management/${id}/convert-to-order`, {}),

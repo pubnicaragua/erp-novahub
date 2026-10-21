@@ -21,7 +21,7 @@ import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, type PermissionAction } from '../../contexts/AuthContext';
 import { usePurchasesIntegrationPolicy } from '../../hooks/usePurchasesIntegrationPolicy';
 import { storageService } from '../../services/storage.service';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
@@ -55,6 +55,9 @@ import type { VoiceExpenseDraft } from '../../utils/voice-expense-parser';
 interface Props { data: Expense[]; summaryData?: Expense[]; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; isSidebarCollapsed?: boolean; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
 type DateFilterPreset = 'all' | 'month' | 'year' | 'range';
+type ExpensePermissionAction = Extract<PermissionAction, 'edit' | 'delete' | 'export' | 'submit' | 'pay'>;
+const expensePermissionModule = (expense?: Partial<Expense> | null) =>
+  expense?.originModule === 'FINANCIAL_EXPENSES' ? 'FINANCIAL_EXPENSES' : 'PURCHASES_EXPENSES';
 const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   EFECTIVO: 'Efectivo',
   CASH: 'Efectivo',
@@ -82,6 +85,13 @@ const statusOpts = [
 
 export function GastosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId, isSidebarCollapsed = true }: Props) {
   const { canPerform, user } = useAuth();
+  const canExpensePerform = (expense: Partial<Expense> | null | undefined, action: ExpensePermissionAction) =>
+    Boolean(expense && canPerform(expensePermissionModule(expense), action));
+  const canReadPurchaseExpenses = canPerform('PURCHASES_EXPENSES', 'read');
+  const canReadFinancialExpenses = canPerform('FINANCIAL_EXPENSES', 'read');
+  const canExportExpenseList = (canReadPurchaseExpenses || canReadFinancialExpenses)
+    && (!canReadPurchaseExpenses || canPerform('PURCHASES_EXPENSES', 'export'))
+    && (!canReadFinancialExpenses || canPerform('FINANCIAL_EXPENSES', 'export'));
   const integrationPolicyQuery = usePurchasesIntegrationPolicy();
   const integrationPolicyReady = !integrationPolicyQuery.isFetching && !integrationPolicyQuery.isError && Boolean(integrationPolicyQuery.data);
   const accountingConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingRequired === true;
@@ -230,6 +240,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   }), filterGetters);
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
+    if (!canExportExpenseList) return;
     const exportToastId = toast.loading('Generando reporte de gastos...');
     try {
       const allRows = scope === 'all'
@@ -255,6 +266,9 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         return true;
       });
       const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
+      if (exportRows.some((expense) => !canExpensePerform(expense, 'export'))) {
+        throw new Error('Tu rol no permite exportar todos los gastos seleccionados');
+      }
       const totalExpenses = exportRows.reduce((sum, expense) => sum + convertAmount(
         Number(expense.amount || 0),
         expense.currency,
@@ -285,6 +299,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   };
 
   const handleExportExcel = async () => {
+    if (!canExportExpenseList) return;
     try {
       const allRows = await fetchAllPaginatedRows<Expense>((page, pageSize) => expensesService.getAll({
         page, pageSize, report: true, export: true, light: true,
@@ -303,6 +318,9 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         return true;
       });
       const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
+      if (exportRows.some((expense) => !canExpensePerform(expense, 'export'))) {
+        throw new Error('Tu rol no permite exportar todos los gastos seleccionados');
+      }
       createReportWorkbook({
         fileName: 'gastos.xlsx',
         sheets: [{ name: 'Gastos', rows: exportRows.map(row => ({ Fecha: row.date || '—', Categoria: row.category || '—', Descripcion: row.description || '—', Monto: Number(row.amount || 0), Moneda: row.currency || '—', Estado: row.status || '—' })) }],
@@ -581,6 +599,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       return;
     }
     const payload = buildExpenseImportRows(parsedImportRows).filter((row) => eligible.includes(row.sourceRowNumber));
+    if (payload.some((row) => row.status === 'PAID') && !canPerform('PURCHASES_EXPENSES', 'pay')) {
+      toast.error('Tu rol no permite confirmar gastos importados como pagados.');
+      return;
+    }
     setImporting(true);
     setImportProgress(5);
     setImportResult(null);
@@ -696,12 +718,12 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     { key: 'date',        header: 'Fecha',     width: '110px',
       headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
       render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },
-    { key: 'category',    header: 'Categoría', width: '130px', editable: canPerform('PURCHASES_EXPENSES', 'edit'), type: 'select', options: [
+    { key: 'category',    header: 'Categoría', width: '130px', editable: canPerform('PURCHASES_EXPENSES', 'edit') || canPerform('FINANCIAL_EXPENSES', 'edit'), type: 'select', options: [
         {label: 'Operacional', value: 'OPERATIVO'}, {label: 'Administrativo', value: 'ADMINISTRATIVO'}, {label: 'Ventas', value: 'VENTAS'}, {label: 'Financiero', value: 'FINANCIERO'}, {label: 'Otro', value: 'OTRO'}
       ],
       headerExtra: <ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} />,
       render: (val, row) => <Badge variant="outline" className="text-[9px] uppercase bg-primary/5 text-primary border-none">{String(val || '').toUpperCase() === 'OTRO' ? (row.categoryCustom || 'OTRO') : (val || '-')}</Badge> },
-    { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES', 'edit') },
+    { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES', 'edit') || canPerform('FINANCIAL_EXPENSES', 'edit') },
     { key: 'paidTo',      header: 'Pagado a', width: '170px',
       render: (val) => <span className="text-xs font-medium text-foreground">{val || '-'}</span> },
     { key: 'paymentSource', header: 'Método de pago', width: '145px',
@@ -717,6 +739,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
   const handleUpdate = async (id: string | number, updates: Partial<Expense>) => {
     const row = data.find(x => x.id === id);
+    if (!row || !canExpensePerform(row, 'edit')) return;
     if (row && String(row.status || '').toUpperCase() === 'PAID') {
       toast.error('El gasto ya está PAGADO y contabilizado; no puede editarse en línea. Ábrelo en modo Ver.');
       throw new Error('PAID_LOCKED');
@@ -727,7 +750,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   };
 
   const handleStatusAction = async (row: Expense, status: 'DRAFT' | 'PENDING') => {
-    if (status === 'PENDING' && !canPerform('PURCHASES_EXPENSES', 'approve')) return;
+    if (status === 'PENDING' && !canExpensePerform(row, 'submit')) return;
+    if (status === 'DRAFT' && !canExpensePerform(row, 'edit')) return;
     const statusToastId = toast.loading(status === 'DRAFT' ? 'Guardando gasto como borrador...' : 'Enviando gasto a pendientes...');
     try {
       const update = status === 'PENDING' ? expensesService.updateStatus : expensesService.update;
@@ -740,6 +764,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   };
 
   const openPaymentDialog = (row: Expense) => {
+    if (!canExpensePerform(row, 'pay')) return;
     setPaymentExpense(row);
     setPaymentMethod('CASH');
     setPaymentBankAccountId('');
@@ -748,7 +773,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
   const handlePayment = async () => {
     if (!paymentExpense) return;
-    if (!canPerform('PURCHASES_EXPENSES', 'approve')) return;
+    if (!canExpensePerform(paymentExpense, 'pay')) return;
     if (requiresPaymentReference(paymentMethod) && !paymentReference.trim()) {
       toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque');
       return;
@@ -778,6 +803,11 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
   const handleDeleteConfirm = async () => {
     if (!pendingDeleteId) return;
+    const pendingExpense = data.find((expense) => expense.id === pendingDeleteId)
+      || summaryData?.find((expense) => expense.id === pendingDeleteId)
+      || (localDoc?.id === pendingDeleteId ? localDoc : null)
+      || (selectedExpenseDetail?.id === pendingDeleteId ? selectedExpenseDetail : null);
+    if (!pendingExpense || !canExpensePerform(pendingExpense, 'delete')) return;
     setDeleteLoading(true);
     const deleteToastId = toast.loading('Eliminando gasto...');
     try {
@@ -794,6 +824,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     }
   };
   const handleSaveDoc = async (statusToSave: 'DRAFT' | 'PENDING' = 'PENDING') => {
+    const isNew = editingId === 'NEW';
+    const currentStatus = String(localDoc?.status || 'DRAFT').toUpperCase();
+    if (isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canExpensePerform(localDoc, 'edit')) return;
+    if (!isNew && statusToSave === 'PENDING' && currentStatus !== 'PENDING' && !canExpensePerform(localDoc, 'submit')) return;
     if (!localDoc?.description) return toast.error('La descripción es obligatoria');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
     // Clean data (ensure numbers and remove nested objects)
@@ -806,6 +840,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     };
     delete (cleanedDoc as any).account;
     delete (cleanedDoc as any).supplier;
+    delete (cleanedDoc as any).originModule;
 
     if (localDoc.category === 'OTRO' && !String(localDoc.categoryCustom || '').trim()) {
       return toast.error('Debes especificar la categoría cuando eliges OTRO');
@@ -860,6 +895,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   };
 
   const handleDownloadExpensePdf = async (expense: Expense, format: PdfDownloadFormat = 'configured') => {
+    if (!canExpensePerform(expense, 'export')) return;
     const exportToastId = toast.loading('Generando PDF del gasto...');
     try {
       await generatePurchaseRecordPDF({
@@ -903,7 +939,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const isPaidLocked = !isNew && String(localDoc.status || '').toUpperCase() === 'PAID';
-    const canMutate = isNew ? canPerform('PURCHASES_EXPENSES', 'create') : (canPerform('PURCHASES_EXPENSES', 'edit') && !isPaidLocked);
+    const currentStatus = String(localDoc.status || 'DRAFT').toUpperCase();
+    const canSaveExpense = isNew ? canPerform('PURCHASES_EXPENSES', 'create') : canExpensePerform(localDoc, 'edit');
+    const canSavePending = canSaveExpense && (isNew || currentStatus === 'PENDING' || canExpensePerform(localDoc, 'submit'));
+    const canMutate = canSaveExpense && !isPaidLocked;
     const resolvedHour = localDoc.time || (localDoc.date ? new Date(localDoc.date).toTimeString().slice(0, 5) : '');
 
     return (
@@ -920,7 +959,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="expenses" context="form" />
-             {!isNew && canPerform('PURCHASES_EXPENSES', 'delete') && (
+             {!isNew && currentStatus !== 'PAID' && canExpensePerform(localDoc, 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Ban className="size-3 mr-2" /> Anular
@@ -931,17 +970,17 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                 <Lock className="size-3.5" /> Gasto pagado y contabilizado · Solo lectura
               </div>
             )}
-            {((isNew && canPerform('PURCHASES_EXPENSES', 'create')) || (!isNew && canPerform('PURCHASES_EXPENSES', 'edit'))) && !isPaidLocked && (
+            {canMutate && (
               <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                 <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="flex-1 rounded-xl px-4 font-black uppercase text-[10px] tracking-widest sm:flex-none">
                   Guardar borrador
                 </Button>
-                <Button onClick={() => handleSaveDoc('PENDING')} className="flex-1 rounded-xl bg-primary px-5 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 sm:flex-none">
+                {canSavePending && <Button onClick={() => handleSaveDoc('PENDING')} className="flex-1 rounded-xl bg-primary px-5 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 sm:flex-none">
                   Guardar pendiente
-                </Button>
+                </Button>}
               </div>
             )}
-            {canPerform('PURCHASES_EXPENSES', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll onDownload={(format) => void handleDownloadExpensePdf(localDoc as Expense, format)} />}
+            {canExpensePerform(localDoc, 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll onDownload={(format) => void handleDownloadExpensePdf(localDoc as Expense, format)} />}
           </div>
         </div>
 
@@ -1213,7 +1252,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2></div>
           <div className="erp-list-toolbar grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" />
-            {canPerform('PURCHASES_EXPENSES', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
+            {canExportExpenseList && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">
@@ -1316,10 +1355,14 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         </div>
         <div className="min-w-0">
           <div className="min-w-0">
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} showSelection={canPerform('PURCHASES_EXPENSES', 'delete')} onRowClick={(row) => setSelectedExpenseDetail(row)}
-          onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} canEditRow={(row) => canExpensePerform(row, 'edit')} showSelection={filteredData.some((row) => canExpensePerform(row, 'delete') && String(row.status || '').toUpperCase() !== 'PAID')} isRowSelectable={(row) => canExpensePerform(row, 'delete') && String(row.status || '').toUpperCase() !== 'PAID'} onRowClick={(row) => setSelectedExpenseDetail(row)}
+          onBulkDelete={filteredData.some((row) => canExpensePerform(row, 'delete') && String(row.status || '').toUpperCase() !== 'PAID') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'}...`);
             try {
+              const selectedRows = ids.map((id) => filteredData.find((expense) => expense.id === id));
+              if (selectedRows.some((row) => !row || !canExpensePerform(row, 'delete') || String(row.status || '').toUpperCase() === 'PAID')) {
+                throw new Error('Tu rol no permite eliminar todos los gastos seleccionados');
+              }
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
                 await expensesService.delete(id as string);
@@ -1333,13 +1376,13 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           actions={(row) => (
             <div className="flex items-center gap-1">
               <Button title="Ver detalle completo" aria-label="Ver detalle completo del gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setSelectedExpenseDetail(null); setEditingId(row.id); }}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_EXPENSES', 'edit') && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(String(row.status || '').toUpperCase()) && (
+              {canExpensePerform(row, 'edit') && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(String(row.status || '').toUpperCase()) && (
                 <Button title="Editar gasto" aria-label="Editar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setEditingId(row.id); }}><Pencil className="size-4" /></Button>
               )}
-              {canPerform('PURCHASES_EXPENSES', 'approve') && String(row.status || '').toUpperCase() === 'DRAFT' && (
+              {canExpensePerform(row, 'submit') && String(row.status || '').toUpperCase() === 'DRAFT' && (
                 <Button type="button" title="Cambiar a pendiente" aria-label="Cambiar gasto a pendiente" variant="ghost" size="icon" className="size-8 rounded-lg text-amber-600 hover:bg-amber-500/10 hover:text-amber-700" onClick={() => { void handleStatusAction(row, 'PENDING'); }}><Send className="size-4" /></Button>
               )}
-              {canPerform('PURCHASES_EXPENSES', 'approve') && String(row.status || '').toUpperCase() === 'PENDING' && (
+              {canExpensePerform(row, 'pay') && String(row.status || '').toUpperCase() === 'PENDING' && (
                 <Button type="button" title="Registrar pago" aria-label="Registrar pago del gasto" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700" onClick={() => openPaymentDialog(row)}><CircleDollarSign className="size-4" /></Button>
               )}
             </div>
@@ -1354,13 +1397,13 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           extraActions={detailExpense && (() => {
             const status = String(detailExpense.status || '').toUpperCase();
             return <>
-              {canPerform('PURCHASES_EXPENSES', 'edit') && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setSelectedExpenseDetail(null); setEditingId(detailExpense.id); }}><Pencil className="size-4" /> Editar</Button>}
-              {canPerform('PURCHASES_EXPENSES', 'approve') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailExpense, 'PENDING')}><Send className="size-4" /> Enviar a pendientes</Button>}
-              {canPerform('PURCHASES_EXPENSES', 'approve') && status === 'PENDING' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600" onClick={() => { setSelectedExpenseDetail(null); openPaymentDialog(detailExpense); }}><CircleDollarSign className="size-4" /> Registrar pago</Button>}
-              {canPerform('PURCHASES_EXPENSES', 'delete') && status !== 'PAID' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
+              {canExpensePerform(detailExpense, 'edit') && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setSelectedExpenseDetail(null); setEditingId(detailExpense.id); }}><Pencil className="size-4" /> Editar</Button>}
+              {canExpensePerform(detailExpense, 'submit') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailExpense, 'PENDING')}><Send className="size-4" /> Enviar a pendientes</Button>}
+              {canExpensePerform(detailExpense, 'pay') && status === 'PENDING' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600" onClick={() => { setSelectedExpenseDetail(null); openPaymentDialog(detailExpense); }}><CircleDollarSign className="size-4" /> Registrar pago</Button>}
+              {canExpensePerform(detailExpense, 'delete') && status !== 'PAID' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
             </>;
           })()}
-          onDownloadPdf={canPerform('PURCHASES_EXPENSES', 'export') ? (format) => detailExpense ? void handleDownloadExpensePdf(detailExpense, format) : undefined : undefined}
+          onDownloadPdf={detailExpense && canExpensePerform(detailExpense, 'export') ? (format) => detailExpense ? void handleDownloadExpensePdf(detailExpense, format) : undefined : undefined}
         />
         </div>
         <ConfirmDialog
@@ -1373,7 +1416,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           loading={deleteLoading}
         />
 
-        <Dialog open={Boolean(paymentExpense)} onOpenChange={(open) => !open && !paymentLoading && setPaymentExpense(null)}>
+        <Dialog open={Boolean(paymentExpense && canExpensePerform(paymentExpense, 'pay'))} onOpenChange={(open) => !open && !paymentLoading && setPaymentExpense(null)}>
           <DialogContent className="w-[calc(100%-2rem)] !max-w-xl rounded-3xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">

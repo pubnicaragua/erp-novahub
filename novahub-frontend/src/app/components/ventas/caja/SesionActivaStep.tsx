@@ -39,8 +39,9 @@ interface SesionActivaStepProps {
   onSubmitCount: (dto: any) => Promise<any>;
   onConfirmClose: (dto: any) => Promise<void>;
   onNavigateToFacturacion?: () => void;
-  canEdit?: boolean;
-  canApprove?: boolean;
+  canRecordMovement?: boolean;
+  canCount?: boolean;
+  canClose?: boolean;
   canExport?: boolean;
 }
 
@@ -55,8 +56,9 @@ export function SesionActivaStep({
   onSubmitCount,
   onConfirmClose,
   onNavigateToFacturacion,
-  canEdit = true,
-  canApprove = true,
+  canRecordMovement = true,
+  canCount = true,
+  canClose = true,
   canExport = true,
 }: SesionActivaStepProps) {
   const [modalOpen, setModalOpen] = useState(false);
@@ -461,7 +463,7 @@ export function SesionActivaStep({
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            {canEdit && !isAutoClosePending && <Button onClick={() => setModalOpen(true)} variant="outline" className="h-8 text-xs font-bold shadow-sm border-border hover:bg-muted/60">
+            {canRecordMovement && !isAutoClosePending && <Button onClick={() => setModalOpen(true)} variant="outline" className="h-8 text-xs font-bold shadow-sm border-border hover:bg-muted/60">
               <Plus className="size-3 mr-1" /> MOVIMIENTO
             </Button>}
             <Button 
@@ -597,22 +599,22 @@ export function SesionActivaStep({
             </div>
           )}
 
-          {canApprove && isBlind && !hasSubmittedBlindCount && !isAutoClosePending ? (
+          {canCount && isBlind && !hasSubmittedBlindCount && !isAutoClosePending ? (
             <Button onClick={submitBlindCount} className="w-full h-12 mt-4 font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-all rounded-xl">
               <Lock className="size-4 mr-2" /> ENVIAR ARQUEO A CIEGAS
             </Button>
-          ) : canApprove && isBlind && isRecounting ? (
+          ) : canCount && isBlind && isRecounting ? (
             <Button onClick={submitBlindCount} className="w-full h-12 mt-4 font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-all rounded-xl">
               <Lock className="size-4 mr-2" /> GUARDAR RECONTEO
             </Button>
           ) : (
             <div className="space-y-2 mt-4">
-              {canApprove && canRecount && (
+              {canCount && canRecount && (
                 <Button onClick={startRecount} variant="outline" className="w-full h-10 font-bold rounded-xl">
                   <Calculator className="size-4 mr-2" /> RECONTAR CAJA (OPCIONAL)
                 </Button>
               )}
-              {canApprove && <Button onClick={handleClose} className="w-full h-12 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all rounded-xl">
+              {canClose && <Button onClick={handleClose} className="w-full h-12 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all rounded-xl">
                 <Lock className="size-4 mr-2" /> {isAutoClosePending ? 'COMPLETAR ARQUEO Y CIERRE' : isBlind ? 'CERRAR CAJA CON ESTE CONTEO' : 'INICIAR CIERRE DE CAJA'}
               </Button>}
             </div>

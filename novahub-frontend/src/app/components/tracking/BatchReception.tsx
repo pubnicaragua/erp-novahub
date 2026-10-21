@@ -63,9 +63,9 @@ const emptyRow = (index: number): GridRow => ({
 
 export function BatchReception() {
   const { canPerform, user } = useAuth();
-  const canCreateBatch = canPerform('TRACKING_BATCHES', 'create');
+  const canCreateBatch = canPerform('TRACKING_BATCHES', 'create') || canPerform('TRACKING_RECEPTION', 'create');
   const canEditBatch = canPerform('TRACKING_BATCHES', 'edit');
-  const canApproveBatch = canPerform('TRACKING_BATCHES', 'approve');
+  const canConfirmBatch = canPerform('TRACKING_BATCHES', 'confirm') || canPerform('TRACKING_RECEPTION', 'confirm');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -209,7 +209,7 @@ export function BatchReception() {
     module: 'tracking',
     subModules: ['batches'],
     onRefresh: refreshBatchesFromNotification,
-    enabled: canCreateBatch || canEditBatch || canApproveBatch,
+    enabled: canCreateBatch || canEditBatch || canConfirmBatch,
   });
 
   const closeDetail = useCallback(() => {
@@ -315,7 +315,7 @@ export function BatchReception() {
   }, [canEditBatch, commonOwner, detail, rows, refreshDetail]);
 
   const confirmBatch = useCallback(async () => {
-    if (!canApproveBatch || !detail) return;
+    if (!canConfirmBatch || !detail) return;
     setConfirming(true);
     const actionToken = beginNotificationAction();
     try {
@@ -339,7 +339,7 @@ export function BatchReception() {
       completeNotificationAction(actionToken);
       setConfirming(false);
     }
-  }, [canApproveBatch, detail, confirmForm, refreshDetail]);
+  }, [canConfirmBatch, detail, confirmForm, refreshDetail]);
 
   const totals = useMemo(() => {
     const weight = rows.reduce((s, r) => s + (Number(r.physicalWeight) || 0), 0);
@@ -366,7 +366,7 @@ export function BatchReception() {
               {batch.provider || 'Sin proveedor'} · {batch.warehouseName || 'Sin bodega'} · {formatDate(batch.date)}
             </p>
           </div>
-          {false && (
+          {canConfirmBatch && open && (
             <Button className="rounded-xl text-xs" onClick={() => setConfirmOpen(true)} disabled={!detail?.packages.length} data-tour="log-batch-confirm">
               <CheckCircle2 className="size-4" /> Confirmar referencia
             </Button>
@@ -579,9 +579,9 @@ export function BatchReception() {
             </div>
             <SheetFooter className="flex-row justify-end gap-2 border-t border-border/50 px-5 py-3">
               <Button type="button" variant="outline" className="rounded-xl" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
-              <Button type="button" className="rounded-xl" onClick={confirmBatch} disabled={confirming}>
+              {canConfirmBatch && <Button type="button" className="rounded-xl" onClick={confirmBatch} disabled={confirming}>
                 {confirming ? 'Confirmando…' : `Confirmar (${detail.packages.length})`}
-              </Button>
+              </Button>}
             </SheetFooter>
           </SheetContent>
         </Sheet>

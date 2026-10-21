@@ -34,14 +34,16 @@ import { AddExpenseModal } from './modals/AddExpenseModal';
 import { CloseContainerModal } from './modals/CloseContainerModal';
 
 interface CustomsProrationTabProps {
-  canApprove?: boolean;
+  canAddExpense?: boolean;
+  canClose?: boolean;
   /** Permiso dedicado: no se hereda de `approve` ni de `edit`. */
   canCloseByException?: boolean;
   canReopen?: boolean;
 }
 
 export function CustomsProrationTab({
-  canApprove = true,
+  canAddExpense = false,
+  canClose = false,
   canCloseByException = false,
   canReopen = false,
 }: CustomsProrationTabProps) {
@@ -153,7 +155,7 @@ export function CustomsProrationTab({
   }, [selectedContainerId]);
 
   const handleCloseByException = useCallback(async () => {
-    if (!selectedContainerId) return;
+    if (!canCloseByException || !selectedContainerId) return;
     if (exceptionReason.trim().length < 10) {
       setActionError('El motivo debe tener al menos 10 caracteres: queda registrado en la auditoría.');
       return;
@@ -170,10 +172,10 @@ export function CustomsProrationTab({
     } finally {
       setBusy(false);
     }
-  }, [selectedContainerId, exceptionReason, loadContainerDetail, loadContainers]);
+  }, [canCloseByException, selectedContainerId, exceptionReason, loadContainerDetail, loadContainers]);
 
   const handleReopen = useCallback(async () => {
-    if (!selectedContainerId) return;
+    if (!canReopen || !selectedContainerId) return;
     if (reopenReason.trim().length < 10) {
       setActionError('El motivo debe tener al menos 10 caracteres: queda registrado en la auditoría.');
       return;
@@ -190,7 +192,7 @@ export function CustomsProrationTab({
     } finally {
       setBusy(false);
     }
-  }, [selectedContainerId, reopenReason, loadContainerDetail, loadContainers]);
+  }, [canReopen, selectedContainerId, reopenReason, loadContainerDetail, loadContainers]);
 
   const totalExpenses = React.useMemo(() => {
     if (prorationPreview?.totalExpensesUsd !== undefined && prorationPreview.totalExpensesUsd > 0) {
@@ -359,7 +361,7 @@ export function CustomsProrationTab({
                 <DollarSign className="size-4 text-primary shrink-0" />
                 <span>Gastos de Nacionalización y Logística</span>
               </div>
-              {!containerDetail.isClosed && (
+              {!containerDetail.isClosed && canAddExpense && (
                 <Button size="sm" onClick={() => setAddExpenseOpen(true)} className="w-full sm:w-auto">
                   <Plus className="size-4 mr-1.5" />
                   Registrar Gasto
@@ -410,7 +412,7 @@ export function CustomsProrationTab({
                 </p>
               </div>
 
-              {!containerDetail.isClosed && canApprove && (
+              {!containerDetail.isClosed && canClose && (
                 <Button
                   variant="destructive"
                   size="sm"
@@ -618,24 +620,26 @@ export function CustomsProrationTab({
       <AddExpenseModal
         containerId={selectedContainerId}
         containerNumber={containerDetail?.containerNumber}
-        open={addExpenseOpen}
+        open={canAddExpense && addExpenseOpen}
         onOpenChange={setAddExpenseOpen}
         onSuccess={() => {
           loadContainers();
           loadContainerDetail(selectedContainerId);
         }}
+        canAddExpense={canAddExpense}
       />
 
       <CloseContainerModal
         container={containerDetail}
         totalExpenses={totalExpenses}
         totalVolume={totalVolume}
-        open={closeContainerOpen}
+        open={canClose && closeContainerOpen}
         onOpenChange={setCloseContainerOpen}
         onSuccess={() => {
           loadContainers();
           loadContainerDetail(selectedContainerId);
         }}
+        canClose={canClose}
       />
     </div>
   );

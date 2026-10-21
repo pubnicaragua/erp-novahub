@@ -57,7 +57,7 @@ function formatWeight(value?: number, unit?: string) {
 
 export function ReceivedPackages() {
   const { canPerform, user } = useAuth();
-  const canCreatePackages = canPerform('TRACKING_PACKAGES', 'create');
+  const canImportPackages = canPerform('TRACKING_PACKAGES', 'import');
   const canReadPackages = canPerform('TRACKING_PACKAGES', 'view');
   const [result, setResult] = useState<ReceivedPackageListResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -192,8 +192,8 @@ export function ReceivedPackages() {
             className="rounded-xl pl-9"
           />
         </div>
-        {canCreatePackages && <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('quick')} data-tour="log-reception-quick"><Zap className="size-4" /> Recepción rápida</Button>}
-        {canCreatePackages && <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('import')} data-tour="log-reception-import"><Download className="size-4" /> Importar Excel</Button>}
+        {canImportPackages && <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('quick')} data-tour="log-reception-quick"><Zap className="size-4" /> Recepción rápida</Button>}
+        {canImportPackages && <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('import')} data-tour="log-reception-import"><Download className="size-4" /> Importar Excel</Button>}
         {canPerform('TRACKING_PACKAGES', 'export') && <ExportMenu onPdf={() => void exportPackages('pdf')} onExcel={() => void exportPackages('xlsx')} pdfDescription="Reporte configurado de paquetes" excelDescription="Todos los paquetes filtrados" />}
       </div>
 
@@ -223,7 +223,7 @@ export function ReceivedPackages() {
         {hasFilters && <button className="text-[11px] font-bold text-destructive" onClick={() => { setFilters({ userId: '', shipmentModeCode: '', status: '', branchId: '', warehouseId: '', agencyName: '', subagencyName: '', dateFrom: '', dateTo: '' }); setPage(1); }}>Limpiar</button>}
       </div>
 
-      {view !== 'list' && (
+      {view !== 'list' && canImportPackages && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-black">{view === 'quick' ? 'Recepción rápida' : 'Importación masiva'}</h3>

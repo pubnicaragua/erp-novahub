@@ -21,6 +21,7 @@ interface NewContainerModalProps {
   onSuccess: (created: IntlImportContainer) => void;
   defaultCbm?: number;
   defaultMaxKg?: number;
+  canCreate?: boolean;
 }
 
 export function NewContainerModal({
@@ -29,6 +30,7 @@ export function NewContainerModal({
   onSuccess,
   defaultCbm = 20,
   defaultMaxKg = 5000,
+  canCreate = false,
 }: NewContainerModalProps) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -56,6 +58,7 @@ export function NewContainerModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCreate) return;
     if (!form.containerNumber.trim()) {
       toast.error('El número de contenedor es obligatorio');
       return;
@@ -96,7 +99,7 @@ export function NewContainerModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open && canCreate} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2 text-primary font-semibold">
@@ -214,7 +217,7 @@ export function NewContainerModal({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !canCreate}>
               {loading ? 'Creando...' : 'Crear Contenedor'}
             </Button>
           </DialogFooter>

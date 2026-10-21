@@ -75,6 +75,8 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   const colFilters = useColumnFilters();
 
   const handleCreateTraining = async () => {
+    if (!canPerform('HR_TRAINING', 'create')) return;
+    if (newTraining.employeeIds.length > 0 && !canPerform('HR_TRAINING', 'enroll')) return;
     if (!newTraining.title || !newTraining.startDate || !newTraining.endDate) {
       toast.error('Completa los campos requeridos');
       return;
@@ -89,7 +91,9 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     setIsCreating(true);
     const actionToken = beginNotificationAction();
     try {
-      await hrService.createTraining(newTraining);
+      const payload: any = { ...newTraining };
+      if (!canPerform('HR_TRAINING', 'enroll')) delete payload.employeeIds;
+      await hrService.createTraining(payload);
       toast.success('Capacitación creada');
       completeNotificationAction(actionToken);
       setShowNewForm(false);
@@ -116,7 +120,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   };
 
   const handleRequestPayment = async (training: any) => {
-    if (!canPerform('HR_TRAINING', 'approve')) return;
+    if (!canPerform('HR_TRAINING', 'requestPayment')) return;
     const actionToken = beginNotificationAction();
     try {
       await hrService.createPaymentRequest({ requestType: 'TRAINING', sourceId: training.id });
@@ -130,6 +134,13 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   };
 
   const handleTrainingStatus = async (training: any, status: string) => {
+    const permissionByStatus: Record<string, 'start' | 'complete' | 'cancel'> = {
+      IN_PROGRESS: 'start',
+      COMPLETED: 'complete',
+      CANCELLED: 'cancel',
+    };
+    const requiredPermission = permissionByStatus[status];
+    if (!requiredPermission || !canPerform('HR_TRAINING', requiredPermission)) return;
     setChangingStatus(training.id);
     const actionToken = beginNotificationAction();
     try {
@@ -151,6 +162,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   };
 
   const handleCompleteEnrollment = async (trainingId: string, employeeId: string) => {
+    if (!canPerform('HR_TRAINING', 'completeEnrollment')) return;
     setCompletingEnrollment(`${trainingId}:${employeeId}`);
     const actionToken = beginNotificationAction();
     try {
@@ -167,12 +179,14 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   };
 
   const openEnrollDialog = (training: any) => {
+    if (!canPerform('HR_TRAINING', 'enroll')) return;
     setEnrollingTraining(training.id);
     const enrolledIds = new Set<string>((training.enrollments || []).map((e: any) => e.employeeId));
     setEnrollSelection(Array.from(enrolledIds));
   };
 
   const handleEnroll = async (trainingId: string) => {
+    if (!canPerform('HR_TRAINING', 'enroll')) return;
     const training = trainings.find((t: any) => t.id === trainingId);
     if (!training) return;
     const enrolledIds = new Set<string>((training.enrollments || []).map((e: any) => e.employeeId));
@@ -434,7 +448,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 <option value="USD">Dólares (USD)</option>
               </select>
             </div>
-            <div className="md:col-span-2" data-tour="hr-training-form-items">
+            {canPerform('HR_TRAINING', 'enroll') && <div className="md:col-span-2" data-tour="hr-training-form-items">
               <label className="text-sm font-medium mb-1 block">Empleados Participantes ({newTraining.employeeIds.length}/{newTraining.capacity})</label>
               <div className="border border-border/50 rounded-xl p-3 max-h-40 overflow-y-auto bg-background">
                 {employees?.map((emp: any) => (
@@ -463,7 +477,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                   </label>
                 ))}
               </div>
-            </div>
+            </div>}
           </div>
           <div className="flex items-center gap-2 mt-4" data-tour="hr-training-form-actions">
             <Button onClick={handleCreateTraining} disabled={isCreating} className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -547,29 +561,29 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 </div>
               )}
 
-              {Number(training.cost || 0) > 0 && training.paymentStatus !== 'PAID' && canPerform('HR_TRAINING', 'approve') && (
+              {Number(training.cost || 0) > 0 && training.paymentStatus !== 'PAID' && (
                 <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-warning/20 bg-warning/5 px-3 py-2">
                   <span className="text-[10px] font-black uppercase tracking-widest text-warning">Pago: {training.paymentStatus === 'REQUESTED' ? 'Solicitud enviada' : training.paymentStatus === 'APPROVED' ? 'Aprobada' : 'Pendiente'}</span>
-                  {(!training.paymentStatus || training.paymentStatus === 'PENDING') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(training)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}
+                  {(!training.paymentStatus || training.paymentStatus === 'PENDING') && canPerform('HR_TRAINING', 'requestPayment') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(training)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}
                 </div>
               )}
               {Number(training.cost || 0) > 0 && training.paymentStatus === 'PAID' && <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-success"><CheckCircle2 className="size-3.5" /> Pago contabilizado</div>}
 
-              {canPerform('HR_TRAINING', 'edit') && training.status !== 'COMPLETED' && training.status !== 'CANCELLED' && (
+              {(canPerform('HR_TRAINING', 'start') || canPerform('HR_TRAINING', 'complete') || canPerform('HR_TRAINING', 'cancel')) && training.status !== 'COMPLETED' && training.status !== 'CANCELLED' && (
                 <div className="flex items-center gap-2 pt-3 mt-3 border-t border-border/40">
-                  {training.status === 'SCHEDULED' && (
+                  {training.status === 'SCHEDULED' && canPerform('HR_TRAINING', 'start') && (
                     <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'IN_PROGRESS')}>
                       <PlayCircle className="size-3 mr-1" /> Iniciar
                     </Button>
                   )}
-                  {(training.status === 'IN_PROGRESS' || training.status === 'SCHEDULED') && (
+                  {(training.status === 'IN_PROGRESS' || training.status === 'SCHEDULED') && canPerform('HR_TRAINING', 'complete') && (
                     <Button size="sm" className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'COMPLETED')}>
                       <CheckCircle2 className="size-3 mr-1" /> Completar
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" className="h-8 px-2 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground border-destructive" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'CANCELLED')}>
+                  {canPerform('HR_TRAINING', 'cancel') && <Button size="sm" variant="outline" aria-label="Cancelar capacitación" title="Cancelar capacitación" className="h-8 px-2 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground border-destructive" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'CANCELLED')}>
                     <XCircle className="size-3" />
-                  </Button>
+                  </Button>}
                 </div>
               )}
 
@@ -590,7 +604,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                         return (
                           <div key={enrollment.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-1.5">
                             <span className="text-xs font-medium truncate">{name}</span>
-                            {training.status !== 'COMPLETED' && enrollment.status !== 'COMPLETED' && canPerform('HR_TRAINING', 'edit') ? (
+                            {training.status !== 'COMPLETED' && enrollment.status !== 'COMPLETED' && canPerform('HR_TRAINING', 'completeEnrollment') ? (
                               <button
                                 className="text-[10px] font-black uppercase text-primary hover:text-primary/80 flex items-center gap-1 shrink-0"
                                 disabled={completingEnrollment === `${training.id}:${enrollment.employeeId}`}
@@ -611,7 +625,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 </div>
               )}
 
-              {canPerform('HR_TRAINING', 'edit') && training.status === 'SCHEDULED' && (
+              {canPerform('HR_TRAINING', 'enroll') && training.status === 'SCHEDULED' && (
                 <Button size="sm" variant="outline" className="w-full mt-3 h-8 text-xs gap-1.5" onClick={() => openEnrollDialog(training)}>
                   <UserPlus className="size-3.5" /> Inscribir empleados
                 </Button>
@@ -650,7 +664,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
       )}
 
       {/* Enroll Dialog */}
-      <Dialog open={enrollingTraining !== null} onOpenChange={(open) => { if (!open) setEnrollingTraining(null); }}>
+      <Dialog open={enrollingTraining !== null && canPerform('HR_TRAINING', 'enroll')} onOpenChange={(open) => { if (!open) setEnrollingTraining(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader data-tour="hr-training-enroll-title">
             <DialogTitle className="flex items-center gap-2 text-lg font-black">

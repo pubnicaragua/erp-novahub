@@ -33,6 +33,7 @@ import {
 } from '../../services/projects.service';
 import { queryClient } from '../../services/query-client';
 import { storageService } from '../../services/storage.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ProyectoAvancePanelProps {
   projectId: string;
@@ -40,14 +41,23 @@ interface ProyectoAvancePanelProps {
 }
 
 export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelProps) {
+  const { canPerform } = useAuth();
+  const canViewProgress = canPerform('PROJECTS_PROGRESS', 'view');
+  const canViewMilestones = canPerform('PROJECTS_MILESTONES', 'view');
+  const canEditWeights = canPerform('PROJECTS_MILESTONES', 'updateProgress');
+  const canCreateCapture = canPerform('PROJECTS_PROGRESS', 'createCapture');
+  const canDeleteCapture = canPerform('PROJECTS_PROGRESS', 'deleteCapture');
+  const canManagePublicLinks = canPerform('PROJECTS_PROGRESS', 'managePublicLinks');
   // Queries
   const capturesQuery = useTenantQuery<ProjectProgressCapture[]>(
     ['projects', projectId, 'captures'],
     (signal) => projectsService.captures(projectId, undefined, signal),
+    { enabled: canViewProgress },
   );
   const linksQuery = useTenantQuery<ProjectPublicLink[]>(
     ['projects', projectId, 'publicLinks'],
     (signal) => projectsService.publicLinks(projectId, signal),
+    { enabled: canViewProgress },
   );
 
   // States
@@ -124,6 +134,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
 
   // Start editing weights
   const handleStartEditWeights = () => {
+    if (!canViewMilestones || !canEditWeights) return;
     const initial: { [id: string]: { weight: number; progress: number } } = {};
     (project.milestones || []).forEach((m) => {
       initial[m.id] = {
@@ -137,6 +148,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
 
   // Save weights
   const handleSaveWeights = async () => {
+    if (!canEditWeights) return;
     try {
       setIsSavingWeights(true);
       for (const m of project.milestones || []) {
@@ -162,6 +174,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
   // Create capture
   const handleCreateCapture = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCreateCapture) return;
     if (!captureForm.caption) return;
     if (imageMode === 'url' && !captureForm.imageUrl) {
       setCaptureError('Ingresá el enlace de la imagen.');
@@ -206,11 +219,12 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
 
   // Delete capture
   const handleDeleteCapture = (captureId: string) => {
+    if (!canDeleteCapture) return;
     setCaptureToDelete(captureId);
   };
 
   const handleConfirmDeleteCapture = async () => {
-    if (!captureToDelete) return;
+    if (!captureToDelete || !canDeleteCapture) return;
     try {
       setIsDeletingCapture(true);
       await projectsService.deleteCapture(projectId, captureToDelete);
@@ -227,6 +241,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
 
   // Create public link
   const handleCreatePublicLink = async () => {
+    if (!canManagePublicLinks) return;
     try {
       setIsCreatingLink(true);
       await projectsService.createPublicLink(projectId, {
@@ -247,11 +262,12 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
 
   // Revoke public link
   const handleRevokePublicLink = (linkId: string) => {
+    if (!canManagePublicLinks) return;
     setLinkToRevoke(linkId);
   };
 
   const handleConfirmRevokePublicLink = async () => {
-    if (!linkToRevoke) return;
+    if (!linkToRevoke || !canManagePublicLinks) return;
     try {
       setIsRevokingLink(true);
       await projectsService.revokePublicLink(projectId, linkToRevoke);
@@ -306,9 +322,9 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
               <CardTitle className="text-sm font-bold flex items-center gap-2">
                 <LinkIcon className="size-4 text-primary" /> Enlace Público para Cliente
               </CardTitle>
-              <Button size="sm" variant="outline" onClick={() => setShowLinkModal(true)} className="gap-1.5 text-xs h-7">
+              {canManagePublicLinks && <Button size="sm" variant="outline" onClick={() => setShowLinkModal(true)} className="gap-1.5 text-xs h-7">
                 <Plus className="size-3.5" /> Generar Enlace
-              </Button>
+              </Button>}
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-3">
@@ -347,7 +363,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
                     {copiedToken === activeLink.id ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
                     {copiedToken === activeLink.id ? 'Copiado' : 'Copiar'}
                   </Button>
-                  <Button
+                  {canManagePublicLinks && <Button
                     size="sm"
                     variant="ghost"
                     className="h-8 px-2 text-destructive hover:bg-destructive/10 shrink-0"
@@ -355,7 +371,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
                     title="Revocar enlace"
                   >
                     <XCircle className="size-4" />
-                  </Button>
+                  </Button>}
                 </div>
               </div>
             ) : (
@@ -369,7 +385,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
       </div>
 
       {/* 2. Etapas Ponderadas */}
-      <Card className="border-border/60 shadow-sm">
+      {canViewMilestones && <Card className="border-border/60 shadow-sm">
         <CardHeader className="p-4 pb-2">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
@@ -381,9 +397,11 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
               </CardDescription>
             </div>
             {!isEditingWeights ? (
+              canEditWeights ?
               <Button size="sm" variant="outline" onClick={handleStartEditWeights} className="text-xs h-7">
                 Modificar Ponderaciones
               </Button>
+              : null
             ) : (
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="ghost" onClick={() => setIsEditingWeights(false)} disabled={isSavingWeights} className="text-xs h-7">
@@ -481,7 +499,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
             </table>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* 3. Capturas de Avance Visual */}
       <Card className="border-border/60 shadow-sm">
@@ -495,9 +513,9 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
                 Capturas visibles en la vista pública compartida con el cliente.
               </CardDescription>
             </div>
-            <Button size="sm" onClick={() => setShowCaptureModal(true)} className="gap-1.5 text-xs h-7">
+            {canCreateCapture && <Button size="sm" onClick={() => setShowCaptureModal(true)} className="gap-1.5 text-xs h-7">
               <Plus className="size-3.5" /> Agregar Captura
-            </Button>
+            </Button>}
           </div>
         </CardHeader>
         <CardContent className="p-4">
@@ -530,7 +548,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
                       <span className="flex items-center gap-1">
                         <Calendar className="size-3" /> {new Date(cap.capturedAt).toLocaleDateString('es-NI')}
                       </span>
-                      <Button
+                      {canDeleteCapture && <Button
                         size="icon"
                         variant="ghost"
                         className="size-6 text-destructive hover:bg-destructive/10"
@@ -538,7 +556,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
                         title="Eliminar captura"
                       >
                         <Trash2 className="size-3.5" />
-                      </Button>
+                      </Button>}
                     </div>
                   </div>
                 </div>
@@ -549,7 +567,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
       </Card>
 
       {/* Modal: Agregar Captura */}
-      <Dialog open={showCaptureModal} onOpenChange={setShowCaptureModal}>
+      <Dialog open={showCaptureModal && canCreateCapture} onOpenChange={setShowCaptureModal}>
         <DialogContent className="sm:max-w-md">
           <form onSubmit={handleCreateCapture} className="space-y-4">
             <DialogHeader>
@@ -670,7 +688,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
       </Dialog>
 
       {/* Modal: Generar Enlace Público */}
-      <Dialog open={showLinkModal} onOpenChange={setShowLinkModal}>
+      <Dialog open={showLinkModal && canManagePublicLinks} onOpenChange={setShowLinkModal}>
         <DialogContent className="sm:max-w-md">
           <div className="space-y-4">
             <DialogHeader>
@@ -719,7 +737,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
 
       {/* Confirmación: Eliminar Evidencia */}
       <ConfirmDialog
-        open={Boolean(captureToDelete)}
+        open={Boolean(captureToDelete) && canDeleteCapture}
         onOpenChange={(open) => {
           if (!open && !isDeletingCapture) setCaptureToDelete(null);
         }}
@@ -734,7 +752,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
 
       {/* Confirmación: Revocar Enlace Público */}
       <ConfirmDialog
-        open={Boolean(linkToRevoke)}
+        open={Boolean(linkToRevoke) && canManagePublicLinks}
         onOpenChange={(open) => {
           if (!open && !isRevokingLink) setLinkToRevoke(null);
         }}

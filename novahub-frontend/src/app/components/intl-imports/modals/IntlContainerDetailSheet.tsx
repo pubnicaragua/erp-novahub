@@ -53,9 +53,8 @@ interface IntlContainerDetailSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRefresh?: () => void;
-  /** Mover paquetes requiere permiso de edicion; mover desde un contenedor
-   *  cerrado exige haberlo reabierto previamente en el backend. */
-  canEdit?: boolean;
+  canMovePackages?: boolean;
+  canUnassignPackages?: boolean;
 }
 
 const containerStatusColors: Record<IntlImportContainerStatus, string> = {
@@ -91,7 +90,8 @@ export function IntlContainerDetailSheet({
   open,
   onOpenChange,
   onRefresh,
-  canEdit = false,
+  canMovePackages = false,
+  canUnassignPackages = false,
 }: IntlContainerDetailSheetProps) {
   const [packages, setPackages] = useState<IntlImportPackage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -150,7 +150,7 @@ export function IntlContainerDetailSheet({
    * imposible volver a asignar la mercancia.
    */
   const handleUnassignPackage = async () => {
-    if (!packageToDelete || !container) return;
+    if (!canUnassignPackages || !packageToDelete || !container) return;
     try {
       setDeleting(true);
       await intlImportsService.unassignPackages(container.id, [packageToDelete.id]);
@@ -187,8 +187,10 @@ export function IntlContainerDetailSheet({
   const isFull = cbmPercent >= 85;
   const isWeightFull = weightPercent >= 85;
 
-  const toggleMoveSelection = (id: string) =>
+  const toggleMoveSelection = (id: string) => {
+    if (!canMovePackages) return;
     setMoveSelection((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
 
   const statusLabel = INTL_CONTAINER_STATUS_LABELS[container.status] || container.status;
   const statusColorClass = containerStatusColors[container.status] || 'bg-secondary text-secondary-foreground border-border/50';
@@ -344,7 +346,7 @@ export function IntlContainerDetailSheet({
                 </Card>
               ) : (
                 <>
-                  {canEdit && moveSelection.length > 0 && (
+                  {canMovePackages && moveSelection.length > 0 && (
                     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 mb-3">
                       <span className="text-xs font-medium text-foreground">
                         {moveSelection.length} paquete(s) seleccionado(s)
@@ -364,7 +366,7 @@ export function IntlContainerDetailSheet({
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/30 hover:bg-muted/30">
-                          <TableHead className="text-[10px] font-black uppercase tracking-wider py-2 w-10" />
+                          {canMovePackages && <TableHead className="text-[10px] font-black uppercase tracking-wider py-2 w-10" />}
                           <TableHead className="text-[10px] font-black uppercase tracking-wider py-2">
                             <span className="flex items-center gap-1.5">
                               <Package className="size-3.5" />
@@ -394,14 +396,13 @@ export function IntlContainerDetailSheet({
 
                           return (
                             <TableRow key={pkg.id} className="hover:bg-muted/20 transition-colors">
-                              <TableCell data-label="Seleccionar" className="py-2.5">
+                              {canMovePackages && <TableCell data-label="Seleccionar" className="py-2.5">
                                 <Checkbox
                                   checked={moveSelection.includes(pkg.id)}
                                   onCheckedChange={() => toggleMoveSelection(pkg.id)}
-                                  disabled={!canEdit}
                                   aria-label={`Seleccionar ${pkg.trackingCode}`}
                                 />
-                              </TableCell>
+                              </TableCell>}
                               <TableCell className="py-2.5">
                                 <span className="font-mono font-bold text-xs text-foreground">{pkg.trackingCode}</span>
                               </TableCell>
@@ -460,6 +461,7 @@ export function IntlContainerDetailSheet({
                                       : <Eye className="size-3.5 text-muted-foreground" />
                                     }
                                   </Button>
+                                  {canUnassignPackages && <>
                                   <Button
                                     size="sm"
                                     variant="ghost"
@@ -471,6 +473,7 @@ export function IntlContainerDetailSheet({
                                   >
                                     <Undo2 className="size-3.5" />
                                   </Button>
+                                  </>}
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -505,6 +508,7 @@ export function IntlContainerDetailSheet({
         onOpenChange={setMoveModalOpen}
         sourceContainer={container}
         packageIds={moveSelection}
+        canMove={canMovePackages}
         onSuccess={async () => {
           setMoveSelection([]);
           await fetchPackages();
@@ -526,7 +530,7 @@ export function IntlContainerDetailSheet({
       {/* Confirmar devolución a bodega. No es una eliminación: el paquete,
           su trazabilidad y su volumetría congelada se conservan. */}
       <ConfirmDialog
-        open={Boolean(packageToDelete)}
+        open={canUnassignPackages && Boolean(packageToDelete)}
         onOpenChange={(open) => !open && setPackageToDelete(null)}
         title={`¿Quitar ${packageToDelete?.trackingCode} del contenedor?`}
         description="El paquete volverá a bodega de origen y quedará disponible para asignarlo a otro contenedor. Se conservan su trazabilidad y su volumetría congelada; no se elimina ningún registro."

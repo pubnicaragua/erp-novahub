@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { BriefcaseBusiness, Building2, Check, Edit2, Plus, Search, Trash2, UsersRound } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from '@/app/services/toast';

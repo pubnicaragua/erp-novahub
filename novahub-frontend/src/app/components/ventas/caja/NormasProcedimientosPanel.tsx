@@ -41,6 +41,7 @@ interface ProtocolFieldDraft {
 
 export function NormasProcedimientosPanel() {
   const { canPerform } = useAuth();
+  const canConfigure = canPerform('RETAIL_CASH_CONTROL', 'configure');
   const integrationPolicyQuery = useSalesIntegrationPolicy();
   const integrationPolicyReady = !integrationPolicyQuery.isFetching && !integrationPolicyQuery.isError && Boolean(integrationPolicyQuery.data);
   const accountingConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingEnabled === true;
@@ -98,6 +99,7 @@ export function NormasProcedimientosPanel() {
   }, [canReadBankAccounts]);
 
   const saveNorms = async () => {
+    if (!canConfigure) return;
     if (!norms) return;
     setSavingNorms(true);
     try {
@@ -112,12 +114,14 @@ export function NormasProcedimientosPanel() {
   };
 
   const toggleAutoCloseDay = (dayIndex: number) => {
+    if (!canConfigure) return;
     if (!autoClose) return;
     const days = Array.isArray(autoClose.days) ? autoClose.days.map(Number) : [];
     setAutoClose({ ...autoClose, days: days.includes(dayIndex) ? days.filter((d: number) => d !== dayIndex) : [...days, dayIndex] });
   };
 
   const setDaySchedule = (dayIndex: number, time: string) => {
+    if (!canConfigure) return;
     if (!autoClose) return;
     const schedules = { ...(autoClose.schedules || {}) };
     if (time) schedules[String(dayIndex)] = time;
@@ -126,6 +130,7 @@ export function NormasProcedimientosPanel() {
   };
 
   const saveAutoClose = async () => {
+    if (!canConfigure) return;
     if (!autoClose) return;
     setSavingAutoClose(true);
     try {
@@ -144,6 +149,7 @@ export function NormasProcedimientosPanel() {
   };
 
   const addField = () => {
+    if (!canConfigure) return;
     setFieldDrafts(current => [...current, {
       id: `campo_${Date.now()}`,
       label: '',
@@ -155,14 +161,17 @@ export function NormasProcedimientosPanel() {
   };
 
   const updateField = (index: number, patch: Partial<ProtocolFieldDraft>) => {
+    if (!canConfigure) return;
     setFieldDrafts(current => current.map((field, i) => i === index ? { ...field, ...patch } : field));
   };
 
   const removeField = (index: number) => {
+    if (!canConfigure) return;
     setFieldDrafts(current => current.filter((_, i) => i !== index));
   };
 
   const saveProtocol = async () => {
+    if (!canConfigure) return;
     setSavingProtocol(true);
     try {
       const fields = fieldDrafts
@@ -222,6 +231,7 @@ export function NormasProcedimientosPanel() {
             title="Excedente en caja"
             description="El sobrante se registra en la contabilidad (otros ingresos) como parte del asiento de cierre. Mantén la opción activa para conservar este comportamiento."
             checked={norms?.surplusToOtherIncome}
+            disabled={!canConfigure}
             onCheckedChange={(v) => setNorms({ ...norms, surplusToOtherIncome: v })}
           />
           <NormaRow
@@ -229,6 +239,7 @@ export function NormasProcedimientosPanel() {
             title="Faltante en caja"
             description="Si hay diferencia negativa, se notifica a la gerencia y se registra el cobro pendiente para que la gerencia determine cobrárselo al responsable."
             checked={norms?.notifyManagementOnDeficit}
+            disabled={!canConfigure}
             onCheckedChange={(v) => setNorms({ ...norms, notifyManagementOnDeficit: v })}
           />
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/50 bg-background/40 px-3 py-2">
@@ -240,6 +251,7 @@ export function NormasProcedimientosPanel() {
               type="number"
               min={0}
               className="h-8 w-28 text-right text-xs"
+              disabled={!canConfigure}
               value={norms?.deficitNotifyThreshold ?? 0}
               onChange={(e) => setNorms({ ...norms, deficitNotifyThreshold: Math.max(0, Number(e.target.value) || 0) })}
             />
@@ -297,6 +309,7 @@ export function NormasProcedimientosPanel() {
                     type="number"
                     min={0}
                     className="h-8 text-right text-xs"
+                    disabled={!canConfigure}
                     value={norms?.keepInCashNIO ?? 0}
                     onChange={(e) => setNorms({ ...norms, keepInCashNIO: Math.max(0, Number(e.target.value) || 0) })}
                   />
@@ -307,6 +320,7 @@ export function NormasProcedimientosPanel() {
                     type="number"
                     min={0}
                     className="h-8 text-right text-xs"
+                    disabled={!canConfigure}
                     value={norms?.keepInCashUSD ?? 0}
                     onChange={(e) => setNorms({ ...norms, keepInCashUSD: Math.max(0, Number(e.target.value) || 0) })}
                   />
@@ -319,9 +333,9 @@ export function NormasProcedimientosPanel() {
           )}
         </div>
         <div className="mt-4 flex justify-end">
-          <Button size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => void saveNorms()} disabled={savingNorms || !norms}>
+          {canConfigure && <Button size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => void saveNorms()} disabled={savingNorms || !norms}>
             {savingNorms ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Guardar normas
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -338,13 +352,14 @@ export function NormasProcedimientosPanel() {
               <p className="text-xs font-bold">Activar cierre automático</p>
               <p className="text-[10px] text-muted-foreground">Las sesiones se cierran con el monto esperado del sistema (diferencia 0).</p>
             </div>
-            <Switch checked={Boolean(autoClose?.enabled)} onCheckedChange={(v) => setAutoClose({ ...autoClose, enabled: v })} />
+            <Switch checked={Boolean(autoClose?.enabled)} disabled={!canConfigure} onCheckedChange={(v) => setAutoClose({ ...autoClose, enabled: v })} />
           </div>
           <div className="rounded-xl border border-border/50 bg-background/40 px-3 py-2">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-bold">Días programados</p>
               <Select
                 value={daysMode}
+                disabled={!canConfigure}
                 onValueChange={(mode) => setAutoClose({ ...autoClose, mode, days: [] })}
               >
                 <SelectTrigger className="h-7 w-[190px] text-[10px] font-bold">
@@ -364,6 +379,7 @@ export function NormasProcedimientosPanel() {
                     <button
                       key={day.index}
                       type="button"
+                      disabled={!canConfigure}
                       onClick={() => toggleAutoCloseDay(day.index)}
                       className={`flex h-9 w-9 items-center justify-center rounded-lg border text-xs font-black transition-colors ${active ? 'border-primary/40 bg-primary/15 text-primary' : 'border-border/60 bg-background text-muted-foreground hover:bg-muted/40'}`}
                       title={day.name}
@@ -381,6 +397,7 @@ export function NormasProcedimientosPanel() {
                     <button
                       key={day}
                       type="button"
+                      disabled={!canConfigure}
                       onClick={() => toggleAutoCloseDay(day)}
                       className={`flex h-8 w-8 items-center justify-center rounded-lg border text-[10px] font-black transition-colors ${active ? 'border-primary/40 bg-primary/15 text-primary' : 'border-border/60 bg-background text-muted-foreground hover:bg-muted/40'}`}
                       title={`Día ${day}`}
@@ -400,6 +417,7 @@ export function NormasProcedimientosPanel() {
             <Input
               type="time"
               className="h-8 w-32 text-xs"
+              disabled={!canConfigure}
               value={autoClose?.time || '20:00'}
               onChange={(e) => setAutoClose({ ...autoClose, time: e.target.value })}
             />
@@ -414,6 +432,7 @@ export function NormasProcedimientosPanel() {
                     <Input
                       type="time"
                       className="h-7 w-28 text-xs"
+                      disabled={!canConfigure}
                       value={schedules[String(day.index)] || autoClose?.time || '20:00'}
                       onChange={(e) => setDaySchedule(day.index, e.target.value)}
                       title={`Hora de cierre para ${day.name}`}
@@ -426,9 +445,9 @@ export function NormasProcedimientosPanel() {
           )}
         </div>
         <div className="mt-4 flex justify-end">
-          <Button size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => void saveAutoClose()} disabled={savingAutoClose || !autoClose}>
+          {canConfigure && <Button size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => void saveAutoClose()} disabled={savingAutoClose || !autoClose}>
             {savingAutoClose ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Guardar configuración
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -451,16 +470,17 @@ export function NormasProcedimientosPanel() {
                 <GripVertical className="size-4 shrink-0 text-muted-foreground/40" />
                 <Input
                   className="h-8 flex-1 text-xs font-bold"
+                  disabled={!canConfigure}
                   placeholder={`Nombre del campo (ej. N° de depósito)`}
                   value={field.label}
                   onChange={(e) => updateField(index, { label: e.target.value })}
                 />
-                <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-destructive hover:text-destructive" onClick={() => removeField(index)} title="Quitar campo">
+                {canConfigure && <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-destructive hover:text-destructive" onClick={() => removeField(index)} title="Quitar campo">
                   <Trash2 className="size-3.5" />
-                </Button>
+                </Button>}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Select value={field.type} onValueChange={(v) => updateField(index, { type: v })}>
+                <Select value={field.type} disabled={!canConfigure} onValueChange={(v) => updateField(index, { type: v })}>
                   <SelectTrigger className="h-8 w-[150px] text-xs">
                     <SelectValue />
                   </SelectTrigger>
@@ -473,6 +493,7 @@ export function NormasProcedimientosPanel() {
                 {field.type === 'select' && (
                   <Input
                     className="h-8 w-52 text-xs"
+                    disabled={!canConfigure}
                     placeholder="Opciones separadas por coma"
                     value={field.options}
                     onChange={(e) => updateField(index, { options: e.target.value })}
@@ -480,24 +501,25 @@ export function NormasProcedimientosPanel() {
                 )}
                 <Input
                   className="h-8 flex-1 min-w-40 text-xs"
+                  disabled={!canConfigure}
                   placeholder="Placeholder (opcional)"
                   value={field.placeholder}
                   onChange={(e) => updateField(index, { placeholder: e.target.value })}
                 />
                 <label className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  <Switch checked={field.required} onCheckedChange={(v) => updateField(index, { required: v })} /> Obligatorio
+                  <Switch checked={field.required} disabled={!canConfigure} onCheckedChange={(v) => updateField(index, { required: v })} /> Obligatorio
                 </label>
               </div>
             </div>
           ))}
-          <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={addField}>
+          {canConfigure && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={addField}>
             <Plus className="size-3.5" /> Agregar campo
-          </Button>
+          </Button>}
         </div>
         <div className="mt-4 flex justify-end">
-          <Button size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => void saveProtocol()} disabled={savingProtocol}>
+          {canConfigure && <Button size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => void saveProtocol()} disabled={savingProtocol}>
             {savingProtocol ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Guardar protocolo
-          </Button>
+          </Button>}
         </div>
       </div>
     </div>

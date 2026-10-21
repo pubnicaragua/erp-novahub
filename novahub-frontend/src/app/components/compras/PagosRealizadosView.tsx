@@ -501,6 +501,10 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PaymentMade>) => {
+    if (!canPerform('PURCHASES_PAYMENTS', 'read') || !canPerform('PURCHASES_PAYMENTS', 'edit')) return;
+    const existingPayment = data.find((payment) => payment.id === id);
+    if ((existingPayment?.supplierInvoiceId || updates.supplierInvoiceId)
+      && !canPerform('PURCHASES_RECEIPTS', 'read')) return;
     const updateToastId = toast.loading('Guardando cambios en el pago...');
     try {
       const payload = { ...updates } as any;
@@ -533,6 +537,13 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
   };
 
   const handleSaveDoc = async () => {
+    const canSavePayment = editingId === 'NEW'
+      ? canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'pay')
+      : canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'edit');
+    if (!canSavePayment) return;
+    if (localDoc?.supplierInvoiceId && !canPerform('PURCHASES_RECEIPTS', 'read')) return;
+    const canManagePaymentEvidence = canPerform('PURCHASES_RECEIPTS', 'read')
+      && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
     const effectiveLines = paymentLines
       .map((line) => ({
@@ -576,6 +587,9 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
     if (!isSupplierActive(localDoc.supplierId)) return toast.error('No se pueden registrar pagos a proveedores inactivos');
     if (paymentEvidenceFiles.length > 0 && !localDoc.supplierInvoiceId) {
       return toast.error('Seleccione una factura de proveedor para asociar las evidencias del pago');
+    }
+    if (paymentEvidenceFiles.length > 0 && !canManagePaymentEvidence) {
+      return toast.error('No tiene permiso para adjuntar comprobantes a la factura del proveedor');
     }
     for (const file of paymentEvidenceFiles) {
       const extension = file.name.toLowerCase().split('.').pop() || '';
@@ -698,6 +712,9 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
+    const canCreatePayment = canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'pay');
+    const canEditPayment = canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'edit');
+    const canManagePaymentEvidence = canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
     
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
@@ -714,13 +731,13 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="payments" context="form" />
              {!isNew && canPerform('PURCHASES_PAYMENTS', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll onDownload={(format) => void handleDownloadPaymentPdf(localDoc as PaymentMade, format)} />}
-             {!isNew && canPerform('PURCHASES_PAYMENTS', 'delete') && (
+             {!isNew && canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'cancel') && (
                  <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
                   <Ban className="mr-2 size-3.5" /> Anular
                 </Button>
              )}
-            {((isNew && canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve')) || (!isNew && canPerform('PURCHASES_PAYMENTS', 'edit'))) && (
+            {((isNew && canCreatePayment) || (!isNew && canEditPayment)) && (
               <Button onClick={handleSaveDoc} disabled={paymentOverInvoiceBalance || paymentOverGeneralBalance || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (accountingConnectionEnabled && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Pago
               </Button>
@@ -737,7 +754,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                     <Combobox
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                      disabled={isNew ? !canCreatePayment : !canEditPayment}
                       options={suppliers
                         .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                         .map(s => ({ label: s.name, value: s.id, description: [s.companyName, s.code ? `[${s.code}]` : '', s.phone || ''].filter(Boolean).join(' · ') || 'Sin datos adicionales' }))}
@@ -749,7 +766,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Destino del pago</p>
                     <Select
-                      disabled={(isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')) || (!isNew && Boolean(localDoc.supplierInvoiceId))}
+                      disabled={(isNew ? !canCreatePayment : !canEditPayment) || (!isNew && Boolean(localDoc.supplierInvoiceId))}
                       value={paymentApplicationTarget}
                       onValueChange={(value) => {
                         setPartialPaymentEnabled(false);
@@ -771,7 +788,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                   {paymentApplicationTarget === 'INVOICE' && <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Factura a pagar</p>
                     <Combobox
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                      disabled={isNew ? !canCreatePayment : !canEditPayment}
                       options={currentBills.map(s => ({ label: `${s.number} (Saldo: ${s.balance ?? s.total})`, value: s.id }))}
                       value={localDoc.supplierInvoiceId || ''}
                       onChange={(val) => {
@@ -808,7 +825,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Fecha de Pago</p>
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                      disabled={isNew ? !canCreatePayment : !canEditPayment}
                       type="date" 
                       value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
@@ -842,7 +859,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                             <div>
                               <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
                               <Select
-                                disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                                disabled={isNew ? !canCreatePayment : !canEditPayment}
                                 value={normalizeMethod(line.method)}
                                 onValueChange={(method) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: method as PurchasePaymentMethod, bankAccountId: undefined, reference: '' } : item))}
                               >
@@ -855,7 +872,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                               baseCurrency={baseCurrency}
                               exchangeRate={globalRate}
                               label="Moneda"
-                              disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                              disabled={isNew ? !canCreatePayment : !canEditPayment}
                               onChange={(newCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                                 if (itemIndex !== index) return item;
                                 const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
@@ -875,7 +892,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                             <div>
                               <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p>
                               <Input
-                                disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                                disabled={isNew ? !canCreatePayment : !canEditPayment}
                                 type="text"
                                 inputMode="decimal"
                                 min="0"
@@ -912,7 +929,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                     </div>
                     {paymentOverInvoiceBalance && <p className="mt-2 text-[10px] font-bold text-rose-600">El monto excede el saldo de la factura.</p>}
                   </div>}
-                  <div className="col-span-2 rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
+                  {canManagePaymentEvidence && <div className="col-span-2 rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Evidencias del pago</p>
@@ -924,16 +941,17 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                       type="file"
                       multiple
                       accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx"
-                      disabled={(isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')) || !localDoc.supplierInvoiceId}
+                      disabled={(isNew ? !canCreatePayment : !canEditPayment) || !localDoc.supplierInvoiceId}
                       onChange={(event) => setPaymentEvidenceFiles(Array.from(event.target.files || []))}
                       className="h-10 bg-background text-xs"
                     />
                     {paymentEvidenceFiles.length > 0 && <p className="mt-1 truncate text-[10px] text-muted-foreground">Archivos seleccionados: {paymentEvidenceFiles.map((file) => file.name).join(', ')}</p>}
-                  </div>
+                  </div>}
+                  {!canManagePaymentEvidence && Boolean(localDoc.supplierInvoiceId) && <p className="col-span-2 text-[10px] text-muted-foreground">No puede adjuntar comprobantes a esta factura con los permisos actuales.</p>}
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Notas ADicionales</p>
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                      disabled={isNew ? !canCreatePayment : !canEditPayment}
                       value={localDoc.notes || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, notes: e.target.value })} 
                       className="h-8 text-xs" 
@@ -1031,13 +1049,13 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
             />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de pagos a proveedores" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
-             {canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && (
+             {canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'pay') && (
                <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
              )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailPayment(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_PAYMENTS', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedTargetId} bulkAction="cancel"
-          onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'delete') ? async (ids) => {
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailPayment(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'cancel')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedTargetId} bulkAction="cancel"
+          onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'cancel') ? async (ids) => {
             const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`);
             try {
               const paymentIds = new Set<string>();
@@ -1086,7 +1104,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
         onClose={() => setDetailPayment(null)}
         extraActions={detailPayment ? <>
           {canPerform('PURCHASES_PAYMENTS', 'edit') && !detailPayment.isGroupedPayment && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailPayment(null); setEditingId(detailPayment.id); }}><Pencil className="size-4" /> Editar</Button>}
-          {canPerform('PURCHASES_PAYMENTS', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => { setPendingCancelId(detailPayment.id); setPendingCancelGroup(detailPayment); setCancelReason(''); }}><Ban className="size-4" /> Anular</Button>}
+          {canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'cancel') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => { setPendingCancelId(detailPayment.id); setPendingCancelGroup(detailPayment); setCancelReason(''); }}><Ban className="size-4" /> Anular</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('PURCHASES_PAYMENTS', 'export') ? (format) => detailPayment ? void handleDownloadPaymentPdf(detailPayment, format) : undefined : undefined}
       />
@@ -1100,7 +1118,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
         loading={cancelLoading}
         disabled={!cancelReason.trim()}
         onConfirm={async () => {
-          if (!pendingCancelId || !cancelReason.trim()) return;
+          if (!pendingCancelId || !cancelReason.trim() || !canPerform('PURCHASES_PAYMENTS', 'read') || !canPerform('PURCHASES_PAYMENTS', 'cancel')) return;
           const cancelToastId = toast.loading('Anulando pago a proveedor...');
           try {
             setCancelLoading(true);

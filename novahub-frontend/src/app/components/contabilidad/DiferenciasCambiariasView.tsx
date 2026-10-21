@@ -82,8 +82,10 @@ function rateSourceLabel(source?: string | null) {
 
 export function DiferenciasCambiariasView() {
   const { canPerform } = useAuth();
-  const canCreate = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'create');
-  const canApprove = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'approve');
+  const canSaveRun = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'saveRun');
+  const canCreateJournal = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'createJournal');
+  const canPost = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'post');
+  const canCreateReversal = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'createReversal');
   const [asOfDate, setAsOfDate] = useState(today());
   const [rateInput, setRateInput] = useState('');
   const [appliedAsOfDate, setAppliedAsOfDate] = useState(today());
@@ -152,7 +154,7 @@ export function DiferenciasCambiariasView() {
   const saveValuation = () => runAction(
     'save',
     () => {
-      if (!canCreate) return Promise.resolve(null);
+      if (!canSaveRun) return Promise.resolve(null);
       return contabilidadService.saveExchangeDifferencesRun({
         asOfDate: appliedAsOfDate,
         ...(appliedRate ? { rate: Number(appliedRate) } : {}),
@@ -162,17 +164,17 @@ export function DiferenciasCambiariasView() {
   );
 
   const createDraftJournal = () => {
-    if (!run || !canCreate) return;
+    if (!run || !canCreateJournal) return;
     runAction('journal', () => contabilidadService.createExchangeDifferencesJournal(run.id), 'Asiento borrador creado. Revisa sus líneas antes de contabilizarlo.');
   };
 
   const postValuation = () => {
-    if (!run || !canApprove || !window.confirm('¿Contabilizar la valoración cambiaria? Esta acción actualizará los saldos contables y no modifica las facturas ni los pagos.')) return;
+    if (!run || !canPost || !window.confirm('¿Contabilizar la valoración cambiaria? Esta acción actualizará los saldos contables y no modifica las facturas ni los pagos.')) return;
     runAction('post', () => contabilidadService.postExchangeDifferencesRun(run.id), 'Valoración cambiaria contabilizada correctamente.');
   };
 
   const createReversal = () => {
-    if (!run || !canCreate || !window.confirm('¿Crear el asiento borrador de reversión para el siguiente período? El borrador deberá revisarse y contabilizarse desde el Diario.')) return;
+    if (!run || !canCreateReversal || !window.confirm('¿Crear el asiento borrador de reversión para el siguiente período? El borrador deberá revisarse y contabilizarse desde el Diario.')) return;
     runAction('reversal', () => contabilidadService.createExchangeDifferencesReversal(run.id), 'Borrador de reversión creado.');
   };
 
@@ -246,19 +248,19 @@ export function DiferenciasCambiariasView() {
                 </div>
               </div>
               <div className="flex min-w-0 flex-wrap gap-2 xl:justify-end">
-                {canCreate && <Button type="button" variant="outline" onClick={saveValuation} disabled={loading || Boolean(actionLoading)} className="gap-2 rounded-xl text-xs font-bold">
+                {canSaveRun && <Button type="button" variant="outline" onClick={saveValuation} disabled={loading || Boolean(actionLoading)} className="gap-2 rounded-xl text-xs font-bold">
                   {actionLoading === 'save' ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                   Guardar valoración
                 </Button>}
-                {canCreate && <Button type="button" variant="outline" onClick={createDraftJournal} disabled={!run || run.status !== 'PREVIEW' || preview.totals.missingHistoricalRateCount > 0 || Boolean(actionLoading)} className="gap-2 rounded-xl text-xs font-bold">
+                {canCreateJournal && <Button type="button" variant="outline" onClick={createDraftJournal} disabled={!run || run.status !== 'PREVIEW' || preview.totals.missingHistoricalRateCount > 0 || Boolean(actionLoading)} className="gap-2 rounded-xl text-xs font-bold">
                   {actionLoading === 'journal' ? <Loader2 className="size-4 animate-spin" /> : <BookOpenCheck className="size-4" />}
                   Crear asiento borrador
                 </Button>}
-                {canApprove && <Button type="button" onClick={postValuation} disabled={!run || run.status !== 'DRAFT' || Boolean(actionLoading)} className="gap-2 rounded-xl text-xs font-bold">
+                {canPost && <Button type="button" onClick={postValuation} disabled={!run || run.status !== 'DRAFT' || Boolean(actionLoading)} className="gap-2 rounded-xl text-xs font-bold">
                   {actionLoading === 'post' ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
                   Contabilizar ajuste
                 </Button>}
-                {canCreate && <Button type="button" variant="ghost" onClick={createReversal} disabled={!run || run.status !== 'POSTED' || Boolean(run.reversal) || Boolean(actionLoading)} className="gap-2 rounded-xl text-xs font-bold">
+                {canCreateReversal && <Button type="button" variant="ghost" onClick={createReversal} disabled={!run || run.status !== 'POSTED' || Boolean(run.reversal) || Boolean(actionLoading)} className="gap-2 rounded-xl text-xs font-bold">
                   {actionLoading === 'reversal' ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
                   Crear reversión
                 </Button>}

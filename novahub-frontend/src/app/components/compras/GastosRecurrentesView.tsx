@@ -185,13 +185,13 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   };
 
   const columns: ColumnDef<RecurringExpense>[] = [
-    { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES_REC', 'edit') },
+    { key: 'description', header: 'Descripción' },
 
     { key: 'amount',      header: 'Monto',       width: '130px',
       render: (val, row) => (
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
       ) },
-    { key: 'frequency',   header: 'Frecuencia',  width: '120px', editable: canPerform('PURCHASES_EXPENSES_REC', 'edit'), type: 'select', options: freqOpts,
+    { key: 'frequency',   header: 'Frecuencia',  width: '120px', type: 'select', options: freqOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toLowerCase()]||val}</Badge> },
 
     { key: 'startDate',   header: 'Inicio',      width: '110px',
@@ -201,17 +201,24 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringExpense>) => {
+    const current = data.find((expense) => String(expense.id) === String(id));
+    if (!current || String((current as any).originModule || 'PURCHASES_EXPENSES_REC') !== 'PURCHASES_EXPENSES_REC'
+      || !canPerform('PURCHASES_EXPENSES_REC', 'read') || !canPerform('PURCHASES_EXPENSES_REC', 'edit')) return;
     const updateToastId = toast.loading('Guardando cambios en el gasto recurrente...');
     try { await recurringExpensesService.update(id as string, updates); toast.success('Actualizado', { id: updateToastId }); onRefresh(); }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', { id: updateToastId }); throw new Error('Update failed', { cause: e }); }
   };
 
   const handleStatusAction = async (row: RecurringExpense) => {
+    if (String((row as any).originModule || 'PURCHASES_EXPENSES_REC') !== 'PURCHASES_EXPENSES_REC') return;
     const current = String(row.status || '').toUpperCase();
     const status = current === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    const action = status === 'ACTIVE' ? 'resume' : 'pause';
+    if (!canPerform('PURCHASES_EXPENSES_REC', 'read') || !canPerform('PURCHASES_EXPENSES_REC', action)) return;
     const statusToastId = toast.loading(status === 'ACTIVE' ? 'Activando gasto recurrente...' : 'Pausando gasto recurrente...');
     try {
-      await recurringExpensesService.update(row.id, { status } as any);
+      if (status === 'ACTIVE') await recurringExpensesService.resume(row.id);
+      else await recurringExpensesService.pause(row.id);
       toast.success(status === 'ACTIVE' ? 'Gasto recurrente activado' : 'Gasto recurrente pausado', { id: statusToastId });
       onRefresh();
     } catch (e: any) {
@@ -249,6 +256,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
     };
     delete (cleanedDoc as any).account;
     delete (cleanedDoc as any).supplier;
+    if (editingId !== 'NEW') delete (cleanedDoc as any).status;
 
     const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando gasto recurrente...' : 'Guardando gasto recurrente...');
     try {
@@ -472,6 +480,8 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
+                const expense = data.find((candidate) => String(candidate.id) === String(id));
+                if (String((expense as any)?.originModule || 'PURCHASES_EXPENSES_REC') !== 'PURCHASES_EXPENSES_REC') continue;
                 await recurringExpensesService.delete(id as string);
               }
               toast.success('Elementos eliminados', { id: deleteToastId });
@@ -482,8 +492,8 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
           } : undefined}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <Button title="Ver detalle completo" aria-label="Ver detalle completo del gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setDetailExpense(null); openEditor(row.id); }}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_EXPENSES_REC', 'edit') && <Button title="Editar gasto recurrente" aria-label="Editar gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailExpense(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
+              <Button title="Ver detalle completo" aria-label="Ver detalle completo del gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailExpense(row)}><Eye className="size-4" /></Button>
+              {String((row as any).originModule || 'PURCHASES_EXPENSES_REC') === 'PURCHASES_EXPENSES_REC' && canPerform('PURCHASES_EXPENSES_REC', 'read') && canPerform('PURCHASES_EXPENSES_REC', 'edit') && <Button title="Editar gasto recurrente" aria-label="Editar gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailExpense(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
             </div>
           )}
         />
@@ -506,9 +516,9 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
           extraActions={detailExpense && (() => {
             const status = String(detailExpense.status || '').toUpperCase();
             return <>
-              {canPerform('PURCHASES_EXPENSES_REC', 'edit') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailExpense(null); openEditor(detailExpense.id); }}><Pencil className="size-4" /> Editar</Button>}
-              {canPerform('PURCHASES_EXPENSES_REC', 'edit') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailExpense)}>{status === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />} {status === 'ACTIVE' ? 'Pausar' : 'Activar'}</Button>}
-              {canPerform('PURCHASES_EXPENSES_REC', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
+              {String((detailExpense as any).originModule || 'PURCHASES_EXPENSES_REC') === 'PURCHASES_EXPENSES_REC' && canPerform('PURCHASES_EXPENSES_REC', 'read') && canPerform('PURCHASES_EXPENSES_REC', 'edit') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailExpense(null); openEditor(detailExpense.id); }}><Pencil className="size-4" /> Editar</Button>}
+              {String((detailExpense as any).originModule || 'PURCHASES_EXPENSES_REC') === 'PURCHASES_EXPENSES_REC' && canPerform('PURCHASES_EXPENSES_REC', 'read') && canPerform('PURCHASES_EXPENSES_REC', status === 'ACTIVE' ? 'pause' : 'resume') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailExpense)}>{status === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />} {status === 'ACTIVE' ? 'Pausar' : 'Activar'}</Button>}
+              {String((detailExpense as any).originModule || 'PURCHASES_EXPENSES_REC') === 'PURCHASES_EXPENSES_REC' && canPerform('PURCHASES_EXPENSES_REC', 'read') && canPerform('PURCHASES_EXPENSES_REC', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
             </>;
           })()}
           onDownloadPdf={canPerform('PURCHASES_EXPENSES_REC', 'export') ? (format) => detailExpense ? void handleDownloadRecurringPdf(detailExpense, format) : undefined : undefined}

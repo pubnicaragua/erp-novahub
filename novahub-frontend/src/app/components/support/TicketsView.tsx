@@ -33,7 +33,7 @@ import {
 import { supportService } from '../../services/support.service';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, type PermissionAction } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
@@ -74,6 +74,19 @@ const isTicketAdmin = (user?: { role?: string; isPlatformAdmin?: boolean } | nul
 };
 
 const isTerminalTicket = (ticket?: Ticket | null) => ['RESOLVED', 'CLOSED'].includes(String(ticket?.status || '').toUpperCase());
+
+const TICKET_STATUS_TRANSITIONS: Record<string, Array<{ value: Ticket['status']; action: PermissionAction }>> = {
+  OPEN: [
+    { value: 'IN_PROGRESS', action: 'startTicket' },
+    { value: 'RESOLVED', action: 'resolveTicket' },
+  ],
+  IN_PROGRESS: [
+    { value: 'OPEN', action: 'returnTicketToOpen' },
+    { value: 'RESOLVED', action: 'resolveTicket' },
+  ],
+  RESOLVED: [{ value: 'CLOSED', action: 'closeTicket' }],
+  CLOSED: [],
+};
 
 const formatTicketDate = (value?: string | null) => value ? format(new Date(value), 'dd/MM/yyyy HH:mm') : 'Sin fecha';
 
@@ -174,15 +187,21 @@ const ticketProductLinks = (ticket?: Ticket | null): TicketProductLink[] => {
 
 export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog = [], categoryCatalog = [], agentCatalog = [], invoiceCatalog = [], productCatalog = [], loading, onRefresh, onHelp, targetTicketId, onTargetTicketHandled }) => {
   const { canPerform, user } = useAuth();
+  const canManageCategories = canPerform('TICKETS_LIST', 'create') || canPerform('TICKETS_LIST', 'edit');
   const canInteractWithTicket = (ticket?: Ticket | null) => Boolean(
     ticket && user && (isTicketAdmin(user) || ticket.createdById === user.id || ticket.assignedToId === user.id),
   );
+  const canTransitionTicketStatus = (ticket: Ticket | null | undefined, targetStatus: string) => {
+    if (!ticket || !canInteractWithTicket(ticket) || (!isTicketAdmin(user) && ticket.assignedToId !== user?.id)) return false;
+    const transition = TICKET_STATUS_TRANSITIONS[String(ticket.status || '').toUpperCase()]
+      ?.find((option) => option.value === targetStatus);
+    return Boolean(transition && canPerform('TICKETS_LIST', transition.action));
+  };
+  const availableTicketStatusTransitions = (ticket?: Ticket | null) => (
+    TICKET_STATUS_TRANSITIONS[String(ticket?.status || '').toUpperCase()] || []
+  ).filter((transition) => canTransitionTicketStatus(ticket, transition.value));
   const canChangeTicketStatus = (ticket?: Ticket | null) => Boolean(
-    ticket
-      && canPerform('TICKETS_LIST', 'edit')
-      && canInteractWithTicket(ticket)
-      && (isTicketAdmin(user) || ticket.assignedToId === user?.id)
-      && String(ticket.status || '').toUpperCase() !== 'CLOSED',
+    availableTicketStatusTransitions(ticket).length > 0,
   );
   const canEditTicket = (ticket?: Ticket | null) => canPerform('TICKETS_LIST', 'edit') && canInteractWithTicket(ticket) && !isTerminalTicket(ticket);
   const [searchTerm, setSearchTerm] = useState('');
@@ -270,14 +289,10 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
   ];
 
   const openStatusDialog = (ticket: Ticket) => {
-    const currentStatus = String(ticket.status || '').toUpperCase();
-    const defaultNextStatus = currentStatus === 'OPEN'
-      ? 'IN_PROGRESS'
-      : currentStatus === 'IN_PROGRESS'
-        ? 'RESOLVED'
-        : 'CLOSED';
+    const transitions = availableTicketStatusTransitions(ticket);
+    if (transitions.length === 0) return;
     setStatusDialogTicket(ticket);
-    setNextStatus(defaultNextStatus);
+    setNextStatus(transitions[0].value);
     setStatusResolutionNote(ticket.resolutionNote || '');
   };
 
@@ -370,9 +385,6 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
       key: 'status',
       header: 'Estado',
       width: '120px',
-      editable: canPerform('TICKETS_LIST', 'edit'),
-      type: 'select',
-      options: statusOpts,
       render: (val: any) => {
         const option = statusOpts.find((x) => x.value === (val || '').toUpperCase());
         return (
@@ -435,11 +447,13 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
   };
 
   const handleAdd = () => {
+    if (!canPerform('TICKETS_LIST', 'create')) return;
     setEditingTicket(null);
     setFormOpen(true);
   };
 
   const handleEdit = (ticket: Ticket) => {
+    if (!canEditTicket(ticket)) return;
     setEditingTicket(ticket);
     setFormOpen(true);
   };
@@ -451,6 +465,10 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
   };
 
   const saveCategory = async () => {
+    const canSaveCategory = editingCategoryId
+      ? canPerform('TICKETS_LIST', 'edit')
+      : canPerform('TICKETS_LIST', 'create');
+    if (!canSaveCategory) return;
     const name = categoryName.trim();
     if (!name) {
       toast.error('El nombre de la categoría es obligatorio');
@@ -475,6 +493,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
   };
 
   const toggleCategory = async (category: any) => {
+    if (!canPerform('TICKETS_LIST', 'edit')) return;
     try {
       await supportService.updateCategory(category.id, { isActive: category.isActive === false });
       await onRefresh();
@@ -484,6 +503,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
   };
 
   const handleDelete = async (ticket: Ticket) => {
+    if (!canPerform('TICKETS_LIST', 'delete')) return;
     if (!canInteractWithTicket(ticket)) {
       toast.error('Solo el creador, responsable o administrador puede interactuar con este ticket');
       return;
@@ -501,7 +521,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
   };
 
   const handleReopen = async () => {
-    if (!activeSelectedTicket?.id) return;
+    if (!activeSelectedTicket?.id || !canPerform('TICKETS_LIST', 'reopenTicket') || !canInteractWithTicket(activeSelectedTicket)) return;
     const reason = reopenReason.trim();
     if (!reason) {
       toast.error('Escribe el motivo de reapertura');
@@ -523,7 +543,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
   };
 
   const handleStatusChange = async () => {
-    if (!statusDialogTicket?.id || !canChangeTicketStatus(statusDialogTicket)) {
+    if (!statusDialogTicket?.id || !canTransitionTicketStatus(statusDialogTicket, nextStatus)) {
       toast.error('Solo el responsable o un administrador puede cambiar el estado');
       return;
     }
@@ -551,7 +571,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
   };
 
   const sendComment = async () => {
-    if (!activeSelectedTicket?.id) return;
+    if (!activeSelectedTicket?.id || !canPerform('TICKETS_LIST', 'commentTicket')) return;
     if (!canInteractWithTicket(activeSelectedTicket)) {
       toast.error('Solo el creador, responsable o administrador puede interactuar con este ticket');
       return;
@@ -664,7 +684,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              {canPerform('TICKETS_LIST', 'edit') && (
+              {canManageCategories && (
                 <Button type="button" variant="outline" onClick={() => setCategoryManagerOpen(true)} className="h-10 shrink-0 gap-2 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest">
                   <Tags className="size-4" /> Categorías
                 </Button>
@@ -754,7 +774,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                     <ArrowRightLeft className="size-4" />
                   </Button>
                 )}
-                {canPerform('TICKETS_LIST', 'edit') && canInteractWithTicket(row) && isTerminalTicket(row) && (
+                {canPerform('TICKETS_LIST', 'reopenTicket') && canInteractWithTicket(row) && isTerminalTicket(row) && (
                   <Button
                     type="button"
                     variant="ghost"
@@ -818,9 +838,9 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                 {activeSelectedTicket && canChangeTicketStatus(activeSelectedTicket) && <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl text-[10px] font-black uppercase tracking-widest text-blue-600 hover:bg-blue-500/10" onClick={() => openStatusDialog(activeSelectedTicket)}><ArrowRightLeft className="mr-1.5 size-3.5" />Cambiar estado</Button>}
                 {activeSelectedTicket && canInteractWithTicket(activeSelectedTicket) && (
                   isTerminalTicket(activeSelectedTicket) ? (
-                    <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => setReopenDialogOpen(true)}>
+                    canPerform('TICKETS_LIST', 'reopenTicket') ? <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => setReopenDialogOpen(true)}>
                       <RotateCcw className="mr-1.5 size-3.5" /> Reabrir
-                    </Button>
+                    </Button> : null
                   ) : canEditTicket(activeSelectedTicket) ? (
                     <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl text-[10px] font-black uppercase tracking-widest" onClick={() => { setSelectedTicket(null); handleEdit(activeSelectedTicket); }}>
                       <Pencil className="mr-1.5 size-3.5" /> Editar
@@ -1013,26 +1033,26 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                     </div>
                   ))}
                 </div>
-                <div className="space-y-2">
+                {canPerform('TICKETS_LIST', 'commentTicket') && canInteractWithTicket(activeSelectedTicket) && <div className="space-y-2">
                   <Textarea
                     placeholder="Agregar comentario..."
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     className="min-h-20"
-                    disabled={!canPerform('TICKETS_LIST', 'edit') || !canInteractWithTicket(activeSelectedTicket)}
+                    disabled={!canPerform('TICKETS_LIST', 'commentTicket') || !canInteractWithTicket(activeSelectedTicket)}
                   />
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <input type="checkbox" checked={commentInternal} onChange={(event) => setCommentInternal(event.target.checked)} disabled={!canPerform('TICKETS_LIST', 'edit') || !canInteractWithTicket(activeSelectedTicket)} className="size-3.5 accent-primary" />
+                    <input type="checkbox" checked={commentInternal} onChange={(event) => setCommentInternal(event.target.checked)} disabled={!canPerform('TICKETS_LIST', 'commentTicket') || !canInteractWithTicket(activeSelectedTicket)} className="size-3.5 accent-primary" />
                     Comentario interno
                   </label>
                   <Button
                     onClick={sendComment}
-                    disabled={commentLoading || !newComment.trim() || !canPerform('TICKETS_LIST', 'edit') || !canInteractWithTicket(activeSelectedTicket)}
+                    disabled={commentLoading || !newComment.trim() || !canPerform('TICKETS_LIST', 'commentTicket') || !canInteractWithTicket(activeSelectedTicket)}
                     className="w-full h-9 text-[10px] font-black uppercase tracking-widest"
                   >
                     {commentLoading ? 'Guardando...' : 'Comentar'}
                   </Button>
-                </div>
+                </div>}
               </div>
 
               <div className="space-y-2">
@@ -1085,9 +1105,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                 <SelectTrigger className="h-10 rounded-xl text-sm"><SelectValue placeholder="Selecciona un estado" /></SelectTrigger>
                 <SelectContent>
                   {statusOpts
-                    .filter((option) => option.value !== String(statusDialogTicket?.status || '').toUpperCase())
-                    .filter((option) => !(isTerminalTicket(statusDialogTicket) && option.value === 'OPEN'))
-                    .filter((option) => option.value !== 'CLOSED' || String(statusDialogTicket?.status || '').toUpperCase() === 'RESOLVED')
+                    .filter((option) => canTransitionTicketStatus(statusDialogTicket, option.value))
                     .map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -1107,7 +1125,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
           </div>
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
             <Button type="button" variant="outline" onClick={() => setStatusDialogTicket(null)} disabled={statusSaving}>Cancelar</Button>
-            <Button type="button" onClick={handleStatusChange} disabled={statusSaving || !nextStatus || (nextStatus === 'RESOLVED' && !statusResolutionNote.trim())}>
+            <Button type="button" onClick={handleStatusChange} disabled={statusSaving || !nextStatus || !canTransitionTicketStatus(statusDialogTicket, nextStatus) || (nextStatus === 'RESOLVED' && !statusResolutionNote.trim())}>
               {statusSaving ? 'Guardando...' : 'Guardar estado'}
             </Button>
           </DialogFooter>
@@ -1147,7 +1165,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={categoryManagerOpen} onOpenChange={(open) => { setCategoryManagerOpen(open); if (!open) resetCategoryForm(); }}>
+      <Dialog open={categoryManagerOpen && canManageCategories} onOpenChange={(open) => { setCategoryManagerOpen(open); if (!open) resetCategoryForm(); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Gestionar categorías</DialogTitle>
@@ -1157,15 +1175,15 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
             <div className="grid grid-cols-[1fr_auto_auto] gap-2">
               <Input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder="Nombre de categoría" className="h-9 text-xs" />
               <input type="color" value={categoryColor} onChange={(event) => setCategoryColor(event.target.value)} className="h-9 w-10 cursor-pointer rounded-lg border border-border bg-background p-1" aria-label="Color de categoría" />
-              <Button type="button" onClick={saveCategory} disabled={categorySaving} className="h-9 text-[10px] font-black uppercase">{editingCategoryId ? 'Guardar' : 'Agregar'}</Button>
+              {(editingCategoryId ? canPerform('TICKETS_LIST', 'edit') : canPerform('TICKETS_LIST', 'create')) && <Button type="button" onClick={saveCategory} disabled={categorySaving} className="h-9 text-[10px] font-black uppercase">{editingCategoryId ? 'Guardar' : 'Agregar'}</Button>}
             </div>
             <div className="max-h-64 space-y-2 overflow-y-auto">
               {categoryCatalog.map((category: any) => (
                 <div key={category.id} className="flex items-center gap-3 rounded-xl border border-border/60 p-2.5">
                   <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: category.color || '#64748b' }} />
                   <span className={cn('min-w-0 flex-1 truncate text-sm font-semibold', category.isActive === false && 'text-muted-foreground line-through')}>{category.name}</span>
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => { setEditingCategoryId(category.id); setCategoryName(category.name); setCategoryColor(category.color || '#64748b'); }}>Editar</Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-muted-foreground" onClick={() => toggleCategory(category)}>{category.isActive === false ? 'Activar' : 'Desactivar'}</Button>
+                  {canPerform('TICKETS_LIST', 'edit') && <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => { setEditingCategoryId(category.id); setCategoryName(category.name); setCategoryColor(category.color || '#64748b'); }}>Editar</Button>}
+                  {canPerform('TICKETS_LIST', 'edit') && <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-muted-foreground" onClick={() => toggleCategory(category)}>{category.isActive === false ? 'Activar' : 'Desactivar'}</Button>}
                 </div>
               ))}
             </div>
@@ -1186,6 +1204,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
         agentCatalog={agentCatalog}
         invoiceCatalog={invoiceCatalog}
         productCatalog={productCatalog}
+        canAddAttachments={canPerform('TICKETS_LIST', 'create')}
         onRefresh={onRefresh}
       />
 

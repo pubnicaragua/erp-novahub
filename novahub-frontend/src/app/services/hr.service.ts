@@ -32,6 +32,7 @@ export const hrService = {
     id: string;
     firstName: string;
     lastName: string;
+    payFrequency?: string;
     email?: string;
     phone?: string;
     employeeNumber?: string;

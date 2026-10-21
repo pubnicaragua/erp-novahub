@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, CheckCircle2, ListTodo, Flag, CalendarDays } from 'lucide-react';
+import { Plus, Pencil, Trash2, CheckCircle2, ListTodo, Flag, CalendarDays, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -39,7 +39,7 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
 
   const canViewTasks = showTasks && canPerform('PROJECTS_TASKS', 'view');
   const canViewMilestones = showMilestones && canPerform('PROJECTS_MILESTONES', 'view');
-  const canViewTimeline = showTimeline && canPerform('PROJECTS_TIME', 'view');
+  const canViewTimeline = showTimeline && canPerform('PROJECTS_TASKS', 'view');
   const tasksQuery = useTenantQuery<ProjectTask[]>(['projects', 'tasks', projectId], (s) => projectsService.tasks(projectId, s), { enabled: canViewTasks });
   const milestonesQuery = useTenantQuery<ProjectMilestone[]>(['projects', 'milestones', projectId], (s) => projectsService.milestones(projectId, s), { enabled: canViewMilestones });
   const timelineQuery = useTenantQuery<any>(['projects', 'timeline', projectId], (s) => projectsService.timeline(projectId, s), { enabled: canViewTimeline });
@@ -52,12 +52,39 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
   const users = asList(usersQuery.data);
 
   const invalidate = () => invalidateTenantQueries(queryClient);
+  const requirePermission = (allowed: boolean, message: string) => {
+    if (!allowed) throw new Error(message);
+  };
+  const taskStatusAction = (status: unknown): 'complete' | 'cancel' | 'changeStatus' => status === 'COMPLETED'
+    ? 'complete'
+    : status === 'CANCELLED'
+      ? 'cancel'
+      : 'changeStatus';
+  const milestoneStatusAction = taskStatusAction;
 
   const taskMutations = useMutation({
     mutationFn: (args: { type: 'create' | 'update' | 'complete' | 'delete'; id?: string; payload?: any }) => {
-      if (args.type === 'create') return projectsService.createTask(projectId, args.payload);
-      if (args.type === 'update') return projectsService.updateTask(projectId, args.id!, args.payload);
-      if (args.type === 'complete') return projectsService.completeTask(projectId, args.id!);
+      requirePermission(canViewTasks, 'No tienes permiso para consultar las tareas de este proyecto.');
+      if (args.type === 'create') {
+        requirePermission(canCreateTasks, 'No tienes permiso para crear tareas.');
+        const status = args.payload?.status;
+        requirePermission(!status || status === 'PENDING' || canPerform('PROJECTS_TASKS', taskStatusAction(status)), 'No tienes permiso para iniciar la tarea en ese estado.');
+        return projectsService.createTask(projectId, args.payload);
+      }
+      if (args.type === 'update') {
+        const entries = Object.entries(args.payload || {}).filter(([, value]) => value !== undefined);
+        const hasStatus = entries.some(([key]) => key === 'status');
+        const hasDetails = entries.some(([key]) => key !== 'status');
+        requirePermission(!hasDetails || canEditTasks, 'No tienes permiso para editar los datos de la tarea.');
+        requirePermission(!hasStatus || canPerform('PROJECTS_TASKS', taskStatusAction(args.payload.status)), 'No tienes permiso para cambiar al estado solicitado.');
+        requirePermission(hasDetails || hasStatus ? true : canEditTasks, 'No tienes permiso para editar tareas.');
+        return projectsService.updateTask(projectId, args.id!, args.payload);
+      }
+      if (args.type === 'complete') {
+        requirePermission(canCompleteTasks, 'No tienes permiso para completar tareas.');
+        return projectsService.completeTask(projectId, args.id!);
+      }
+      requirePermission(canDeleteTasks, 'No tienes permiso para eliminar tareas.');
       return projectsService.deleteTask(projectId, args.id!);
     },
     onSuccess: () => { invalidate(); },
@@ -66,8 +93,23 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
 
   const milestoneMutations = useMutation({
     mutationFn: (args: { type: 'create' | 'update' | 'delete'; id?: string; payload?: any }) => {
-      if (args.type === 'create') return projectsService.createMilestone(projectId, args.payload);
-      if (args.type === 'update') return projectsService.updateMilestone(projectId, args.id!, args.payload);
+      requirePermission(canViewMilestones, 'No tienes permiso para consultar los hitos de este proyecto.');
+      if (args.type === 'create') {
+        requirePermission(canCreateMilestones, 'No tienes permiso para crear hitos.');
+        const status = args.payload?.status;
+        requirePermission(!status || status === 'PENDING' || canPerform('PROJECTS_MILESTONES', milestoneStatusAction(status)), 'No tienes permiso para iniciar el hito en ese estado.');
+        return projectsService.createMilestone(projectId, args.payload);
+      }
+      if (args.type === 'update') {
+        const entries = Object.entries(args.payload || {}).filter(([, value]) => value !== undefined);
+        const hasStatus = entries.some(([key]) => key === 'status');
+        const hasDetails = entries.some(([key]) => key !== 'status');
+        requirePermission(!hasDetails || canEditMilestones, 'No tienes permiso para editar los datos del hito.');
+        requirePermission(!hasStatus || canPerform('PROJECTS_MILESTONES', milestoneStatusAction(args.payload.status)), 'No tienes permiso para cambiar al estado solicitado.');
+        requirePermission(hasDetails || hasStatus ? true : canEditMilestones, 'No tienes permiso para editar hitos.');
+        return projectsService.updateMilestone(projectId, args.id!, args.payload);
+      }
+      requirePermission(canDeleteMilestones, 'No tienes permiso para eliminar hitos.');
       return projectsService.deleteMilestone(projectId, args.id!);
     },
     onSuccess: () => { invalidate(); },
@@ -75,9 +117,15 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
   });
 
   const canEditTasks = canPerform('PROJECTS_TASKS', 'edit');
+  const canChangeTaskStatus = canPerform('PROJECTS_TASKS', 'changeStatus');
+  const canCompleteTasks = canPerform('PROJECTS_TASKS', 'complete');
+  const canCancelTasks = canPerform('PROJECTS_TASKS', 'cancel');
   const canCreateTasks = canPerform('PROJECTS_TASKS', 'create');
   const canDeleteTasks = canPerform('PROJECTS_TASKS', 'delete');
   const canEditMilestones = canViewMilestones && canPerform('PROJECTS_MILESTONES', 'edit');
+  const canChangeMilestoneStatus = canPerform('PROJECTS_MILESTONES', 'changeStatus');
+  const canCompleteMilestones = canPerform('PROJECTS_MILESTONES', 'complete');
+  const canCancelMilestones = canPerform('PROJECTS_MILESTONES', 'cancel');
   const canCreateMilestones = canViewMilestones && canPerform('PROJECTS_MILESTONES', 'create');
   const canDeleteMilestones = canViewMilestones && canPerform('PROJECTS_MILESTONES', 'delete');
 
@@ -103,10 +151,11 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
                     <Badge variant="outline" className={cn('border', TASK_STATUS_META[m.status].badge)}>{TASK_STATUS_META[m.status].label}</Badge>
                   </div>
                   {canPerform('PROJECTS_TASKS', 'view') && m._count?.tasks != null && <p className="mt-2 text-xs text-muted-foreground">{m._count.tasks} tareas vinculadas</p>}
-                  {canEditMilestones && (
+                  {(canEditMilestones || canChangeMilestoneStatus || canCompleteMilestones || canCancelMilestones || canDeleteMilestones) && (
                     <div className="mt-3 flex gap-1">
-                      {m.status !== 'COMPLETED' && <Button size="sm" variant="outline" onClick={() => milestoneMutations.mutate({ type: 'update', id: m.id, payload: { status: 'COMPLETED' } })}><CheckCircle2 className="size-3.5" /> Completar</Button>}
-                      <Button size="icon" variant="ghost" className="size-8" onClick={() => setMilestoneDialog({ open: true, editing: m })}><Pencil className="size-4" /></Button>
+                      {m.status !== 'COMPLETED' && canCompleteMilestones && <Button size="sm" variant="outline" onClick={() => milestoneMutations.mutate({ type: 'update', id: m.id, payload: { status: 'COMPLETED' } })}><CheckCircle2 className="size-3.5" /> Completar</Button>}
+                      {m.status !== 'CANCELLED' && canCancelMilestones && <Button size="icon" variant="ghost" className="size-8 text-rose-500" title="Cancelar hito" aria-label="Cancelar hito" onClick={() => milestoneMutations.mutate({ type: 'update', id: m.id, payload: { status: 'CANCELLED' } })}><XCircle className="size-4" /></Button>}
+                      {(canEditMilestones || canChangeMilestoneStatus) && <Button size="icon" variant="ghost" className="size-8" title="Editar hito" aria-label="Editar hito" onClick={() => setMilestoneDialog({ open: true, editing: m })}><Pencil className="size-4" /></Button>}
                       {canDeleteMilestones && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setConfirmDelete({ type: 'milestone', id: m.id, title: m.name })}><Trash2 className="size-4" /></Button>}
                     </div>
                   )}
@@ -163,8 +212,9 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
-                        {t.status !== 'COMPLETED' && canEditTasks && <Button size="icon" variant="ghost" className="size-8 text-emerald-600" title="Completar" onClick={() => taskMutations.mutate({ type: 'complete', id: t.id })}><CheckCircle2 className="size-4" /></Button>}
-                        {canEditTasks && <Button size="icon" variant="ghost" className="size-8" onClick={() => setTaskDialog({ open: true, editing: t })}><Pencil className="size-4" /></Button>}
+                        {t.status !== 'COMPLETED' && canCompleteTasks && <Button size="icon" variant="ghost" className="size-8 text-emerald-600" title="Completar" aria-label="Completar tarea" onClick={() => taskMutations.mutate({ type: 'complete', id: t.id })}><CheckCircle2 className="size-4" /></Button>}
+                        {t.status !== 'CANCELLED' && canCancelTasks && <Button size="icon" variant="ghost" className="size-8 text-rose-500" title="Cancelar" aria-label="Cancelar tarea" onClick={() => taskMutations.mutate({ type: 'update', id: t.id, payload: { status: 'CANCELLED' } })}><XCircle className="size-4" /></Button>}
+                        {(canEditTasks || canChangeTaskStatus) && <Button size="icon" variant="ghost" className="size-8" title="Editar tarea" aria-label="Editar tarea" onClick={() => setTaskDialog({ open: true, editing: t })}><Pencil className="size-4" /></Button>}
                         {canDeleteTasks && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setConfirmDelete({ type: 'task', id: t.id, title: t.title })}><Trash2 className="size-4" /></Button>}
                       </div>
                     </TableCell>
@@ -179,16 +229,16 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
       {canViewTimeline && <Cronograma tasks={timelineTasks} milestones={timelineMilestones} />}
 
       {taskDialog.open && (
-        <TaskFormDialog editing={taskDialog.editing} users={users} milestones={milestones} onClose={() => setTaskDialog({ open: false, editing: null })}
+        <TaskFormDialog editing={taskDialog.editing} users={users} milestones={milestones} canEdit={canEditTasks} canChangeStatus={canChangeTaskStatus} canComplete={canCompleteTasks} canCancel={canCancelTasks} onClose={() => setTaskDialog({ open: false, editing: null })}
           onSubmit={(payload) => taskMutations.mutate(taskDialog.editing ? { type: 'update', id: taskDialog.editing.id, payload } : { type: 'create', payload })} />
       )}
       {canViewMilestones && milestoneDialog.open && (
-        <MilestoneFormDialog editing={milestoneDialog.editing} onClose={() => setMilestoneDialog({ open: false, editing: null })}
+        <MilestoneFormDialog editing={milestoneDialog.editing} canEdit={canEditMilestones} canChangeStatus={canChangeMilestoneStatus} canComplete={canCompleteMilestones} canCancel={canCancelMilestones} onClose={() => setMilestoneDialog({ open: false, editing: null })}
           onSubmit={(payload) => milestoneMutations.mutate(milestoneDialog.editing ? { type: 'update', id: milestoneDialog.editing.id, payload } : { type: 'create', payload })} />
       )}
 
       <ConfirmDialog
-        open={Boolean(confirmDelete)}
+        open={Boolean(confirmDelete) && (confirmDelete?.type === 'milestone' ? canDeleteMilestones : canDeleteTasks)}
         onOpenChange={(open) => { if (!open) setConfirmDelete(null); }}
         title={confirmDelete?.type === 'milestone' ? 'Eliminar hito' : 'Eliminar tarea'}
         description={`¿Estás seguro de que deseas eliminar ${confirmDelete?.type === 'milestone' ? 'el hito' : 'la tarea'} "${confirmDelete?.title}"? Esta acción no se puede deshacer.`}
@@ -198,6 +248,8 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
         loading={confirmDelete?.type === 'milestone' ? milestoneMutations.isPending : taskMutations.isPending}
         onConfirm={async () => {
           if (!confirmDelete) return;
+          if (confirmDelete.type === 'milestone' && !canDeleteMilestones) return;
+          if (confirmDelete.type === 'task' && !canDeleteTasks) return;
           if (confirmDelete.type === 'milestone') {
             await milestoneMutations.mutateAsync({ type: 'delete', id: confirmDelete.id });
           } else {
@@ -267,10 +319,14 @@ export function Cronograma({ tasks, milestones }: { tasks: Array<Pick<ProjectTas
   );
 }
 
-function TaskFormDialog({ editing, users, milestones, onClose, onSubmit }: {
+function TaskFormDialog({ editing, users, milestones, canEdit, canChangeStatus, canComplete, canCancel, onClose, onSubmit }: {
   editing?: ProjectTask | null;
   users: any[];
   milestones: ProjectMilestone[];
+  canEdit: boolean;
+  canChangeStatus: boolean;
+  canComplete: boolean;
+  canCancel: boolean;
   onClose: () => void;
   onSubmit: (payload: any) => void;
 }) {
@@ -287,12 +343,15 @@ function TaskFormDialog({ editing, users, milestones, onClose, onSubmit }: {
   });
   const isDateInvalid = Boolean(form.startDate && form.dueDate && form.dueDate < form.startDate);
   const valid = form.title?.trim() && !isDateInvalid;
+  const maySetStatus = (value: string) => value === 'COMPLETED' ? canComplete : value === 'CANCELLED' ? canCancel : canChangeStatus;
+  const statusChanged = Boolean(editing && form.status !== editing.status);
+  const canSave = !editing || canEdit || (statusChanged && maySetStatus(form.status));
   const submit = () => {
-    if (!valid) return;
-    onSubmit({
+    if (!valid || !canSave) return;
+    const payload: Record<string, unknown> = {};
+    if (!editing || canEdit) Object.assign(payload, {
       title: form.title.trim(),
       description: form.description?.trim() || undefined,
-      status: form.status,
       priority: form.priority,
       dueDate: fromLocalDate(form.dueDate),
       startDate: fromLocalDate(form.startDate),
@@ -300,6 +359,8 @@ function TaskFormDialog({ editing, users, milestones, onClose, onSubmit }: {
       assignedToId: form.assignedToId || undefined,
       progress: form.progress === '' ? undefined : Number(form.progress),
     });
+    if ((!editing && maySetStatus(form.status)) || (editing && statusChanged && maySetStatus(form.status))) payload.status = form.status;
+    onSubmit(payload);
     onClose();
   };
   return (
@@ -307,32 +368,38 @@ function TaskFormDialog({ editing, users, milestones, onClose, onSubmit }: {
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader><DialogTitle>{editing ? 'Editar tarea' : 'Nueva tarea'}</DialogTitle></DialogHeader>
         <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <div className="sm:col-span-2"><Label>Título *</Label><Input value={form.title} onChange={(e) => setForm((f: any) => ({ ...f, title: e.target.value }))} placeholder="Ej. Levantamiento de requerimientos" /></div>
-          <div className="sm:col-span-2"><Label>Descripción</Label><Textarea rows={2} value={form.description} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} /></div>
-          <div><Label>Estado</Label><Select value={form.status} onValueChange={(v) => setForm((f: any) => ({ ...f, status: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TASK_STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
-          <div><Label>Prioridad</Label><Select value={form.priority} onValueChange={(v) => setForm((f: any) => ({ ...f, priority: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PRIORITY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
-          <div><Label>Responsable</Label><Select value={form.assignedToId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, assignedToId: v === EMPTY_SELECT_VALUE ? '' : v }))}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value={EMPTY_SELECT_VALUE}>Sin asignar</SelectItem>{users.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
-          <div><Label>Hito</Label><Select value={form.milestoneId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, milestoneId: v === EMPTY_SELECT_VALUE ? '' : v }))}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value={EMPTY_SELECT_VALUE}>Sin hito</SelectItem>{milestones.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent></Select></div>
-          <div><Label>Inicio</Label><DateField value={form.startDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, startDate: v }))} /></div>
-          <div><Label>Vence</Label><DateField value={form.dueDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, dueDate: v }))} /></div>
+          <div className="sm:col-span-2"><Label>Título *</Label><Input disabled={Boolean(editing) && !canEdit} value={form.title} onChange={(e) => setForm((f: any) => ({ ...f, title: e.target.value }))} placeholder="Ej. Levantamiento de requerimientos" /></div>
+          <div className="sm:col-span-2"><Label>Descripción</Label><Textarea disabled={Boolean(editing) && !canEdit} rows={2} value={form.description} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} /></div>
+          {(canChangeStatus || canComplete || canCancel) && <div><Label>Estado</Label><Select value={form.status} onValueChange={(v) => setForm((f: any) => ({ ...f, status: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TASK_STATUS_OPTIONS.filter((o) => o.value === form.status || maySetStatus(o.value)).map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>}
+          <div><Label>Prioridad</Label><Select value={form.priority} onValueChange={(v) => setForm((f: any) => ({ ...f, priority: v }))}><SelectTrigger disabled={Boolean(editing) && !canEdit}><SelectValue /></SelectTrigger><SelectContent>{PRIORITY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Responsable</Label><Select value={form.assignedToId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, assignedToId: v === EMPTY_SELECT_VALUE ? '' : v }))}><SelectTrigger disabled={Boolean(editing) && !canEdit}><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value={EMPTY_SELECT_VALUE}>Sin asignar</SelectItem>{users.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Hito</Label><Select value={form.milestoneId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, milestoneId: v === EMPTY_SELECT_VALUE ? '' : v }))}><SelectTrigger disabled={Boolean(editing) && !canEdit}><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value={EMPTY_SELECT_VALUE}>Sin hito</SelectItem>{milestones.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Inicio</Label><DateField disabled={Boolean(editing) && !canEdit} value={form.startDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, startDate: v }))} /></div>
+          <div><Label>Vence</Label><DateField disabled={Boolean(editing) && !canEdit} value={form.dueDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, dueDate: v }))} /></div>
           {isDateInvalid && (
             <p className="sm:col-span-2 text-xs font-semibold text-destructive">
               La fecha de vencimiento no puede ser anterior a la fecha de inicio.
             </p>
           )}
-          <div><Label>Avance (%)</Label><Input type="number" min={0} max={100} value={form.progress} onChange={(e) => setForm((f: any) => ({ ...f, progress: e.target.value }))} placeholder="0" /></div>
+          <div><Label>Avance (%)</Label><Input disabled={Boolean(editing) && !canEdit} type="number" min={0} max={100} value={form.progress} onChange={(e) => setForm((f: any) => ({ ...f, progress: e.target.value }))} placeholder="0" /></div>
         </div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={submit} disabled={!valid}>{editing ? 'Guardar' : 'Crear tarea'}</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button>{canSave && <Button onClick={submit} disabled={!valid || (Boolean(editing) && !canEdit && !statusChanged)}>{editing ? 'Guardar' : 'Crear tarea'}</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function MilestoneFormDialog({ editing, onClose, onSubmit }: { editing?: ProjectMilestone | null; onClose: () => void; onSubmit: (payload: any) => void }) {
-  const [form, setForm] = useState<any>({ name: editing?.name || '', description: editing?.description || '', dueDate: toLocalDate(editing?.dueDate) || '' });
+function MilestoneFormDialog({ editing, canEdit, canChangeStatus, canComplete, canCancel, onClose, onSubmit }: { editing?: ProjectMilestone | null; canEdit: boolean; canChangeStatus: boolean; canComplete: boolean; canCancel: boolean; onClose: () => void; onSubmit: (payload: any) => void }) {
+  const [form, setForm] = useState<any>({ name: editing?.name || '', description: editing?.description || '', dueDate: toLocalDate(editing?.dueDate) || '', status: editing?.status || 'PENDING' });
+  const maySetStatus = (value: string) => value === 'COMPLETED' ? canComplete : value === 'CANCELLED' ? canCancel : canChangeStatus;
+  const statusChanged = Boolean(editing && form.status !== editing.status);
+  const canSave = !editing || canEdit || (statusChanged && maySetStatus(form.status));
   const submit = () => {
-    if (!form.name?.trim()) return;
-    onSubmit({ name: form.name.trim(), description: form.description?.trim() || undefined, dueDate: fromLocalDate(form.dueDate) });
+    if (!form.name?.trim() || !canSave) return;
+    const payload: Record<string, unknown> = {};
+    if (!editing || canEdit) Object.assign(payload, { name: form.name.trim(), description: form.description?.trim() || undefined, dueDate: fromLocalDate(form.dueDate) });
+    if ((!editing && maySetStatus(form.status)) || (editing && statusChanged && maySetStatus(form.status))) payload.status = form.status;
+    onSubmit(payload);
     onClose();
   };
   return (
@@ -340,11 +407,12 @@ function MilestoneFormDialog({ editing, onClose, onSubmit }: { editing?: Project
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>{editing ? 'Editar hito' : 'Nuevo hito'}</DialogTitle></DialogHeader>
         <div className="grid gap-4 py-2">
-          <div><Label>Nombre *</Label><Input value={form.name} onChange={(e) => setForm((f: any) => ({ ...f, name: e.target.value }))} placeholder="Ej. Entrega de planos" /></div>
-          <div><Label>Descripción</Label><Textarea rows={2} value={form.description} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} /></div>
-          <div><Label>Fecha límite</Label><DateField value={form.dueDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, dueDate: v }))} /></div>
+          <div><Label>Nombre *</Label><Input disabled={Boolean(editing) && !canEdit} value={form.name} onChange={(e) => setForm((f: any) => ({ ...f, name: e.target.value }))} placeholder="Ej. Entrega de planos" /></div>
+          <div><Label>Descripción</Label><Textarea disabled={Boolean(editing) && !canEdit} rows={2} value={form.description} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} /></div>
+          <div><Label>Fecha límite</Label><DateField disabled={Boolean(editing) && !canEdit} value={form.dueDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, dueDate: v }))} /></div>
+          {(canChangeStatus || canComplete || canCancel) && <div><Label>Estado</Label><Select value={form.status} onValueChange={(v) => setForm((f: any) => ({ ...f, status: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TASK_STATUS_OPTIONS.filter((o) => o.value === form.status || maySetStatus(o.value)).map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>}
         </div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={submit} disabled={!form.name?.trim()}>{editing ? 'Guardar' : 'Crear hito'}</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button>{canSave && <Button onClick={submit} disabled={!form.name?.trim() || (Boolean(editing) && !canEdit && !statusChanged)}>{editing ? 'Guardar' : 'Crear hito'}</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -28,8 +28,8 @@ interface TareasKanbanProps {
   onStatusChange: (taskId: string, newStatus: string) => Promise<void>;
   onSubmitApproval?: (task: Task) => void;
   onApprove?: (task: Task) => void;
-  canEdit: boolean;
-  canApprove: boolean;
+  onComplete?: (task: Task) => void;
+  canMoveToStatus: (task: Task, status: string) => boolean;
 }
 
 export const TareasKanban: React.FC<TareasKanbanProps> = ({
@@ -38,8 +38,8 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
   onStatusChange,
   onSubmitApproval,
   onApprove,
-  canEdit,
-  canApprove,
+  onComplete,
+  canMoveToStatus,
 }) => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
@@ -83,24 +83,29 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
 
       // Special transitions:
       // 1. Dropping into WAITING_APPROVAL triggers approval submission modal
-      if (targetStatus === 'WAITING_APPROVAL' && onSubmitApproval) {
+      if (targetStatus === 'WAITING_APPROVAL' && onSubmitApproval && canMoveToStatus(task, targetStatus)) {
         onSubmitApproval(task);
         return;
       }
 
-      // 2. Dropping into COMPLETED requires approve permission if coming from WAITING_APPROVAL
+      // Completed tasks use a dedicated action, with approval reserved for the
+      // review column and direct completion available to the assignee flow.
       if (targetStatus === 'COMPLETED') {
-        if (currentStatus === 'WAITING_APPROVAL' && onApprove) {
+        if (currentStatus === 'WAITING_APPROVAL' && onApprove && canMoveToStatus(task, targetStatus)) {
           onApprove(task);
+          return;
+        }
+        if (currentStatus !== 'WAITING_APPROVAL' && onComplete && canMoveToStatus(task, targetStatus)) {
+          onComplete(task);
           return;
         }
       }
 
-      if (canEdit) {
+      if (canMoveToStatus(task, targetStatus)) {
         await onStatusChange(taskId, targetStatus);
       }
     },
-    [data, canEdit, onStatusChange, onSubmitApproval, onApprove]
+    [data, canMoveToStatus, onStatusChange, onSubmitApproval, onApprove, onComplete]
   );
 
   const columnTasks = useMemo(() => {
@@ -181,7 +186,9 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
                     animate={{ opacity: isDragging ? 0.4 : 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.96 }}
                     transition={{ duration: 0.15 }}
-                    draggable={canEdit}
+                    draggable={[
+                      'PENDING', 'IN_PROGRESS', 'WAITING_APPROVAL', 'COMPLETED',
+                    ].some((targetStatus) => targetStatus !== String(task.status || 'PENDING').toUpperCase() && canMoveToStatus(task, targetStatus))}
                     onDragStart={(e) => handleDragStart(e as any, String(task.id))}
                     onDragEnd={handleDragEnd}
                     onClick={() => onViewDetail(task)}
