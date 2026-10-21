@@ -415,7 +415,7 @@ function buildInvoiceItems(cart: CartItem[]): PosInvoiceItem[] {
     commercialNoteSnapshot: item.commercialNoteSnapshot || null,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
-    priceListId: item.itemType === 'SERVICE' ? undefined : item.priceListId,
+    priceListId: item.priceListId,
     taxRate: item.itemType === 'SERVICE' ? 0 : item.taxRate,
     discount: item.discount,
     irRate: 0,
@@ -991,12 +991,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     setPriceListItems([]);
     setSelectedPriceListId('');
     let active = true;
-    void Promise.all([priceListsService.getAll(), priceListsService.getMatrix()]).then(([lists, matrix]) => {
+    void Promise.all([priceListsService.getAll(), priceListsService.getMatrix(), priceListsService.getServiceMatrix()]).then(([lists, matrix, serviceMatrix]) => {
       if (!active) return;
       const normalizedLists = Array.isArray(lists) ? lists : ((lists as any)?.data || []);
       const normalizedMatrix = unwrapSalesPriceListMatrix(matrix);
+      const normalizedServiceMatrix = unwrapSalesPriceListMatrix(serviceMatrix);
       setPriceLists(normalizedLists);
-      setPriceListItems(normalizedMatrix.items.map((item) => ({
+      setPriceListItems([...normalizedMatrix.items, ...normalizedServiceMatrix.items].map((item) => ({
         priceListId: String(item.priceListId),
         productId: String(item.productId),
         variantId: item.variantId || item.variant?.id ? String(item.variantId || item.variant.id) : null,
@@ -1014,7 +1015,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     return () => { active = false; };
   }, [user?.tenantId]);
 
-  const getConfiguredPrice = (priceListId: string, productId: string, variantId?: string | null) => {
+  const getConfiguredPrice = (priceListId: string, productId: string, variantId?: string | null, allowZero = false) => {
     const resolved = getConfiguredPriceForVariant(
       priceListItems,
       priceListId,
@@ -1022,12 +1023,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       variantId,
       paymentCurrency,
       Number(activeSession?.exchangeRateUSD || 1),
+      allowZero,
     );
     return resolved.priceMissing ? undefined : resolved.unitPrice;
   };
 
   const getCatalogPrice = (product: PosProduct) => {
-    if (product.itemType === 'SERVICE') return Number(product.salePrice || 0);
+    if (product.itemType === 'SERVICE') return getConfiguredPrice(selectedPriceListId, product.id, null, true) ?? Number(product.salePrice || 0);
     return getConfiguredPrice(selectedPriceListId, product.id);
   };
 
@@ -1307,7 +1309,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           taxRate: isService ? 0 : item.taxRate,
           variantId: isService ? undefined : item.variantId,
           warehouseId: isService ? undefined : item.warehouseId,
-          priceListId: isService ? undefined : item.priceListId,
+          priceListId: item.priceListId,
         };
       });
       return changed ? normalized : current;
@@ -1449,7 +1451,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
     const isService = product.itemType === 'SERVICE';
     const warehouseId = isService ? undefined : (selectedWarehouseId || undefined);
-    const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id, variant.id);
+    const configuredPrice = isService
+      ? getConfiguredPrice(selectedPriceListId, product.id, null, true) ?? Number(product.salePrice || 0)
+      : getConfiguredPrice(selectedPriceListId, product.id, variant.id);
     const hasOverridePrice = Number.isFinite(overrideUnitPrice);
     const effectivePrice = hasOverridePrice ? Number(overrideUnitPrice) : (configuredPrice ?? 0);
     const priceMissing = !isService && !hasOverridePrice && (configuredPrice === undefined || configuredPrice === 0);
@@ -1498,7 +1502,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           commercialNoteSnapshot: product.commercialNote || null,
           quantity,
           unitPrice: effectivePrice,
-          priceListId: isService ? undefined : selectedPriceListId,
+          priceListId: selectedPriceListId || undefined,
           priceMissing,
           discount: 0,
           taxRate: isService ? 0 : NICARAGUA_IVA_RATE,
@@ -1516,7 +1520,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       toast.error('Selecciona una bodega de salida antes de agregar el producto.');
       return;
     }
-    const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id);
+    const configuredPrice = isService
+      ? getConfiguredPrice(selectedPriceListId, product.id, null, true) ?? Number(product.salePrice || 0)
+      : getConfiguredPrice(selectedPriceListId, product.id);
     const hasOverridePrice = Number.isFinite(overrideUnitPrice);
     const effectivePrice = hasOverridePrice ? Number(overrideUnitPrice) : (configuredPrice ?? 0);
     const priceMissing = !isService && !hasOverridePrice && configuredPrice === undefined;
@@ -1564,7 +1570,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           commercialNoteSnapshot: product.commercialNote || null,
           quantity,
           unitPrice: effectivePrice,
-          priceListId: isService ? undefined : selectedPriceListId,
+          priceListId: selectedPriceListId || undefined,
           priceMissing,
           discount: 0,
           // En modo global este valor se ignora; en modo por producto solo los productos parten con IVA.
@@ -1633,7 +1639,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
 
     const product = availabilityProduct;
     const isService = product.itemType === 'SERVICE';
-    const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id, availabilityVariantId);
+    const configuredPrice = isService
+      ? getConfiguredPrice(selectedPriceListId, product.id, null, true) ?? Number(product.salePrice || 0)
+      : getConfiguredPrice(selectedPriceListId, product.id, availabilityVariantId);
     const selectedVariant = availabilityVariantId
       ? product.variants?.find((variant) => variant.id === availabilityVariantId)
       : undefined;
@@ -1650,7 +1658,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       commercialNoteSnapshot: product.commercialNote || null,
       quantity: availabilityQuantity,
       unitPrice: configuredPrice ?? 0,
-      priceListId: isService ? undefined : selectedPriceListId,
+      priceListId: selectedPriceListId || undefined,
       taxRate: isService ? 0 : NICARAGUA_IVA_RATE,
       deliveryWarehouseId: isService ? undefined : selection.deliveryWarehouseId || undefined,
     }];
@@ -1870,10 +1878,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       : retailList?.id || priceLists.find((list) => list.isDefault)?.id || priceLists[0]?.id || '';
     const nextCart = cart.map((item) => {
       const isService = productsById.get(item.productId)?.itemType === 'SERVICE';
-      const price = isService ? Number(productsById.get(item.productId)?.salePrice || item.unitPrice || 0) : getConfiguredPrice(nextListId, item.productId, item.variantId);
+      const price = isService
+        ? getConfiguredPrice(nextListId, item.productId, null, true) ?? Number(productsById.get(item.productId)?.salePrice ?? item.unitPrice ?? 0)
+        : getConfiguredPrice(nextListId, item.productId, item.variantId);
       return price === undefined
-        ? { ...item, itemType: isService ? 'SERVICE' : item.itemType, taxRate: isService ? 0 : item.taxRate, priceListId: isService ? undefined : nextListId, unitPrice: 0, lineTotal: 0, priceMissing: true }
-        : { ...item, itemType: isService ? 'SERVICE' : item.itemType, taxRate: isService ? 0 : item.taxRate, priceListId: isService ? undefined : nextListId, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
+        ? { ...item, itemType: isService ? 'SERVICE' : item.itemType, taxRate: isService ? 0 : item.taxRate, priceListId: nextListId || undefined, unitPrice: 0, lineTotal: 0, priceMissing: true }
+        : { ...item, itemType: isService ? 'SERVICE' : item.itemType, taxRate: isService ? 0 : item.taxRate, priceListId: nextListId || undefined, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
     });
     if (hasSalesProductPriceListConflicts(nextCart, nextListId)) {
       toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.');

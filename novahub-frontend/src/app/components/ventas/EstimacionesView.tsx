@@ -305,7 +305,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       && getActiveVariantCount(item) > 1
   ));
   const showPriceListColumn = (localDoc?.items || []).some((item: EstimateItem) => (
-    Boolean(item.productId) && String(resolveItemType(item)).toUpperCase() !== 'SERVICE'
+    Boolean(item.productId)
   ));
   const quoteLineProductLayoutClass = showVariantColumn
     ? showPriceListColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
@@ -1190,7 +1190,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                           />
                              )}
                      {showPriceListColumn && (
-                       itemType !== 'SERVICE' && item.productId ? <SalesLinePriceListSelect
+                       item.productId ? <SalesLinePriceListSelect
                        className="sales-line-price-list sales-quote-line-price-column"
                        labelLayout="stacked"
                        labelText="Lista de precios"

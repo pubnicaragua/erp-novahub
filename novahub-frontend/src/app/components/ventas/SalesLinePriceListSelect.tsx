@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { priceListsService } from '../../services/price-lists.service';
+import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { filterAllowedPriceLists } from '../../utils/permissions';
@@ -26,7 +26,7 @@ interface SalesLinePriceListSelectProps {
   labelLayout?: 'inline' | 'stacked';
   labelText?: string;
   /** Líneas del documento para impedir repetir producto+lista desde cualquier orden de selección. */
-  lineItems?: Array<{ productId?: string | null; variantId?: string | null; priceListId?: string | null }>;
+  lineItems?: Array<{ productId?: string | null; variantId?: string | null; priceListId?: string | null; itemType?: string | null }>;
   lineIndex?: number;
   onChange: (priceListId: string, result: { unitPrice?: number; priceMissing: boolean }, source?: 'initial' | 'user') => void;
 }
@@ -34,37 +34,56 @@ interface SalesLinePriceListSelectProps {
 /** Selector compacto para elegir la tarifa comercial de una línea y devolver su precio bloqueado. */
 export function SalesLinePriceListSelect({ productId, variantId, productCode, productName, itemType, value, defaultPriceListId, fallbackPrice, currency = 'NIO', exchangeRate = 1, disabled, lineItems = [], lineIndex = -1, className, labelLayout = 'inline', labelText = 'Tipo de precio', onChange }: SalesLinePriceListSelectProps) {
   const { user, canPerform } = useAuth();
+  const isService = String(itemType || '').toUpperCase() === 'SERVICE';
   const query = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', user?.tenantId || 'anonymous'],
     queryFn: ({ signal }) => priceListsService.getMatrix(signal),
-    enabled: Boolean(user?.tenantId) && canPerform('SALES_PRICE_LISTS', 'view'),
+    enabled: Boolean(user?.tenantId) && canPerform('SALES_PRICE_LISTS', 'view') && !isService,
+    staleTime: 60_000,
+  });
+  const serviceQuery = useQuery({
+    queryKey: ['sales', 'price-lists', 'services', user?.tenantId || 'anonymous'],
+    queryFn: ({ signal }) => priceListsService.getServiceMatrix(signal),
+    enabled: Boolean(user?.tenantId) && Boolean(productId) && canPerform('SALES_PRICE_LISTS', 'view') && isService,
     staleTime: 60_000,
   });
 
   const matrix = useMemo(() => {
     return unwrapSalesPriceListMatrix(query.data);
   }, [query.data]);
+  const serviceMatrix = (serviceQuery.data as any)?.data || serviceQuery.data;
 
-  const allLists = Array.isArray(matrix?.lists) ? matrix.lists : [];
+  const allLists = useMemo<PriceList[]>(() => (
+    isService
+      ? (Array.isArray(serviceMatrix?.lists) ? serviceMatrix.lists as PriceList[] : [])
+      : (Array.isArray(matrix?.lists) ? matrix.lists as PriceList[] : [])
+  ), [isService, matrix.lists, serviceMatrix]);
   const lists = useMemo(() => filterAllowedPriceLists(allLists, user), [allLists, user]);
   const visibleListIds = useMemo(() => new Set(lists.map((list: any) => list.id)), [lists]);
   const matrixItems = useMemo(
-    () => matrix.items.filter((item: any) => visibleListIds.has(item.priceListId)),
-    [matrix.items, visibleListIds],
+    () => (isService
+      ? (Array.isArray(serviceMatrix?.items) ? serviceMatrix.items : [])
+      : matrix.items).filter((item: any) => visibleListIds.has(item.priceListId)),
+    [isService, matrix.items, serviceMatrix, visibleListIds],
   );
-  const matrixProduct = matrix.products.find((product: any) =>
+  const matrixProducts = isService
+    ? (Array.isArray(serviceMatrix?.services) ? serviceMatrix.services : [])
+    : matrix.products;
+  const matrixProduct = matrixProducts.find((product: any) =>
     sameSalesId(product.code, productCode) || sameSalesId(product.id, productId),
-  ) || matrix.products.find((product: any) =>
+  ) || matrixProducts.find((product: any) =>
     String(product.name || '').trim().toLowerCase() === String(productName || '').trim().toLowerCase(),
   );
-  const isService = String(matrixProduct?.itemType || matrixProduct?.type || itemType || '').toUpperCase() === 'SERVICE';
 
   const inheritedPriceListId = lists.some((list: any) => sameSalesId(list.id, defaultPriceListId))
     ? defaultPriceListId
     : lists.find((list: any) => list.isDefault)?.id || lists[0]?.id || '';
   const blockedPriceListIds = useMemo(() => new Set(
     lineItems
-      .filter((line, index) => index !== lineIndex && sameSalesId(line?.productId, productId) && String(line?.variantId || '') === String(variantId || ''))
+      .filter((line, index) => index !== lineIndex
+        && String(line?.itemType || '').toUpperCase() !== 'SERVICE'
+        && sameSalesId(line?.productId, productId)
+        && String(line?.variantId || '') === String(variantId || ''))
       .map((line) => getSalesLinePriceListId(line, inheritedPriceListId))
       .filter(Boolean)
       .map((id) => String(id)),
@@ -100,7 +119,7 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
       }
     }
 
-    const matchedProduct = matrixProduct || matrix.products.find((product: any) => sameSalesId(product.id, pid));
+    const matchedProduct = matrixProduct || matrixProducts.find((product: any) => sameSalesId(product.id, pid));
     const matrixProductId = matchedProduct?.id;
     const entry = matrixItems.find((item: any) => {
       if (!sameSalesId(item.priceListId, priceListId)) return false;
@@ -109,14 +128,15 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
     });
     if (!entry) {
       const selectedList = lists.find((list: any) => sameSalesId(list.id, priceListId));
-      const canUseRetailFallback = (
+      const canUseRetailFallback = isService || (
         String(selectedList?.code || '').toUpperCase() === 'RETAIL'
         || String(selectedList?.name || '').trim().toLowerCase() === 'minorista'
-      ) && Number(fallbackPrice) > 0;
-      if (canUseRetailFallback) {
+      );
+      const catalogFallbackPrice = Number(matchedProduct?.salePrice ?? fallbackPrice);
+      if (canUseRetailFallback && catalogFallbackPrice > 0) {
         const unitPrice = String(currency).toUpperCase() === 'USD'
-          ? Number(fallbackPrice) / Math.max(Number(exchangeRate) || 1, 0.000001)
-          : Number(fallbackPrice);
+          ? catalogFallbackPrice / Math.max(Number(exchangeRate) || 1, 0.000001)
+          : catalogFallbackPrice;
         return { unitPrice, priceMissing: false };
       }
       return { unitPrice: 0, priceMissing: true };
@@ -135,18 +155,22 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
   });
 
   useEffect(() => {
-    if (isService || !query.isSuccess || !lists.length || !matrix || !productId || !resolvedListId || matrixItems.length === 0) return;
+    const isPriceQuerySuccess = isService ? serviceQuery.isSuccess : query.isSuccess;
+    if (!isPriceQuerySuccess || !lists.length || !productId || !resolvedListId) return;
 
-    const key = `${productId}_${variantId || ''}_${resolvedListId}_${currency}_${Math.round((exchangeRate || 1) * 10000)}_${matrixItems.length}`;
+    const configuredEntry = matrixItems.find((item: any) =>
+      sameSalesId(item.priceListId, resolvedListId)
+      && sameSalesId(item.productId ?? item.product?.id, productId)
+      && (!item.variantId || sameSalesId(item.variantId, variantId)),
+    );
+    const key = `${productId}_${variantId || ''}_${resolvedListId}_${currency}_${Math.round((exchangeRate || 1) * 10000)}_${configuredEntry?.price ?? ''}_${configuredEntry?.basePrice ?? ''}_${matrixProduct?.salePrice ?? ''}`;
     if (initialAppliedRef.current === key) return;
     initialAppliedRef.current = key;
 
     const result = calcPrice(resolvedListId, productId);
     latestOnChange.current(resolvedListId, result, 'initial');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.isSuccess, lists.length, matrix, matrixItems.length, productId, variantId, resolvedListId, currency, exchangeRate, isService]);
-
-  if (isService) return null;
+  }, [query.isSuccess, serviceQuery.isSuccess, lists.length, matrix, matrixItems, matrixProduct, serviceMatrix, productId, variantId, resolvedListId, currency, exchangeRate, isService]);
 
   /** Cuando el usuario elige explícitamente un tipo de precio */
   const handleUserSelect = (priceListId: string) => {
@@ -159,7 +183,7 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
   return (
     <div className={cn(isStacked ? 'w-full min-w-0 space-y-1' : 'flex w-[7rem] min-w-0 shrink-0 items-center gap-1', className)}>
       {isStacked && <span className="block truncate text-[9px] font-black uppercase tracking-[0.14em] text-muted-foreground">{labelText}</span>}
-      <Select value={resolvedListId || ''} onValueChange={handleUserSelect} disabled={disabled || query.isLoading || !lists.length}>
+      <Select value={resolvedListId || ''} onValueChange={handleUserSelect} disabled={disabled || (isService ? serviceQuery.isLoading : query.isLoading) || !lists.length}>
         <SelectTrigger className={cn('min-w-0 truncate px-2 text-[9px]', isStacked ? 'h-8 w-full' : 'h-7 w-[7rem]')} aria-label={labelText}>
           <SelectValue placeholder={labelText} />
         </SelectTrigger>

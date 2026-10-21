@@ -99,7 +99,10 @@ export function resolveVariantPrice(
   priceListId: string,
   productId: string,
   variantId?: string | null,
+  allowZero = false,
 ): { price: number; basePrice: number; currency: string; exchangeRate: number; isVariantPrice: boolean } | undefined {
+  const hasValidPrice = (item: any) => Number.isFinite(Number(item?.basePrice))
+    && (allowZero ? Number(item.basePrice) >= 0 : Number(item.basePrice) > 0);
   if (variantId) {
     const variantItem = items.find(
       (item) =>
@@ -107,7 +110,7 @@ export function resolveVariantPrice(
         sameSalesId(item.productId, productId) &&
         sameSalesId(item.variantId, variantId)
     );
-    if (variantItem && Number(variantItem.basePrice) > 0) {
+    if (variantItem && hasValidPrice(variantItem)) {
       return {
         price: Number(variantItem.price),
         basePrice: Number(variantItem.basePrice),
@@ -124,7 +127,7 @@ export function resolveVariantPrice(
       sameSalesId(item.productId, productId) &&
       (!item.variantId || item.variantId === null)
   );
-  if (parentItem && Number(parentItem.basePrice) > 0) {
+  if (parentItem && hasValidPrice(parentItem)) {
     return {
       price: Number(parentItem.price),
       basePrice: Number(parentItem.basePrice),
@@ -148,15 +151,16 @@ export function getConfiguredPriceForVariant(
   variantId?: string | null,
   currency = 'NIO',
   exchangeRate = 1,
+  allowZero = false,
 ): { unitPrice: number; priceMissing: boolean; isVariantPrice: boolean } {
-  const resolved = resolveVariantPrice(items, priceListId, productId, variantId);
+  const resolved = resolveVariantPrice(items, priceListId, productId, variantId, allowZero);
   if (!resolved) {
     return { unitPrice: 0, priceMissing: true, isVariantPrice: false };
   }
   const unitPrice = getSalesUnitPrice(resolved, currency, exchangeRate) ?? 0;
   return {
     unitPrice,
-    priceMissing: unitPrice <= 0,
+    priceMissing: allowZero ? false : unitPrice <= 0,
     isVariantPrice: resolved.isVariantPrice,
   };
 }

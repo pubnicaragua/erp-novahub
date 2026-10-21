@@ -1,5 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback, type ComponentProps } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, SlidersHorizontal, Tag, FileText, Columns, Clock, AlertCircle, Filter } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, SlidersHorizontal, Tag, Tags, FileText, Columns, Clock, AlertCircle, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
@@ -58,6 +58,7 @@ import { resolveInventoryValuation } from '../../utils/inventory-valuation';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from '../ui/dropdown-menu';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import { ServicePriceListsDialog } from './ServicePriceListsDialog';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -1081,6 +1082,9 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
     ? 'INVENTORY_SERVICES'
     : 'INVENTORY_PRODUCTS';
   const canViewInventoryCost = canPerform(catalogPermissionModule, 'viewCost');
+  const canConfigureServicePriceLists = isServiceView
+    && canPerform('SALES_PRICE_LISTS', 'view')
+    && canPerform('SALES_PRICE_LISTS', 'edit');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('inventory-products-layout', 'table', 24 * 365);
   const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
   const effectiveLayoutMode = isCompactTableViewport ? 'cards' : layoutMode;
@@ -1311,6 +1315,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   const [similarImportAlertOpen, setSimilarImportAlertOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
+  const [servicePriceListProduct, setServicePriceListProduct] = useState<any | null>(null);
   const [variantManagerProduct, setVariantManagerProduct] = useState<any | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
   const [labelModalOpen, setLabelModalOpen] = useState(false);
@@ -3159,7 +3164,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
         ['Descripción', 'Opcional. Texto descriptivo del servicio.'],
         ['Nota comercial', 'Opcional; máximo 100 caracteres. Se muestra en ventas y documentos.'],
         ['Categoría', 'Debe existir y ser de tipo servicio.'],
-        ['Precio', 'Obligatorio. Es el único precio de venta del servicio; no usa listas de precios ni precios alternos.'],
+        ['Precio', 'Obligatorio. Es el precio base/Minorista del servicio. Después de importarlo puedes configurar precios propios para otras listas desde la vista Servicios.'],
         ['Importante', 'Los servicios no llevan IVA, no se vinculan a bodegas, no manejan stock y no tienen variantes.'],
         ['Imágenes', 'Las imágenes se cargan únicamente mediante ZIP/RAR y se vinculan por coincidencia exacta del código.'],
         ['Contabilidad', 'La importación de servicios no crea asiento de apertura porque no crea existencias físicas. El costo se conserva en el servicio y se contabiliza cuando corresponda en una venta.'],
@@ -4546,6 +4551,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                 </div>
               </div>
               <div className="mt-4 flex justify-end gap-1 border-t border-border/40 pt-3">
+                {canConfigureServicePriceLists && <Button variant="ghost" size="icon" className="size-8 text-primary hover:bg-primary/10" title="Configurar listas de precios" aria-label={`Configurar listas de precios de ${product.name}`} onClick={(e) => { e.stopPropagation(); setServicePriceListProduct(product); }}><Tags className="size-3.5" /></Button>}
                 {canPerform(catalogPermissionModule, 'edit') && <Button variant="ghost" size="icon" className="size-8" title={`Editar ${entityLabel}`} aria-label={`Editar ${entityLabel}`} onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
                 {product.isVariable && canPerform(catalogPermissionModule, 'edit') && (
                   <Button
@@ -4806,6 +4812,18 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                     </TableCell>}
                     <TableCell data-actions-column="compact" className="text-right">
                          <div data-action-group="true" className="flex min-w-max items-center justify-end gap-1">
+                         {canConfigureServicePriceLists && (
+                           <Button
+                             variant="ghost"
+                             size="icon"
+                             className="size-7 text-primary hover:bg-primary/10"
+                             title="Configurar listas de precios"
+                             aria-label={`Configurar listas de precios de ${product.name}`}
+                             onClick={(e) => { e.stopPropagation(); setServicePriceListProduct(product); }}
+                           >
+                             <Tags className="size-3.5" />
+                           </Button>
+                         )}
                          {canPerform(catalogPermissionModule, 'edit') && (
                              <Button 
                                variant="ghost" 
@@ -4932,6 +4950,12 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
         itemType={catalogItemType}
         onClose={() => setModalProduct(null)}
         onRefresh={onRefresh}
+      />
+      <ServicePriceListsDialog
+        open={Boolean(servicePriceListProduct)}
+        onOpenChange={(open) => { if (!open) setServicePriceListProduct(null); }}
+        service={servicePriceListProduct}
+        onSaved={onRefresh}
       />
       <VariantManagerModal
         open={variantManagerProduct !== null}
@@ -5064,6 +5088,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
         movements={movements}
         series={series}
         extraActions={productDetail ? <>
+          {canConfigureServicePriceLists && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setProductDetail(null); setServicePriceListProduct(productDetail); }}><Tags className="mr-1.5 size-3.5" />Precios por lista</Button>}
           {canPerform(catalogPermissionModule, 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setProductDetail(null); setModalProduct(productDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}
           {productDetail.isVariable && canPerform(catalogPermissionModule, 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setProductDetail(null); setVariantManagerProduct(productDetail); }}><Tag className="mr-1.5 size-3.5" />Variantes</Button>}
           {canPerform(catalogPermissionModule, 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setProductDetail(null); handleToggleProductStatus(productDetail); }}><Ban className="mr-1.5 size-3.5" />{productDetail.isActive === false ? 'Activar' : 'Inactivar'}</Button>}
@@ -5165,11 +5190,11 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
              <DialogDescription>
                {isServiceView ? 'Puedes importar servicios en cualquier momento. Descarga la plantilla, completa los datos y revisa la previsualización antes de confirmar. Las imágenes opcionales pueden cargarse en ZIP o RAR.' : 'Puedes importar productos varias veces por sucursal. La plantilla avanzada usa Productos, Variantes, Atributos, Precios e Inventario; permite crear o reutilizar atributos y valores faltantes después de confirmarla. Los SKU existentes se actualizan sin duplicar IDs, existencias ni historial; las variantes nuevas se agregan.'}
              </DialogDescription>
-             <InventoryViewTutorial label={isServiceView ? 'Cómo importar servicios' : 'Cómo importar inventario'} targetPrefix="inventory-initial-import" copy={{ data: { description: isServiceView ? 'Descarga la plantilla, prepara servicios, su único precio, costos e imágenes y revisa las reglas. Los servicios no llevan IVA ni manejan stock o bodegas.' : 'Descarga la plantilla, prepara productos, precios, costos, stock e imágenes y revisa las reglas.' }, actions: { description: 'Descarga la plantilla o continúa con la carga para iniciar la importación.' } }} />
+             <InventoryViewTutorial label={isServiceView ? 'Cómo importar servicios' : 'Cómo importar inventario'} targetPrefix="inventory-initial-import" copy={{ data: { description: isServiceView ? 'Descarga la plantilla, prepara servicios, el precio base Minorista, costos e imágenes y revisa las reglas. Las demás listas se configuran desde Servicios.' : 'Descarga la plantilla, prepara productos, precios, costos, stock e imágenes y revisa las reglas.' }, actions: { description: 'Descarga la plantilla o continúa con la carga para iniciar la importación.' } }} />
           </DialogHeader>
           <div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm" data-tour="inventory-initial-import-data">
-             <p><b>La plantilla siempre incluye:</b> {canViewInventoryCost ? (isServiceView ? 'costo del servicio, ' : 'costo base y costo por variante, ') : ''}{isServiceView ? 'un único precio, disponibilidad e imagen opcional.' : 'una fila por producto, una fila por variante, atributos dinámicos, precios por alcance y stock por SKU/bodega; el stock del padre siempre se calcula, nunca se captura.'}</p>
-             <p>Cada {isServiceView ? 'servicio' : 'producto'} debe tener SKU único, nombre, categoría y {canViewInventoryCost ? 'costo base y ' : ''}al menos un precio base. {isServiceView ? 'El servicio no lleva IVA ni precios alternos.' : 'La hoja Productos usa los mismos campos de la creación actual; no incluye modelo, color, peso, dimensiones, garantía ni otros datos de catálogo que no se capturan allí. Los precios de variante son opcionales y solo sobrescriben el precio padre para ese SKU.'}</p>
+             <p><b>La plantilla siempre incluye:</b> {canViewInventoryCost ? (isServiceView ? 'costo del servicio, ' : 'costo base y costo por variante, ') : ''}{isServiceView ? 'el precio base Minorista, disponibilidad e imagen opcional.' : 'una fila por producto, una fila por variante, atributos dinámicos, precios por alcance y stock por SKU/bodega; el stock del padre siempre se calcula, nunca se captura.'}</p>
+             <p>Cada {isServiceView ? 'servicio' : 'producto'} debe tener SKU único, nombre, categoría y {canViewInventoryCost ? 'costo base y ' : ''}al menos un precio base. {isServiceView ? 'El servicio no lleva IVA. El precio importado es Minorista; los demás se configuran desde Servicios.' : 'La hoja Productos usa los mismos campos de la creación actual; no incluye modelo, color, peso, dimensiones, garantía ni otros datos de catálogo que no se capturan allí. Los precios de variante son opcionales y solo sobrescriben el precio padre para ese SKU.'}</p>
              {!isServiceView && <p>Si un atributo o valor no existe, se detectará en la revisión y se creará/reutilizará dentro de la misma transacción. Un producto sin filas en Variantes recibirá la variante Estándar.</p>}
              {isServiceView && <p>Los servicios no se vinculan a bodegas, no manejan stock inicial y no tienen variantes.</p>}
             <p>Opcionalmente puedes cargar un ZIP o RAR con imágenes JPG, JPEG o PNG cuyo nombre sea exactamente el SKU.</p>
@@ -5196,12 +5221,12 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
           <DialogHeader data-tour="inventory-import-title">
              <DialogTitle>Importar {isServiceView ? 'Servicios' : 'Productos'}</DialogTitle>
              <DialogDescription>
-               {isServiceView ? 'Sube servicios con descripción, categoría, un único precio, costo y disponibilidad. La carga se confirma en dos pasos.' : 'Sube productos nuevos o existentes de la sucursal. Puedes repetir la carga: los SKU existentes actualizan sus datos y precios, conservan IDs, existencias e historial, y las variantes nuevas se agregan. La carga se confirma en dos pasos.'}
+               {isServiceView ? 'Sube servicios con descripción, categoría, precio base Minorista, costo y disponibilidad. Configura otras listas desde la vista Servicios. La carga se confirma en dos pasos.' : 'Sube productos nuevos o existentes de la sucursal. Puedes repetir la carga: los SKU existentes actualizan sus datos y precios, conservan IDs, existencias e historial, y las variantes nuevas se agregan. La carga se confirma en dos pasos.'}
              </DialogDescription>
              <InventoryViewTutorial label={`Cómo importar ${isServiceView ? 'servicios' : 'productos'}`} targetPrefix="inventory-import" copy={{ data: { description: isServiceView ? 'Configura moneda, tasa, archivo e imágenes; luego normaliza y revisa la previsualización. Los servicios no usan bodegas ni stock.' : 'Configura moneda, tasa, archivo, imágenes y bodega de destino; luego revisa la previsualización del catálogo.' }, actions: { description: 'Carga el archivo y abre la previsualización antes de confirmar.' } }} />
           </DialogHeader>
           <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-3" data-tour="inventory-import-data">
-            <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">{isServiceView ? 'Precio incluido' : 'Listas incluidas'}</p><p className="h-9 flex items-center text-xs font-semibold">{isServiceView ? 'Precio único del servicio' : importPriceLists.map((list) => list.name).join(' · ')}</p></div>
+            <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">{isServiceView ? 'Precio incluido' : 'Listas incluidas'}</p><p className="h-9 flex items-center text-xs font-semibold">{isServiceView ? 'Precio base / Minorista' : importPriceLists.map((list) => list.name).join(' · ')}</p></div>
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Moneda del archivo</p><Select value={importCurrency} onValueChange={setImportCurrency}><SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Tasa USD / moneda base</p><Input className="h-9 text-xs" type="number" min="0.0001" step="any" value={importExchangeRate} onChange={(event) => setImportExchangeRate(Number(event.target.value) || 1)} disabled={importCurrency === 'NIO'} /></div>
           </div>
@@ -5432,7 +5457,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                 {isServiceView && <p>• <b>Descripción</b></p>}
                 <p>• <b>Nota comercial</b> (máximo 100 caracteres)</p>
                 <p>• <b>Categoría</b></p>
-                <p>• <b>{isServiceView ? 'Precio único' : 'Precios por lista'}</b></p>
+                <p>• <b>{isServiceView ? 'Precio base / Minorista' : 'Precios por lista'}</b></p>
                 {canViewInventoryCost && <p>• <b>{isServiceView ? 'Costo del servicio' : 'Costo'}</b></p>}
                 {isServiceView ? <><p>• <b>Disponible</b> (SI/NO)</p><p>• Sin IVA, bodega, stock ni variantes</p></> : <><p>• <b>Productos</b> y <b>Variantes</b></p><p>• <b>Atributos</b> dinámicos por fila</p><p>• <b>Precios</b>: PRODUCTO / VARIANTE</p><p>• <b>Inventario</b> por SKU y bodega</p><p>• Sin stock automático para variantes</p></>}
               </div>
@@ -5463,7 +5488,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
         <DialogContent>
           <DialogHeader data-tour="inventory-initial-confirm-title">
              <DialogTitle>Formalizar importación</DialogTitle>
-             <DialogDescription>Esta acción procesará {importData.filter((row) => !row._hasError).length} {isServiceView ? 'servicios' : 'registros de catálogo'} y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. {isServiceView ? 'Los servicios no manejan IVA, bodega, stock ni variantes.' : 'Los SKU existentes se controlan por sucursal y sin distinguir mayúsculas/minúsculas.'} {isServiceView ? `El precio se guardará en ${importCurrency}.` : `Los precios configurados se guardarán en ${importCurrency}; las listas sin precio quedarán pendientes.`} Escribe IMPORTAR para confirmar.</DialogDescription>
+             <DialogDescription>Esta acción procesará {importData.filter((row) => !row._hasError).length} {isServiceView ? 'servicios' : 'registros de catálogo'} y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. {isServiceView ? 'Los servicios no manejan IVA, bodega, stock ni variantes.' : 'Los SKU existentes se controlan por sucursal y sin distinguir mayúsculas/minúsculas.'} {isServiceView ? `El precio base Minorista se guardará en ${importCurrency}; las demás listas se configuran desde Servicios.` : `Los precios configurados se guardarán en ${importCurrency}; las listas sin precio quedarán pendientes.`} Escribe IMPORTAR para confirmar.</DialogDescription>
           <InventoryViewTutorial label="Cómo confirmar importación" targetPrefix="inventory-initial-confirm" copy={{ data: { description: 'Escribe IMPORTAR únicamente después de revisar las filas válidas, errores y advertencias.' }, actions: { description: `Confirma la importación para crear ${isServiceView ? 'los servicios' : 'los productos nuevos'}.` } }} />
           </DialogHeader>
           <div className="space-y-3" data-tour="inventory-initial-confirm-data">

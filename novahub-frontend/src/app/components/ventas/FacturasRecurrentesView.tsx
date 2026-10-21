@@ -162,7 +162,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
     resolveItemType(item) !== 'SERVICE' && getActiveVariantCount(findProductForItem(item)) > 1
   ));
   const showPriceListColumn = (localDoc?.items || []).some((item: any) => (
-    Boolean(item.productId) && resolveItemType(item) !== 'SERVICE'
+    Boolean(item.productId)
   ));
   const productLineLayoutClass = showVariantColumn
     ? showPriceListColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
@@ -801,7 +801,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                             : line),
                         } as any)}
                       />}
-                      {itemType !== 'SERVICE' && item.productId && <SalesLinePriceListSelect
+                      {item.productId && <SalesLinePriceListSelect
                         className="sales-line-price-list sales-quote-line-price-column"
                         labelLayout="stacked"
                         labelText="Lista de precios"

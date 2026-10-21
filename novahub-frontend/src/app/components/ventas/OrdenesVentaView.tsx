@@ -178,7 +178,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       && (product?.variants || []).filter((variant: any) => variant.isActive !== false).length > 1;
   });
   const showPriceTypeColumn = (localDoc?.items || []).some((item: any) => (
-    Boolean(item.productId) && String(resolveItemType(item)).toUpperCase() !== 'SERVICE'
+    Boolean(item.productId)
   ));
   const productLineLayoutClass = showVariantColumn
     ? showPriceTypeColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
@@ -1198,7 +1198,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                           } as any)}
                         />
                       )}
-                      {item.productId && String(resolveItemType(item)).toUpperCase() !== 'SERVICE' && (
+                      {item.productId && (
                         <SalesLinePriceListSelect
                           className="sales-line-price-list sales-quote-line-price-column"
                           labelLayout="stacked"

@@ -43,6 +43,9 @@ export interface PriceListMatrixProduct {
   code: string;
   name: string;
   salePrice: number;
+  salePriceOriginal?: number;
+  priceCurrency?: string;
+  priceExchangeRate?: number;
   costPrice: number;
   itemType?: string;
   category?: { id: string; name: string };
@@ -56,6 +59,12 @@ export interface PriceListMatrix {
   items: PriceListItem[];
 }
 
+export interface ServicePriceListMatrix {
+  lists: PriceList[];
+  services: PriceListMatrixProduct[];
+  items: PriceListItem[];
+}
+
 export const priceListsService = {
   getAll: (signal?: AbortSignal) => api.get<PriceList[]>('/sales/price-lists', { signal }),
 
@@ -64,6 +73,9 @@ export const priceListsService = {
 
   getMatrix: (signal?: AbortSignal) =>
     api.get<PriceListMatrix>('/sales/price-lists/matrix', { signal }),
+
+  getServiceMatrix: (signal?: AbortSignal) =>
+    api.get<ServicePriceListMatrix>('/sales/price-lists/services', { signal }),
 
   getItems: (id: string, signal?: AbortSignal) =>
     api.get<PriceListItem[]>(`/sales/price-lists/${id}/items`, { signal }),
@@ -84,6 +96,12 @@ export const priceListsService = {
     variantId?: string | null;
   }) => api.patch<PriceListItem>(`/sales/price-lists/${id}/items/${productId}`, data),
 
+  updateServiceItem: (id: string, productId: string, data: {
+    price: number;
+    currency: string;
+    exchangeRate?: number;
+  }) => api.patch<PriceListItem>(`/sales/price-lists/${id}/services/${productId}`, data),
+
   updateVariantItem: (listId: string, productId: string, variantId: string, data: {
     price: number;
     currency: string;
@@ -93,6 +111,7 @@ export const priceListsService = {
   importMatrix: (data: {
     currency: string;
     exchangeRate?: number;
+    itemType?: 'PRODUCT' | 'SERVICE';
     listCodes: string[];
     rows: Array<{
       code: string;

@@ -193,7 +193,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     resolveItemType(item) !== 'SERVICE' && getActiveVariantCount(findProductForItem(item)) > 1
   ));
   const showPriceListColumn = (localDoc?.items || []).some((item: any) => (
-    Boolean(item.productId) && resolveItemType(item) !== 'SERVICE'
+    Boolean(item.productId)
   ));
   const productLineLayoutClass = showVariantColumn
     ? showPriceListColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
@@ -242,7 +242,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       ? {
         ...nextDoc,
         items: nextDoc.items.map((item: any) => resolveItemType(item) === 'SERVICE'
-          ? { ...item, itemType: 'SERVICE', taxRate: 0, priceListId: null, variantId: null, warehouseId: undefined }
+          ? { ...item, itemType: 'SERVICE', taxRate: 0, variantId: null, warehouseId: undefined }
           : item),
       }
       : nextDoc;
@@ -1095,7 +1095,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             productCode: item.productCode || item.code || findProductForItem(item)?.code || undefined,
             taxRate: resolveItemType(item) === 'SERVICE' ? 0 : Number(item.taxRate || 0),
             discount: Number(item.discount || 0),
-            priceListId: resolveItemType(item) === 'SERVICE' ? undefined : item.priceListId || localDoc.priceListId || undefined,
+            priceListId: item.priceListId || localDoc.priceListId || undefined,
             total: Number(item.total || 0),
           })),
           subtotal: Number(localDoc.subtotal || 0),
@@ -1366,7 +1366,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         commercialNoteSnapshot: (product as any).commercialNote || null,
         quantity,
         unitPrice,
-        priceListId: itemType === 'SERVICE' ? null : priceListId || null,
+        priceListId: priceListId || null,
         discount: 0,
         taxRate: itemType === 'SERVICE' ? 0 : Number((product as any).taxRate || 0),
         total: quantity * unitPrice,
@@ -1777,7 +1777,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                       const priceListId = getCustomerPriceListId(val);
                       const items = (localDoc.items || []).map((item: any) => item.productId
                         ? resolveItemType(item) === 'SERVICE'
-                          ? { ...item, itemType: 'SERVICE', priceListId: null, priceMissing: false }
+                          ? { ...item, itemType: 'SERVICE', priceListId, unitPrice: 0, total: 0, priceMissing: false }
                           : { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false }
                         : { ...item, priceListId });
                       if (hasSalesProductPriceListConflicts(items, priceListId)) {
@@ -1933,7 +1933,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                  {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => {
                     const itemId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-                    const newItems = [...(localDoc.items || []), { id: itemId, itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: itemType === 'SERVICE' ? undefined : localDoc?.warehouseId || getDefaultWarehouseId(), taxRate: itemType === 'SERVICE' ? 0 : 0, priceListId: itemType === 'SERVICE' ? null : localDoc?.priceListId || undefined, serialNumbers: [] }];
+                    const newItems = [...(localDoc.items || []), { id: itemId, itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: itemType === 'SERVICE' ? undefined : localDoc?.warehouseId || getDefaultWarehouseId(), taxRate: 0, priceListId: localDoc?.priceListId || undefined, serialNumbers: [] }];
                     setLocalDoc({ ...localDoc, items: newItems });
                     setSalesProductPickerItemId(itemId);
                  }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
@@ -1999,9 +1999,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           variantAttributes: selectedVariant?.attributes || null,
                           productCode: selectedProd?.code || newItems[idx].productCode,
                           itemType: selectedItemType,
-                          priceListId: selectedItemType === 'SERVICE'
-                            ? null
-                            : (newItems[idx].priceListId || localDoc.priceListId || getCustomerPriceListId(localDoc.customerId)),
+                          priceListId: newItems[idx].priceListId || localDoc.priceListId || getCustomerPriceListId(localDoc.customerId),
                           warehouseId: selectedItemType === 'SERVICE' ? undefined : newItems[idx].warehouseId || localDoc?.warehouseId || getDefaultWarehouseId(),
                           taxRate: selectedItemType === 'SERVICE' ? 0 : Number(newItems[idx].taxRate || 0),
                           serialNumbers: [],
@@ -2045,7 +2043,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           if (!isCreating) void handleUpdate(localDoc!.id, { items: nextItems } as any);
                         }}
                       />}
-                      {item.productId && resolveItemType(item) !== 'SERVICE' && <SalesLinePriceListSelect
+                      {item.productId && <SalesLinePriceListSelect
                         className="sales-line-price-list sales-quote-line-price-column"
                         labelLayout="stacked"
                         labelText="Lista de precios"

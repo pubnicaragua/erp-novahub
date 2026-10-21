@@ -22,6 +22,7 @@ import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { filterAllowedPriceLists } from '../../utils/permissions';
 import { formatExchangeRate } from '../../utils/currency';
+import { toast } from 'sonner';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
@@ -37,21 +38,23 @@ const currencyLabel = (currency: string) => currency === 'USD' ? 'Dólares' : 'C
 const normalize = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 const PRICE_LISTS_TOUR_STEPS: GuidedTourStep[] = [
-  { target: '[data-tour="price-lists-title"]', title: 'Vista de Listas de precios', description: 'Aquí administras las tarifas de venta por producto. El costo permanece en Inventario; esta vista concentra los precios que utilizará Ventas.', tip: 'Minorista, Mayorista y Distribuidor vienen como listas predeterminadas. Las demás listas se agregan después.', placement: 'bottom' },
+  { target: '[data-tour="price-lists-title"]', title: 'Vista de Listas de precios', description: 'Aquí administras las tarifas de venta de productos y servicios. Usa las pestañas para mantener cada matriz separada.', tip: 'Minorista, Mayorista y Distribuidor vienen como listas predeterminadas. Las demás listas se agregan después.', placement: 'bottom' },
   { target: '[data-tour="price-lists-new"]', title: 'Crear una nueva lista', description: 'Usa Nueva lista para agregar una tarifa adicional, por ejemplo Promocional o Institucional. El sistema genera automáticamente su código.', placement: 'bottom' },
   { target: '[data-tour="price-lists-columns"]', title: 'Configurar columnas', description: 'Elige qué listas se ven en la tabla. La misma selección define las columnas que aparecerán al descargar o importar una plantilla.', placement: 'bottom' },
-  { target: '[data-tour="price-lists-search"]', title: 'Buscar productos', description: 'Filtra la matriz por código, SKU, nombre, categoría o SKU de variante. La paginación se reinicia al cambiar la búsqueda.', placement: 'bottom' },
+  { target: '[data-tour="price-lists-search"]', title: 'Buscar artículos', description: 'Filtra la matriz activa por código, SKU, nombre, categoría o SKU de variante. La paginación se reinicia al cambiar la búsqueda.', placement: 'bottom' },
   { target: '[data-tour="price-lists-currency"]', title: 'Moneda de visualización', description: 'La matriz usa la moneda seleccionada en el topbar para consultar y editar precios. El cálculo utiliza la tasa global configurada y conserva el valor base.', placement: 'bottom' },
   { target: '[data-tour="price-lists-pagination"]', title: 'Paginación', description: 'La matriz inicia con 50 productos por página para mantener la vista ágil. Puedes desactivarla o cambiar el tamaño cuando lo necesites.', placement: 'bottom' },
-  { target: '[data-tour="price-lists-template"]', title: 'Descargar plantilla', description: 'Selecciona productos en la tabla y descarga una plantilla con el costo de referencia, precios existentes y las listas visibles. Incluye una guía de llenado.', placement: 'bottom' },
-  { target: '[data-tour="price-lists-import"]', title: 'Importar precios', description: 'La importación no depende de seleccionar filas: carga un archivo y el sistema identifica los productos por SKU. Primero se abre el modal de carga; después, al presionar Previsualizar actualización, se muestra la tabla completa para editar.', tip: 'Las celdas vacías no cambian precios existentes. Las incidencias se corrigen antes de confirmar y el proceso muestra porcentaje y resultado final.', placement: 'bottom' },
-  { target: '[data-tour="price-lists-matrix"]', title: 'Matriz y edición', description: 'Cada fila representa un producto y cada columna una lista. Haz clic en el lápiz para editar todos los precios visibles de esa fila y guarda una sola vez.', placement: 'top' },
+  { target: '[data-tour="price-lists-template"]', title: 'Descargar plantilla', description: 'Selecciona filas en la tabla y descarga una plantilla con los precios existentes y las listas visibles. La pestaña Productos incluye el costo de referencia.', placement: 'bottom' },
+  { target: '[data-tour="price-lists-import"]', title: 'Importar precios', description: 'Carga una plantilla de productos o servicios desde su pestaña. El sistema identifica cada registro por código o SKU y permite revisar y editar los valores antes de confirmar.', tip: 'Las celdas vacías no cambian precios existentes. Las incidencias se corrigen antes de confirmar y el proceso muestra porcentaje y resultado final.', placement: 'bottom' },
+  { target: '[data-tour="price-lists-matrix"]', title: 'Matriz y edición', description: 'Cada fila representa un producto o servicio y cada columna una lista. Haz clic en el lápiz para editar los precios visibles de esa fila y guarda una sola vez.', placement: 'top' },
 ];
 
 function PriceImportPreviewPage({
   rows,
   fileName,
   lists,
+  itemLabel,
+  showCost,
   currency,
   rate,
   baseCurrency,
@@ -67,6 +70,8 @@ function PriceImportPreviewPage({
   rows: ImportRow[];
   fileName: string;
   lists: any[];
+  itemLabel: string;
+  showCost: boolean;
   currency: 'NIO' | 'USD';
   rate: number;
   baseCurrency: string;
@@ -86,7 +91,7 @@ function PriceImportPreviewPage({
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const validRows = rows.filter((row) => !row.error).length;
   const issueRows = rows.length - validRows;
-  const gridTemplate = `80px 176px minmax(256px, 1fr) 144px ${lists.map(() => '144px').join(' ')} minmax(208px, 1fr)`;
+  const gridTemplate = `80px 176px minmax(256px, 1fr) ${showCost ? '144px ' : ''}${lists.map(() => '144px').join(' ')} minmax(208px, 1fr)`;
   const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 58, { overscan: 2 });
 
   useEffect(() => {
@@ -100,7 +105,7 @@ function PriceImportPreviewPage({
       <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
         <ImportPreviewField label="Código / SKU"><Input className={`${importPreviewFieldClass} font-mono`} value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></ImportPreviewField>
         <ImportPreviewField label="Producto"><Input className={importPreviewFieldClass} value={row.name} disabled /></ImportPreviewField>
-        <ImportPreviewField label={`Costo (${currencyLabel(currency)})`}><Input className={`${importPreviewFieldClass} text-right`} type="number" value={row.cost} disabled /></ImportPreviewField>
+        {showCost && <ImportPreviewField label={`Costo (${currencyLabel(currency)})`}><Input className={`${importPreviewFieldClass} text-right`} type="number" value={row.cost} disabled /></ImportPreviewField>}
         {lists.map((list) => <ImportPreviewField key={list.id} label={list.name}><Input className={`${importPreviewFieldClass} text-right`} type="number" min="0" value={row.prices[list.code] ?? ''} onChange={(event) => onRowUpdate(index, list.code, event.target.value)} disabled={importing} /></ImportPreviewField>)}
       </div>
     </ImportPreviewMobileCard>
@@ -113,7 +118,7 @@ function PriceImportPreviewPage({
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Actualización masiva</p>
             <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar precios</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Revisa y corrige los precios antes de actualizar las listas seleccionadas.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Revisa y corrige los precios de {itemLabel.toLowerCase()} antes de actualizar las listas seleccionadas.</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
             <Badge variant="outline" className="border-primary/40 text-primary">Moneda: {currencyLabel(currency)}</Badge>
@@ -140,8 +145,8 @@ function PriceImportPreviewPage({
               <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
                 <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Estado</TableHead>
                 <TableHead className="w-44">Código / SKU</TableHead>
-                <TableHead className="min-w-64">Producto</TableHead>
-                <TableHead className="w-36 text-right">Costo</TableHead>
+                <TableHead className="min-w-64">{itemLabel}</TableHead>
+                {showCost && <TableHead className="w-36 text-right">Costo</TableHead>}
                 {lists.map((list) => <TableHead key={list.id} className="w-36 text-right">{list.name}</TableHead>)}
                 <TableHead className="min-w-52">Validación</TableHead>
               </TableRow>
@@ -154,8 +159,8 @@ function PriceImportPreviewPage({
                 <TableRow key={virtualRow.key} ref={tableVirtualizer.measureElement} data-index={index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }} className={row.error ? 'bg-rose-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                   <TableCell><Input className="h-9 font-mono text-xs" value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell className="font-medium">{row.name || 'Producto no encontrado'}</TableCell>
-                  <TableCell><Input className="h-9 text-right text-muted-foreground" type="number" value={row.cost} disabled /></TableCell>
+                  <TableCell className="font-medium">{row.name || `${itemLabel} no encontrado`}</TableCell>
+                  {showCost && <TableCell><Input className="h-9 text-right text-muted-foreground" type="number" value={row.cost} disabled /></TableCell>}
                   {lists.map((list) => <TableCell key={list.id}><Input className="h-9 text-right" type="number" min="0" value={row.prices[list.code] ?? ''} onChange={(event) => onRowUpdate(index, list.code, event.target.value)} disabled={importing} /></TableCell>)}
                   <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : 'text-xs text-emerald-600'}>{row.error || 'Correcto'}</TableCell>
                 </TableRow>
@@ -217,6 +222,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const canExportPriceLists = canPerform('SALES_PRICE_LISTS', 'export');
   const queryClient = useQueryClient();
   const tenantKey = user?.tenantId || 'anonymous';
+  const [activeItemType, setActiveItemType] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT');
   const matrixQuery = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', tenantKey],
     queryFn: ({ signal }) => priceListsService.getMatrix(signal),
@@ -225,11 +231,25 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     gcTime: 5 * 60_000,
     placeholderData: keepPreviousData,
   });
-  const lists = useMemo(() => filterAllowedPriceLists((matrixQuery.data?.lists || []) as any[], user), [matrixQuery.data, user]);
+  const serviceMatrixQuery = useQuery({
+    queryKey: ['sales', 'price-lists', 'services', tenantKey],
+    queryFn: ({ signal }) => priceListsService.getServiceMatrix(signal),
+    enabled: Boolean(user?.tenantId) && canPerform('SALES_PRICE_LISTS', 'view'),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+  });
+  const lists = useMemo(() => filterAllowedPriceLists(
+    (activeItemType === 'SERVICE' ? serviceMatrixQuery.data?.lists : matrixQuery.data?.lists || []) as any[] || [],
+    user,
+  ), [activeItemType, serviceMatrixQuery.data, matrixQuery.data, user]);
   const matrixProducts = useMemo(() => matrixQuery.data?.products || [], [matrixQuery.data]);
   const [visibleListIds, setVisibleListIds] = useLocalStorageState<string[] | null>(`sales-price-lists-columns-${tenantKey}`, null, 24 * 365);
   const visibleAccessListIds = useMemo(() => new Set(lists.map((list) => list.id)), [lists]);
-  const matrixItems = useMemo(() => (matrixQuery.data?.items || []).filter((item) => visibleAccessListIds.has(item.priceListId)) as PriceListItem[], [matrixQuery.data, visibleAccessListIds]);
+  const matrixItems = useMemo(() => {
+    const source = activeItemType === 'SERVICE' ? serviceMatrixQuery.data?.items : matrixQuery.data?.items;
+    return (source || []).filter((item) => visibleAccessListIds.has(item.priceListId)) as PriceListItem[];
+  }, [activeItemType, serviceMatrixQuery.data, matrixQuery.data, visibleAccessListIds]);
   const [paginationEnabled, setPaginationEnabled] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
@@ -274,10 +294,10 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const savingVariantRef = useRef<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const catalogProducts = useMemo(
-    () => (matrixProducts.length ? matrixProducts : products).filter((product) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() !== 'SERVICE'),
-    [matrixProducts, products],
-  );
+  const catalogProducts = useMemo(() => activeItemType === 'SERVICE'
+    ? (serviceMatrixQuery.data?.services || [])
+    : (matrixProducts.length ? matrixProducts : products).filter((product) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() !== 'SERVICE'),
+  [activeItemType, serviceMatrixQuery.data, matrixProducts, products]);
   const filteredCatalogProducts = useMemo(() => {
     const query = normalize(productSearch);
     if (!query) return catalogProducts;
@@ -316,18 +336,35 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const selectedCount = selectedProductIds.size;
   const importLists = visibleLists;
   const totalPages = Math.max(1, Math.ceil(filteredCatalogProducts.length / pageSize));
-  const displayedProducts = useMemo(() => paginationEnabled ? filteredCatalogProducts.slice((page - 1) * pageSize, page * pageSize) : filteredCatalogProducts, [filteredCatalogProducts, page, pageSize, paginationEnabled]);
+  const currentPage = Math.min(page, totalPages);
+  const displayedProducts = useMemo(() => paginationEnabled ? filteredCatalogProducts.slice((currentPage - 1) * pageSize, currentPage * pageSize) : filteredCatalogProducts, [filteredCatalogProducts, currentPage, pageSize, paginationEnabled]);
   const displayedProductIds = useMemo(() => displayedProducts.map((product) => product.id), [displayedProducts]);
   const allDisplayedSelected = displayedProductIds.length > 0 && displayedProductIds.every((id) => selectedProductIds.has(id));
 
-  const loading = matrixQuery.isPending || matrixQuery.isFetching;
+  const activeMatrixQuery = activeItemType === 'SERVICE' ? serviceMatrixQuery : matrixQuery;
+  const itemLabel = activeItemType === 'SERVICE' ? 'Servicios' : 'Productos';
+  const itemLabelSingular = activeItemType === 'SERVICE' ? 'servicio' : 'producto';
+  const loading = activeMatrixQuery.isPending || activeMatrixQuery.isFetching;
+  const changeActiveItemType = (itemType: 'PRODUCT' | 'SERVICE') => {
+    if (itemType === activeItemType) return;
+    setActiveItemType(itemType);
+    setProductSearch('');
+    setPage(1);
+    setSelectedProductIds(new Set());
+    setMissingSelectedIds(new Set());
+    setEditingProductIds(new Set());
+    setEditingPrices({});
+  };
   const refreshMatrix = async () => {
-    await queryClient.refetchQueries({ queryKey: ['sales', 'price-lists', 'matrix', tenantKey], type: 'active' });
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ['sales', 'price-lists', 'matrix', tenantKey], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['sales', 'price-lists', 'services', tenantKey], type: 'active' }),
+    ]);
   };
 
   useEffect(() => {
-    if (matrixQuery.isError) toast.error((matrixQuery.error as any)?.message || 'No se pudo cargar la matriz de precios');
-  }, [matrixQuery.isError, matrixQuery.error]);
+    if (activeMatrixQuery.isError) toast.error((activeMatrixQuery.error as any)?.message || 'No se pudo cargar la matriz de precios');
+  }, [activeMatrixQuery.isError, activeMatrixQuery.error]);
   useEffect(() => {
     if (!lists.length) return;
     setVisibleListIds((current) => {
@@ -338,18 +375,6 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
         : [];
     });
   }, [lists, setVisibleListIds]);
-
-  useEffect(() => {
-    setPage((current) => Math.min(current, totalPages));
-  }, [totalPages]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [productSearch]);
-
-  useEffect(() => {
-    if (missingOpen) setMissingSelectedIds(new Set(missingProducts.map((product) => product.id)));
-  }, [missingOpen, missingProducts]);
 
   const toggleProduct = (id: string, source: 'main' | 'missing' = 'main') => {
     const setter = source === 'main' ? setSelectedProductIds : setMissingSelectedIds;
@@ -546,7 +571,9 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     savingProductRef.current.add(productId);
     setSaving(productId);
     try {
-      await Promise.all(changes.map(({ list, price }) => priceListsService.updateItem(list.id, productId, { price, currency, exchangeRate: rate, variantId: null })));
+      await Promise.all(changes.map(({ list, price }) => activeItemType === 'SERVICE'
+        ? priceListsService.updateServiceItem(list.id, productId, { price, currency, exchangeRate: rate })
+        : priceListsService.updateItem(list.id, productId, { price, currency, exchangeRate: rate, variantId: null })));
       // La respuesta de PATCH confirma la operación, pero la matriz debe
       // quedar basada en la lectura posterior al commit del servidor. Esto
       // evita mostrar un cambio solo local o conservar una fila variante en
@@ -560,7 +587,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
 
   const openDownload = (productIds: string[]) => {
     if (!canExportPriceLists) return;
-    if (!productIds.length) return toast.error('Selecciona al menos un producto');
+    if (!productIds.length) return toast.error(`Selecciona al menos un ${itemLabelSingular}`);
     if (!importLists.length) return toast.error('Selecciona al menos una lista visible');
     setDownloadScopeIds(productIds);
     setDownloadOpen(true);
@@ -570,9 +597,11 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     if (!canExportPriceLists) return;
     const selectedProducts = catalogProducts.filter((product) => productIds.includes(product.id));
     const hasVariants = selectedProducts.some((p) => p.variants && p.variants.length > 1);
-    const headers = hasVariants
-      ? ['SKU', 'Producto', 'Atributos', 'Costo (ref.)', ...importLists.map((list) => list.name)]
-      : ['Código', 'Producto', 'Costo (solo referencia)', ...importLists.map((list) => list.name)];
+    const headers = activeItemType === 'SERVICE'
+      ? ['Código', 'Servicio', ...importLists.map((list) => list.name)]
+      : hasVariants
+        ? ['SKU', 'Producto', 'Atributos', 'Costo (ref.)', ...importLists.map((list) => list.name)]
+        : ['Código', 'Producto', 'Costo (solo referencia)', ...importLists.map((list) => list.name)];
     const rows: any[][] = [];
     selectedProducts.forEach((product) => {
       const byList = itemsByProduct.get(product.id);
@@ -589,28 +618,32 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
           rows.push([variant.sku, product.name, attrs, Number(product.costPrice ?? product.details?.costPrice ?? 0), ...variantPrices]);
         });
       } else {
-        rows.push([product.code, product.name, Number(product.costPrice ?? product.details?.costPrice ?? 0), ...importLists.map((list) => byList?.get(list.id)?.price ?? '')]);
+        rows.push(activeItemType === 'SERVICE'
+          ? [product.code, product.name, ...importLists.map((list) => byList?.get(list.id)?.price ?? '')]
+          : [product.code, product.name, Number(product.costPrice ?? product.details?.costPrice ?? 0), ...importLists.map((list) => byList?.get(list.id)?.price ?? '')]);
       }
     });
     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    worksheet['!cols'] = hasVariants
+    worksheet['!cols'] = activeItemType === 'SERVICE'
+      ? [{ wch: 18 }, { wch: 34 }, ...importLists.map(() => ({ wch: 20 }))]
+      : hasVariants
       ? [{ wch: 18 }, { wch: 34 }, { wch: 30 }, { wch: 18 }, ...importLists.map(() => ({ wch: 20 }))]
       : [{ wch: 18 }, { wch: 34 }, { wch: 22 }, ...importLists.map(() => ({ wch: 20 }))];
     const guide = XLSX.utils.aoa_to_sheet([
       ['GUÍA DE LLENADO · ACTUALIZACIÓN DE PRECIOS'],
       ['1. No cambies los encabezados Código/SKU ni los nombres de las listas.'],
-      ['2. El costo es informativo y no se actualizará al importar.'],
+      ...(activeItemType === 'PRODUCT' ? [['2. El costo es informativo y no se actualizará al importar.']] : []),
       ['3. Los precios existentes se incluyen como referencia. Si mantienes el mismo valor, no se hará ningún cambio.'],
       ['4. Ingresa únicamente los precios de las listas que deseas actualizar. Las celdas vacías no modifican el precio existente.'],
       ['5. La moneda y la tasa se eligen en la ventana de carga. Guarda el archivo como .xlsx y cárgalo desde Listas de Precios.'],
-      hasVariants ? ['6. Para productos con variantes, usa el SKU de la variante (no el del producto padre).'] : [],
+      hasVariants && activeItemType === 'PRODUCT' ? ['6. Para productos con variantes, usa el SKU de la variante (no el del producto padre).'] : [],
       ['Listas incluidas:', ...importLists.map((list) => list.name)],
     ].filter((row) => row.length > 0));
     guide['!cols'] = [{ wch: 72 }, ...importLists.map(() => ({ wch: 24 }))];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Precios');
     XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
-    XLSX.writeFile(workbook, buildDownloadFileName(['plantilla_precios', selectedProducts.length, 'productos'], 'xlsx'));
+    XLSX.writeFile(workbook, buildDownloadFileName(['plantilla_precios', selectedProducts.length, activeItemType === 'SERVICE' ? 'servicios' : 'productos'], 'xlsx'));
     toast.success('Plantilla descargada');
     setDownloadOpen(false);
   };
@@ -619,7 +652,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     if (!canImportPriceLists) return;
     if (!importLists.length) return toast.error('Selecciona al menos una lista visible');
     const scope = ids.length ? ids : catalogProducts.map((product) => product.id);
-    if (!scope.length) return toast.error('No hay productos disponibles para actualizar');
+    if (!scope.length) return toast.error(`No hay ${itemLabel.toLowerCase()} disponibles para actualizar`);
     setImportScopeIds(scope); setImportRows([]); setImportFile(''); setImportOpen(true);
   };
 
@@ -670,7 +703,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
             p.variants?.some((v: any) => normalize(v.sku) === normalize(code))
           ) : null;
           const resolvedProduct = product || variantMatch;
-          const next: ImportRow = { code, name: resolvedProduct?.name || '', cost: costIndex >= 0 && row[costIndex] !== '' && row[costIndex] !== undefined ? Number(row[costIndex]) : Number(resolvedProduct?.costPrice ?? resolvedProduct?.details?.costPrice ?? 0), prices };
+        const next: ImportRow = { code, name: resolvedProduct?.name || '', cost: activeItemType === 'SERVICE' ? 0 : costIndex >= 0 && row[costIndex] !== '' && row[costIndex] !== undefined ? Number(row[costIndex]) : Number(resolvedProduct?.costPrice ?? resolvedProduct?.details?.costPrice ?? 0), prices };
           next.error = validateImportRow(next);
           return next;
         });
@@ -692,7 +725,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       const next = { ...row, prices: { ...row.prices } };
       if (field === 'code') next.code = value;
       else if (!field.startsWith('cost')) next.prices[field] = value === '' ? '' : Number(value);
-      next.name = productByCode.get(normalize(next.code))?.name || next.name;
+      next.name = productByCode.get(normalize(next.code))?.name || '';
       next.error = validateImportRow(next);
       return next;
     }));
@@ -708,6 +741,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       const result = await priceListsService.importMatrix({
         currency: importCurrency,
         exchangeRate: importCurrency === baseCurrency ? 1 : importRate,
+        itemType: activeItemType,
         listCodes: importLists.map((list) => list.code),
         rows: importRows.map((row) => {
           const normalizedCode = normalize(row.code);
@@ -751,6 +785,8 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       rows={importRows}
       fileName={importFile}
       lists={importLists}
+      itemLabel={itemLabel}
+      showCost={activeItemType === 'PRODUCT'}
       currency={importCurrency as 'USD' | 'NIO'}
       rate={importRate}
       baseCurrency={baseCurrency}
@@ -864,8 +900,8 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     <Card className="min-w-0 rounded-2xl" data-tour="price-lists-matrix">
       <CardHeader className="flex flex-col items-start justify-between gap-3 p-4 sm:flex-row sm:items-center sm:p-6">
         <div className="min-w-0">
-          <CardTitle>Matriz de precios</CardTitle>
-          <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">Selecciona productos para descargar una plantilla. Para importar, el sistema identifica los productos por el SKU del archivo. El costo permanece en Inventario.</p>
+          <CardTitle>Matriz de precios · {itemLabel}</CardTitle>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">Selecciona {itemLabel.toLowerCase()} para descargar una plantilla. La carga identifica cada registro por su código o SKU{activeItemType === 'PRODUCT' ? '. El costo permanece en Inventario.' : '.'}</p>
         </div>
         <Badge variant="outline" className="shrink-0">{selectedCount} seleccionados</Badge>
       </CardHeader>
@@ -881,12 +917,12 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
             >
               <TableRow>
                 <TableHead className="w-10">
-                  <button type="button" onClick={() => toggleAll(displayedProductIds)} className="flex size-7 items-center justify-center rounded-md hover:bg-muted/60" aria-label="Seleccionar productos visibles">
+                  <button type="button" onClick={() => toggleAll(displayedProductIds)} className="flex size-7 items-center justify-center rounded-md hover:bg-muted/60" aria-label={`Seleccionar ${itemLabel.toLowerCase()} visibles`}>
                     {allDisplayedSelected ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}
                   </button>
                 </TableHead>
                 <TableHead>Código</TableHead>
-                <TableHead>Producto</TableHead>
+                <TableHead>{activeItemType === 'SERVICE' ? 'Servicio' : 'Producto'}</TableHead>
                 <TableHead>Categoría</TableHead>
                 {visibleLists.map((list) => <TableHead key={list.id} className="min-w-36 text-right">{list.name}</TableHead>)}
                 <TableHead className="w-24 text-right" style={{ position: 'sticky', top: 0, zIndex: 60, backgroundColor: 'var(--card)', backgroundClip: 'padding-box' }}>Acciones</TableHead>
@@ -960,9 +996,9 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
             );
           })}
         </div>
-        {paginationEnabled && <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>Mostrando {displayedProducts.length} de {filteredCatalogProducts.length} productos</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}><ChevronLeft className="size-4" /><span className="sr-only">Página anterior</span></Button><span>Página {page} de {totalPages}</span><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}><ChevronRight className="size-4" /><span className="sr-only">Página siguiente</span></Button></div></div>}
-        {!catalogProducts.length && <p className="py-8 text-center text-sm text-muted-foreground">No hay productos disponibles.</p>}
-        {catalogProducts.length > 0 && !filteredCatalogProducts.length && <p className="py-8 text-center text-sm text-muted-foreground">No hay productos que coincidan con la búsqueda.</p>}
+        {paginationEnabled && <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>Mostrando {displayedProducts.length} de {filteredCatalogProducts.length} {itemLabel.toLowerCase()}</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" className="h-8" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}><ChevronLeft className="size-4" /><span className="sr-only">Página anterior</span></Button><span>Página {currentPage} de {totalPages}</span><Button variant="outline" size="sm" className="h-8" onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage >= totalPages}><ChevronRight className="size-4" /><span className="sr-only">Página siguiente</span></Button></div></div>}
+        {!catalogProducts.length && <p className="py-8 text-center text-sm text-muted-foreground">No hay {itemLabel.toLowerCase()} disponibles.</p>}
+        {catalogProducts.length > 0 && !filteredCatalogProducts.length && <p className="py-8 text-center text-sm text-muted-foreground">No hay {itemLabel.toLowerCase()} que coincidan con la búsqueda.</p>}
         {!visibleLists.length && <p className="py-8 text-center text-sm text-muted-foreground">Selecciona al menos una lista para mostrar columnas.</p>}
       </CardContent>
     </Card>
@@ -974,16 +1010,32 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       <div className="flex flex-wrap gap-2"><Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo actualizar precios" title="Cómo actualizar precios"><CircleHelp className="size-4" /></Button>{canCreatePriceList && <Button variant="outline" className="rounded-xl" onClick={() => setNewListOpen(true)} data-tour="price-lists-new"><Plus className="mr-2 size-4" /> Nueva lista</Button>}{canExportPriceLists && <Button variant="outline" className="rounded-xl" onClick={() => openDownload([...selectedProductIds])} disabled={!selectedCount} data-tour="price-lists-template"><Download className="mr-2 size-4" /> Plantilla ({selectedCount})</Button>}{canImportPriceLists && <Button className="rounded-xl" onClick={() => openImport([...selectedProductIds])} disabled={!catalogProducts.length || !importLists.length} data-tour="price-lists-import"><Upload className="mr-2 size-4" /> Importar precios</Button>}</div>
     </div>
 
-    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-tour="price-lists-kpis">
-      <SalesKpiCard title="Productos" value={loading || matrixQuery.isError ? '—' : filteredCatalogProducts.length} icon={Package} color="text-primary" bg="bg-primary/10" kind="indicator" />
-      <SalesKpiCard title="Listas visibles" value={loading || matrixQuery.isError ? '—' : visibleLists.length} icon={ListChecks} color="text-primary" bg="bg-primary/10" kind="indicator" />
-      <SalesKpiCard title="Precios cargados" value={loading || matrixQuery.isError ? '—' : Math.max(0, filteredCatalogProducts.length * visibleLists.length - missingPriceCount)} icon={CircleDollarSign} color="text-primary" bg="bg-primary/10" kind="indicator" />
-      <SalesKpiCard title="Productos con precios faltantes" value={loading || matrixQuery.isError ? '—' : missingProducts.length} icon={AlertTriangle} color="text-primary" bg="bg-primary/10" kind="filter" active={missingOpen} onClick={() => setMissingOpen(true)} />
+    <div role="tablist" aria-label="Tipo de artículo en listas de precios" className="flex w-full max-w-md gap-1 rounded-xl border bg-muted/40 p-1">
+      {(['PRODUCT', 'SERVICE'] as const).map((itemType) => {
+        const selected = activeItemType === itemType;
+        const label = itemType === 'PRODUCT' ? 'Productos' : 'Servicios';
+        return <button key={itemType} id={`price-list-tab-${itemType.toLowerCase()}`} type="button" role="tab" aria-controls="price-list-matrix-panel" aria-selected={selected} tabIndex={selected ? 0 : -1} onClick={() => changeActiveItemType(itemType)} onKeyDown={(event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const nextType = event.key === 'Home' ? 'PRODUCT' : event.key === 'End' ? 'SERVICE' : itemType === 'PRODUCT' ? 'SERVICE' : 'PRODUCT';
+          changeActiveItemType(nextType);
+          document.getElementById(`price-list-tab-${nextType.toLowerCase()}`)?.focus();
+        }} className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+          {itemType === 'PRODUCT' ? <Package className="size-4 shrink-0" /> : <Layers className="size-4 shrink-0" />}{label}
+        </button>;
+      })}
     </div>
-    <KpiSummaryNotice loading={loading} error={matrixQuery.isError} />
+
+    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-tour="price-lists-kpis">
+      <SalesKpiCard title={itemLabel} value={loading || activeMatrixQuery.isError ? '—' : filteredCatalogProducts.length} icon={activeItemType === 'SERVICE' ? Layers : Package} color="text-primary" bg="bg-primary/10" kind="indicator" />
+      <SalesKpiCard title="Listas visibles" value={loading || activeMatrixQuery.isError ? '—' : visibleLists.length} icon={ListChecks} color="text-primary" bg="bg-primary/10" kind="indicator" />
+      <SalesKpiCard title="Precios cargados" value={loading || activeMatrixQuery.isError ? '—' : Math.max(0, filteredCatalogProducts.length * visibleLists.length - missingPriceCount)} icon={CircleDollarSign} color="text-primary" bg="bg-primary/10" kind="indicator" />
+      <SalesKpiCard title={`${itemLabel} con precios faltantes`} value={loading || activeMatrixQuery.isError ? '—' : missingProducts.length} icon={AlertTriangle} color="text-primary" bg="bg-primary/10" kind="filter" active={missingOpen} onClick={() => { setMissingSelectedIds(new Set(missingProducts.map((product) => product.id))); setMissingOpen(true); }} />
+    </div>
+    <KpiSummaryNotice loading={loading} error={activeMatrixQuery.isError} />
 
     <div className="flex min-w-0 flex-col gap-3" data-tour="price-lists-filters">
-      <div className="relative w-full min-w-0" data-tour="price-lists-search"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Buscar producto, código o SKU..." aria-label="Buscar producto, código o SKU" className="h-10 w-full rounded-xl pl-9 pr-9" />{productSearch && <button type="button" onClick={() => setProductSearch('')} className="absolute right-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label="Limpiar búsqueda"><X className="size-4" /></button>}</div>
+      <div className="relative w-full min-w-0" data-tour="price-lists-search"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={productSearch} onChange={(event) => { setProductSearch(event.target.value); setPage(1); }} placeholder={`Buscar ${itemLabelSingular}, código o SKU...`} aria-label={`Buscar ${itemLabelSingular}, código o SKU`} className="h-10 w-full rounded-xl pl-9 pr-9" />{productSearch && <button type="button" onClick={() => { setProductSearch(''); setPage(1); }} className="absolute right-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label="Limpiar búsqueda"><X className="size-4" /></button>}</div>
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch lg:justify-end">
         <div className="flex min-w-0 w-full items-center gap-2 rounded-xl border px-3 py-1.5 sm:flex-1 lg:w-auto lg:flex-none" data-tour="price-lists-currency"><span className="shrink-0 text-xs font-bold text-muted-foreground">Moneda</span><span className="min-w-0 flex-1 truncate px-2 text-sm font-bold text-foreground">{currencyLabel(displayCurrency)}</span><span className="shrink-0 text-[10px] text-muted-foreground">Topbar · Tasa {formatExchangeRate(exchangeRate)}</span></div>
         <div className="flex min-w-0 w-full items-center gap-2 rounded-xl border px-3 py-1.5 sm:flex-1 lg:w-[18rem] lg:flex-none" data-tour="price-lists-pagination"><span className="shrink-0 text-xs font-bold text-muted-foreground">Paginación</span><Select value={paginationEnabled ? 'on' : 'off'} onValueChange={(value) => { setPaginationEnabled(value === 'on'); setPage(1); }}><SelectTrigger className="h-8 min-w-0 flex-1 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="off">Desactivada</SelectItem><SelectItem value="on">Activada</SelectItem></SelectContent></Select>{paginationEnabled && <Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(1); }}><SelectTrigger className="h-8 w-20 shrink-0 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="25">25</SelectItem><SelectItem value="50">50</SelectItem><SelectItem value="100">100</SelectItem></SelectContent></Select>}</div>
@@ -991,7 +1043,9 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       </div>
     </div>
 
-    {priceMatrix}
+    <div id="price-list-matrix-panel" role="tabpanel" aria-labelledby={`price-list-tab-${activeItemType.toLowerCase()}`} tabIndex={0} className="min-w-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      {priceMatrix}
+    </div>
     <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
       <DialogContent className="w-[calc(100vw-2rem)] !max-w-[44rem] gap-4 overflow-hidden p-5 sm:p-6">
         <DialogHeader className="pr-8 text-left">
@@ -1060,8 +1114,8 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
               <AlertTriangle className="size-5" />
             </div>
             <div className="min-w-0">
-              <DialogTitle className="text-lg sm:text-xl">Productos con precios faltantes</DialogTitle>
-              <DialogDescription className="mt-1 max-w-3xl leading-5">Selecciona los productos y descarga una plantilla con las listas visibles pendientes. Las celdas vacías no modifican precios existentes.</DialogDescription>
+            <DialogTitle className="text-lg sm:text-xl">{itemLabel} con precios faltantes</DialogTitle>
+            <DialogDescription className="mt-1 max-w-3xl leading-5">Selecciona {itemLabel.toLowerCase()} y descarga una plantilla con las listas visibles pendientes. Las celdas vacías no modifican precios existentes.</DialogDescription>
             </div>
           </div>
         </DialogHeader>
@@ -1069,7 +1123,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
         <div className="flex shrink-0 flex-col gap-3 border-b border-border/60 bg-muted/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-7">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Badge variant="outline" className="border-primary/40 bg-primary/5 text-primary">{missingSelectedIds.size} seleccionados</Badge>
-            <span className="text-xs text-muted-foreground">de {missingProducts.length} productos pendientes</span>
+            <span className="text-xs text-muted-foreground">de {missingProducts.length} {itemLabel.toLowerCase()} pendientes</span>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openDownload([...missingSelectedIds])} disabled={!missingSelectedIds.size}>
@@ -1087,7 +1141,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
               <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                 <TableRow>
                   <TableHead className="w-14">
-                    <button type="button" onClick={() => toggleAll(missingProducts.map((product) => product.id), 'missing')} className="flex size-8 items-center justify-center rounded-lg hover:bg-muted" aria-label="Seleccionar todos los productos pendientes">
+                    <button type="button" onClick={() => toggleAll(missingProducts.map((product) => product.id), 'missing')} className="flex size-8 items-center justify-center rounded-lg hover:bg-muted" aria-label={`Seleccionar todos los ${itemLabel.toLowerCase()} pendientes`}>
                       {missingSelectedIds.size === missingProducts.length && missingProducts.length > 0 ? <SquareCheckBig className="size-5 text-primary" /> : <Square className="size-5 text-muted-foreground" />}
                     </button>
                   </TableHead>
@@ -1129,10 +1183,10 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                 className="min-h-[22rem] space-y-3 pr-1"
                 renderItem={(index) => <div className="pb-3">{renderMissingProductCard(missingProducts[index])}</div>}
               />
-            ) : <p className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">Todos los productos tienen precios en las listas visibles.</p>}
+            ) : <p className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">Todos los {itemLabel.toLowerCase()} tienen precios en las listas visibles.</p>}
           </div>
 
-          {!missingProducts.length && <p className="hidden p-8 text-center text-sm text-muted-foreground lg:block">Todos los productos tienen precios en las listas visibles.</p>}
+          {!missingProducts.length && <p className="hidden p-8 text-center text-sm text-muted-foreground lg:block">Todos los {itemLabel.toLowerCase()} tienen precios en las listas visibles.</p>}
         </div>
 
         <DialogFooter className="shrink-0 border-t border-border/60 bg-card px-5 py-3 sm:px-7">
@@ -1141,7 +1195,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       </DialogContent>
     </Dialog>
 
-    <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}><DialogContent className="w-[calc(100vw-2rem)] !max-w-[36rem]"><DialogHeader><DialogTitle>Preparar plantilla de precios</DialogTitle><DialogDescription>Revisa el contenido antes de descargar el archivo.</DialogDescription></DialogHeader><div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm"><div className="flex justify-between"><span>Productos seleccionados</span><b>{downloadScopeIds.length}</b></div><div className="flex justify-between"><span>Listas incluidas</span><b>{importLists.length}</b></div><div className="flex justify-between"><span>Precios existentes incluidos</span><b>{catalogProducts.filter((product) => downloadScopeIds.includes(product.id)).reduce((total, product) => total + importLists.filter((list) => itemsByProduct.get(product.id)?.has(list.id)).length, 0)}</b></div><div className="flex justify-between"><span>Costo de referencia</span><b>Incluido</b></div></div><div className="space-y-2 text-xs text-muted-foreground"><p>• La plantilla incluirá el código, nombre, costo informativo y una columna por cada lista visible.</p><p>• Los precios existentes se descargarán para usarlos como referencia.</p><p>• El costo no se modifica al importar. Si un precio permanece igual, el sistema no hará ningún cambio.</p></div><DialogFooter><Button variant="outline" onClick={() => setDownloadOpen(false)}>Cancelar</Button><Button onClick={() => downloadTemplate(downloadScopeIds)}><Download className="mr-2 size-4" /> Descargar plantilla</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}><DialogContent className="w-[calc(100vw-2rem)] !max-w-[36rem]"><DialogHeader><DialogTitle>Preparar plantilla de precios</DialogTitle><DialogDescription>Revisa el contenido antes de descargar el archivo.</DialogDescription></DialogHeader><div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm"><div className="flex justify-between"><span>{itemLabel} seleccionados</span><b>{downloadScopeIds.length}</b></div><div className="flex justify-between"><span>Listas incluidas</span><b>{importLists.length}</b></div><div className="flex justify-between"><span>Precios existentes incluidos</span><b>{catalogProducts.filter((product) => downloadScopeIds.includes(product.id)).reduce((total, product) => total + importLists.filter((list) => itemsByProduct.get(product.id)?.has(list.id)).length, 0)}</b></div>{activeItemType === 'PRODUCT' && <div className="flex justify-between"><span>Costo de referencia</span><b>Incluido</b></div>}</div><div className="space-y-2 text-xs text-muted-foreground"><p>• La plantilla incluirá código, nombre y una columna por cada lista visible{activeItemType === 'PRODUCT' ? ', además del costo informativo' : ''}.</p><p>• Los precios existentes se descargarán para usarlos como referencia.</p><p>• Las celdas vacías no modifican los precios existentes.</p></div><DialogFooter><Button variant="outline" onClick={() => setDownloadOpen(false)}>Cancelar</Button><Button onClick={() => downloadTemplate(downloadScopeIds)}><Download className="mr-2 size-4" /> Descargar plantilla</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) clearPriceImportFile(); setImportOpen(open); }}>
       <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-2xl overflow-y-auto">
         <DialogHeader><DialogTitle>Actualizar precios en varias listas</DialogTitle><DialogDescription>Carga el archivo y luego abre la previsualización completa para editarlo antes de confirmar.</DialogDescription></DialogHeader>
