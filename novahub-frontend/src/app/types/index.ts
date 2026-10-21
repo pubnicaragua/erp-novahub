@@ -115,6 +115,23 @@ export interface User {
 // ============================================================
 
 // ---- Customers ----
+export interface CustomerHistoricalSummary {
+  id: string;
+  customerId: string;
+  clientTenantId: string;
+  activityType: string;
+  recordCount: number;
+  measureLabel?: string | null;
+  measureValue?: number | string | null;
+  measureUnit?: string | null;
+  amount: number | string;
+  currency: 'NIO' | 'USD' | string;
+  sourceFileName?: string | null;
+  sourceFingerprint: string;
+  importedById?: string | null;
+  importedAt: string;
+}
+
 export interface Customer {
   id: string;
   tenantId: string;
@@ -157,6 +174,7 @@ export interface Customer {
   portalUser?: { id: string; email: string; name?: string; isActive: boolean } | null;
   portalAccessEnabled?: boolean;
   priceList?: { id: string; code: string; name: string } | null;
+  historicalSummaries?: CustomerHistoricalSummary[];
   createdAt: string;
   updatedAt: string;
 }

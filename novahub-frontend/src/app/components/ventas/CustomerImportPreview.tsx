@@ -13,6 +13,8 @@ import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput } from './CustomerContactFields';
 import type { CustomerCountryOption } from '../../utils/customer-data';
+import { formatCurrencyAmount } from '../../utils/currency';
+import type { CustomerHistoryImportSummary } from '../../utils/customer-history-import';
 
 export type CustomerImportRow = {
   name: string;
@@ -42,9 +44,12 @@ export type CustomerImportRow = {
   notes: string;
   error?: string;
   warning?: string;
+  historyReviewError?: string;
+  historyReviewWarning?: string;
+  historicalSummaries?: CustomerHistoryImportSummary[];
 };
 
-export type CustomerImportResult = { total: number; created: number; skipped: number; errors: string[]; warnings: string[] };
+export type CustomerImportResult = { total: number; created: number; historicalSummariesCreated?: number; skipped: number; errors: string[]; warnings: string[] };
 
 interface CustomerImportPreviewProps {
   rows: CustomerImportRow[];
@@ -71,6 +76,22 @@ function ImportField({ label, children, className = '' }: { label: string; child
       <span className="block truncate text-[9px] font-black uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
       {children}
     </label>
+  );
+}
+
+function HistoricalSummaryPreview({ summaries }: { summaries?: CustomerHistoryImportSummary[] }) {
+  if (!summaries?.length) return null;
+  return (
+    <div className="mt-2 space-y-1 rounded-lg border border-primary/15 bg-primary/[0.035] p-2 text-[10px] leading-relaxed">
+      <p className="font-black uppercase tracking-wider text-primary">Resumen histórico importado</p>
+      {summaries.map((summary) => (
+        <p key={`${summary.activityType}-${summary.currency}`} className="break-words text-foreground">
+          <span className="font-bold">{summary.activityType}:</span> {summary.recordCount} registros
+          {summary.measureValue !== null && summary.measureValue !== undefined ? ` · ${summary.measureValue} ${summary.measureLabel || 'medida'}${summary.measureUnit ? ` ${summary.measureUnit}` : ''}` : ''}
+          {' · '}{formatCurrencyAmount(summary.amount, summary.currency, true)}
+        </p>
+      ))}
+    </div>
   );
 }
 
@@ -104,6 +125,7 @@ function CustomerImportMobileCard({
           <div className="min-w-0">
             <p className="truncate text-[9px] font-black uppercase tracking-[0.16em] text-muted-foreground">Registro {index + 1}</p>
             <p className="mt-0.5 break-words text-sm font-black text-foreground">{row.name || 'Cliente sin nombre'}</p>
+            <HistoricalSummaryPreview summaries={row.historicalSummaries} />
           </div>
         </div>
         <Badge variant="outline" className={`shrink-0 border-none text-[9px] font-black uppercase ${row.error ? 'text-rose-600' : row.warning ? 'text-amber-600' : 'text-emerald-600'}`}>
@@ -206,6 +228,7 @@ export function CustomerImportPreview({
   const errorRows = rows.filter((row) => row.error).length;
   const warningRows = rows.filter((row) => !row.error && row.warning).length;
   const hasPendingOpeningBalance = rows.some((row) => row.openingBalanceType === 'PENDING' && Number(row.openingBalanceAmount) > 0);
+  const hasHistoricalImport = rows.some((row) => row.historicalSummaries !== undefined || row.historyReviewError || row.historyReviewWarning);
 
   useEffect(() => {
     if (!result) return;
@@ -219,14 +242,14 @@ export function CustomerImportPreview({
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación masiva</p>
-            <h1 className="mt-1 text-xl font-black tracking-tight sm:text-3xl">Previsualizar clientes</h1>
-            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Edita los datos antes de crear los clientes. El número de cliente se genera automáticamente. La moneda del límite usa {defaultCreditLimitCurrency} si no se indica; el saldo inicial usa la moneda base {defaultOpeningBalanceCurrency}.</p>
+            <h1 className="mt-1 text-xl font-black tracking-tight sm:text-3xl">{hasHistoricalImport ? 'Previsualizar clientes e historial' : 'Previsualizar clientes'}</h1>
+            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">{hasHistoricalImport ? 'Verifica el cliente y su resumen histórico acumulado. El resumen es informativo y permanece separado de facturas, pagos, saldos y movimientos.' : `Edita los datos antes de crear los clientes. El número de cliente se genera automáticamente. La moneda del límite usa ${defaultCreditLimitCurrency} si no se indica; el saldo inicial usa la moneda base ${defaultOpeningBalanceCurrency}.`}</p>
           </div>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
           <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Archivo cargado</p><p className="truncate text-sm font-bold" title={fileName}>{fileName}</p></div>
-          <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Empresa y saldos iniciales</Badge><Badge variant="secondary">Avisos no bloquean</Badge></div>
+          <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Duplicados se omiten</Badge>{hasHistoricalImport ? <Badge variant="outline">Resumen informativo</Badge> : <Badge variant="secondary">Empresa y saldos iniciales</Badge>}<Badge variant="secondary">Avisos no bloquean</Badge></div>
         </div>
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="clientes" />
@@ -274,7 +297,7 @@ export function CustomerImportPreview({
                 return (
                 <TableRow key={virtualRow.key} ref={tableVirtualizer.measureElement} data-index={virtualRow.index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row.warning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
-                  <TableCell><Input className={fieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={fieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /><HistoricalSummaryPreview summaries={row.historicalSummaries} /></TableCell>
                   <TableCell><Select value={row.type} onValueChange={(value) => onRowUpdate(index, 'type', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="INDIVIDUAL">Particular</SelectItem><SelectItem value="COMPANY">Empresa</SelectItem></SelectContent></Select></TableCell>
                   <TableCell>{row.type === 'COMPANY' && <Input className={fieldClass} value={row.companyName} onChange={(event) => onRowUpdate(index, 'companyName', event.target.value)} disabled={importing} />}</TableCell>
                   <TableCell><Input className={fieldClass} value={row.fiscalRegime} placeholder="General" onChange={(event) => onRowUpdate(index, 'fiscalRegime', event.target.value)} disabled={importing} /></TableCell>
@@ -332,7 +355,7 @@ export function CustomerImportPreview({
 
       <Dialog open={result !== null} onOpenChange={(open) => { if (!open) onDone(); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader><div className="flex flex-col items-center gap-3 py-3 text-center"><div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 duration-500"><CheckCircle2 className="size-12 animate-pulse" /></div><DialogTitle className="text-xl">Importación completada</DialogTitle><DialogDescription>Los clientes válidos ya fueron registrados.</DialogDescription></div></DialogHeader>
+          <DialogHeader><div className="flex flex-col items-center gap-3 py-3 text-center"><div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 duration-500"><CheckCircle2 className="size-12 animate-pulse" /></div><DialogTitle className="text-xl">Importación completada</DialogTitle><DialogDescription>Los clientes válidos ya fueron registrados.{result?.historicalSummariesCreated ? ` Se guardaron ${result.historicalSummariesCreated} resúmenes históricos informativos; no se crearon facturas, pedidos, pagos ni saldos.` : ''}</DialogDescription></div></DialogHeader>
           <div className="grid grid-cols-3 gap-2 text-center"><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-emerald-500">{result?.created || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Creados</p></div><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{result?.warnings.length || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Avisos</p></div><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-rose-500">{result?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Omitidos</p></div></div>
           {(result?.errors.length || result?.warnings.length) ? <div className="max-h-32 overflow-auto rounded-xl border p-3 text-xs text-muted-foreground"><p className="font-bold text-foreground">Detalles</p>{[...(result?.errors || []), ...(result?.warnings || [])].slice(0, 8).map((item, index) => <p key={index} className="mt-1">• {item}</p>)}</div> : null}
           <DialogFooter><Button className="w-full" onClick={onDone}>Continuar a clientes</Button></DialogFooter>

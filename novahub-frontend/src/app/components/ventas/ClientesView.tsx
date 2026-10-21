@@ -35,6 +35,7 @@ import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerImportPhoneValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
+import { aggregateCustomerHistory, type CustomerHistoryImportOptions, type CustomerHistorySourceRow } from '../../utils/customer-history-import';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -71,6 +72,23 @@ type CustomerDraft = {
   notes: string;
   status: 'ACTIVE' | 'INACTIVE';
 };
+
+type CustomerImportMode = 'CUSTOMERS' | 'HISTORICAL';
+type CustomerHistoryColumn = 'nameColumn' | 'identifierColumn' | 'amountColumn' | 'measureColumn' | 'documentColumn' | 'currencyColumn' | 'activityTypeColumn';
+type CustomerHistoryImportConfig = {
+  nameColumn: string;
+  identifierColumn: string;
+  amountColumn: string;
+  measureColumn: string;
+  documentColumn: string;
+  currencyColumn: string;
+  activityTypeColumn: string;
+  activityType: string;
+  measureLabel: string;
+  measureUnit: string;
+  fallbackCurrency: SupportedCurrency | '';
+};
+type CustomerHistorySource = { headers: string[]; rows: Array<{ rowNumber: number; values: any[] }> };
 
 const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO', countryCode = 'NI', country = 'Nicaragua'): CustomerDraft => ({
   name: '', companyName: '', type: 'individual', fiscalRegime: '', priceListId: '',
@@ -142,8 +160,14 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const [statusChanging, setStatusChanging] = useState(false);
   const [pendingBulkDeactivateIds, setPendingBulkDeactivateIds] = useState<(string | number)[]>([]);
   const [importOpen, setImportOpen] = useState(false);
+  const [importMode, setImportMode] = useState<CustomerImportMode>('CUSTOMERS');
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importRows, setImportRows] = useState<CustomerImportRow[]>([]);
+  const [historySource, setHistorySource] = useState<CustomerHistorySource | null>(null);
+  const [historyConfig, setHistoryConfig] = useState<CustomerHistoryImportConfig>({
+    nameColumn: '', identifierColumn: '', amountColumn: '', measureColumn: '', documentColumn: '', currencyColumn: '', activityTypeColumn: '',
+    activityType: 'Estadías', measureLabel: '', measureUnit: '', fallbackCurrency: '',
+  });
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -197,6 +221,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       const identifiers = [row.taxId, row.ruc].map(identifierComparisonKey).filter(Boolean);
       const priceListMatch = row.priceListCode && priceLists.some((list) => list.code.toLowerCase() === row.priceListCode.trim().toLowerCase() || list.name.toLowerCase() === row.priceListCode.trim().toLowerCase());
       if (!row.name.trim()) next.error = 'Nombre obligatorio';
+      else if (importMode === 'HISTORICAL' && row.historyReviewError) next.error = row.historyReviewError;
+      else if (importMode === 'HISTORICAL' && !identifiers.length) next.error = 'Identificación obligatoria para vincular el historial';
       else if (row.taxId && !isCustomerIdentifierValid(row.taxId, 'taxId', row.countryCode)) next.error = 'Identificación fiscal inválida para el país';
       else if (row.ruc && !isCustomerIdentifierValid(row.ruc, 'ruc', row.countryCode)) next.error = 'RUC inválido para el país';
       else if (identifiers.some((identifier) => existingTaxIds.has(identifier) || seenTaxIds.has(identifier))) next.error = 'Cédula o RUC duplicado';
@@ -210,11 +236,78 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         if (row.phone && !isCustomerImportPhoneValid(row.phone, row.countryCode)) warnings.push('No se pudo validar automáticamente el teléfono; se conservará');
         if (row.contactPhone && !isCustomerImportPhoneValid(row.contactPhone, row.countryCode)) warnings.push('No se pudo validar automáticamente el teléfono de contacto; se conservará');
         if (row.priceListCode && !priceListMatch) warnings.push('Lista no encontrada; se importará sin lista');
+        if (row.historyReviewWarning) warnings.push(row.historyReviewWarning);
         next.warning = warnings.join(' · ') || undefined;
       }
       identifiers.forEach((identifier) => { seenTaxIds.add(identifier); existingTaxIds.add(identifier); });
       return next;
     });
+  };
+
+  const defaultHistoryConfig = (headers: string[]): CustomerHistoryImportConfig => {
+    const normalizedHeaders = headers.map(normalizeHeader);
+    const pick = (aliases: string[]) => {
+      const aliasSet = aliases.map(normalizeHeader);
+      const index = normalizedHeaders.findIndex((header) => aliasSet.includes(header));
+      return index < 0 ? '' : String(index);
+    };
+    const measureColumn = pick(['noches', 'cantidad', 'quantity', 'unidades']);
+    const measureHeader = measureColumn ? headers[Number(measureColumn)] : '';
+    const normalizedMeasureHeader = normalizeHeader(measureHeader);
+    return {
+      nameColumn: pick(['nombre', 'cliente', 'name', 'customer', 'huesped', 'huésped']),
+      identifierColumn: pick(['identificacion', 'identificación', 'identificacionfiscal', 'cedula', 'cédula', 'taxid', 'ruc', 'rut', 'pasaporte', 'documentoid']),
+      amountColumn: pick(['total', 'totalfacturado', 'importe', 'monto', 'amount', 'cost', 'costo', 'gastado']),
+      measureColumn,
+      documentColumn: pick(['numerodocumento', 'documento', 'numerofactura', 'factura', 'folio', 'referencia', 'documentnumber']),
+      currencyColumn: pick(['moneda', 'currency', 'divisa']),
+      activityTypeColumn: pick(['tipoactividad', 'tipoactividadhistorica', 'actividad', 'tipodehistorial', 'activitytype']),
+      activityType: 'Estadías',
+      measureLabel: measureHeader ? String(measureHeader).trim() : '',
+      measureUnit: normalizedMeasureHeader.includes('noche') ? 'noches' : '',
+      fallbackCurrency: '',
+    };
+  };
+
+  const historyCell = (row: { values: any[] }, column: string) => column ? row.values[Number(column)] ?? '' : '';
+
+  const buildHistoryImportRows = (source: CustomerHistorySource, config: CustomerHistoryImportConfig, previousRows: CustomerImportRow[] = []) => {
+    const mappedRows: CustomerHistorySourceRow[] = source.rows.map((sourceRow) => ({
+      rowNumber: sourceRow.rowNumber,
+      name: historyCell(sourceRow, config.nameColumn),
+      identifier: historyCell(sourceRow, config.identifierColumn),
+      amount: historyCell(sourceRow, config.amountColumn),
+      measure: config.measureColumn ? historyCell(sourceRow, config.measureColumn) : undefined,
+      document: config.documentColumn ? historyCell(sourceRow, config.documentColumn) : undefined,
+      currency: config.currencyColumn ? historyCell(sourceRow, config.currencyColumn) : config.fallbackCurrency,
+      activityType: config.activityTypeColumn ? historyCell(sourceRow, config.activityTypeColumn) : undefined,
+    }));
+    const aggregationOptions: CustomerHistoryImportOptions = {
+      activityType: config.activityType,
+      measureLabel: config.measureLabel,
+      measureUnit: config.measureUnit,
+      documentColumnSelected: Boolean(config.documentColumn),
+      activityTypeColumnSelected: Boolean(config.activityTypeColumn),
+      fallbackCurrency: config.fallbackCurrency || null,
+    };
+    const aggregated = aggregateCustomerHistory(mappedRows, aggregationOptions);
+    const existingRowsByIdentifier = new Map(previousRows.map((row) => [identifierComparisonKey(row.taxId || row.ruc), row]).filter(([key]) => Boolean(key)) as Array<[string, CustomerImportRow]>);
+    return aggregated.customers.map((customer) => {
+      const previous = existingRowsByIdentifier.get(identifierComparisonKey(customer.identifier));
+      const row: CustomerImportRow = previous ? { ...previous } : emptyImportRow();
+      row.name = previous?.name || customer.name;
+      row.taxId = previous?.taxId || customer.identifier;
+      row.historyReviewError = customer.errors.join(' · ') || undefined;
+      row.historyReviewWarning = customer.warnings.join(' · ') || undefined;
+      row.historicalSummaries = customer.summaries;
+      return row;
+    });
+  };
+
+  const updateHistoryConfig = <K extends keyof CustomerHistoryImportConfig>(field: K, value: CustomerHistoryImportConfig[K]) => {
+    const nextConfig = { ...historyConfig, [field]: value };
+    setHistoryConfig(nextConfig);
+    if (historySource) setImportRows(validateImportRows(buildHistoryImportRows(historySource, nextConfig, importRows)));
   };
 
   const downloadTemplate = async () => {
@@ -279,6 +372,26 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       });
       setPreviewProgress(88);
       if (raw.length < 2) throw new Error('El archivo no contiene filas para importar');
+      if (importMode === 'HISTORICAL') {
+        const source = {
+          headers: (raw[0] || []).map((header) => String(header ?? '').trim()),
+          rows: raw.slice(1)
+            .map((values: any[], index: number) => ({ rowNumber: index + 2, values }))
+            .filter((sourceRow) => sourceRow.values.some((cell) => String(cell ?? '').trim())),
+        } satisfies CustomerHistorySource;
+        if (!source.rows.length) throw new Error('El archivo no contiene registros de historial');
+        const config = defaultHistoryConfig(source.headers);
+        setHistorySource(source);
+        setHistoryConfig(config);
+        setImportFile(file);
+        const prepared = buildHistoryImportRows(source, config);
+        setImportRows(validateImportRows(prepared));
+        setPreviewProgress(100);
+        setImportResult(null);
+        toast.success(`${prepared.length} clientes únicos preparados con resumen histórico`);
+        return;
+      }
+      setHistorySource(null);
       const headers = (raw[0] || []).map(normalizeHeader);
       const parsed = raw.slice(1).filter((row: any[]) => row.some((cell) => String(cell ?? '').trim())).map((values: any[]) => {
         const source: Record<string, any> = {};
@@ -336,6 +449,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     } catch (error: any) {
       setImportFile(null);
       setImportRows([]);
+      setHistorySource(null);
       toast.error(error?.message || 'No se pudo leer el archivo');
     } finally {
       setPreviewLoading(false);
@@ -355,6 +469,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     setImportResult(null);
     setImportRows([]);
     setImportFile(null);
+    setHistorySource(null);
     setPreviewProgress(0);
     if (importFileInputRef.current) importFileInputRef.current.value = '';
   };
@@ -383,7 +498,11 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     try {
       const result = await customersService.importMassive({
         openingBalanceDate,
-        rows: validRows.map(({ error: _error, warning: _warning, creditLimitCurrencyError: _currencyError, openingBalanceCurrencyError: _openingCurrencyError, openingBalanceTypeError: _openingTypeError, ...row }) => ({
+        sourceFileName: importMode === 'HISTORICAL' ? importFile?.name : undefined,
+        historicalSummaries: importMode === 'HISTORICAL'
+          ? validRows.flatMap((row) => (row.historicalSummaries || []).map((summary) => ({ ...summary, identifier: row.taxId || row.ruc })))
+          : undefined,
+        rows: validRows.map(({ error: _error, warning: _warning, historyReviewError: _historyError, historyReviewWarning: _historyWarning, historicalSummaries: _summaries, creditLimitCurrencyError: _currencyError, openingBalanceCurrencyError: _openingCurrencyError, openingBalanceTypeError: _openingTypeError, ...row }) => ({
           ...row,
           type: row.type === 'COMPANY' ? 'company' : 'individual',
           companyName: row.type === 'COMPANY' ? row.companyName.trim() || undefined : undefined,
@@ -413,6 +532,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     setImportPreviewOpen(false);
     setImportRows([]);
     setImportFile(null);
+    setHistorySource(null);
   };
 
   const filtered = data.filter(c => {
@@ -859,6 +979,18 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     { key: 'balance', label: 'Saldos del cliente' },
     { key: 'status', label: 'Estado' },
   ];
+  const renderHistoryColumnSelector = (field: CustomerHistoryColumn, label: string, required = false) => (
+    <label className="min-w-0 space-y-1.5">
+      <span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}{required ? ' *' : ''}</span>
+      <Select value={historyConfig[field] || '__none__'} onValueChange={(value) => updateHistoryConfig(field, value === '__none__' ? '' : value)} disabled={previewLoading || importing}>
+        <SelectTrigger className="h-9 min-w-0 max-w-full rounded-lg text-xs"><SelectValue placeholder="Seleccionar columna" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">Sin seleccionar</SelectItem>
+          {historySource?.headers.map((header, index) => <SelectItem key={`${index}-${header}`} value={String(index)}>{header || `Columna ${index + 1}`}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </label>
+  );
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* KPIs Section */}
@@ -1198,13 +1330,31 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
 
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) clearCustomerImportFile(); setImportOpen(open); }}>
         <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-[min(92vw,720px)] overflow-y-auto rounded-3xl p-5 sm:p-6">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar clientes</DialogTitle><DialogDescription>Carga una plantilla Excel. Luego abre la previsualización completa para corregir los datos antes de crear los clientes.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar clientes</DialogTitle><DialogDescription>{importMode === 'HISTORICAL' ? 'Agrupa las filas de un archivo histórico por identificación y crea clientes con un resumen acumulado.' : 'Carga una plantilla Excel. Luego abre la previsualización completa para corregir los datos antes de crear los clientes.'}</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El número de cliente lo asigna automáticamente el sistema. La importación puede repetirse; las cédulas o RUC duplicados se marcarán como errores. Los avisos, como una lista de precios inexistente, no bloquean las filas.</p><p className="mt-2">Para teléfonos, indica el Código país ISO (por ejemplo, NI o US) y escribe los dígitos nacionales sin guiones: 88888888 con NI o 2025550123 con US. También se acepta el número completo con + y prefijo internacional; en ese caso, conserva la celda como Texto.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
-            <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de clientes</label><Input ref={importFileInputRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); event.currentTarget.value = ''; }} />{importFile && <div className="flex flex-wrap items-center justify-between gap-2"><p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p><Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-destructive hover:text-destructive" onClick={clearCustomerImportFile} disabled={previewLoading || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}</div>
-            <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del cliente, sin código.</li><li>Carga el archivo; el sistema lo prepara sin mostrar cambios todavía.</li><li>Presiona “Previsualizar clientes” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; los clientes válidos recibirán su número automático.</li></ol></div>
+            <label className="block max-w-full space-y-1.5"><span className="text-xs font-bold text-muted-foreground">Contenido del archivo</span><Select value={importMode} onValueChange={(value) => { setImportMode(value as CustomerImportMode); setImportFile(null); setImportRows([]); setHistorySource(null); setImportResult(null); if (importFileInputRef.current) importFileInputRef.current.value = ''; }} disabled={previewLoading || importing}><SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CUSTOMERS">Clientes desde plantilla</SelectItem><SelectItem value="HISTORICAL">Clientes + resumen histórico</SelectItem></SelectContent></Select></label>
+            <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p>{importMode === 'HISTORICAL' ? <><p className="mt-2">El historial se guardará como resumen informativo acumulado. No creará facturas, pedidos, pagos, saldos ni asientos contables. Las identificaciones existentes se omiten y no se modifican.</p><p className="mt-2">Si hay una columna de documento, se contará cada documento único. Si no la mapeas, se contarán las filas. Los totales se separan por moneda; el símbolo “$” por sí solo no determina si es USD.</p></> : <><p className="mt-2">El número de cliente lo asigna automáticamente el sistema. La importación puede repetirse; las cédulas o RUC duplicados se marcarán como errores. Los avisos, como una lista de precios inexistente, no bloquean las filas.</p><p className="mt-2">Para teléfonos, indica el Código país ISO (por ejemplo, NI o US) y escribe los dígitos nacionales sin guiones: 88888888 con NI o 2025550123 con US. También se acepta el número completo con + y prefijo internacional; en ese caso, conserva la celda como Texto.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></>}</div>
+            <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel {importMode === 'HISTORICAL' ? 'con historial' : 'de clientes'}</label><Input ref={importFileInputRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); event.currentTarget.value = ''; }} />{importFile && <div className="flex flex-wrap items-center justify-between gap-2"><p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importMode === 'HISTORICAL' ? `${historySource?.rows.length || 0} filas · ${importRows.length} clientes agrupados` : `${importRows.length} filas detectadas`}</p><Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-destructive hover:text-destructive" onClick={clearCustomerImportFile} disabled={previewLoading || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}</div>
+            {importMode === 'HISTORICAL' && historySource && <section className="space-y-3 rounded-2xl border border-primary/20 bg-primary/[0.025] p-4">
+              <div><h3 className="text-xs font-black uppercase tracking-wider text-foreground">Asignar columnas del historial</h3><p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Revisa las asignaciones y usa la vista previa para comprobar el resumen de cada cliente.</p></div>
+              <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                {renderHistoryColumnSelector('nameColumn', 'Nombre del cliente', true)}
+                {renderHistoryColumnSelector('identifierColumn', 'Identificación', true)}
+                {renderHistoryColumnSelector('amountColumn', 'Importe total', true)}
+                {renderHistoryColumnSelector('activityTypeColumn', 'Tipo de historial por fila')}
+                {renderHistoryColumnSelector('measureColumn', 'Medida opcional')}
+                {renderHistoryColumnSelector('documentColumn', 'Número de documento opcional')}
+                {renderHistoryColumnSelector('currencyColumn', 'Moneda de origen')}
+                {!historyConfig.activityTypeColumn && <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Tipo de historial</span><Input value={historyConfig.activityType} onChange={(event) => updateHistoryConfig('activityType', event.target.value)} placeholder="Estadías o Facturas" className="h-9 rounded-lg text-xs" disabled={previewLoading || importing} /></label>}
+                {historyConfig.measureColumn && <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Etiqueta de medida</span><Input value={historyConfig.measureLabel} onChange={(event) => updateHistoryConfig('measureLabel', event.target.value)} placeholder="Noches" className="h-9 rounded-lg text-xs" disabled={previewLoading || importing} /></label>}
+                {historyConfig.measureColumn && <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Unidad de medida (opcional)</span><Input value={historyConfig.measureUnit} onChange={(event) => updateHistoryConfig('measureUnit', event.target.value)} placeholder="noches" className="h-9 rounded-lg text-xs" disabled={previewLoading || importing} /></label>}
+                <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Moneda explícita para filas vacías o con $</span><Select value={historyConfig.fallbackCurrency || '__none__'} onValueChange={(value) => updateHistoryConfig('fallbackCurrency', value === '__none__' ? '' : value as SupportedCurrency)} disabled={previewLoading || importing}><SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue placeholder="Revisar moneda" /></SelectTrigger><SelectContent><SelectItem value="__none__">Seleccionar moneda</SelectItem><SelectItem value="NIO">Córdobas (NIO)</SelectItem><SelectItem value="USD">Dólares (USD)</SelectItem></SelectContent></Select></label>
+              </div>
+              <p className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-3 text-[10px] leading-relaxed text-muted-foreground">Los registros con identificación faltante, importe inválido o moneda desconocida se marcarán para revisión. Se aceptan NIO y USD; los valores vacíos o “$” usan la moneda explícita seleccionada, sin inferirla automáticamente.</p>
+            </section>}
+            <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5">{importMode === 'HISTORICAL' ? <><li>Asigna nombre, identificación, importe y moneda; completa el tipo de historial.</li><li>Revisa los clientes agrupados y el conteo, medida e importe de cada uno.</li><li>Corrige o resuelve los errores; solo los clientes válidos se importan.</li><li>Confirma escribiendo IMPORTAR. El historial queda separado de los movimientos del sistema.</li></> : <><li>Descarga la plantilla y completa los datos del cliente, sin código.</li><li>Carga el archivo; el sistema lo prepara sin mostrar cambios todavía.</li><li>Presiona “Previsualizar clientes” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; los clientes válidos recibirán su número automático.</li></>}</ol></div>
           </div>
-          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)} disabled={previewLoading}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar clientes</Button>}</DialogFooter>
+          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)} disabled={previewLoading}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar {importMode === 'HISTORICAL' ? 'historial' : 'clientes'}</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
       <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, validando columnas y preparando los clientes para revisión." />
