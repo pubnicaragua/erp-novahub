@@ -49,7 +49,16 @@ export type CustomerImportRow = {
   historicalSummaries?: CustomerHistoryImportSummary[];
 };
 
-export type CustomerImportResult = { total: number; created: number; historicalSummariesCreated?: number; skipped: number; errors: string[]; warnings: string[] };
+export type CustomerImportResult = {
+  total: number;
+  created: number;
+  historicalSummariesCreated?: number;
+  historicalSummariesSkipped?: number;
+  historicalSummariesUnmatched?: number;
+  skipped: number;
+  errors: string[];
+  warnings: string[];
+};
 
 interface CustomerImportPreviewProps {
   rows: CustomerImportRow[];
@@ -59,6 +68,7 @@ interface CustomerImportPreviewProps {
   defaultOpeningBalanceCurrency: 'NIO' | 'USD';
   countryOptions: CustomerCountryOption[];
   isSidebarCollapsed: boolean;
+  historyOnly?: boolean;
   importing: boolean;
   progress: number;
   result: CustomerImportResult | null;
@@ -205,6 +215,7 @@ export function CustomerImportPreview({
   defaultOpeningBalanceCurrency,
   countryOptions,
   isSidebarCollapsed,
+  historyOnly = false,
   importing,
   progress,
   result,
@@ -227,14 +238,17 @@ export function CustomerImportPreview({
   const validRows = rows.filter((row) => !row.error).length;
   const errorRows = rows.filter((row) => row.error).length;
   const warningRows = rows.filter((row) => !row.error && row.warning).length;
-  const hasPendingOpeningBalance = rows.some((row) => row.openingBalanceType === 'PENDING' && Number(row.openingBalanceAmount) > 0);
+  const historySummaryRows = rows.filter((row) => !row.error && (row.historicalSummaries?.length || 0) > 0).length;
+  const historySummaryCount = rows.reduce((count, row) => !row.error ? count + (row.historicalSummaries?.length || 0) : count, 0);
+  const canConfirm = historyOnly ? historySummaryCount > 0 : validRows > 0;
+  const hasPendingOpeningBalance = !historyOnly && rows.some((row) => row.openingBalanceType === 'PENDING' && Number(row.openingBalanceAmount) > 0);
   const hasHistoricalImport = rows.some((row) => row.historicalSummaries !== undefined || row.historyReviewError || row.historyReviewWarning);
 
   useEffect(() => {
-    if (!result) return;
+    if (!result || historyOnly) return;
     const timer = window.setTimeout(onDone, 2800);
     return () => window.clearTimeout(timer);
-  }, [result, onDone]);
+  }, [result, historyOnly, onDone]);
 
   return (
     <div data-import-preview-shell="true" className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
@@ -242,17 +256,17 @@ export function CustomerImportPreview({
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación masiva</p>
-            <h1 className="mt-1 text-xl font-black tracking-tight sm:text-3xl">{hasHistoricalImport ? 'Previsualizar clientes e historial' : 'Previsualizar clientes'}</h1>
-            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">{hasHistoricalImport ? 'Verifica el cliente y su resumen histórico acumulado. El resumen es informativo y permanece separado de facturas, pagos, saldos y movimientos.' : `Edita los datos antes de crear los clientes. El número de cliente se genera automáticamente. La moneda del límite usa ${defaultCreditLimitCurrency} si no se indica; el saldo inicial usa la moneda base ${defaultOpeningBalanceCurrency}.`}</p>
+            <h1 className="mt-1 text-xl font-black tracking-tight sm:text-3xl">{historyOnly ? 'Vincular historial a clientes existentes' : hasHistoricalImport ? 'Previsualizar clientes e historial' : 'Previsualizar clientes'}</h1>
+            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">{historyOnly ? 'Se guardarán resúmenes informativos solo cuando la identificación coincida con un cliente único de este tenant. No se crearán ni modificarán clientes.' : hasHistoricalImport ? 'Verifica el cliente y su resumen histórico acumulado. El resumen es informativo y permanece separado de facturas, pagos, saldos y movimientos.' : `Edita los datos antes de crear los clientes. El número de cliente se genera automáticamente. La moneda del límite usa ${defaultCreditLimitCurrency} si no se indica; el saldo inicial usa la moneda base ${defaultOpeningBalanceCurrency}.`}</p>
           </div>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
           <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Archivo cargado</p><p className="truncate text-sm font-bold" title={fileName}>{fileName}</p></div>
-          <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Duplicados se omiten</Badge>{hasHistoricalImport ? <Badge variant="outline">Resumen informativo</Badge> : <Badge variant="secondary">Empresa y saldos iniciales</Badge>}<Badge variant="secondary">Avisos no bloquean</Badge></div>
+          <div className="flex flex-wrap gap-2 text-xs">{historyOnly ? <><Badge variant="outline">Solo clientes existentes</Badge><Badge variant="secondary">Coincidencia exacta por identificación</Badge></> : <><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Duplicados se omiten</Badge>{hasHistoricalImport ? <Badge variant="outline">Resumen informativo</Badge> : <Badge variant="secondary">Empresa y saldos iniciales</Badge>}</>}<Badge variant="secondary">Avisos no bloquean</Badge></div>
         </div>
 
-        <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="clientes" />
+        <ImportReviewSummary total={rows.length} valid={historyOnly ? historySummaryRows : validRows} skipped={errorRows} warnings={warningRows} entityLabel={historyOnly ? 'clientes con resumen' : 'clientes'} />
         {hasPendingOpeningBalance && <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
           <label className="min-w-48 space-y-1 text-xs font-bold text-foreground">
             <span className="block">Fecha de corte de saldos pendientes *</span>
@@ -261,7 +275,30 @@ export function CustomerImportPreview({
           <p className="max-w-2xl text-xs text-muted-foreground">Esta fecha se usará para los asientos de apertura de los clientes con saldo pendiente. Los saldos a favor no se contabilizan en este proceso.</p>
         </div>}
 
-        <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex">
+        {historyOnly && <div className="hidden min-h-0 min-w-0 max-w-full flex-1 overflow-auto rounded-2xl border bg-card sm:block">
+          <Table className="w-full min-w-[720px]">
+            <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
+              <TableRow><TableHead className="w-16">Estado</TableHead><TableHead className="min-w-56">Cliente e identificación</TableHead><TableHead className="min-w-64">Resumen histórico</TableHead><TableHead className="min-w-64">Revisión</TableHead></TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row, index) => <TableRow key={`${row.taxId || row.ruc || row.name}-${index}`} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
+                <TableCell>{row.error ? <AlertTriangle className="size-4 text-rose-500" /> : row.warning ? <AlertTriangle className="size-4 text-amber-500" /> : <CheckCircle2 className="size-4 text-emerald-500" />}</TableCell>
+                <TableCell className="min-w-56"><p className="break-words font-bold text-foreground">{row.name || 'Cliente sin nombre'}</p><p className="mt-1 break-all font-mono text-xs text-muted-foreground">{row.taxId || row.ruc || 'Sin identificación'}</p></TableCell>
+                <TableCell className="min-w-64"><HistoricalSummaryPreview summaries={row.historicalSummaries} />{!row.historicalSummaries?.length && <span className="text-xs text-muted-foreground">Sin resumen válido</span>}</TableCell>
+                <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : row.warning ? 'text-xs font-medium text-amber-600' : 'text-xs text-emerald-600'}>{row.error || row.warning || 'Listo para validar identificación en el tenant'}</TableCell>
+              </TableRow>)}
+            </TableBody>
+          </Table>
+        </div>}
+        {historyOnly && <section className="flex min-h-0 flex-1 flex-col overflow-auto rounded-2xl border bg-card p-3 sm:hidden" aria-label="Resúmenes para vincular a clientes existentes">
+          <div className="space-y-3">
+            {rows.map((row, index) => <article key={`${row.taxId || row.ruc || row.name}-${index}`} className={`rounded-xl border p-3 ${row.error ? 'border-rose-500/35 bg-rose-500/[0.03]' : row.warning ? 'border-amber-500/35 bg-amber-500/[0.03]' : 'border-border/60'}`}>
+              <div className="flex min-w-0 items-start gap-2">{row.error ? <AlertTriangle className="mt-0.5 size-4 shrink-0 text-rose-500" /> : row.warning ? <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" />}<div className="min-w-0"><p className="break-words text-sm font-bold">{row.name || 'Cliente sin nombre'}</p><p className="mt-1 break-all font-mono text-xs text-muted-foreground">{row.taxId || row.ruc || 'Sin identificación'}</p><HistoricalSummaryPreview summaries={row.historicalSummaries} />{!row.historicalSummaries?.length && <p className="mt-2 text-xs text-muted-foreground">Sin resumen válido</p>}<p className={`mt-2 break-words text-xs ${row.error ? 'text-rose-600' : row.warning ? 'text-amber-600' : 'text-muted-foreground'}`}>{row.error || row.warning || 'Se verificará la identificación exacta en el tenant.'}</p></div></div>
+            </article>)}
+          </div>
+        </section>}
+
+        {!historyOnly && <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex">
           <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 flex-1" tableClassName="scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="overflow-visible" containerStyle={{ width: '4200px', minWidth: '4200px', maxWidth: 'none' }} className="block w-[4200px] min-w-[4200px]">
             <TableHeader className="sticky top-0 z-10 block bg-muted/95 backdrop-blur">
@@ -325,9 +362,9 @@ export function CustomerImportPreview({
           </Table>
           {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
           </HorizontalTableScroller>
-        </div>
+        </div>}
 
-        <section data-import-preview-mobile-section="true" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Registros de clientes para revisar">
+        {!historyOnly && <section data-import-preview-mobile-section="true" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Registros de clientes para revisar">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un cliente por tarjeta</p></div>
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
@@ -335,28 +372,28 @@ export function CustomerImportPreview({
           <div className="flex min-h-0 flex-1 flex-col">
             {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={540} overscan={2} className="pt-3 pr-1" renderItem={(index) => <div className="pb-3"><CustomerImportMobileCard row={rows[index]} index={index} priceLists={priceLists} countries={countryOptions} importing={importing} onRowUpdate={onRowUpdate} /></div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
           </div>
-        </section>
+        </section>}
 
         <div className="flex shrink-0 flex-col items-stretch gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-4">
           <Button variant="outline" onClick={onBack} disabled={importing} className="w-full sm:w-auto"><ArrowLeft className="mr-2 size-4" /> Volver a la carga</Button>
-          <Button onClick={() => { setConfirmText(''); setConfirmOpen(true); }} disabled={importing || validRows === 0} className="w-full font-bold sm:w-auto"><Upload className="mr-2 size-4" /> {importing ? `Importando… ${progress}%` : `Importar ${validRows} válidos · omitir ${errorRows}`}</Button>
+          <Button onClick={() => { setConfirmText(''); setConfirmOpen(true); }} disabled={importing || !canConfirm} className="w-full font-bold sm:w-auto"><Upload className="mr-2 size-4" /> {importing ? `Importando… ${progress}%` : historyOnly ? `Vincular ${historySummaryCount} resúmenes · omitir ${errorRows}` : `Importar ${validRows} válidos · omitir ${errorRows}`}</Button>
         </div>
       </div>
 
       <Dialog open={confirmOpen && !importing} onOpenChange={setConfirmOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Confirmar importación</DialogTitle><DialogDescription>Se importarán {validRows} clientes válidos y se omitirán {errorRows} con errores. Los {warningRows} avisos no bloquean la carga. Escribe IMPORTAR para continuar.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{historyOnly ? 'Confirmar vinculación de historial' : 'Confirmar importación'}</DialogTitle><DialogDescription>{historyOnly ? `Se intentarán vincular ${historySummaryCount} resúmenes a clientes con una coincidencia única por identificación en este tenant. No se crearán ni modificarán clientes; los ${errorRows} registros con errores se omitirán y los ${warningRows} avisos quedan para revisión. Escribe IMPORTAR para continuar.` : `Se importarán ${validRows} clientes válidos y se omitirán ${errorRows} con errores. Los ${warningRows} avisos no bloquean la carga. Escribe IMPORTAR para continuar.`}</DialogDescription></DialogHeader>
           <Input value={confirmText} onChange={(event) => setConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
           <DialogFooter><Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button><Button onClick={() => { setConfirmOpen(false); onConfirm(hasPendingOpeningBalance ? openingBalanceDate : undefined); }} disabled={confirmText !== 'IMPORTAR' || (hasPendingOpeningBalance && !openingBalanceDate)}>Confirmar importación</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <ImportProgressOverlay open={importing} progress={progress} title="Importando clientes" description="Generando números de cliente y guardando la información. No cierres esta ventana." />
+      <ImportProgressOverlay open={importing} progress={progress} title={historyOnly ? 'Vinculando historial' : 'Importando clientes'} description={historyOnly ? 'Validando identificaciones exactas y guardando únicamente los resúmenes.' : 'Generando números de cliente y guardando la información. No cierres esta ventana.'} />
 
       <Dialog open={result !== null} onOpenChange={(open) => { if (!open) onDone(); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader><div className="flex flex-col items-center gap-3 py-3 text-center"><div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 duration-500"><CheckCircle2 className="size-12 animate-pulse" /></div><DialogTitle className="text-xl">Importación completada</DialogTitle><DialogDescription>Los clientes válidos ya fueron registrados.{result?.historicalSummariesCreated ? ` Se guardaron ${result.historicalSummariesCreated} resúmenes históricos informativos; no se crearon facturas, pedidos, pagos ni saldos.` : ''}</DialogDescription></div></DialogHeader>
-          <div className="grid grid-cols-3 gap-2 text-center"><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-emerald-500">{result?.created || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Creados</p></div><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{result?.warnings.length || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Avisos</p></div><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-rose-500">{result?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Omitidos</p></div></div>
+          <DialogHeader><div className="flex flex-col items-center gap-3 py-3 text-center"><div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 duration-500"><CheckCircle2 className="size-12 animate-pulse" /></div><DialogTitle className="text-xl">{historyOnly ? 'Vinculación completada' : 'Importación completada'}</DialogTitle><DialogDescription>{historyOnly ? `Se agregaron ${result?.historicalSummariesCreated || 0} resúmenes. ${result?.historicalSummariesSkipped || 0} ya existían iguales y ${result?.historicalSummariesUnmatched || 0} quedaron sin vincular por falta de coincidencia exacta. No se modificaron clientes.` : <>Los clientes válidos ya fueron registrados.{result?.historicalSummariesCreated ? ` Se guardaron ${result.historicalSummariesCreated} resúmenes históricos informativos; no se crearon facturas, pedidos, pagos ni saldos.` : ''}</>}</DialogDescription></div></DialogHeader>
+          <div className="grid grid-cols-3 gap-2 text-center"><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-emerald-500">{historyOnly ? result?.historicalSummariesCreated || 0 : result?.created || 0}</p><p className="text-[10px] uppercase text-muted-foreground">{historyOnly ? 'Resúmenes' : 'Creados'}</p></div><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{historyOnly ? result?.historicalSummariesUnmatched || 0 : result?.warnings.length || 0}</p><p className="text-[10px] uppercase text-muted-foreground">{historyOnly ? 'Sin coincidencia' : 'Avisos'}</p></div><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-rose-500">{historyOnly ? result?.historicalSummariesSkipped || 0 : result?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">{historyOnly ? 'Repetidos' : 'Omitidos'}</p></div></div>
           {(result?.errors.length || result?.warnings.length) ? <div className="max-h-32 overflow-auto rounded-xl border p-3 text-xs text-muted-foreground"><p className="font-bold text-foreground">Detalles</p>{[...(result?.errors || []), ...(result?.warnings || [])].slice(0, 8).map((item, index) => <p key={index} className="mt-1">• {item}</p>)}</div> : null}
           <DialogFooter><Button className="w-full" onClick={onDone}>Continuar a clientes</Button></DialogFooter>
         </DialogContent>

@@ -41,15 +41,29 @@ export type CustomerHistoryImportCustomer = {
 
 export type CustomerHistoryImportResult = { customers: CustomerHistoryImportCustomer[] };
 
+export function prepareCustomerHistoryForImport(customer: CustomerHistoryImportCustomer) {
+  const identityErrors = customer.errors.filter((message) => /identificación obligatoria|nombre obligatorio/i.test(message));
+  const historicalErrors = customer.errors.filter((message) => !identityErrors.includes(message));
+  return {
+    identityErrors,
+    historicalErrors,
+    summaries: identityErrors.length || historicalErrors.length ? [] : customer.summaries,
+  };
+}
+
 export function normalizeCustomerHistoryIdentifier(value: unknown): string {
   return String(value ?? '').trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
 }
 
 function parseHistoricalNumber(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  const raw = String(value ?? '').trim();
-  if (!raw) return null;
-  const normalized = raw.replace(/\s/g, '').replace(/[^0-9,.-]/g, '');
+  let raw = String(value ?? '').trim();
+  if (!raw || /[()]/.test(raw)) return null;
+  raw = raw
+    .replace(/^(?:US\$|U\$|C\$|\$|USD|NIO)\s*/i, '')
+    .replace(/\s*(?:USD|NIO)$/i, '')
+    .replace(/\s+(?:NOCHES?|UNIDADES?|D[IÍ]AS?|HABITACIONES?)$/i, '');
+  const normalized = raw.replace(/\s/g, '');
   if (!normalized || !/^-?[0-9][0-9,.-]*$/.test(normalized)) return null;
 
   const lastComma = normalized.lastIndexOf(',');
