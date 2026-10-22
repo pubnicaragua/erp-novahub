@@ -1,5 +1,5 @@
 import { parsePdfHeaderContentSpacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM } from './pdf-header-spacing';
-import { canEditPdfTemplate, PDF_TEMPLATE_TARGETS } from './pdf-document-catalog';
+import { PDF_TEMPLATE_TARGETS } from './pdf-document-catalog';
 
 export const PDF_APPEARANCE_FONTS = [
   'Arial', 'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans', 'Source Sans 3',
@@ -69,9 +69,9 @@ export interface PdfCuratedTemplateSelections {
   document: Record<string, PdfCuratedTemplateSelection>;
 }
 
-/** Salidas lógicas editables admitidas por el adaptador de plantillas ZIP. */
+/** Salidas de sucursal admitidas por el adaptador; las físicas conservan su geometría. */
 export const PDF_CURATED_TEMPLATE_TARGETS = PDF_TEMPLATE_TARGETS
-  .filter(target => canEditPdfTemplate(target))
+  .filter(target => target.branchCustomizable !== false)
   .map(target => target.key);
 
 export interface PdfAppearanceProfile {

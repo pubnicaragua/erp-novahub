@@ -218,6 +218,7 @@ const REPORT_EXPORT_PERMISSIONS: Record<string, string> = {
   'ventas.customers': 'SALES_CLIENTS',
   'ventas.customer-history': 'SALES_CLIENTS',
   'ventas.cash-ticket': 'RETAIL_POS',
+  'inventario.product-labels': 'INVENTORY_PRODUCTS',
   'ventas.cash-session': 'RETAIL_CASH_CONTROL',
   'ventas.cash-historical-report': 'RETAIL_CASH_CONTROL',
   'inventario.products': 'INVENTORY_PRODUCTS',

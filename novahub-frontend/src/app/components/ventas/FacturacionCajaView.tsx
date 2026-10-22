@@ -57,7 +57,7 @@ import { formatSalesAmount, getConfiguredPriceForVariant, getMissingSalesPriceMe
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
 import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
-import { getPdfDesign, generateEstimatePDF } from '../../utils/pdfGenerator';
+import { getPdfDesign, generateEstimatePDF, renderCuratedTemplateToPdf } from '../../utils/pdfGenerator';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { renderPdfTemplateToPdf } from '../../utils/pdf-template-renderer';
@@ -247,7 +247,10 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
       ],
     };
     const definition = sanitizeTemplateDefinition(design?.layoutZones?.definition || createDefaultTemplateDefinition(targetKey, settings), targetKey, settings);
-    const { blob } = await renderPdfTemplateToPdf({ definition, settings, targetKey, data: ticketData, fileName: `factura_${invoice.number || 'sin_numero'}.pdf`, save: false });
+    const fileName = `factura_${invoice.number || 'sin_numero'}.pdf`;
+    const { blob } = settings.curatedTemplateSelection
+      ? await renderCuratedTemplateToPdf({ targetKey, data: ticketData, fileName, save: false, format: 'roll-80' })
+      : await renderPdfTemplateToPdf({ definition, settings, targetKey, data: ticketData, fileName, save: false });
     const pdfUrl = URL.createObjectURL(blob);
     win.location.replace(pdfUrl);
     let didPrint = false;

@@ -1,4 +1,5 @@
-export type PdfPaperFormat = 'letter' | 'oficio' | 'A4' | 'legal' | 'roll-80' | 'roll-58';
+/** label es un tamaño interno para el renderer de etiquetas; no aparece en el menú general. */
+export type PdfPaperFormat = 'letter' | 'oficio' | 'A4' | 'legal' | 'roll-80' | 'roll-58' | 'label';
 /** Valores heredados que se conservan para leer preferencias antiguas del sistema. */
 export type PdfDownloadFormat = PdfPaperFormat | 'configured' | 'novahub-format';
 export type PdfExportScope = 'page' | 'all';

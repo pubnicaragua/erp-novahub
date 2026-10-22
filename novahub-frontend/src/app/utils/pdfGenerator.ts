@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import jspdfAutoTable from 'jspdf-autotable';
+import JsBarcode from 'jsbarcode';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
 import { getPdfTemplateTarget, isPdfTemplateFixed } from '../services/pdf-document-catalog';
 import { getBase64Image } from './export-utils';
@@ -355,14 +356,7 @@ export async function getPdfDesign(targetKey: string) {
 
   const request = (async () => {
     const design = await loadPdfDesign(normalizedTarget);
-    if (isPdfTemplateFixed(normalizedTarget)) return design;
     const profile = await loadPdfAppearanceProfile(scope);
-    const definition = (design?.layoutZones as any)?.definition;
-    const appearance = resolvePdfDesignAppearance(
-      (design?.settings || {}) as Record<string, unknown>,
-      definition,
-      profile,
-    );
     const storedSettings = design?.settings && typeof design.settings === 'object' && !Array.isArray(design.settings)
       ? design.settings as Record<string, unknown>
       : {};
@@ -374,6 +368,21 @@ export async function getPdfDesign(targetKey: string) {
     const selectedCuratedTemplate = attachedCuratedTemplate
       || profile?.curatedTemplates?.document[normalizedTarget]
       || profile?.curatedTemplates?.branch[normalizedTarget];
+    if (isPdfTemplateFixed(normalizedTarget)) {
+      return {
+        ...design,
+        settings: {
+          ...(design?.settings || {}),
+          ...(selectedCuratedTemplate ? { curatedTemplateSelection: selectedCuratedTemplate } : {}),
+        },
+      };
+    }
+    const definition = (design?.layoutZones as any)?.definition;
+    const appearance = resolvePdfDesignAppearance(
+      (design?.settings || {}) as Record<string, unknown>,
+      definition,
+      profile,
+    );
     return {
       ...design,
       settings: {
@@ -2875,6 +2884,7 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
 export function resolveCuratedPaperFormat(format: PdfDownloadFormat, configuredPaperSize?: unknown): PdfPaperFormat {
   if (format !== 'configured' && format !== 'novahub-format') return format;
   const configured = String(configuredPaperSize || 'LETTER').trim().toUpperCase();
+  if (configured === 'LABEL') return 'label';
   if (configured === 'ROLL-80') return 'roll-80';
   if (configured === 'ROLL-58') return 'roll-58';
   if (configured === 'OFICIO') return 'oficio';
@@ -2884,6 +2894,7 @@ export function resolveCuratedPaperFormat(format: PdfDownloadFormat, configuredP
 }
 
 function curatedPaperDimensions(format: PdfPaperFormat): [number, number] {
+  if (format === 'label') return [70, 38];
   if (format === 'roll-80') return [80, 100];
   if (format === 'roll-58') return [58, 100];
   if (format === 'oficio') return [215.9, 330.2];
@@ -2944,7 +2955,8 @@ export async function generateConfiguredReportTemplate({
   designOverride?: any;
   format?: PdfDownloadFormat;
 }) {
-  if (format === 'novahub-format' && !['ventas.customer-history', 'compras.supplier-history'].includes(targetKey)) {
+  const design = designOverride || await getPdfDesign(targetKey);
+  if (format === 'novahub-format' && !design?.settings?.curatedTemplateSelection && !['ventas.customer-history', 'compras.supplier-history'].includes(targetKey)) {
     return generateNovaHubFormatReport({
       title,
       tenantName,
@@ -2957,7 +2969,6 @@ export async function generateConfiguredReportTemplate({
     });
   }
 
-  const design = designOverride || await getPdfDesign(targetKey);
   const mappedColumns = columns.map((column, index) => ({
     id: `column-${index}`,
     label: column.header,
@@ -3392,7 +3403,7 @@ export async function generateLedgerPDF({
 
 export async function generateProductLabelsPDF({ products, configs, tenantName, tenantLogo }: {
   products: any[];
-  configs: Map<string, { productId: string; quantity: number; showName: boolean; showPrice: boolean; showCompany: boolean; showDate: boolean }>;
+  configs: Map<string, { productId: string; quantity: number; showName: boolean; showVariation?: boolean; showPrice: boolean; showCompany: boolean; showDate: boolean; showTaxIncluded?: boolean }>;
   tenantName: string;
   tenantLogo?: string | null;
 }) {
@@ -3410,12 +3421,39 @@ export async function generateProductLabelsPDF({ products, configs, tenantName, 
     return Array.from({ length: quantity }, () => ({
       barcode,
       name: config.showName ? product.name || 'Producto' : '',
+      variation: config.showVariation ? product.variant?.name || product.variantName || product.variation?.name || product.variationName || '' : '',
       price: config.showPrice && product.salePrice != null ? `C$ ${Number(product.salePrice).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '',
       company: config.showCompany ? tenantName : '',
       date: config.showDate ? new Date().toLocaleDateString('es-NI') : '',
       code: product.code || '',
+      taxIncluded: config.showTaxIncluded ? 'IVA incluido' : '',
     }));
   });
+  if (settings.curatedTemplateSelection) {
+    const barcodeImages: Record<string, string> = {};
+    for (const row of rows) {
+      const barcode = String(row.barcode || '').trim();
+      if (!barcode || barcodeImages[barcode]) continue;
+      try {
+        const canvas = document.createElement('canvas');
+        JsBarcode(canvas, barcode, { format: 'CODE128', displayValue: false, height: 36, width: 1.5, margin: 2, background: '#ffffff' });
+        barcodeImages[barcode] = canvas.toDataURL('image/png');
+      } catch {
+        // El texto se conserva como identificador aunque no sea posible codificarlo como barras.
+      }
+    }
+    const configuredLogo = templateLogoFromSettings(settings);
+    const resolvedLogo = configuredLogo || tenantLogo || undefined;
+    const fileName = buildHumanPdfFileName('Etiquetas de productos', 'configured');
+    const { doc } = await renderCuratedTemplateToPdf({
+      targetKey,
+      data: { logo: resolvedLogo, company: { name: tenantName, logo: resolvedLogo }, items: rows, rows, barcodeImages },
+      fileName,
+      save: true,
+      format: 'label',
+    });
+    return doc;
+  }
   const definition = sanitizeTemplateDefinition(design?.layoutZones?.definition, targetKey, settings);
   const configuredLogo = templateLogoFromSettings(settings);
   const resolvedLogo = configuredLogo || tenantLogo || undefined;
@@ -3447,7 +3485,8 @@ export const generateConfiguredHistoryPDF = async ({
   fileName,
   save = true,
 }: ConfiguredHistoryPdfOptions): Promise<{ doc: jsPDF; blob: Blob }> => {
-  if (format === 'novahub-format' && !['ventas.customer-history', 'compras.supplier-history'].includes(targetKey)) {
+  const configuredDesign = designOverride || await getPdfDesign(targetKey);
+  if (format === 'novahub-format' && !configuredDesign?.settings?.curatedTemplateSelection && !['ventas.customer-history', 'compras.supplier-history'].includes(targetKey)) {
     const resolvedFileName = /\.pdf$/i.test(String(fileName)) ? String(fileName) : buildPdfFileName([fileName], format);
     const doc = await generateNovaHubFormatReport({
       title,
@@ -3467,7 +3506,6 @@ export const generateConfiguredHistoryPDF = async ({
     });
     return { doc, blob: doc.output('blob') };
   }
-  const configuredDesign = designOverride || await getPdfDesign(targetKey);
   if (format !== 'roll-58') {
     const defaults = createSystemDefaultPdfDesign(targetKey).settings || {};
     const fetchedDesignSettings = configuredDesign?.settings && typeof configuredDesign.settings === 'object' ? configuredDesign.settings : {};
@@ -4514,7 +4552,7 @@ export const generateHistoricalCashReportPDF = async ({
     differenceDeposit: `${row.difference}\n${row.depositNio}`,
   }));
   const reportDate = (value: any) => value ? String(value).slice(0, 10) : '—';
-  if (format === 'novahub-format') {
+  if (format === 'novahub-format' && !(await getPdfDesign('ventas.cash-historical-report')).settings?.curatedTemplateSelection) {
     return generateNovaHubFormatReport({
       title: 'REPORTE HISTÓRICO DE CAJA',
       subtitle: `Consolidado de Sesiones, Ventas y Arqueos · Sesiones: ${summary.sessions || 0} (Cerradas: ${summary.closedSessions || 0})`,
@@ -4720,7 +4758,7 @@ export const generateCashClosureReportPDF = async ({
     currency: row.currency || 'NIO',
     amount: typeof (row.amount ?? row.total) === 'number' ? moneyFmt(row.amount ?? row.total, row.currency) : String(row.amount || row.total || '—'),
   }));
-  if (format === 'novahub-format') {
+  if (format === 'novahub-format' && !(await getPdfDesign('ventas.cash-historical-report')).settings?.curatedTemplateSelection) {
     return generateNovaHubFormatReport({
       title: `CIERRE GERENCIAL DE CAJA · ${session.register?.code || 'SIN CAJA'}`,
       subtitle: `${session.branch?.name || 'Sucursal'} · Cajero: ${session.openedBy?.name || 'No aplica'} · Estado: ${pdfStatusLabel(session.status)}`,

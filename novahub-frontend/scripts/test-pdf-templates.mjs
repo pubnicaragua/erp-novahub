@@ -24,6 +24,10 @@ try {
   const appearance = await server.ssrLoadModule('/src/app/services/pdf-appearance.ts');
   const { PdfAppearanceSettingsPanel } = await server.ssrLoadModule('/src/app/components/configuracion/PdfAppearanceSettingsPanel.tsx');
   const targets = catalog.PDF_TEMPLATE_TARGETS;
+  assert.ok(appearance.PDF_CURATED_TEMPLATE_TARGETS.includes('ventas.cash-ticket'), 'La plantilla de sucursal debe incluir el ticket físico POS.');
+  assert.ok(appearance.PDF_CURATED_TEMPLATE_TARGETS.includes('inventario.product-labels'), 'La plantilla de sucursal debe incluir las etiquetas físicas.');
+  assert.equal(appearance.PDF_CURATED_TEMPLATE_TARGETS.includes('finanzas.manager-consolidated'), false, 'Los PDF consolidados de Manager siguen fuera del alcance de sucursal.');
+  assert.equal(generator.resolveCuratedPaperFormat('configured', 'LABEL'), 'label', 'Las etiquetas deben conservar su tamaño físico al usar una plantilla seleccionada.');
 
   for (const reportFile of [
     'CustomersReportTab.tsx', 'ProvidersReportTab.tsx', 'SalesReportTab.tsx',
@@ -160,7 +164,16 @@ try {
     service.active = async () => null;
     service.getAppearanceProfile = async () => {
       profileReads += 1;
-      return { fontFamily: 'Inter', headerComposition: 'logo-left-company-right', headerContentSpacing: 5 };
+      return {
+        fontFamily: 'Inter', headerComposition: 'logo-left-company-right', headerContentSpacing: 5,
+        curatedTemplates: {
+          branch: {
+            'inventario.product-labels': { templateId: 'template-label', revisionId: 'revision-label', version: 1, overrides: {} },
+            'ventas.cash-ticket': { templateId: 'template-ticket', revisionId: 'revision-ticket', version: 1, overrides: {} },
+          },
+          document: {},
+        },
+      };
     };
     try {
       generator.clearPdfDesignCache();
@@ -170,8 +183,11 @@ try {
       assert.equal(resolvedDesign.settings.headerContentSpacing, 5);
       assert.equal(profileReads, 1, 'El perfil de apariencia debe quedar cacheado con el diseño de la sucursal.');
       generator.clearPdfDesignCache();
-      await generator.getPdfDesign('inventario.product-labels');
-      assert.equal(profileReads, 1, 'Los formatos físicos fijos no deben cargar el perfil visual.');
+      const labelDesign = await generator.getPdfDesign('inventario.product-labels');
+      assert.equal(labelDesign.settings.curatedTemplateSelection?.revisionId, 'revision-label', 'La etiqueta fija debe cargar su selección de sucursal sin cambiar sus medidas físicas.');
+      const ticketDesign = await generator.getPdfDesign('ventas.cash-ticket');
+      assert.equal(ticketDesign.settings.curatedTemplateSelection?.revisionId, 'revision-ticket', 'El ticket POS debe cargar la misma selección de sucursal que el renderizador Chromium.');
+      assert.equal(profileReads, 2, 'Los formatos físicos cargan el perfil una sola vez para resolver su asignación de plantilla.');
     } finally {
       service.active = originalActive;
       service.getAppearanceProfile = originalGetProfile;
@@ -387,13 +403,13 @@ try {
       assert.equal(settings.paperSize, 'LETTER', `${target.key} debe iniciar en Carta.`);
       assert.equal(settings.orientation, target.key === 'ventas.customers' ? 'landscape' : 'portrait', `${target.key} debe iniciar en la orientación que conserva la lectura de sus columnas.`);
       const paper = generator.pdfDesignPaper({ paperSize: 'A4', orientation: 'landscape' });
-      assert.equal(paper.format, 'letter', 'La política estándar debe normalizar A4 a Carta.');
+      assert.equal(paper.format, 'a4', 'La exportación debe conservar el tamaño explícito seleccionado en las opciones disponibles.');
       assert.equal(paper.orientation, 'portrait', 'La política estándar debe normalizar horizontal a vertical.');
       const customerListPaper = generator.pdfDesignPaper({ paperSize: 'LETTER', orientation: 'landscape' }, 'ventas.customers');
       assert.equal(customerListPaper.orientation, 'landscape', 'El listado de clientes debe conservar el formato horizontal incluso en la ruta rápida de exportación.');
       const pdf = new jsPDF(paper);
-      assert.equal(Math.round(pdf.internal.pageSize.getWidth()), 216, 'Carta debe medir 216 mm de ancho.');
-      assert.equal(Math.round(pdf.internal.pageSize.getHeight()), 279, 'Carta debe medir 279 mm de alto.');
+      assert.equal(Math.round(pdf.internal.pageSize.getWidth()), 210, 'A4 debe medir 210 mm de ancho.');
+      assert.equal(Math.round(pdf.internal.pageSize.getHeight()), 297, 'A4 debe medir 297 mm de alto.');
     }
   }
 
@@ -689,9 +705,11 @@ try {
 
   const curatedService = designService.pdfDocumentDesignService;
   const originalCuratedRender = curatedService.renderSelectedCuratedTemplate;
+  const originalCompanyProfile = curatedService.getCompanyProfile;
   let curatedRenderCall;
-  curatedService.renderSelectedCuratedTemplate = async (targetKey, data) => {
-    curatedRenderCall = { targetKey, data };
+  curatedService.getCompanyProfile = async () => null;
+  curatedService.renderSelectedCuratedTemplate = async (targetKey, data, format) => {
+    curatedRenderCall = { targetKey, data, format };
     return new Blob(['%PDF-curated-test'], { type: 'application/pdf' });
   };
   try {
@@ -700,9 +718,15 @@ try {
     });
     assert.equal(curatedRenderCall.targetKey, 'ventas.invoice', 'La exportación preparada debe conservar el destino comercial.');
     assert.equal(curatedRenderCall.data.document.number, 'FAC-TEST', 'La exportación preparada debe transportar los datos actuales del documento.');
+    assert.equal(curatedRenderCall.format, 'letter', 'Una factura común debe mantener Carta en el renderizador seleccionado.');
     assert.equal(await curatedResult.doc.output('blob').text(), '%PDF-curated-test', 'La vista previa y la descarga deben utilizar el Blob que produjo el renderer aislado.');
+    await generator.renderCuratedTemplateToPdf({
+      targetKey: 'inventario.product-labels', data: { product: { barcode: '7501234567890' } }, fileName: 'etiqueta.pdf', save: false, format: 'label',
+    });
+    assert.equal(curatedRenderCall.format, 'label', 'Las etiquetas deben pasar su formato físico interno al mismo renderer.');
   } finally {
     curatedService.renderSelectedCuratedTemplate = originalCuratedRender;
+    curatedService.getCompanyProfile = originalCompanyProfile;
   }
 
   const curatedTargetSet = new Set(appearance.PDF_CURATED_TEMPLATE_TARGETS);
@@ -725,11 +749,18 @@ try {
     }
     assert.doesNotMatch(css, /https?:|@import|<script/i, `${packageId} debe cargar recursos locales y CSS declarativo.`);
   }
-  assert.equal(curatedTargetSet.has('reportes.sales'), false, 'Los reportes Manager no deben heredar plantillas por sucursal.');
+  assert.equal(curatedTargetSet.has('ventas.cash-ticket'), true, 'El ticket POS debe recibir el diseño de sucursal adaptado a 80 mm.');
+  assert.equal(curatedTargetSet.has('inventario.product-labels'), true, 'Las etiquetas deben recibir el diseño de sucursal adaptado a 70 x 38 mm.');
+  assert.equal(curatedTargetSet.has('finanzas.manager-consolidated'), false, 'Los PDF consolidados de Manager no heredan plantillas por sucursal.');
   const purchaseExportsSource = await readFile(new URL('../src/app/utils/purchaseExports.ts', import.meta.url), 'utf8');
   const managerPurchasesSource = await readFile(new URL('../src/app/components/manager/ManagerPurchasesModule.tsx', import.meta.url), 'utf8');
+  const posSource = await readFile(new URL('../src/app/components/ventas/FacturacionCajaView.tsx', import.meta.url), 'utf8');
+  const productLabelsSource = await readFile(new URL('../src/app/utils/pdfGenerator.ts', import.meta.url), 'utf8');
   assert.match(purchaseExportsSource, /allowCuratedTemplate && settings\.curatedTemplateSelection/, 'Los registros comerciales de compra deben usar la ruta Chromium cuando tienen una revisión seleccionada.');
   assert.match(managerPurchasesSource, /allowCuratedTemplate:\s*false/, 'El detalle PDF del módulo Manager no debe heredar la plantilla de la sucursal.');
+  assert.match(posSource, /settings\.curatedTemplateSelection[\s\S]*?renderCuratedTemplateToPdf[\s\S]*?format:\s*'roll-80'/, 'El ticket POS debe usar Chromium con su rollo físico de 80 mm cuando tiene una plantilla seleccionada.');
+  assert.match(productLabelsSource, /settings\.curatedTemplateSelection[\s\S]*?renderCuratedTemplateToPdf[\s\S]*?format:\s*'label'/, 'Las etiquetas deben usar Chromium con sus dimensiones físicas cuando tienen una plantilla seleccionada.');
+  assert.match(productLabelsSource, /JsBarcode\([\s\S]*?barcodeImages/, 'El adaptador de etiquetas debe mantener el código de barras para la plantilla seleccionada.');
 
   console.log(`Validación PDF aprobada: ${targets.length} destinos, muestras por vista, gráficas y paginación.`);
 } finally {
