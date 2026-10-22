@@ -39,14 +39,14 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     setMapFullscreen(false);
   }, [activeSubModule]);
 
-  if (!isSuperAdmin && !isAuthorizedUser) {
+  if (!isSuperAdmin || !isAuthorizedUser) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background p-6">
         <div className="max-w-md rounded-3xl border border-border/60 bg-card p-8 text-center shadow-xl">
           <ShieldAlert className="mx-auto mb-4 size-10 text-destructive" />
           <h1 className="text-2xl font-black tracking-tight">Acceso restringido</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Fuerza Comercial no está habilitada para tu empresa o tu rol actual.
+            Esta herramienta está disponible solo para Super Admin de NovaHub.
           </p>
         </div>
       </div>

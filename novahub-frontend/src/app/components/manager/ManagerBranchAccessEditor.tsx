@@ -23,7 +23,7 @@ const PARENT_LABELS: Record<string, string> = {
   DASHBOARD: 'Panel principal', SALES: 'Ventas', PURCHASES: 'Compras', RESTAURANT: 'Restaurante',
   TRACKING: 'Logística y tracking', INVENTORY: 'Inventario', FINANCIAL: 'Finanzas', ACCOUNTING: 'Contabilidad',
   REPORTS: 'Reportes', HR: 'Recursos Humanos', ACTIVITIES: 'Actividades', PROJECTS: 'Proyectos',
-  FORCE_SALES: 'Fuerza de ventas', TICKETS: 'Tickets', HR_TRAINING: 'Capacitación', SUPPORT_TECH: 'Soporte técnico',
+  TICKETS: 'Tickets', HR_TRAINING: 'Capacitación', SUPPORT_TECH: 'Soporte técnico',
   LEGAL: 'Asesoría legal', FINANCING: 'Financiamiento', NOVACHAT: 'NovaChat', DOCUMENTS: 'Documentos',
   NOTIFICATIONS: 'Notificaciones', MY_COMPANY: 'Mi empresa', CONFIGURATION: 'Configuración',
 };

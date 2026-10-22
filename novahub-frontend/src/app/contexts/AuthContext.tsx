@@ -378,7 +378,7 @@ const ALL_MODULES: Module[] = [
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
   'auditoria',
   'financiamiento-pyme', 'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
-  'contabilidad', 'novachat', 'qa-console', 'fuerza-comercial', 'platform-users',
+  'contabilidad', 'novachat', 'qa-console', 'platform-users',
 ];
 
 const getPermissionsByRole = (role: Role): Permission[] => {
@@ -869,24 +869,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasAccess = useCallback((module: string): boolean => {
     if (!user) return false;
-    if (!user.isPlatformAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
-
-    // En tenant, Fuerza Comercial es un módulo comercial normal: la
-    // suscripción y la matriz de Roles/Permisos determinan su acceso. La
-    // excepción de plataforma se conserva para la consola interna de NovaHub.
     if (module === 'fuerza-comercial') {
-      if (user.isPlatformAdmin) {
-        return user.role === 'superadmin'
-          || (user.role === 'platform_quote_user'
-            && (user.platformPermissions.includes('PLATFORM_QUOTES') || user.platformPermissions.includes('PLATFORM_FORCE_SALES')));
-      }
+      return user.isPlatformAdmin && user.role === 'superadmin';
     }
+    if (!user.isPlatformAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
 
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
       if (user.role === 'platform_quote_user') {
         if (module === 'suscripciones') return user.platformPermissions.includes('PLATFORM_QUOTES');
-        if (module === 'fuerza-comercial') return user.platformPermissions.includes('PLATFORM_QUOTES') || user.platformPermissions.includes('PLATFORM_FORCE_SALES');
         return false;
       }
       if (module === 'guia-implementacion') return user.role === 'superadmin';
@@ -896,7 +887,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const platformModules = [
         'dashboard', 'suscripciones', 'tenant-admin', 'notificaciones',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
-        'qa-console', 'fuerza-comercial',
+        'qa-console',
         'auditoria', 'platform-users',
       ];
       const platformConfigurationModules = [
@@ -1092,6 +1083,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const canPerform = useCallback((module: string, action: PermissionAction): boolean => {
     if (!user) return false;
+    const normalizedModule = String(module || '');
+    const upperModule = normalizedModule.toUpperCase();
+    if (upperModule === 'FORCE_SALES') {
+      return user.isPlatformAdmin && user.role === 'superadmin';
+    }
     if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, module)) return false;
     if (user.managerMode) {
       if (action !== 'viewCost') return tenantAdminHasModuleEnabled(user, module);
@@ -1114,8 +1110,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user.isPlatformAdmin) return hasAccess(module);
 
     const permissions = Array.isArray(user.permissions) ? user.permissions : [];
-    const normalizedModule = String(module || '');
-    const upperModule = normalizedModule.toUpperCase();
     const parentByGranularPrefix: Record<string, string> = {
       'PURCHASES_': 'PURCHASES',
       'SALES_': 'SALES',

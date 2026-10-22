@@ -326,17 +326,6 @@ const menuItems: MenuItem[] = [
     ]
   },
   {
-    id: 'fuerza-comercial',
-    label: 'Fuerza Comercial',
-    icon: <MapPinned className="size-5" />,
-    section: 'Operaciones',
-    submenu: [
-      { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
-      { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
-      { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: <History className="size-4" /> },
-    ],
-  },
-  {
     id: 'asana',
     label: 'Asana',
     icon: <ClipboardPen className="size-5" />,
@@ -359,17 +348,6 @@ const menuItems: MenuItem[] = [
       { id: 'proyectos-exportar', label: 'Cotización Ejecutiva', icon: <FileDown className="size-4" /> },
       { id: 'proyectos-parametros', label: 'Parámetros del Proyecto', icon: <Sliders className="size-4" /> },
       { id: 'proyectos-actividades', label: 'Actividades e Historial', icon: <History className="size-4" /> },
-    ],
-  },
-  {
-    id: 'fuerza-comercial',
-    label: 'Fuerza Comercial',
-    icon: <MapPinned className="size-5" />,
-    section: 'Comercial',
-    submenu: [
-      { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
-      { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
-      { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: <History className="size-4" /> },
     ],
   },
   {
@@ -481,7 +459,7 @@ const platformMenuItems: MenuItem[] = [
     label: 'Fuerza Comercial',
     icon: <MapPinned className="size-5" />,
     section: 'NovaHub Platform',
-    platformPermission: 'PLATFORM_FORCE_SALES',
+    superadminOnly: true,
     submenu: [
       { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
       { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
@@ -563,15 +541,12 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
   }
 
-  const activeMenuArray = (user?.isPlatformAdmin ? platformMenuItems : menuItems).filter(
-    (item) => (
-      (!item.superadminOnly || user?.role === 'superadmin')
-      && (!item.platformPermission
-        || user?.role === 'superadmin'
-        || user?.platformPermissions.includes(item.platformPermission)
-        || (item.id === 'fuerza-comercial' && user?.platformPermissions.includes('PLATFORM_QUOTES')))
-    )
-  );
+  const activeMenuArray = (user?.isPlatformAdmin ? platformMenuItems : menuItems).filter((item) => (
+    (!item.superadminOnly || user?.role === 'superadmin')
+    && (!item.platformPermission
+      || user?.role === 'superadmin'
+      || user?.platformPermissions.includes(item.platformPermission))
+  ));
 
   const toggleMenu = (id: string) => {
     setExpandedMenus(prev => {
@@ -657,11 +632,13 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     'intl-imports': 'IMPORT_INTL',
     configuracion: 'CONFIGURATION',
     auditoria: 'AUDIT_LOGS',
-    'fuerza-comercial': 'FORCE_SALES',
   };
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
+    if (parentId === 'fuerza-comercial') {
+      return user.isPlatformAdmin && user.role === 'superadmin' && hasAccess('fuerza-comercial');
+    }
     // Operación POS is the restaurant's main entry point. Keep it visible when
     // the order permission is available even if an older module-view policy
     // has not yet persisted this newly introduced view id.
@@ -673,8 +650,6 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
     if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, subId)) return false;
     const parentMod = PARENT_MODULE_MAP[parentId] || (parentId === 'inventario' ? 'INVENTORY' : null);
-    const isForceSalesPlatformUser = parentId === 'fuerza-comercial'
-      && (user?.isPlatformAdmin || user?.platformPermissions.includes('PLATFORM_FORCE_SALES') || user?.platformPermissions.includes('PLATFORM_QUOTES'));
     
     // Check if parent or any of its submodules is active
     let isParentOrSubmoduleActive = false;
@@ -694,7 +669,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       }
     }
     
-    if (parentMod && !isAlwaysAvailableSystemMenu && !isParentOrSubmoduleActive && !isForceSalesPlatformUser) return false;
+    if (parentMod && !isAlwaysAvailableSystemMenu && !isParentOrSubmoduleActive) return false;
 
     const requiredModules = SUBMENU_MODULE_REQUIREMENTS[`${parentId}:${subId}`] || SUBMENU_MODULE_REQUIREMENTS[subId];
     if (!requiredModules || requiredModules.length === 0) {

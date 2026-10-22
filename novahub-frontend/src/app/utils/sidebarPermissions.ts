@@ -30,7 +30,6 @@ export const SIDEBAR_PERMISSION_PARENT_ORDER = [
   'ACTIVITIES',
   'ASANA',
   'PROJECTS',
-  'FORCE_SALES',
   'TICKETS',
   'HR_TRAINING',
   'SUPPORT_TECH',
@@ -366,10 +365,6 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'proyectos-tiempo': ['PROJECTS_TIME', 'PROJECTS'],
   'proyectos-avance': ['PROJECTS_PROGRESS', 'PROJECTS'],
 
-  'fuerza-comercial': ['FORCE_SALES'],
-  'fuerza-comercial-kanban': ['FORCE_SALES'],
-  'fuerza-comercial-historial': ['FORCE_SALES'],
-
   tickets: ['TICKETS_LIST'],
   // TICKETS_FAQS es el identificador histórico de esta misma vista.
   faqs: ['TICKETS_KNOWLEDGE_BASE', 'TICKETS_FAQS'],
@@ -515,6 +510,8 @@ export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
   'SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'ACCOUNTING', 'HR',
   'ACTIVITIES', 'ASANA', 'ASANA_TASKS', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
   'FINANCING', 'LEGAL', 'HR_TRAINING', 'SUPPORT_TECH', 'NOVACHAT',
+  // Se conserva el identificador para validar filas históricas; FORCE_SALES
+  // no se publica en el catálogo de vistas ni en la matriz de sucursales.
   'PROJECTS', 'FORCE_SALES', 'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT',
   'RESTAURANT_TABLES', 'RESTAURANT_SALON', 'RESTAURANT_ORDERS', 'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS',
   'HOTEL', 'HOTEL_ROOMS', 'HOTEL_RESERVATIONS',

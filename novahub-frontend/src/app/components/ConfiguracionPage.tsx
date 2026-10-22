@@ -8,7 +8,7 @@ import {
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
-  CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MapPinned, ChevronDown,
+  CalendarDays, Headphones, BellRing, FileText, Activity, Settings, ChevronDown,
   BookOpen, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe, MessageCircle, CreditCard,
   FolderKanban, ClipboardPen, BedDouble
 } from 'lucide-react';
@@ -82,7 +82,6 @@ const AVAILABLE_MODULES = [
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
   { id: 'ASANA', label: 'Asana', icon: ClipboardPen, description: 'Tableros y tareas colaborativas' },
-  { id: 'FORCE_SALES', label: 'Fuerza Comercial', icon: MapPinned, description: 'Prospección, rutas, visitas y seguimiento comercial' },
   { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'HR_TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
   { id: 'SUPPORT_TECH', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
