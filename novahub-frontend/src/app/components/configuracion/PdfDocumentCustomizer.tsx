@@ -31,6 +31,14 @@ import { getBase64Image } from '../../utils/export-utils';
 
 const DOCUMENTS = PDF_TEMPLATE_TARGETS.filter(target => target.branchCustomizable !== false);
 
+type CuratedPreviewSelection = {
+  templateId: string;
+  revisionId: string;
+  targetKey: string;
+  scope: PdfCuratedTemplateScope;
+  overrides: PdfCuratedTemplateSelection['overrides'];
+};
+
 type PdfSettings = {
   paperSize: 'LETTER' | 'A4' | 'OFICIO' | 'LEGAL' | 'LABEL' | 'ROLL-80'; orientation: 'portrait' | 'landscape';
   headerLayout: 'classic' | 'split' | 'banner' | 'compact' | 'ribbon' | 'topline' | 'sidebar' | 'centered' | 'boxed' | 'corner' | 'editorial' | 'double-band' | 'fluid' | 'aurora' | 'diagonal' | 'portal' | 'steps' | 'ink' | 'grid' | 'ticket';
@@ -180,6 +188,8 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const [curatedBusy, setCuratedBusy] = useState(false);
   const [previewedCuratedRevisions, setPreviewedCuratedRevisions] = useState<Record<string, boolean>>({});
   const [curatedPreviewTargets, setCuratedPreviewTargets] = useState<Record<string, string>>({});
+  const [previewedCuratedSelection, setPreviewedCuratedSelection] = useState<CuratedPreviewSelection | null>(null);
+  const [pendingCuratedSave, setPendingCuratedSave] = useState<CuratedPreviewSelection | null>(null);
   const [previewTitle, setPreviewTitle] = useState('');
   const [curatedOverridesDraft, setCuratedOverridesDraft] = useState<PdfCuratedTemplateSelection['overrides']>({});
   const curatedPackageInputRef = useRef<HTMLInputElement>(null);
@@ -204,7 +214,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const [appearanceScope, setAppearanceScope] = useState<PdfAppearanceDraftScope>('document');
   const [isSavingAppearance, setIsSavingAppearance] = useState(false);
   const [isSavingFooterProfile, setIsSavingFooterProfile] = useState(false);
-  const [globalSaveKind, setGlobalSaveKind] = useState<'appearance' | 'footer' | null>(null);
+  const [globalSaveKind, setGlobalSaveKind] = useState<'appearance' | 'footer' | 'curated' | null>(null);
   const [companyProfile, setCompanyProfile] = useState<PdfCompanyProfile>(() => createDefaultPdfCompanyProfile(companyName, logo || ''));
   const [hasSavedCompanyProfile, setHasSavedCompanyProfile] = useState(false);
   const [isSavingCompanyProfile, setIsSavingCompanyProfile] = useState(false);
@@ -505,6 +515,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   }, [previewDocument, appearanceScope, scopedCuratedSelection?.templateId, scopedCuratedSelection?.revisionId]);
   useEffect(() => {
     let cancelled = false;
+    setPreviewedCuratedSelection(null);
     const timer = window.setTimeout(() => {
       setIsPreviewRendering(true);
       setPreviewError('');
@@ -537,6 +548,15 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
         previewObjectUrlRef.current = nextUrl;
         setPreviewUrl(nextUrl);
+        if (activeCuratedSelectionTemplateId && activeCuratedSelectionRevisionId && activeCuratedSelectionScope) {
+          setPreviewedCuratedSelection({
+            templateId: activeCuratedSelectionTemplateId,
+            revisionId: activeCuratedSelectionRevisionId,
+            targetKey: previewDocument,
+            scope: appearanceScope,
+            overrides: activeCuratedSelectionScope === appearanceScope ? curatedOverridesDraft : activeCuratedOverrides || {},
+          });
+        }
       }).catch((error: unknown) => {
         if (!cancelled) setPreviewError(error instanceof Error ? error.message : 'No se pudo generar la vista previa.');
       }).finally(() => {
@@ -692,6 +712,21 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
 
   const confirmGlobalSave = async () => {
     if (!globalSaveKind) return;
+    if (globalSaveKind === 'curated') {
+      const pending = pendingCuratedSave;
+      const template = pending && curatedTemplates.find(item => item.id === pending.templateId);
+      const revision = template?.revisions.find(item => item.id === pending?.revisionId);
+      if (!pending || !template || !revision) {
+        toast.error('No se encontró la revisión de plantilla que estaba en la vista previa.');
+        return;
+      }
+      const saved = await saveCuratedTemplateSelection(template, revision, pending.scope, pending.overrides, pending.targetKey);
+      if (saved) {
+        setPendingCuratedSave(null);
+        setGlobalSaveKind(null);
+      }
+      return;
+    }
     const saved = globalSaveKind === 'footer' ? await saveGlobalFooter() : await saveAppearanceProfile();
     if (saved) setGlobalSaveKind(null);
   };
@@ -733,6 +768,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         data,
       });
       showPdfPreviewBlob(blob, getPdfTemplateTarget(targetKey).label);
+      setPreviewedCuratedSelection({ templateId: template.id, revisionId: revision.id, targetKey, scope, overrides });
       setCuratedPreviewTargets(previous => ({ ...previous, [revision.id]: targetKey }));
       setPreviewedCuratedRevisions(previous => ({ ...previous, [`${revision.id}:${targetKey}`]: true }));
       setActiveMobilePanel('preview');
@@ -743,12 +779,12 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     }
   };
 
-  const saveCuratedTemplateSelection = async (template: PdfCuratedTemplateRecord, revision: PdfCuratedTemplateRevision, scope: PdfCuratedTemplateScope, overrides: PdfCuratedTemplateSelection['overrides'] = {}) => {
+  const saveCuratedTemplateSelection = async (template: PdfCuratedTemplateRecord, revision: PdfCuratedTemplateRevision, scope: PdfCuratedTemplateScope, overrides: PdfCuratedTemplateSelection['overrides'] = {}, targetKey = previewDocument): Promise<boolean> => {
     const mayEditScope = scope === 'branch' ? canEditCompanyProfile : canModifyActive;
-    if (!hasActiveBranchScope || !mayEditScope) return;
-    if (!CURATED_TARGET_SET.has(previewDocument) || !revision.manifest.documentTypes.includes(previewDocument)) {
+    if (!hasActiveBranchScope || !mayEditScope) return false;
+    if (!CURATED_TARGET_SET.has(targetKey) || !revision.manifest.documentTypes.includes(targetKey)) {
       toast.error('La plantilla no admite el tipo de PDF seleccionado.');
-      return;
+      return false;
     }
     setCuratedBusy(true);
     try {
@@ -760,7 +796,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
           ? { ...item, revisions: item.revisions.map(version => version.id === revision.id ? publishedRevision : version) }
           : item));
       }
-      await pdfDocumentDesignService.selectCuratedTemplate({ templateId: template.id, revisionId: revision.id, targetKey: previewDocument, scope, overrides });
+      await pdfDocumentDesignService.selectCuratedTemplate({ templateId: template.id, revisionId: revision.id, targetKey, scope, overrides });
       const savedProfile = await pdfDocumentDesignService.getAppearanceProfile();
       appearanceProfileRef.current = savedProfile;
       savedAppearanceProfileRef.current = savedProfile;
@@ -768,12 +804,23 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       setCuratedOverridesDraft(overrides || {});
       clearPdfDesignCache();
       toast.success(`«${template.name}» quedó seleccionada para ${scope === 'branch' ? 'esta sucursal y este PDF' : 'este PDF'}.`);
-      await renderCuratedRevisionPreview(template, publishedRevision, scope, overrides);
+      if (targetKey === previewDocument) await renderCuratedRevisionPreview(template, publishedRevision, scope, overrides, targetKey);
+      return true;
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo activar la plantilla preparada.');
+      return false;
     } finally {
       setCuratedBusy(false);
     }
+  };
+
+  const requestCuratedTemplateSave = (template: PdfCuratedTemplateRecord, revision: PdfCuratedTemplateRevision, scope: PdfCuratedTemplateScope, overrides: PdfCuratedTemplateSelection['overrides'] = {}, targetKey = previewDocument) => {
+    if (scope === 'branch') {
+      setPendingCuratedSave({ templateId: template.id, revisionId: revision.id, targetKey, scope, overrides });
+      setGlobalSaveKind('curated');
+      return;
+    }
+    void saveCuratedTemplateSelection(template, revision, scope, overrides, targetKey);
   };
 
   const installCuratedPackage = async (file: File, templateId?: string) => {
@@ -923,6 +970,25 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       toast.success(options.successMessage || (saved.name !== name.trim() ? `Diseño guardado como «${saved.name}»` : 'Diseño PDF guardado'));
       return true;
     } catch (error: any) { toast.error(error?.message || 'No se pudo guardar el diseño'); return false; } finally { setIsSaving(false); }
+  };
+
+  const savePreviewedDesign = () => {
+    if (previewedCuratedSelection) {
+      if (previewedCuratedSelection.targetKey !== previewDocument || previewedCuratedSelection.scope !== appearanceScope) {
+        toast.info('Espera a que termine la vista previa actual antes de guardar.');
+        return;
+      }
+      const template = curatedTemplates.find(item => item.id === previewedCuratedSelection.templateId);
+      const revision = template?.revisions.find(item => item.id === previewedCuratedSelection.revisionId);
+      if (!template || !revision) {
+        toast.error('No se encontró la plantilla que aparece en la vista previa.');
+        return;
+      }
+      requestCuratedTemplateSave(template, revision, appearanceScope, previewedCuratedSelection.overrides, previewDocument);
+      return;
+    }
+    if (appearanceScope === 'branch') setGlobalSaveKind('appearance');
+    else void saveDesign();
   };
   const createDesign = () => {
     if (!hasActiveBranchScope || !canCreate) return;
@@ -1118,7 +1184,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                         <span className="flex min-w-0 flex-wrap items-center gap-1.5"><Badge variant={revision.status === 'PUBLISHED' ? 'secondary' : 'outline'} className="text-[9px]">v{revision.version} · {revision.status === 'PUBLISHED' ? 'Publicada' : 'Borrador'}</Badge>{isScopedActive && <Badge className="text-[9px]"><Check className="mr-1 size-3" />Activa</Badge>}</span>
                         {!supportsTarget && supportedTargets.length > 0 && <label className="block space-y-1 text-[9px] text-muted-foreground"><span>Documento para la muestra</span><select aria-label={`Documento de muestra para ${template.name}, versión ${revision.version}`} value={selectedPreviewTarget} onChange={event => setCuratedPreviewTargets(previous => ({ ...previous, [revision.id]: event.target.value }))} className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[10px] text-foreground">{supportedTargets.map(target => <option key={target} value={target}>{getPdfTemplateTarget(target).label}</option>)}</select></label>}
                         {!supportsTarget && <p className="text-[9px] leading-relaxed text-muted-foreground">El PDF seleccionado no admite esta plantilla. La muestra usa el documento compatible de arriba; para activarla, cambia a un PDF admitido.</p>}
-                        <div className="flex flex-wrap justify-end gap-1.5"><Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void renderCuratedRevisionPreview(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {}, selectedPreviewTarget)} disabled={!selectedPreviewTarget || curatedBusy}><Eye className="mr-1 size-3" />Previsualizar</Button><Button type="button" size="sm" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void saveCuratedTemplateSelection(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {})} disabled={!supportsTarget || curatedBusy || (revision.status !== 'PUBLISHED' && !previewed) || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)}>{isScopedActive ? 'Guardar alcance' : revision.status === 'PUBLISHED' ? 'Activar' : 'Publicar y activar'}</Button></div>
+                        <div className="flex flex-wrap justify-end gap-1.5"><Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void renderCuratedRevisionPreview(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {}, selectedPreviewTarget)} disabled={!selectedPreviewTarget || curatedBusy}><Eye className="mr-1 size-3" />Previsualizar</Button><Button type="button" size="sm" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => requestCuratedTemplateSave(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {})} disabled={!supportsTarget || curatedBusy || (revision.status !== 'PUBLISHED' && !previewed) || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)}>{isScopedActive ? 'Guardar alcance' : revision.status === 'PUBLISHED' ? 'Activar' : 'Publicar y activar'}</Button></div>
                       </div>;
                     })}
                   </div>
@@ -1154,7 +1220,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         <Card className={cn('flex min-w-0 flex-col overflow-hidden', isPreviewExpanded ? 'min-h-[640px] xl:min-h-[min(90vh,1400px)]' : 'min-h-[580px] xl:min-h-[min(82vh,1100px)]')}>
           <CardHeader className="shrink-0 border-b border-border/50 py-3"><div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="flex min-w-0 items-center gap-2 truncate text-sm"><FileText className="size-4 shrink-0 text-primary" /><span className="truncate">Diseño PDF · {selectedTarget.label}</span></CardTitle><CardDescription className="truncate text-xs">{name || 'Diseño sin nombre'} · {selectedTarget.moduleLabel} · {hasActiveBranchScope ? activeBranchLabel : 'Selecciona una sucursal para guardar'}</CardDescription></div><div className="flex shrink-0 items-center gap-1.5"><Badge variant="outline" className="text-[10px]">{activeId === 'draft' ? 'Borrador' : 'Guardado'}</Badge><Badge variant="outline" className="text-[10px]">{settings.paperSize} · {settings.orientation === 'portrait' ? 'Vertical' : 'Horizontal'}</Badge></div></div></CardHeader>
           <CardContent className="relative flex min-h-0 flex-1 flex-col p-2">
-            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onSave={() => { if (appearanceScope === 'branch') setGlobalSaveKind('appearance'); else void saveDesign(); }} saveLabel={appearanceScope === 'branch' ? 'Guardar estos cambios' : 'Guardar diseño'} saveDisabled={!hasActiveBranchScope || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)} isSaving={isSavingAppearance || isSavingFooterProfile || isSaving} />
+            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onSave={savePreviewedDesign} saveLabel={appearanceScope === 'branch' ? 'Guardar estos cambios' : 'Guardar diseño'} saveDisabled={!hasActiveBranchScope || isPreviewRendering || curatedBusy || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)} isSaving={isSavingAppearance || isSavingFooterProfile || isSaving || curatedBusy} />
           </CardContent>
         </Card>
       </main>
@@ -1227,15 +1293,17 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
 
       <ConfirmDialog
         open={Boolean(globalSaveKind)}
-        onOpenChange={open => { if (!open && !isSavingAppearance && !isSavingFooterProfile) setGlobalSaveKind(null); }}
-        title={globalSaveKind === 'footer' ? '¿Guardar el pie para toda la sucursal?' : '¿Guardar cambios para toda la sucursal?'}
+        onOpenChange={open => { if (!open && !isSavingAppearance && !isSavingFooterProfile && !curatedBusy) { setGlobalSaveKind(null); setPendingCuratedSave(null); } }}
+        title={globalSaveKind === 'footer' ? '¿Guardar el pie para toda la sucursal?' : globalSaveKind === 'curated' ? '¿Guardar esta plantilla para la sucursal?' : '¿Guardar cambios para toda la sucursal?'}
         description={globalSaveKind === 'footer'
           ? 'El texto y la numeración se aplicarán a todos los PDF de esta sucursal que hereden la configuración del pie.'
-          : 'La plantilla visual, composición, espaciado, tipografía y colores se aplicarán a los PDF de esta sucursal que hereden esos valores.'}
-        confirmLabel="Guardar para toda la sucursal"
+          : globalSaveKind === 'curated'
+            ? `La revisión se publicará y quedará seleccionada para ${pendingCuratedSave ? getPdfTemplateTarget(pendingCuratedSave.targetKey).label.toLowerCase() : 'este PDF'} en esta sucursal.`
+            : 'La plantilla visual, composición, espaciado, tipografía y colores se aplicarán a los PDF de esta sucursal que hereden esos valores.'}
+        confirmLabel={globalSaveKind === 'curated' ? 'Publicar y guardar para esta sucursal' : 'Guardar para toda la sucursal'}
         cancelLabel="Cancelar"
         variant="warning"
-        loading={isSavingAppearance || isSavingFooterProfile}
+        loading={isSavingAppearance || isSavingFooterProfile || curatedBusy}
         closeOnConfirm={false}
         onConfirm={confirmGlobalSave}
       />
