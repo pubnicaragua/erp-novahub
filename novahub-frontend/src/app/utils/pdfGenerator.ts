@@ -1196,7 +1196,17 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       : (normalizedEstimateImages.customFields || []).filter((cf: any) => !isEstimateCustomFieldExpired(cf));
     const data: PdfTemplateData = {
       logo: templateLogoFromSettings(design) || resolvedTenantLogo,
-      company: { name: design.companyName || tenantName, fiscalInfo: design.fiscalInfo, address: design.address, phone: design.phone, email: design.email, logo: templateLogoFromSettings(design) || resolvedTenantLogo },
+      company: {
+        name: design.companyName || tenantName,
+        fiscalInfo: design.fiscalInfo,
+        address: design.address,
+        phone: design.phone,
+        email: design.email,
+        slogan: design.slogan,
+        website: design.website,
+        footerText: design.footerText,
+        logo: templateLogoFromSettings(design) || resolvedTenantLogo,
+      },
       document: { title: ({ estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'DEVOLUCIÓN', credit: 'CRÉDITO', 'credit-note': 'NOTA DE CRÉDITO' } as Record<string, string>)[documentType] || documentType.toUpperCase(), number: estimate.number || 'N/A', date: estimate.date ? new Date(estimate.date).toLocaleDateString('es-NI') : 'N/A', status: estimate.status || '', notes: configuredNotes, extra: configuredExtra, terms: design.terms || '', legal: design.legalText || '' },
       customer: { name: customerSource.name || estimate.customCustomerName || 'Cliente sin registrar', taxId: customerSource.taxId || customerSource.ruc || '', address: customerAddress || '', city: customerSource.city || '', department: customerSource.department || '', country: customerSource.country || '', phone: customerSource.phone || customerSource.telephone || customerSource.contactPhone || estimate.customCustomerPhone || '', email: customerSource.email || customerSource.contactEmail || estimate.customCustomerEmail || '', contact: customerSource.contact || customerSource.contactName || '', contactName: customerSource.contactName || '', contactEmail: customerSource.contactEmail || '', contactPhone: customerSource.contactPhone || '', fiscalRegime: customerSource.fiscalRegime || '', razonSocial: customerSource.razonSocial || '' },
       items: configuredItems.map((item: any) => ({ description: commercialItemDescription(item), quantity: item.quantity || 0, unitPrice: formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate), total: formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate) })),
@@ -2845,9 +2855,18 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
 export async function renderCuratedTemplateToPdf({ targetKey, data, fileName, save }: { targetKey: string; data: Record<string, unknown>; fileName: string; save: boolean }) {
   const source = data && typeof data === 'object' ? data as Record<string, any> : {};
   const company = source.company && typeof source.company === 'object' ? source.company as Record<string, any> : {};
-  const logoSource = String(company.logo || source.logo || '').trim();
+  // La vista previa usa el perfil PDF de la sucursal. Las exportaciones reales
+  // también deben consumir esa misma identidad para que el encabezado no cambie
+  // según el documento o el motor que inició la descarga.
+  const companyProfile = await pdfDocumentDesignService.getCompanyProfile().catch(() => null);
+  const effectiveCompany = companyProfile ? { ...company, ...companyProfile } : company;
+  const logoSource = String(companyProfile ? companyProfile.logo || '' : company.logo || source.logo || '').trim();
   const logo = /^data:image\/(?:png|jpeg|webp);base64,/i.test(logoSource) ? logoSource : logoSource ? await getBase64Image(logoSource) || '' : '';
-  const renderData = { ...source, logo, company: { ...company, logo } };
+  const renderData = {
+    ...source,
+    logo,
+    company: { ...effectiveCompany, logo },
+  };
   const blob = await pdfDocumentDesignService.renderSelectedCuratedTemplate(targetKey, renderData);
   const doc = new jsPDF({ format: 'letter', orientation: 'portrait', unit: 'mm' });
   const originalOutput = doc.output.bind(doc);
