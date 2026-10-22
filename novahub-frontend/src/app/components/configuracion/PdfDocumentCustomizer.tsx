@@ -134,6 +134,12 @@ const PDF_DESIGN_TOUR_STEPS: GuidedTourStep[] = [
 ];
 
 const CURATED_TARGET_SET = new Set<string>(PDF_CURATED_TEMPLATE_TARGETS);
+const CURATED_PREVIEW_TARGET_PRIORITY = ['ventas.invoice', 'compras.supplier-invoice', 'ventas.estimate', 'ventas.order', 'compras.purchase-order', 'compras.purchase-record'];
+
+function preferredCuratedPreviewTarget(supportedTargets: string[]) {
+  return CURATED_PREVIEW_TARGET_PRIORITY.find(target => supportedTargets.includes(target)) || supportedTargets[0] || '';
+}
+
 const PREPARED_PDF_PACKAGES = [
   { id: 'blue-waves', name: 'Ondas azules', description: 'Curvas azules arriba y abajo.', primary: '#164b91', secondary: '#347cb4' },
   { id: 'dental-curve', name: 'Curva clínica', description: 'Cabecera azul curva para servicios.', primary: '#1d4d91', secondary: '#327ab8' },
@@ -155,12 +161,24 @@ async function toCuratedPreviewData(data: Record<string, any>) {
   return { ...data, logo, company: { ...company, logo } };
 }
 
+function createCuratedPreviewData(targetKey: string, companyProfile: PdfCompanyProfile, footerText: string, logo: string) {
+  const sample = createPdfTemplateSampleData(targetKey);
+  return {
+    ...sample,
+    company: { ...sample.company, ...companyProfile, footerText, logo },
+    pdfCompanyProfile: companyProfile,
+    logo,
+  };
+}
+
 export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName = '', corporateColor = '#10b981', logo, canEdit = true, canCreate = true, canImport = false, canDelete = true }: { tenantId?: string; branchName?: string; companyName?: string; corporateColor?: string; logo?: string | null; canEdit?: boolean; canCreate?: boolean; canImport?: boolean; canDelete?: boolean }) {
   const documentViewStorageKey = `novahub.pdf-customizer.view.${tenantId || 'current'}.${branchName || 'default'}`;
   const [designs, setDesigns] = useState<PdfDocumentDesignRecord[]>([]);
   const [curatedTemplates, setCuratedTemplates] = useState<PdfCuratedTemplateRecord[]>([]);
   const [curatedBusy, setCuratedBusy] = useState(false);
   const [previewedCuratedRevisions, setPreviewedCuratedRevisions] = useState<Record<string, boolean>>({});
+  const [curatedPreviewTargets, setCuratedPreviewTargets] = useState<Record<string, string>>({});
+  const [previewTitle, setPreviewTitle] = useState('');
   const [curatedOverridesDraft, setCuratedOverridesDraft] = useState<PdfCuratedTemplateSelection['overrides']>({});
   const curatedPackageInputRef = useRef<HTMLInputElement>(null);
   const curatedImportTargetIdRef = useRef<string | undefined>(undefined);
@@ -456,19 +474,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     : logo;
   const canvasLogo = hasSavedCompanyProfile ? globalCompanyLogo : globalCompanyLogo || legacyTemplateLogo;
   const previewData = useMemo(() => {
-    const sample = createPdfTemplateSampleData(previewDocument);
-    const previewCompany = {
-      name: companyProfile.name,
-      slogan: companyProfile.slogan,
-      fiscalInfo: companyProfile.fiscalInfo,
-      address: companyProfile.address,
-      phone: companyProfile.phone,
-      email: companyProfile.email,
-      website: companyProfile.website,
-      footerText: effectiveSettings.footerText,
-      logo: canvasLogo,
-    };
-    return { ...sample, company: previewCompany, pdfCompanyProfile: companyProfile, logo: canvasLogo };
+    return createCuratedPreviewData(previewDocument, companyProfile, effectiveSettings.footerText, canvasLogo);
   }, [previewDocument, companyProfile, effectiveSettings.footerText, canvasLogo]);
   const scopedCuratedSelection = appearanceProfile.curatedTemplates?.[appearanceScope]?.[previewDocument];
   const scopedCuratedTemplate = scopedCuratedSelection
@@ -485,6 +491,11 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     ? curatedTemplates.find(template => template.id === activeCuratedSelection.templateId) || null
     : null;
   const activeCuratedRevision = activeCuratedTemplate?.revisions.find(revision => revision.id === activeCuratedSelection?.revisionId) || null;
+  const activeCuratedSelectionTemplateId = activeCuratedSelection?.templateId || '';
+  const activeCuratedSelectionRevisionId = activeCuratedSelection?.revisionId || '';
+  const activeCuratedTemplateId = activeCuratedTemplate?.id || '';
+  const activeCuratedRevisionId = activeCuratedRevision?.id || '';
+  const activeCuratedOverrides = activeCuratedSelection?.overrides;
   useEffect(() => {
     setCuratedOverridesDraft(scopedCuratedSelection?.overrides ? { ...scopedCuratedSelection.overrides } : {});
   }, [previewDocument, appearanceScope, scopedCuratedSelection?.templateId, scopedCuratedSelection?.revisionId]);
@@ -493,15 +504,16 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     const timer = window.setTimeout(() => {
       setIsPreviewRendering(true);
       setPreviewError('');
+      setPreviewTitle('');
       const renderPreview = async () => {
-        if (activeCuratedSelection && CURATED_TARGET_SET.has(previewDocument)) {
-          if (!activeCuratedTemplate || !activeCuratedRevision || !activeCuratedSelectionScope) throw new Error('No se pudo cargar la revisión de plantilla seleccionada en esta sucursal.');
+        if (activeCuratedSelectionTemplateId && CURATED_TARGET_SET.has(previewDocument)) {
+          if (!activeCuratedTemplateId || !activeCuratedRevisionId || !activeCuratedSelectionScope) throw new Error('No se pudo cargar la revisión de plantilla seleccionada en esta sucursal.');
           const data = await toCuratedPreviewData(previewData as Record<string, any>);
-          return pdfDocumentDesignService.previewCuratedTemplate(activeCuratedTemplate.id, {
-            revisionId: activeCuratedRevision.id,
+          return pdfDocumentDesignService.previewCuratedTemplate(activeCuratedTemplateId, {
+            revisionId: activeCuratedRevisionId,
             targetKey: previewDocument,
             scope: activeCuratedSelectionScope,
-            overrides: activeCuratedSelectionScope === appearanceScope ? curatedOverridesDraft : activeCuratedSelection.overrides,
+            overrides: activeCuratedSelectionScope === appearanceScope ? curatedOverridesDraft : activeCuratedOverrides,
             data,
           });
         }
@@ -531,7 +543,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [templateDefinition, effectiveSettings, previewDocument, previewData, activeCuratedSelection, activeCuratedSelectionScope, activeCuratedTemplate, activeCuratedRevision, appearanceScope, curatedOverridesDraft]);
+  }, [templateDefinition, effectiveSettings, previewDocument, previewData, activeCuratedSelectionTemplateId, activeCuratedSelectionRevisionId, activeCuratedOverrides, activeCuratedSelectionScope, activeCuratedTemplateId, activeCuratedRevisionId, appearanceScope, curatedOverridesDraft]);
   useEffect(() => () => {
     if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
   }, []);
@@ -626,29 +638,45 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     }
   };
 
-  const showPdfPreviewBlob = (blob: Blob) => {
+  const showPdfPreviewBlob = (blob: Blob, title?: string) => {
     const nextUrl = URL.createObjectURL(blob);
     if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
     previewObjectUrlRef.current = nextUrl;
     setPreviewUrl(nextUrl);
+    setPreviewTitle(title || '');
   };
 
-  const renderCuratedRevisionPreview = async (template: PdfCuratedTemplateRecord, revision: PdfCuratedTemplateRevision, scope: PdfCuratedTemplateScope, overrides: PdfCuratedTemplateSelection['overrides'] = {}) => {
-    if (!CURATED_TARGET_SET.has(previewDocument)) throw new Error('Las plantillas preparadas solo admiten documentos comerciales de Ventas y Compras.');
-    if (!revision.manifest.documentTypes.includes(previewDocument)) throw new Error('Esta plantilla no incluye el tipo de PDF seleccionado.');
+  const renderCuratedRevisionPreview = async (
+    template: PdfCuratedTemplateRecord,
+    revision: PdfCuratedTemplateRevision,
+    scope: PdfCuratedTemplateScope,
+    overrides: PdfCuratedTemplateSelection['overrides'] = {},
+    requestedTarget = previewDocument,
+  ) => {
+    const supportedTargets = revision.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target));
+    const targetKey = supportedTargets.includes(requestedTarget) ? requestedTarget : preferredCuratedPreviewTarget(supportedTargets);
+    if (!targetKey) {
+      setPreviewError('El paquete no declara un documento comercial compatible para mostrar la vista previa.');
+      setActiveMobilePanel('preview');
+      return;
+    }
     setIsPreviewRendering(true);
     setPreviewError('');
     try {
-      const data = await toCuratedPreviewData(previewData as Record<string, any>);
+      const sampleData = targetKey === previewDocument
+        ? previewData as Record<string, any>
+        : createCuratedPreviewData(targetKey, companyProfile, effectiveSettings.footerText, canvasLogo) as Record<string, any>;
+      const data = await toCuratedPreviewData(sampleData);
       const blob = await pdfDocumentDesignService.previewCuratedTemplate(template.id, {
         revisionId: revision.id,
-        targetKey: previewDocument,
+        targetKey,
         scope,
         overrides,
         data,
       });
-      showPdfPreviewBlob(blob);
-      setPreviewedCuratedRevisions(previous => ({ ...previous, [`${revision.id}:${previewDocument}`]: true }));
+      showPdfPreviewBlob(blob, getPdfTemplateTarget(targetKey).label);
+      setCuratedPreviewTargets(previous => ({ ...previous, [revision.id]: targetKey }));
+      setPreviewedCuratedRevisions(previous => ({ ...previous, [`${revision.id}:${targetKey}`]: true }));
       setActiveMobilePanel('preview');
     } catch (error: any) {
       setPreviewError(error?.message || 'No se pudo generar la vista previa de la plantilla.');
@@ -698,8 +726,25 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     setCuratedBusy(true);
     try {
       const installed = await pdfDocumentDesignService.importCuratedTemplate(file, templateId);
-      setCuratedTemplates(previous => [installed, ...previous.filter(item => item.id !== installed.id)]);
-      toast.success(`«${installed.name}» se instaló como borrador de esta sucursal. Revisa la vista previa antes de publicarla.`);
+      setCuratedTemplates(previous => {
+        const existing = previous.find(item => item.id === installed.id);
+        const revisions = [
+          ...installed.revisions,
+          ...(existing?.revisions || []).filter(oldRevision => !installed.revisions.some(newRevision => newRevision.id === oldRevision.id)),
+        ];
+        return [{ ...existing, ...installed, revisions }, ...previous.filter(item => item.id !== installed.id)];
+      });
+      const revision = installed.revisions[0];
+      const supportedTargets = revision?.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target)) || [];
+      const targetKey = supportedTargets.includes(previewDocument) ? previewDocument : preferredCuratedPreviewTarget(supportedTargets);
+      toast.success(`«${installed.name}» se instaló como borrador de esta sucursal. Se abrirá una muestra de un documento compatible.`);
+      if (revision && targetKey) {
+        setCuratedPreviewTargets(previous => ({ ...previous, [revision.id]: targetKey }));
+        await renderCuratedRevisionPreview(installed, revision, appearanceScope, {}, targetKey);
+      } else {
+        setPreviewError('El paquete se instaló, pero no incluye un destino compatible para generar una muestra.');
+        setActiveMobilePanel('preview');
+      }
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo instalar el paquete de plantilla.');
     } finally {
@@ -712,6 +757,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     setCuratedBusy(true);
     try {
       const zip = new JSZip();
+      let packageManifest: { name?: string; description?: string } = {};
       const paths = [
         ['manifest.json', `/pdf-template-packages/${packageId}/manifest.json`],
         ['template.html', '/pdf-template-packages/common/template.html'],
@@ -720,10 +766,14 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       await Promise.all(paths.map(async ([fileName, url]) => {
         const response = await fetch(url, { cache: 'no-store' });
         if (!response.ok) throw new Error('No se pudo cargar uno de los recursos de la plantilla preparada.');
-        zip.file(fileName, await response.arrayBuffer());
+        const content = await response.arrayBuffer();
+        zip.file(fileName, content);
+        if (fileName === 'manifest.json') packageManifest = JSON.parse(new TextDecoder().decode(content));
       }));
       const archive = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-      await installCuratedPackage(new File([archive], `${packageId}.zip`, { type: 'application/zip' }));
+      const existingTemplate = curatedTemplates.find(item => item.name.trim().toLocaleLowerCase() === String(packageManifest.name || '').trim().toLocaleLowerCase()
+        && (item.description || '') === (packageManifest.description || ''));
+      await installCuratedPackage(new File([archive], `${packageId}.zip`, { type: 'application/zip' }), existingTemplate?.id);
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo preparar el paquete de ejemplo.');
     } finally {
@@ -964,21 +1014,23 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
               })}
             </div>
             <section className="mt-4 space-y-3 border-t border-border/50 pt-4" aria-labelledby="pdf-curated-templates-heading">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0"><h3 id="pdf-curated-templates-heading" className="text-xs font-semibold">De esta sucursal</h3><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Paquetes de diseño con archivos y fuentes locales; primero se instalan como borrador.</p></div>
+              <div className="space-y-2">
+                <div className="min-w-0"><h3 id="pdf-curated-templates-heading" className="text-xs font-semibold">Plantillas de la sucursal</h3><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Paquetes de diseño con archivos y fuentes locales. Al instalarlos se abre una muestra y quedan como borrador.</p></div>
                 <input ref={curatedPackageInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={event => { const file = event.target.files?.[0]; const templateId = curatedImportTargetIdRef.current; curatedImportTargetIdRef.current = undefined; if (file) void installCuratedPackage(file, templateId); event.currentTarget.value = ''; }} />
-                <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 cursor-pointer gap-1.5 px-2 text-[10px]" onClick={() => curatedPackageInputRef.current?.click()} disabled={!hasActiveBranchScope || !canImport || curatedBusy}><Upload className="size-3.5" />Instalar ZIP</Button>
+                <Button type="button" size="sm" variant="outline" className="h-8 w-full cursor-pointer justify-center gap-1.5 px-2 text-[10px]" onClick={() => curatedPackageInputRef.current?.click()} disabled={!hasActiveBranchScope || !canImport || curatedBusy}><Upload className="size-3.5" />Instalar ZIP</Button>
               </div>
               {appearanceScope === 'branch' && appearanceProfile.curatedTemplates?.document?.[previewDocument] && <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[10px] leading-relaxed text-muted-foreground">Este PDF tiene una selección propia; prevalece sobre la selección de sucursal.</p>}
               {!CURATED_TARGET_SET.has(previewDocument) && <p className="rounded-md border border-dashed border-border/60 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">Las plantillas de alta fidelidad están disponibles para facturas, cotizaciones, órdenes y documentos comerciales de Ventas y Compras.</p>}
-              {CURATED_TARGET_SET.has(previewDocument) && <div className="space-y-2">
-                <p className="text-[10px] text-muted-foreground">Opciones preparadas para instalar; revisa la vista previa antes de publicar.</p>
+              <div className="space-y-2">
+                <p className="text-[10px] text-muted-foreground">{CURATED_TARGET_SET.has(previewDocument)
+                  ? 'Opciones preparadas para instalar; revisa la vista previa antes de publicar.'
+                  : 'El PDF actual no admite estas plantillas. Puedes instalarlas y ver una muestra en un documento comercial compatible.'}</p>
                 {PREPARED_PDF_PACKAGES.map(item => <div key={item.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-border/50 p-2">
                   <span aria-hidden="true" className="h-8 w-9 shrink-0 rounded-md border border-border/40" style={{ background: `linear-gradient(150deg, ${item.primary} 0 40%, ${item.secondary} 41% 62%, white 63%)` }} />
                   <span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-medium">{item.name}</span><span className="block text-[9px] text-muted-foreground">{item.description}</span></span>
                   <Button type="button" size="sm" variant="ghost" className="h-7 shrink-0 cursor-pointer px-2 text-[10px]" onClick={() => void installPreparedPackage(item.id)} disabled={!hasActiveBranchScope || !canImport || curatedBusy}><Download className="mr-1 size-3" />Preparar</Button>
                 </div>)}
-              </div>}
+              </div>
               {curatedTemplates.length > 0 && <div className="space-y-2">
                 <p className="text-[10px] font-medium text-muted-foreground">Biblioteca privada · {branchName || 'sucursal activa'}</p>
                 {curatedTemplates.map(template => <details key={template.id} className="group rounded-lg border border-border/50 bg-background/50">
@@ -987,11 +1039,18 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                     <Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => { curatedImportTargetIdRef.current = template.id; curatedPackageInputRef.current?.click(); }} disabled={!hasActiveBranchScope || !canImport || curatedBusy}><Upload className="mr-1 size-3" />Instalar nueva versión</Button>
                     {template.revisions.map(revision => {
                       const isScopedActive = scopedCuratedSelection?.templateId === template.id && scopedCuratedSelection.revisionId === revision.id;
-                      const supportsTarget = revision.manifest.documentTypes.includes(previewDocument);
-                      const previewed = Boolean(previewedCuratedRevisions[`${revision.id}:${previewDocument}`]);
-                      return <div key={revision.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/20 p-2">
-                        <span className="flex min-w-0 items-center gap-1.5"><Badge variant={revision.status === 'PUBLISHED' ? 'secondary' : 'outline'} className="text-[9px]">v{revision.version} · {revision.status === 'PUBLISHED' ? 'Publicada' : 'Borrador'}</Badge>{isScopedActive && <Badge className="text-[9px]"><Check className="mr-1 size-3" />Activa</Badge>}</span>
-                        <span className="flex gap-1"><Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void renderCuratedRevisionPreview(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {})} disabled={!supportsTarget || curatedBusy}><Eye className="mr-1 size-3" />Previsualizar</Button><Button type="button" size="sm" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void saveCuratedTemplateSelection(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {})} disabled={!supportsTarget || curatedBusy || (revision.status !== 'PUBLISHED' && !previewed) || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)}>{isScopedActive ? 'Guardar alcance' : revision.status === 'PUBLISHED' ? 'Activar' : 'Publicar y activar'}</Button></span>
+                      const supportedTargets = revision.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target));
+                      const supportsTarget = supportedTargets.includes(previewDocument);
+                      const storedPreviewTarget = curatedPreviewTargets[revision.id];
+                      const selectedPreviewTarget = supportsTarget
+                        ? previewDocument
+                        : supportedTargets.includes(storedPreviewTarget || '') ? storedPreviewTarget || '' : preferredCuratedPreviewTarget(supportedTargets);
+                      const previewed = Boolean(previewedCuratedRevisions[`${revision.id}:${selectedPreviewTarget}`]);
+                      return <div key={revision.id} className="space-y-2 rounded-md bg-muted/20 p-2">
+                        <span className="flex min-w-0 flex-wrap items-center gap-1.5"><Badge variant={revision.status === 'PUBLISHED' ? 'secondary' : 'outline'} className="text-[9px]">v{revision.version} · {revision.status === 'PUBLISHED' ? 'Publicada' : 'Borrador'}</Badge>{isScopedActive && <Badge className="text-[9px]"><Check className="mr-1 size-3" />Activa</Badge>}</span>
+                        {!supportsTarget && supportedTargets.length > 0 && <label className="block space-y-1 text-[9px] text-muted-foreground"><span>Documento para la muestra</span><select aria-label={`Documento de muestra para ${template.name}, versión ${revision.version}`} value={selectedPreviewTarget} onChange={event => setCuratedPreviewTargets(previous => ({ ...previous, [revision.id]: event.target.value }))} className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[10px] text-foreground">{supportedTargets.map(target => <option key={target} value={target}>{getPdfTemplateTarget(target).label}</option>)}</select></label>}
+                        {!supportsTarget && <p className="text-[9px] leading-relaxed text-muted-foreground">El PDF seleccionado no admite esta plantilla. La muestra usa el documento compatible de arriba; para activarla, cambia a un PDF admitido.</p>}
+                        <div className="flex flex-wrap justify-end gap-1.5"><Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void renderCuratedRevisionPreview(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {}, selectedPreviewTarget)} disabled={!selectedPreviewTarget || curatedBusy}><Eye className="mr-1 size-3" />Previsualizar</Button><Button type="button" size="sm" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void saveCuratedTemplateSelection(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {})} disabled={!supportsTarget || curatedBusy || (revision.status !== 'PUBLISHED' && !previewed) || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)}>{isScopedActive ? 'Guardar alcance' : revision.status === 'PUBLISHED' ? 'Activar' : 'Publicar y activar'}</Button></div>
                       </div>;
                     })}
                   </div>
@@ -1027,7 +1086,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         <Card className={cn('flex min-w-0 flex-col overflow-hidden', isPreviewExpanded ? 'min-h-[640px] xl:min-h-[min(90vh,1400px)]' : 'min-h-[580px] xl:min-h-[min(82vh,1100px)]')}>
           <CardHeader className="shrink-0 border-b border-border/50 py-3"><div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="flex min-w-0 items-center gap-2 truncate text-sm"><FileText className="size-4 shrink-0 text-primary" /><span className="truncate">Diseño PDF · {selectedTarget.label}</span></CardTitle><CardDescription className="truncate text-xs">{name || 'Diseño sin nombre'} · {selectedTarget.moduleLabel} · {hasActiveBranchScope ? activeBranchLabel : 'Selecciona una sucursal para guardar'}</CardDescription></div><div className="flex shrink-0 items-center gap-1.5"><Badge variant="outline" className="text-[10px]">{activeId === 'draft' ? 'Borrador' : 'Guardado'}</Badge><Badge variant="outline" className="text-[10px]">{settings.paperSize} · {settings.orientation === 'portrait' ? 'Vertical' : 'Horizontal'}</Badge></div></div></CardHeader>
           <CardContent className="relative flex min-h-0 flex-1 flex-col p-2">
-            <PdfLivePreview sourceUrl={previewUrl} title={selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onSave={() => void saveDesign()} saveDisabled={!hasActiveBranchScope || !canModifyActive || isSaving} isSaving={isSaving} />
+            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onSave={() => void saveDesign()} saveDisabled={!hasActiveBranchScope || !canModifyActive || isSaving} isSaving={isSaving} />
           </CardContent>
         </Card>
       </main>
