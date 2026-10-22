@@ -58,8 +58,16 @@ export interface PdfCuratedTemplateRevision {
     page: { size: 'LETTER'; orientation: 'portrait' | 'landscape' };
     defaults: Record<string, unknown>;
   };
+  compatibleTargets?: PdfCuratedTemplateCompatibilityTarget[];
   createdAt: string;
   publishedAt?: string | null;
+}
+
+export interface PdfCuratedTemplateCompatibilityTarget {
+  targetKey: string;
+  adapter: string;
+  relation: 'declarado' | 'adaptable';
+  layoutId: string;
 }
 
 export interface PdfCuratedTemplateRecord {
@@ -77,6 +85,7 @@ export interface PdfCuratedTemplatePreflight {
   schemaVersion: 1 | 2;
   documentTypes: string[];
   layouts: Array<{ id: string; documentTypes: string[] }>;
+  compatibleTargets?: PdfCuratedTemplateCompatibilityTarget[];
   fontFamilies: string[];
   pageFormats: PdfPaperFormat[];
   adaptsPageFormats: boolean;

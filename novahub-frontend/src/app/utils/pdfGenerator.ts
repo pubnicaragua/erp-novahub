@@ -3051,7 +3051,18 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   // Algunas salidas operativas (por ejemplo, la carta del restaurante) piden
   // ignorar una plantilla personalizada. Se conserva ese contrato, pero ahora
   // el predeterminado pasa por el mismo renderer semántico que los demás PDF.
-  const design = forceNative ? createSystemDefaultPdfDesign(targetKey) : loadedDesign;
+  const design = forceNative
+    ? (() => {
+      const systemDesign = createSystemDefaultPdfDesign(targetKey);
+      const systemSettings = (systemDesign?.settings && typeof systemDesign.settings === 'object' ? systemDesign.settings : {}) as Record<string, any>;
+      const loadedSettings = (loadedDesign?.settings && typeof loadedDesign.settings === 'object' ? loadedDesign.settings : {}) as Record<string, any>;
+      // Este destino conserva su layout nativo; una plantilla ZIP explícita
+      // sigue siendo una composición separada y puede adaptarse a sus datos.
+      return loadedSettings.curatedTemplateSelection
+        ? { ...systemDesign, settings: { ...systemSettings, curatedTemplateSelection: loadedSettings.curatedTemplateSelection } }
+        : systemDesign;
+    })()
+    : loadedDesign;
   const baseSettings = (design?.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
   const settings = getGlobalReportSettings(configuredHistoryPaper(baseSettings, format), tenantName, tenantLogo, targetKey);
   const configuredDefinition = design && !isVirtualSystemDefaultDesign(design) && design?.layoutZones?.definition

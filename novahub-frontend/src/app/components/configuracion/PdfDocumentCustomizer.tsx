@@ -149,13 +149,34 @@ const PDF_DESIGN_TOUR_STEPS: GuidedTourStep[] = [
 ];
 
 const CURATED_TARGET_SET = new Set<string>(PDF_CURATED_TEMPLATE_TARGETS);
-const CURATED_SUPPORTED_TARGET_LABELS = PDF_CURATED_TEMPLATE_TARGETS.map(target => getPdfTemplateTarget(target).label);
 const PDF_FOOTER_APPEARANCE_KEYS = ['footerText', 'showPageNumber', 'pageNumberFormat', 'pageNumberCustom'] as const;
 const PDF_FOOTER_APPEARANCE_KEY_SET = new Set<string>(PDF_FOOTER_APPEARANCE_KEYS);
 const CURATED_PREVIEW_TARGET_PRIORITY = ['ventas.invoice', 'compras.supplier-invoice', 'ventas.estimate', 'ventas.order', 'compras.purchase-order', 'compras.purchase-record'];
 
 function preferredCuratedPreviewTarget(supportedTargets: string[]) {
   return CURATED_PREVIEW_TARGET_PRIORITY.find(target => supportedTargets.includes(target)) || supportedTargets[0] || '';
+}
+
+function curatedTargetsForRevision(revision: PdfCuratedTemplateRevision | null | undefined) {
+  if (!revision) return [];
+  if (Array.isArray(revision.compatibleTargets)) {
+    return revision.compatibleTargets.map(target => target.targetKey).filter(target => CURATED_TARGET_SET.has(target));
+  }
+  return revision.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target));
+}
+
+function curatedTargetLabel(targetKey: string, includeModule = false) {
+  const target = getPdfTemplateTarget(targetKey);
+  return includeModule ? `${target.moduleLabel} · ${target.label}` : target.label;
+}
+
+function groupCuratedTargetsByModule(targetKeys: string[]) {
+  const groups = new Map<string, string[]>();
+  for (const targetKey of targetKeys) {
+    const target = getPdfTemplateTarget(targetKey);
+    groups.set(target.moduleLabel, [...(groups.get(target.moduleLabel) || []), target.label]);
+  }
+  return [...groups.entries()];
 }
 
 const PREPARED_PDF_PACKAGES = [
@@ -776,10 +797,10 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     overrides: PdfCuratedTemplateSelection['overrides'] = {},
     requestedTarget = previewDocument,
   ) => {
-    const supportedTargets = revision.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target));
+    const supportedTargets = curatedTargetsForRevision(revision);
     const targetKey = supportedTargets.includes(requestedTarget) ? requestedTarget : preferredCuratedPreviewTarget(supportedTargets);
     if (!targetKey) {
-      setPreviewError('El paquete no declara un documento comercial compatible para mostrar la vista previa.');
+      setPreviewError('El paquete no declara ni tiene una composición que NovaHub pueda adaptar a una salida PDF editable.');
       setActiveMobilePanel('preview');
       return;
     }
@@ -814,12 +835,13 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     const mayEditScope = scope === 'branch' ? canEditCompanyProfile : canModifyActive;
     if (!hasActiveBranchScope || !mayEditScope) return false;
     const targetKeys = scope === 'branch'
-      ? [...new Set(revision.manifest.documentTypes.filter(candidate => CURATED_TARGET_SET.has(candidate)))]
+      ? [...new Set(curatedTargetsForRevision(revision))]
       : [targetKey];
-    if (!targetKeys.length || targetKeys.some(candidate => !CURATED_TARGET_SET.has(candidate) || !revision.manifest.documentTypes.includes(candidate))) {
+    const compatibleTargets = new Set(curatedTargetsForRevision(revision));
+    if (!targetKeys.length || targetKeys.some(candidate => !CURATED_TARGET_SET.has(candidate) || !compatibleTargets.has(candidate))) {
       toast.error(scope === 'branch'
-        ? 'La plantilla no declara tipos comerciales compatibles para aplicarla en la sucursal.'
-        : 'La plantilla no admite el tipo de PDF seleccionado.');
+        ? 'La plantilla no tiene salidas PDF editables que pueda declarar o adaptar en esta sucursal.'
+        : 'La plantilla no tiene una composición que pueda adaptarse al tipo de PDF seleccionado.');
       return false;
     }
     setCuratedBusy(true);
@@ -896,7 +918,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       setPendingCuratedPackage(null);
       setIsCuratedPackagePreflightOpen(false);
       const revision = installed.revisions[0];
-      const supportedTargets = revision?.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target)) || [];
+      const supportedTargets = curatedTargetsForRevision(revision);
       const targetKey = supportedTargets.includes(previewDocument) ? previewDocument : preferredCuratedPreviewTarget(supportedTargets);
       toast.success(`«${installed.name}» se instaló como borrador de esta sucursal. Se abrirá una muestra de un documento compatible.`);
       if (revision && targetKey) {
@@ -972,8 +994,8 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   };
 
   const saveCuratedTemplateToDesign = async (template: PdfCuratedTemplateRecord, revision: PdfCuratedTemplateRevision, overrides: PdfCuratedTemplateSelection['overrides'] = {}) => {
-    if (!canModifyActive || !revision.manifest.documentTypes.includes(previewDocument)) {
-      toast.error('Selecciona una vista compatible antes de guardar esta plantilla en el diseño.');
+    if (!canModifyActive || !curatedTargetsForRevision(revision).includes(previewDocument)) {
+      toast.error('Selecciona una vista que NovaHub pueda adaptar antes de guardar esta plantilla en el diseño.');
       return;
     }
     setCuratedBusy(true);
@@ -1240,8 +1262,10 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const selectedFolderDesigns = selectedFolderId ? visibleDesigns.filter(record => record.folderId === selectedFolderId) : [];
   const pendingCuratedTemplate = pendingCuratedSave && curatedTemplates.find(item => item.id === pendingCuratedSave.templateId);
   const pendingCuratedRevision = pendingCuratedTemplate?.revisions.find(item => item.id === pendingCuratedSave?.revisionId);
-  const pendingCuratedTargets = pendingCuratedRevision?.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target)) || [];
-  const pendingCuratedLabels = pendingCuratedTargets.map(target => getPdfTemplateTarget(target).label);
+  const pendingCuratedTargets = curatedTargetsForRevision(pendingCuratedRevision);
+  const pendingCuratedModuleSummary = groupCuratedTargetsByModule(pendingCuratedTargets).map(([module, labels]) => `${module} (${labels.length})`).join(', ');
+  const pendingPreflightAdaptedTargets = pendingCuratedPackage?.preflight.compatibleTargets?.filter(target => target.relation === 'adaptable') || [];
+  const pendingPreflightModuleSummary = groupCuratedTargetsByModule(pendingPreflightAdaptedTargets.map(target => target.targetKey)).map(([module, labels]) => `${module} (${labels.length})`).join(' · ');
   return <div className="flex min-w-0 flex-col gap-3 xl:min-h-[calc(100vh-11rem)]">
     <div className={cn('grid grid-cols-3 gap-1 rounded-xl border border-border/60 bg-muted/30 p-1 xl:hidden', isPreviewExpanded && 'hidden')} role="group" aria-label="Panel del editor PDF">
       <Button type="button" size="sm" variant={activeMobilePanel === 'assignment' ? 'default' : 'ghost'} className="cursor-pointer" aria-pressed={activeMobilePanel === 'assignment'} onClick={() => setActiveMobilePanel('assignment')}>Asignación</Button>
@@ -1326,16 +1350,16 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
           <CardContent className="pt-0">
             <section className="mt-4 space-y-3 border-t border-border/50 pt-4" aria-labelledby="pdf-curated-templates-heading">
               <div className="space-y-2">
-                <div className="min-w-0"><h3 id="pdf-curated-templates-heading" className="text-xs font-semibold">Paquetes de diseño</h3><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Instala un ZIP y revisa su muestra. En “Solo este PDF” se guarda para el documento abierto; en “Todos los PDF de esta sucursal” se aplica a todos los destinos que declara el paquete y NovaHub valida. Las asignaciones propias de un diseño conservan prioridad.</p></div>
+                <div className="min-w-0"><h3 id="pdf-curated-templates-heading" className="text-xs font-semibold">Paquetes de diseño</h3><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Instala un ZIP y revisa su muestra. NovaHub detecta otros PDF editables que puede adaptar entre módulos. En “Todos los PDF de esta sucursal” se aplica a los destinos declarados o adaptables; las asignaciones propias conservan prioridad.</p></div>
                 <input ref={curatedPackageInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={event => { const file = event.target.files?.[0]; const templateId = curatedImportTargetIdRef.current; curatedImportTargetIdRef.current = undefined; if (file) void installCuratedPackage(file, templateId); event.currentTarget.value = ''; }} />
                 <Button type="button" size="sm" variant="outline" className="h-8 w-full cursor-pointer justify-center gap-1.5 px-2 text-[10px]" onClick={() => curatedPackageInputRef.current?.click()} disabled={!hasActiveBranchScope || !canImport || curatedBusy}><Upload className="size-3.5" />Instalar ZIP</Button>
               </div>
               {appearanceScope === 'branch' && appearanceProfile.curatedTemplates?.document?.[previewDocument] && <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[10px] leading-relaxed text-muted-foreground">Este PDF tiene una selección propia; prevalece sobre la selección de sucursal.</p>}
-              {!CURATED_TARGET_SET.has(previewDocument) && <p className="rounded-md border border-dashed border-border/60 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">Las plantillas de alta fidelidad están disponibles para facturas, cotizaciones, órdenes y documentos comerciales de Ventas y Compras.</p>}
+              {!CURATED_TARGET_SET.has(previewDocument) && <p className="rounded-md border border-dashed border-border/60 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">Las plantillas de alta fidelidad se pueden adaptar a salidas PDF editables. Los formatos físicos, como tickets y etiquetas, mantienen su diseño propio.</p>}
               <div className="space-y-2">
                 <p className="text-[10px] text-muted-foreground">{CURATED_TARGET_SET.has(previewDocument)
                   ? 'Opciones preparadas para instalar; revisa la vista previa antes de publicar.'
-                  : 'El PDF actual no admite estas plantillas. Puedes instalarlas y ver una muestra en un documento comercial compatible.'}</p>
+                  : 'El PDF actual no usa el adaptador de plantillas. Puedes instalar el ZIP y revisar los destinos compatibles antes de aplicarlo.'}</p>
                 {PREPARED_PDF_PACKAGES.map(item => <div key={item.id} className="space-y-2 rounded-lg border border-border/50 p-3 text-left">
                   <div className="flex min-w-0 items-start gap-2.5">
                     <span aria-hidden="true" className="mt-0.5 h-9 w-10 shrink-0 rounded-md border border-border/40" style={{ background: `linear-gradient(150deg, ${item.primary} 0 40%, ${item.secondary} 41% 62%, white 63%)` }} />
@@ -1352,7 +1376,9 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                     <Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => { curatedImportTargetIdRef.current = template.id; curatedPackageInputRef.current?.click(); }} disabled={!hasActiveBranchScope || !canImport || curatedBusy}><Upload className="mr-1 size-3" />Instalar nueva versión</Button>
                     {template.revisions.map(revision => {
                       const isScopedActive = scopedCuratedSelection?.templateId === template.id && scopedCuratedSelection.revisionId === revision.id;
-                      const supportedTargets = revision.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target));
+                      const supportedTargets = curatedTargetsForRevision(revision);
+                      const declaredTargets = revision.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target));
+                      const adaptedTargets = (revision.compatibleTargets || []).filter(target => target.relation === 'adaptable').map(target => target.targetKey);
                       const supportsTarget = supportedTargets.includes(previewDocument);
                       const storedPreviewTarget = curatedPreviewTargets[revision.id];
                       const selectedPreviewTarget = supportsTarget
@@ -1361,10 +1387,12 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                       const previewed = Boolean(previewedCuratedRevisions[`${revision.id}:${selectedPreviewTarget}`]);
                       return <div key={revision.id} className="space-y-2 rounded-md bg-muted/20 p-2">
                         <span className="flex min-w-0 flex-wrap items-center gap-1.5"><Badge variant={revision.status === 'PUBLISHED' ? 'secondary' : 'outline'} className="text-[9px]">v{revision.version} · {revision.status === 'PUBLISHED' ? 'Publicada' : 'Borrador'}</Badge>{isScopedActive && <Badge className="text-[9px]"><Check className="mr-1 size-3" />Activa</Badge>}</span>
-                        <p className="text-[9px] leading-relaxed text-muted-foreground">Declarados y validados en el paquete: {supportedTargets.map(target => getPdfTemplateTarget(target).label).join(', ')}.</p>
+                        <p className="text-[9px] leading-relaxed text-muted-foreground">Declarados en el ZIP: {declaredTargets.map(target => curatedTargetLabel(target, true)).join(', ') || 'ninguno'}.</p>
+                        {adaptedTargets.length > 0 && <details className="rounded-md border border-border/40 px-2 py-1.5 text-[9px]"><summary className="cursor-pointer font-medium">Destinos detectados y adaptables por NovaHub ({adaptedTargets.length})</summary><div className="mt-1 space-y-1 leading-relaxed text-muted-foreground">{groupCuratedTargetsByModule(adaptedTargets).map(([module, labels]) => <p key={module}><strong>{module}:</strong> {labels.join(', ')}</p>)}</div></details>}
                         {revision.manifest.fontFamilies?.length ? <p className="text-[9px] leading-relaxed text-muted-foreground">Fuentes incluidas: {revision.manifest.fontFamilies.join(', ')}.</p> : <p className="text-[9px] leading-relaxed text-muted-foreground">Sin fuentes incluidas; se usa la familia declarada por la plantilla y su alternativa local.</p>}
                         {!supportsTarget && supportedTargets.length > 0 && <label className="block space-y-1 text-[9px] text-muted-foreground"><span>Documento para la muestra</span><select aria-label={`Documento de muestra para ${template.name}, versión ${revision.version}`} value={selectedPreviewTarget} onChange={event => setCuratedPreviewTargets(previous => ({ ...previous, [revision.id]: event.target.value }))} className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[10px] text-foreground">{supportedTargets.map(target => <option key={target} value={target}>{getPdfTemplateTarget(target).label}</option>)}</select></label>}
-                        {!supportsTarget && <p className="text-[9px] leading-relaxed text-muted-foreground">El PDF seleccionado no está declarado en este paquete. La muestra usa uno de los destinos listados arriba; puedes aplicar el paquete a todos los destinos que declara desde el alcance de sucursal.</p>}
+                        {supportsTarget && !declaredTargets.includes(previewDocument) && <p className="text-[9px] leading-relaxed text-muted-foreground">El PDF seleccionado no está declarado en el ZIP. NovaHub adapta su estructura al diseño de «{getPdfTemplateTarget(previewDocument).moduleLabel}» con el adaptador disponible.</p>}
+                        {!supportsTarget && <p className="text-[9px] leading-relaxed text-muted-foreground">El PDF actual no se encuentra entre los destinos declarados o adaptables. La muestra usa uno de los PDF que NovaHub detectó para esta plantilla.</p>}
                         <div className="flex justify-end border-t border-border/40 pt-2"><Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void renderCuratedRevisionPreview(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {}, selectedPreviewTarget)} disabled={!selectedPreviewTarget || curatedBusy}><Eye className="mr-1 size-3" />{previewed ? 'Actualizar vista previa' : 'Previsualizar'}</Button></div>
                       </div>;
                     })}
@@ -1476,7 +1504,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Revisión del paquete PDF</DialogTitle>
-            <DialogDescription>Confirma los destinos que declara el ZIP y las fuentes antes de instalarlo como borrador en esta sucursal.</DialogDescription>
+            <DialogDescription>Revisa qué destinos declara el ZIP y cuáles detecta NovaHub que puede adaptar antes de instalarlo como borrador en esta sucursal.</DialogDescription>
           </DialogHeader>
           {pendingCuratedPackage && <div className="space-y-3 text-sm">
             <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
@@ -1484,15 +1512,20 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
               {pendingCuratedPackage.preflight.description && <p className="mt-1 text-xs text-muted-foreground">{pendingCuratedPackage.preflight.description}</p>}
               <p className="mt-1 text-[10px] text-muted-foreground">Formato del paquete v{pendingCuratedPackage.preflight.schemaVersion} · Carta como base · se adapta a Carta, Oficio, A4, Legal y rollos de 80/58 mm.</p>
             </div>
-            <section className="space-y-1.5" aria-label="Destinos declarados y validados">
-              <h3 className="text-xs font-semibold">Destinos declarados y validados ({pendingCuratedPackage.preflight.documentTypes.length})</h3>
-              <p className="text-[10px] leading-relaxed text-muted-foreground">NovaHub valida que el <code>manifest.json</code> declare uno o más de los 11 destinos comerciales que este renderizador puede rellenar (empresa, documento, contraparte, detalle, totales y pie). En ZIP v2 también comprueba que cada destino tenga una composición asignada. No se infiere por los colores ni por la imagen. Recibos, reportes y etiquetas usan estructuras distintas y no están incluidos en este motor.</p>
+            <section className="space-y-1.5" aria-label="Compatibilidad detectada por NovaHub">
+              <h3 className="text-xs font-semibold">Declarados en el ZIP ({pendingCuratedPackage.preflight.documentTypes.length})</h3>
+              <p className="text-[10px] leading-relaxed text-muted-foreground">Estos tipos aparecen explícitamente en <code>manifest.json</code> y tienen composición validada.</p>
               <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                {pendingCuratedPackage.preflight.documentTypes.map(target => <li key={target} className="rounded-md border border-border/40 px-2 py-1.5 text-xs">{getPdfTemplateTarget(target).label}</li>)}
+                {pendingCuratedPackage.preflight.documentTypes.map(target => <li key={target} className="rounded-md border border-border/40 px-2 py-1.5 text-xs">{curatedTargetLabel(target, true)}</li>)}
               </ul>
+            </section>
+            <section className="space-y-1.5" aria-label="Destinos adaptables en otros módulos">
               <details className="rounded-md border border-border/40 px-2 py-1.5 text-[10px]">
-                <summary className="cursor-pointer font-medium">Ver los 11 destinos que admite este motor</summary>
-                <p className="mt-1 leading-relaxed text-muted-foreground">{CURATED_SUPPORTED_TARGET_LABELS.join(', ')}.</p>
+                <summary className="cursor-pointer font-medium">Detectados y adaptables por NovaHub ({pendingPreflightAdaptedTargets.length}) · {pendingPreflightModuleSummary || 'sin destinos adicionales'}</summary>
+                <p className="mt-1 leading-relaxed text-muted-foreground">La detección no depende de que dos PDF estén en el mismo módulo: NovaHub mapea los datos del adaptador de cada salida a las regiones dinámicas del ZIP. Si no hay una composición específica, usa una composición de referencia del paquete para generar una muestra. Los datos del ERP se conservan; la vista previa permite revisar el resultado antes de activarlo. Tickets y etiquetas físicos siguen excluidos.</p>
+                <div className="mt-1 space-y-1 rounded-md bg-muted/20 p-2">
+                  {groupCuratedTargetsByModule(pendingPreflightAdaptedTargets.map(target => target.targetKey)).map(([module, labels]) => <p key={module} className="leading-relaxed"><strong>{module}:</strong> <span className="text-muted-foreground">{labels.join(', ')}</span></p>)}
+                </div>
               </details>
             </section>
             <section className="space-y-1.5" aria-label="Composiciones del paquete">
@@ -1516,13 +1549,13 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       <ConfirmDialog
         open={Boolean(globalSaveKind)}
         onOpenChange={open => { if (!open && !isSavingAppearance && !isSavingFooterProfile && !curatedBusy) { setGlobalSaveKind(null); setPendingCuratedSave(null); } }}
-        title={globalSaveKind === 'footer' ? '¿Guardar el pie para toda la sucursal?' : globalSaveKind === 'curated' ? '¿Aplicar la plantilla a todos sus documentos compatibles?' : '¿Guardar cambios para toda la sucursal?'}
+        title={globalSaveKind === 'footer' ? '¿Guardar el pie para toda la sucursal?' : globalSaveKind === 'curated' ? '¿Aplicar la plantilla a todos sus PDF compatibles?' : '¿Guardar cambios para toda la sucursal?'}
         description={globalSaveKind === 'footer'
           ? 'El texto y la numeración se aplicarán a todos los PDF de esta sucursal que hereden la configuración del pie.'
           : globalSaveKind === 'curated'
-            ? `La revisión se publicará y quedará seleccionada para ${pendingCuratedLabels.length ? pendingCuratedLabels.join(', ') : 'los documentos que declara el paquete'} en esta sucursal. Las selecciones guardadas directamente en un documento seguirán teniendo prioridad.`
+            ? `La revisión se publicará y quedará seleccionada para ${pendingCuratedTargets.length ? `${pendingCuratedTargets.length} salidas PDF de ${pendingCuratedModuleSummary}` : 'las salidas que NovaHub detecte como compatibles'} en esta sucursal. Esto incluye destinos declarados y adaptables; las selecciones propias de cada PDF seguirán teniendo prioridad.`
             : 'La plantilla visual, composición, espaciado, tipografía y colores se aplicarán a los PDF de esta sucursal que hereden esos valores.'}
-        confirmLabel={globalSaveKind === 'curated' ? `Publicar y aplicar a ${pendingCuratedTargets.length || 'todos los'} documentos compatibles` : 'Guardar para toda la sucursal'}
+        confirmLabel={globalSaveKind === 'curated' ? `Publicar y aplicar a ${pendingCuratedTargets.length || 'todos los'} PDF compatibles` : 'Guardar para toda la sucursal'}
         cancelLabel="Cancelar"
         variant="warning"
         loading={isSavingAppearance || isSavingFooterProfile || curatedBusy}

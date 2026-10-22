@@ -1,4 +1,5 @@
 import { parsePdfHeaderContentSpacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM } from './pdf-header-spacing';
+import { canEditPdfTemplate, PDF_TEMPLATE_TARGETS } from './pdf-document-catalog';
 
 export const PDF_APPEARANCE_FONTS = [
   'Arial', 'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Nunito Sans', 'Source Sans 3',
@@ -68,10 +69,10 @@ export interface PdfCuratedTemplateSelections {
   document: Record<string, PdfCuratedTemplateSelection>;
 }
 
-export const PDF_CURATED_TEMPLATE_TARGETS = [
-  'ventas.estimate', 'ventas.order', 'ventas.invoice', 'ventas.recurring', 'ventas.return', 'ventas.credit', 'ventas.credit-note',
-  'compras.purchase-record', 'compras.recurring-supplier-invoice', 'compras.purchase-order', 'compras.supplier-invoice',
-] as const;
+/** Salidas lógicas editables admitidas por el adaptador de plantillas ZIP. */
+export const PDF_CURATED_TEMPLATE_TARGETS = PDF_TEMPLATE_TARGETS
+  .filter(target => canEditPdfTemplate(target))
+  .map(target => target.key);
 
 export interface PdfAppearanceProfile {
   templateId?: typeof PDF_DEFAULT_TEMPLATE_ID;
@@ -165,7 +166,7 @@ export function normalizePdfAppearanceProfile(value: unknown): PdfAppearanceProf
       const records = scope && typeof scope === 'object' && !Array.isArray(scope) ? scope as Record<string, unknown> : {};
       const normalized: Record<string, PdfCuratedTemplateSelection> = {};
       for (const [targetKey, rawSelection] of Object.entries(records)) {
-        if (!PDF_CURATED_TEMPLATE_TARGETS.includes(targetKey as typeof PDF_CURATED_TEMPLATE_TARGETS[number]) || !rawSelection || typeof rawSelection !== 'object' || Array.isArray(rawSelection)) continue;
+        if (!PDF_CURATED_TEMPLATE_TARGETS.includes(targetKey) || !rawSelection || typeof rawSelection !== 'object' || Array.isArray(rawSelection)) continue;
         const selection = rawSelection as Record<string, unknown>;
         if (typeof selection.templateId !== 'string' || !selection.templateId.trim() || typeof selection.revisionId !== 'string' || !selection.revisionId.trim()) continue;
         const version = Number(selection.version);
