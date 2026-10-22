@@ -103,7 +103,11 @@ async function fetchPdfBlob(path: string, body: unknown) {
     let message = '';
     try {
       const error = await response.json();
-      message = typeof error?.message === 'string' ? error.message : Array.isArray(error?.message) ? error.message.join(', ') : '';
+      const candidates = [error?.message, error?.message?.message, error?.error?.message];
+      const resolved = candidates.find(value => typeof value === 'string' && value.trim());
+      message = typeof resolved === 'string'
+        ? resolved
+        : candidates.find(Array.isArray)?.join(', ') || '';
     } catch { /* Se usa el error HTTP como reserva. */ }
     throw new Error(message || `No se pudo generar el PDF (HTTP ${response.status}).`);
   }
