@@ -69,6 +69,8 @@ interface CustomerImportPreviewProps {
   countryOptions: CustomerCountryOption[];
   isSidebarCollapsed: boolean;
   historyOnly?: boolean;
+  historicalImport?: boolean;
+  importNotice?: string | null;
   importing: boolean;
   progress: number;
   result: CustomerImportResult | null;
@@ -89,23 +91,22 @@ function ImportField({ label, children, className = '' }: { label: string; child
   );
 }
 
-function HistoricalSummaryPreview({ summaries }: { summaries?: CustomerHistoryImportSummary[] }) {
+function HistoricalSummaryPreview({ summaries, compact = false }: { summaries?: CustomerHistoryImportSummary[]; compact?: boolean }) {
   if (!summaries?.length) return null;
+  const summaryLines = summaries.map((summary) => {
+    const measureLabel = summary.measureLabel || 'medida';
+    const measureUnit = String(summary.measureUnit || '').trim();
+    const extraUnit = measureUnit && !measureLabel.toLocaleLowerCase().includes(measureUnit.toLocaleLowerCase()) ? ` ${measureUnit}` : '';
+    return `${summary.activityType}: ${summary.recordCount} registros${summary.measureValue !== null && summary.measureValue !== undefined ? ` · ${summary.measureValue} ${measureLabel}${extraUnit}` : ''} · ${formatCurrencyAmount(summary.amount, summary.currency, true)}`;
+  });
+  if (compact) {
+    const label = `Historial importado: ${summaryLines.join('; ')}`;
+    return <p title={label} aria-label={label} className="mt-1 max-w-full truncate rounded-md border border-primary/15 bg-primary/[0.035] px-2 py-1 text-[10px] leading-4 text-foreground"><span className="font-black text-primary">Historial:</span> {summaryLines.join(' · ')}</p>;
+  }
   return (
     <div className="mt-2 space-y-1 rounded-lg border border-primary/15 bg-primary/[0.035] p-2 text-[10px] leading-relaxed">
       <p className="font-black uppercase tracking-wider text-primary">Resumen histórico importado</p>
-      {summaries.map((summary) => {
-        const measureLabel = summary.measureLabel || 'medida';
-        const measureUnit = String(summary.measureUnit || '').trim();
-        const extraUnit = measureUnit && !measureLabel.toLocaleLowerCase().includes(measureUnit.toLocaleLowerCase()) ? ` ${measureUnit}` : '';
-        return (
-          <p key={`${summary.activityType}-${summary.currency}`} className="break-words text-foreground">
-            <span className="font-bold">{summary.activityType}:</span> {summary.recordCount} registros
-            {summary.measureValue !== null && summary.measureValue !== undefined ? ` · ${summary.measureValue} ${measureLabel}${extraUnit}` : ''}
-            {' · '}{formatCurrencyAmount(summary.amount, summary.currency, true)}
-          </p>
-        );
-      })}
+      {summaryLines.map((line, index) => <p key={`${summaries[index].activityType}-${summaries[index].currency}`} className="break-words text-foreground">{line}</p>)}
     </div>
   );
 }
@@ -221,6 +222,8 @@ export function CustomerImportPreview({
   countryOptions,
   isSidebarCollapsed,
   historyOnly = false,
+  historicalImport = false,
+  importNotice,
   importing,
   progress,
   result,
@@ -247,7 +250,7 @@ export function CustomerImportPreview({
   const historySummaryCount = rows.reduce((count, row) => !row.error ? count + (row.historicalSummaries?.length || 0) : count, 0);
   const canConfirm = historyOnly ? historySummaryCount > 0 : validRows > 0;
   const hasPendingOpeningBalance = !historyOnly && rows.some((row) => row.openingBalanceType === 'PENDING' && Number(row.openingBalanceAmount) > 0);
-  const hasHistoricalImport = rows.some((row) => row.historicalSummaries !== undefined || row.historyReviewError || row.historyReviewWarning);
+  const hasHistoricalImport = historicalImport || rows.some((row) => row.historicalSummaries !== undefined || row.historyReviewError || row.historyReviewWarning);
 
   useEffect(() => {
     if (!result || historyOnly) return;
@@ -272,6 +275,7 @@ export function CustomerImportPreview({
         </div>
 
         <ImportReviewSummary total={rows.length} valid={historyOnly ? historySummaryRows : validRows} skipped={errorRows} warnings={warningRows} entityLabel={historyOnly ? 'clientes con resumen' : 'clientes'} />
+        {importNotice && <div role="status" className="flex min-w-0 items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-800 dark:text-amber-200"><AlertTriangle className="mt-0.5 size-4 shrink-0" /><p className="min-w-0 break-words">{importNotice}</p></div>}
         {hasPendingOpeningBalance && <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
           <label className="min-w-48 space-y-1 text-xs font-bold text-foreground">
             <span className="block">Fecha de corte de saldos pendientes *</span>
@@ -339,7 +343,7 @@ export function CustomerImportPreview({
                 return (
                 <TableRow key={virtualRow.key} ref={tableVirtualizer.measureElement} data-index={virtualRow.index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row.warning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
-                  <TableCell><Input className={fieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /><HistoricalSummaryPreview summaries={row.historicalSummaries} /></TableCell>
+                  <TableCell><Input className={fieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Select value={row.type} onValueChange={(value) => onRowUpdate(index, 'type', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="INDIVIDUAL">Particular</SelectItem><SelectItem value="COMPANY">Empresa</SelectItem></SelectContent></Select></TableCell>
                   <TableCell>{row.type === 'COMPANY' && <Input className={fieldClass} value={row.companyName} onChange={(event) => onRowUpdate(index, 'companyName', event.target.value)} disabled={importing} />}</TableCell>
                   <TableCell><Input className={fieldClass} value={row.fiscalRegime} placeholder="General" onChange={(event) => onRowUpdate(index, 'fiscalRegime', event.target.value)} disabled={importing} /></TableCell>
@@ -359,7 +363,7 @@ export function CustomerImportPreview({
                   <TableCell><Input className={`${fieldClass} text-right`} type="number" min="0" step="0.01" value={row.openingBalanceAmount} onChange={(event) => onRowUpdate(index, 'openingBalanceAmount', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Select value={row.openingBalanceCurrency} onValueChange={(value) => onRowUpdate(index, 'openingBalanceCurrency', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></TableCell>
                   <TableCell><Select value={row.status} onValueChange={(value) => onRowUpdate(index, 'status', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select></TableCell>
-                  <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : row.warning ? 'text-xs font-medium text-amber-600' : 'text-xs text-emerald-600'}>{row.error || row.warning || 'Correcto'}</TableCell>
+                  <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : row.warning ? 'text-xs font-medium text-amber-600' : 'text-xs text-emerald-600'}><span>{row.error || row.warning || 'Correcto'}</span><HistoricalSummaryPreview summaries={row.historicalSummaries} compact /></TableCell>
                 </TableRow>
                 );
               })}

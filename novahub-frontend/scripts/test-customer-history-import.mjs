@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { aggregateCustomerHistory, prepareCustomerHistoryForImport } from '../src/app/utils/customer-history-import.ts';
+import { aggregateCustomerHistory, mergeCustomerHistoryByIdentifier, prepareCustomerHistoryForImport } from '../src/app/utils/customer-history-import.ts';
 
 const consolidated = aggregateCustomerHistory([
   { rowNumber: 2, name: 'Ana Pérez', identifier: '001-010190-1000A', amount: 100, measure: 2, currency: 'NIO' },
@@ -24,6 +24,19 @@ assert.deepEqual(consolidated.customers[0].summaries.map((summary) => ({
   { recordCount: 1, measureValue: 1, amount: 20, currency: 'USD' },
 ]);
 assert.equal(prepareCustomerHistoryForImport(consolidated.customers[0]).summaries.length, 2, 'complete history summaries remain importable');
+
+const importedCustomers = [
+  { name: 'Ana Pérez', taxId: '001-010190-1000A', ruc: '', historicalSummaries: undefined },
+  { name: 'Cliente sin cédula', taxId: '', ruc: '', historicalSummaries: undefined },
+];
+const importedHistory = [
+  { name: 'Nombre distinto en historial', taxId: '001 010190 1000a', ruc: '', historicalSummaries: consolidated.customers[0].summaries },
+  { name: 'Cliente sin cédula', taxId: '', ruc: '', historicalSummaries: [] },
+];
+const mergedImport = mergeCustomerHistoryByIdentifier(importedCustomers, importedHistory);
+assert.equal(mergedImport.rows[0].historicalSummaries?.length, 2, 'history is attached by normalized identifier even when the source name differs');
+assert.equal(mergedImport.rows[1].historicalSummaries, undefined, 'missing identifiers are never linked by matching names');
+assert.equal(mergedImport.unmatchedHistoryGroups, 1, 'history without an exact identifier match remains visible for review');
 
 const uniqueDocuments = aggregateCustomerHistory([
   { rowNumber: 2, name: 'Hotel Sol', identifier: 'ID-1', amount: '100.00', document: 'F-001', currency: 'USD' },

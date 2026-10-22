@@ -41,6 +41,53 @@ export type CustomerHistoryImportCustomer = {
 
 export type CustomerHistoryImportResult = { customers: CustomerHistoryImportCustomer[] };
 
+type CustomerHistoryMergeRow = {
+  taxId: string;
+  ruc: string;
+  historicalSummaries?: CustomerHistoryImportSummary[];
+  historyReviewWarning?: string;
+  historyReviewError?: string;
+};
+
+/** Attach prepared history groups to exactly one customer by normalized tax ID or RUC. */
+export function mergeCustomerHistoryByIdentifier<T extends CustomerHistoryMergeRow>(
+  customerRows: T[],
+  historyRows: T[],
+): { rows: T[]; unmatchedHistoryGroups: number } {
+  const rows = customerRows.map((row) => ({ ...row }));
+  const customerIndexesByIdentifier = new Map<string, Set<number>>();
+
+  rows.forEach((row, index) => {
+    [row.taxId, row.ruc].map(normalizeCustomerHistoryIdentifier).filter(Boolean).forEach((identifier) => {
+      const indexes = customerIndexesByIdentifier.get(identifier) || new Set<number>();
+      indexes.add(index);
+      customerIndexesByIdentifier.set(identifier, indexes);
+    });
+  });
+
+  let unmatchedHistoryGroups = 0;
+  historyRows.forEach((historyRow) => {
+    const identifiers = [...new Set([historyRow.taxId, historyRow.ruc].map(normalizeCustomerHistoryIdentifier).filter(Boolean))];
+    const candidateIndexes = new Set(identifiers.flatMap((identifier) => [...(customerIndexesByIdentifier.get(identifier) || [])]));
+    if (candidateIndexes.size !== 1 || !identifiers.length) {
+      unmatchedHistoryGroups += 1;
+      return;
+    }
+
+    const [index] = candidateIndexes;
+    const customer = rows[index];
+    customer.historicalSummaries = [...(customer.historicalSummaries || []), ...(historyRow.historicalSummaries || [])];
+    const warnings = [customer.historyReviewWarning, historyRow.historyReviewWarning]
+      .map((warning) => String(warning || '').trim())
+      .filter(Boolean);
+    if (historyRow.historyReviewError) warnings.push(`No se guardará el historial: ${historyRow.historyReviewError}`);
+    customer.historyReviewWarning = [...new Set(warnings)].join(' · ') || undefined;
+    customer.historyReviewError = undefined;
+  });
+
+  return { rows, unmatchedHistoryGroups };
+}
+
 export function prepareCustomerHistoryForImport(customer: CustomerHistoryImportCustomer) {
   const identityErrors = customer.errors.filter((message) => /identificación obligatoria|nombre obligatorio/i.test(message));
   const historicalErrors = customer.errors.filter((message) => !identityErrors.includes(message));
