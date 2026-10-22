@@ -201,7 +201,13 @@ const createCrudService = <T>(endpoint: string, options?: { dedupe?: boolean }) 
   }
 });
 
-export const alertsService = createCrudService<any>('/notifications/alerts', { dedupe: true });
+const alertsCrudService = createCrudService<any>('/notifications/alerts', { dedupe: true });
+export const alertsService = {
+  getAll: alertsCrudService.getAll,
+  getById: alertsCrudService.getById,
+  create: alertsCrudService.create,
+  update: alertsCrudService.update,
+};
 export const messagesService = {
   getAll: async (signal?: AbortSignal) => normalizeMessageThreads(await api.get<unknown>('/notifications/messages', { signal })),
   getRecipients: (signal?: AbortSignal) => api.get<MessageParticipant[]>('/notifications/messages/recipients', { signal }),
@@ -228,7 +234,13 @@ export const messagesService = {
   markRead: (threadId: string) =>
     api.patch<{ success: true }>(`/notifications/messages/${threadId}/read`, {}),
 };
-export const pushNotificationsService = createCrudService<any>('/notifications/push', { dedupe: true });
+const pushNotificationsCrudService = createCrudService<any>('/notifications/push', { dedupe: true });
+export const pushNotificationsService = {
+  getAll: pushNotificationsCrudService.getAll,
+  getById: pushNotificationsCrudService.getById,
+  create: pushNotificationsCrudService.create,
+  update: pushNotificationsCrudService.update,
+};
 
 export const notificationsCatalogService = {
   getCatalog: () => api.get<any>('/notifications/catalog'),

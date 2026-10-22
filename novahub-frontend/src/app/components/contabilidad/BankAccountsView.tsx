@@ -37,7 +37,7 @@ export function BankAccountsView() {
   const { canPerform } = useAuth();
   const canCreateBankAccount = canPerform('FINANCIAL_ACCOUNTS', 'create');
   const canEditBankAccount = canPerform('FINANCIAL_ACCOUNTS', 'edit');
-  const canDeactivateBankAccount = canPerform('FINANCIAL_ACCOUNTS', 'delete');
+  const canDeleteBankAccount = canPerform('FINANCIAL_ACCOUNTS', 'delete');
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -147,7 +147,7 @@ export function BankAccountsView() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!canDeactivateBankAccount) return;
+    if (!canDeleteBankAccount) return;
     const actionToken = beginNotificationAction();
     try {
       await api.delete(`/bank-accounts/${id}`);
@@ -217,7 +217,7 @@ export function BankAccountsView() {
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" className="size-7 text-primary" title="Ver movimientos del banco" aria-label={`Ver movimientos de ${a.bankName}`} onClick={() => setDetailAccount(a)}><Eye className="size-3.5" /></Button>
                     {canEditBankAccount && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>}
-                    {canDeactivateBankAccount && <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>}
+                    {canDeleteBankAccount && <Button variant="ghost" size="icon" aria-label={`Eliminar cuenta bancaria de ${a.bankName}`} title="Eliminar cuenta bancaria" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>}
                   </TableCell>
                 </TableRow>
                 );
@@ -241,7 +241,7 @@ export function BankAccountsView() {
                 <span className="shrink-0">
                   <Button variant="ghost" size="icon" className="size-7 text-primary" title="Ver movimientos del banco" aria-label={`Ver movimientos de ${a.bankName}`} onClick={() => setDetailAccount(a)}><Eye className="size-3.5" /></Button>
                   {canEditBankAccount && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>}
-                  {canDeactivateBankAccount && <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>}
+                  {canDeleteBankAccount && <Button variant="ghost" size="icon" aria-label={`Eliminar cuenta bancaria de ${a.bankName}`} title="Eliminar cuenta bancaria" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>}
                 </span>
               </div>
               <div className="mt-2 border-t border-border/20 pt-2 text-[10px] text-muted-foreground">
@@ -417,7 +417,7 @@ export function BankAccountsView() {
           </div>
           <DialogFooter className="flex-wrap gap-2">
             {canEditBankAccount && detailAccount && <Button type="button" variant="outline" onClick={() => { const account = detailAccount; setDetailAccount(null); openEdit(account); }}><Edit2 className="mr-1.5 size-4" />Editar</Button>}
-            {canDeactivateBankAccount && detailAccount && <Button type="button" variant="outline" className="border-rose-500/30 text-rose-600 hover:bg-rose-500/10" onClick={() => { const account = detailAccount; setDetailAccount(null); void handleDelete(account.id); }}><Trash2 className="mr-1.5 size-4" />Desactivar</Button>}
+            {canDeleteBankAccount && detailAccount && <Button type="button" variant="outline" className="border-rose-500/30 text-rose-600 hover:bg-rose-500/10" onClick={() => { const account = detailAccount; setDetailAccount(null); void handleDelete(account.id); }}><Trash2 className="mr-1.5 size-4" />Eliminar</Button>}
             <Button variant="outline" onClick={() => setDetailAccount(null)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>

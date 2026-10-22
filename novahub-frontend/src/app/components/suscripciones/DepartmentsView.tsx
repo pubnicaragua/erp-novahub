@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Building2, Check, Info, Plus, Search, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Ban, Building2, Check, Info, Plus, Search, Users } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -18,7 +18,7 @@ interface DepartmentsViewProps {
   onDataChange?: () => Promise<unknown> | void;
   canCreate?: boolean;
   canEdit?: boolean;
-  canDelete?: boolean;
+  canDeactivate?: boolean;
 }
 
 const getUserDepartmentIds = (user: any) => {
@@ -46,7 +46,7 @@ export function DepartmentsView({
   onDataChange,
   canCreate = true,
   canEdit = true,
-  canDelete = true,
+  canDeactivate = true,
 }: DepartmentsViewProps) {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
   const [newDepartmentName, setNewDepartmentName] = useState('');
@@ -132,12 +132,12 @@ export function DepartmentsView({
     }
   };
 
-  const deleteDepartment = async () => {
-    if (!canDelete) return;
+  const deactivateDepartment = async () => {
+    if (!canDeactivate) return;
     if (!selectedDepartment) return;
     try {
       setDeleting(true);
-      await hrService.deleteDepartment(selectedDepartment.id);
+      await hrService.deactivateDepartment(selectedDepartment.id);
       setDeleteDialogOpen(false);
       setSelectedDepartmentId(null);
       await refetchDepartments();
@@ -184,7 +184,7 @@ export function DepartmentsView({
 
         <Card className="min-w-0 border-border/50">
           {!selectedDepartment ? <CardContent className="flex min-h-[300px] items-center justify-center p-6 text-center text-sm text-muted-foreground">Selecciona un departamento para administrar sus usuarios.</CardContent> : <>
-            <CardHeader className="flex flex-col gap-3 border-b border-border/40 pb-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="truncate text-lg font-black">{selectedDepartment.name}</CardTitle><CardDescription className="text-xs">Agrupador de usuarios; no modifica permisos ni accesos</CardDescription></div><Button variant="outline" size="sm" className="w-fit shrink-0 gap-1.5 border-rose-500/25 text-rose-600 hover:bg-rose-500/10" onClick={() => setDeleteDialogOpen(true)} disabled={!canDelete} title={!canDelete ? 'No tienes permiso para desactivar departamentos' : undefined}><Trash2 className="size-3.5" /> Desactivar</Button></CardHeader>
+            <CardHeader className="flex flex-col gap-3 border-b border-border/40 pb-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="truncate text-lg font-black">{selectedDepartment.name}</CardTitle><CardDescription className="text-xs">Agrupador de usuarios; no modifica permisos ni accesos</CardDescription></div>{canDeactivate && <Button variant="outline" size="sm" className="w-fit shrink-0 gap-1.5 border-rose-500/25 text-rose-600 hover:bg-rose-500/10" onClick={() => setDeleteDialogOpen(true)}><Ban className="size-3.5" /> Desactivar</Button>}</CardHeader>
             <CardContent className="space-y-4 p-4 sm:p-6">
               <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Buscar usuario por nombre o correo..." className="h-10 pl-9" aria-label="Buscar usuario del grupo" /></div>
               <div className="grid min-w-0 gap-4 lg:grid-cols-2">{[
@@ -196,7 +196,7 @@ export function DepartmentsView({
         </Card>
       </div>
 
-      <ConfirmDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} title="¿Desactivar departamento?" description={`Se desactivará ${selectedDepartment?.name || 'este departamento'}. Los vínculos históricos se conservarán.`} confirmLabel="Desactivar" onConfirm={deleteDepartment} loading={deleting} />
+      <ConfirmDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} title="¿Desactivar departamento?" description={`Se desactivará ${selectedDepartment?.name || 'este departamento'}. Los vínculos históricos se conservarán.`} confirmLabel="Desactivar" onConfirm={deactivateDepartment} loading={deleting} />
     </div>
   );
 }

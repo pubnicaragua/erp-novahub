@@ -101,7 +101,7 @@ const OPERATIONAL_GUIDES = [
 
 export function TrainingHubView({ activeSubModule, onSubModuleChange }: { activeSubModule?: string; onSubModuleChange?: (subModule: string) => void }) {
   const { user } = useAuth();
-  const isSuperAdmin = user?.role === 'superadmin';
+  const isSuperAdmin = String(user?.role || '').toLowerCase().replace(/[_\s-]/g, '') === 'superadmin';
   
   const videosQuery = useTenantQuery<any[]>(['training', 'videos'], async signal => asList(await trainingService.getVideos(undefined, signal)));
   const videos = asList(videosQuery.data);

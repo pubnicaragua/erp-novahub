@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
-  ClipboardList, Search, Eye, X, AlertTriangle,
+  ClipboardList, Search, Eye, X, AlertTriangle, Trash2,
   CheckCircle, Send, Ban,
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -111,6 +111,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
   const canExportRequests = canPerform('PURCHASES_REQUESTS', 'export');
   const canApproveRequests = canReadRequests && canPerform('PURCHASES_REQUESTS', 'approve');
   const canCancelRequests = canReadRequests && canPerform('PURCHASES_REQUESTS', 'cancel');
+  const canDeleteManagement = canReadRequests && canPerform('PURCHASES_REQUESTS', 'deleteManagement');
   const canSubmitManagement = canReadRequests && canPerform('PURCHASES_REQUESTS', 'submit');
   // La gestión ocurre dentro de la vista Solicitudes; no es una vista
   // independiente del sidebar ni necesita una fila propia en la matriz.
@@ -138,6 +139,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [pendingApproveManagement, setPendingApproveManagement] = useState<PurchaseManagement | null>(null);
   const [pendingSubmitManagement, setPendingSubmitManagement] = useState<PurchaseManagement | null>(null);
+  const [pendingDeleteManagement, setPendingDeleteManagement] = useState<PurchaseManagement | null>(null);
   const [pendingRejectManagement, setPendingRejectManagement] = useState<PurchaseManagement | null>(null);
   const [pendingConvertManagement, setPendingConvertManagement] = useState<PurchaseManagement | null>(null);
   const [pendingRequestAction, setPendingRequestAction] = useState<RequestActionState | null>(null);
@@ -378,6 +380,28 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
   const handleSubmitManagement = (mgmt: PurchaseManagement) => {
     if (!canSubmitManagement || mgmt.status !== 'DRAFT') return;
     setPendingSubmitManagement(mgmt);
+  };
+
+  const handleDeleteManagement = (mgmt: PurchaseManagement) => {
+    if (!canDeleteManagement || mgmt.status !== 'DRAFT') return;
+    setPendingDeleteManagement(mgmt);
+  };
+
+  const confirmDeleteManagement = async () => {
+    if (!canDeleteManagement || !pendingDeleteManagement || pendingDeleteManagement.status !== 'DRAFT') return;
+    const mgmt = pendingDeleteManagement;
+    setActionLoading(mgmt.id);
+    const actionToken = beginNotificationAction();
+    const deleteToastId = toast.loading('Eliminando gestión de compra...');
+    try {
+      await purchaseManagementService.delete(mgmt.id);
+      toast.success('Gestión de compra eliminada', { id: deleteToastId });
+      setPendingDeleteManagement(null);
+      setDetailOpen(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar la gestión de compra', { id: deleteToastId });
+    } finally { completeNotificationAction(actionToken); setActionLoading(null); }
   };
 
   const confirmSubmitManagement = async () => {
@@ -715,6 +739,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
           return <>
             {requestStatus === 'PENDING_APPROVAL' && canApproveRequests && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => handleRequestApprove(detailOpen)} disabled={actionLoading === detailOpen.id}><CheckCircle className="size-4" /> Aprobar solicitud</Button>}
             {requestStatus === 'PENDING_APPROVAL' && canCancelRequests && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => handleRequestCancel(detailOpen)} disabled={actionLoading === detailOpen.id}><X className="size-4" /> Cancelar solicitud</Button>}
+            {management && management.status === 'DRAFT' && canDeleteManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-destructive" onClick={() => handleDeleteManagement(management)} disabled={actionLoading === management.id}><Trash2 className="size-4" /> Eliminar gestión</Button>}
             {management && management.status === 'DRAFT' && canSubmitManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => handleSubmitManagement(management)} disabled={actionLoading === management.id}><Send className="size-4" /> Enviar gestión a aprobación</Button>}
             {management && management.status === 'PENDING_APPROVAL' && canApproveManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => handleApproveManagement(management)} disabled={actionLoading === management.id}><CheckCircle className="size-4" /> Aprobar gestión</Button>}
             {management && management.status === 'PENDING_APPROVAL' && canRejectManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => handleRejectManagement(management)} disabled={actionLoading === management.id}><X className="size-4" /> Rechazar gestión</Button>}
@@ -734,6 +759,16 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         confirmLabel="Rechazar"
         onConfirm={confirmRejectManagement}
         loading={Boolean(actionLoading && pendingRejectManagement)}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDeleteManagement)}
+        onOpenChange={open => { if (!open && !actionLoading) setPendingDeleteManagement(null); }}
+        title="¿Eliminar gestión en borrador?"
+        description="Solo se puede eliminar una gestión que sigue en borrador. La solicitud de compra y su historial se conservan."
+        confirmLabel="Eliminar gestión"
+        variant="destructive"
+        onConfirm={confirmDeleteManagement}
+        loading={Boolean(pendingDeleteManagement && actionLoading === pendingDeleteManagement.id)}
       />
       <ConfirmDialog
         open={Boolean(pendingSubmitManagement)}

@@ -16,6 +16,7 @@ export const hrService = {
     api.post('/hr/commissions/configuration/reset', data),
   createDepartment: (data: any) => api.post('/hr/departments', data),
   updateDepartment: (id: string, data: any) => api.patch(`/hr/departments/${id}`, data),
+  deactivateDepartment: (id: string) => api.delete(`/hr/departments/${id}`),
   deleteDepartment: (id: string) => api.delete(`/hr/departments/${id}`),
 
   // ===== POSITIONS =====
@@ -24,6 +25,7 @@ export const hrService = {
   getPosition: (id: string, signal?: AbortSignal) => api.get(`/hr/positions/${id}`, withSignal(undefined, signal)),
   createPosition: (data: any) => api.post('/hr/positions', data),
   updatePosition: (id: string, data: any) => api.patch(`/hr/positions/${id}`, data),
+  deactivatePosition: (id: string) => api.delete(`/hr/positions/${id}`),
   deletePosition: (id: string) => api.delete(`/hr/positions/${id}`),
 
   // ===== EMPLOYEES =====
@@ -82,6 +84,7 @@ export const hrService = {
   getLeaveRequests: (filters?: any, signal?: AbortSignal) => api.get('/hr/leave/requests', withSignal(filters, signal)),
   createLeaveRequest: (data: any) => api.post('/hr/leave/requests', data),
   updateLeaveRequest: (id: string, data: any) => api.patch(`/hr/leave/requests/${id}`, data),
+  deleteLeaveRequest: (id: string) => api.delete(`/hr/leave/requests/${id}`),
   approveLeaveRequest: (id: string, approvedBy: string) => api.put(`/hr/leave/requests/${id}/approve`, { approvedBy }),
   rejectLeaveRequest: (id: string, rejectionReason: string) => api.put(`/hr/leave/requests/${id}/reject`, { rejectionReason }),
 
@@ -107,6 +110,7 @@ export const hrService = {
   getBenefits: (filters?: any, signal?: AbortSignal) => api.get('/hr/benefits', withSignal(filters, signal)),
   createBenefit: (data: any) => api.idempotentPost('/hr/benefits', data),
   updateBenefit: (id: string, data: any) => api.idempotentPatch(`/hr/benefits/${id}`, data),
+  deactivateBenefit: (id: string) => api.delete(`/hr/benefits/${id}`),
   deleteBenefit: (id: string) => api.delete(`/hr/benefits/${id}`),
   assignBenefit: (data: any) => api.post('/hr/benefits/assign', data),
 

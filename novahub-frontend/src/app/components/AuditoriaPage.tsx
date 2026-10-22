@@ -56,7 +56,7 @@ const CONTEXTUAL_MODULE_LABELS: Record<string, { branch: string; platform: strin
 };
 
 const ACTION_LABELS: Record<string, string> = {
-  CREATE: 'Creación', UPDATE: 'Edición', DELETE: 'Eliminación', PAYMENT: 'Pago', STATUS_CHANGE: 'Cambio de estado',
+  CREATE: 'Creación', UPDATE: 'Edición', DELETE: 'Eliminación', ARCHIVE: 'Archivado', PAYMENT: 'Pago', STATUS_CHANGE: 'Cambio de estado',
   INVENTORY_AUDIT: 'Auditoría de inventario', LOGIN: 'Inicio de sesión', LOGOUT: 'Cierre de sesión',
   LOGIN_FAILED: 'Inicio de sesión fallido', ACCESS_DENIED: 'Acceso denegado', EXPORT: 'Exportación', IMPORT: 'Importación',
   APPROVE: 'Aprobación', REJECT: 'Rechazo', SESSION_TAKEOVER: 'Cambio de sesión', IMPERSONATE_ENTER: 'Ingreso a sucursal',

@@ -167,6 +167,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const [localDoc, setLocalDoc] = useState<Partial<SupplierCredit> | null>(null);
   const [pendingVoidId, setPendingVoidId] = useState<string | null>(null);
   const [voidLoading, setVoidLoading] = useState(false);
+  const [pendingDeleteCreditId, setPendingDeleteCreditId] = useState<string | null>(null);
+  const [deleteCreditLoading, setDeleteCreditLoading] = useState(false);
   const [pendingIssueId, setPendingIssueId] = useState<string | null>(null);
   const [issueLoading, setIssueLoading] = useState(false);
   const [applyTarget, setApplyTarget] = useState<SupplierCredit | null>(null);
@@ -598,6 +600,24 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       toast.error(error?.response?.data?.message || 'Error al anular el crédito', { id: voidToastId });
     } finally {
       setVoidLoading(false);
+    }
+  };
+
+  const handleDeleteCreditConfirm = async () => {
+    if (!pendingDeleteCreditId || !canPerform('PURCHASES_RETURNS', 'read') || !canPerform('PURCHASES_RETURNS', 'delete')) return;
+    setDeleteCreditLoading(true);
+    const deleteToastId = toast.loading('Eliminando crédito en borrador...');
+    try {
+      await vendorCreditsService.delete(pendingDeleteCreditId);
+      toast.success('Crédito en borrador eliminado', { id: deleteToastId });
+      setPendingDeleteCreditId(null);
+      setDetailCredit(null);
+      if (editingId === pendingDeleteCreditId) openEditor(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo eliminar el crédito', { id: deleteToastId });
+    } finally {
+      setDeleteCreditLoading(false);
     }
   };
 
@@ -1220,6 +1240,21 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar por número, proveedor o factura..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
         </div>
         <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailCredit(row)} isLoading={loading} pagination={pagination} showSelection={false} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+          onRowDelete={canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'delete') ? async (id) => {
+            if (!canPerform('PURCHASES_RETURNS', 'read') || !canPerform('PURCHASES_RETURNS', 'delete')) return;
+            const credit = filteredData.find((row) => String(row.id) === String(id));
+            if (!credit || String(credit.status || '').toUpperCase() !== 'DRAFT') return;
+            try {
+              await vendorCreditsService.delete(String(id));
+              toast.success('Crédito en borrador eliminado');
+              onRefresh();
+            } catch (e: any) {
+              toast.error(e?.response?.data?.message || e?.message || 'No se pudo eliminar el crédito');
+              throw e;
+            }
+          } : undefined}
+          canDeleteRow={(row) => String(row.status || '').toUpperCase() === 'DRAFT'}
+          actionsWidth="w-36"
           actions={(row) => {
             return (
              <div className="flex items-center gap-1">
@@ -1256,6 +1291,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
             {canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'issue') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-blue-600" onClick={() => setPendingIssueId(detailCredit.id)}><Send className="size-4" /> Emitir</Button>}
             {canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'apply') && status === 'ISSUED' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600" onClick={() => setApplyTarget(detailCredit)}><CheckCircle2 className="size-4" /> Aplicar</Button>}
             {canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'void') && ['DRAFT', 'ISSUED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingVoidId(detailCredit.id)}><Ban className="size-4" /> Anular</Button>}
+            {canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'delete') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-destructive" onClick={() => setPendingDeleteCreditId(detailCredit.id)}><Trash2 className="size-4" /> Eliminar borrador</Button>}
           </>;
         })()}
         onDownloadPdf={canPerform('PURCHASES_RETURNS', 'export') ? (format) => detailCredit ? void handleDownloadCreditPdf(detailCredit, format) : undefined : undefined}
@@ -1308,6 +1344,17 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         description="El crédito quedará marcado como ANULADO y se devolverá el saldo a la factura vinculada (si la tiene). Esta acción no se puede deshacer."
         confirmLabel="Anular crédito"
         onConfirm={handleVoidConfirm}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteCreditId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteCreditId(null)}
+        loading={deleteCreditLoading}
+        title="¿Eliminar crédito en borrador?"
+        description="Se eliminarán el borrador y sus ítems. Un crédito emitido debe anularse mediante su acción de flujo."
+        confirmLabel="Eliminar borrador"
+        variant="destructive"
+        onConfirm={handleDeleteCreditConfirm}
       />
     </div>
   );

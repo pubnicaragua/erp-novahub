@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { BriefcaseBusiness, Building2, Check, Edit2, Plus, Search, Trash2, UsersRound } from 'lucide-react';
+import { Ban, BriefcaseBusiness, Building2, Check, Edit2, Plus, Search, UsersRound } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from '@/app/services/toast';
 import { Badge } from '../ui/badge';
@@ -60,9 +60,9 @@ export function DepartamentosView({ departments = [], employees = [], positions 
   const [saving, setSaving] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const canCreate = canPerform('HR_EMPLOYEES', 'create');
-  const canEdit = canPerform('HR_EMPLOYEES', 'edit');
-  const canDelete = canPerform('HR_EMPLOYEES', 'delete');
+  const canCreate = canPerform('HR_DEPARTMENTS', 'create') || canPerform('CONFIG_DEPARTMENTS', 'create');
+  const canEdit = canPerform('HR_DEPARTMENTS', 'edit') || canPerform('CONFIG_DEPARTMENTS', 'edit');
+  const canDeactivate = canPerform('HR_DEPARTMENTS', 'deactivate') || canPerform('CONFIG_DEPARTMENTS', 'deactivate');
   const validDepartmentIds = useMemo(
     () => new Set<string>(departments.filter((department: any) => department?.status !== 'INACTIVE').map((department: any) => department.id)),
     [departments],
@@ -181,13 +181,13 @@ export function DepartamentosView({ departments = [], employees = [], positions 
     }
   };
 
-  const handleDelete = async () => {
+  const handleDeactivate = async () => {
     if (!pendingDeleteId) return;
     const actionToken = beginNotificationAction();
     try {
       setDeleting(true);
-      await hrService.deleteDepartment(pendingDeleteId);
-      toast.success('Departamento desactivado');
+      await hrService.deactivateDepartment(pendingDeleteId);
+      toast.success('Departamento inhabilitado');
       completeNotificationAction(actionToken);
       setPendingDeleteId(null);
       await onRefresh?.();
@@ -234,7 +234,7 @@ export function DepartamentosView({ departments = [], employees = [], positions 
           return (
             <motion.div key={department.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.03 }}>
               <Card className={cn('h-full overflow-hidden rounded-2xl border-border/50 shadow-sm transition-shadow hover:shadow-md', department.isSellerDepartment && 'border-primary/70 shadow-md shadow-primary/10 ring-1 ring-primary/20')}>
-                <CardHeader className="border-b border-border/40 bg-muted/10 pb-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Building2 className="size-5" /></div><div className="min-w-0"><CardTitle className="truncate text-base font-black">{department.name}</CardTitle>{department.isSellerDepartment && <Badge className="mt-1 border-primary/25 bg-primary/10 text-[10px] text-primary hover:bg-primary/10">Departamento vendedor</Badge>}</div></div><div className="flex shrink-0 items-center gap-1">{canEdit && <Button type="button" variant="ghost" size="icon" className="size-8 rounded-lg" title="Editar departamento" aria-label={`Editar ${department.name}`} onClick={() => openEdit(department)}><Edit2 className="size-4" /></Button>}{canDelete && <Button type="button" variant="ghost" size="icon" className="size-8 rounded-lg" title={hasLinkedEmployees ? 'No se puede desactivar: hay empleados vinculados' : 'Desactivar departamento'} aria-label={hasLinkedEmployees ? `No se puede desactivar ${department.name} porque tiene empleados vinculados` : `Desactivar ${department.name}`} disabled={hasLinkedEmployees} onClick={() => setPendingDeleteId(department.id)}><Trash2 className="size-4" /></Button>}</div></div></CardHeader>
+                <CardHeader className="border-b border-border/40 bg-muted/10 pb-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Building2 className="size-5" /></div><div className="min-w-0"><CardTitle className="truncate text-base font-black">{department.name}</CardTitle>{department.isSellerDepartment && <Badge className="mt-1 border-primary/25 bg-primary/10 text-[10px] text-primary hover:bg-primary/10">Departamento vendedor</Badge>}</div></div><div className="flex shrink-0 items-center gap-1">{canEdit && <Button type="button" variant="ghost" size="icon" className="size-8 rounded-lg" title="Editar departamento" aria-label={`Editar ${department.name}`} onClick={() => openEdit(department)}><Edit2 className="size-4" /></Button>}{canDeactivate && <Button type="button" variant="ghost" size="icon" className="size-8 rounded-lg" title={hasLinkedEmployees ? 'No se puede inhabilitar: hay empleados vinculados' : 'Inhabilitar departamento'} aria-label={hasLinkedEmployees ? `No se puede inhabilitar ${department.name} porque tiene empleados vinculados` : `Inhabilitar ${department.name}`} disabled={hasLinkedEmployees} onClick={() => setPendingDeleteId(department.id)}><Ban className="size-4" /></Button>}</div></div></CardHeader>
                 <CardContent className="space-y-4 p-5">
                   <p className="min-h-10 text-sm text-muted-foreground">{department.description || 'Sin descripción registrada.'}</p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/40 pt-4 text-xs text-muted-foreground">
@@ -271,7 +271,7 @@ export function DepartamentosView({ departments = [], employees = [], positions 
         </div><DialogFooter className="shrink-0 border-t border-border/40 px-6 py-4" data-tour="hr-department-form-actions"><Button type="button" variant="outline" onClick={() => setEditorOpen(false)} disabled={saving}>Cancelar</Button><Button type="button" onClick={() => void handleSave()} disabled={saving}>{saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear departamento'}</Button></DialogFooter>
       </DialogContent></Dialog>
 
-      <ConfirmDialog open={Boolean(pendingDeleteId)} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="Desactivar departamento" description={`Se desactivará ${departmentToDelete?.name || 'este departamento'}. Los vínculos históricos de empleados se conservarán.`} confirmLabel="Desactivar" onConfirm={handleDelete} loading={deleting} />
+      <ConfirmDialog open={Boolean(pendingDeleteId)} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="Inhabilitar departamento" description={`Se inhabilitará ${departmentToDelete?.name || 'este departamento'}. Los vínculos históricos de empleados se conservarán.`} confirmLabel="Inhabilitar" onConfirm={handleDeactivate} loading={deleting} />
     </div>
   );
 }

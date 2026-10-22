@@ -72,6 +72,10 @@ export function ControlDashboardCajaView({
   const canCloseSession = canPerform('RETAIL_CASH_CONTROL', 'close');
   const canExportCash = canPerform('RETAIL_CASH_CONTROL', 'export');
   const canManageRegisters = canPerform('RETAIL_CASH_CONTROL', 'manage');
+  const canOpenRegisterManager = canManageRegisters
+    || canPerform('RETAIL_CASH_CONTROL', 'create')
+    || canPerform('RETAIL_CASH_CONTROL', 'edit')
+    || canPerform('RETAIL_CASH_CONTROL', 'deactivate');
   const canResolveDeficits = canPerform('RETAIL_CASH_CONTROL', 'resolve');
   const canReadTeamUsers = canPerform('CONFIG_USERS', 'view');
   const canSelectAllRegisters = Boolean(
@@ -230,7 +234,7 @@ export function ControlDashboardCajaView({
             <Button type="button" variant="ghost" size="icon" onClick={() => setShowTutorial(true)} className="size-8 shrink-0 rounded-lg text-muted-foreground" aria-label="Cómo controlar caja" title="Cómo controlar caja">
               <CircleHelp className="size-4" />
             </Button>
-            {canManageRegisters && <Button
+            {canOpenRegisterManager && <Button
               size="sm" 
               onClick={() => setManageCajasOpen(true)}
               data-tour="cash-control-manage"
@@ -328,7 +332,7 @@ export function ControlDashboardCajaView({
               selectedRegister={selectedRegister}
               onSelectRegister={setSelectedRegister}
               onRegistersChanged={loadRegisters}
-              onOpenManageCajas={() => { if (canManageRegisters) setManageCajasOpen(true); }}
+              onOpenManageCajas={() => { if (canOpenRegisterManager) setManageCajasOpen(true); }}
             />
 
             {sessionStep === 'idle' && (

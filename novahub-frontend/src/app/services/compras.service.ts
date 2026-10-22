@@ -118,6 +118,7 @@ export const expensesService = {
   bulkImport: (data: Partial<Expense>[]) => api.post<{ success: number; count: number; failed: number }>('/purchases/expenses/bulk-import', data),
   update: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}`, data),
   updateStatus: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}/status`, data),
+  cancel: (id: string) => api.post<Expense>(`/purchases/expenses/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/purchases/expenses/${id}`),
 };
 
@@ -185,6 +186,7 @@ export const recurringExpensesService = {
   update: (id: string, data: Partial<RecurringExpense>) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}`, data),
   pause: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/pause`, {}),
   resume: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/resume`, {}),
+  cancel: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/purchases/recurring-expenses/${id}`),
 };
 
@@ -195,7 +197,6 @@ export const purchasesReportsService = {
 export const supplierPricesService = {
   getAll: (supplierId?: string, signal?: AbortSignal) => api.get<any[]>('/purchases/supplier-prices', { params: { supplierId }, signal }),
   create: (data: any) => api.post<any>('/purchases/supplier-prices', data),
-  delete: (id: string) => api.delete<void>(`/purchases/supplier-prices/${id}`),
 };
 
 // ─── SOLICITUDES DE COMPRA ──────────────────────────────────────────────────

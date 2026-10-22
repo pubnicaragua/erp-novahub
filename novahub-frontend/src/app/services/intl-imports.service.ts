@@ -121,6 +121,7 @@ export interface IntlVolumetricFactor {
   factorKgPerCbm: number;
   priority: number;
   isActive: boolean;
+  usedByCount?: number;
   notes?: string | null;
   createdAt?: string;
   updatedAt?: string;

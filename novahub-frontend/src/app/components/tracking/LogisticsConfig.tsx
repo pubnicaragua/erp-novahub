@@ -29,6 +29,7 @@ export function LogisticsConfig() {
   const { canPerform } = useAuth();
   const canReadConfig = canPerform('TRACKING_CONFIG', 'view');
   const canEditConfig = canPerform('TRACKING_CONFIG', 'edit');
+  const canDeactivateConfig = canPerform('TRACKING_CONFIG', 'deactivate');
   const canDeleteConfig = canPerform('TRACKING_CONFIG', 'delete');
   const [tab, setTab] = useState<Tab>('settings');
   const [settings, setSettings] = useState<LogisticsSettings | null>(null);
@@ -304,7 +305,7 @@ export function LogisticsConfig() {
                   <p className="text-[11px] text-muted-foreground">{s.isActive ? 'Activa' : 'Inactiva'}</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  {canEditConfig && <Button variant="ghost" size="sm" className="rounded-lg text-xs" onClick={async () => { await logisticsService.updateSubagency(s.id, { isActive: !s.isActive }); await load(); }}>{s.isActive ? 'Desactivar' : 'Activar'}</Button>}
+                  {canDeactivateConfig && <Button variant="ghost" size="sm" className="rounded-lg text-xs" aria-label={`${s.isActive ? 'Desactivar' : 'Activar'} subagencia ${s.name}`} onClick={async () => { await logisticsService.updateSubagency(s.id, { isActive: !s.isActive }); await load(); }}>{s.isActive ? 'Desactivar' : 'Activar'}</Button>}
                   {canEditConfig && <Button variant="ghost" size="sm" className="rounded-lg text-xs" onClick={() => { setSubEditId(s.id); setSubForm({ name: s.name, code: s.code || '' }); }}><Pencil className="size-4" /></Button>}
                   {canDeleteConfig && <Button variant="ghost" size="sm" className="rounded-lg text-xs" onClick={() => void removeSubagency(s.id)}><Trash2 className="size-4" /></Button>}
                 </div>

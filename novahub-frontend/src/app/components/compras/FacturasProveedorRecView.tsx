@@ -137,8 +137,8 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED'>('ALL');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingRecurringAction, setPendingRecurringAction] = useState<{ action: 'cancel' | 'delete'; ids: string[] } | null>(null);
+  const [recurringActionLoading, setRecurringActionLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -329,6 +329,60 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado', { id: statusToastId });
     }
+  };
+
+  const executeRecurringAction = async (action: 'cancel' | 'delete', ids: (string | number)[]) => {
+    const permission = action === 'cancel' ? 'cancel' : 'delete';
+    if (!canPerform('PURCHASES_INVOICES_REC', 'read') || !canPerform('PURCHASES_INVOICES_REC', permission)) {
+      toast.error('No tienes permiso para realizar esta acción');
+      return;
+    }
+    const recurringIds = ids.map(String).filter((id) => id && !id.startsWith('new-'));
+    if (recurringIds.length === 0) return;
+    const verb = action === 'cancel' ? 'Anulando' : 'Eliminando';
+    const noun = recurringIds.length === 1 ? 'compra recurrente' : 'compras recurrentes';
+    const actionToastId = toast.loading(`${verb} ${recurringIds.length} ${noun}...`);
+    try {
+      for (const id of recurringIds) {
+        if (action === 'cancel') await recurringSupplierInvoicesService.cancel(id);
+        else await recurringSupplierInvoicesService.delete(id);
+      }
+      toast.success(action === 'cancel' ? 'Compras recurrentes anuladas' : 'Compras recurrentes eliminadas', { id: actionToastId });
+      setPendingRecurringAction(null);
+      setDetailInvoice(null);
+      if (editingId) openEditor(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || `No se pudieron ${action === 'cancel' ? 'anular' : 'eliminar'} las compras recurrentes`, { id: actionToastId });
+    }
+  };
+
+  const renderRecurringActionDialog = () => {
+    const action = pendingRecurringAction?.action;
+    const count = pendingRecurringAction?.ids.length || 0;
+    const isCancel = action === 'cancel';
+    return (
+      <ConfirmDialog
+        open={Boolean(pendingRecurringAction)}
+        onOpenChange={(open) => !open && setPendingRecurringAction(null)}
+        loading={recurringActionLoading}
+        title={isCancel ? '¿Anular compra recurrente?' : '¿Eliminar compra recurrente?'}
+        description={isCancel
+          ? `${count === 1 ? 'La programación' : `Las ${count} programaciones`} dejará${count === 1 ? '' : 'n'} de generar órdenes y recepciones. Se conservará su historial.`
+          : `${count === 1 ? 'Se eliminará físicamente la programación' : `Se eliminarán físicamente ${count} programaciones`} y sus ítems asociados. Esta acción no se puede deshacer.`}
+        confirmLabel={isCancel ? 'Anular' : 'Eliminar'}
+        variant="destructive"
+        onConfirm={async () => {
+          if (!pendingRecurringAction) return;
+          setRecurringActionLoading(true);
+          try {
+            await executeRecurringAction(pendingRecurringAction.action, pendingRecurringAction.ids);
+          } finally {
+            setRecurringActionLoading(false);
+          }
+        }}
+      />
+    );
   };
 
   const handleSaveDoc = async () => {
@@ -528,8 +582,8 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
           </div>
           <div className="flex max-w-full flex-wrap items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="recurring-invoices" context="form" />
-            {!isNew && canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'cancel') && (
-              <Button variant="outline" className="rounded-xl border-rose-500/50 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-700 hover:text-white" onClick={() => setPendingDeleteId(editingId)}>
+            {!isNew && canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'cancel') && ['ACTIVE', 'PAUSED'].includes(String(localDoc.status || '').toUpperCase()) && (
+              <Button variant="outline" className="rounded-xl border-rose-500/50 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-700 hover:text-white" onClick={() => setPendingRecurringAction({ action: 'cancel', ids: [editingId] })}>
                 <Ban className="mr-2 size-3" /> Anular
               </Button>
             )}
@@ -678,26 +732,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
             </div>
           </CardContent>
         </Card>
-        <ConfirmDialog
-          open={!!pendingDeleteId}
-          onOpenChange={(open) => !open && setPendingDeleteId(null)}
-          loading={deleteLoading}
-          title="Anular Compra Recurrente"
-          description="¿Estás seguro de anular esta compra recurrente? No se generarán más órdenes ni recepciones automáticamente."
-          onConfirm={async () => {
-            if (!pendingDeleteId) return;
-            const deleteToastId = toast.loading('Anulando compra recurrente...');
-            setDeleteLoading(true);
-            try {
-               await recurringSupplierInvoicesService.cancel(pendingDeleteId);
-               toast.success('Compra recurrente anulada', { id: deleteToastId });
-               setPendingDeleteId(null);
-               openEditor(null);
-               onRefresh();
-              } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: deleteToastId }); }
-            finally { setDeleteLoading(false); }
-          }}
-        />
+        {renderRecurringActionDialog()}
         <PurchaseVariantPickerModal
           open={variantPickerOpen}
           onOpenChange={(open) => {
@@ -764,24 +799,19 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'cancel')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
-          onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'cancel') ? async (ids) => {
-            const deleteToastId = toast.loading(`Anulando ${ids.length} compra${ids.length === 1 ? '' : 's'} recurrente${ids.length === 1 ? '' : 's'}...`);
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await recurringSupplierInvoicesService.cancel(id as string);
-              }
-              toast.success('Compras recurrentes anuladas', { id: deleteToastId });
-              onRefresh();
-            } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId });
-            }
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} actionsWidth="w-40" showSelection={canPerform('PURCHASES_INVOICES_REC', 'read') && (canPerform('PURCHASES_INVOICES_REC', 'cancel') || canPerform('PURCHASES_INVOICES_REC', 'delete'))} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} bulkAction={canPerform('PURCHASES_INVOICES_REC', 'cancel') ? 'cancel' : 'delete'}
+          isRowSelectable={(row) => canPerform('PURCHASES_INVOICES_REC', 'cancel')
+            ? ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase())
+            : canPerform('PURCHASES_INVOICES_REC', 'delete')}
+          onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'read') && (canPerform('PURCHASES_INVOICES_REC', 'cancel') || canPerform('PURCHASES_INVOICES_REC', 'delete')) ? async (ids) => {
+            const action = canPerform('PURCHASES_INVOICES_REC', 'cancel') ? 'cancel' : 'delete';
+            await executeRecurringAction(action, ids);
           } : undefined}
           actions={(row) => (
             <div className="flex items-center gap-1">
               <Button title="Ver detalle completo" aria-label="Ver detalle completo de la compra recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setDetailInvoice(null); openEditor(row.id); }}><Eye className="size-4" /></Button>
               {canPerform('PURCHASES_INVOICES_REC', 'edit') && <Button title="Editar compra recurrente" aria-label="Editar compra recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailInvoice(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
+              {canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'delete') && <Button title="Eliminar compra recurrente" aria-label="Eliminar compra recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={(event) => { event.stopPropagation(); setPendingRecurringAction({ action: 'delete', ids: [row.id] }); }}><Trash2 className="size-4" /></Button>}
             </div>
           )}
         />
@@ -818,11 +848,13 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
             return <>
               {canPerform('PURCHASES_INVOICES_REC', 'edit') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailInvoice(null); openEditor(detailInvoice.id); }}><Pencil className="size-4" /> Editar</Button>}
               {canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', status === 'ACTIVE' ? 'pause' : 'resume') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailInvoice)}>{status === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />} {status === 'ACTIVE' ? 'Pausar' : 'Activar'}</Button>}
-              {canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'cancel') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailInvoice.id)}><Ban className="size-4" /> Anular</Button>}
+              {canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'cancel') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingRecurringAction({ action: 'cancel', ids: [detailInvoice.id] })}><Ban className="size-4" /> Anular</Button>}
+              {canPerform('PURCHASES_INVOICES_REC', 'read') && canPerform('PURCHASES_INVOICES_REC', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-destructive" onClick={() => setPendingRecurringAction({ action: 'delete', ids: [detailInvoice.id] })}><Trash2 className="size-4" /> Eliminar</Button>}
             </>;
           })()}
           onDownloadPdf={canPerform('PURCHASES_INVOICES_REC', 'export') ? (format) => detailInvoice ? void handleDownloadRecurringInvoicePdf(detailInvoice, format) : undefined : undefined}
         />
+        {renderRecurringActionDialog()}
       </div>
     </div>
   );

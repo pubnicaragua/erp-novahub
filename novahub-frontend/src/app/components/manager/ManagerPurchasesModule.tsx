@@ -172,6 +172,7 @@ export function ManagerPurchasesModule({ view, onViewChange, groupId, businessUn
         format,
         targetKey: purchasePdfTarget(view),
         designOverride: document.pdfDesign,
+        allowCuratedTemplate: false,
         document: purchasePdfDocument(document),
       });
       toast.success('PDF generado', { id: pdfToastId });

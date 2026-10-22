@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import * as XLSX from 'xlsx';
 import { 
-  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Pencil, Upload, Download, Ban, CircleX, Settings2, Check, CircleHelp, X
+  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Pencil, Upload, Download, Ban, CircleX, Settings2, Check, CircleHelp, X, Trash2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -970,7 +970,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       key: 'status', 
       header: 'Estado', 
       width: '110px',
-      editable: canPerform('SALES_CLIENTS', 'delete'),
+      editable: canPerform('SALES_CLIENTS', 'deactivate'),
       type: 'select',
       options: [
         { label: 'Activo', value: 'ACTIVE', color: 'bg-primary/10 text-primary' },
@@ -1126,14 +1126,26 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               data={filteredData}
               columns={visibleColumns}
               onRowUpdate={handleUpdate}
+              onRowDelete={canPerform('SALES_CLIENTS', 'read') && canPerform('SALES_CLIENTS', 'delete') ? async (id) => {
+                if (!canPerform('SALES_CLIENTS', 'read') || !canPerform('SALES_CLIENTS', 'delete')) return;
+                try {
+                  await customersService.delete(String(id));
+                  toast.success('Cliente eliminado');
+                  if (String(selectedCustomerDetail?.id) === String(id)) setSelectedCustomerDetail(null);
+                  onRefresh();
+                } catch (error: any) {
+                  toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar el cliente');
+                  throw error;
+                }
+              } : undefined}
               onRowClick={(row) => setSelectedCustomerDetail(row)}
               onRowDoubleClick={canPerform('SALES_CLIENTS', 'edit') ? (row) => openEditCustomer(row) : undefined}
               editOnPencilOnly
-              showSelection={canPerform('SALES_CLIENTS', 'delete')}
+              showSelection={canPerform('SALES_CLIENTS', 'deactivate')}
               isLoading={loading}
               pagination={pagination}
               showClearSelection={false}
-              actionsWidth="w-28"
+              actionsWidth="w-36"
               fitContent
               layoutMode={layoutMode}
               showHorizontalControls
@@ -1144,12 +1156,12 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
                    {canPerform('SALES_CLIENTS', 'edit') && (
                      <Button variant="ghost" size="icon" title="Editar cliente" aria-label="Editar cliente" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => openEditCustomer(row)}><Pencil className="size-4" /></Button>
                    )}
-                   {canPerform('SALES_CLIENTS', 'delete') && (
+                   {canPerform('SALES_CLIENTS', 'deactivate') && (
                    <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Inactivar cliente'} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setPendingStatusChange(row)}><Ban className="size-4" /></Button>
                    )}
                 </div>
               )}
-              bulkActions={canPerform('SALES_CLIENTS', 'delete') ? (selectedIds) => (
+              bulkActions={canPerform('SALES_CLIENTS', 'deactivate') ? (selectedIds) => (
                 <Button
                   variant="outline"
                   size="sm"
@@ -1216,7 +1228,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         canExport={canPerform('SALES_CLIENTS', 'export')}
         extraActions={selectedCustomerDetail ? <>
           {canPerform('SALES_CLIENTS', 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedCustomerDetail(null); openEditCustomer(selectedCustomerDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}
-          {canPerform('SALES_CLIENTS', 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedCustomerDetail(null); setPendingStatusChange(selectedCustomerDetail); }}><Ban className="mr-1.5 size-3.5" />{String(selectedCustomerDetail.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar' : 'Inactivar'}</Button>}
+          {canPerform('SALES_CLIENTS', 'deactivate') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedCustomerDetail(null); setPendingStatusChange(selectedCustomerDetail); }}><Ban className="mr-1.5 size-3.5" />{String(selectedCustomerDetail.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar' : 'Inactivar'}</Button>}
         </> : undefined}
       />
 

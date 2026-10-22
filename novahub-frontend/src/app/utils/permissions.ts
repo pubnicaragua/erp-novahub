@@ -2,7 +2,15 @@ export const PERMISSION_ACTION_DEFINITIONS = [
   { key: 'read', label: 'Ver', description: 'Permite entrar a la vista y consultar sus registros.' },
   { key: 'create', label: 'Crear', description: 'Permite agregar nuevos registros o borradores.' },
   { key: 'edit', label: 'Editar', description: 'Permite modificar los datos de un registro existente.' },
-  { key: 'delete', label: 'Eliminar', description: 'Permite eliminar, inhabilitar, cancelar, rechazar o revertir según la vista.' },
+  { key: 'delete', label: 'Eliminar', description: 'Permite eliminar físicamente los registros que admiten borrado.' },
+  { key: 'deleteManagement', label: 'Eliminar gestión en borrador', description: 'Permite eliminar una gestión de compra mientras siga en borrador.' },
+  { key: 'deactivate', label: 'Inhabilitar / reactivar', description: 'Permite cambiar la disponibilidad del registro y conservar su historial.' },
+  { key: 'archive', label: 'Archivar', description: 'Permite archivar el registro y conservarlo fuera de la operación activa.' },
+  { key: 'terminateEmployee', label: 'Dar de baja empleado', description: 'Permite finalizar la relación laboral y conservar el historial del empleado.' },
+  { key: 'deleteEmployeeDocument', label: 'Eliminar documento de empleado', description: 'Permite eliminar un documento laboral asociado a un empleado.' },
+  { key: 'deleteBudgetLine', label: 'Eliminar línea de presupuesto', description: 'Permite eliminar una línea del presupuesto de un proyecto.' },
+  { key: 'deleteCost', label: 'Eliminar costo del proyecto', description: 'Permite eliminar un costo registrado en el proyecto.' },
+  { key: 'deleteCostingLine', label: 'Eliminar partida de costeo', description: 'Permite eliminar una partida del costeo 6D del proyecto.' },
   { key: 'approve', label: 'Aprobar', description: 'Permite resolver aprobaciones explícitas del proceso.' },
   { key: 'startTask', label: 'Iniciar tarea', description: 'Permite mover una tarea pendiente a En progreso.' },
   { key: 'returnTaskToPending', label: 'Devolver a pendientes', description: 'Permite mover una tarea en progreso a Pendiente.' },
@@ -113,6 +121,11 @@ export const PERMISSION_ACTION_DEFINITIONS = [
   { key: 'submit', label: 'Enviar a pendientes', description: 'Permite enviar un borrador a la bandeja de pendientes de aprobación.' },
   { key: 'requestPayment', label: 'Solicitar pago', description: 'Permite enviar una solicitud de pago de nómina, beneficio o capacitación a Contabilidad.' },
   { key: 'pay', label: 'Registrar pago', description: 'Permite registrar el pago o cobro que ofrece el flujo de esta vista.' },
+  { key: 'createPaymentLink', label: 'Generar link de pago', description: 'Permite crear un enlace externo para cobrar una factura.' },
+  { key: 'reconcilePaymentLink', label: 'Verificar link de pago', description: 'Permite consultar a Poket y actualizar el estado de un link de pago.' },
+  { key: 'cancelPaymentLink', label: 'Cancelar link de pago', description: 'Permite cancelar un link activo sin anular la factura.' },
+  { key: 'createAppToAppPayment', label: 'Iniciar cobro con Poket', description: 'Permite preparar y abrir un cobro NFC desde la aplicación Poket.' },
+  { key: 'reconcileAppToAppPayment', label: 'Verificar cobro con Poket', description: 'Permite consultar y actualizar el resultado de un cobro NFC.' },
   { key: 'assign', label: 'Asignar empleados', description: 'Permite asignar empleados a beneficios.' },
   { key: 'enroll', label: 'Inscribir empleados', description: 'Permite inscribir empleados en una capacitación.' },
   { key: 'process', label: 'Procesar', description: 'Permite ejecutar el procesamiento que completa el flujo del registro.' },
@@ -202,7 +215,8 @@ export type PermissionMatrixAction =
   | typeof SENSITIVE_PERMISSION_ACTION_DEFINITIONS[number]['key'];
 
 const GRANULAR_PERMISSION_ACTIONS = new Set<PermissionMatrixAction>([
-  'submit', 'requestPayment', 'pay', 'assign', 'enroll', 'cancel', 'cancelInvoice', 'reject', 'convert', 'receive', 'retryInventory', 'confirm', 'completeEnrollment',
+  'deleteManagement', 'import',
+  'deactivate', 'archive', 'terminateEmployee', 'deleteEmployeeDocument', 'deleteBudgetLine', 'deleteCost', 'deleteCostingLine', 'submit', 'requestPayment', 'pay', 'createPaymentLink', 'reconcilePaymentLink', 'cancelPaymentLink', 'createAppToAppPayment', 'reconcileAppToAppPayment', 'assign', 'enroll', 'cancel', 'cancelInvoice', 'reject', 'convert', 'receive', 'retryInventory', 'confirm', 'completeEnrollment',
   'registerInvoice', 'issue', 'apply', 'void', 'pause', 'resume', 'send', 'sendToCredit', 'sendToCash',
   'claim', 'release', 'deliver', 'open', 'start', 'close', 'reopen', 'movement', 'count', 'resolve', 'configure', 'process',
   'lookup', 'sync', 'registerEvent', 'bill', 'assignPackages', 'unassignPackages', 'movePackages', 'consolidate', 'dispatch', 'sendToCustoms', 'addExpense',
@@ -282,43 +296,45 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   RESTAURANT: ['read', 'configureRestaurant', 'export'],
   HOTEL: ['read'],
   TRACKING: ['read', 'export'],
-  PURCHASES: ['read', 'create', 'delete'],
+  // El módulo padre no ofrece borrado; el endpoint histórico de precios de
+  // proveedor no tiene actualmente un control conectado en una vista activa.
+  PURCHASES: ['read', 'create'],
   INVENTORY: ['read', 'export', 'viewCost'],
   FINANCIAL: ['read', 'export'],
-  ACCOUNTING: ['read', 'create', 'edit', 'delete', 'import', 'export'],
+  ACCOUNTING: ['read', 'create', 'edit', 'import', 'export'],
   HR: ['read', 'export'],
   ACTIVITIES: ['read', 'export'],
-  ASANA: ['read', 'create', 'edit', 'delete', 'export'],
-  ASANA_TASKS: ['read', 'create', 'edit', 'delete', 'export'],
-  PROJECTS: ['read', 'create', 'edit', 'delete', 'export'],
+  ASANA: ['read', 'create', 'edit', 'archive', 'export'],
+  ASANA_TASKS: ['read', 'create', 'edit', 'archive', 'export'],
+  PROJECTS: ['read', 'create', 'edit', 'export'],
   FORCE_SALES: [
     'read', 'create', 'edit', 'importProspects', 'updateProspect', 'changeStage', 'registerVisit',
     'discardProspect', 'assignProspect', 'attachEvidence', 'manageConsent', 'send', 'createRoute',
     'editRoute', 'assignRoute', 'changeRouteStatus', 'completeRouteStop', 'updatePresence', 'hidePresence',
     'configureLocation',
   ],
-  TICKETS: ['read', 'create', 'edit', 'delete', 'export'],
-  HR_TRAINING: ['read', 'create', 'edit', 'delete', 'enroll', 'start', 'complete', 'completeEnrollment', 'cancel', 'requestPayment'],
-  SUPPORT_TECH: ['read', 'create', 'edit', 'delete'],
+  TICKETS: ['read', 'create', 'edit', 'export'],
+  HR_TRAINING: ['read', 'create', 'edit', 'enroll', 'start', 'complete', 'completeEnrollment', 'cancel', 'requestPayment'],
+  SUPPORT_TECH: ['read', 'create', 'edit'],
   LEGAL: ['read'],
-  NOVACHAT: ['read', 'create', 'edit', 'delete'],
+  NOVACHAT: ['read', 'create', 'edit'],
   DOCUMENTS: ['read'],
   NOTIFICATIONS: ['read'],
   REPORTS: ['read', 'export'],
   MY_COMPANY: ['read'],
   CONFIGURATION: ['read', 'edit'],
 
-  SALES_CLIENTS: ['read', 'create', 'edit', 'delete', 'import', 'export'],
-  SALES_QUOTES: ['read', 'create', 'edit', 'delete', 'submit', 'convert', 'cancel', 'export', 'viewOtherLocations'],
+  SALES_CLIENTS: ['read', 'create', 'edit', 'delete', 'deactivate', 'import', 'export'],
+  SALES_QUOTES: ['read', 'create', 'edit', 'submit', 'convert', 'cancel', 'export', 'viewOtherLocations'],
   SALES_ORDERS: ['read', 'create', 'edit', 'submit', 'approve', 'convert', 'cancel', 'export', 'viewOtherLocations'],
-  SALES_INVOICES: ['read', 'create', 'edit', 'delete', 'submit', 'sendToCredit', 'sendToCash', 'cancel', 'export', 'viewOtherLocations'],
+  SALES_INVOICES: ['read', 'create', 'edit', 'delete', 'submit', 'import', 'pay', 'sendToCredit', 'sendToCash', 'createPaymentLink', 'reconcilePaymentLink', 'cancelPaymentLink', 'createAppToAppPayment', 'reconcileAppToAppPayment', 'cancel', 'export', 'viewOtherLocations'],
   SALES_RECURRING: ['read', 'create', 'edit', 'pause', 'resume', 'cancel', 'export', 'viewOtherLocations'],
   SALES_PAYMENTS: ['read', 'edit', 'pay', 'cancel', 'export'],
   SALES_RETURNS: ['read', 'create', 'edit', 'approve', 'process', 'reject', 'export'],
   SALES_CREDIT_NOTES: ['read', 'create', 'edit', 'issue', 'send', 'pay', 'cancel', 'export', 'viewOtherLocations'],
   SALES_PRICE_LISTS: ['read', 'create', 'edit', 'import', 'export'],
-  RETAIL_POS: ['read', 'create', 'edit', 'delete', 'pay', 'reconcile', 'claim', 'release', 'confirm', 'deliver', 'cancel', 'export', 'viewOtherLocations'],
-  RETAIL_CASH_CONTROL: ['read', 'create', 'edit', 'delete', 'open', 'movement', 'count', 'close', 'resolve', 'configure', 'export', 'manage'],
+  RETAIL_POS: ['read', 'create', 'edit', 'import', 'pay', 'reconcile', 'claim', 'release', 'confirm', 'deliver', 'cancel', 'export', 'viewOtherLocations'],
+  RETAIL_CASH_CONTROL: ['read', 'create', 'edit', 'deactivate', 'open', 'movement', 'count', 'close', 'resolve', 'configure', 'export', 'manage'],
 
 
   // IDs separados para las pestañas del POS de restaurante.
@@ -331,10 +347,10 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   HOTEL_ROOMS: ['read', 'createRoomType', 'editRoomType', 'changeRoomTypeAvailability', 'createRoom', 'editRoom', 'changeRoomAvailability', 'export'],
   HOTEL_RESERVATIONS: ['read', 'create', 'edit', 'checkIn', 'checkOut', 'payAtCheckout', 'cancelReservation', 'markNoShow', 'issueGuestLink', 'revokeGuestLink', 'export'],
 
-  PURCHASES_REQUESTS: ['read', 'create', 'edit', 'delete', 'submit', 'approve', 'cancel', 'reject', 'convert', 'export'],
-  PURCHASES_PROVIDERS: ['read', 'create', 'edit', 'delete', 'import', 'export'],
-  PURCHASES_EXPENSES: ['read', 'create', 'edit', 'delete', 'submit', 'pay', 'import', 'export'],
-  PURCHASES_EXPENSES_REC: ['read', 'create', 'edit', 'delete', 'pause', 'resume', 'export'],
+  PURCHASES_REQUESTS: ['read', 'create', 'edit', 'submit', 'approve', 'cancel', 'reject', 'convert', 'deleteManagement', 'export'],
+  PURCHASES_PROVIDERS: ['read', 'create', 'edit', 'delete', 'deactivate', 'import', 'export'],
+  PURCHASES_EXPENSES: ['read', 'create', 'edit', 'delete', 'submit', 'pay', 'cancel', 'import', 'export'],
+  PURCHASES_EXPENSES_REC: ['read', 'create', 'edit', 'delete', 'pause', 'resume', 'cancel', 'export'],
   PURCHASES_ORDERS: ['read', 'create', 'edit', 'submit', 'approve', 'reject', 'import', 'export'],
   PURCHASES_RECEIPTS: ['read', 'create', 'edit', 'receive', 'cancel', 'cancelInvoice', 'retryInventory', 'registerInvoice', 'export'],
   PURCHASES_INVOICES_REC: ['read', 'create', 'edit', 'delete', 'pause', 'resume', 'cancel', 'export'],
@@ -346,19 +362,19 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   TRACKING_PACKAGES: ['read', 'import', 'export'],
   TRACKING_RECONCILIATION: ['read', 'confirm', 'export'],
   TRACKING_BILLING: ['read', 'bill', 'deliver', 'send', 'issue', 'cancel', 'export'],
-  TRACKING_CONFIG: ['read', 'edit', 'delete'],
+  TRACKING_CONFIG: ['read', 'edit', 'deactivate', 'delete'],
 
   IMPORT_INTL: ['read'],
   IMPORT_INTL_ORIGIN: ['read', 'create', 'edit', 'delete', 'registerEvent', 'deliver', 'cancel'],
   IMPORT_INTL_CONTAINERS: ['read', 'create', 'edit', 'delete', 'assignPackages', 'unassignPackages', 'movePackages', 'consolidate', 'dispatch', 'sendToCustoms', 'cancel'],
   IMPORT_INTL_CUSTOMS: ['read', 'addExpense', 'close', 'closeByException', 'reopenContainer'],
   // Las reglas de factor se administran aquí, por eso create/delete.
-  IMPORT_INTL_CONFIG: ['read', 'create', 'edit', 'delete'],
+  IMPORT_INTL_CONFIG: ['read', 'create', 'edit', 'delete', 'deactivate'],
 
-  INVENTORY_PRODUCTS: ['read', 'create', 'edit', 'delete', 'import', 'export', 'viewCost'],
-  INVENTORY_SERVICES: ['read', 'create', 'edit', 'delete', 'import', 'export', 'viewCost'],
+  INVENTORY_PRODUCTS: ['read', 'create', 'edit', 'delete', 'deactivate', 'import', 'export', 'viewCost'],
+  INVENTORY_SERVICES: ['read', 'create', 'edit', 'deactivate', 'import', 'export', 'viewCost'],
   INVENTORY_ATTRIBUTES: ['read', 'create', 'edit', 'delete', 'export'],
-  INVENTORY_WAREHOUSES: ['read', 'create', 'edit', 'delete', 'export'],
+  INVENTORY_WAREHOUSES: ['read', 'create', 'edit', 'deactivate', 'export'],
   INVENTORY_TRANSFERS: ['read', 'create', 'edit', 'export'],
   INVENTORY_ADJUSTMENTS: ['read', 'create', 'approve', 'export', 'viewCost'],
   INVENTORY_MOVEMENTS: ['read', 'create', 'export', 'viewCost'],
@@ -371,30 +387,30 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   FINANCIAL_BANK: ['read', 'export'],
   FINANCIAL_RECEIVABLES: ['read', 'export'],
   FINANCIAL_PAYABLES: ['read', 'export'],
-  FINANCIAL_INCOMES: ['read', 'create', 'edit', 'delete', 'import', 'export'],
-  FINANCIAL_EXPENSES: ['read', 'create', 'edit', 'delete', 'submit', 'pay', 'import', 'export'],
-  FINANCIAL_EXPENSES_REC: ['read', 'create', 'edit', 'delete', 'export'],
+  FINANCIAL_INCOMES: ['read', 'create', 'edit', 'import', 'export'],
+  FINANCIAL_EXPENSES: ['read', 'create', 'edit', 'delete', 'submit', 'pay', 'cancel', 'import', 'export'],
+  FINANCIAL_EXPENSES_REC: ['read', 'create', 'edit', 'pause', 'resume', 'cancel', 'export'],
   FINANCIAL_CALENDAR: ['read', 'export'],
   FINANCIAL_ANALYSIS: ['read', 'export'],
   FINANCIAL_BALANCE: ['read', 'export'],
   FINANCIAL_LOSSES: ['read', 'export'],
-  FINANCIAL_INCOMES_REC: ['read', 'create', 'edit', 'delete', 'export'],
+  FINANCIAL_INCOMES_REC: ['read', 'create', 'edit', 'pause', 'resume', 'cancel', 'export'],
   FINANCIAL_ACCOUNTS: ['read', 'create', 'edit', 'delete'],
   FINANCIAL_JOURNAL: ['read', 'export'],
   FINANCIAL_LEDGER: ['read', 'export'],
-  FINANCIAL_BUDGET: ['read', 'create', 'edit', 'delete', 'export'],
+  FINANCIAL_BUDGET: ['read', 'export'],
   FINANCIAL_REPORTS: ['read', 'export'],
 
   HR_DASHBOARD: ['read', 'export'],
-  HR_EMPLOYEES: ['read', 'create', 'edit', 'delete', 'import', 'export', 'submit', 'approve', 'reject'],
-  HR_DEPARTMENTS: ['read', 'create', 'edit', 'delete', 'export'],
+  HR_EMPLOYEES: ['read', 'create', 'edit', 'deactivate', 'terminateEmployee', 'deleteEmployeeDocument', 'import', 'export', 'submit', 'approve', 'reject'],
+  HR_DEPARTMENTS: ['read', 'create', 'edit', 'deactivate', 'export'],
   HR_PAYROLL: ['read', 'create', 'edit', 'delete', 'import', 'export', 'process', 'requestPayment'],
   HR_COMMISSIONS: ['read', 'export'],
   HR_COMMISSIONS_CONFIG: ['read', 'edit'],
   HR_ATTENDANCE: ['read', 'create', 'import', 'export'],
   HR_LEAVES: ['read', 'create', 'edit', 'delete', 'approve', 'reject', 'export'],
   HR_PERFORMANCE: ['read', 'create', 'edit', 'export'],
-  HR_BENEFITS: ['read', 'create', 'edit', 'delete', 'assign', 'requestPayment', 'export'],
+  HR_BENEFITS: ['read', 'create', 'edit', 'deactivate', 'assign', 'requestPayment', 'export'],
   HR_PAYROLL_CONFIG: ['read', 'create', 'edit'],
 
   ACTIVITIES_TASKS: ['read', 'create', 'edit', 'delete', 'startTask', 'returnTaskToPending', 'submit', 'complete', 'approve', 'reject', 'claim', 'reassign', 'manageSubtasks', 'startTimeTracking', 'stopTimeTracking', 'addManualTimeEntry', 'export'],
@@ -407,8 +423,8 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   PROJECTS_LIST: ['read', 'create', 'edit', 'delete', 'complete', 'cancel', 'changeStatus', 'manageMembers', 'comment', 'export'],
   PROJECTS_TASKS: ['read', 'create', 'edit', 'delete', 'complete', 'cancel', 'changeStatus', 'reorder', 'comment', 'react', 'linkErp', 'autoPlan', 'export'],
   PROJECTS_MILESTONES: ['read', 'create', 'edit', 'delete', 'complete', 'cancel', 'changeStatus', 'updateProgress', 'export'],
-  PROJECTS_QUOTATIONS: ['read', 'create', 'edit', 'delete', 'manageMaterials', 'sendToSuppliers', 'manualFill', 'reviewOverwrite', 'selectOffers', 'export'],
-  PROJECTS_EXPENSES: ['read', 'create', 'edit', 'approve', 'reorder', 'applyCostTemplate', 'createJournal', 'editPricing', 'syncPricing', 'manageCalculationMemory', 'export'],
+  PROJECTS_QUOTATIONS: ['read', 'create', 'edit', 'manageMaterials', 'sendToSuppliers', 'manualFill', 'reviewOverwrite', 'selectOffers', 'export'],
+  PROJECTS_EXPENSES: ['read', 'create', 'edit', 'approve', 'deleteBudgetLine', 'deleteCost', 'deleteCostingLine', 'reorder', 'applyCostTemplate', 'createJournal', 'editPricing', 'syncPricing', 'manageCalculationMemory', 'export'],
   PROJECTS_DOCUMENTS: ['read', 'create', 'delete', 'export'],
   PROJECTS_TIME: ['read', 'export'],
   PROJECTS_PROGRESS: ['read', 'recordProgress', 'editCurve', 'createCapture', 'deleteCapture', 'managePublicLinks', 'export'],
@@ -417,17 +433,17 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   DOCUMENTS_CONTRACTS: ['read', 'create', 'edit', 'delete'],
   DOCUMENTS_INVOICES: ['read', 'create', 'edit', 'delete'],
   DOCUMENTS_REPORTS: ['read', 'create', 'edit', 'delete'],
-  DOCUMENTS_FOLDERS: ['read', 'create', 'edit', 'delete'],
+  DOCUMENTS_FOLDERS: ['read', 'create', 'edit'],
   DOCUMENTS_STORAGE_PLANS: ['read'],
-  NOTIFICATIONS_ALERTS: ['read', 'create', 'edit', 'delete'],
-  NOTIFICATIONS_MESSAGES: ['read', 'create', 'edit', 'delete'],
-  NOTIFICATIONS_PUSH: ['read', 'create', 'edit', 'delete'],
-  TICKETS_KNOWLEDGE_BASE: ['read', 'create', 'edit', 'delete'],
+  NOTIFICATIONS_ALERTS: ['read', 'create', 'edit'],
+  NOTIFICATIONS_MESSAGES: ['read', 'create', 'edit'],
+  NOTIFICATIONS_PUSH: ['read', 'create', 'edit'],
+  TICKETS_KNOWLEDGE_BASE: ['read', 'create', 'edit', 'deactivate', 'archive'],
   TICKETS_AGENTS: ['read'],
   // TICKETS_LIST es la vista del sidebar. TICKETS_VIEW se conserva como
   // alias de compatibilidad para roles históricos.
-  TICKETS_LIST: ['read', 'create', 'edit', 'delete', 'startTicket', 'returnTicketToOpen', 'resolveTicket', 'closeTicket', 'reopenTicket', 'commentTicket', 'export'],
-  TICKETS_VIEW: ['read', 'create', 'edit', 'delete', 'startTicket', 'returnTicketToOpen', 'resolveTicket', 'closeTicket', 'reopenTicket', 'commentTicket', 'export'],
+  TICKETS_LIST: ['read', 'create', 'edit', 'delete', 'deactivate', 'startTicket', 'returnTicketToOpen', 'resolveTicket', 'closeTicket', 'reopenTicket', 'commentTicket', 'export'],
+  TICKETS_VIEW: ['read', 'create', 'edit', 'delete', 'deactivate', 'startTicket', 'returnTicketToOpen', 'resolveTicket', 'closeTicket', 'reopenTicket', 'commentTicket', 'export'],
   LEGAL_CASES: ['read', 'create', 'edit', 'startCase', 'requestCaseDocuments', 'returnCaseToPending', 'completeCase', 'cancelCase', 'assignCase', 'addCaseNote', 'attachCaseDocument', 'sendCaseMessage'],
   LEGAL_REMINDERS: ['read', 'create', 'delete'],
 
@@ -444,7 +460,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
 
   ACCOUNTING_CHART: ['read', 'create', 'edit', 'delete', 'import', 'export'],
   ACCOUNTING_JOURNAL: ['read', 'create', 'edit', 'delete', 'post', 'void', 'export'],
-  ACCOUNTING_HR_PAYMENT_REQUESTS: ['read', 'delete', 'approve', 'reject', 'pay', 'export'],
+  ACCOUNTING_HR_PAYMENT_REQUESTS: ['read', 'approve', 'reject', 'pay', 'export'],
   ACCOUNTING_LEDGER: ['read', 'export'],
   ACCOUNTING_TRIAL_BALANCE: ['read', 'export'],
   ACCOUNTING_PROFIT_LOSS: ['read', 'export'],
@@ -452,14 +468,14 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   ACCOUNTING_CASH_FLOW: ['read', 'export'],
   ACCOUNTING_EXCHANGE_DIFFERENCES: ['read', 'saveRun', 'createJournal', 'post', 'createReversal', 'export'],
   ACCOUNTING_EQUITY: ['read', 'export'],
-  ACCOUNTING_ASSETS: ['read', 'create', 'edit', 'delete', 'import', 'generateProjection', 'processDepreciation', 'export'],
+  ACCOUNTING_ASSETS: ['read', 'create', 'edit', 'import', 'generateProjection', 'processDepreciation', 'export'],
   ACCOUNTING_RECONCILIATION: ['read', 'create', 'edit', 'updateBalance', 'autoMatch', 'addMovement', 'editMovement', 'matchMovement', 'complete', 'export'],
   ACCOUNTING_PERIODS: ['read', 'create', 'close', 'reopen', 'lock'],
   ACCOUNTING_FISCAL: ['read', 'create', 'delete', 'export'],
   ACCOUNTING_INVOICE_AUDIT: ['read', 'audit', 'sendToCorrect', 'cancelInvoice', 'reissueInvoice', 'approveCancellation', 'rejectCancellation'],
   ACCOUNTING_BUDGET: ['read', 'create', 'edit', 'delete', 'export'],
   ACCOUNTING_EXPENSE_CATEGORIES: ['read', 'create', 'edit', 'delete'],
-  ACCOUNTING_CONFIG: ['read', 'create', 'edit', 'delete', 'import', 'export'],
+  ACCOUNTING_CONFIG: ['read', 'create', 'edit', 'delete', 'deactivate', 'import', 'export'],
 
   CONFIG_BRANDING: ['read', 'edit'],
   CONFIG_PDF: ['read', 'create', 'edit', 'delete', 'import'],
@@ -468,9 +484,9 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   CONFIG_CURRENCY: ['read', 'edit'],
   CONFIG_COMPANY: ['read', 'create', 'edit', 'delete'],
   SUBSCRIPTIONS: ['read', 'create', 'edit'],
-  CONFIG_USERS: ['read', 'create', 'edit', 'delete'],
+  CONFIG_USERS: ['read', 'create', 'edit', 'deactivate'],
   CONFIG_ROLES: ['read', 'create', 'edit', 'delete'],
-  CONFIG_DEPARTMENTS: ['read', 'create', 'edit', 'delete'],
+  CONFIG_DEPARTMENTS: ['read', 'create', 'edit', 'deactivate'],
   CONFIG_NOVA_PULSE: ['read', 'edit', 'send'],
   CONFIG_DOMAINS: ['read'],
 };
@@ -489,6 +505,11 @@ export function permissionValue(permission: any, action: PermissionMatrixAction,
   const permissionModule = String(module || permission.module || '').toUpperCase();
   if (action === 'viewCost') return permission.viewCost === true || permission.canViewCost === true;
   if (action === 'read') return permission.read === true || permission.view === true || permission.canView === true;
+  if (action === 'deleteManagement' && String(module || permission.module || '').toUpperCase() === 'PURCHASES_REQUESTS') {
+    if (permission.deleteManagement !== undefined) return permission.deleteManagement === true;
+    if (permission.canDeleteManagement !== undefined) return permission.canDeleteManagement === true;
+    return permissionValue(permission, 'delete', 'PURCHASES_REQUESTS');
+  }
   if (action === 'import' && permissionModule === 'TRACKING_PACKAGES') {
     return approvalActionValue(permission, action, permissionModule);
   }
@@ -498,12 +519,12 @@ export function permissionValue(permission: any, action: PermissionMatrixAction,
     if (permission.canDelete !== undefined) return permission.canDelete === true;
     return false;
   }
-  // Los roles existentes pueden guardar la misma capacidad con los nombres
-  // históricos "deactivate", "cancel", "reject" o "reverse". Se muestran y editan como Eliminar.
-  if (action === 'delete' && (
-    permission.delete === true || permission.deactivate === true || permission.cancel === true || permission.reject === true || permission.reverse === true
-    || permission.canDelete === true || permission.canDeactivate === true || permission.canCancel === true || permission.canReject === true || permission.canReverse === true
-  )) return true;
+  // Eliminar es una operación física propia. Las acciones históricas de cancelar,
+  // inhabilitar, rechazar o revertir se hidratan en su permiso específico, no aquí.
+  if (action === 'delete') {
+    if (permission.delete !== undefined) return permission.delete === true;
+    if (permission.canDelete !== undefined) return permission.canDelete === true;
+  }
   if (permission[action] !== undefined) return permission[action] === true;
   const frontendKey = `can${action.charAt(0).toUpperCase()}${action.slice(1)}`;
   if (permission[frontendKey] !== undefined) return permission[frontendKey] === true;
@@ -522,6 +543,34 @@ export function approvalActionValue(permission: any, action: string, module?: st
   const frontendKey = `can${action.charAt(0).toUpperCase()}${action.slice(1)}`;
   const frontendValue = permission[frontendKey];
   const permissionModule = String(module || permission.module || '').toUpperCase();
+
+  const retentionFallbacks: Record<string, Record<string, string[]>> = {
+    PURCHASES_PROVIDERS: { deactivate: ['delete'] },
+    SALES_CLIENTS: { deactivate: ['delete'] },
+    CONFIG_USERS: { deactivate: ['delete'] },
+    INVENTORY_PRODUCTS: { deactivate: ['delete'] },
+    INVENTORY_SERVICES: { deactivate: ['delete'] },
+    INVENTORY_WAREHOUSES: { deactivate: ['delete'] },
+    HR_EMPLOYEES: { deactivate: ['delete'] },
+    HR_DEPARTMENTS: { deactivate: ['delete'] },
+    CONFIG_DEPARTMENTS: { deactivate: ['delete'] },
+    HR_BENEFITS: { deactivate: ['delete'] },
+    IMPORT_INTL_CONFIG: { deactivate: ['delete'] },
+    RETAIL_CASH_CONTROL: { deactivate: ['delete'] },
+    TICKETS_LIST: { deactivate: ['delete'] },
+    TICKETS_KNOWLEDGE_BASE: { deactivate: ['delete'], archive: ['delete'] },
+    ASANA: { archive: ['delete'] },
+    ASANA_TASKS: { archive: ['delete'] },
+    TRACKING_CONFIG: { deactivate: ['edit'] },
+    ACCOUNTING_CONFIG: { deactivate: ['edit'] },
+  };
+  const retentionLegacyActions = retentionFallbacks[permissionModule]?.[action];
+  if (action === 'deactivate' || action === 'archive') {
+    if (typeof actionValue === 'boolean') return actionValue;
+    if (typeof frontendValue === 'boolean') return frontendValue;
+    if (permission.canManage === true || permission.manage === true) return true;
+    return (retentionLegacyActions || []).some((legacyAction) => permissionValue(permission, legacyAction as PermissionMatrixAction, permissionModule));
+  }
 
   const activitiesFallbacks: Record<string, Record<string, string[]>> = {
     ACTIVITIES_TASKS: {
@@ -565,6 +614,7 @@ export function approvalActionValue(permission: any, action: string, module?: st
     PROJECTS_EXPENSES: {
       approve: ['edit'], createJournal: ['edit'], applyCostTemplate: ['edit'], editPricing: ['edit'],
       syncPricing: ['edit'], manageCalculationMemory: ['edit'], reorder: ['edit'],
+      deleteBudgetLine: ['delete'], deleteCost: ['delete'], deleteCostingLine: ['delete'],
     },
     PROJECTS_PROGRESS: {
       recordProgress: ['edit'], editCurve: ['edit'], createCapture: ['create'],
@@ -615,12 +665,16 @@ export function approvalActionValue(permission: any, action: string, module?: st
   const salesFallbacks: Record<string, Record<string, string[]>> = {
     SALES_QUOTES: { submit: ['create', 'edit'], convert: ['approve'], cancel: ['delete'] },
     SALES_ORDERS: { submit: ['create', 'edit'], convert: ['approve'], cancel: ['delete'] },
-    SALES_INVOICES: { submit: ['create', 'edit'], sendToCredit: ['approve'], sendToCash: ['approve'], cancel: ['delete'] },
+    SALES_INVOICES: {
+      submit: ['create', 'edit'], import: ['create'], sendToCredit: ['approve'], sendToCash: ['approve'], cancel: ['delete'],
+      createPaymentLink: ['approve'], reconcilePaymentLink: ['approve'], cancelPaymentLink: ['delete'],
+      createAppToAppPayment: ['approve'], reconcileAppToAppPayment: ['approve'],
+    },
     SALES_PAYMENTS: { pay: ['approve'], cancel: ['delete'] },
     SALES_RECURRING: { pause: ['edit'], resume: ['edit'], cancel: ['delete'] },
     SALES_RETURNS: { process: ['approve'], reject: ['delete'] },
     SALES_CREDIT_NOTES: { issue: ['approve'], send: ['approve'], pay: ['approve'], cancel: ['delete'] },
-    RETAIL_POS: { pay: ['approve'], reconcile: ['approve'], claim: ['edit'], release: ['delete'], confirm: ['approve'], deliver: ['approve'], cancel: ['delete'] },
+    RETAIL_POS: { import: ['create'], pay: ['approve'], reconcile: ['approve'], claim: ['edit'], release: ['delete'], confirm: ['approve'], deliver: ['approve'], cancel: ['delete'] },
     RETAIL_CASH_CONTROL: { open: ['edit'], movement: ['edit'], count: ['approve'], close: ['approve'], resolve: ['approve'], configure: ['edit'] },
   };
   const salesLegacyActions = salesFallbacks[permissionModule]?.[action];
@@ -636,7 +690,7 @@ export function approvalActionValue(permission: any, action: string, module?: st
     PURCHASES_RECEIPTS: { receive: ['approve'], cancel: ['delete'], cancelInvoice: ['delete'], retryInventory: ['approve'], registerInvoice: ['create', 'edit'] },
     PURCHASES_PAYMENTS: { pay: ['approve'], cancel: ['delete'] },
     PURCHASES_RETURNS: { issue: ['approve'], apply: ['approve'], void: ['delete'] },
-    PURCHASES_EXPENSES_REC: { pause: ['edit'], resume: ['edit'] },
+    PURCHASES_EXPENSES_REC: { pause: ['edit'], resume: ['edit'], cancel: ['delete'] },
     PURCHASES_INVOICES_REC: { pause: ['edit'], resume: ['edit'], cancel: ['delete'] },
   };
   const legacyActions = purchaseFallbacks[permissionModule]?.[action];
@@ -721,7 +775,9 @@ export function approvalActionValue(permission: any, action: string, module?: st
   }
 
   const hrFallbacks: Record<string, Record<string, string[]>> = {
-    HR_EMPLOYEES: { submit: ['approve'], reject: ['approve'] },
+    HR_EMPLOYEES: {
+      submit: ['approve'], reject: ['approve'], terminateEmployee: ['delete'], deleteEmployeeDocument: ['delete'],
+    },
     HR_PAYROLL: { process: ['approve'], requestPayment: ['approve', 'submit'] },
     HR_LEAVES: { reject: ['approve'] },
     HR_TRAINING: {
@@ -815,6 +871,7 @@ export function approvalActionValue(permission: any, action: string, module?: st
     if (typeof actionValue === 'boolean') return actionValue;
     if (typeof frontendValue === 'boolean') return frontendValue;
     if (permission.canManage === true) return true;
+    if (action === 'cancel' && permissionValue(permission, 'delete', permissionModule)) return true;
     if (action === 'submit') {
       if (typeof permission.edit === 'boolean') return permission.edit;
       if (typeof permission.canEdit === 'boolean') return permission.canEdit;
@@ -823,6 +880,30 @@ export function approvalActionValue(permission: any, action: string, module?: st
     if (typeof permission.approve === 'boolean') return permission.approve;
     if (typeof permission.canApprove === 'boolean') return permission.canApprove;
     return false;
+  }
+
+  if (['PURCHASES_EXPENSES', 'FINANCIAL_EXPENSES'].includes(permissionModule) && action === 'cancel') {
+    if (typeof actionValue === 'boolean') return actionValue;
+    if (typeof frontendValue === 'boolean') return frontendValue;
+    return permissionValue(permission, 'delete', permissionModule);
+  }
+
+  if (action === 'import') {
+    if (typeof actionValue === 'boolean') return actionValue;
+    if (typeof frontendValue === 'boolean') return frontendValue;
+    return false;
+  }
+
+  const financialRecurringFallbacks: Record<string, Record<string, string[]>> = {
+    FINANCIAL_EXPENSES_REC: { pause: ['edit'], resume: ['edit'], cancel: ['delete'] },
+    FINANCIAL_INCOMES_REC: { pause: ['edit'], resume: ['edit'], cancel: ['delete'] },
+  };
+  const financialRecurringActions = financialRecurringFallbacks[permissionModule]?.[action];
+  if (financialRecurringActions) {
+    if (typeof actionValue === 'boolean') return actionValue;
+    if (typeof frontendValue === 'boolean') return frontendValue;
+    if (permission.canManage === true || permission.manage === true) return true;
+    return financialRecurringActions.some((legacyAction) => permissionValue(permission, legacyAction as PermissionMatrixAction, permissionModule));
   }
 
   // Los flujos de otros módulos conservan su resolución histórica hasta que
@@ -888,8 +969,38 @@ export function allowedModulesFromPermissions(input: any): string[] {
     .map(({ module }: { module: string }) => module))];
 }
 
-export function hydratePermissionActions(permission: any, module: string): Record<string, any> & { module: string; viewCost: boolean; allowedPriceListIds?: any[] } {
+export function hydratePermissionActions(permission: any, module: string, rolePermissions?: any[]): Record<string, any> & { module: string; viewCost: boolean; allowedPriceListIds?: any[] } {
+  const normalizedModule = String(module || '').toUpperCase();
+  const invoicePayIsExplicit = permission?.pay !== undefined || permission?.canPay !== undefined;
+  const legacyPaymentsPermission = normalizedModule === 'SALES_INVOICES'
+    ? rolePermissions?.find((candidate) => String(candidate?.module || '').toUpperCase() === 'SALES_PAYMENTS')
+    : undefined;
+  const legacyReceptionPermission = normalizedModule === 'TRACKING_BATCHES'
+    ? rolePermissions?.find((candidate) => String(candidate?.module || '').toUpperCase() === 'TRACKING_RECEPTION')
+    : undefined;
+  const hasExplicitField = (source: any, keys: string[]) => keys.some((key) => source?.[key] !== undefined);
+  const batchCreateIsExplicit = hasExplicitField(permission, ['create', 'canCreate']);
+  const batchConfirmIsExplicit = hasExplicitField(permission, ['confirm', 'canConfirm', 'approve', 'canApprove']);
+  const resolveAction = (key: string) => {
+    if (key === 'pay' && normalizedModule === 'SALES_INVOICES' && !invoicePayIsExplicit) {
+      return approvalActionValue(legacyPaymentsPermission, 'pay', 'SALES_PAYMENTS');
+    }
+    if (normalizedModule === 'TRACKING_BATCHES' && key === 'create' && !batchCreateIsExplicit) {
+      return permissionValue(legacyReceptionPermission, 'create', 'TRACKING_RECEPTION');
+    }
+    if (normalizedModule === 'TRACKING_BATCHES' && key === 'confirm' && !batchConfirmIsExplicit) {
+      return approvalActionValue(legacyReceptionPermission, 'confirm', 'TRACKING_RECEPTION');
+    }
+    return permissionValue(permission, key as PermissionMatrixAction, normalizedModule);
+  };
   const visibleActions = PERMISSION_ACTION_DEFINITIONS.filter(({ key }) => {
+    // Los permisos históricos de eliminar se migran a la acción de flujo
+    // correspondiente. No deben volver como opciones fantasma en una vista
+    // que ya no ofrece borrado físico.
+    if (key === 'delete' && !supportsPermissionAction(module, 'delete')) return false;
+    // Crear y confirmar referencias pertenecen a Lotes; Recepción solo
+    // registra la entrada física del paquete.
+    if (normalizedModule === 'TRACKING_RECEPTION' && ['create', 'confirm'].includes(key)) return false;
     if (!GRANULAR_PERMISSION_ACTIONS.has(key as PermissionMatrixAction)) return true;
     const frontendKey = `can${key.charAt(0).toUpperCase()}${key.slice(1)}`;
     return supportsPermissionAction(module, key as PermissionMatrixAction)
@@ -898,7 +1009,7 @@ export function hydratePermissionActions(permission: any, module: string): Recor
   });
   return {
     module,
-    ...Object.fromEntries(visibleActions.map(({ key }) => [key, permissionValue(permission, key, module)])),
+    ...Object.fromEntries(visibleActions.map(({ key }) => [key, resolveAction(key)])),
     viewCost: permissionValue(permission, 'viewCost'),
     ...(Object.prototype.hasOwnProperty.call(permission || {}, 'allowedPriceListIds')
       ? { allowedPriceListIds: Array.isArray(permission.allowedPriceListIds) ? [...permission.allowedPriceListIds] : [] }
@@ -927,6 +1038,7 @@ export function serializePermissionActions(input: any): any[] {
     .map((permission: any) => {
       const module = String(permission.module).trim().toUpperCase();
       const serializableActions = PERMISSION_ACTION_DEFINITIONS.filter(({ key }) => {
+        if (key === 'delete' && !supportsPermissionAction(module, 'delete')) return false;
         if (!GRANULAR_PERMISSION_ACTIONS.has(key as PermissionMatrixAction)) return true;
         const frontendKey = `can${key.charAt(0).toUpperCase()}${key.slice(1)}`;
         return supportsPermissionAction(module, key as PermissionMatrixAction)

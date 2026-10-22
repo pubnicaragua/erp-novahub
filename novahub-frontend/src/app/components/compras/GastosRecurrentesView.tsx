@@ -44,7 +44,7 @@ const freqMap: Record<string,string> = { weekly:'Semanal', monthly:'Mensual', qu
 const statusOpts = [
   { label: 'Activo',     value: 'ACTIVE',    color: 'bg-primary/10 text-primary' },
   { label: 'Pausado',    value: 'PAUSED',    color: 'bg-primary/10 text-primary' },
-  { label: 'Finalizado', value: 'CANCELLED', color: 'bg-primary/10 text-primary' },
+  { label: 'Anulado',    value: 'CANCELLED', color: 'bg-primary/10 text-primary' },
 ];
 
 export function GastosRecurrentesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
@@ -53,8 +53,8 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-expenses-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -226,20 +226,22 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
     }
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!pendingDeleteId) return;
-    setDeleteLoading(true);
-    const deleteToastId = toast.loading('Eliminando gasto recurrente...');
+  const handleCancelConfirm = async () => {
+    if (!pendingCancelId || !canPerform('PURCHASES_EXPENSES_REC', 'read') || !canPerform('PURCHASES_EXPENSES_REC', 'cancel')) return;
+    const pendingExpense = data.find((expense) => String(expense.id) === String(pendingCancelId));
+    if (!pendingExpense || String((pendingExpense as any).originModule || 'PURCHASES_EXPENSES_REC') !== 'PURCHASES_EXPENSES_REC') return;
+    setCancelLoading(true);
+    const cancelToastId = toast.loading('Anulando gasto recurrente...');
     try {
-      await recurringExpensesService.delete(pendingDeleteId);
-      toast.success('Gasto recurrente eliminado correctamente', { id: deleteToastId });
-      setPendingDeleteId(null);
-      if (editingId === pendingDeleteId) openEditor(null);
+      await recurringExpensesService.cancel(pendingCancelId);
+      toast.success('Gasto recurrente anulado; se conservó su historial', { id: cancelToastId });
+      setPendingCancelId(null);
+      if (editingId === pendingCancelId) openEditor(null);
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId });
+      toast.error(e?.response?.data?.message || e?.message || 'Error al anular el gasto recurrente', { id: cancelToastId });
     } finally {
-      setDeleteLoading(false);
+      setCancelLoading(false);
     }
   };
 
@@ -292,9 +294,9 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="recurring-expenses" context="form" />
-             {!isNew && canPerform('PURCHASES_EXPENSES_REC', 'delete') && (
+             {!isNew && ['ACTIVE', 'PAUSED'].includes(String(localDoc.status || '').toUpperCase()) && canPerform('PURCHASES_EXPENSES_REC', 'cancel') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => setPendingDeleteId(editingId)}>
+                  onClick={() => setPendingCancelId(editingId)}>
                   <Ban className="size-3 mr-2" /> Anular
                 </Button>
              )}
@@ -518,19 +520,19 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
             return <>
               {String((detailExpense as any).originModule || 'PURCHASES_EXPENSES_REC') === 'PURCHASES_EXPENSES_REC' && canPerform('PURCHASES_EXPENSES_REC', 'read') && canPerform('PURCHASES_EXPENSES_REC', 'edit') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailExpense(null); openEditor(detailExpense.id); }}><Pencil className="size-4" /> Editar</Button>}
               {String((detailExpense as any).originModule || 'PURCHASES_EXPENSES_REC') === 'PURCHASES_EXPENSES_REC' && canPerform('PURCHASES_EXPENSES_REC', 'read') && canPerform('PURCHASES_EXPENSES_REC', status === 'ACTIVE' ? 'pause' : 'resume') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailExpense)}>{status === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />} {status === 'ACTIVE' ? 'Pausar' : 'Activar'}</Button>}
-              {String((detailExpense as any).originModule || 'PURCHASES_EXPENSES_REC') === 'PURCHASES_EXPENSES_REC' && canPerform('PURCHASES_EXPENSES_REC', 'read') && canPerform('PURCHASES_EXPENSES_REC', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
+              {String((detailExpense as any).originModule || 'PURCHASES_EXPENSES_REC') === 'PURCHASES_EXPENSES_REC' && canPerform('PURCHASES_EXPENSES_REC', 'read') && canPerform('PURCHASES_EXPENSES_REC', 'cancel') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingCancelId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
             </>;
           })()}
           onDownloadPdf={canPerform('PURCHASES_EXPENSES_REC', 'export') ? (format) => detailExpense ? void handleDownloadRecurringPdf(detailExpense, format) : undefined : undefined}
         />
         <ConfirmDialog
-          open={!!pendingDeleteId}
-          onOpenChange={(open) => !open && setPendingDeleteId(null)}
+          open={!!pendingCancelId}
+          onOpenChange={(open) => !open && setPendingCancelId(null)}
           title="Anular Gasto Recurrente"
           description="¿Estás seguro de que deseas anular este gasto recurrente? Dejará de generar ejecuciones automáticas."
           confirmLabel="Anular Gasto"
-          onConfirm={handleDeleteConfirm}
-          loading={deleteLoading}
+          onConfirm={handleCancelConfirm}
+          loading={cancelLoading}
         />
       </div>
     </div>

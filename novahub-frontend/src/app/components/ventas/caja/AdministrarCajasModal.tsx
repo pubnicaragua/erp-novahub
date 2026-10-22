@@ -33,7 +33,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
   const { canPerform } = useAuth();
   const canCreateRegister = canPerform(permissionModule, 'create');
   const canEditRegister = canPerform(permissionModule, 'edit');
-  const canDeleteRegister = canPerform(permissionModule, 'delete');
+  const canDeactivateRegister = canPerform(permissionModule, 'deactivate');
   const [cajasList, setCajasList] = useState<CashRegister[]>([]);
   const [cajasLoading, setCajasLoading] = useState(false);
   const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
@@ -93,7 +93,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
   };
 
   const toggleCajaStatus = async (caja: CashRegister) => {
-    if (!caja.id) return;
+    if (!caja.id || !canDeactivateRegister) return;
     try {
       await cajaService.updateRegister(caja.id, { isActive: !caja.isActive });
       toast.success(caja.isActive ? 'Caja inhabilitada' : 'Caja habilitada');
@@ -169,7 +169,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                               }}>
                                 <Edit2 className="size-4" />
                               </Button>}
-                              {canDeleteRegister && <Button
+                              {canDeactivateRegister && <Button
                                 variant="ghost"
                                 size="icon"
                                 className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
@@ -234,7 +234,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
             </div>
             <div className="flex items-center justify-between">
               <Label>Estado de la Caja</Label>
-              <Switch checked={cajaForm.isActive} onCheckedChange={c => setCajaForm({...cajaForm, isActive: c})} />
+              <Switch checked={cajaForm.isActive} disabled={Boolean(cajaForm.id) && !canDeactivateRegister} onCheckedChange={c => setCajaForm({...cajaForm, isActive: c})} />
             </div>
           </div>
           <DialogFooter data-tour="sales-form-actions">
@@ -242,7 +242,10 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
             {(cajaForm.id ? canEditRegister : canCreateRegister) && <Button onClick={async () => {
               if (!cajaForm.name || !cajaForm.code) return toast.error('Nombre y código son obligatorios');
               try {
-                const payload = toCajaPayload(cajaForm);
+                const { isActive, ...editableFields } = toCajaPayload(cajaForm);
+                const payload = cajaForm.id && !canDeactivateRegister
+                  ? editableFields
+                  : { ...editableFields, isActive };
                 if (cajaForm.id) {
                   await cajaService.updateRegister(cajaForm.id, payload);
                   toast.success('Caja actualizada');

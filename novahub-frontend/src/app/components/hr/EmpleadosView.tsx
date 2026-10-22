@@ -380,16 +380,17 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleTerminateEmployee = async (id: string) => {
+    if (!canPerform('HR_EMPLOYEES', 'terminateEmployee')) return;
     const actionToken = beginNotificationAction();
     try {
       setDeleteLoading(true);
-      await hrService.updateEmployee(id, { employmentStatus: 'INACTIVE' });
-      toast.success('Empleado desactivado');
+      await hrService.deleteEmployee(id);
+      toast.success('Empleado dado de baja');
       completeNotificationAction(actionToken);
       onRefresh();
     } catch (error) {
-      toast.error('Error al desactivar empleado');
+      toast.error('Error al dar de baja al empleado');
       failNotificationAction(actionToken);
     } finally {
       setDeleteLoading(false);
@@ -1115,7 +1116,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                             <Button title="Historial de cambios" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-info/10 hover:text-info" onClick={(e) => { e.stopPropagation(); loadChangeLog(emp.id); }}>
                               <History className="size-4" />
                             </Button>
-                            {canPerform('HR_EMPLOYEES', 'delete') && <Button variant="ghost" size="icon" title="Anular empleado" aria-label="Anular empleado" onClick={(event) => { event.stopPropagation(); setPendingDeleteId(emp.id); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Ban className="size-4" /></Button>}
+                            {canPerform('HR_EMPLOYEES', 'terminateEmployee') && <Button variant="ghost" size="icon" title="Dar de baja empleado" aria-label="Dar de baja empleado" onClick={(event) => { event.stopPropagation(); setPendingDeleteId(emp.id); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Ban className="size-4" /></Button>}
                       </div>
                     </td>
                   </tr>
@@ -1204,8 +1205,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                 >
                   <History className="size-4" />
                 </Button>
-                {canPerform('HR_EMPLOYEES', 'delete') && (
-                  <Button variant="ghost" size="icon" title="Anular empleado" aria-label="Anular empleado" onClick={(event) => { event.stopPropagation(); setPendingDeleteId(emp.id); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors">
+                {canPerform('HR_EMPLOYEES', 'terminateEmployee') && (
+                  <Button variant="ghost" size="icon" title="Dar de baja empleado" aria-label="Dar de baja empleado" onClick={(event) => { event.stopPropagation(); setPendingDeleteId(emp.id); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors">
                     <Ban className="size-4" />
                   </Button>
                 )}
@@ -1474,12 +1475,12 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       <ConfirmDialog 
         open={pendingDeleteId !== null} 
         onOpenChange={open => { if (!open) setPendingDeleteId(null); }} 
-        title="¿Anular empleado?"
-        description="El empleado quedará inactivo y no aparecerá en selecciones futuras." 
-        confirmLabel="Anular empleado"
+        title="¿Dar de baja al empleado?"
+        description="La relación laboral quedará terminada. Se conservarán los datos y el historial del empleado."
+        confirmLabel="Dar de baja"
         variant="destructive" 
         loading={deleteLoading} 
-        onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} 
+        onConfirm={() => pendingDeleteId ? handleTerminateEmployee(pendingDeleteId) : Promise.resolve()}
       />
       <Dialog open={rejectEmpId !== null} onOpenChange={(o) => { if (!o) { setRejectEmpId(null); setRejectReason(''); } }}>
         <DialogContent className="sm:max-w-md">
@@ -1522,7 +1523,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             {employee.approvalStatus === 'PENDING_APPROVAL' && canPerform('HR_EMPLOYEES', 'approve') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-success" onClick={() => { setDetailEmployeeId(null); handleApprove(employee.id); }}><CheckCircle2 className="mr-1.5 size-3.5" />Aprobar</Button>}
             {employee.approvalStatus === 'PENDING_APPROVAL' && canPerform('HR_EMPLOYEES', 'reject') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setDetailEmployeeId(null); setRejectEmpId(employee.id); }}><XCircle className="mr-1.5 size-3.5" />Rechazar</Button>}
             <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setDetailEmployeeId(null); loadChangeLog(employee.id); }}><History className="mr-1.5 size-3.5" />Historial</Button>
-            {canPerform('HR_EMPLOYEES', 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setDetailEmployeeId(null); setPendingDeleteId(employee.id); }}><Ban className="mr-1.5 size-3.5" />Anular</Button>}
+            {canPerform('HR_EMPLOYEES', 'terminateEmployee') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setDetailEmployeeId(null); setPendingDeleteId(employee.id); }}><Ban className="mr-1.5 size-3.5" />Dar de baja</Button>}
           </>;
         })()}
       />

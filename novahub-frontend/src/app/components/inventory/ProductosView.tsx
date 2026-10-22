@@ -2532,7 +2532,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   };
 
   const handleToggleProductStatus = (product: any) => {
-    if (!canPerform(catalogPermissionModule, 'delete')) {
+    if (!canPerform(catalogPermissionModule, 'deactivate')) {
       toast.error(`No tienes permiso para activar o inactivar ${isServiceView ? 'servicios' : 'productos'}`);
       return;
     }
@@ -2541,7 +2541,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
 
   const handleConfirmStatusChange = async () => {
     if (!pendingStatusChange) return;
-    if (!canPerform(catalogPermissionModule, 'delete')) {
+    if (!canPerform(catalogPermissionModule, 'deactivate')) {
       toast.error(`No tienes permiso para activar o inactivar ${isServiceView ? 'servicios' : 'productos'}`);
       return;
     }
@@ -4553,7 +4553,9 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
               <div className="mt-4 flex justify-end gap-1 border-t border-border/40 pt-3">
                 {canConfigureServicePriceLists && <Button variant="ghost" size="icon" className="size-8 text-primary hover:bg-primary/10" title="Configurar listas de precios" aria-label={`Configurar listas de precios de ${product.name}`} onClick={(e) => { e.stopPropagation(); setServicePriceListProduct(product); }}><Tags className="size-3.5" /></Button>}
                 {canPerform(catalogPermissionModule, 'edit') && <Button variant="ghost" size="icon" className="size-8" title={`Editar ${entityLabel}`} aria-label={`Editar ${entityLabel}`} onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
-                {product.isVariable && canPerform(catalogPermissionModule, 'edit') && (
+                {product.isVariable && canPerform(catalogPermissionModule, 'read') && (
+                  (canPerform(catalogPermissionModule, 'create') || canPerform(catalogPermissionModule, 'edit') || canPerform(catalogPermissionModule, 'delete'))
+                ) && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -4565,7 +4567,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                     <Tag className="size-3.5" />
                   </Button>
                 )}
-                {canPerform(catalogPermissionModule, 'delete') && <Button
+                {canPerform(catalogPermissionModule, 'deactivate') && <Button
                   variant="ghost"
                   size="icon"
                   className={`size-8 ${product.isActive === false ? 'text-success hover:bg-success hover:text-success-foreground' : 'text-warning hover:bg-warning hover:text-warning-foreground hover:text-warning-foreground'}`}
@@ -4839,7 +4841,9 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                              <Pencil className="size-3.5" />
                            </Button>
                        )}
-                        {product.isVariable && canPerform(catalogPermissionModule, 'edit') && (
+                         {product.isVariable && canPerform(catalogPermissionModule, 'read') && (
+                           (canPerform(catalogPermissionModule, 'create') || canPerform(catalogPermissionModule, 'edit') || canPerform(catalogPermissionModule, 'delete'))
+                         ) && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -4854,7 +4858,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                             <Tag className="size-3.5" />
                           </Button>
                         )}
-                         {canPerform(catalogPermissionModule, 'delete') && (
+                         {canPerform(catalogPermissionModule, 'deactivate') && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -5090,8 +5094,8 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
         extraActions={productDetail ? <>
           {canConfigureServicePriceLists && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setProductDetail(null); setServicePriceListProduct(productDetail); }}><Tags className="mr-1.5 size-3.5" />Precios por lista</Button>}
           {canPerform(catalogPermissionModule, 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setProductDetail(null); setModalProduct(productDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}
-          {productDetail.isVariable && canPerform(catalogPermissionModule, 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setProductDetail(null); setVariantManagerProduct(productDetail); }}><Tag className="mr-1.5 size-3.5" />Variantes</Button>}
-          {canPerform(catalogPermissionModule, 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setProductDetail(null); handleToggleProductStatus(productDetail); }}><Ban className="mr-1.5 size-3.5" />{productDetail.isActive === false ? 'Activar' : 'Inactivar'}</Button>}
+          {productDetail.isVariable && canPerform(catalogPermissionModule, 'read') && (canPerform(catalogPermissionModule, 'create') || canPerform(catalogPermissionModule, 'edit') || canPerform(catalogPermissionModule, 'delete')) && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setProductDetail(null); setVariantManagerProduct(productDetail); }}><Tag className="mr-1.5 size-3.5" />Variantes</Button>}
+          {canPerform(catalogPermissionModule, 'deactivate') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setProductDetail(null); handleToggleProductStatus(productDetail); }}><Ban className="mr-1.5 size-3.5" />{productDetail.isActive === false ? 'Activar' : 'Inactivar'}</Button>}
         </> : undefined}
       />
       <ProductSimilarityAlert

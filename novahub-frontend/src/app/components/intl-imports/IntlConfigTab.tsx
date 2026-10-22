@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings2, Save, Calculator, Ship, Plus, Trash2 } from 'lucide-react';
+import { Settings2, Save, Calculator, Ship, Plus, Trash2, Ban } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { getApiErrorMessage } from '@/app/services/api';
 import { Button } from '../ui/button';
@@ -16,6 +16,7 @@ interface IntlConfigTabProps {
   canEdit?: boolean;
   canCreate?: boolean;
   canDelete?: boolean;
+  canDeactivate?: boolean;
 }
 
 const EMPTY_FACTOR = {
@@ -27,7 +28,7 @@ const EMPTY_FACTOR = {
   priority: '0',
 };
 
-export function IntlConfigTab({ canEdit = false, canCreate = false, canDelete = false }: IntlConfigTabProps) {
+export function IntlConfigTab({ canEdit = false, canCreate = false, canDelete = false, canDeactivate = false }: IntlConfigTabProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<IntlImportConfig>({
@@ -179,7 +180,8 @@ export function IntlConfigTab({ canEdit = false, canCreate = false, canDelete = 
   };
 
   const handleDeleteFactor = async (factor: IntlVolumetricFactor) => {
-    if (!canDelete) return;
+    const requiresDeactivation = Number(factor.usedByCount || 0) > 0;
+    if (requiresDeactivation ? !canDeactivate : !canDelete) return;
     try {
       const res = await intlImportsService.deleteVolumetricFactor(factor.id);
       toast.success(
@@ -524,16 +526,16 @@ export function IntlConfigTab({ canEdit = false, canCreate = false, canDelete = 
                       Editar
                     </Button>
                   )}
-                  {canDelete && (
+                  {((Number(f.usedByCount || 0) > 0 && canDeactivate && f.isActive) || (Number(f.usedByCount || 0) === 0 && canDelete)) && (
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       onClick={() => handleDeleteFactor(f)}
-                      title="Si la regla ya tiene paquetes facturados se desactivará en lugar de eliminarse"
-                      aria-label={`Eliminar regla ${f.label}`}
+                      title={Number(f.usedByCount || 0) > 0 ? 'Desactivar regla para conservar los paquetes vinculados' : 'Eliminar regla sin paquetes vinculados'}
+                      aria-label={`${Number(f.usedByCount || 0) > 0 ? 'Desactivar' : 'Eliminar'} regla ${f.label}`}
                     >
-                      <Trash2 className="size-3.5" />
+                      {Number(f.usedByCount || 0) > 0 ? <Ban className="size-3.5" /> : <Trash2 className="size-3.5" />}
                     </Button>
                   )}
                 </div>

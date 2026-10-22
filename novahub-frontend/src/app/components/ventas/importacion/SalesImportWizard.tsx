@@ -130,6 +130,7 @@ interface SalesImportWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   kind: SalesImportKind;
+  canImport: boolean;
   tenantId: string;
   register?: CashRegister | null;
   session?: CashRegisterSession | null;
@@ -501,6 +502,7 @@ export function SalesImportWizard({
   open,
   onOpenChange,
   kind,
+  canImport,
   tenantId,
   register,
   session,
@@ -680,6 +682,7 @@ export function SalesImportWizard({
   };
 
   const runPreview = async (allowDuplicateContent = false) => {
+    if (!canImport) return;
     if (!file) {
       toast.error("Selecciona el archivo XLSX que deseas cargar.");
       return;
@@ -906,6 +909,7 @@ export function SalesImportWizard({
   };
 
   const confirmBlock = async (blockNumber: number) => {
+    if (!canImport) return;
     if (kind !== "POS") return;
     if (!batch || workingBlock !== null) return;
     setWorkingBlock(blockNumber);
@@ -936,6 +940,7 @@ export function SalesImportWizard({
   };
 
   const confirmInvoices = async () => {
+    if (!canImport) return;
     if (kind !== "INVOICE" || !invoicePreview || !invoiceAttemptId || confirmingInvoices)
       return;
     cancelPendingInvoiceValidations(invoiceValidationTimersRef.current, invoiceValidationVersionsRef.current);

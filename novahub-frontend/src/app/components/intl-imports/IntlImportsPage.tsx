@@ -71,6 +71,7 @@ export function IntlImportsPage({ activeSubModule, onSubModuleChange }: IntlImpo
   const canEditConfig = canPerform('IMPORT_INTL_CONFIG', 'edit');
   const canCreateConfig = canPerform('IMPORT_INTL_CONFIG', 'create');
   const canDeleteConfig = canPerform('IMPORT_INTL_CONFIG', 'delete');
+  const canDeactivateConfig = canPerform('IMPORT_INTL_CONFIG', 'deactivate');
 
   return (
     <div className="intl-imports-module space-y-4 sm:space-y-6 min-w-0 max-w-full">
@@ -160,7 +161,7 @@ export function IntlImportsPage({ activeSubModule, onSubModuleChange }: IntlImpo
           />
         )}
         {currentTab === 'configuracion' && (
-          <IntlConfigTab canEdit={canEditConfig} canCreate={canCreateConfig} canDelete={canDeleteConfig} />
+          <IntlConfigTab canEdit={canEditConfig} canCreate={canCreateConfig} canDelete={canDeleteConfig} canDeactivate={canDeactivateConfig} />
         )}
       </div>
     </div>

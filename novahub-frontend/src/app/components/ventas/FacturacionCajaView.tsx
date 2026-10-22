@@ -443,6 +443,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const quickVoiceEnabled = Boolean(user?.isPlatformAdmin || user?.enabledModules?.includes('SALES_VOICE_QUICK'));
   const loggedInSellerId = getLoggedInSellerEmployeeId(user);
   const canCreatePosInvoice = canPerform('RETAIL_POS', 'create');
+  const canImportPosInvoices = canPerform('RETAIL_POS', 'read') && canPerform('RETAIL_POS', 'import');
   const canViewPosOtherLocations = canPerform('RETAIL_POS', 'viewOtherLocations');
   const canPayPos = canCreatePosInvoice && canPerform('RETAIL_POS', 'pay');
   const canPayPosQueue = canPerform('RETAIL_POS', 'pay');
@@ -451,6 +452,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const canReconcilePosQueue = canPerform('RETAIL_POS', 'reconcile');
   const canCreatePosHold = canPerform('RETAIL_POS', 'create');
   const canManagePosRegisters = canPerform('RETAIL_CASH_CONTROL', 'manage');
+  const canOpenRegisterManager = canManagePosRegisters
+    || canPerform('RETAIL_CASH_CONTROL', 'create')
+    || canPerform('RETAIL_CASH_CONTROL', 'edit')
+    || canPerform('RETAIL_CASH_CONTROL', 'deactivate');
   // El comprobante se genera localmente después de un cobro POS exitoso.
   // Todo usuario que puede cobrar debe poder imprimir su voucher/ticket,
   // aunque su rol granular no tenga el flag histórico `print`.
@@ -2176,7 +2181,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           <p className="text-muted-foreground max-w-md mb-6">
             {availabilityMessage.description}
           </p>
-          {canManagePosRegisters && <Button onClick={() => setManageCajasOpen(true)} className="gap-2 rounded-xl font-bold">
+          {canOpenRegisterManager && <Button onClick={() => setManageCajasOpen(true)} className="gap-2 rounded-xl font-bold">
             <Settings2 className="size-4" /> Configurar caja
           </Button>}
         </div>
@@ -2198,7 +2203,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
               <Badge className="border-none bg-primary/15 text-primary">{cashQueue.length}</Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {canCreatePosInvoice && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 border-primary/30 text-xs font-bold text-primary" onClick={() => setSalesImportOpen(true)}>
+              {canImportPosInvoices && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 border-primary/30 text-xs font-bold text-primary" onClick={() => setSalesImportOpen(true)}>
                 <Upload className="size-3.5" /> Importar Excel
               </Button>}
               <Button
@@ -3670,15 +3675,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         open={Boolean(otherLocationsProduct)}
         onOpenChange={(open) => { if (!open) setOtherLocationsProduct(null); }}
       />
-      <SalesImportWizard
+      {canImportPosInvoices && <SalesImportWizard
         open={salesImportOpen}
         onOpenChange={setSalesImportOpen}
         kind="POS"
+        canImport={canImportPosInvoices}
         tenantId={user?.clientTenantId || user?.tenantId || ''}
         register={selectedRegister}
         session={activeSession}
         onFinished={() => { if (selectedRegisterId) void loadRecentInvoices(selectedRegisterId); }}
-      />
+      />}
       <AdministrarCajasModal
         open={manageCajasOpen}
         onOpenChange={setManageCajasOpen}

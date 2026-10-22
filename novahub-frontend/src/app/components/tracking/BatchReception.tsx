@@ -4,6 +4,7 @@ import { toast } from '@/app/services/toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button } from '../ui/button';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
@@ -63,9 +64,20 @@ const emptyRow = (index: number): GridRow => ({
 
 export function BatchReception() {
   const { canPerform, user } = useAuth();
-  const canCreateBatch = canPerform('TRACKING_BATCHES', 'create') || canPerform('TRACKING_RECEPTION', 'create');
+  const batchPermission = Array.isArray((user as any)?.permissions)
+    ? (user as any).permissions.find((permission: any) => String(permission?.module || '').toUpperCase() === 'TRACKING_BATCHES')
+    : undefined;
+  const hasExplicitBatchAction = (action: 'create' | 'confirm') => {
+    const keys = action === 'create' ? ['create', 'canCreate'] : ['confirm', 'canConfirm', 'approve', 'canApprove'];
+    return keys.some((key) => batchPermission?.[key] !== undefined);
+  };
+  const canCreateBatch = canPerform('TRACKING_BATCHES', 'create')
+    || (!hasExplicitBatchAction('create') && canPerform('TRACKING_RECEPTION', 'create'));
   const canEditBatch = canPerform('TRACKING_BATCHES', 'edit');
-  const canConfirmBatch = canPerform('TRACKING_BATCHES', 'confirm') || canPerform('TRACKING_RECEPTION', 'confirm');
+  const canDeleteBatch = canPerform('TRACKING_BATCHES', 'read') && canPerform('TRACKING_BATCHES', 'delete');
+  const canConfirmBatch = canPerform('TRACKING_BATCHES', 'confirm')
+    || (!hasExplicitBatchAction('confirm') && canPerform('TRACKING_RECEPTION', 'confirm'));
+  const batchTableColumnCount = canDeleteBatch ? 11 : 10;
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -79,6 +91,8 @@ export function BatchReception() {
 
   const [detail, setDetail] = useState<BatchDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [pendingDeleteBatch, setPendingDeleteBatch] = useState<ReceptionBatch | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [rows, setRows] = useState<GridRow[]>([]);
   const [saving, setSaving] = useState(false);
@@ -181,6 +195,29 @@ export function BatchReception() {
     }
   }, []);
 
+  const confirmDeleteBatch = useCallback(async () => {
+    const batch = pendingDeleteBatch;
+    if (!batch || !canDeleteBatch || batch.status !== 'OPEN' || batch.packageCount > 0) return;
+    setDeleteLoading(true);
+    const actionToken = beginNotificationAction();
+    try {
+      await logisticsService.deleteBatch(batch.id);
+      toast.success(`Referencia ${batch.number} eliminada`);
+      setPendingDeleteBatch(null);
+      if (detail?.batch.id === batch.id) {
+        setDetail(null);
+        setRows([]);
+      }
+      await load(true);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'No se pudo eliminar la referencia'));
+      throw error;
+    } finally {
+      completeNotificationAction(actionToken);
+      setDeleteLoading(false);
+    }
+  }, [canDeleteBatch, detail, load, pendingDeleteBatch]);
+
   const refreshDetail = useCallback(async () => {
     if (!detail) return;
     try {
@@ -209,7 +246,7 @@ export function BatchReception() {
     module: 'tracking',
     subModules: ['batches'],
     onRefresh: refreshBatchesFromNotification,
-    enabled: canCreateBatch || canEditBatch || canConfirmBatch,
+    enabled: canCreateBatch || canEditBatch || canConfirmBatch || canDeleteBatch,
   });
 
   const closeDetail = useCallback(() => {
@@ -634,13 +671,14 @@ export function BatchReception() {
               <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Total</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Factura</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
+              {canDeleteBatch && <TableHead className="w-12 text-right text-[10px] font-black uppercase tracking-widest">Acción</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={10} className="py-10 text-center text-xs text-muted-foreground">Cargando referencias…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={batchTableColumnCount} className="py-10 text-center text-xs text-muted-foreground">Cargando referencias…</TableCell></TableRow>
             ) : (data?.items.length ?? 0) === 0 ? (
-              <TableRow><TableCell colSpan={10} className="py-10 text-center">
+              <TableRow><TableCell colSpan={batchTableColumnCount} className="py-10 text-center">
                 <ReceiptText className="mx-auto size-8 text-muted-foreground/40" />
                 <p className="mt-2 text-sm font-bold">Sin referencias</p>
                 <p className="text-xs text-muted-foreground">Las nuevas referencias se crean automáticamente desde Recepción.</p>
@@ -661,6 +699,17 @@ export function BatchReception() {
                     {b.status === 'OPEN' ? 'Abierta' : 'Confirmada'}
                   </Badge>
                 </TableCell>
+                {canDeleteBatch && <TableCell className="py-2 text-right">
+                  {b.status === 'OPEN' && b.packageCount === 0 && <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-destructive"
+                    aria-label={`Eliminar referencia vacía ${b.number}`}
+                    title="Eliminar referencia vacía"
+                    onClick={(event) => { event.stopPropagation(); setPendingDeleteBatch(b); }}
+                  ><Trash2 className="size-4" /></Button>}
+                </TableCell>}
               </TableRow>
             ))}
           </TableBody>
@@ -676,6 +725,16 @@ export function BatchReception() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteBatch)}
+        onOpenChange={(open) => !open && !deleteLoading && setPendingDeleteBatch(null)}
+        title="¿Eliminar referencia vacía?"
+        description={pendingDeleteBatch ? `Se eliminará ${pendingDeleteBatch.number}. Solo pueden borrarse referencias abiertas sin paquetes.` : ''}
+        confirmLabel="Eliminar referencia"
+        loading={deleteLoading}
+        onConfirm={confirmDeleteBatch}
+      />
 
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">

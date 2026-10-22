@@ -32,7 +32,7 @@ export function BudgetItemsView() {
   const { canPerform } = useAuth();
   const canCreate = canPerform('ACCOUNTING_BUDGET', 'create');
   const canEdit = canPerform('ACCOUNTING_BUDGET', 'edit');
-  const canDeactivate = canPerform('ACCOUNTING_BUDGET', 'delete');
+  const canDelete = canPerform('ACCOUNTING_BUDGET', 'delete');
   const { baseCurrency, formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -98,12 +98,12 @@ export function BudgetItemsView() {
   }
 
   async function handleDelete(id: string) {
-    if (!canDeactivate) return;
+    if (!canDelete) return;
     setPendingDeleteId(id);
   }
 
   async function confirmDelete() {
-    if (!pendingDeleteId || !canDeactivate) return;
+    if (!pendingDeleteId || !canDelete) return;
     const actionToken = beginNotificationAction();
     try {
       await contabilidadService.deleteBudgetItem(pendingDeleteId);
@@ -234,7 +234,7 @@ export function BudgetItemsView() {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {canEdit && <Button variant="ghost" size="icon" aria-label="Editar partida" className="size-8 rounded-lg" onClick={() => openEdit(item)}><Pencil className="size-3.5" /></Button>}
-                        {canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar partida" className="size-8 rounded-lg text-red-500 hover:text-red-600" onClick={() => handleDelete(item.id)}><Trash2 className="size-3.5" /></Button>}
+                        {canDelete && <Button variant="ghost" size="icon" aria-label="Eliminar partida" title="Eliminar partida" className="size-8 rounded-lg text-red-500 hover:text-red-600" onClick={() => handleDelete(item.id)}><Trash2 className="size-3.5" /></Button>}
                       </div>
                     </td>
                   </tr>
@@ -255,7 +255,7 @@ export function BudgetItemsView() {
                   </div>
                   <span className={cn("shrink-0 font-mono text-[10px] font-bold", available < 0 ? "text-red-500" : "text-muted-foreground")}>{pct.toFixed(0)}%</span>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Asignado</span><span className="font-bold">{format(assigned)}</span></div><div><span className="block text-muted-foreground">Ejecutado</span><span>{format(executed)}</span></div><div><span className="block text-muted-foreground">Disponible</span><span className={cn('font-bold', available >= 0 ? 'text-emerald-500' : 'text-red-500')}>{format(available)}</span></div><div className="flex justify-end gap-1">{canEdit && <Button variant="ghost" size="icon" aria-label="Editar partida" className="size-7" onClick={() => openEdit(item)}><Pencil className="size-3.5" /></Button>}{canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar partida" className="size-7 text-red-500" onClick={() => handleDelete(item.id)}><Trash2 className="size-3.5" /></Button>}</div></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Asignado</span><span className="font-bold">{format(assigned)}</span></div><div><span className="block text-muted-foreground">Ejecutado</span><span>{format(executed)}</span></div><div><span className="block text-muted-foreground">Disponible</span><span className={cn('font-bold', available >= 0 ? 'text-emerald-500' : 'text-red-500')}>{format(available)}</span></div><div className="flex justify-end gap-1">{canEdit && <Button variant="ghost" size="icon" aria-label="Editar partida" className="size-7" onClick={() => openEdit(item)}><Pencil className="size-3.5" /></Button>}{canDelete && <Button variant="ghost" size="icon" aria-label="Eliminar partida" title="Eliminar partida" className="size-7 text-red-500" onClick={() => handleDelete(item.id)}><Trash2 className="size-3.5" /></Button>}</div></div>
               </div>
             })}
           </div>

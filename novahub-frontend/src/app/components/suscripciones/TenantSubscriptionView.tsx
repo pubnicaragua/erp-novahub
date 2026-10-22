@@ -110,7 +110,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
   const canEditCompany = canPerform('CONFIG_COMPANY', 'edit');
   const canCreateCompany = canPerform('CONFIG_COMPANY', 'create');
-  const canDeactivateCompany = canPerform('CONFIG_COMPANY', 'deactivate');
+  const canDeleteCompany = canPerform('CONFIG_COMPANY', 'delete');
   const canCreateUsers = canPerform('CONFIG_USERS', 'create');
   const canEditUsers = canPerform('CONFIG_USERS', 'edit');
   const canDeactivateUsers = canPerform('CONFIG_USERS', 'deactivate');
@@ -122,7 +122,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const canViewDepartments = canPerform('CONFIG_DEPARTMENTS', 'view');
   const canCreateDepartments = canPerform('CONFIG_DEPARTMENTS', 'create');
   const canEditDepartments = canPerform('CONFIG_DEPARTMENTS', 'edit');
-  const canDeleteDepartments = canPerform('CONFIG_DEPARTMENTS', 'delete');
+  const canDeactivateDepartments = canPerform('CONFIG_DEPARTMENTS', 'deactivate');
   const canEditEmployees = canPerform('HR_EMPLOYEES', 'edit');
   const canViewEmployees = canPerform('HR_EMPLOYEES', 'view');
   const canViewDomains = canPerform('CONFIG_DOMAINS', 'view');
@@ -347,7 +347,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   };
 
   const handleDeleteIndustry = async (id: string) => {
-    if (!canDeactivateCompany) return;
+    if (!canDeleteCompany) return;
     try {
       await api.delete(`/tenants/${tenant.id}/industries/${id}`);
       setIndustryOptions((current) => current.filter((industry) => industry.id !== id));
@@ -735,7 +735,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                   {industryOptions.filter((industry) => !industry.isDefault).length > 0 && <div className="flex flex-wrap gap-1.5">
                     {industryOptions.filter((industry) => !industry.isDefault).map((industry) => <Badge key={industry.id} variant="secondary" className="gap-1 pr-1 text-[10px] font-bold">
                       {industry.name}
-                      {canDeactivateCompany && <button onClick={() => industry.id && void handleDeleteIndustry(industry.id)} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-destructive/20 hover:text-destructive"><Trash2 className="size-2.5" /></button>}
+                      {canDeleteCompany && <button aria-label={`Eliminar industria ${industry.name}`} title="Eliminar industria" onClick={() => industry.id && void handleDeleteIndustry(industry.id)} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-destructive/20 hover:text-destructive"><Trash2 className="size-2.5" /></button>}
                     </Badge>)}
                   </div>}
                   {canCreateCompany && (showAddIndustry ? <div className="flex gap-2">
@@ -988,7 +988,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
              onDataChange={async () => { await refetchTenantData(); }}
              canCreate={canCreateDepartments}
              canEdit={canEditDepartments}
-             canDelete={canDeleteDepartments}
+             canDeactivate={canDeactivateDepartments}
            />
          </TabsContent>
          <TabsContent value="dominio" className="space-y-6">

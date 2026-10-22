@@ -82,25 +82,28 @@ for (const submoduleId of new Set(sidebarSubmoduleIds)) {
 const actionAliases = {
   view: 'read',
   write: 'edit',
-  submit: 'approve',
-  deactivate: 'delete',
-  cancel: 'delete',
-  reject: 'delete',
-  reverse: 'delete',
   duplicate: 'create',
   download: 'export',
   print: 'export',
-  authorize: 'approve',
-  reopen: 'approve',
-  close: 'approve',
-  confirm: 'approve',
-  process: 'approve',
-  pay: 'approve',
-  apply: 'approve',
-  reconcile: 'approve',
-  convert: 'approve',
-  generate: 'approve',
 };
+const moduleActionAliases = {
+  // Los roles antiguos guardaban crear/confirmar referencias en Recepción;
+  // el permiso editable ahora vive en Lotes y prevalece si está definido.
+  TRACKING_RECEPTION: {
+    create: { module: 'TRACKING_BATCHES', action: 'create' },
+    confirm: { module: 'TRACKING_BATCHES', action: 'confirm' },
+  },
+};
+
+// Los aliases son solo equivalencias de CRUD/lectura/exportación. Las
+// transiciones de negocio deben existir con su propia clave en la matriz.
+function supportsCatalogAction(module, requestedAction) {
+  if (permissions.supportsPermissionAction(module, requestedAction)) return true;
+  const moduleAlias = moduleActionAliases[module]?.[requestedAction];
+  if (moduleAlias && permissions.supportsPermissionAction(moduleAlias.module, moduleAlias.action)) return true;
+  const legacyAction = actionAliases[requestedAction];
+  return Boolean(legacyAction && permissions.supportsPermissionAction(module, legacyAction));
+}
 
 function collectSourceFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -116,12 +119,11 @@ for (const file of collectSourceFiles(path.join(frontendRoot, 'src', 'app'))) {
   for (const match of source.matchAll(canPerformPattern)) {
     const module = normalize(match[2]);
     const requestedAction = match[4];
-    const matrixAction = requestedAction === 'read' ? 'read' : actionAliases[requestedAction] || requestedAction;
     if (!knownPermissionIds.has(module)) {
       errors.push(`${path.relative(frontendRoot, file)} usa el permiso no catalogado ${module}`);
       continue;
     }
-    if (!permissions.supportsPermissionAction(module, matrixAction)) {
+    if (!supportsCatalogAction(module, requestedAction)) {
       errors.push(`${path.relative(frontendRoot, file)} solicita ${module}:${requestedAction}, pero la matriz no lo ofrece`);
     }
   }
@@ -144,7 +146,6 @@ for (const file of collectBackendControllers(backendRoot)) {
       ? [match[2]]
       : [...String(match[3] || '').matchAll(/['"]([A-Z0-9_]+)['"]/g)].map((item) => item[1]);
     const requestedAction = match[5];
-    const matrixAction = requestedAction === 'read' ? 'read' : actionAliases[requestedAction] || requestedAction;
     for (const module of modules) {
       validatedBackendPermissionReferences += 1;
       if (!knownPermissionIds.has(module)) {
@@ -152,7 +153,7 @@ for (const file of collectBackendControllers(backendRoot)) {
         continue;
       }
       if (backendOnlyCompatibilityIds.has(module)) continue;
-      if (!permissions.supportsPermissionAction(module, matrixAction)) {
+      if (!supportsCatalogAction(module, requestedAction)) {
         errors.push(`${path.relative(frontendRoot, file)} solicita ${module}:${requestedAction}, pero la matriz no lo ofrece`);
       }
     }

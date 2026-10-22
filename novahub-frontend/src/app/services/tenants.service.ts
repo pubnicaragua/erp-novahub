@@ -99,8 +99,6 @@ export const tenantsService = {
     api.put(`/tenants/${tenantId}/users/${userId}/employee/${employeeId}`, {}),
   unlinkUserFromEmployee: (tenantId: string, userId: string) =>
     api.delete(`/tenants/${tenantId}/users/${userId}/employee`),
-  deleteUser: (tenantId: string, userId: string) => api.delete(`/tenants/${tenantId}/users/${userId}`),
-
   getUserAccess: (tenantId: string, userId: string) =>
     api.get<{ warehouseIds: string[]; cashRegisterIds: string[] }>(`/tenants/${tenantId}/users/${userId}/access`),
   updateUserAccess: (tenantId: string, userId: string, data: { warehouseIds: string[]; cashRegisterIds: string[] }) =>

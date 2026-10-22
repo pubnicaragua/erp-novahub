@@ -135,7 +135,7 @@ export interface Permission {
 }
 
 export type PermissionAction =
-  | 'view' | 'create' | 'edit' | 'delete' | 'deactivate' | 'cancel'
+  | 'view' | 'create' | 'edit' | 'delete' | 'deactivate' | 'archive' | 'cancel'
   | 'import' | 'export' | 'approve' | 'reject' | 'authorize' | 'reopen'
   | 'close' | 'start' | 'lookup' | 'sync' | 'registerEvent' | 'bill' | 'closeByException' | 'reopenContainer'
   | 'confirm' | 'process' | 'pay' | 'submit' | 'apply' | 'reconcile'
@@ -143,6 +143,7 @@ export type PermissionAction =
   | 'receive' | 'retryInventory' | 'registerInvoice' | 'cancelInvoice' | 'issue' | 'void' | 'pause' | 'resume'
   | 'reverse' | 'duplicate' | 'convert' | 'assign' | 'download'
   | 'generate' | 'send' | 'print' | 'manage' | 'viewCost' | 'viewOtherLocations'
+  | 'createPaymentLink' | 'reconcilePaymentLink' | 'cancelPaymentLink' | 'createAppToAppPayment' | 'reconcileAppToAppPayment'
   | 'post' | 'saveRun' | 'createJournal' | 'createReversal' | 'generateProjection' | 'processDepreciation' | 'requestPayment' | 'enroll'
   | 'updateBalance' | 'autoMatch' | 'addMovement' | 'editMovement' | 'matchMovement' | 'complete' | 'lock'
   | 'audit' | 'sendToCorrect' | 'reissueInvoice' | 'approveCancellation' | 'rejectCancellation' | 'completeEnrollment'
@@ -1205,6 +1206,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (salesPermission?.canView === true) permission = salesPermission;
     }
     if (!permission) return false;
+    if (upperModule === 'SALES_INVOICES' && action === 'pay') {
+      const invoicePermission = findPermission('SALES_INVOICES');
+      const invoicePayWasSet = invoicePermission && (
+        Object.prototype.hasOwnProperty.call(invoicePermission, 'pay')
+        || Object.prototype.hasOwnProperty.call(invoicePermission, 'canPay')
+      );
+      if (invoicePayWasSet) return approvalActionValue(invoicePermission, 'pay', 'SALES_INVOICES');
+      const legacyPaymentsPermission = findPermission('SALES_PAYMENTS');
+      return legacyPaymentsPermission
+        ? approvalActionValue(legacyPaymentsPermission, 'pay', 'SALES_PAYMENTS')
+        : false;
+    }
+    if (upperModule === 'SALES_INVOICES' && [
+      'createPaymentLink', 'reconcilePaymentLink', 'cancelPaymentLink',
+      'createAppToAppPayment', 'reconcileAppToAppPayment',
+    ].includes(action)) {
+      return approvalActionValue(permission, action, upperModule);
+    }
+    if (action === 'deactivate' || action === 'archive') {
+      return approvalActionValue(permission, action, upperModule);
+    }
     if (action === 'manage') return permission.canManage === true;
     if ((upperModule === 'PURCHASES_REQUESTS' && ['submit', 'approve', 'cancel', 'reject', 'convert'].includes(action))
       || (upperModule.startsWith('PURCHASES_') && ['submit', 'pay', 'cancel', 'cancelInvoice', 'reject', 'receive', 'retryInventory', 'registerInvoice', 'issue', 'apply', 'void', 'pause', 'resume'].includes(action))) {

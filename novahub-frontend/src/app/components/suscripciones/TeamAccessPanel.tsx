@@ -36,7 +36,7 @@ interface TeamAccessPanelProps {
 }
 
 const permissionActions = [...PERMISSION_ACTION_DEFINITIONS, ...SENSITIVE_PERMISSION_ACTION_DEFINITIONS];
-const LEGACY_PERMISSION_KEYS = ['view', 'canView', 'write', 'canWrite', 'canCreate', 'canEdit', 'canApprove', 'pay', 'canPay', 'submit', 'canSubmit', 'lookup', 'canLookup', 'sync', 'canSync', 'registerEvent', 'canRegisterEvent', 'bill', 'canBill', 'send', 'canSend', 'confirm', 'canConfirm', 'receive', 'canReceive', 'import', 'canImport', 'deliver', 'canDeliver', 'issue', 'canIssue', 'close', 'canClose', 'closeByException', 'canCloseByException', 'reopenContainer', 'canReopenContainer', 'assignPackages', 'canAssignPackages', 'unassignPackages', 'canUnassignPackages', 'movePackages', 'canMovePackages', 'consolidate', 'canConsolidate', 'dispatch', 'canDispatch', 'sendToCustoms', 'canSendToCustoms', 'addExpense', 'canAddExpense', 'post', 'canPost', 'saveRun', 'canSaveRun', 'createJournal', 'canCreateJournal', 'createReversal', 'canCreateReversal', 'generateProjection', 'canGenerateProjection', 'processDepreciation', 'canProcessDepreciation', 'updateBalance', 'canUpdateBalance', 'autoMatch', 'canAutoMatch', 'addMovement', 'canAddMovement', 'editMovement', 'canEditMovement', 'matchMovement', 'canMatchMovement', 'complete', 'canComplete', 'lock', 'canLock', 'audit', 'canAudit', 'sendToCorrect', 'canSendToCorrect', 'reissueInvoice', 'canReissueInvoice', 'approveCancellation', 'canApproveCancellation', 'rejectCancellation', 'canRejectCancellation', 'canViewCost', 'deactivate', 'cancel', 'reject', 'convert', 'canDelete', 'canDeactivate', 'canCancel', 'canReject', 'canConvert', 'canReverse'];
+const LEGACY_PERMISSION_KEYS = ['view', 'canView', 'write', 'canWrite', 'canCreate', 'canEdit', 'canApprove', 'pay', 'canPay', 'submit', 'canSubmit', 'lookup', 'canLookup', 'sync', 'canSync', 'registerEvent', 'canRegisterEvent', 'bill', 'canBill', 'send', 'canSend', 'confirm', 'canConfirm', 'receive', 'canReceive', 'import', 'canImport', 'deliver', 'canDeliver', 'issue', 'canIssue', 'close', 'canClose', 'closeByException', 'canCloseByException', 'reopenContainer', 'canReopenContainer', 'assignPackages', 'canAssignPackages', 'unassignPackages', 'canUnassignPackages', 'movePackages', 'canMovePackages', 'consolidate', 'canConsolidate', 'dispatch', 'canDispatch', 'sendToCustoms', 'canSendToCustoms', 'addExpense', 'canAddExpense', 'post', 'canPost', 'saveRun', 'canSaveRun', 'createJournal', 'canCreateJournal', 'createReversal', 'canCreateReversal', 'generateProjection', 'canGenerateProjection', 'processDepreciation', 'canProcessDepreciation', 'updateBalance', 'canUpdateBalance', 'autoMatch', 'canAutoMatch', 'addMovement', 'canAddMovement', 'editMovement', 'canEditMovement', 'matchMovement', 'canMatchMovement', 'complete', 'canComplete', 'lock', 'canLock', 'audit', 'canAudit', 'sendToCorrect', 'canSendToCorrect', 'reissueInvoice', 'canReissueInvoice', 'approveCancellation', 'canApproveCancellation', 'rejectCancellation', 'canRejectCancellation', 'canViewCost', 'deleteManagement', 'canDeleteManagement', 'deactivate', 'cancel', 'reject', 'convert', 'canDelete', 'canDeactivate', 'canCancel', 'canReject', 'canConvert', 'canReverse'];
 const DATA_VISIBILITY_MODULE = 'DATA_VISIBILITY';
 
 /**
@@ -97,38 +97,51 @@ const getActionLabel = (key: PermissionMatrixAction, moduleId?: string) => {
     FINANCING_APPLICATIONS: { addNote: 'Agregar nota del revisor', addDocument: 'Adjuntar documento' },
     SALES_QUOTES: { submit: 'Enviar a proceso', convert: 'Enviar a orden', cancel: 'Cancelar cotización' },
     SALES_ORDERS: { submit: 'Enviar a proceso', approve: 'Aprobar orden', convert: 'Enviar a factura', cancel: 'Cancelar orden' },
-    SALES_INVOICES: { submit: 'Emitir factura', sendToCredit: 'Enviar a crédito', sendToCash: 'Enviar a caja', cancel: 'Solicitar anulación' },
+    SALES_INVOICES: { delete: 'Eliminar factura en borrador', submit: 'Emitir factura', pay: 'Registrar pago', sendToCredit: 'Enviar a crédito', sendToCash: 'Enviar a caja', cancel: 'Solicitar anulación' },
     SALES_PAYMENTS: { pay: 'Registrar cobro', cancel: 'Anular cobro' },
     SALES_RECURRING: { pause: 'Pausar programación', resume: 'Reanudar programación', cancel: 'Finalizar programación' },
     SALES_RETURNS: { approve: 'Aprobar devolución', process: 'Aplicar saldo e inventario', reject: 'Rechazar devolución' },
     SALES_CREDIT_NOTES: { issue: 'Emitir crédito', send: 'Enviar a caja', pay: 'Registrar devolución', cancel: 'Cancelar crédito' },
     RETAIL_POS: { pay: 'Cobrar factura', reconcile: 'Reconciliar cola de caja', claim: 'Tomar gestión', release: 'Liberar gestión', confirm: 'Confirmar apartado', deliver: 'Entregar apartado', cancel: 'Cancelar apartado' },
+    ASANA: { archive: 'Archivar tablero' },
+    ASANA_TASKS: { archive: 'Archivar tarea' },
     RETAIL_CASH_CONTROL: { open: 'Abrir sesión', movement: 'Registrar movimiento', count: 'Registrar arqueo', close: 'Cerrar sesión', resolve: 'Resolver faltante', configure: 'Configurar caja' },
-    PURCHASES_REQUESTS: { submit: 'Enviar a pendientes', cancel: 'Anular solicitud', reject: 'Rechazar gestión', convert: 'Convertir en orden' },
+    PURCHASES_REQUESTS: { submit: 'Enviar a pendientes', cancel: 'Anular solicitud', reject: 'Rechazar gestión', convert: 'Convertir en orden', deleteManagement: 'Eliminar gestión en borrador' },
+    PURCHASES_EXPENSES: { delete: 'Eliminar gasto en borrador', cancel: 'Anular gasto' },
+    FINANCIAL_EXPENSES: { delete: 'Eliminar gasto en borrador', cancel: 'Anular gasto' },
     PURCHASES_ORDERS: { submit: 'Enviar a proceso', approve: 'Aprobar orden', reject: 'Rechazar orden' },
     PURCHASES_RECEIPTS: { receive: 'Recepcionar mercancía', cancel: 'Cancelar recepción', cancelInvoice: 'Anular factura de proveedor', retryInventory: 'Reintentar inventario', registerInvoice: 'Registrar factura' },
     PURCHASES_PAYMENTS: { pay: 'Registrar pago a proveedor', cancel: 'Anular pago' },
-    PURCHASES_RETURNS: { issue: 'Emitir crédito', apply: 'Aplicar crédito', void: 'Anular crédito' },
-    PURCHASES_EXPENSES_REC: { pause: 'Pausar gasto recurrente', resume: 'Reanudar gasto recurrente' },
-    PURCHASES_INVOICES_REC: { pause: 'Pausar compra recurrente', resume: 'Reanudar compra recurrente', cancel: 'Anular compra recurrente' },
+    FINANCIAL_EXPENSES_REC: { pause: 'Pausar programación', resume: 'Reanudar programación', cancel: 'Cancelar programación' },
+    FINANCIAL_INCOMES_REC: { pause: 'Pausar programación', resume: 'Reanudar programación', cancel: 'Cancelar programación' },
+    PURCHASES_RETURNS: { delete: 'Eliminar crédito en borrador', issue: 'Emitir crédito', apply: 'Aplicar crédito', void: 'Anular crédito' },
+    PURCHASES_EXPENSES_REC: { delete: 'Eliminar programación', pause: 'Pausar gasto recurrente', resume: 'Reanudar gasto recurrente', cancel: 'Anular gasto recurrente' },
+    PURCHASES_INVOICES_REC: { delete: 'Eliminar programación', pause: 'Pausar compra recurrente', resume: 'Reanudar compra recurrente', cancel: 'Anular compra recurrente' },
     INVENTORY_ADJUSTMENTS: { approve: 'Aprobar y aplicar ajuste' },
     INVENTORY_AUDITS: { start: 'Iniciar conteo', close: 'Cerrar conteo', approve: 'Aprobar diferencias', reopen: 'Reabrir auditoría', cancel: 'Cancelar auditoría' },
     TRACKING_TRANSIT: { lookup: 'Consultar transportista', sync: 'Sincronizar tracking', registerEvent: 'Registrar evento manual' },
     TRACKING_RECEPTION: { receive: 'Registrar recepción física' },
     TRACKING_PACKAGES: { import: 'Importar paquetes' },
-    TRACKING_BATCHES: { confirm: 'Confirmar referencia' },
+    TRACKING_BATCHES: { delete: 'Eliminar referencia vacía', confirm: 'Confirmar referencia' },
     TRACKING_RECONCILIATION: { confirm: 'Confirmar conciliación' },
     TRACKING_BILLING: { bill: 'Emitir factura de venta', deliver: 'Registrar entrega', send: 'Compartir factura', issue: 'Emitir nota de crédito', cancel: 'Anular y reversar venta logística' },
     IMPORT_INTL_ORIGIN: { registerEvent: 'Registrar hito manual', deliver: 'Marcar paquete entregado', cancel: 'Cancelar paquete' },
     IMPORT_INTL_CONTAINERS: { assignPackages: 'Asignar paquetes', unassignPackages: 'Devolver paquetes a origen', movePackages: 'Mover paquetes', consolidate: 'Consolidar contenedor', dispatch: 'Despachar contenedor', sendToCustoms: 'Enviar a aduana', cancel: 'Cancelar contenedor' },
     IMPORT_INTL_CUSTOMS: { addExpense: 'Registrar gasto de importación', close: 'Cerrar y prorratear contenedor' },
-    ACCOUNTING_JOURNAL: { post: 'Contabilizar asiento', void: 'Anular asiento publicado' },
+    ACCOUNTING_JOURNAL: { delete: 'Eliminar asiento en borrador', post: 'Contabilizar asiento', void: 'Anular asiento publicado' },
+    ACCOUNTING_CHART: { delete: 'Eliminar cuenta contable al transferir' },
+    ACCOUNTING_FISCAL: { delete: 'Eliminar respaldo fiscal' },
+    HR_LEAVES: { delete: 'Eliminar solicitud pendiente' },
     ACCOUNTING_HR_PAYMENT_REQUESTS: { approve: 'Aprobar solicitud', reject: 'Rechazar solicitud', pay: 'Registrar pago' },
     ACCOUNTING_EXCHANGE_DIFFERENCES: { saveRun: 'Guardar valoración', createJournal: 'Crear asiento borrador', post: 'Contabilizar valoración', createReversal: 'Crear borrador de reversión' },
     ACCOUNTING_ASSETS: { generateProjection: 'Generar proyección', processDepreciation: 'Procesar depreciación' },
     ACCOUNTING_RECONCILIATION: { updateBalance: 'Actualizar saldos', autoMatch: 'Aplicar coincidencias automáticas', addMovement: 'Agregar movimiento manual', editMovement: 'Editar movimiento', matchMovement: 'Conciliar movimiento', complete: 'Completar conciliación' },
     ACCOUNTING_PERIODS: { close: 'Cerrar período', reopen: 'Reabrir período', lock: 'Bloquear período' },
     ACCOUNTING_INVOICE_AUDIT: { audit: 'Auditar facturas', sendToCorrect: 'Enviar a corregir', cancelInvoice: 'Anular y reversar factura', reissueInvoice: 'Registrar reemisión', approveCancellation: 'Aprobar solicitud de anulación', rejectCancellation: 'Rechazar solicitud de anulación' },
+    HR_EMPLOYEES: { terminateEmployee: 'Dar de baja empleado', deleteEmployeeDocument: 'Eliminar documento de empleado' },
+    TICKETS_LIST: { delete: 'Eliminar ticket o adjunto', deactivate: 'Activar o desactivar categoría' },
+    TICKETS_KNOWLEDGE_BASE: { archive: 'Archivar artículo', deactivate: 'Activar o desactivar categoría' },
+    PROJECTS_EXPENSES: { deleteBudgetLine: 'Eliminar línea de presupuesto', deleteCost: 'Eliminar costo del proyecto', deleteCostingLine: 'Eliminar partida de costeo' },
   };
   return labels[moduleId || '']?.[key] || permissionActions.find((action) => action.key === key)?.label || key;
 };
@@ -136,6 +149,8 @@ const getActionLabel = (key: PermissionMatrixAction, moduleId?: string) => {
 const getViewActionDescription = (module: any, action: PermissionMatrixAction) => {
   if (action === 'read') return `Permite acceder a la vista ${module.label}.`;
   const descriptions: Record<string, Record<string, string>> = {
+    ASANA: { archive: 'Retira el tablero de la operación y conserva su historial de actividad.' },
+    ASANA_TASKS: { archive: 'Retira la tarea y sus subtareas de la operación y conserva el historial.' },
     FINANCING: {
       startReview: 'Cambia una solicitud pendiente a En revisión.',
       approve: 'Cambia una solicitud en revisión a Aprobada.',
@@ -159,7 +174,9 @@ const getViewActionDescription = (module: any, action: PermissionMatrixAction) =
       cancel: 'Cancela una orden abierta y conserva su historial.',
     },
     SALES_INVOICES: {
+      delete: 'Solo permite eliminar facturas en borrador; las emitidas deben solicitar anulación contable.',
       submit: 'Permite emitir una factura en estado pendiente.',
+      pay: 'Permite registrar un pago recibido para una factura y actualizar su saldo.',
       sendToCredit: 'Traslada el saldo pendiente al crédito del cliente.',
       sendToCash: 'Envía la factura pendiente a la cola de caja.',
       cancel: 'Envía una solicitud de anulación al flujo contable.',
@@ -199,6 +216,9 @@ const getViewActionDescription = (module: any, action: PermissionMatrixAction) =
       approve: 'Aprueba la orden y prepara la recepción pendiente asociada.',
       reject: 'Rechaza una orden que sigue en borrador o en proceso.',
     },
+    PURCHASES_REQUESTS: {
+      deleteManagement: 'Elimina físicamente una gestión de compra que sigue en borrador. Las solicitudes se anulan con una acción separada.',
+    },
     PURCHASES_RECEIPTS: {
       receive: 'Confirma las cantidades recibidas y procesa los movimientos de inventario.',
       cancel: 'Cancela una recepción pendiente.',
@@ -206,20 +226,41 @@ const getViewActionDescription = (module: any, action: PermissionMatrixAction) =
       retryInventory: 'Reintenta la sincronización de inventario de una recepción procesada parcialmente.',
       registerInvoice: 'Registra una factura de proveedor o evidencia fiscal de la recepción.',
     },
+    PURCHASES_EXPENSES: {
+      delete: 'Elimina físicamente solo gastos en borrador.',
+      cancel: 'Anula un gasto sin borrar el registro ni su historial.',
+    },
+    FINANCIAL_EXPENSES: {
+      delete: 'Elimina físicamente solo gastos manuales en borrador.',
+      cancel: 'Anula un gasto manual, conserva el registro y revierte el saldo de la cuenta.',
+    },
+    FINANCIAL_EXPENSES_REC: {
+      pause: 'Detiene temporalmente las próximas ejecuciones del gasto recurrente.',
+      resume: 'Reanuda una programación de gasto que estaba pausada.',
+      cancel: 'Detiene futuras ejecuciones y conserva la programación y los gastos ya generados.',
+    },
+    FINANCIAL_INCOMES_REC: {
+      pause: 'Detiene temporalmente las próximas ejecuciones del ingreso recurrente.',
+      resume: 'Reanuda una programación de ingreso que estaba pausada.',
+      cancel: 'Detiene futuras ejecuciones y conserva la programación y los ingresos ya generados.',
+    },
     PURCHASES_PAYMENTS: {
       pay: 'Registra pagos simples o mixtos y aplica sus efectos a cuentas por pagar.',
       cancel: 'Anula un pago de proveedor y conserva su trazabilidad.',
     },
     PURCHASES_RETURNS: {
+      delete: 'Solo permite eliminar créditos en borrador; los créditos emitidos deben anularse.',
       issue: 'Emite un crédito de proveedor y aplica los efectos contables existentes.',
       apply: 'Aplica un crédito emitido a una cuenta por pagar.',
       void: 'Anula un crédito que todavía no se ha aplicado.',
     },
     PURCHASES_EXPENSES_REC: {
+      delete: 'Elimina físicamente una programación sin historial de ejecuciones; Anular conserva el registro.',
       pause: 'Pausa la programación de un gasto recurrente.',
       resume: 'Reanuda la programación de un gasto recurrente.',
     },
     PURCHASES_INVOICES_REC: {
+      delete: 'Elimina físicamente la programación; Anular la conserva y detiene futuras órdenes y recepciones.',
       pause: 'Pausa la generación programada de compras recurrentes.',
       resume: 'Reanuda la generación programada de compras recurrentes.',
       cancel: 'Finaliza una programación de compras recurrentes.',
@@ -241,7 +282,10 @@ const getViewActionDescription = (module: any, action: PermissionMatrixAction) =
     },
     TRACKING_RECEPTION: { receive: 'Registra la recepción física del paquete en la sucursal y bodega seleccionadas.' },
     TRACKING_PACKAGES: { import: 'Valida y confirma la importación masiva o rápida de paquetes.' },
-    TRACKING_BATCHES: { confirm: 'Confirma la referencia y registra la factura de compra asociada cuando aplica.' },
+    TRACKING_BATCHES: {
+      delete: 'Elimina solo referencias abiertas y vacías; no permite borrar referencias con paquetes.',
+      confirm: 'Confirma la referencia y registra la factura de compra asociada cuando aplica.',
+    },
     TRACKING_RECONCILIATION: { confirm: 'Crea la factura del proveedor y asocia los paquetes seleccionados.' },
     TRACKING_BILLING: {
       bill: 'Emite la factura de venta y cambia los paquetes seleccionados a Facturado.',
@@ -270,9 +314,36 @@ const getViewActionDescription = (module: any, action: PermissionMatrixAction) =
       closeByException: 'Cierra un contenedor fuera de los mínimos con motivo obligatorio y auditoría.',
       reopenContainer: 'Reabre un contenedor con motivo obligatorio y conserva el prorrateo histórico.',
     },
+    HR_EMPLOYEES: {
+      terminateEmployee: 'Finaliza la relación laboral y conserva el historial del empleado.',
+      deleteEmployeeDocument: 'Elimina físicamente un documento laboral asociado al empleado.',
+    },
+    TICKETS_LIST: {
+      delete: 'Elimina físicamente un ticket o un adjunto, sujeto al alcance de interacción del ticket.',
+      deactivate: 'Activa o inhabilita una categoría conservando los tickets y su historial.',
+    },
+    TICKETS_KNOWLEDGE_BASE: {
+      archive: 'Archiva un artículo y conserva sus versiones e historial.',
+      deactivate: 'Activa o inhabilita una categoría sin borrar artículos asociados.',
+    },
+    PROJECTS_EXPENSES: {
+      deleteBudgetLine: 'Elimina una línea del presupuesto y recalcula los totales del proyecto.',
+      deleteCost: 'Elimina un costo registrado y recalcula los totales del proyecto.',
+      deleteCostingLine: 'Elimina una partida del costeo 6D y conserva la recalculación del proyecto.',
+    },
     ACCOUNTING_JOURNAL: {
+      delete: 'Solo permite eliminar asientos en borrador; los contabilizados deben anularse.',
       post: 'Contabiliza un asiento borrador y aplica los cambios al libro contable.',
       void: 'Anula un asiento publicado y conserva la reversión y el historial contable.',
+    },
+    ACCOUNTING_CHART: {
+      delete: 'Permite eliminar una cuenta al transferir sus datos; sin este permiso, la transferencia conserva la cuenta inhabilitada.',
+    },
+    ACCOUNTING_FISCAL: {
+      delete: 'Elimina un respaldo fiscal y sus adjuntos asociados.',
+    },
+    HR_LEAVES: {
+      delete: 'Elimina físicamente solo solicitudes de ausencia que continúan pendientes.',
     },
     ACCOUNTING_HR_PAYMENT_REQUESTS: {
       approve: 'Aprueba la solicitud de pago para dejarla lista para pago.',
@@ -370,7 +441,7 @@ function hydratePermissions(role: any) {
     const parent = module.parent
       ? current.find((permission: any) => String(permission.module || '').toUpperCase() === String(module.parent).toUpperCase())
       : undefined;
-    return hydratePermissionActions(existing || parent, module.id);
+    return hydratePermissionActions(existing || parent, module.id, current);
   });
   // El editor se guarda contra el catálogo canónico. Así los identificadores
   // retirados o desconocidos se limpian al editar un rol existente.

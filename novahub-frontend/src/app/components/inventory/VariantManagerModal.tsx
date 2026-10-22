@@ -22,6 +22,9 @@ interface VariantManagerModalProps {
 export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: VariantManagerModalProps) {
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
+  const canCreateVariants = canPerform('INVENTORY_PRODUCTS', 'create');
+  const canEditVariants = canPerform('INVENTORY_PRODUCTS', 'edit');
+  const canDeleteVariants = canPerform('INVENTORY_PRODUCTS', 'delete');
   const [variants, setVariants] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,6 +72,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
   };
 
   const openCreate = () => {
+    if (!canCreateVariants) return;
     resetForm();
     setFormSku(`${product?.code || ''}-`);
     setEditingId(null);
@@ -76,6 +80,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
   };
 
   const openEdit = (variant: any) => {
+    if (!canEditVariants) return;
     setFormSku(variant.sku);
     setFormName(variant.name || '');
     setFormPriceModifier(String(variant.priceModifier || 0));
@@ -87,6 +92,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
 
   const handleSave = async () => {
     if (!product) return;
+    if (editingId ? !canEditVariants : !canCreateVariants) return;
     if (!formSku.trim()) {
       toast.error('El SKU es obligatorio');
       return;
@@ -126,7 +132,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
   };
 
   const handleDelete = async () => {
-    if (!pendingDeleteId) return;
+    if (!pendingDeleteId || !canDeleteVariants) return;
     setSaving(true);
     const actionToken = beginNotificationAction();
     try {
@@ -145,7 +151,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
   };
 
   const handleRegenerate = async () => {
-    if (!product) return;
+    if (!product || !canEditVariants) return;
     setRegenerating(true);
     const actionToken = beginNotificationAction();
     try {
@@ -210,7 +216,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                       <TableHead>Atributos</TableHead>
                       <TableHead className="w-20 text-right">Stock</TableHead>
                       <TableHead className="w-24 text-right">Precios</TableHead>
-                      <TableHead className="w-20 text-right">Acciones</TableHead>
+                      {(canEditVariants || canDeleteVariants) && <TableHead className="w-20 text-right">Acciones</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -254,9 +260,9 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">
+                        {(canEditVariants || canDeleteVariants) && <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
-                            <Button
+                            {canEditVariants && <Button
                               variant="ghost"
                               size="icon"
                               className="size-7"
@@ -264,18 +270,19 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                               title="Editar"
                             >
                               <Pencil className="size-3.5" />
-                            </Button>
-                            <Button
+                            </Button>}
+                            {canDeleteVariants && <Button
                               variant="ghost"
                               size="icon"
                               className="size-7 text-destructive hover:bg-destructive/10"
                               onClick={() => setPendingDeleteId(variant.id)}
+                              aria-label={`Eliminar variante ${variant.sku}`}
                               title="Eliminar"
                             >
                               <Trash2 className="size-3.5" />
-                            </Button>
+                            </Button>}
                           </div>
-                        </TableCell>
+                        </TableCell>}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -285,7 +292,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
           </div>
 
           <DialogFooter className="flex flex-wrap gap-2 pt-2 border-t">
-            <Button
+            {canEditVariants && <Button
               variant="outline"
               size="sm"
               onClick={handleRegenerate}
@@ -294,11 +301,11 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
             >
               {regenerating ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
               Regenerar
-            </Button>
-            <Button size="sm" onClick={openCreate} className="gap-1.5">
+            </Button>}
+            {canCreateVariants && <Button size="sm" onClick={openCreate} className="gap-1.5">
               <Plus className="size-3.5" />
               Nueva Variante
-            </Button>
+            </Button>}
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cerrar
             </Button>
@@ -306,7 +313,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showCreate} onOpenChange={(v) => { if (!v) { setShowCreate(false); setEditingId(null); resetForm(); } }}>
+      <Dialog open={showCreate && (editingId ? canEditVariants : canCreateVariants)} onOpenChange={(v) => { if (!v) { setShowCreate(false); setEditingId(null); resetForm(); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{editingId ? 'Editar Variante' : 'Nueva Variante'}</DialogTitle>
@@ -369,7 +376,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
             <Button variant="outline" onClick={() => { setShowCreate(false); setEditingId(null); resetForm(); }} disabled={saving}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving || !formSku.trim()}>
+            <Button onClick={handleSave} disabled={saving || !formSku.trim() || (editingId ? !canEditVariants : !canCreateVariants)}>
               {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
               {editingId ? 'Guardar cambios' : 'Crear variante'}
             </Button>
@@ -378,7 +385,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
       </Dialog>
 
       <ConfirmDialog
-        open={!!pendingDeleteId}
+        open={!!pendingDeleteId && canDeleteVariants}
         onOpenChange={(v) => { if (!v) setPendingDeleteId(null); }}
         title="Eliminar variante"
         description="¿Estás seguro de eliminar esta variante? Esta acción no se puede deshacer."

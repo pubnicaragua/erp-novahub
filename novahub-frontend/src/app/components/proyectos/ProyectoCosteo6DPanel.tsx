@@ -82,7 +82,7 @@ export function ProyectoCosteo6DPanel({
   const { canPerform } = useAuth();
   const canEditLines = canPerform('PROJECTS_EXPENSES', 'edit');
   const canCreateLine = canPerform('PROJECTS_EXPENSES', 'create');
-  const canDeleteLine = canPerform('PROJECTS_EXPENSES', 'delete');
+  const canDeleteLine = canPerform('PROJECTS_EXPENSES', 'deleteCostingLine');
   const canApplyTemplate = canPerform('PROJECTS_EXPENSES', 'applyCostTemplate');
   const canApproveBaseline = canPerform('PROJECTS_EXPENSES', 'approve');
   const queryClient = useQueryClient();

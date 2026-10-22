@@ -40,10 +40,10 @@ interface SoporteTecnicoAdminViewProps {
 }
 
 export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: SoporteTecnicoAdminViewProps) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canViewSupport = canPerform('SUPPORT_TECH', 'view');
   const canEditSupport = canPerform('SUPPORT_TECH', 'edit');
-  const canDeleteSupport = canPerform('SUPPORT_TECH', 'delete');
+  const canDeleteSupport = String(user?.role || '').toLowerCase().replace(/[_\s-]/g, '') === 'superadmin';
   const ticketsQuery = useTenantQuery<any[]>(['technical-support', 'all-tickets'], signal => soporteTecnicoService.getAll(signal), { enabled: canViewSupport });
   const tickets = Array.isArray(ticketsQuery.data) ? ticketsQuery.data : [];
   const loading = ticketsQuery.isLoading || ticketsQuery.isFetching;

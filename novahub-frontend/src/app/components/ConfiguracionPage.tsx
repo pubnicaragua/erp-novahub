@@ -602,7 +602,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
   const canViewCurrency = canPerform('CONFIG_CURRENCY', 'view');
   const canEditCompany = canPerform('CONFIG_COMPANY', 'edit');
   const canCreateCompany = canPerform('CONFIG_COMPANY', 'create');
-  const canDeactivateCompany = canPerform('CONFIG_COMPANY', 'deactivate');
+  const canDeleteCompany = canPerform('CONFIG_COMPANY', 'delete');
   const canEditBranding = canPerform('CONFIG_BRANDING', 'edit');
   const canEditSecurity = canPerform('CONFIG_SECURITY', 'edit');
   const canEditCurrency = canPerform('CONFIG_CURRENCY', 'edit');
@@ -787,7 +787,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
   };
 
   const handleDeleteIndustry = async (id: string) => {
-    if (!canDeactivateCompany || !user?.tenantId) return;
+    if (!canDeleteCompany || !user?.tenantId) return;
     try {
       await api.delete(`/tenants/${user.tenantId}/industries/${id}`);
       toast.success('Industria eliminada');
@@ -1138,7 +1138,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
       ) as any;
       
       if (existing) {
-        return hydratePermissionActions(existing, m.id) as any;
+        return hydratePermissionActions(existing, m.id, currentPerms) as any;
       }
       
       return hydratePermissionActions({}, m.id) as any;
@@ -1567,6 +1567,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
             logo={corporateLogo}
             canEdit={canEditPdf}
             canCreate={canCreatePdf}
+            canImport={canPerform('CONFIG_PDF', 'import')}
             canDelete={canDeletePdf}
           />
         </TabsContent>
@@ -1626,7 +1627,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
                         {industryOptions.filter(o => !o.isDefault).map(o => (
                           <Badge key={o.id} variant="secondary" className="gap-1 pr-1 text-[10px] font-bold">
                             {o.name}
-                            {canDeactivateCompany && <button onClick={() => o.id && handleDeleteIndustry(o.id)}
+                            {canDeleteCompany && <button aria-label={`Eliminar industria ${o.name}`} title="Eliminar industria" onClick={() => o.id && handleDeleteIndustry(o.id)}
                               className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive transition-colors">
                               <Trash2 className="size-2.5" />
                             </button>}

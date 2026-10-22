@@ -187,7 +187,7 @@ const ticketProductLinks = (ticket?: Ticket | null): TicketProductLink[] => {
 
 export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog = [], categoryCatalog = [], agentCatalog = [], invoiceCatalog = [], productCatalog = [], loading, onRefresh, onHelp, targetTicketId, onTargetTicketHandled }) => {
   const { canPerform, user } = useAuth();
-  const canManageCategories = canPerform('TICKETS_LIST', 'create') || canPerform('TICKETS_LIST', 'edit');
+  const canManageCategories = canPerform('TICKETS_LIST', 'create') || canPerform('TICKETS_LIST', 'edit') || canPerform('TICKETS_LIST', 'deactivate');
   const canInteractWithTicket = (ticket?: Ticket | null) => Boolean(
     ticket && user && (isTicketAdmin(user) || ticket.createdById === user.id || ticket.assignedToId === user.id),
   );
@@ -493,9 +493,13 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
   };
 
   const toggleCategory = async (category: any) => {
-    if (!canPerform('TICKETS_LIST', 'edit')) return;
+    if (!canPerform('TICKETS_LIST', 'deactivate')) return;
     try {
-      await supportService.updateCategory(category.id, { isActive: category.isActive === false });
+      if (category.isActive === false) {
+        await supportService.updateCategory(category.id, { isActive: true });
+      } else {
+        await supportService.deactivateCategory(category.id);
+      }
       await onRefresh();
     } catch {
       toast.error('No se pudo actualizar la categoría');
@@ -1183,7 +1187,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                   <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: category.color || '#64748b' }} />
                   <span className={cn('min-w-0 flex-1 truncate text-sm font-semibold', category.isActive === false && 'text-muted-foreground line-through')}>{category.name}</span>
                   {canPerform('TICKETS_LIST', 'edit') && <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => { setEditingCategoryId(category.id); setCategoryName(category.name); setCategoryColor(category.color || '#64748b'); }}>Editar</Button>}
-                  {canPerform('TICKETS_LIST', 'edit') && <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-muted-foreground" onClick={() => toggleCategory(category)}>{category.isActive === false ? 'Activar' : 'Desactivar'}</Button>}
+                  {canPerform('TICKETS_LIST', 'deactivate') && <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-muted-foreground" onClick={() => toggleCategory(category)}>{category.isActive === false ? 'Activar' : 'Desactivar'}</Button>}
                 </div>
               ))}
             </div>

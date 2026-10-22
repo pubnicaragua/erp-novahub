@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella, Search, CalendarRange, Pencil } from 'lucide-react';
+import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella, Search, CalendarRange, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -12,6 +12,7 @@ import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
 import type { AbsenceType, VacationBalance } from '../../types';
 import { PromptDialog } from '../ui/PromptDialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useQuery } from '@tanstack/react-query';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -60,6 +61,8 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   });
 
   const [pendingRejectId, setPendingRejectId] = useState<string | null>(null);
+  const [pendingDeleteRequestId, setPendingDeleteRequestId] = useState<string | null>(null);
+  const [deleteRequestLoading, setDeleteRequestLoading] = useState(false);
 
   const computedDays = newRequest.startDate && newRequest.endDate
     ? countWorkDays(new Date(newRequest.startDate), new Date(newRequest.endDate))
@@ -202,6 +205,31 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al rechazar solicitud');
       failNotificationAction(actionToken);
+    }
+  };
+
+  const openDeleteRequest = (request: any) => {
+    if (String(request?.status || '').toUpperCase() !== 'PENDING'
+      || !canPerform('HR_LEAVES', 'read') || !canPerform('HR_LEAVES', 'delete')) return;
+    setPendingDeleteRequestId(String(request.id));
+  };
+
+  const confirmDeleteRequest = async () => {
+    if (!pendingDeleteRequestId || !canPerform('HR_LEAVES', 'read') || !canPerform('HR_LEAVES', 'delete')) return;
+    const actionToken = beginNotificationAction();
+    setDeleteRequestLoading(true);
+    try {
+      await hrService.deleteLeaveRequest(pendingDeleteRequestId);
+      toast.success('Solicitud pendiente eliminada');
+      completeNotificationAction(actionToken);
+      setPendingDeleteRequestId(null);
+      await onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar la solicitud');
+      failNotificationAction(actionToken);
+      throw error;
+    } finally {
+      setDeleteRequestLoading(false);
     }
   };
 
@@ -536,7 +564,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'reject') || canPerform('HR_LEAVES', 'edit')) && (
+                    {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'reject') || canPerform('HR_LEAVES', 'edit') || canPerform('HR_LEAVES', 'delete')) && (
                       <div className="flex items-center justify-end gap-1">
                         {canPerform('HR_LEAVES', 'edit') && <Button
                           size="sm"
@@ -562,6 +590,17 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                           className="h-7 px-2 text-destructive hover:text-destructive-foreground hover:bg-destructive"
                         >
                           <X className="size-4" />
+                        </Button>}
+                        {canPerform('HR_LEAVES', 'delete') && <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openDeleteRequest(request)}
+                          className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          title="Eliminar solicitud pendiente"
+                          aria-label={`Eliminar solicitud pendiente de ${employeeName(request)}`}
+                        >
+                          <Trash2 className="size-4" />
                         </Button>}
                       </div>
                     )}
@@ -622,8 +661,8 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                 )}
               </div>
 
-                {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'reject') || canPerform('HR_LEAVES', 'edit')) && (
-                <div className="flex items-center gap-2 pt-4 mt-2 border-t border-border/50">
+                {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'reject') || canPerform('HR_LEAVES', 'edit') || canPerform('HR_LEAVES', 'delete')) && (
+                <div className="flex flex-wrap items-center gap-2 pt-4 mt-2 border-t border-border/50">
                   {canPerform('HR_LEAVES', 'edit') && <Button size="sm" variant="outline" onClick={() => handleOpenEditRequest(request)} className="flex-1 rounded-xl text-[11px] h-8 text-primary border-primary/30 hover:bg-primary/10">
                     <Pencil className="size-3 mr-1" /> Editar
                   </Button>}
@@ -632,6 +671,9 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                   </Button>}
                   {canPerform('HR_LEAVES', 'reject') && <Button size="sm" onClick={() => handleReject(request.id)} className="flex-1 bg-destructive hover:bg-destructive text-destructive-foreground rounded-xl text-[11px] h-8">
                     <X className="size-3 mr-1" /> Rechazar
+                  </Button>}
+                  {canPerform('HR_LEAVES', 'delete') && <Button type="button" size="sm" variant="outline" onClick={() => openDeleteRequest(request)} className="flex-1 rounded-xl border-destructive/30 text-[11px] text-destructive hover:bg-destructive/10 h-8" aria-label={`Eliminar solicitud pendiente de ${employeeName(request)}`}>
+                    <Trash2 className="size-3 mr-1" /> Eliminar
                   </Button>}
                 </div>
               )}
@@ -684,6 +726,16 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
         placeholder="Escribe la razón…"
         confirmLabel="Rechazar"
         onConfirm={confirmReject}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDeleteRequestId)}
+        onOpenChange={(open) => { if (!open && !deleteRequestLoading) setPendingDeleteRequestId(null); }}
+        title="¿Eliminar solicitud pendiente?"
+        description="La solicitud se eliminará permanentemente. Solo se permite antes de aprobarla o rechazarla."
+        confirmLabel="Eliminar solicitud"
+        variant="destructive"
+        loading={deleteRequestLoading}
+        onConfirm={confirmDeleteRequest}
       />
     </div>
   );

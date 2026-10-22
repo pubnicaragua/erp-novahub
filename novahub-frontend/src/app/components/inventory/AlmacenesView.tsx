@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
-import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, Banknote, Loader2, Users, CircleHelp } from 'lucide-react';
+import { Warehouse, MapPin, Plus, Ban, X, Check, Edit2, Banknote, Loader2, Users, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -68,7 +68,7 @@ export function AlmacenesView({ warehouses, onRefresh, accountingConnectionEnabl
   const { canPerform } = useAuth();
   const canCreateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'create');
   const canEditWarehouse = canPerform('INVENTORY_WAREHOUSES', 'edit');
-  const canDeactivateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'delete');
+  const canDeactivateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'deactivate');
   const canViewPos = canPerform('RETAIL_POS', 'view');
   const canManagePos = canPerform('RETAIL_POS', 'edit');
   const [showTutorial, setShowTutorial] = useState(false);
@@ -277,12 +277,12 @@ export function AlmacenesView({ warehouses, onRefresh, accountingConnectionEnabl
     const actionToken = beginNotificationAction();
     try {
       await inventoryService.deleteWarehouse(pendingDeleteId);
-      toast.success('Bodega eliminada');
+      toast.success('Bodega inhabilitada');
       completeNotificationAction(actionToken);
       setPendingDeleteId(null);
       onRefresh();
     } catch (e: any) {
-      toast.error(e.message || 'Error al eliminar');
+      toast.error(e.message || 'Error al inhabilitar');
       failNotificationAction(actionToken);
     } finally {
       setDeleteLoading(false);
@@ -447,7 +447,7 @@ export function AlmacenesView({ warehouses, onRefresh, accountingConnectionEnabl
         </div>
         <div className="mt-3 flex justify-end gap-1 border-t border-border/40 pt-3">
           {canEditWarehouse && <Button type="button" variant="ghost" size="icon" className="size-9" onClick={() => handleEditRow(warehouse)} aria-label={`Editar ${warehouse.name}`}><Edit2 className="size-4" /></Button>}
-          {canDeactivateWarehouse && <Button type="button" variant="ghost" size="icon" className="size-9 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteWarehouse(warehouse.id)} aria-label={`Eliminar ${warehouse.name}`}><Trash2 className="size-4" /></Button>}
+          {canDeactivateWarehouse && <Button type="button" variant="ghost" size="icon" className="size-9 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteWarehouse(warehouse.id)} aria-label={`Inhabilitar ${warehouse.name}`} title={`Inhabilitar ${warehouse.name}`}><Ban className="size-4" /></Button>}
         </div>
       </Card>
     );
@@ -564,7 +564,7 @@ export function AlmacenesView({ warehouses, onRefresh, accountingConnectionEnabl
                           className="size-7 text-destructive hover:text-destructive-foreground hover:bg-destructive"
                           onClick={() => handleDeleteWarehouse(wh.id)}
                         >
-                          <Trash2 className="size-3.5" />
+                          <Ban className="size-3.5" />
                         </Button>}
                       </div>
                     </TableCell>
@@ -590,7 +590,7 @@ export function AlmacenesView({ warehouses, onRefresh, accountingConnectionEnabl
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {canEditWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl px-2 text-[10px]" onClick={() => handleEditRow(detailWarehouse)}><Edit2 className="mr-1 size-3.5" />Editar</Button>}
-                  {canDeactivateWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl border-destructive/30 px-2 text-[10px] text-destructive hover:bg-destructive/10" onClick={() => handleDeleteWarehouse(detailWarehouse.id)}><Trash2 className="mr-1 size-3.5" />Eliminar</Button>}
+                        {canDeactivateWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl border-destructive/30 px-2 text-[10px] text-destructive hover:bg-destructive/10" onClick={() => handleDeleteWarehouse(detailWarehouse.id)}><Ban className="mr-1 size-3.5" />Inhabilitar</Button>}
                   <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setDetailWarehouse(null)} title="Cerrar" aria-label="Cerrar detalle de bodega">
                     <X className="size-3.5" />
                   </Button>
@@ -631,9 +631,9 @@ export function AlmacenesView({ warehouses, onRefresh, accountingConnectionEnabl
       <ConfirmDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => !open && setPendingDeleteId(null)}
-        title="¿Eliminar bodega?"
-        description="Esta acción desactivará la bodega seleccionada."
-        confirmLabel="Eliminar"
+        title="¿Inhabilitar bodega?"
+        description="La bodega dejará de estar disponible para nuevas operaciones y conservará su historial."
+        confirmLabel="Inhabilitar"
         loading={deleteLoading}
         onConfirm={handleConfirmDeleteWarehouse}
       />

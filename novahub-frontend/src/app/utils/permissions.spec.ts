@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { approvalActionValue, getPermissionActionKeys, hydratePermissionActions, permissionValue, serializePermissionActions } from './permissions.ts';
 import { getLegalCaseStatusPermissionAction, LEGAL_CASE_STATUS_OPTIONS } from './legalWorkflow.ts';
+import { canShowInvoiceSubmitAction, getInvoicePaymentBalance, shouldSubmitExistingDraftBeforePayment } from './invoicePaymentWorkflow.ts';
 
 test('legacy approve grants hydrate the new expense actions', () => {
   assert.equal(permissionValue({ approve: true }, 'submit'), true);
@@ -18,6 +19,35 @@ test('editing an old expense role shows inherited actions and persists granular 
   assert.equal(saved.approve, true);
   assert.equal(saved.submit, false);
   assert.equal(saved.pay, true);
+});
+
+test('expense roles separate cancellation from physical deletion and keep legacy delete access', () => {
+  for (const module of ['PURCHASES_EXPENSES', 'FINANCIAL_EXPENSES']) {
+    const actions = getPermissionActionKeys(module);
+    assert.equal(actions.includes('cancel' as any), true, `${module} exposes cancellation`);
+    assert.equal(actions.includes('delete' as any), true, `${module} keeps draft deletion as a separate action`);
+    assert.equal(permissionValue({ module, delete: true }, 'cancel' as any, module), true, 'legacy roles retain cancellation');
+    assert.equal(permissionValue({ module, delete: true, cancel: false }, 'cancel' as any, module), false, 'explicit cancellation denial wins');
+    assert.equal(permissionValue({ module, cancel: true, delete: false }, 'delete', module), false, 'cancellation does not grant physical deletion');
+  }
+});
+
+test('financial incomes do not offer physical deletion and recurring schedules expose cancellation', () => {
+  assert.equal(getPermissionActionKeys('FINANCIAL_INCOMES').includes('delete' as any), false);
+
+  for (const module of ['FINANCIAL_EXPENSES_REC', 'FINANCIAL_INCOMES_REC']) {
+    const actions = getPermissionActionKeys(module);
+    assert.equal(actions.includes('cancel' as any), true, `${module} exposes cancellation`);
+    assert.equal(actions.includes('delete' as any), false, `${module} does not expose physical deletion`);
+
+    const oldRole = hydratePermissionActions({ module, read: true, delete: true }, module);
+    assert.equal(oldRole.cancel, true, `${module} keeps cancellation for old roles`);
+    assert.equal(Object.hasOwn(oldRole, 'delete'), false, `${module} drops the ghost delete field`);
+
+    const [saved] = serializePermissionActions([{ ...oldRole, cancel: false }]);
+    assert.equal(saved.cancel, false, `${module} persists an explicit cancellation denial`);
+    assert.equal(Object.hasOwn(saved, 'delete'), false, `${module} no longer serializes delete`);
+  }
 });
 
 test('explicit granular values override the legacy approve value', () => {
@@ -189,7 +219,7 @@ test('Ventas matrix exposes each confirmed business workflow instead of a blanke
   const expectedByModule: Record<string, string[]> = {
     SALES_QUOTES: ['submit', 'convert'],
     SALES_ORDERS: ['submit', 'approve', 'convert'],
-    SALES_INVOICES: ['submit', 'sendToCredit', 'sendToCash', 'cancel'],
+    SALES_INVOICES: ['submit', 'pay', 'sendToCredit', 'sendToCash', 'cancel', 'createPaymentLink', 'reconcilePaymentLink', 'cancelPaymentLink'],
     SALES_PAYMENTS: ['pay', 'cancel'],
     SALES_RECURRING: ['pause', 'resume', 'cancel'],
     SALES_RETURNS: ['approve', 'process', 'reject'],
@@ -204,11 +234,76 @@ test('Ventas matrix exposes each confirmed business workflow instead of a blanke
   }
   assert.equal(getPermissionActionKeys('SALES_QUOTES').includes('approve'), false);
   assert.equal(getPermissionActionKeys('SALES_INVOICES').includes('approve'), false);
+  assert.equal(getPermissionActionKeys('SALES_INVOICES').includes('delete'), true, 'borradores de factura sí se eliminan');
   assert.equal(getPermissionActionKeys('SALES_PAYMENTS').includes('approve'), false);
   assert.equal(getPermissionActionKeys('RETAIL_POS').includes('approve'), false);
   assert.equal(getPermissionActionKeys('RETAIL_CASH_CONTROL').includes('approve'), false);
   assert.equal(getPermissionActionKeys('SALES_ORDERS').includes('delete'), false);
   assert.equal(getPermissionActionKeys('SALES_CREDIT_NOTES').includes('delete'), false);
+});
+
+test('Facturas muestra registrar pago y conserva el permiso histórico de Pagos recibidos al editar roles', () => {
+  const permissions = [
+    { module: 'SALES_INVOICES', read: true },
+    { module: 'SALES_PAYMENTS', read: true, pay: true },
+  ];
+  const invoice = hydratePermissionActions(permissions[0], 'SALES_INVOICES', permissions);
+  assert.equal(invoice.pay, true);
+  assert.equal(invoice.createPaymentLink, false);
+
+  const [savedInvoice] = serializePermissionActions([{ ...invoice, pay: false }]);
+  assert.equal(savedInvoice.pay, false);
+  assert.equal(permissionValue(savedInvoice, 'pay' as any, 'SALES_INVOICES'), false);
+
+  const explicitlyEnabled = hydratePermissionActions(
+    { module: 'SALES_INVOICES', read: true, pay: false },
+    'SALES_INVOICES',
+    permissions,
+  );
+  assert.equal(explicitlyEnabled.pay, false);
+});
+
+test('la matriz migra permisos históricos de lotes y oculta acciones que no pertenecen a recepción', () => {
+  const legacyPermissions = [
+    { module: 'TRACKING_RECEPTION', read: true, create: true, approve: true },
+    { module: 'TRACKING_BATCHES', read: true },
+  ];
+  const reception = hydratePermissionActions(legacyPermissions[0], 'TRACKING_RECEPTION', legacyPermissions);
+  const batches = hydratePermissionActions(legacyPermissions[1], 'TRACKING_BATCHES', legacyPermissions);
+
+  assert.equal(reception.receive, true, 'la recepción física conserva el permiso histórico de creación');
+  assert.equal(Object.hasOwn(reception, 'create'), false, 'crear un lote no aparece en Recepción');
+  assert.equal(Object.hasOwn(reception, 'confirm'), false, 'confirmar un lote no aparece en Recepción');
+  assert.equal(batches.create, true, 'crear lotes conserva el permiso heredado');
+  assert.equal(batches.confirm, true, 'confirmar lotes conserva la aprobación heredada');
+
+  const explicitDenial = hydratePermissionActions(
+    { module: 'TRACKING_BATCHES', read: true, create: false, confirm: false },
+    'TRACKING_BATCHES',
+    legacyPermissions,
+  );
+  assert.equal(explicitDenial.create, false, 'una decisión granular prevalece sobre la fila antigua');
+  assert.equal(explicitDenial.confirm, false, 'una denegación granular prevalece sobre aprobar en Recepción');
+});
+
+test('el editor no ofrece eliminar cuando no hay una accion de usuario en la vista', () => {
+  const cases = [
+    ['SALES_QUOTES', 'cancel'],
+    ['SALES_ORDERS', 'cancel'],
+    ['SALES_RETURNS', 'reject'],
+    ['SALES_CREDIT_NOTES', 'cancel'],
+    ['PURCHASES_REQUESTS', 'cancel'],
+  ] as const;
+
+  for (const [module, action] of cases) {
+    const hydrated = hydratePermissionActions({ module, read: true, delete: true }, module);
+    assert.equal(hydrated[action], true, `${module} migrates old delete to ${action}`);
+    assert.equal(Object.hasOwn(hydrated, 'delete'), false, `${module} does not expose physical delete`);
+
+    const [saved] = serializePermissionActions([hydrated]);
+    assert.equal(saved[action], true, `${module} saves the real workflow action`);
+    assert.equal(Object.hasOwn(saved, 'delete'), false, `${module} drops the ghost delete option when saved`);
+  }
 });
 
 test('Restaurante matrix exposes independent table, order, kitchen and configuration actions', () => {
@@ -445,7 +540,7 @@ test('Contabilidad hydrates old permissions and an explicit granular denial wins
 
 test('Recursos Humanos exposes distinct workflow actions across the full module', () => {
   const expected: Record<string, string[]> = {
-    HR_EMPLOYEES: ['submit', 'approve', 'reject'],
+    HR_EMPLOYEES: ['submit', 'approve', 'reject', 'terminateEmployee', 'deleteEmployeeDocument'],
     HR_PAYROLL: ['process', 'requestPayment'],
     HR_LEAVES: ['approve', 'reject'],
     HR_TRAINING: ['enroll', 'start', 'complete', 'completeEnrollment', 'cancel', 'requestPayment'],
@@ -528,6 +623,7 @@ test('Fuerza Comercial exposes dedicated prospect, route, presence and consent a
   ];
   for (const action of expected) assert.equal(actions.includes(action as any), true, `FORCE_SALES:${action}`);
   assert.equal(actions.includes('approve'), false);
+  assert.equal(actions.includes('delete'), false, 'prospect deletion is reserved for Super Admin and is not a custom-role permission');
 });
 
 test('Fuerza Comercial keeps legacy create/edit/send access until an explicit granular choice is saved', () => {
@@ -596,19 +692,27 @@ test('Proyectos exposes its operational actions by area and keeps legacy grants 
     PROJECTS_TASKS: ['complete', 'changeStatus', 'reorder', 'comment', 'react', 'linkErp', 'autoPlan'],
     PROJECTS_MILESTONES: ['complete', 'changeStatus', 'updateProgress'],
     PROJECTS_QUOTATIONS: ['manageMaterials', 'sendToSuppliers', 'manualFill', 'reviewOverwrite', 'selectOffers'],
-    PROJECTS_EXPENSES: ['createJournal', 'applyCostTemplate', 'approve', 'editPricing', 'syncPricing', 'manageCalculationMemory'],
+    PROJECTS_EXPENSES: ['createJournal', 'applyCostTemplate', 'approve', 'editPricing', 'syncPricing', 'manageCalculationMemory', 'deleteBudgetLine', 'deleteCost', 'deleteCostingLine'],
     PROJECTS_PROGRESS: ['recordProgress', 'editCurve', 'createCapture', 'deleteCapture', 'managePublicLinks'],
   };
   for (const [module, actions] of Object.entries(expected)) {
     const supported = getPermissionActionKeys(module);
     for (const action of actions) assert.equal(supported.includes(action as any), true, `${module}:${action}`);
   }
+  assert.equal(getPermissionActionKeys('PROJECTS_QUOTATIONS').includes('delete'), false, 'quotation material removal is governed by manageMaterials, not a phantom delete option');
 
   const legacyTask = hydratePermissionActions({ module: 'PROJECTS_TASKS', read: true, edit: true }, 'PROJECTS_TASKS');
   assert.equal(legacyTask.complete, true);
   const [savedTask] = serializePermissionActions([{ ...legacyTask, complete: false }]);
   assert.equal(savedTask.complete, false);
   assert.equal(approvalActionValue(savedTask, 'complete', 'PROJECTS_TASKS'), false);
+
+  const legacyExpenseDeletes = hydratePermissionActions({ module: 'PROJECTS_EXPENSES', delete: true }, 'PROJECTS_EXPENSES');
+  for (const action of ['deleteBudgetLine', 'deleteCost', 'deleteCostingLine']) {
+    assert.equal(legacyExpenseDeletes[action], true, `legacy delete grants ${action} until a granular choice is saved`);
+  }
+  const [savedExpenseDeletes] = serializePermissionActions([{ ...legacyExpenseDeletes, deleteCost: false }]);
+  assert.equal(permissionValue(savedExpenseDeletes, 'deleteCost' as any, 'PROJECTS_EXPENSES'), false);
 
   const legacyCapture = hydratePermissionActions({ module: 'PROJECTS_DOCUMENTS', create: true }, 'PROJECTS_PROGRESS');
   assert.equal(legacyCapture.createCapture, true);
@@ -621,6 +725,7 @@ test('Tickets exposes workflow actions by transition and keeps TICKETS_VIEW as a
   for (const action of ['startTicket', 'returnTicketToOpen', 'resolveTicket', 'closeTicket', 'reopenTicket', 'commentTicket']) {
     assert.equal(actions.includes(action as any), true, action);
   }
+  assert.equal(actions.includes('deactivate' as any), true);
   assert.equal(actions.includes('approve'), false);
   assert.deepEqual(getPermissionActionKeys('TICKETS_VIEW'), actions);
 
@@ -636,4 +741,157 @@ test('Tickets exposes workflow actions by transition and keeps TICKETS_VIEW as a
   assert.equal(permissionValue(saved, 'resolveTicket' as any, 'TICKETS_LIST'), false);
   assert.equal(permissionValue(saved, 'reopenTicket' as any, 'TICKETS_LIST'), false);
   assert.equal(permissionValue(saved, 'returnTicketToOpen' as any, 'TICKETS_LIST'), false);
+});
+
+test('delete options in the role editor match the active view contract', () => {
+  assert.deepEqual(getPermissionActionKeys('PURCHASES'), ['read', 'create'], 'the parent Compras view has no delete control');
+  const supplierPricePermission = hydratePermissionActions({ module: 'PURCHASES', read: true, delete: true }, 'PURCHASES');
+  assert.equal(Object.hasOwn(supplierPricePermission, 'delete'), false, 'supplier-price delete is not offered as a parent-view action');
+  assert.equal(getPermissionActionKeys('ACCOUNTING_ASSETS').includes('delete'), false, 'accounting assets have no physical delete route');
+  assert.equal(getPermissionActionKeys('DOCUMENTS_FOLDERS').includes('delete'), false, 'document folder view has no folder deletion action');
+  assert.deepEqual(getPermissionActionKeys('FINANCIAL_BUDGET'), ['read', 'export'], 'financial budget view only reads and exports its data');
+  const knowledgeBaseActions = getPermissionActionKeys('TICKETS_KNOWLEDGE_BASE');
+  assert.equal(knowledgeBaseActions.includes('delete'), false);
+  assert.equal(knowledgeBaseActions.includes('archive'), true);
+  assert.equal(knowledgeBaseActions.includes('deactivate'), true);
+  assert.equal(permissionValue({ module: 'TICKETS_KNOWLEDGE_BASE', delete: true, archive: false }, 'archive', 'TICKETS_KNOWLEDGE_BASE'), false);
+  assert.equal(permissionValue({ module: 'TICKETS_KNOWLEDGE_BASE', delete: true, deactivate: false }, 'deactivate', 'TICKETS_KNOWLEDGE_BASE'), false);
+
+  const serviceActions = getPermissionActionKeys('INVENTORY_SERVICES');
+  assert.equal(serviceActions.includes('delete'), false);
+  assert.equal(serviceActions.includes('deactivate'), true);
+
+  const productActions = getPermissionActionKeys('INVENTORY_PRODUCTS');
+  assert.equal(productActions.includes('delete'), true);
+  assert.equal(productActions.includes('deactivate'), true);
+
+  const cashControlActions = getPermissionActionKeys('RETAIL_CASH_CONTROL');
+  assert.equal(cashControlActions.includes('delete'), false);
+  assert.equal(cashControlActions.includes('deactivate'), true);
+  assert.equal(getPermissionActionKeys('RETAIL_POS').includes('delete'), false);
+
+  for (const module of ['HR_DEPARTMENTS', 'CONFIG_DEPARTMENTS', 'HR_BENEFITS']) {
+    const actions = getPermissionActionKeys(module);
+    assert.equal(actions.includes('delete'), false, `${module} must not expose soft deactivation as delete`);
+    assert.equal(actions.includes('deactivate'), true, `${module} exposes deactivation`);
+  }
+  assert.equal(getPermissionActionKeys('HR_EMPLOYEES').includes('delete'), false, 'employee separation is a termination action, not physical deletion');
+  assert.equal(getPermissionActionKeys('HR_EMPLOYEES').includes('terminateEmployee'), true);
+  assert.equal(getPermissionActionKeys('HR_EMPLOYEES').includes('deleteEmployeeDocument'), true, 'employee documents have a separate physical delete action');
+  assert.equal(approvalActionValue({ module: 'HR_EMPLOYEES', delete: true }, 'terminateEmployee', 'HR_EMPLOYEES'), true, 'legacy employee delete grants termination during migration');
+  assert.equal(getPermissionActionKeys('HR_TRAINING').includes('delete'), false, 'platform-only video deletion is not granted from tenant role permissions');
+  assert.equal(getPermissionActionKeys('PURCHASES_REQUESTS').includes('delete'), false, 'requests are cancelled through their workflow and do not expose physical deletion');
+  assert.equal(getPermissionActionKeys('PURCHASES_REQUESTS').includes('deleteManagement'), true, 'draft purchase management deletion is separate from request cancellation');
+  assert.equal(hydratePermissionActions({ module: 'PURCHASES_REQUESTS', read: true, delete: true }, 'PURCHASES_REQUESTS').deleteManagement, true, 'legacy delete grants management deletion until explicitly limited');
+  assert.equal(permissionValue({ module: 'PURCHASES_REQUESTS', delete: true, deleteManagement: false }, 'deleteManagement', 'PURCHASES_REQUESTS'), false, 'explicit management-delete denial overrides legacy delete');
+  const userActions = getPermissionActionKeys('CONFIG_USERS');
+  assert.equal(userActions.includes('deactivate'), true, 'user suspension is separate');
+  assert.equal(userActions.includes('delete'), false, 'user removal has no active UI action');
+  assert.equal(getPermissionActionKeys('SALES_INVOICES').includes('pay'), true, 'invoice payment is a separate action');
+  assert.equal(getPermissionActionKeys('SALES_INVOICES').includes('delete'), true, 'draft invoices retain a separate physical delete action');
+  for (const module of ['SUPPORT_TECH']) {
+    const actions = getPermissionActionKeys(module);
+    assert.equal(actions.includes('delete'), false, `${module} does not expose delete as an active role-matrix action`);
+    const hydrated = hydratePermissionActions({ module, read: true, delete: true }, module);
+    assert.equal(Object.hasOwn(hydrated, 'delete'), false, `${module} drops its legacy delete value when the role is edited`);
+    const [saved] = serializePermissionActions([{ ...hydrated, delete: true }]);
+    assert.equal(Object.hasOwn(saved, 'delete'), false, `${module} does not offer this delete action through the current matrix`);
+  }
+  assert.equal(getPermissionActionKeys('TRACKING_BATCHES').includes('delete'), true, 'tracking batches have a physical delete action');
+  for (const module of ['ASANA', 'ASANA_TASKS']) {
+    const actions = getPermissionActionKeys(module);
+    assert.equal(actions.includes('archive'), true, `${module} removes records from active lists while retaining history`);
+    assert.equal(actions.includes('delete'), false, `${module} does not physically delete records`);
+    const legacy = hydratePermissionActions({ module, read: true, delete: true }, module);
+    assert.equal(legacy.archive, true, `${module} legacy delete keeps the old archive capability`);
+    assert.equal(permissionValue({ module, delete: true, archive: false }, 'archive', module), false, `${module} explicit archive denial overrides legacy delete`);
+    const [saved] = serializePermissionActions([{ ...legacy, delete: true }]);
+    assert.equal(Object.hasOwn(saved, 'delete'), false, `${module} no longer saves a physical delete permission`);
+  }
+  for (const module of ['PURCHASES', 'NOTIFICATIONS_ALERTS', 'NOTIFICATIONS_MESSAGES', 'NOTIFICATIONS_PUSH']) {
+    assert.equal(getPermissionActionKeys(module).includes('delete'), false, `${module} has no active delete control in the role editor`);
+  }
+  assert.equal(getPermissionActionKeys('HR_LEAVES').includes('delete'), true, 'pending leave requests have an explicit delete control');
+  assert.equal(getPermissionActionKeys('ACCOUNTING_CHART').includes('delete'), true, 'account transfer deletion is separately permissioned');
+  assert.equal(getPermissionActionKeys('ACCOUNTING_FISCAL').includes('delete'), true, 'fiscal backup deletion is a real action');
+  assert.equal(permissionValue({ module: 'PURCHASES_INVOICES_REC', cancel: true }, 'delete', 'PURCHASES_INVOICES_REC'), false, 'cancelling a recurring invoice must not grant physical deletion');
+  assert.equal(permissionValue({ module: 'PURCHASES_PROVIDERS', deactivate: true }, 'delete', 'PURCHASES_PROVIDERS'), false, 'deactivating a supplier must not grant physical deletion');
+  assert.equal(permissionValue({ module: 'SALES_INVOICES', cancel: true }, 'delete', 'SALES_INVOICES'), false, 'requesting invoice cancellation must not grant draft deletion');
+  assert.equal(permissionValue({ module: 'SALES_INVOICES', delete: true }, 'delete', 'SALES_INVOICES'), true, 'explicit delete permission remains effective');
+  assert.equal(approvalActionValue({ module: 'PURCHASES_REQUESTS', delete: true }, 'cancel', 'PURCHASES_REQUESTS'), true, 'legacy request delete grants the new cancel action');
+  assert.equal(approvalActionValue({ module: 'PURCHASES_REQUESTS', delete: true, cancel: false }, 'cancel', 'PURCHASES_REQUESTS'), false, 'an explicit cancel denial overrides legacy delete');
+  assert.equal(getPermissionActionKeys('PURCHASES_PROVIDERS').includes('deactivate'), true, 'supplier availability has a dedicated action');
+  assert.equal(getPermissionActionKeys('PURCHASES_PROVIDERS').includes('delete'), true, 'supplier physical deletion has a backed action');
+  assert.equal(getPermissionActionKeys('PURCHASES_EXPENSES_REC').includes('cancel'), true, 'recurring expenses expose cancellation separately from deletion');
+  assert.equal(getPermissionActionKeys('PURCHASES_EXPENSES_REC').includes('delete'), true, 'recurring expenses can be physically deleted only as a separate action');
+  assert.equal(getPermissionActionKeys('ACCOUNTING_CONFIG').includes('deactivate'), true, 'tax catalog state changes are separate from physical deletion');
+  assert.equal(getPermissionActionKeys('CONFIG_COMPANY').includes('delete'), true, 'company industries and documents have physical delete routes');
+  assert.equal(getPermissionActionKeys('CONFIG_COMPANY').includes('deactivate'), false, 'no company deactivation action is exposed in the UI');
+  for (const module of ['ACCOUNTING', 'PROJECTS', 'TICKETS', 'NOVACHAT', 'ACCOUNTING_HR_PAYMENT_REQUESTS']) {
+    assert.equal(getPermissionActionKeys(module).includes('delete'), false, `${module} must not expose an unbacked delete action`);
+  }
+  assert.equal(permissionValue({ module: 'ACCOUNTING_HR_PAYMENT_REQUESTS', delete: true }, 'reject' as any, 'ACCOUNTING_HR_PAYMENT_REQUESTS'), true);
+
+  const legacyArticle = hydratePermissionActions({ module: 'TICKETS_KNOWLEDGE_BASE', read: true, delete: true }, 'TICKETS_KNOWLEDGE_BASE');
+  assert.equal(legacyArticle.archive, true);
+  assert.equal(legacyArticle.deactivate, true);
+
+  const legacyBenefit = hydratePermissionActions({ module: 'HR_BENEFITS', delete: true }, 'HR_BENEFITS');
+  assert.equal(legacyBenefit.deactivate, true);
+  assert.equal(permissionValue({ module: 'HR_BENEFITS', delete: true, deactivate: false }, 'deactivate'), false);
+
+  const legacyEmployee = hydratePermissionActions({ module: 'HR_EMPLOYEES', delete: true }, 'HR_EMPLOYEES');
+  assert.equal(legacyEmployee.terminateEmployee, true);
+  assert.equal(legacyEmployee.deleteEmployeeDocument, true);
+  assert.equal(permissionValue({ module: 'HR_EMPLOYEES', delete: true, terminateEmployee: false }, 'terminateEmployee'), false);
+  assert.equal(permissionValue({ module: 'HR_EMPLOYEES', delete: true, deleteEmployeeDocument: false }, 'deleteEmployeeDocument' as any), false);
+
+  const legacyIntlConfig = hydratePermissionActions({ module: 'IMPORT_INTL_CONFIG', delete: true }, 'IMPORT_INTL_CONFIG');
+  assert.equal(legacyIntlConfig.deactivate, true);
+  assert.equal(permissionValue({ module: 'IMPORT_INTL_CONFIG', delete: true, deactivate: false }, 'deactivate'), false);
+
+  const legacyAccountingConfig = hydratePermissionActions({ module: 'ACCOUNTING_CONFIG', edit: true }, 'ACCOUNTING_CONFIG');
+  assert.equal(legacyAccountingConfig.deactivate, true, 'legacy edit roles retain tax catalog activation changes');
+  assert.equal(permissionValue({ module: 'ACCOUNTING_CONFIG', edit: true, deactivate: false }, 'deactivate'), false);
+
+  const legacySuppliers = hydratePermissionActions({ module: 'PURCHASES_PROVIDERS', delete: true }, 'PURCHASES_PROVIDERS');
+  assert.equal(legacySuppliers.deactivate, true, 'legacy supplier delete roles retain their former deactivation action');
+  assert.equal(permissionValue({ module: 'PURCHASES_PROVIDERS', delete: true, deactivate: false }, 'deactivate'), false);
+
+  const legacyRecurringExpenses = hydratePermissionActions({ module: 'PURCHASES_EXPENSES_REC', delete: true }, 'PURCHASES_EXPENSES_REC');
+  assert.equal(legacyRecurringExpenses.cancel, true, 'legacy recurring expense delete roles retain their former cancellation action');
+  assert.equal(permissionValue({ module: 'PURCHASES_EXPENSES_REC', delete: true, cancel: false }, 'cancel'), false);
+});
+
+test('tracking config exposes deactivation separately from editing and deletion', () => {
+  const actions = getPermissionActionKeys('TRACKING_CONFIG');
+  assert.equal(actions.includes('deactivate'), true);
+  assert.equal(actions.includes('delete'), true);
+
+  const legacy = hydratePermissionActions({ module: 'TRACKING_CONFIG', read: true, edit: true }, 'TRACKING_CONFIG');
+  assert.equal(legacy.deactivate, true, 'existing edit roles retain availability changes until limited');
+
+  const [saved] = serializePermissionActions([{ ...legacy, deactivate: false }]);
+  assert.equal(permissionValue(saved, 'deactivate', 'TRACKING_CONFIG'), false, 'explicit denial overrides legacy edit');
+  assert.equal(permissionValue(saved, 'delete', 'TRACKING_CONFIG'), false, 'deactivation does not grant physical deletion');
+});
+
+test('sales invoice and POS imports are separate actions with legacy create fallback', () => {
+  for (const module of ['SALES_INVOICES', 'RETAIL_POS']) {
+    assert.equal(getPermissionActionKeys(module).includes('import'), true, `${module}: import is in the role matrix`);
+    assert.equal(permissionValue({ module, create: true }, 'import', module), true, `${module}: old create roles keep access`);
+    assert.equal(permissionValue({ module, create: true, import: false }, 'import', module), false, `${module}: explicit denial wins`);
+    assert.equal(permissionValue({ module, create: false, import: true }, 'import', module), true, `${module}: granular grant works`);
+  }
+});
+
+test('an existing invoice draft is submitted before payment while a new draft is created and paid atomically', () => {
+  assert.equal(shouldSubmitExistingDraftBeforePayment('invoice-1', 'DRAFT'), true);
+  assert.equal(shouldSubmitExistingDraftBeforePayment('invoice-1', 'PENDING'), false);
+  assert.equal(shouldSubmitExistingDraftBeforePayment(undefined, 'DRAFT'), false);
+  assert.equal(getInvoicePaymentBalance({ status: 'DRAFT', total: 100, amountPaid: 25 }, 0), 75);
+  assert.equal(getInvoicePaymentBalance({ status: 'PENDING', total: 100, amountPaid: 25 }, 75), 75);
+  assert.equal(canShowInvoiceSubmitAction('DRAFT', true), true);
+  assert.equal(canShowInvoiceSubmitAction('DRAFT', false), false);
+  assert.equal(canShowInvoiceSubmitAction('PENDING', true), false);
 });

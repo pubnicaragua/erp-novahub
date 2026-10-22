@@ -58,7 +58,8 @@ export function TaxCatalogView() {
   const { canPerform } = useAuth()
   const canCreate = canPerform('ACCOUNTING_CONFIG', 'create')
   const canEdit = canPerform('ACCOUNTING_CONFIG', 'edit')
-  const canDeactivate = canPerform('ACCOUNTING_CONFIG', 'delete')
+  const canDeactivate = canPerform('ACCOUNTING_CONFIG', 'deactivate')
+  const canDelete = canPerform('ACCOUNTING_CONFIG', 'delete')
   const queryClient = useQueryClient()
   const [newEntry, setNewEntry] = useState<TaxEntry>({
     name: '', code: '', type: 'WITHHOLDING', category: 'IR',
@@ -89,8 +90,10 @@ export function TaxCatalogView() {
   }
 
   const handleUpdate = async (id: string, data: Partial<TaxEntry>) => {
-    const isDeactivation = data.isActive === false
-    if (isDeactivation ? !canDeactivate : !canEdit) return
+    const changesStatus = Object.prototype.hasOwnProperty.call(data, 'isActive')
+    const changesOtherFields = Object.keys(data).some(key => key !== 'isActive')
+    if (changesStatus && !canDeactivate) return
+    if ((changesOtherFields || !changesStatus) && !canEdit) return
     const actionToken = beginNotificationAction()
     try {
       await contabilidadService.updateTaxCatalogEntry(id, data)
@@ -105,7 +108,7 @@ export function TaxCatalogView() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!canDeactivate) return
+    if (!canDelete) return
     const actionToken = beginNotificationAction()
     try {
       await contabilidadService.deleteTaxCatalogEntry(id)
@@ -277,7 +280,7 @@ export function TaxCatalogView() {
                     </td>
                     <td className="py-2 px-1 text-center">{entry.requiresAuth ? <ShieldAlert className="size-3.5 text-amber-500 mx-auto" /> : '—'}</td>
                     <td className="py-2 px-1 text-center">
-                      {(canEdit || canDeactivate) && <Switch checked={entry.isActive} disabled={entry.isActive ? !canDeactivate : !canEdit} onCheckedChange={v => entry.id && handleUpdate(entry.id, { isActive: v })} />}
+                      {canDeactivate && <Switch checked={entry.isActive} aria-label={`${entry.isActive ? 'Desactivar' : 'Activar'} ${entry.name}`} onCheckedChange={v => entry.id && handleUpdate(entry.id, { isActive: v })} />}
                     </td>
                     <td className="py-2 px-1 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -286,7 +289,7 @@ export function TaxCatalogView() {
                         ) : (
                           <Button variant="ghost" size="icon" aria-label="Editar entrada tributaria" className="size-7" onClick={() => { setEditingId(entry.id || null); setDraft({ name: entry.name, rate: Number(entry.rate), category: entry.category, baseCalculation: entry.baseCalculation, appliesTo: entry.appliesTo }) }}>✎</Button>
                         ))}
-                        {canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar entrada tributaria" className="size-7 text-destructive" onClick={() => entry.id && handleDelete(entry.id)}><Trash2 className="size-3.5" /></Button>}
+                        {canDelete && <Button variant="ghost" size="icon" aria-label="Eliminar entrada tributaria" title="Eliminar entrada tributaria" className="size-7 text-destructive" onClick={() => entry.id && handleDelete(entry.id)}><Trash2 className="size-3.5" /></Button>}
                       </div>
                     </td>
                   </tr>
@@ -302,7 +305,7 @@ export function TaxCatalogView() {
             {entries.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">Sin entradas.</p> : entries.map(entry => (
               <div key={entry.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-bold">{entry.name}</p><p className="mt-1 break-all text-[10px] font-mono text-muted-foreground">{entry.code}</p></div><Badge variant={entry.type === 'TAX' ? 'default' : 'secondary'} className="shrink-0 text-[9px]">{entry.type === 'TAX' ? 'Impuesto' : 'Retención'}</Badge></div>
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Categoría</span><span>{labelOf(CATEGORY_LABELS, entry.category, '—')}</span></div><div><span className="block text-muted-foreground">Tasa</span><span className="font-mono">{Number(entry.rate).toFixed(2)}%</span></div><div><span className="block text-muted-foreground">Base de cálculo</span><span>{labelOf(BASE_CALCULATION_LABELS, entry.baseCalculation, '—')}</span></div><div><span className="block text-muted-foreground">Aplica a</span><span>{labelOf(APPLIES_TO_LABELS, entry.appliesTo, '—')}</span></div><div><span className="block text-muted-foreground">Estado</span><span>{entry.isActive ? 'Activo' : 'Inactivo'}</span></div><div className="col-span-2 flex justify-end gap-1">{canEdit && <Button variant="ghost" size="icon" aria-label="Editar entrada tributaria" className="size-7" onClick={() => { setEditingId(entry.id || null); setDraft({ name: entry.name, rate: Number(entry.rate), category: entry.category, baseCalculation: entry.baseCalculation, appliesTo: entry.appliesTo }) }}>✎</Button>}{canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar entrada tributaria" className="size-7 text-destructive" onClick={() => entry.id && handleDelete(entry.id)}><Trash2 className="size-3.5" /></Button>}</div></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Categoría</span><span>{labelOf(CATEGORY_LABELS, entry.category, '—')}</span></div><div><span className="block text-muted-foreground">Tasa</span><span className="font-mono">{Number(entry.rate).toFixed(2)}%</span></div><div><span className="block text-muted-foreground">Base de cálculo</span><span>{labelOf(BASE_CALCULATION_LABELS, entry.baseCalculation, '—')}</span></div><div><span className="block text-muted-foreground">Aplica a</span><span>{labelOf(APPLIES_TO_LABELS, entry.appliesTo, '—')}</span></div><div><span className="block text-muted-foreground">Estado</span><div className="flex items-center gap-2"><span>{entry.isActive ? 'Activo' : 'Inactivo'}</span>{canDeactivate && <Switch checked={entry.isActive} aria-label={`${entry.isActive ? 'Desactivar' : 'Activar'} ${entry.name}`} onCheckedChange={v => entry.id && handleUpdate(entry.id, { isActive: v })} />}</div></div><div className="col-span-2 flex justify-end gap-1">{canEdit && <Button variant="ghost" size="icon" aria-label="Editar entrada tributaria" className="size-7" onClick={() => { setEditingId(entry.id || null); setDraft({ name: entry.name, rate: Number(entry.rate), category: entry.category, baseCalculation: entry.baseCalculation, appliesTo: entry.appliesTo }) }}>✎</Button>}{canDelete && <Button variant="ghost" size="icon" aria-label="Eliminar entrada tributaria" title="Eliminar entrada tributaria" className="size-7 text-destructive" onClick={() => entry.id && handleDelete(entry.id)}><Trash2 className="size-3.5" /></Button>}</div></div>
               </div>
             ))}
           </div>

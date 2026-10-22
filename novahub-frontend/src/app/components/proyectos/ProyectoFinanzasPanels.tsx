@@ -45,7 +45,7 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
   const baseCurrency = data?.baseCurrency || 'NIO';
   const canCreate = canPerform('PROJECTS_EXPENSES', 'create');
   const canEdit = canPerform('PROJECTS_EXPENSES', 'edit');
-  const canDelete = canPerform('PROJECTS_EXPENSES', 'delete');
+  const canDelete = canPerform('PROJECTS_EXPENSES', 'deleteBudgetLine');
 
   const invalidate = () => {
     invalidateTenantQueries(queryClient);
@@ -243,7 +243,7 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
 
   const canCreate = canPerform('PROJECTS_EXPENSES', 'create');
   const canEdit = canPerform('PROJECTS_EXPENSES', 'edit');
-  const canDelete = canPerform('PROJECTS_EXPENSES', 'delete');
+  const canDelete = canPerform('PROJECTS_EXPENSES', 'deleteCost');
   const canCreateJournal = canPerform('PROJECTS_EXPENSES', 'createJournal');
   const canViewQuotations = canPerform('PROJECTS_QUOTATIONS', 'view');
   const invalidate = () => {

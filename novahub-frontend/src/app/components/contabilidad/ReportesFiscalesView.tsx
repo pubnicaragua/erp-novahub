@@ -23,6 +23,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { storageService } from '../../services/storage.service';
 import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { useAuth } from '../../contexts/AuthContext';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const statusStyles: Record<string, string> = {
@@ -97,6 +98,8 @@ const isAllowedBackupFile = (file: File): boolean =>
   ACCEPTED_EXTENSIONS.includes(file.type) || /\.(pdf|xlsx|xls)$/i.test(file.name);
 
 export function ReportesFiscalesView() {
+  const { canPerform } = useAuth();
+  const canDeleteReports = canPerform('ACCOUNTING_FISCAL', 'read') && canPerform('ACCOUNTING_FISCAL', 'delete');
   const queryClient = useQueryClient();
   const [expandedGenerate, setExpandedGenerate] = useState(true);
   const [showMeta, setShowMeta] = useState<any>(null);
@@ -179,6 +182,7 @@ export function ReportesFiscalesView() {
   };
 
   const handleDeleteReport = async (report: any) => {
+    if (!canDeleteReports) return;
     if (!window.confirm('¿Eliminar este respaldo? Los archivos adjuntos también se eliminarán del almacenamiento.')) return;
     const actionToken = beginNotificationAction();
     try {
@@ -428,15 +432,16 @@ export function ReportesFiscalesView() {
                           <Download className="size-4" />
                         </Button>
                       )}
-                      <Button
+                      {canDeleteReports && <Button
                         variant="ghost"
                         size="icon"
                         className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => handleDeleteReport(r)}
-                        title="Eliminar"
+                        title="Eliminar respaldo fiscal"
+                        aria-label={`Eliminar respaldo fiscal ${formatReportType(r.type)} ${r.period || ''}`}
                       >
                         <Trash2 className="size-4" />
-                      </Button>
+                      </Button>}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -472,7 +477,7 @@ export function ReportesFiscalesView() {
                 )}
                 <div className="mt-2 flex justify-end gap-1">
                   <Button variant="ghost" size="icon" className="size-7" onClick={() => setShowMeta(r)}><Eye className="size-4" /></Button>
-                  <Button variant="ghost" size="icon" className="size-7 hover:text-destructive" onClick={() => handleDeleteReport(r)}><Trash2 className="size-4" /></Button>
+                  {canDeleteReports && <Button type="button" variant="ghost" size="icon" className="size-7 hover:text-destructive" title="Eliminar respaldo fiscal" aria-label={`Eliminar respaldo fiscal ${formatReportType(r.type)} ${r.period || ''}`} onClick={() => handleDeleteReport(r)}><Trash2 className="size-4" /></Button>}
                 </div>
               </div>
               );

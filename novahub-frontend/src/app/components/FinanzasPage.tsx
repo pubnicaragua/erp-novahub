@@ -424,7 +424,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     ] },
     { key: 'amount', label: 'monto', type: 'currency' as const, editable: true },
     { key: 'category', label: 'categoria', type: 'select' as const, editable: true },
-    { key: 'status', label: 'estado', type: 'select' as const, editable: true, options: [
+    { key: 'status', label: 'estado', type: 'select' as const, editable: false, options: [
       { value: 'ACTIVE', label: 'Activo' }, { value: 'PAUSED', label: 'Pausado' },
     ] },
   ];
@@ -539,20 +539,6 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     } catch (error) { toast.error('Error al crear gasto'); failNotificationAction(actionToken); }
   };
 
-  const handleDeleteIncome = async (id: string) => {
-    const actionToken = beginNotificationAction();
-    try {
-      await incomeService.delete(id);
-      await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
-      toast.success('Ingreso eliminado');
-      completeNotificationAction(actionToken);
-    } catch (error) {
-      toast.error('No se pudo eliminar el ingreso');
-      failNotificationAction(actionToken);
-      throw error;
-    }
-  };
-
   const handleDeleteExpense = async (id: string) => {
     const actionToken = beginNotificationAction();
     try {
@@ -567,20 +553,44 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     }
   };
 
-  const handleDeleteRecurring = async (id: string, income: boolean) => {
+  const handleCancelExpense = async (id: string) => {
+    const actionToken = beginNotificationAction();
+    try {
+      await expensesService.cancel(id);
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
+      toast.success('Gasto anulado; se conservó su historial');
+      completeNotificationAction(actionToken);
+    } catch (error) {
+      toast.error('No se pudo anular el gasto');
+      failNotificationAction(actionToken);
+      throw error;
+    }
+  };
+
+  const handleRecurringTransition = async (id: string, income: boolean, action: 'pause' | 'resume' | 'cancel') => {
+    const module = income ? 'FINANCIAL_INCOMES_REC' : 'FINANCIAL_EXPENSES_REC';
+    if (!canPerform(module, action)) {
+      toast.error('No tienes permiso para cambiar esta programación');
+      throw new Error('Permiso denegado');
+    }
     const actionToken = beginNotificationAction();
     try {
       if (income) {
-        await recurringIncomesService.delete(id);
+        if (action === 'pause') await recurringIncomesService.pause(id);
+        else if (action === 'resume') await recurringIncomesService.resume(id);
+        else await recurringIncomesService.cancel(id);
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
       } else {
-        await recurringExpensesService.delete(id);
+        if (action === 'pause') await recurringExpensesService.pause(id);
+        else if (action === 'resume') await recurringExpensesService.resume(id);
+        else await recurringExpensesService.cancel(id);
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
       }
-      toast.success('Eliminado');
+      const actionLabel = action === 'pause' ? 'pausada' : action === 'resume' ? 'reanudada' : 'cancelada';
+      toast.success(`Programación ${actionLabel}; se conservaron el registro y su historial`);
       completeNotificationAction(actionToken);
     } catch (error) {
-      toast.error('No se pudo eliminar el movimiento recurrente');
+      toast.error('No se pudo cambiar el estado de la programación');
       failNotificationAction(actionToken);
       throw error;
     }
@@ -723,7 +733,6 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     })}
                     onUpdate={handleUpdateIncome}
                     onAdd={handleAddIncome}
-                    onDelete={handleDeleteIncome}
                     loading={loading}
                     canCreate={false}
                     canEdit={false}
@@ -767,7 +776,12 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     loading={loading}
                     canCreate={false}
                     canEdit={false}
-                    canDelete={false}
+                    canDelete={canPerform('FINANCIAL_EXPENSES', 'delete')}
+                    canDeleteItem={(item) => !item.isPayment && String(item.status || '').toUpperCase() === 'DRAFT'}
+                    deleteActionLabel="Eliminar borrador"
+                    canCancel={canPerform('FINANCIAL_EXPENSES', 'cancel')}
+                    canCancelItem={(item) => !item.isPayment && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(String(item.status || '').toUpperCase())}
+                    onCancel={handleCancelExpense}
                     canExport={canPerform('FINANCIAL_EXPENSES', 'export')}
                     detailsRenderer={renderExpenseDetails}
                     auditEntity="FINANCIAL_EXPENSE"
@@ -794,15 +808,26 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           title=""
                           globalDateRange={globalDateRange}
                           onClearGlobalDateRange={clearFilters}
-                          data={fRecurringIncomes.map((r: any) => ({ ...r, isPayment: true }))}
+                          data={fRecurringIncomes}
                           columns={RECURRING_COLUMNS}
                           onUpdate={handleUpdateRecurring}
                           onAdd={() => handleAddRecurring('INCOME')}
-                          onDelete={(id) => handleDeleteRecurring(id, true)}
                           loading={loading}
                           canCreate={false}
                           canEdit={false}
-                          canDelete={false}
+                          canPause={canPerform('FINANCIAL_INCOMES_REC', 'pause')}
+                          canPauseItem={(item) => String(item.status || '').toUpperCase() === 'ACTIVE' && !item.recurringInvoiceId}
+                          onPause={(id) => handleRecurringTransition(id, true, 'pause')}
+                          canResume={canPerform('FINANCIAL_INCOMES_REC', 'resume')}
+                          canResumeItem={(item) => String(item.status || '').toUpperCase() === 'PAUSED' && !item.recurringInvoiceId}
+                          onResume={(id) => handleRecurringTransition(id, true, 'resume')}
+                          canCancel={canPerform('FINANCIAL_INCOMES_REC', 'cancel')}
+                          canCancelItem={(item) => ['ACTIVE', 'PAUSED'].includes(String(item.status || '').toUpperCase()) && !item.recurringInvoiceId}
+                          onCancel={(id) => handleRecurringTransition(id, true, 'cancel')}
+                          cancelActionLabel="Cancelar programación"
+                          cancelDialogTitle="¿Cancelar programación de ingreso?"
+                          cancelDialogDescription="Se detendrán las próximas ejecuciones. La programación y los ingresos ya generados se conservarán."
+                          cancelConfirmLabel="Cancelar programación"
                           canExport={canPerform('FINANCIAL_INCOMES_REC', 'export')}
                           detailsRenderer={(item) => <div className="text-sm text-muted-foreground">Ingreso recurrente programado: {item.source || item.description || 'Sin descripción'}</div>}
                           auditEntity="RECURRING_FINANCIAL_INCOME"
@@ -815,15 +840,26 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           title=""
                           globalDateRange={globalDateRange}
                           onClearGlobalDateRange={clearFilters}
-                          data={fRecurringExpenses.map((r: any) => ({ ...r, isPayment: true }))}
+                          data={fRecurringExpenses}
                           columns={RECURRING_COLUMNS}
                           onUpdate={handleUpdateRecurring}
                           onAdd={() => handleAddRecurring('EXPENSE')}
-                          onDelete={(id) => handleDeleteRecurring(id, false)}
                           loading={loading}
                           canCreate={false}
                           canEdit={false}
-                          canDelete={false}
+                          canPause={canPerform('FINANCIAL_EXPENSES_REC', 'pause')}
+                          canPauseItem={(item) => String(item.status || '').toUpperCase() === 'ACTIVE' && !String(item.source || '').trim().toLowerCase().startsWith('compras')}
+                          onPause={(id) => handleRecurringTransition(id, false, 'pause')}
+                          canResume={canPerform('FINANCIAL_EXPENSES_REC', 'resume')}
+                          canResumeItem={(item) => String(item.status || '').toUpperCase() === 'PAUSED' && !String(item.source || '').trim().toLowerCase().startsWith('compras')}
+                          onResume={(id) => handleRecurringTransition(id, false, 'resume')}
+                          canCancel={canPerform('FINANCIAL_EXPENSES_REC', 'cancel')}
+                          canCancelItem={(item) => ['ACTIVE', 'PAUSED'].includes(String(item.status || '').toUpperCase()) && !String(item.source || '').trim().toLowerCase().startsWith('compras')}
+                          onCancel={(id) => handleRecurringTransition(id, false, 'cancel')}
+                          cancelActionLabel="Cancelar programación"
+                          cancelDialogTitle="¿Cancelar programación de gasto?"
+                          cancelDialogDescription="Se detendrán las próximas ejecuciones. La programación y los gastos ya generados se conservarán."
+                          cancelConfirmLabel="Cancelar programación"
                           canExport={canPerform('FINANCIAL_EXPENSES_REC', 'export')}
                           detailsRenderer={(item) => <div className="text-sm text-muted-foreground">Gasto recurrente programado: {item.source || item.description || 'Sin descripción'}</div>}
                           auditEntity="RECURRING_FINANCIAL_EXPENSE"
@@ -841,15 +877,26 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     title="Ingresos recurrentes"
                     globalDateRange={globalDateRange}
                     onClearGlobalDateRange={clearFilters}
-                    data={fRecurringIncomes.map((r: any) => ({ ...r, isPayment: true }))}
+                    data={fRecurringIncomes}
                     columns={RECURRING_COLUMNS}
                     onUpdate={handleUpdateRecurring}
                     onAdd={() => handleAddRecurring('INCOME')}
-                          onDelete={(id) => handleDeleteRecurring(id, true)}
                     loading={loading}
                     canCreate={canPerform('FINANCIAL_INCOMES_REC', 'create')}
                     canEdit={canPerform('FINANCIAL_INCOMES_REC', 'edit')}
-                    canDelete={canPerform('FINANCIAL_INCOMES_REC', 'delete')}
+                    canPause={canPerform('FINANCIAL_INCOMES_REC', 'pause')}
+                    canPauseItem={(item) => String(item.status || '').toUpperCase() === 'ACTIVE' && !item.recurringInvoiceId}
+                    onPause={(id) => handleRecurringTransition(id, true, 'pause')}
+                    canResume={canPerform('FINANCIAL_INCOMES_REC', 'resume')}
+                    canResumeItem={(item) => String(item.status || '').toUpperCase() === 'PAUSED' && !item.recurringInvoiceId}
+                    onResume={(id) => handleRecurringTransition(id, true, 'resume')}
+                    canCancel={canPerform('FINANCIAL_INCOMES_REC', 'cancel')}
+                    canCancelItem={(item) => ['ACTIVE', 'PAUSED'].includes(String(item.status || '').toUpperCase()) && !item.recurringInvoiceId}
+                    onCancel={(id) => handleRecurringTransition(id, true, 'cancel')}
+                    cancelActionLabel="Cancelar programación"
+                    cancelDialogTitle="¿Cancelar programación de ingreso?"
+                    cancelDialogDescription="Se detendrán las próximas ejecuciones. La programación y los ingresos ya generados se conservarán."
+                    cancelConfirmLabel="Cancelar programación"
                     canExport={canPerform('FINANCIAL_INCOMES_REC', 'export')}
                     detailsRenderer={(item) => <div className="text-sm text-muted-foreground">Ingreso recurrente programado: {item.source || item.description || 'Sin descripción'}</div>}
                     auditEntity="RECURRING_FINANCIAL_INCOME"

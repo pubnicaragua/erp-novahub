@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Truck, Plus, Search, Eye, TrendingDown, CheckCircle2, Upload, Download, Ban, Pencil, X } from 'lucide-react';
+import { Truck, Plus, Search, Eye, TrendingDown, CheckCircle2, Upload, Download, Ban, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
@@ -72,6 +72,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-suppliers-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [pendingToggle, setPendingToggle] = useState<Supplier | null>(null);
+  const [pendingDeleteSupplier, setPendingDeleteSupplier] = useState<Supplier | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [selectedSupplierDetail, setSelectedSupplierDetail] = useState<Supplier | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -480,7 +481,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         );
       }
     },
-    { key: 'status', header: 'Estado', width: '120px', editable: canPerform('PURCHASES_PROVIDERS', 'delete'), type: 'select', options: statusOptions,
+    { key: 'status', header: 'Estado', width: '120px', editable: canPerform('PURCHASES_PROVIDERS', 'deactivate'), type: 'select', options: statusOptions,
       headerExtra: <ColumnFilterMenu label="Estado" options={statusOptions.map((option) => ({ value: option.value, label: option.label, count: filteredAndSorted.filter((supplier) => (isSupplierInactive(supplier) ? 'INACTIVE' : 'ACTIVE') === option.value).length }))} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
       render: (val) => {
         const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
@@ -491,14 +492,18 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
   const handleUpdate = async (id: string | number, updates: Partial<Supplier>) => {
     try { 
-      const status = String((updates as any).status || '').toUpperCase();
-      const isStatusMutation = Boolean(status) && Object.keys(updates).every((key) => key === 'status' || key === 'isActive');
+      const rawStatus = (updates as any).status;
+      const isStatusMutation = (rawStatus !== undefined || typeof (updates as any).isActive === 'boolean')
+        && Object.keys(updates).every((key) => key === 'status' || key === 'isActive');
       if (isStatusMutation) {
+        if (!canPerform('PURCHASES_PROVIDERS', 'read') || !canPerform('PURCHASES_PROVIDERS', 'deactivate')) return;
+        const status = rawStatus !== undefined ? String(rawStatus).toUpperCase() : (updates as any).isActive ? 'ACTIVE' : 'INACTIVE';
         await suppliersService.setStatus(String(id), status);
         toast.success(status === 'ACTIVE' ? 'Proveedor activado' : 'Proveedor desactivado');
         onRefresh();
         return;
       }
+      if (!canPerform('PURCHASES_PROVIDERS', 'read') || !canPerform('PURCHASES_PROVIDERS', 'edit')) return;
       const sanitized: any = { ...updates };
       if (sanitized.status) sanitized.isActive = String(sanitized.status).toUpperCase() === 'ACTIVE';
       if (sanitized.email === '') sanitized.email = undefined;
@@ -561,8 +566,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       city: draft.city || undefined,
       country: draft.country || undefined,
       notes: draft.notes.trim() || undefined,
-      status: draft.status,
     };
+    if (!editingSupplier) payload.status = draft.status;
     return payload;
   };
 
@@ -683,9 +688,9 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} onRowDoubleClick={canPerform('PURCHASES_PROVIDERS', 'edit') ? (row) => handleOpenEdit(row) : undefined} editOnPencilOnly isLoading={loading} pagination={pagination} actionsWidth="w-28" fitContent showHorizontalControls showSelection={canPerform('PURCHASES_PROVIDERS', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} onRowDoubleClick={canPerform('PURCHASES_PROVIDERS', 'edit') ? (row) => handleOpenEdit(row) : undefined} editOnPencilOnly isLoading={loading} pagination={pagination} actionsWidth="w-40" fitContent showHorizontalControls showSelection={canPerform('PURCHASES_PROVIDERS', 'deactivate')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onAddRow={canPerform('PURCHASES_PROVIDERS', 'create') ? handleAdd : undefined}
-          bulkActions={canPerform('PURCHASES_PROVIDERS', 'delete') ? (ids) => (
+          bulkActions={canPerform('PURCHASES_PROVIDERS', 'deactivate') ? (ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"
               onClick={async () => {
                 await Promise.all(ids.map(id => suppliersService.setStatus(String(id), 'INACTIVE')));
@@ -699,11 +704,14 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           actions={(row) => (
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" title="Ver detalle" aria-label="Ver detalle del proveedor" className="size-8 rounded-lg transition-colors hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierDetail(row)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_PROVIDERS', 'delete') && (
+              {canPerform('PURCHASES_PROVIDERS', 'edit') && (
                 <Button variant="ghost" size="icon" title="Editar proveedor" aria-label="Editar proveedor" className="size-8 rounded-lg transition-colors hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEdit(row)}><Pencil className="size-4" /></Button>
               )}
-              {canPerform('PURCHASES_PROVIDERS', 'edit') && (
+              {canPerform('PURCHASES_PROVIDERS', 'deactivate') && (
                 <Button variant="ghost" size="icon" title={isSupplierInactive(row) ? 'Activar proveedor' : 'Inactivar proveedor'} aria-label={isSupplierInactive(row) ? 'Activar proveedor' : 'Inactivar proveedor'} className="size-8 rounded-lg transition-colors hover:bg-primary/10 hover:text-primary" onClick={() => setPendingToggle(row)}><Ban className="size-4" /></Button>
+              )}
+              {canPerform('PURCHASES_PROVIDERS', 'delete') && (
+                <Button variant="ghost" size="icon" title="Eliminar proveedor" aria-label="Eliminar proveedor" className="size-8 rounded-lg text-destructive transition-colors hover:bg-destructive/10 hover:text-destructive" onClick={() => setPendingDeleteSupplier(row)}><Trash2 className="size-4" /></Button>
               )}
             </div>
           )}
@@ -725,7 +733,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           const activating = isSupplierInactive(pendingToggle);
           try {
             setDeleteLoading(true);
-            await suppliersService.update(pendingToggle.id, { isActive: !activating, status: activating ? 'ACTIVE' : 'INACTIVE' } as any);
+            await suppliersService.setStatus(pendingToggle.id, activating ? 'ACTIVE' : 'INACTIVE');
             toast.success(activating ? 'Proveedor activado correctamente' : 'Proveedor desactivado correctamente');
             onRefresh();
           } catch (error: any) {
@@ -733,6 +741,31 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           } finally {
             setDeleteLoading(false);
             setPendingToggle(null);
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteSupplier !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteSupplier(null); }}
+        title="¿Eliminar proveedor?"
+        description="Esta acción elimina físicamente el proveedor. No se puede eliminar si tiene facturas, órdenes o pagos asociados; en ese caso, desactívelo para conservar su historial."
+        confirmLabel="Eliminar proveedor"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteSupplier || !canPerform('PURCHASES_PROVIDERS', 'read') || !canPerform('PURCHASES_PROVIDERS', 'delete')) return;
+          try {
+            setDeleteLoading(true);
+            await suppliersService.delete(pendingDeleteSupplier.id);
+            toast.success('Proveedor eliminado correctamente');
+            setPendingDeleteSupplier(null);
+            if (selectedSupplierDetail?.id === pendingDeleteSupplier.id) setSelectedSupplierDetail(null);
+            onRefresh();
+          } catch (error: any) {
+            toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar el proveedor');
+          } finally {
+            setDeleteLoading(false);
           }
         }}
       />
@@ -838,8 +871,9 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         supplierSnapshot={selectedSupplierDetail}
         canExport={canPerform('PURCHASES_PROVIDERS', 'export')}
         extraActions={selectedSupplierDetail ? <>
-          {canPerform('PURCHASES_PROVIDERS', 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedSupplierDetail(null); handleOpenEdit(selectedSupplierDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}
-          {canPerform('PURCHASES_PROVIDERS', 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedSupplierDetail(null); setPendingToggle(selectedSupplierDetail); }}><Ban className="mr-1.5 size-3.5" />{isSupplierInactive(selectedSupplierDetail) ? 'Activar' : 'Inactivar'}</Button>}
+          {canPerform('PURCHASES_PROVIDERS', 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedSupplierDetail(null); handleOpenEdit(selectedSupplierDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}
+          {canPerform('PURCHASES_PROVIDERS', 'deactivate') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedSupplierDetail(null); setPendingToggle(selectedSupplierDetail); }}><Ban className="mr-1.5 size-3.5" />{isSupplierInactive(selectedSupplierDetail) ? 'Activar' : 'Inactivar'}</Button>}
+          {canPerform('PURCHASES_PROVIDERS', 'delete') && <Button type="button" variant="destructive" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedSupplierDetail(null); setPendingDeleteSupplier(selectedSupplierDetail); }}><Trash2 className="mr-1.5 size-3.5" />Eliminar</Button>}
         </> : undefined}
         onOpenChange={(open) => !open && setSelectedSupplierDetail(null)}
       />

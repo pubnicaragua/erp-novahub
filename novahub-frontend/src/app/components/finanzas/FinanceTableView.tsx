@@ -8,7 +8,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import {
-  Plus, Trash2, Search, Download, Eye,
+  Plus, Trash2, Search, Download, Eye, Ban, Pause, Play,
   CheckCircle2, Edit3, FileSpreadsheet, FileText, X,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
@@ -53,12 +53,27 @@ interface FinanceTableViewProps {
   exportSummary?: (rows: any[]) => { label: string; value: unknown; columnIndex?: number } | undefined;
   onUpdate: (id: string, updates: any) => Promise<void>;
   onAdd: () => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
   title: string;
   loading?: boolean;
   canCreate?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
+  canDeleteItem?: (item: any) => boolean;
+  deleteActionLabel?: string;
+  canCancel?: boolean;
+  canCancelItem?: (item: any) => boolean;
+  onCancel?: (id: string) => Promise<void>;
+  cancelActionLabel?: string;
+  cancelDialogTitle?: string;
+  cancelDialogDescription?: string;
+  cancelConfirmLabel?: string;
+  canPause?: boolean;
+  canPauseItem?: (item: any) => boolean;
+  onPause?: (id: string) => Promise<void>;
+  canResume?: boolean;
+  canResumeItem?: (item: any) => boolean;
+  onResume?: (id: string) => Promise<void>;
   canExport?: boolean;
   targetItemId?: string | null;
   onClearTargetItem?: () => void;
@@ -81,6 +96,21 @@ export function FinanceTableView({
   canCreate = true,
   canEdit = true,
   canDelete = true,
+  canDeleteItem = () => true,
+  deleteActionLabel = 'Eliminar',
+  canCancel = false,
+  canCancelItem = () => false,
+  onCancel,
+  cancelActionLabel = 'Anular gasto',
+  cancelDialogTitle = '¿Anular gasto?',
+  cancelDialogDescription = 'El registro y su historial se conservarán. El sistema revertirá los efectos que correspondan al estado actual del gasto.',
+  cancelConfirmLabel = 'Anular gasto',
+  canPause = false,
+  canPauseItem = () => false,
+  onPause,
+  canResume = false,
+  canResumeItem = () => false,
+  onResume,
   canExport = false,
   targetItemId,
   onClearTargetItem,
@@ -102,6 +132,9 @@ export function FinanceTableView({
   }));
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [scheduleActionLoadingId, setScheduleActionLoadingId] = useState<string | null>(null);
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryTargetItem, setCategoryTargetItem] = useState<{ id: string; key: string } | null>(null);
@@ -173,9 +206,29 @@ export function FinanceTableView({
   };
 
   const handleDelete = async (id: string) => {
+    if (!onDelete) return;
     try { setDeleteLoading(true); await onDelete(id); }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar registro'); }
     finally { setDeleteLoading(false); setPendingDeleteId(null); }
+  };
+
+  const handleCancel = async (id: string) => {
+    if (!onCancel) return;
+    try { setCancelLoading(true); await onCancel(id); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular registro'); }
+    finally { setCancelLoading(false); setPendingCancelId(null); }
+  };
+
+  const runScheduleAction = async (id: string, action?: (id: string) => Promise<void>) => {
+    if (!action) return;
+    try {
+      setScheduleActionLoadingId(id);
+      await action(id);
+    } catch {
+      // El callback del módulo ya comunica el error con el mensaje del API.
+    } finally {
+      setScheduleActionLoadingId(null);
+    }
   };
 
   const handleSaveNewCategory = async () => {
@@ -609,7 +662,8 @@ export function FinanceTableView({
         </div>
       </div>
 
-      <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={o => { if (!o) setPendingDeleteId(null); }} title="¿Eliminar registro?" description="¿Estás seguro de que deseas eliminar este registro financiero? Esta acción no se puede deshacer." confirmLabel="Eliminar" variant="destructive" loading={deleteLoading} onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} />
+        <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={o => { if (!o) setPendingDeleteId(null); }} title="¿Eliminar registro?" description="¿Estás seguro de que deseas eliminar este registro financiero? Esta acción no se puede deshacer." confirmLabel="Eliminar" variant="destructive" loading={deleteLoading} onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} />
+        <ConfirmDialog open={pendingCancelId !== null} onOpenChange={o => { if (!o) setPendingCancelId(null); }} title={cancelDialogTitle} description={cancelDialogDescription} confirmLabel={cancelConfirmLabel} variant="destructive" loading={cancelLoading} onConfirm={() => pendingCancelId ? handleCancel(pendingCancelId) : Promise.resolve()} />
 
       <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
         <DialogContent className="sm:max-w-[420px]">
@@ -687,7 +741,10 @@ export function FinanceTableView({
           {detailItem && auditEntity && <AuditHistoryDisclosure entity={auditEntity} entityId={String(detailItem.id)} createdAt={detailItem.createdAt} />}
           <DialogFooter className="flex-wrap gap-2">
             {canEdit && <Button type="button" variant="outline" disabled={Boolean(detailItem?.isPayment)} onClick={() => { if (detailItem?.isPayment) { toast.error('No se puede editar un pago de factura'); return; } if (!detailItem) return; setItemBeingEdited({ ...detailItem }); setDetailItem(null); setIsEditModalOpen(true); }}><Edit3 className="mr-1.5 size-4" />Editar</Button>}
-            {canDelete && <Button type="button" variant="outline" className="border-rose-500/30 text-rose-600 hover:bg-rose-500/10" disabled={Boolean(detailItem?.isPayment)} onClick={() => { if (detailItem && !detailItem.isPayment) { setDetailItem(null); setPendingDeleteId(detailItem.id); } }}><Trash2 className="mr-1.5 size-4" />Eliminar</Button>}
+            {canPause && onPause && detailItem && !detailItem.isPayment && canPauseItem(detailItem) && <Button type="button" variant="outline" disabled={scheduleActionLoadingId === detailItem.id} onClick={() => { const id = detailItem.id; setDetailItem(null); void runScheduleAction(id, onPause); }}><Pause className="mr-1.5 size-4" />Pausar</Button>}
+            {canResume && onResume && detailItem && !detailItem.isPayment && canResumeItem(detailItem) && <Button type="button" variant="outline" disabled={scheduleActionLoadingId === detailItem.id} onClick={() => { const id = detailItem.id; setDetailItem(null); void runScheduleAction(id, onResume); }}><Play className="mr-1.5 size-4" />Reanudar</Button>}
+            {canCancel && onCancel && detailItem && !detailItem.isPayment && canCancelItem(detailItem) && <Button type="button" variant="outline" className="border-rose-500/30 text-rose-600 hover:bg-rose-500/10" onClick={() => { setDetailItem(null); setPendingCancelId(detailItem.id); }}><Ban className="mr-1.5 size-4" />{cancelActionLabel}</Button>}
+            {canDelete && onDelete && detailItem && !detailItem.isPayment && canDeleteItem(detailItem) && <Button type="button" variant="outline" className="border-rose-500/30 text-rose-600 hover:bg-rose-500/10" onClick={() => { setDetailItem(null); setPendingDeleteId(detailItem.id); }}><Trash2 className="mr-1.5 size-4" />{deleteActionLabel}</Button>}
             <Button variant="outline" onClick={() => setDetailItem(null)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
@@ -753,8 +810,17 @@ export function FinanceTableView({
                       {canEdit && (
                         <button onClick={() => { if (item.isPayment) toast.error('No se puede editar un pago de factura'); else setEditingCell({ id: item.id, key: columns.find(c => c.editable)?.key || columns[0].key }); }} disabled={item.isPayment} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50" title="Editar"><Edit3 className="size-3.5" /></button>
                       )}
-                      {canDelete && (
-                        <button onClick={() => !item.isPayment && setPendingDeleteId(item.id)} disabled={item.isPayment} className="p-1.5 text-destructive/80 hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors disabled:opacity-50" title="Eliminar"><Trash2 className="size-3.5" /></button>
+                      {canPause && onPause && canPauseItem(item) && !item.isPayment && (
+                        <button onClick={() => void runScheduleAction(item.id, onPause)} disabled={scheduleActionLoadingId === item.id} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50" title="Pausar programación" aria-label="Pausar programación">{scheduleActionLoadingId === item.id ? <span className="block size-3.5 animate-pulse" /> : <Pause className="size-3.5" />}</button>
+                      )}
+                      {canResume && onResume && canResumeItem(item) && !item.isPayment && (
+                        <button onClick={() => void runScheduleAction(item.id, onResume)} disabled={scheduleActionLoadingId === item.id} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50" title="Reanudar programación" aria-label="Reanudar programación">{scheduleActionLoadingId === item.id ? <span className="block size-3.5 animate-pulse" /> : <Play className="size-3.5" />}</button>
+                      )}
+                      {canCancel && onCancel && canCancelItem(item) && !item.isPayment && (
+                        <button onClick={() => setPendingCancelId(item.id)} className="p-1.5 text-rose-500/70 hover:text-rose-600 hover:bg-rose-500/5 rounded-md transition-colors" title={cancelActionLabel} aria-label={`${cancelActionLabel} y conservar historial`}><Ban className="size-3.5" /></button>
+                      )}
+                      {canDelete && onDelete && canDeleteItem(item) && !item.isPayment && (
+                        <button onClick={() => !item.isPayment && setPendingDeleteId(item.id)} disabled={item.isPayment} className="p-1.5 text-destructive/80 hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors disabled:opacity-50" title={deleteActionLabel}><Trash2 className="size-3.5" /></button>
                       )}
                     </div>
                   </TableCell>
@@ -817,7 +883,23 @@ export function FinanceTableView({
                       <Edit3 className="size-4" />
                     </button>
                   )}
-                  {canDelete && (
+                  {canPause && onPause && canPauseItem(item) && !item.isPayment && (
+                    <button onClick={(e) => { e.stopPropagation(); void runScheduleAction(item.id, onPause); }} disabled={scheduleActionLoadingId === item.id} className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50" title="Pausar programación" aria-label="Pausar programación"><Pause className="size-4" /></button>
+                  )}
+                  {canResume && onResume && canResumeItem(item) && !item.isPayment && (
+                    <button onClick={(e) => { e.stopPropagation(); void runScheduleAction(item.id, onResume); }} disabled={scheduleActionLoadingId === item.id} className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50" title="Reanudar programación" aria-label="Reanudar programación"><Play className="size-4" /></button>
+                  )}
+                  {canCancel && onCancel && canCancelItem(item) && !item.isPayment && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setPendingCancelId(item.id); }}
+                      className="p-2 text-rose-500/70 hover:text-rose-600 hover:bg-rose-500/5 rounded-lg transition-colors"
+                      title={cancelActionLabel}
+                      aria-label={`${cancelActionLabel} y conservar historial`}
+                    >
+                      <Ban className="size-4" />
+                    </button>
+                  )}
+                  {canDelete && onDelete && canDeleteItem(item) && !item.isPayment && (
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -825,7 +907,7 @@ export function FinanceTableView({
                       }} 
                       disabled={item.isPayment} 
                       className="p-2 text-rose-500/70 hover:text-rose-600 hover:bg-rose-500/5 rounded-lg transition-colors disabled:opacity-30" 
-                      title="Eliminar"
+                      title={deleteActionLabel}
                     >
                       <Trash2 className="size-4" />
                     </button>

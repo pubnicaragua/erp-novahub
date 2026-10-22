@@ -77,7 +77,7 @@ const translatedLabels: Record<string, string> = {
   LOW: 'Baja', MEDIUM: 'Media', HIGH: 'Alta', URGENT: 'Urgente',
   PENDING: 'Pendiente', IN_PROGRESS: 'En progreso', WAITING_APPROVAL: 'Por aprobar', COMPLETED: 'Completada', CANCELLED: 'Cancelada', OVERDUE: 'Vencida',
   SENT: 'Enviado', SNOOZED: 'Pospuesto',
-  CREATE: 'Creación', UPDATE: 'Actualización', DELETE: 'Eliminación', UPLOAD: 'Carga de archivo', READ: 'Consulta', LOGIN: 'Inicio de sesión', EXPORT: 'Exportación', APPROVE: 'Aprobación', COMPLETE: 'Cierre',
+  CREATE: 'Creación', UPDATE: 'Actualización', DELETE: 'Eliminación', ARCHIVE: 'Archivado', UPLOAD: 'Carga de archivo', READ: 'Consulta', LOGIN: 'Inicio de sesión', EXPORT: 'Exportación', APPROVE: 'Aprobación', COMPLETE: 'Cierre',
   TASK: 'Tarea', EVENT: 'Evento', CALL: 'Llamada', MEETING: 'Reunión', EMAIL: 'Correo', DEADLINE: 'Fecha límite',
   PERSONAL: 'Personal', DEPARTMENT: 'Departamento', GLOBAL: 'Global',
   ACTIVITY: 'Actividad', ACTIVITIES: 'Actividades', REMINDER: 'Recordatorio', USER: 'Usuario', INVOICE: 'Factura', PRODUCT: 'Producto', CUSTOMER: 'Cliente', SUPPLIER: 'Proveedor', PURCHASE_ORDER: 'Orden de compra', SALES_ORDER: 'Orden de venta', DOCUMENT: 'Documento', FILE: 'Archivo', REPORT: 'Reporte', EXPENSE: 'Gasto', INCOME: 'Ingreso', ACCOUNT: 'Cuenta', PAID: 'Pagado', POSTED: 'Contabilizado', DRAFT: 'Borrador', VOIDED: 'Anulado',

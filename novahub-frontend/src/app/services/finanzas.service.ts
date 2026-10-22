@@ -51,7 +51,6 @@ export const incomeService = {
   getById: (id: string) => api.get<Income>(`/financials/income/${id}`),
   create: (data: Partial<Income>) => api.post<Income>('/financials/income', data),
   update: (id: string, data: Partial<Income>) => api.patch<Income>(`/financials/income/${id}`, data),
-  delete: (id: string) => api.delete<void>(`/financials/income/${id}`),
   bulkImport: (data: any[]) => api.post<any>('/financials/income/bulk-import', data),
 };
 
@@ -60,6 +59,7 @@ export const expensesService = {
   getById: (id: string) => api.get<Expense>(`/financials/expenses/${id}`),
   create: (data: Partial<Expense>) => api.post<Expense>('/financials/expenses', data),
   update: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/financials/expenses/${id}`, data),
+  cancel: (id: string) => api.post<Expense>(`/financials/expenses/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/financials/expenses/${id}`),
   bulkImport: (data: Partial<Expense>[]) => api.post<{ success: number; count: number; failed: number }>('/financials/expenses/bulk-import', data),
 };
@@ -68,14 +68,18 @@ export const recurringExpensesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<RecurringExpense>>('/financials/recurring-expenses', { params: filters as any, signal }),
   create: (data: Partial<RecurringExpense>) => api.post<RecurringExpense>('/financials/recurring-expenses', data),
   update: (id: string, data: Partial<RecurringExpense>) => api.patch<RecurringExpense>(`/financials/recurring-expenses/${id}`, data),
-  delete: (id: string) => api.delete<void>(`/financials/recurring-expenses/${id}`),
+  pause: (id: string) => api.post<RecurringExpense>(`/financials/recurring-expenses/${id}/pause`, {}),
+  resume: (id: string) => api.post<RecurringExpense>(`/financials/recurring-expenses/${id}/resume`, {}),
+  cancel: (id: string) => api.post<RecurringExpense>(`/financials/recurring-expenses/${id}/cancel`, {}),
 };
 
 export const recurringIncomesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/financials/recurring-incomes', { params: filters as any, signal }),
   create: (data: any) => api.post<any>('/financials/recurring-incomes', data),
   update: (id: string, data: any) => api.patch<any>(`/financials/recurring-incomes/${id}`, data),
-  delete: (id: string) => api.delete<void>(`/financials/recurring-incomes/${id}`),
+  pause: (id: string) => api.post<any>(`/financials/recurring-incomes/${id}/pause`, {}),
+  resume: (id: string) => api.post<any>(`/financials/recurring-incomes/${id}/resume`, {}),
+  cancel: (id: string) => api.post<any>(`/financials/recurring-incomes/${id}/cancel`, {}),
 };
 
 export const journalEntriesService = {

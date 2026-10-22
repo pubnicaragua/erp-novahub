@@ -320,7 +320,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
   };
 
   const handleMergeAccount = async () => {
-    if (!mergeSource || !mergeTargetId) return;
+    if (!mergeSource || !mergeTargetId || !canPerform('ACCOUNTING_CHART', 'edit')) return;
+    if (mergeDeleteSource && !canPerform('ACCOUNTING_CHART', 'delete')) return;
     const source = mergeSource;
     const target = flatList.find(a => a.id === mergeTargetId);
     const actionToken = beginNotificationAction();
@@ -1270,18 +1271,20 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                 <strong>Transferir sin eliminar:</strong> la cuenta origen se queda en el plan de cuentas, inhabilitada y sin saldo. Puedes habilitarla después si la necesitas.
               </p>
             </div>
-            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border/60 bg-card/50 p-3">
-              <input
-                type="checkbox"
-                className="mt-0.5 size-4 accent-rose-600"
-                checked={mergeDeleteSource}
-                onChange={(e) => setMergeDeleteSource(e.target.checked)}
-              />
-              <span className="min-w-0 text-xs leading-relaxed text-muted-foreground">
-                <strong className="text-rose-600">Eliminar la cuenta origen después de transferir.</strong>{' '}
-                Si lo marcas, la cuenta se eliminará de forma permanente junto con su código. Esta acción no se puede deshacer.
-              </span>
-            </label>
+            {canPerform('ACCOUNTING_CHART', 'delete') && (
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border/60 bg-card/50 p-3">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 accent-rose-600"
+                  checked={mergeDeleteSource}
+                  onChange={(e) => setMergeDeleteSource(e.target.checked)}
+                />
+                <span className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+                  <strong className="text-rose-600">Eliminar la cuenta origen después de transferir.</strong>{' '}
+                  Si lo marcas, la cuenta se eliminará de forma permanente junto con su código. Esta acción no se puede deshacer.
+                </span>
+              </label>
+            )}
             <div className="space-y-2">
               <Label>Cuenta destino (mismo tipo: {mergeSource ? getTypeLabel(mergeSource.type) : ''})</Label>
               <Combobox

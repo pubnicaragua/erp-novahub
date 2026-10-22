@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { HandHeart, Plus, Save, X, Trash2, Users, UserPlus, DollarSign, CheckCircle, Building2, Search, ChevronDown, ChevronUp, Edit2, Send } from 'lucide-react';
+import { HandHeart, Plus, Save, X, Ban, Users, UserPlus, DollarSign, CheckCircle, Building2, Search, ChevronDown, ChevronUp, Edit2, Send } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -107,15 +107,16 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDeactivate = async (id: string) => {
+    if (!canPerform('HR_BENEFITS', 'deactivate')) return;
     const actionToken = beginNotificationAction();
     try {
-      if (id) await hrService.deleteBenefit(id);
-      toast.success('Beneficio eliminado');
+      if (id) await hrService.deactivateBenefit(id);
+      toast.success('Beneficio desactivado');
       completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar beneficio');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al desactivar beneficio');
       failNotificationAction(actionToken);
     } finally {
       setPendingDeleteId(null);
@@ -386,9 +387,9 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                           <Edit2 className="size-3.5" />
                         </button>
                       )}
-                      {canPerform('HR_BENEFITS', 'delete') && (
-                        <button onClick={() => setPendingDeleteId(benefit.id)} className="size-7 rounded-lg hover:bg-destructive/10 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors" title="Eliminar">
-                          <Trash2 className="size-3.5" />
+                      {canPerform('HR_BENEFITS', 'deactivate') && benefit.isActive !== false && String(benefit.status || '').toUpperCase() !== 'INACTIVE' && (
+                        <button onClick={() => setPendingDeleteId(benefit.id)} className="size-7 rounded-lg hover:bg-destructive/10 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors" title="Desactivar beneficio" aria-label={`Desactivar beneficio ${benefit.name}`}>
+                          <Ban className="size-3.5" />
                         </button>
                       )}
                     </div>
@@ -578,11 +579,11 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
       <ConfirmDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => !open && setPendingDeleteId(null)}
-        title="¿Eliminar beneficio?"
-        description="¿Estás seguro de que deseas eliminar este beneficio? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
+        title="¿Desactivar beneficio?"
+        description="El beneficio dejará de estar disponible para nuevas asignaciones. Se conservarán sus datos e historial."
+        confirmLabel="Desactivar"
         variant="destructive"
-        onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()}
+        onConfirm={() => pendingDeleteId ? handleDeactivate(pendingDeleteId) : Promise.resolve()}
       />
     </div>
   );

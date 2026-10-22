@@ -95,6 +95,9 @@ export const invoicesService = {
   accountingPreflight: (data: { warehouseId?: string; items?: Array<{ productId?: string; warehouseId?: string }> }) =>
     api.post<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[]; warehouses?: any[] }>('/sales/invoices/accounting-preflight', data),
   create: (data: Partial<Invoice>, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
+  createMixedPayment: (id: string, data: Partial<PaymentReceived> & { payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; cardCommissionPercent?: number; reference?: string; notes?: string }>; cashRegisterId?: string; cashSessionId?: string; dueDate?: string }, idempotencyKey?: string) =>
+    api.idempotentPost<PaymentReceived & { payments?: PaymentReceived[] }>(`/sales/invoices/${id}/payments/mixed`, data, idempotencyKey),
+  submit: (id: string, idempotencyKey?: string) => api.idempotentPost<Invoice>(`/sales/invoices/${id}/submit`, {}, idempotencyKey),
   update: (id: string, data: Partial<Invoice>) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
   sendToCredit: (id: string, data: { dueDate?: string }, idempotencyKey?: string) =>
     api.idempotentPost<{ invoice: Invoice; credit: CreditNote }>(`/sales/invoices/${id}/send-to-credit`, data, idempotencyKey),

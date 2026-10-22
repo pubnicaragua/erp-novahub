@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { FileText, Send, Ban, Search, RotateCcw, X, ArrowDownLeft, ArrowUpRight, Upload, Download, CalendarRange, FileSpreadsheet, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { FileText, Send, Ban, Search, RotateCcw, X, ArrowDownLeft, ArrowUpRight, Upload, Download, CalendarRange, FileSpreadsheet, CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -30,6 +30,7 @@ import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadF
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
@@ -129,6 +130,8 @@ export function DiarioView() {
   const journalPageSize = 10000;
 
   const [viewJournalId, setViewJournalId] = useState<string | null>(null);
+  const [pendingDeleteJournal, setPendingDeleteJournal] = useState<JournalEntry | null>(null);
+  const [deleteJournalLoading, setDeleteJournalLoading] = useState(false);
 
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -179,6 +182,7 @@ export function DiarioView() {
   const canExport = canPerform('ACCOUNTING_JOURNAL', 'export');
   const canPostJournal = canPerform('ACCOUNTING_JOURNAL', 'post');
   const canVoidJournal = canPerform('ACCOUNTING_JOURNAL', 'void');
+  const canDeleteJournal = canPerform('ACCOUNTING_JOURNAL', 'delete');
 
   const handleExportPDF = async (format: PdfDownloadFormat = 'configured', scope?: PdfExportScope) => {
     if (!canExport) return;
@@ -553,6 +557,23 @@ export function DiarioView() {
     }
   }
 
+  async function handleDeleteJournal() {
+    if (!pendingDeleteJournal || !canPerform('ACCOUNTING_JOURNAL', 'read') || !canDeleteJournal) return;
+    setDeleteJournalLoading(true);
+    const deleteToastId = toast.loading(`Eliminando borrador #${pendingDeleteJournal.number}...`);
+    try {
+      await contabilidadService.deleteJournal(pendingDeleteJournal.id);
+      toast.success(`Borrador #${pendingDeleteJournal.number} eliminado`, { id: deleteToastId });
+      setPendingDeleteJournal(null);
+      if (viewJournalId === pendingDeleteJournal.id) setViewJournalId(null);
+      loadJournals();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar el borrador', { id: deleteToastId });
+    } finally {
+      setDeleteJournalLoading(false);
+    }
+  }
+
   function handleView(journal: JournalEntry) {
     setViewJournalId(journal.id);
   }
@@ -569,6 +590,18 @@ export function DiarioView() {
     const statusKey = journal.status?.toLowerCase();
     return (
       <div className="flex items-center justify-end gap-1">
+        {statusKey === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'read') && canDeleteJournal && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={(e) => { e.stopPropagation(); setPendingDeleteJournal(journal); }}
+            title="Eliminar borrador"
+            aria-label={`Eliminar borrador de asiento ${journal.number}`}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        )}
         {statusKey === 'draft' && canPostJournal && (
           <Button
             variant="ghost"
@@ -965,6 +998,11 @@ export function DiarioView() {
                         <Send className="mr-1 size-3.5" /> Contabilizar
                       </Button>
                     )}
+                    {viewJournal.status?.toLowerCase() === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'read') && canDeleteJournal && (
+                      <Button variant="outline" size="sm" className="flex-1 text-destructive" onClick={() => setPendingDeleteJournal(viewJournal)}>
+                        <Trash2 className="mr-1 size-3.5" /> Eliminar borrador
+                      </Button>
+                    )}
                     {viewJournal.status?.toLowerCase() === 'posted' && canVoidJournal && (
                       <Button variant="outline" size="sm" className="flex-1" onClick={() => { void handleVoid(viewJournal); }}>
                         <Ban className="mr-1 size-3.5" /> Anular
@@ -1034,6 +1072,17 @@ export function DiarioView() {
           </Card>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDeleteJournal !== null}
+        onOpenChange={(open) => !open && setPendingDeleteJournal(null)}
+        loading={deleteJournalLoading}
+        title="¿Eliminar asiento en borrador?"
+        description="Se eliminarán el borrador contable y sus líneas. Los asientos contabilizados deben anularse mediante la acción de flujo."
+        confirmLabel="Eliminar borrador"
+        variant="destructive"
+        onConfirm={handleDeleteJournal}
+      />
 
       <Dialog open={importOpen} onOpenChange={handleImportOpenChange}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">

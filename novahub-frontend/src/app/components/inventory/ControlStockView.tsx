@@ -190,6 +190,9 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   const canCreateAdjustments = canPerform('INVENTORY_ADJUSTMENTS', 'create');
   const canReadAudits = canPerform('INVENTORY_AUDITS', 'view');
   const canViewInventoryCost = canPerform('INVENTORY_ADJUSTMENTS', 'viewCost');
+  const canCreateSerialMovement = canPerform('INVENTORY_MOVEMENTS', 'create');
+  const canAddSerial = canCreateSerialMovement && canPerform('INVENTORY_PRODUCTS', 'create');
+  const canRemoveSerial = canCreateSerialMovement && canPerform('INVENTORY_PRODUCTS', 'delete');
   const { baseCurrency } = useCurrency();
   const [showTutorial, setShowTutorial] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -223,6 +226,12 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     serialNumber: '',
     notes: '',
   });
+  const canSaveSerialAdjustment = serialAdjustment.action === 'ADD' ? canAddSerial : canRemoveSerial;
+  const openSerialAdjustment = () => {
+    if (!canAddSerial && !canRemoveSerial) return;
+    setSerialAdjustment((current) => ({ ...current, action: canAddSerial ? 'ADD' : 'REMOVE' }));
+    setIsSerialAdjustOpen(true);
+  };
 
   const colFilters = useColumnFilters();
   const filterGetters = {
@@ -568,6 +577,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   };
 
   const handleSerialAdjustment = async () => {
+    if (!canSaveSerialAdjustment) return;
     const serial = serialAdjustment.serialNumber.trim();
     if (!serial || !serialAdjustment.productId || !serialAdjustment.warehouseId) {
       toast.error('Completa producto, almacén e IMEI/serie');
@@ -683,15 +693,15 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 Auditorías
                 {auditsForAdjustment.length > 0 && <Badge className="ml-0.5 h-5 min-w-5 border-0 bg-warning px-1 text-[9px] text-warning-foreground hover:bg-warning">{auditsForAdjustment.length}</Badge>}
               </Button>}
-              <Button
+              {(canAddSerial || canRemoveSerial) && <Button
                 size="sm"
                 variant="outline"
                 className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
-                onClick={() => setIsSerialAdjustOpen(true)}
+                onClick={openSerialAdjustment}
                 data-tour="stock-imei-btn"
               >
                 IMEI / Series
-              </Button>
+              </Button>}
               <Button
                 size="sm"
                 variant="outline"
@@ -1073,8 +1083,8 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 <Select value={serialAdjustment.action} onValueChange={(v) => setSerialAdjustment({ ...serialAdjustment, action: v })}>
                   <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ADD">Agregar</SelectItem>
-                    <SelectItem value="REMOVE">Remover</SelectItem>
+                    {canAddSerial && <SelectItem value="ADD">Agregar</SelectItem>}
+                    {canRemoveSerial && <SelectItem value="REMOVE">Remover</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -1128,7 +1138,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
             <Button
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
               onClick={handleSerialAdjustment}
-              disabled={saving}
+              disabled={saving || !canSaveSerialAdjustment}
             >
               {saving ? 'Guardando...' : 'Guardar ajuste'}
             </Button>
