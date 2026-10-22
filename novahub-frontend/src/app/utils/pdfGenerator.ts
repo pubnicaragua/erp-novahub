@@ -1247,6 +1247,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
         data: curatedData,
         fileName: buildSalesPdfFileName(documentType, estimate.number, renderFormat),
         save,
+        format: resolveCuratedPaperFormat(renderFormat, settings.paperSize),
       });
       return renderedCurated;
     }
@@ -2803,7 +2804,6 @@ export function resolvePdfDesignForRender(targetKey: string, loadedDesign: any) 
 }
 
 async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format = 'configured', fileName, designOverride, save = true, onProgress }: { targetKey: string; data: PdfTemplateData; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; fileName: string; designOverride?: any; save?: boolean; onProgress?: (progress: PdfTemplateRenderProgress) => void }) {
-  if (format === 'roll-58' || format === 'roll-80') return null;
   const loadedDesign = designOverride || await getPdfDesign(targetKey);
   const design = resolvePdfDesignForRender(targetKey, loadedDesign);
   const baseSettings = { ...(createSystemDefaultPdfDesign(targetKey).settings || {}), ...(design?.settings && typeof design.settings === 'object' ? design.settings : {}) } as Record<string, any>;
@@ -2866,12 +2866,33 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
     },
   };
   if (settings.curatedTemplateSelection) {
-    return renderCuratedTemplateToPdf({ targetKey, data: enrichedData as Record<string, unknown>, fileName, save });
+    return renderCuratedTemplateToPdf({ targetKey, data: enrichedData as Record<string, unknown>, fileName, save, format: resolveCuratedPaperFormat(format, settings.paperSize) });
   }
+  if (format === 'roll-58' || format === 'roll-80') return null;
   return renderPdfTemplateToPdf({ definition: definitionWithGeneratedFallback, settings: renderSettings, targetKey, data: enrichedData, fileName, save, onProgress });
 }
 
-export async function renderCuratedTemplateToPdf({ targetKey, data, fileName, save }: { targetKey: string; data: Record<string, unknown>; fileName: string; save: boolean }) {
+export function resolveCuratedPaperFormat(format: PdfDownloadFormat, configuredPaperSize?: unknown): PdfPaperFormat {
+  if (format !== 'configured' && format !== 'novahub-format') return format;
+  const configured = String(configuredPaperSize || 'LETTER').trim().toUpperCase();
+  if (configured === 'ROLL-80') return 'roll-80';
+  if (configured === 'ROLL-58') return 'roll-58';
+  if (configured === 'OFICIO') return 'oficio';
+  if (configured === 'A4') return 'A4';
+  if (configured === 'LEGAL') return 'legal';
+  return 'letter';
+}
+
+function curatedPaperDimensions(format: PdfPaperFormat): [number, number] {
+  if (format === 'roll-80') return [80, 100];
+  if (format === 'roll-58') return [58, 100];
+  if (format === 'oficio') return [215.9, 330.2];
+  if (format === 'A4') return [210, 297];
+  if (format === 'legal') return [215.9, 355.6];
+  return [215.9, 279.4];
+}
+
+export async function renderCuratedTemplateToPdf({ targetKey, data, fileName, save, format = 'letter' }: { targetKey: string; data: Record<string, unknown>; fileName: string; save: boolean; format?: PdfPaperFormat }) {
   const source = data && typeof data === 'object' ? data as Record<string, any> : {};
   const company = source.company && typeof source.company === 'object' ? source.company as Record<string, any> : {};
   // La vista previa usa el perfil PDF de la sucursal. Las exportaciones reales
@@ -2886,8 +2907,8 @@ export async function renderCuratedTemplateToPdf({ targetKey, data, fileName, sa
     logo,
     company: { ...effectiveCompany, logo },
   };
-  const blob = await pdfDocumentDesignService.renderSelectedCuratedTemplate(targetKey, renderData);
-  const doc = new jsPDF({ format: 'letter', orientation: 'portrait', unit: 'mm' });
+  const blob = await pdfDocumentDesignService.renderSelectedCuratedTemplate(targetKey, renderData, format);
+  const doc = new jsPDF({ format: curatedPaperDimensions(format), orientation: 'portrait', unit: 'mm' });
   const originalOutput = doc.output.bind(doc);
   (doc as any).output = (type = 'blob', ...args: unknown[]) => type === 'blob' ? blob : originalOutput(type as any, ...(args as any[]));
   (doc as any).save = (name = fileName) => {

@@ -17,12 +17,12 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { toast } from '@/app/services/toast';
 import { storageService } from '../../services/storage.service';
-import { pdfDocumentDesignService, type PdfCompanyProfile, type PdfCuratedTemplateRecord, type PdfCuratedTemplateRevision, type PdfCuratedTemplateScope, type PdfDocumentDesignFolder, type PdfDocumentDesignRecord, type PdfDocumentType } from '../../services/pdf-document-design.service';
+import { pdfDocumentDesignService, type PdfCompanyProfile, type PdfCuratedTemplatePreflight, type PdfCuratedTemplateRecord, type PdfCuratedTemplateRevision, type PdfCuratedTemplateScope, type PdfDocumentDesignFolder, type PdfDocumentDesignRecord, type PdfDocumentType } from '../../services/pdf-document-design.service';
 import { canEditPdfTemplate, getPdfTemplateTarget, isPdfTemplateFixed, normalizePdfTemplateKey, PDF_TEMPLATE_MODULES, PDF_TEMPLATE_TARGETS } from '../../services/pdf-document-catalog';
 import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createPdfTemplateSampleData, createSystemDefaultPdfSettings, ensureDashboardChartNodes, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PURCHASE_PDF_LAYOUT_VERSION, salesPdfLayoutVersionForTarget, sanitizeTemplateDefinition, type PdfHeaderComposition, type PdfHeaderContentSpacing, type PdfTemplateDefinition, type PdfTemplateNode } from '../../services/pdf-template-definition';
 import { normalizePdfFrameGeometry } from '../../services/pdf-document-style';
 import { PDF_STYLE_PRESETS } from '../../services/pdf-document-style';
-import { clearPdfDesignCache } from '../../utils/pdfGenerator';
+import { clearPdfDesignCache, resolveCuratedPaperFormat } from '../../utils/pdfGenerator';
 import { renderPdfTemplateToPdf } from '../../utils/pdf-template-renderer';
 import { PdfLivePreview } from './PdfLivePreview';
 import { PdfAppearanceSettingsPanel } from './PdfAppearanceSettingsPanel';
@@ -37,6 +37,12 @@ type CuratedPreviewSelection = {
   targetKey: string;
   scope: PdfCuratedTemplateScope;
   overrides: PdfCuratedTemplateSelection['overrides'];
+};
+
+type PendingCuratedPackage = {
+  file: File;
+  templateId?: string;
+  preflight: PdfCuratedTemplatePreflight;
 };
 
 type PdfSettings = {
@@ -191,6 +197,8 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const [curatedPreviewTargets, setCuratedPreviewTargets] = useState<Record<string, string>>({});
   const [previewedCuratedSelection, setPreviewedCuratedSelection] = useState<CuratedPreviewSelection | null>(null);
   const [pendingCuratedSave, setPendingCuratedSave] = useState<CuratedPreviewSelection | null>(null);
+  const [pendingCuratedPackage, setPendingCuratedPackage] = useState<PendingCuratedPackage | null>(null);
+  const [isCuratedPackagePreflightOpen, setIsCuratedPackagePreflightOpen] = useState(false);
   const [previewTitle, setPreviewTitle] = useState('');
   const [curatedOverridesDraft, setCuratedOverridesDraft] = useState<PdfCuratedTemplateSelection['overrides']>({});
   const curatedPackageInputRef = useRef<HTMLInputElement>(null);
@@ -556,6 +564,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
             scope: activeCuratedSelectionScope,
             overrides: getCuratedPreviewOverrides(activeCuratedSelectionScope === appearanceScope ? curatedOverridesDraft : activeCuratedOverrides, previewDocument, activeCuratedSelectionScope),
             data,
+          format: resolveCuratedPaperFormat('configured', effectiveSettings.paperSize),
           });
         }
         const { blob } = await renderPdfTemplateToPdf({
@@ -786,6 +795,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         scope,
         overrides: getCuratedPreviewOverrides(overrides, targetKey, scope),
         data,
+        format: resolveCuratedPaperFormat('configured', effectiveSettings.paperSize),
       });
       showPdfPreviewBlob(blob, getPdfTemplateTarget(targetKey).label);
       setPreviewedCuratedSelection({ templateId: template.id, revisionId: revision.id, targetKey, scope, overrides });
@@ -851,6 +861,21 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     }
     setCuratedBusy(true);
     try {
+      const preflight = await pdfDocumentDesignService.inspectCuratedTemplatePackage(file);
+      setPendingCuratedPackage({ file, templateId, preflight });
+      setIsCuratedPackagePreflightOpen(true);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo revisar el paquete ZIP.');
+    } finally {
+      setCuratedBusy(false);
+    }
+  };
+
+  const confirmCuratedPackageInstall = async () => {
+    if (!pendingCuratedPackage || !hasActiveBranchScope || !canImport) return;
+    const { file, templateId, preflight } = pendingCuratedPackage;
+    setCuratedBusy(true);
+    try {
       const installed = await pdfDocumentDesignService.importCuratedTemplate(file, templateId);
       setCuratedTemplates(previous => {
         const existing = previous.find(item => item.id === installed.id);
@@ -860,6 +885,8 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         ];
         return [{ ...existing, ...installed, revisions }, ...previous.filter(item => item.id !== installed.id)];
       });
+      setPendingCuratedPackage(null);
+      setIsCuratedPackagePreflightOpen(false);
       const revision = installed.revisions[0];
       const supportedTargets = revision?.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target)) || [];
       const targetKey = supportedTargets.includes(previewDocument) ? previewDocument : preferredCuratedPreviewTarget(supportedTargets);
@@ -868,7 +895,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         setCuratedPreviewTargets(previous => ({ ...previous, [revision.id]: targetKey }));
         await renderCuratedRevisionPreview(installed, revision, appearanceScope, {}, targetKey);
       } else {
-        setPreviewError('El paquete se instaló, pero no incluye un destino compatible para generar una muestra.');
+        setPreviewError(`El paquete se instaló, pero no hay un destino de muestra compatible para ${preflight.name}.`);
         setActiveMobilePanel('preview');
       }
     } catch (error: any) {
@@ -1321,6 +1348,8 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                       const previewed = Boolean(previewedCuratedRevisions[`${revision.id}:${selectedPreviewTarget}`]);
                       return <div key={revision.id} className="space-y-2 rounded-md bg-muted/20 p-2">
                         <span className="flex min-w-0 flex-wrap items-center gap-1.5"><Badge variant={revision.status === 'PUBLISHED' ? 'secondary' : 'outline'} className="text-[9px]">v{revision.version} · {revision.status === 'PUBLISHED' ? 'Publicada' : 'Borrador'}</Badge>{isScopedActive && <Badge className="text-[9px]"><Check className="mr-1 size-3" />Activa</Badge>}</span>
+                        <p className="text-[9px] leading-relaxed text-muted-foreground">Compatible con: {supportedTargets.map(target => getPdfTemplateTarget(target).label).join(', ')}.</p>
+                        {revision.manifest.fontFamilies?.length ? <p className="text-[9px] leading-relaxed text-muted-foreground">Fuentes incluidas: {revision.manifest.fontFamilies.join(', ')}.</p> : <p className="text-[9px] leading-relaxed text-muted-foreground">Sin fuentes incluidas; se usa la familia declarada por la plantilla y su alternativa local.</p>}
                         {!supportsTarget && supportedTargets.length > 0 && <label className="block space-y-1 text-[9px] text-muted-foreground"><span>Documento para la muestra</span><select aria-label={`Documento de muestra para ${template.name}, versión ${revision.version}`} value={selectedPreviewTarget} onChange={event => setCuratedPreviewTargets(previous => ({ ...previous, [revision.id]: event.target.value }))} className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[10px] text-foreground">{supportedTargets.map(target => <option key={target} value={target}>{getPdfTemplateTarget(target).label}</option>)}</select></label>}
                         {!supportsTarget && <p className="text-[9px] leading-relaxed text-muted-foreground">El PDF seleccionado no admite esta plantilla. La muestra usa el documento compatible de arriba; para activarla, cambia a un PDF admitido.</p>}
                         <div className="flex justify-end border-t border-border/40 pt-2"><Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void renderCuratedRevisionPreview(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {}, selectedPreviewTarget)} disabled={!selectedPreviewTarget || curatedBusy}><Eye className="mr-1 size-3" />{previewed ? 'Actualizar vista previa' : 'Previsualizar'}</Button></div>
@@ -1368,6 +1397,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
           canEditBranch={canEditCompanyProfile}
           canEditDocument={canModifyActive}
           hasImportedHtmlHeader={hasImportedHtmlHeader}
+          packagedFontFamilies={activeCuratedRevision?.manifest.fontFamilies || []}
           onScopeChange={changeAppearanceScope}
           onChange={updateAppearance}
           onReset={resetAppearanceOverride}
@@ -1422,6 +1452,46 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Folder className="size-5 text-primary" />{editingFolderId ? 'Renombrar carpeta' : 'Nueva carpeta de diseños'}</DialogTitle><DialogDescription>Organiza varias plantillas PDF en un mismo espacio para encontrarlas y reutilizarlas.</DialogDescription></DialogHeader>
           <div className="space-y-2"><Label htmlFor="pdf-folder-name">Nombre de la carpeta</Label><Input id="pdf-folder-name" value={folderName} onChange={event => setFolderName(event.target.value)} placeholder="Ej. Documentos comerciales" autoFocus onKeyDown={event => { if (event.key === 'Enter') void saveFolder(); }} /></div>
           <DialogFooter><Button type="button" variant="outline" className="cursor-pointer" onClick={() => setFolderDialogOpen(false)} disabled={isSavingFolder}>Cancelar</Button><Button type="button" className="cursor-pointer gap-2" onClick={saveFolder} disabled={!folderName.trim() || isSavingFolder}>{isSavingFolder ? <Loader2 className="size-4 animate-spin" /> : <FolderPlus className="size-4" />}{editingFolderId ? 'Guardar cambios' : 'Crear carpeta'}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCuratedPackagePreflightOpen} onOpenChange={open => {
+        if (curatedBusy) return;
+        setIsCuratedPackagePreflightOpen(open);
+        if (!open) setPendingCuratedPackage(null);
+      }}>
+        <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Revisión del paquete PDF</DialogTitle>
+            <DialogDescription>Confirma sus destinos y fuentes antes de instalarlo como borrador en esta sucursal.</DialogDescription>
+          </DialogHeader>
+          {pendingCuratedPackage && <div className="space-y-3 text-sm">
+            <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
+              <p className="font-semibold">{pendingCuratedPackage.preflight.name}</p>
+              {pendingCuratedPackage.preflight.description && <p className="mt-1 text-xs text-muted-foreground">{pendingCuratedPackage.preflight.description}</p>}
+              <p className="mt-1 text-[10px] text-muted-foreground">Formato del paquete v{pendingCuratedPackage.preflight.schemaVersion} · Carta como base · se adapta a Carta, Oficio, A4, Legal y rollos de 80/58 mm.</p>
+            </div>
+            <section className="space-y-1.5" aria-label="Documentos compatibles">
+              <h3 className="text-xs font-semibold">Documentos compatibles ({pendingCuratedPackage.preflight.documentTypes.length})</h3>
+              <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                {pendingCuratedPackage.preflight.documentTypes.map(target => <li key={target} className="rounded-md border border-border/40 px-2 py-1.5 text-xs">{getPdfTemplateTarget(target).label}</li>)}
+              </ul>
+            </section>
+            <section className="space-y-1.5" aria-label="Composiciones del paquete">
+              <h3 className="text-xs font-semibold">Composiciones ({pendingCuratedPackage.preflight.layouts.length})</h3>
+              <ul className="space-y-1">
+                {pendingCuratedPackage.preflight.layouts.map(layout => <li key={layout.id} className="rounded-md border border-border/40 px-2 py-1.5 text-[10px]"><span className="font-medium">{layout.id}</span><span className="text-muted-foreground"> · {layout.documentTypes.map(target => getPdfTemplateTarget(target).label).join(', ')}</span></li>)}
+              </ul>
+            </section>
+            <section className="space-y-1.5" aria-label="Fuentes locales incluidas">
+              <h3 className="text-xs font-semibold">Fuentes incluidas</h3>
+              <p className="rounded-md border border-border/40 px-2 py-1.5 text-xs text-muted-foreground">{pendingCuratedPackage.preflight.fontFamilies.length ? pendingCuratedPackage.preflight.fontFamilies.join(', ') : 'El paquete no incluye archivos tipográficos; se aplicará la fuente local indicada por su CSS.'}</p>
+            </section>
+          </div>}
+          <DialogFooter>
+            <Button type="button" variant="outline" className="cursor-pointer" onClick={() => { setIsCuratedPackagePreflightOpen(false); setPendingCuratedPackage(null); }} disabled={curatedBusy}>Cancelar</Button>
+            <Button type="button" className="cursor-pointer gap-2" onClick={() => void confirmCuratedPackageInstall()} disabled={!pendingCuratedPackage || curatedBusy || !canImport}>{curatedBusy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}{curatedBusy ? 'Instalando…' : 'Instalar como borrador'}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -1,5 +1,6 @@
 import { api, getApiUrl, getAuthHeaders } from './api';
 import type { PdfAppearanceProfile, PdfAppearanceProfilePatch, PdfCuratedTemplateSelection } from './pdf-appearance';
+import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 
 /** Identificador de una salida PDF. Puede ser legacy (Ventas) o module.subview. */
 export type PdfDocumentType = string;
@@ -47,7 +48,16 @@ export interface PdfCuratedTemplateRevision {
   id: string;
   version: number;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
-  manifest: { name: string; description?: string; documentTypes: string[]; page: { size: 'LETTER'; orientation: 'portrait' | 'landscape' }; defaults: Record<string, unknown> };
+  manifest: {
+    schemaVersion?: 1 | 2;
+    name: string;
+    description?: string;
+    documentTypes: string[];
+    layouts?: Array<{ id: string; documentTypes: string[]; files: { html: string; css: string } }>;
+    fontFamilies?: string[];
+    page: { size: 'LETTER'; orientation: 'portrait' | 'landscape' };
+    defaults: Record<string, unknown>;
+  };
   createdAt: string;
   publishedAt?: string | null;
 }
@@ -60,6 +70,17 @@ export interface PdfCuratedTemplateRecord {
 }
 
 export type PdfCuratedTemplateScope = 'branch' | 'document';
+
+export interface PdfCuratedTemplatePreflight {
+  name: string;
+  description: string;
+  schemaVersion: 1 | 2;
+  documentTypes: string[];
+  layouts: Array<{ id: string; documentTypes: string[] }>;
+  fontFamilies: string[];
+  pageFormats: PdfPaperFormat[];
+  adaptsPageFormats: boolean;
+}
 
 async function base64FromFile(file: File) {
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -111,6 +132,10 @@ export const pdfDocumentDesignService = {
   update: (id: string, data: Partial<PdfDocumentDesignRecord>) => api.patch<PdfDocumentDesignRecord>(`/pdf-document-designs/${id}`, data),
   remove: (id: string) => api.delete(`/pdf-document-designs/${id}`),
   listCuratedTemplates: () => api.get<PdfCuratedTemplateRecord[]>('/pdf-document-templates'),
+  inspectCuratedTemplatePackage: async (file: File) => api.post<PdfCuratedTemplatePreflight>('/pdf-document-templates/preflight', {
+    fileName: file.name,
+    packageBase64: await base64FromFile(file),
+  }),
   importCuratedTemplate: async (file: File, templateId?: string) => api.post<PdfCuratedTemplateRecord>('/pdf-document-templates/import-package', {
     fileName: file.name,
     packageBase64: await base64FromFile(file),
@@ -119,7 +144,7 @@ export const pdfDocumentDesignService = {
   publishCuratedRevision: (templateId: string, revisionId: string) => api.post<{ id: string; status: string; publishedAt: string }>(`/pdf-document-templates/${encodeURIComponent(templateId)}/publish/${encodeURIComponent(revisionId)}`, {}),
   selectCuratedTemplate: (selection: { templateId: string; revisionId: string; targetKey: string; scope: PdfCuratedTemplateScope; overrides?: PdfCuratedTemplateSelection['overrides'] }) => api.post<PdfCuratedTemplateSelection & { targetKey: string; scope: PdfCuratedTemplateScope }>('/pdf-document-templates/selections', selection),
   clearCuratedSelection: (scope: PdfCuratedTemplateScope, targetKey: string) => api.delete(`/pdf-document-templates/selections/${encodeURIComponent(scope)}/${encodeURIComponent(targetKey)}`),
-  previewCuratedTemplate: (templateId: string, body: { revisionId: string; targetKey: string; scope: PdfCuratedTemplateScope; overrides?: PdfCuratedTemplateSelection['overrides']; data: Record<string, unknown> }) => fetchPdfBlob(`/pdf-document-templates/${encodeURIComponent(templateId)}/preview`, body),
-  renderSelectedCuratedTemplate: (targetKey: string, data: Record<string, unknown>) => fetchPdfBlob('/pdf-document-templates/render', { targetKey, data }),
+  previewCuratedTemplate: (templateId: string, body: { revisionId: string; targetKey: string; scope: PdfCuratedTemplateScope; overrides?: PdfCuratedTemplateSelection['overrides']; data: Record<string, unknown>; format?: PdfPaperFormat }) => fetchPdfBlob(`/pdf-document-templates/${encodeURIComponent(templateId)}/preview`, { ...body, ...(body.format ? { format: body.format.toUpperCase() } : {}) }),
+  renderSelectedCuratedTemplate: (targetKey: string, data: Record<string, unknown>, format: PdfPaperFormat = 'letter') => fetchPdfBlob('/pdf-document-templates/render', { targetKey, data, format: format.toUpperCase() }),
   getCuratedSelections: () => api.get<{ branch: Record<string, PdfCuratedTemplateSelection>; document: Record<string, PdfCuratedTemplateSelection> }>('/pdf-document-templates/selections'),
 };

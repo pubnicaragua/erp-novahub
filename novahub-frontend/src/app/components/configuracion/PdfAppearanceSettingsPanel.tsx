@@ -141,7 +141,7 @@ function PdfColorPicker({ value, disabled, label, onChange }: { value: string; d
   </div>;
 }
 
-function PdfFontFamilyPicker({ value, disabled, onChange }: { value: string; disabled: boolean; onChange: (family: string) => void }) {
+function PdfFontFamilyPicker({ value, disabled, onChange, packagedFamilies = [] }: { value: string; disabled: boolean; onChange: (family: string) => void; packagedFamilies?: string[] }) {
   const [query, setQuery] = React.useState('');
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const groups = PDF_APPEARANCE_FONT_GROUPS.map(group => ({
@@ -153,6 +153,9 @@ function PdfFontFamilyPicker({ value, disabled, onChange }: { value: string; dis
       : label === 'Cursivas y manuscritas' ? 'cursive'
         : label === 'Decorativas' ? 'fantasy' : 'sans-serif';
   const selectedGroup = PDF_APPEARANCE_FONT_GROUPS.find(group => group.families.some(family => family === value));
+  const packagedFontFamilies = [...new Set(packagedFamilies.map(family => family.trim()).filter(Boolean))]
+    .filter(family => !PDF_APPEARANCE_FONT_GROUPS.some(group => group.families.includes(family)))
+    .filter(family => !normalizedQuery || family.toLocaleLowerCase().includes(normalizedQuery));
 
   return <details data-font-family-picker className={`group min-w-0 rounded-md border border-input bg-background ${disabled ? 'pointer-events-none opacity-60' : ''}`}>
     <summary aria-label={`Elegir fuente del documento; actual: ${value}`} aria-disabled={disabled} tabIndex={disabled ? -1 : 0} className="flex h-10 cursor-pointer list-none items-center justify-between gap-2 px-3 text-xs [&::-webkit-details-marker]:hidden">
@@ -166,7 +169,7 @@ function PdfFontFamilyPicker({ value, disabled, onChange }: { value: string; dis
       <Input aria-label="Buscar tipografía" placeholder="Buscar tipografía…" value={query} disabled={disabled} onChange={event => setQuery(event.target.value)} className="mb-2 h-9 text-xs" />
       <ScrollArea type="always" className="pdf-font-family-scrollarea h-[18rem] w-full rounded-md border border-border/60" aria-label="Familias de fuente disponibles">
         <div className="pdf-font-family-list min-w-0">
-        {groups.length ? groups.map(group => <section key={group.label} aria-label={group.label}>
+        {groups.map(group => <section key={group.label} aria-label={group.label}>
           <div className="sticky top-0 z-[1] bg-muted/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</div>
           {group.families.map(family => {
             const selected = family === value;
@@ -188,7 +191,28 @@ function PdfFontFamilyPicker({ value, disabled, onChange }: { value: string; dis
               {selected && <Check aria-hidden="true" className="size-3.5 shrink-0 text-primary" />}
             </button>;
           })}
-        </section>) : <p className="px-3 py-5 text-center text-xs text-muted-foreground">No hay fuentes que coincidan con «{query}».</p>}
+        </section>)}
+        {packagedFontFamilies.length > 0 && <section aria-label="Fuentes incluidas en la plantilla">
+          <div className="sticky top-0 z-[1] bg-muted/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Incluidas en esta plantilla</div>
+          {packagedFontFamilies.map(family => <button
+            key={family}
+            type="button"
+            aria-pressed={family === value}
+            data-font-family-option={family}
+            disabled={disabled}
+            onClick={event => {
+              onChange(family);
+              event.currentTarget.closest('details')?.removeAttribute('open');
+              setQuery('');
+            }}
+            className="flex min-h-11 w-full items-center justify-between gap-2 border-b border-border/40 px-2.5 py-1.5 text-left last:border-b-0 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="min-w-0 truncate text-xs font-medium">{family}</span>
+            <span className="shrink-0 text-lg leading-none text-foreground/90" style={{ fontFamily: `"${family}", sans-serif` }}>Aa Bb Cc 123</span>
+            {family === value && <Check aria-hidden="true" className="size-3.5 shrink-0 text-primary" />}
+          </button>)}
+        </section>}
+        {!groups.length && !packagedFontFamilies.length && <p className="px-3 py-5 text-center text-xs text-muted-foreground">No hay fuentes que coincidan con «{query}».</p>}
         </div>
       </ScrollArea>
       <p className="pt-2 text-[10px] text-muted-foreground">La selección se aplica a todo el documento y actualiza la vista previa.</p>
@@ -204,6 +228,7 @@ export interface PdfAppearanceSettingsPanelProps {
   canEditBranch: boolean;
   canEditDocument: boolean;
   hasImportedHtmlHeader?: boolean;
+  packagedFontFamilies?: string[];
   onScopeChange: (scope: PdfAppearanceDraftScope) => void;
   onChange: (key: PdfAppearanceDraftKey, value: unknown) => void;
   onReset: (key: PdfAppearanceDraftKey) => void;
@@ -213,6 +238,7 @@ export interface PdfAppearanceSettingsPanelProps {
 export function PdfAppearanceSettingsPanel({
   scope, profile, overrides, effective, canEditBranch, canEditDocument,
   hasImportedHtmlHeader = false, onScopeChange, onChange, onReset, onResetAll,
+  packagedFontFamilies = [],
 }: PdfAppearanceSettingsPanelProps) {
   const branchScope = scope === 'branch';
   const disabled = branchScope ? !canEditBranch : !canEditDocument;
@@ -253,7 +279,7 @@ export function PdfAppearanceSettingsPanel({
         {property('headerComposition', effective.headerComposition, <select aria-label="Composición del encabezado PDF" value={effective.headerComposition || 'company-left-logo-right'} disabled={disabled || hasImportedHtmlHeader} onChange={event => onChange('headerComposition', event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60">{COMPOSITIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>)}
         {hasImportedHtmlHeader && <p className="text-[10px] text-muted-foreground">El encabezado HTML importado conserva su propia composición.</p>}
         {property('headerContentSpacing', effective.headerContentSpacing, <PdfHeaderSpacingInput value={normalizePdfHeaderContentSpacing(effective.headerContentSpacing)} disabled={disabled} onChange={spacing => onChange('headerContentSpacing', spacing)} />)}
-        {property('fontFamily', effective.fontFamily, <PdfFontFamilyPicker value={effective.fontFamily || 'Inter'} disabled={disabled} onChange={font => onChange('fontFamily', font)} />)}
+        {property('fontFamily', effective.fontFamily, <PdfFontFamilyPicker value={effective.fontFamily || 'Inter'} disabled={disabled} packagedFamilies={packagedFontFamilies} onChange={font => onChange('fontFamily', font)} />)}
         {property('fontSize', effective.fontSize, <div className="flex items-center gap-2"><Input aria-label="Tamaño base de fuente PDF" type="number" min={PDF_APPEARANCE_FONT_SIZE_MIN} max={PDF_APPEARANCE_FONT_SIZE_MAX} step={0.5} value={effective.fontSize || 9} disabled={disabled} onChange={event => onChange('fontSize', Number(event.target.value))} className="h-9 text-xs" /><span className="text-xs text-muted-foreground">pt</span></div>)}
       </div>
       <div className="space-y-2 border-t border-border/50 pt-3">

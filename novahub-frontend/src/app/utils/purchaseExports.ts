@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import jspdfAutoTable from 'jspdf-autotable';
-import { generateFastGlobalReportPDF, getGlobalReportSettings, getPdfDesign, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignColor, pdfDesignPaper, renderCuratedTemplateToPdf } from './pdfGenerator';
+import { generateFastGlobalReportPDF, getGlobalReportSettings, getPdfDesign, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignColor, pdfDesignPaper, renderCuratedTemplateToPdf, resolveCuratedPaperFormat } from './pdfGenerator';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
 import { getPdfTemplatePartyConfig, getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
@@ -162,9 +162,8 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
   const settings = overrideSettings || await getPdfDesignSettings(targetKey);
   const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
   const resolvedLogo = configuredLogo || (typeof document.supplierData?.logo === 'string' ? document.supplierData.logo : undefined);
-  if (!isRoll(format)) {
-    const paperSettings = withPaperFormat(settings, format);
-    const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...paperSettings };
+  const paperSettings = withPaperFormat(settings, format);
+  const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...paperSettings };
     const fieldData = Object.fromEntries((document.fields || []).map(field => [field.label.toLowerCase().replace(/\s+/g, '_'), valueText(field.value)]));
     const totalsData = Object.fromEntries((document.totals || []).map(field => [field.label.toLowerCase().replace(/\s+/g, '_'), valueText(field.value)]));
     if (document.total) totalsData.total = document.total;
@@ -218,9 +217,11 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
         data: data as Record<string, unknown>,
         fileName: buildLabeledPdfFileName(document.title, document.number, format),
         save: true,
+        format: resolveCuratedPaperFormat(format, settings.paperSize),
       });
       return rendered.doc;
     }
+  if (!isRoll(format)) {
     const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data, fileName: buildLabeledPdfFileName(document.title, document.number, format), save: true });
     return rendered.doc;
   }
