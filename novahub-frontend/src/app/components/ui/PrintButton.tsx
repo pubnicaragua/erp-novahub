@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Printer, ChevronDown } from 'lucide-react';
+import { Printer, ChevronDown, FileText, ReceiptText } from 'lucide-react';
 import { Button } from './button';
 import { cn } from './utils';
 import {
@@ -68,16 +68,17 @@ export function PrintButton({
           <ChevronDown className="size-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent align="end" className="w-64 max-w-[calc(100vw-1rem)]">
         <>
           {standardOptions.map((option) => (
             <DropdownMenuItem
               key={option.value}
               onClick={() => onPrint(option.value)}
-              className="flex items-center justify-between gap-3"
+              className="gap-2.5 rounded-xl py-2"
             >
-              <span className="font-medium">{option.label}</span>
-              <span className="text-[10px] text-muted-foreground">{option.description}</span>
+              <FileText className="size-3.5 text-primary" />
+              <span className="min-w-0 flex-1 truncate font-medium">{option.name}</span>
+              <span className="shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground">{option.dimensions}</span>
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
@@ -85,10 +86,11 @@ export function PrintButton({
             <DropdownMenuItem
               key={option.value}
               onClick={() => onPrint(option.value as PaperSize)}
-              className="flex items-center justify-between gap-3"
+              className="gap-2.5 rounded-xl py-2"
             >
-              <span className="font-medium">{option.label}</span>
-              <span className="text-[10px] text-muted-foreground">{option.description}</span>
+              <ReceiptText className="size-3.5 text-primary" />
+              <span className="min-w-0 flex-1 truncate font-medium">{option.name}</span>
+              <span className="shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground">{option.dimensions}</span>
             </DropdownMenuItem>
           ))}
         </>

@@ -169,8 +169,8 @@ export function ActivosFijosView() {
               <DropdownMenuSeparator />
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger disabled={exporting} className="cursor-pointer gap-2 text-xs"><Download className="size-3.5" /> Todos en PDF ({assets.length})</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="max-h-[min(80vh,34rem)] overflow-y-auto rounded-xl">
-                  {PDF_DOWNLOAD_OPTIONS.map((option) => <DropdownMenuItem key={option.value} onClick={() => void handleExport('all', 'pdf', option.value)} className="cursor-pointer text-xs">{option.label}</DropdownMenuItem>)}
+                <DropdownMenuSubContent className="max-h-[min(80vh,34rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl">
+                  {PDF_DOWNLOAD_OPTIONS.map((option) => <DropdownMenuItem key={option.value} onClick={() => void handleExport('all', 'pdf', option.value)} className="gap-2.5 rounded-xl py-2 text-xs"><Download className="size-3.5 text-primary" /><span className="min-w-0 flex-1 truncate">{option.name}</span><span className="shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground">{option.dimensions}</span></DropdownMenuItem>)}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuItem onClick={() => handleExport('all', 'xlsx')} disabled={exporting} className="cursor-pointer gap-2 text-xs">
@@ -178,8 +178,8 @@ export function ActivosFijosView() {
               </DropdownMenuItem>
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger disabled={exporting || selectedIds.length === 0} className="cursor-pointer gap-2 text-xs"><Download className="size-3.5" /> Seleccionados en PDF ({selectedIds.length})</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="max-h-[min(80vh,34rem)] overflow-y-auto rounded-xl">
-                  {PDF_DOWNLOAD_OPTIONS.map((option) => <DropdownMenuItem key={option.value} onClick={() => void handleExport('selected', 'pdf', option.value)} className="cursor-pointer text-xs">{option.label}</DropdownMenuItem>)}
+                <DropdownMenuSubContent className="max-h-[min(80vh,34rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl">
+                  {PDF_DOWNLOAD_OPTIONS.map((option) => <DropdownMenuItem key={option.value} onClick={() => void handleExport('selected', 'pdf', option.value)} className="gap-2.5 rounded-xl py-2 text-xs"><Download className="size-3.5 text-primary" /><span className="min-w-0 flex-1 truncate">{option.name}</span><span className="shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground">{option.dimensions}</span></DropdownMenuItem>)}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuItem onClick={() => handleExport('selected', 'xlsx')} disabled={exporting || selectedIds.length === 0} className="cursor-pointer gap-2 text-xs">

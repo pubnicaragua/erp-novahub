@@ -132,10 +132,10 @@ export function PdfDownloadButton({ onDownload, onExcel, className, disabled = f
         <DropdownMenuLabel className="px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] text-popover-foreground/75">Tamaño de página</DropdownMenuLabel>
         {pageSizeOptions.length > 0 && <>
           {pageSizeOptions.map((option) => (
-            <DropdownMenuItem key={option.value} onClick={() => triggerDownload(option.value)} className="gap-2 rounded-xl py-2 [&_svg]:text-primary data-[highlighted]:[&_svg]:!text-primary-foreground">
+            <DropdownMenuItem key={option.value} onClick={() => triggerDownload(option.value)} className="gap-2.5 rounded-xl py-2 [&_svg]:text-primary data-[highlighted]:[&_svg]:!text-primary-foreground">
               <Download className="size-3.5" />
-              <span className="min-w-0 flex-1 font-medium">{option.label}</span>
-              <span className="text-right text-[10px] leading-tight text-popover-foreground/75">{option.description}</span>
+              <span className="min-w-0 flex-1 truncate font-medium">{option.name}</span>
+              <span className="shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground">{option.dimensions}</span>
             </DropdownMenuItem>
           ))}
         </>}
@@ -146,10 +146,10 @@ export function PdfDownloadButton({ onDownload, onExcel, className, disabled = f
               <ReceiptText className="size-3.5" /> Rollos / Voucher
             </DropdownMenuLabel>
             {rollOptions.map((option) => (
-              <DropdownMenuItem key={option.value} onClick={() => triggerDownload(option.value)} className="gap-2 rounded-xl py-2 [&_svg]:text-primary data-[highlighted]:[&_svg]:!text-primary-foreground">
+              <DropdownMenuItem key={option.value} onClick={() => triggerDownload(option.value)} className="gap-2.5 rounded-xl py-2 [&_svg]:text-primary data-[highlighted]:[&_svg]:!text-primary-foreground">
                 <ReceiptText className="size-3.5" />
-                <span className="min-w-0 flex-1 font-medium">{option.label}</span>
-                <span className="text-right text-[10px] leading-tight text-popover-foreground/75">{option.description}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">{option.name}</span>
+                <span className="shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground">{option.dimensions}</span>
               </DropdownMenuItem>
             ))}
           </>
