@@ -149,6 +149,7 @@ const PDF_DESIGN_TOUR_STEPS: GuidedTourStep[] = [
 ];
 
 const CURATED_TARGET_SET = new Set<string>(PDF_CURATED_TEMPLATE_TARGETS);
+const CURATED_SUPPORTED_TARGET_LABELS = PDF_CURATED_TEMPLATE_TARGETS.map(target => getPdfTemplateTarget(target).label);
 const PDF_FOOTER_APPEARANCE_KEYS = ['footerText', 'showPageNumber', 'pageNumberFormat', 'pageNumberCustom'] as const;
 const PDF_FOOTER_APPEARANCE_KEY_SET = new Set<string>(PDF_FOOTER_APPEARANCE_KEYS);
 const CURATED_PREVIEW_TARGET_PRIORITY = ['ventas.invoice', 'compras.supplier-invoice', 'ventas.estimate', 'ventas.order', 'compras.purchase-order', 'compras.purchase-record'];
@@ -812,8 +813,13 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const saveCuratedTemplateSelection = async (template: PdfCuratedTemplateRecord, revision: PdfCuratedTemplateRevision, scope: PdfCuratedTemplateScope, overrides: PdfCuratedTemplateSelection['overrides'] = {}, targetKey = previewDocument): Promise<boolean> => {
     const mayEditScope = scope === 'branch' ? canEditCompanyProfile : canModifyActive;
     if (!hasActiveBranchScope || !mayEditScope) return false;
-    if (!CURATED_TARGET_SET.has(targetKey) || !revision.manifest.documentTypes.includes(targetKey)) {
-      toast.error('La plantilla no admite el tipo de PDF seleccionado.');
+    const targetKeys = scope === 'branch'
+      ? [...new Set(revision.manifest.documentTypes.filter(candidate => CURATED_TARGET_SET.has(candidate)))]
+      : [targetKey];
+    if (!targetKeys.length || targetKeys.some(candidate => !CURATED_TARGET_SET.has(candidate) || !revision.manifest.documentTypes.includes(candidate))) {
+      toast.error(scope === 'branch'
+        ? 'La plantilla no declara tipos comerciales compatibles para aplicarla en la sucursal.'
+        : 'La plantilla no admite el tipo de PDF seleccionado.');
       return false;
     }
     setCuratedBusy(true);
@@ -826,15 +832,17 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
           ? { ...item, revisions: item.revisions.map(version => version.id === revision.id ? publishedRevision : version) }
           : item));
       }
-      await pdfDocumentDesignService.selectCuratedTemplate({ templateId: template.id, revisionId: revision.id, targetKey, scope, overrides });
+      await pdfDocumentDesignService.selectCuratedTemplate({ templateId: template.id, revisionId: revision.id, targetKeys, scope, overrides });
       const savedProfile = await pdfDocumentDesignService.getAppearanceProfile();
       appearanceProfileRef.current = savedProfile;
       savedAppearanceProfileRef.current = savedProfile;
       setAppearanceProfile(savedProfile);
       setCuratedOverridesDraft(overrides || {});
       clearPdfDesignCache();
-      toast.success(`«${template.name}» quedó seleccionada para ${scope === 'branch' ? 'esta sucursal y este PDF' : 'este PDF'}.`);
-      if (targetKey === previewDocument) await renderCuratedRevisionPreview(template, publishedRevision, scope, overrides, targetKey);
+      toast.success(scope === 'branch'
+        ? `«${template.name}» quedó aplicada a ${targetKeys.length} ${targetKeys.length === 1 ? 'documento compatible' : 'documentos compatibles'} de esta sucursal.`
+        : `«${template.name}» quedó seleccionada para este PDF.`);
+      if (targetKeys.includes(previewDocument)) await renderCuratedRevisionPreview(template, publishedRevision, scope, overrides, previewDocument);
       return true;
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo activar la plantilla preparada.');
@@ -1062,7 +1070,8 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
 
   const savePreviewedDesign = () => {
     if (previewedCuratedSelection) {
-      if (previewedCuratedSelection.targetKey !== previewDocument || previewedCuratedSelection.scope !== appearanceScope) {
+      const applyingBranchPackage = appearanceScope === 'branch' && previewedCuratedSelection.scope === 'branch';
+      if ((!applyingBranchPackage && previewedCuratedSelection.targetKey !== previewDocument) || previewedCuratedSelection.scope !== appearanceScope) {
         toast.info('Espera a que termine la vista previa actual antes de guardar.');
         return;
       }
@@ -1073,7 +1082,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         return;
       }
       if (appearanceScope === 'branch') {
-        requestCuratedTemplateSave(template, revision, appearanceScope, previewedCuratedSelection.overrides, previewDocument);
+        requestCuratedTemplateSave(template, revision, appearanceScope, previewedCuratedSelection.overrides, previewedCuratedSelection.targetKey);
         return;
       }
       void saveCuratedTemplateToDesign(template, revision, previewedCuratedSelection.overrides);
@@ -1229,6 +1238,10 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const visibleDesigns = designs.filter(record => record.templateKey !== 'erp-default');
   const ungroupedDesigns = visibleDesigns.filter(record => !record.folderId);
   const selectedFolderDesigns = selectedFolderId ? visibleDesigns.filter(record => record.folderId === selectedFolderId) : [];
+  const pendingCuratedTemplate = pendingCuratedSave && curatedTemplates.find(item => item.id === pendingCuratedSave.templateId);
+  const pendingCuratedRevision = pendingCuratedTemplate?.revisions.find(item => item.id === pendingCuratedSave?.revisionId);
+  const pendingCuratedTargets = pendingCuratedRevision?.manifest.documentTypes.filter(target => CURATED_TARGET_SET.has(target)) || [];
+  const pendingCuratedLabels = pendingCuratedTargets.map(target => getPdfTemplateTarget(target).label);
   return <div className="flex min-w-0 flex-col gap-3 xl:min-h-[calc(100vh-11rem)]">
     <div className={cn('grid grid-cols-3 gap-1 rounded-xl border border-border/60 bg-muted/30 p-1 xl:hidden', isPreviewExpanded && 'hidden')} role="group" aria-label="Panel del editor PDF">
       <Button type="button" size="sm" variant={activeMobilePanel === 'assignment' ? 'default' : 'ghost'} className="cursor-pointer" aria-pressed={activeMobilePanel === 'assignment'} onClick={() => setActiveMobilePanel('assignment')}>Asignación</Button>
@@ -1313,7 +1326,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
           <CardContent className="pt-0">
             <section className="mt-4 space-y-3 border-t border-border/50 pt-4" aria-labelledby="pdf-curated-templates-heading">
               <div className="space-y-2">
-                <div className="min-w-0"><h3 id="pdf-curated-templates-heading" className="text-xs font-semibold">Paquetes de diseño</h3><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Instala un ZIP, revisa su muestra y guárdalo dentro del diseño abierto. Luego podrás activarlo desde Mis diseños.</p></div>
+                <div className="min-w-0"><h3 id="pdf-curated-templates-heading" className="text-xs font-semibold">Paquetes de diseño</h3><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Instala un ZIP y revisa su muestra. En “Solo este PDF” se guarda para el documento abierto; en “Todos los PDF de esta sucursal” se aplica a todos los destinos que declara el paquete y NovaHub valida. Las asignaciones propias de un diseño conservan prioridad.</p></div>
                 <input ref={curatedPackageInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={event => { const file = event.target.files?.[0]; const templateId = curatedImportTargetIdRef.current; curatedImportTargetIdRef.current = undefined; if (file) void installCuratedPackage(file, templateId); event.currentTarget.value = ''; }} />
                 <Button type="button" size="sm" variant="outline" className="h-8 w-full cursor-pointer justify-center gap-1.5 px-2 text-[10px]" onClick={() => curatedPackageInputRef.current?.click()} disabled={!hasActiveBranchScope || !canImport || curatedBusy}><Upload className="size-3.5" />Instalar ZIP</Button>
               </div>
@@ -1348,10 +1361,10 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                       const previewed = Boolean(previewedCuratedRevisions[`${revision.id}:${selectedPreviewTarget}`]);
                       return <div key={revision.id} className="space-y-2 rounded-md bg-muted/20 p-2">
                         <span className="flex min-w-0 flex-wrap items-center gap-1.5"><Badge variant={revision.status === 'PUBLISHED' ? 'secondary' : 'outline'} className="text-[9px]">v{revision.version} · {revision.status === 'PUBLISHED' ? 'Publicada' : 'Borrador'}</Badge>{isScopedActive && <Badge className="text-[9px]"><Check className="mr-1 size-3" />Activa</Badge>}</span>
-                        <p className="text-[9px] leading-relaxed text-muted-foreground">Compatible con: {supportedTargets.map(target => getPdfTemplateTarget(target).label).join(', ')}.</p>
+                        <p className="text-[9px] leading-relaxed text-muted-foreground">Declarados y validados en el paquete: {supportedTargets.map(target => getPdfTemplateTarget(target).label).join(', ')}.</p>
                         {revision.manifest.fontFamilies?.length ? <p className="text-[9px] leading-relaxed text-muted-foreground">Fuentes incluidas: {revision.manifest.fontFamilies.join(', ')}.</p> : <p className="text-[9px] leading-relaxed text-muted-foreground">Sin fuentes incluidas; se usa la familia declarada por la plantilla y su alternativa local.</p>}
                         {!supportsTarget && supportedTargets.length > 0 && <label className="block space-y-1 text-[9px] text-muted-foreground"><span>Documento para la muestra</span><select aria-label={`Documento de muestra para ${template.name}, versión ${revision.version}`} value={selectedPreviewTarget} onChange={event => setCuratedPreviewTargets(previous => ({ ...previous, [revision.id]: event.target.value }))} className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[10px] text-foreground">{supportedTargets.map(target => <option key={target} value={target}>{getPdfTemplateTarget(target).label}</option>)}</select></label>}
-                        {!supportsTarget && <p className="text-[9px] leading-relaxed text-muted-foreground">El PDF seleccionado no admite esta plantilla. La muestra usa el documento compatible de arriba; para activarla, cambia a un PDF admitido.</p>}
+                        {!supportsTarget && <p className="text-[9px] leading-relaxed text-muted-foreground">El PDF seleccionado no está declarado en este paquete. La muestra usa uno de los destinos listados arriba; puedes aplicar el paquete a todos los destinos que declara desde el alcance de sucursal.</p>}
                         <div className="flex justify-end border-t border-border/40 pt-2"><Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void renderCuratedRevisionPreview(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {}, selectedPreviewTarget)} disabled={!selectedPreviewTarget || curatedBusy}><Eye className="mr-1 size-3" />{previewed ? 'Actualizar vista previa' : 'Previsualizar'}</Button></div>
                       </div>;
                     })}
@@ -1383,7 +1396,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         <Card className={cn('flex min-w-0 flex-col overflow-hidden', isPreviewExpanded ? 'min-h-[640px] xl:min-h-[min(90vh,1400px)]' : 'min-h-[580px] xl:min-h-[min(82vh,1100px)]')}>
           <CardHeader className="shrink-0 border-b border-border/50 py-3"><div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="flex min-w-0 items-center gap-2 truncate text-sm"><FileText className="size-4 shrink-0 text-primary" /><span className="truncate">Diseño PDF · {selectedTarget.label}</span></CardTitle><CardDescription className="truncate text-xs">{name || 'Diseño sin nombre'} · {selectedTarget.moduleLabel} · {hasActiveBranchScope ? activeBranchLabel : 'Selecciona una sucursal para guardar'}</CardDescription></div><div className="flex shrink-0 items-center gap-1.5"><Badge variant={activeId !== 'draft' && activeDesign?.isActive ? 'default' : 'outline'} className="text-[10px]">{activeId === 'draft' ? 'Borrador' : activeDesign?.isActive ? 'Aplicado a exportaciones' : 'Guardado · inactivo'}</Badge><Badge variant="outline" className="text-[10px]">{settings.paperSize} · {settings.orientation === 'portrait' ? 'Vertical' : 'Horizontal'}</Badge></div></div></CardHeader>
           <CardContent className="relative flex min-h-0 flex-1 flex-col p-2">
-            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onRestoreDefault={restoreCurrentTargetDefault} restoreDefaultDisabled={!hasActiveBranchScope || !canEdit || !selectedTargetEditable} isRestoringDefault={isRestoringDefault} onSave={savePreviewedDesign} saveLabel={appearanceScope === 'branch' ? 'Guardar estos cambios' : 'Guardar diseño'} saveDisabled={!hasActiveBranchScope || isPreviewRendering || curatedBusy || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)} isSaving={isSavingAppearance || isSavingFooterProfile || isSaving || curatedBusy} />
+            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onRestoreDefault={restoreCurrentTargetDefault} restoreDefaultDisabled={!hasActiveBranchScope || !canEdit || !selectedTargetEditable} isRestoringDefault={isRestoringDefault} onSave={savePreviewedDesign} saveLabel={appearanceScope === 'branch' ? previewedCuratedSelection?.scope === 'branch' ? 'Aplicar a todos los compatibles' : 'Guardar estos cambios' : 'Guardar diseño'} saveDisabled={!hasActiveBranchScope || isPreviewRendering || curatedBusy || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)} isSaving={isSavingAppearance || isSavingFooterProfile || isSaving || curatedBusy} />
           </CardContent>
         </Card>
       </main>
@@ -1463,7 +1476,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Revisión del paquete PDF</DialogTitle>
-            <DialogDescription>Confirma sus destinos y fuentes antes de instalarlo como borrador en esta sucursal.</DialogDescription>
+            <DialogDescription>Confirma los destinos que declara el ZIP y las fuentes antes de instalarlo como borrador en esta sucursal.</DialogDescription>
           </DialogHeader>
           {pendingCuratedPackage && <div className="space-y-3 text-sm">
             <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
@@ -1471,11 +1484,16 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
               {pendingCuratedPackage.preflight.description && <p className="mt-1 text-xs text-muted-foreground">{pendingCuratedPackage.preflight.description}</p>}
               <p className="mt-1 text-[10px] text-muted-foreground">Formato del paquete v{pendingCuratedPackage.preflight.schemaVersion} · Carta como base · se adapta a Carta, Oficio, A4, Legal y rollos de 80/58 mm.</p>
             </div>
-            <section className="space-y-1.5" aria-label="Documentos compatibles">
-              <h3 className="text-xs font-semibold">Documentos compatibles ({pendingCuratedPackage.preflight.documentTypes.length})</h3>
+            <section className="space-y-1.5" aria-label="Destinos declarados y validados">
+              <h3 className="text-xs font-semibold">Destinos declarados y validados ({pendingCuratedPackage.preflight.documentTypes.length})</h3>
+              <p className="text-[10px] leading-relaxed text-muted-foreground">NovaHub valida que el <code>manifest.json</code> declare uno o más de los 11 destinos comerciales que este renderizador puede rellenar (empresa, documento, contraparte, detalle, totales y pie). En ZIP v2 también comprueba que cada destino tenga una composición asignada. No se infiere por los colores ni por la imagen. Recibos, reportes y etiquetas usan estructuras distintas y no están incluidos en este motor.</p>
               <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                 {pendingCuratedPackage.preflight.documentTypes.map(target => <li key={target} className="rounded-md border border-border/40 px-2 py-1.5 text-xs">{getPdfTemplateTarget(target).label}</li>)}
               </ul>
+              <details className="rounded-md border border-border/40 px-2 py-1.5 text-[10px]">
+                <summary className="cursor-pointer font-medium">Ver los 11 destinos que admite este motor</summary>
+                <p className="mt-1 leading-relaxed text-muted-foreground">{CURATED_SUPPORTED_TARGET_LABELS.join(', ')}.</p>
+              </details>
             </section>
             <section className="space-y-1.5" aria-label="Composiciones del paquete">
               <h3 className="text-xs font-semibold">Composiciones ({pendingCuratedPackage.preflight.layouts.length})</h3>
@@ -1498,13 +1516,13 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       <ConfirmDialog
         open={Boolean(globalSaveKind)}
         onOpenChange={open => { if (!open && !isSavingAppearance && !isSavingFooterProfile && !curatedBusy) { setGlobalSaveKind(null); setPendingCuratedSave(null); } }}
-        title={globalSaveKind === 'footer' ? '¿Guardar el pie para toda la sucursal?' : globalSaveKind === 'curated' ? '¿Guardar esta plantilla para la sucursal?' : '¿Guardar cambios para toda la sucursal?'}
+        title={globalSaveKind === 'footer' ? '¿Guardar el pie para toda la sucursal?' : globalSaveKind === 'curated' ? '¿Aplicar la plantilla a todos sus documentos compatibles?' : '¿Guardar cambios para toda la sucursal?'}
         description={globalSaveKind === 'footer'
           ? 'El texto y la numeración se aplicarán a todos los PDF de esta sucursal que hereden la configuración del pie.'
           : globalSaveKind === 'curated'
-            ? `La revisión se publicará y quedará seleccionada para ${pendingCuratedSave ? getPdfTemplateTarget(pendingCuratedSave.targetKey).label.toLowerCase() : 'este PDF'} en esta sucursal.`
+            ? `La revisión se publicará y quedará seleccionada para ${pendingCuratedLabels.length ? pendingCuratedLabels.join(', ') : 'los documentos que declara el paquete'} en esta sucursal. Las selecciones guardadas directamente en un documento seguirán teniendo prioridad.`
             : 'La plantilla visual, composición, espaciado, tipografía y colores se aplicarán a los PDF de esta sucursal que hereden esos valores.'}
-        confirmLabel={globalSaveKind === 'curated' ? 'Publicar y guardar para esta sucursal' : 'Guardar para toda la sucursal'}
+        confirmLabel={globalSaveKind === 'curated' ? `Publicar y aplicar a ${pendingCuratedTargets.length || 'todos los'} documentos compatibles` : 'Guardar para toda la sucursal'}
         cancelLabel="Cancelar"
         variant="warning"
         loading={isSavingAppearance || isSavingFooterProfile || curatedBusy}
