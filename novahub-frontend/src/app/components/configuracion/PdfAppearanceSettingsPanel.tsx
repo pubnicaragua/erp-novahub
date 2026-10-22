@@ -233,7 +233,7 @@ export function PdfAppearanceSettingsPanel({
     </div>
   );
 
-  return <details data-tour="pdf-appearance" open className="group rounded-lg border bg-card text-card-foreground shadow-none">
+  return <details data-tour="pdf-appearance" className="group rounded-lg border bg-card text-card-foreground shadow-none">
     <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-6 pb-3 pt-6 [&::-webkit-details-marker]:hidden">
       <div className="space-y-1.5"><h3 className="flex items-center gap-2 text-sm font-semibold"><SwatchBook className="size-4 text-primary" />Apariencia del PDF</h3><p className="text-xs text-muted-foreground">Define la presentación compartida o solo de este diseño.</p></div>
       <span aria-hidden="true" className="mt-0.5 text-muted-foreground transition-transform group-open:rotate-180">⌄</span>

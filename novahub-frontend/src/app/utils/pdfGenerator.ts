@@ -15,7 +15,7 @@ import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, create
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
 import { isEstimateCustomFieldExpired, normalizeEstimateImages } from '../types';
-import { resolvePdfDesignAppearance, type PdfAppearanceProfile } from '../services/pdf-appearance';
+import { resolvePdfDesignAppearance, type PdfAppearanceProfile, type PdfCuratedTemplateSelection } from '../services/pdf-appearance';
 
 type PdfRgb = [number, number, number];
 
@@ -294,7 +294,7 @@ async function loadPdfDesign(targetKey: string) {
     }
     if (savedDesign) {
       const savedDefinition = (savedDesign.layoutZones as any)?.definition;
-      if (isStandardPdfLayoutTarget(target.key) && !hasCurrentStandardPdfLayout(target.key, savedDefinition)) {
+      if (savedDesign.templateKey !== 'erp-default' && isStandardPdfLayoutTarget(target.key) && !hasCurrentStandardPdfLayout(target.key, savedDefinition)) {
         // Las plantillas importadas antiguas pueden contener fragmentos de
         // texto posicionados, pero no la estructura comercial semántica.
         // Se conservan guardadas y esta salida usa la nueva base completa.
@@ -363,7 +363,16 @@ export async function getPdfDesign(targetKey: string) {
       definition,
       profile,
     );
-    const selectedCuratedTemplate = profile?.curatedTemplates?.document[normalizedTarget]
+    const storedSettings = design?.settings && typeof design.settings === 'object' && !Array.isArray(design.settings)
+      ? design.settings as Record<string, unknown>
+      : {};
+    const attachedCuratedTemplate = storedSettings.curatedTemplateSelection
+      && typeof storedSettings.curatedTemplateSelection === 'object'
+      && !Array.isArray(storedSettings.curatedTemplateSelection)
+      ? storedSettings.curatedTemplateSelection as PdfCuratedTemplateSelection
+      : null;
+    const selectedCuratedTemplate = attachedCuratedTemplate
+      || profile?.curatedTemplates?.document[normalizedTarget]
       || profile?.curatedTemplates?.branch[normalizedTarget];
     return {
       ...design,

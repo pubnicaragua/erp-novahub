@@ -57,6 +57,9 @@ export interface PdfCuratedTemplateSelection {
     fontFamily?: string;
     fontSize?: number;
     contentOffsetMm?: number;
+    headerComposition?: PdfHeaderComposition;
+    headerContentSpacing?: number;
+    palette?: PdfAppearancePalette;
   };
 }
 
@@ -178,6 +181,17 @@ export function normalizePdfAppearanceProfile(value: unknown): PdfAppearanceProf
         if (typeof rawOverrides.fontFamily === 'string' && rawOverrides.fontFamily.length <= 80) overrides.fontFamily = rawOverrides.fontFamily;
         if (typeof rawOverrides.fontSize === 'number' && Number.isFinite(rawOverrides.fontSize) && rawOverrides.fontSize >= 6 && rawOverrides.fontSize <= 16) overrides.fontSize = rawOverrides.fontSize;
         if (typeof rawOverrides.contentOffsetMm === 'number' && Number.isFinite(rawOverrides.contentOffsetMm) && rawOverrides.contentOffsetMm >= 0 && rawOverrides.contentOffsetMm <= 50) overrides.contentOffsetMm = rawOverrides.contentOffsetMm;
+        if (HEADER_COMPOSITIONS.includes(rawOverrides.headerComposition as PdfHeaderComposition)) overrides.headerComposition = rawOverrides.headerComposition as PdfHeaderComposition;
+        const headerContentSpacing = parsePdfHeaderContentSpacing(rawOverrides.headerContentSpacing);
+        if (headerContentSpacing !== null) overrides.headerContentSpacing = headerContentSpacing;
+        if (rawOverrides.palette && typeof rawOverrides.palette === 'object' && !Array.isArray(rawOverrides.palette)) {
+          const palette: PdfAppearancePalette = {};
+          for (const key of PDF_APPEARANCE_PALETTE_KEYS) {
+            const color = (rawOverrides.palette as Record<string, unknown>)[key];
+            if (typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)) palette[key] = color;
+          }
+          if (Object.keys(palette).length) overrides.palette = palette;
+        }
         normalized[targetKey] = { templateId: selection.templateId, revisionId: selection.revisionId, version, overrides };
       }
       return normalized;
@@ -358,6 +372,45 @@ export function resolvePdfDesignAppearance(
       ...(palette.tableBorder ? { tableBorderColor: palette.tableBorder } : {}),
     },
   };
+}
+
+/** Applies explicitly changed PDF appearance values to an imported template at render time.
+ * The untouched ERP defaults stay out of the merge so a package keeps its own palette and layout.
+ */
+export function resolveCuratedTemplateAppearanceOverrides(
+  templateOverrides: PdfCuratedTemplateSelection['overrides'] = {},
+  profile: Partial<PdfAppearanceProfile> | null | undefined = {},
+  documentOverrides: Partial<PdfAppearanceOverrides> | null | undefined = {},
+): NonNullable<PdfCuratedTemplateSelection['overrides']> {
+  const branch = normalizePdfAppearanceProfile(profile);
+  const local = documentOverrides && typeof documentOverrides === 'object' ? documentOverrides : {};
+  const result: NonNullable<PdfCuratedTemplateSelection['overrides']> = { ...(templateOverrides || {}) };
+  const headerComposition = local.headerComposition
+    ?? (branch.headerComposition && !sameLegacyValue(branch.headerComposition, 'company-left-logo-right') ? branch.headerComposition : undefined);
+  if (headerComposition) result.headerComposition = headerComposition;
+  const headerContentSpacing = local.headerContentSpacing
+    ?? (branch.headerContentSpacing !== undefined && !sameLegacyValue(branch.headerContentSpacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM) ? branch.headerContentSpacing : undefined);
+  if (typeof headerContentSpacing === 'number') result.headerContentSpacing = headerContentSpacing;
+  const fontFamily = local.fontFamily
+    ?? (branch.fontFamily && !sameLegacyValue(branch.fontFamily, 'Arial') ? branch.fontFamily : undefined);
+  if (fontFamily) result.fontFamily = fontFamily;
+  const fontSize = local.fontSize
+    ?? (branch.fontSize !== undefined && !sameLegacyValue(branch.fontSize, 9) ? branch.fontSize : undefined);
+  if (typeof fontSize === 'number') result.fontSize = fontSize;
+
+  const palette: PdfAppearancePalette = { ...(templateOverrides?.palette || {}) };
+  const localPalette = local.palette || {};
+  const branchPalette = branch.palette || {};
+  for (const key of PDF_APPEARANCE_PALETTE_KEYS) {
+    const localColor = localPalette[key];
+    const branchColor = branchPalette[key];
+    const color = localColor ?? (branchColor && !sameLegacyValue(branchColor, DEFAULT_STYLE_PALETTE[key]) ? branchColor : undefined);
+    if (typeof color === 'string') palette[key] = color;
+  }
+  if (Object.keys(palette).length) result.palette = palette;
+  if (palette.primary) result.primaryColor = palette.primary;
+  if (palette.secondary) result.secondaryColor = palette.secondary;
+  return result;
 }
 
 function hasLegacyValue(value: unknown): boolean {

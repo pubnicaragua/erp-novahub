@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { ChevronLeft, ChevronRight, ExternalLink, Loader2, Maximize2, Minimize2, Save, WandSparkles, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Loader2, Maximize2, Minimize2, RotateCcw, Save, WandSparkles, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
 
@@ -17,12 +17,15 @@ type PdfLivePreviewProps = {
   onToggleExpanded?: () => void;
   onHelp?: () => void;
   onSave?: () => void;
+  onRestoreDefault?: () => void;
+  restoreDefaultDisabled?: boolean;
+  isRestoringDefault?: boolean;
   saveLabel?: string;
   saveDisabled?: boolean;
   isSaving?: boolean;
 };
 
-export function PdfLivePreview({ sourceUrl, title, isGenerating = false, error = '', isExpanded = false, onToggleExpanded, onHelp, onSave, saveLabel = 'Guardar', saveDisabled = false, isSaving = false }: PdfLivePreviewProps) {
+export function PdfLivePreview({ sourceUrl, title, isGenerating = false, error = '', isExpanded = false, onToggleExpanded, onHelp, onSave, onRestoreDefault, restoreDefaultDisabled = false, isRestoringDefault = false, saveLabel = 'Guardar', saveDisabled = false, isSaving = false }: PdfLivePreviewProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
@@ -141,6 +144,7 @@ export function PdfLivePreview({ sourceUrl, title, isGenerating = false, error =
         <Button type="button" variant="ghost" size="icon" className="size-8 cursor-pointer" title="Acercar" aria-label="Acercar" onClick={() => setZoomPercent(value => Math.min(180, value + 10))} disabled={zoomPercent >= 180}><ZoomIn className="size-4" /></Button>
         <Button type="button" variant="outline" size="sm" className="ml-1 h-8 cursor-pointer px-2" title="Ajustar al ancho" onClick={() => setZoomPercent(100)}>Ajustar</Button>
         {onHelp && <Button type="button" variant="outline" size="sm" className="h-8 cursor-pointer gap-1.5 px-2" onClick={onHelp} aria-label="Cómo configurar documentos PDF"><WandSparkles className="size-3.5" /><span>Ayuda</span></Button>}
+        {onRestoreDefault && <Button type="button" variant="outline" size="sm" className="h-8 cursor-pointer gap-1.5 px-2" onClick={onRestoreDefault} disabled={restoreDefaultDisabled || isRestoringDefault} title="Usar el diseño predeterminado del ERP"><RotateCcw className={cn('size-3.5', isRestoringDefault && 'animate-spin')} /><span>{isRestoringDefault ? 'Restableciendo…' : 'Volver al predeterminado'}</span></Button>}
         {onSave && <Button type="button" size="sm" className="h-8 cursor-pointer gap-1.5 px-2" data-tour="pdf-save" onClick={onSave} disabled={saveDisabled || isSaving}>{isSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}<span>{saveLabel}</span></Button>}
         {onToggleExpanded && <Button type="button" variant="outline" size="sm" className="h-8 cursor-pointer gap-1.5 px-2" title={isExpanded ? 'Volver a mostrar configuraciones' : 'Ampliar documento'} onClick={onToggleExpanded}>{isExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}<span>{isExpanded ? 'Volver' : 'Ampliar'}</span></Button>}
       </div>

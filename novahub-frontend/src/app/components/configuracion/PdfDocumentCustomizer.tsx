@@ -26,7 +26,7 @@ import { clearPdfDesignCache } from '../../utils/pdfGenerator';
 import { renderPdfTemplateToPdf } from '../../utils/pdf-template-renderer';
 import { PdfLivePreview } from './PdfLivePreview';
 import { PdfAppearanceSettingsPanel } from './PdfAppearanceSettingsPanel';
-import { clearPdfAppearanceFallback, PDF_CURATED_TEMPLATE_TARGETS, PDF_DEFAULT_TEMPLATE_ID, PDF_DOCUMENT_TEMPLATES, resetPdfAppearanceOverride, resolvePdfDesignAppearance, updatePdfAppearanceDraft, type PdfAppearanceDraftKey, type PdfAppearanceDraftScope, type PdfAppearanceOverrides, type PdfAppearanceProfile, type PdfAppearanceProfilePatch, type PdfCuratedTemplateSelection } from '../../services/pdf-appearance';
+import { clearPdfAppearanceFallback, PDF_CURATED_TEMPLATE_TARGETS, PDF_DEFAULT_TEMPLATE_ID, PDF_DOCUMENT_TEMPLATES, resetPdfAppearanceOverride, resolveCuratedTemplateAppearanceOverrides, resolvePdfDesignAppearance, updatePdfAppearanceDraft, type PdfAppearanceDraftKey, type PdfAppearanceDraftScope, type PdfAppearanceOverrides, type PdfAppearanceProfile, type PdfAppearanceProfilePatch, type PdfCuratedTemplateSelection } from '../../services/pdf-appearance';
 import { getBase64Image } from '../../utils/export-utils';
 
 const DOCUMENTS = PDF_TEMPLATE_TARGETS.filter(target => target.branchCustomizable !== false);
@@ -54,6 +54,7 @@ type PdfSettings = {
   legalText: string; terms: string; defaultNotes: string; margins: number; fontFamily: string;
   fontSize: number; primaryColor: string; secondaryColor: string; textColor: string; lineColor: string; backgroundColor: string; separator: 'solid' | 'dashed' | 'none';
   paletteMode: 'corporate' | 'independent';
+  curatedTemplateSelection?: PdfCuratedTemplateSelection;
 };
 
 const DEFAULT_SETTINGS: PdfSettings = { ...createSystemDefaultPdfSettings(), headerComposition: 'company-left-logo-right' } as PdfSettings;
@@ -212,6 +213,8 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const [appearanceOverrides, setAppearanceOverrides] = useState<Partial<PdfAppearanceOverrides>>({});
   const [appearanceOverridesExplicit, setAppearanceOverridesExplicit] = useState(false);
   const [appearanceScope, setAppearanceScope] = useState<PdfAppearanceDraftScope>('document');
+  const [activatingDesignId, setActivatingDesignId] = useState<string | null>(null);
+  const [isRestoringDefault, setIsRestoringDefault] = useState(false);
   const [isSavingAppearance, setIsSavingAppearance] = useState(false);
   const [isSavingFooterProfile, setIsSavingFooterProfile] = useState(false);
   const [globalSaveKind, setGlobalSaveKind] = useState<'appearance' | 'footer' | 'curated' | null>(null);
@@ -435,14 +438,17 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         const stored = window.localStorage.getItem(documentViewStorageKey);
         if (stored && DOCUMENTS.some(target => target.key === stored)) storedDocumentType = stored as PdfDocumentType;
       } catch { /* almacenamiento no disponible */ }
-      const preferredRecord = storedDocumentType && editableRecords.find(record => normalizePdfTemplateKey(record.documentTypes?.[0] || '') === storedDocumentType);
+      const recordsForPreferredTarget = storedDocumentType
+        ? editableRecords.filter(record => normalizePdfTemplateKey(record.documentTypes?.[0] || '') === storedDocumentType)
+        : [];
+      const preferredRecord = recordsForPreferredTarget.find(record => record.isActive) || recordsForPreferredTarget[0];
       if (preferredRecord) loadDesign(preferredRecord, normalizedAppearanceProfile);
       else if (storedDocumentType) {
         resetDraftForScope(storedDocumentType);
         setAppearanceOverrides({});
         setAppearanceOverridesExplicit(false);
       }
-      else if (editableRecords.length) loadDesign(editableRecords[0], normalizedAppearanceProfile);
+      else if (editableRecords.length) loadDesign(editableRecords.find(record => record.isActive) || editableRecords[0], normalizedAppearanceProfile);
       else {
         resetDraftForScope();
         setAppearanceOverrides({});
@@ -464,6 +470,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     return () => clearTimeout(timer);
   }, [activeId, logo]);
   const previewDocument = useMemo(() => assignedDocuments.includes(documentType) ? documentType : assignedDocuments[0] || 'ventas.estimate', [assignedDocuments, documentType]);
+  const activeDesign = designs.find(record => record.id === activeId);
   const resolvedEditorAppearance = useMemo(() => resolvePdfDesignAppearance(
     { ...(settings as unknown as Record<string, unknown>), appearanceOverrides },
     templateDefinition as unknown as Record<string, any>,
@@ -490,16 +497,24 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const previewData = useMemo(() => {
     return createCuratedPreviewData(previewDocument, companyProfile, effectiveSettings.footerText, canvasLogo);
   }, [previewDocument, companyProfile, effectiveSettings.footerText, canvasLogo]);
-  const scopedCuratedSelection = appearanceProfile.curatedTemplates?.[appearanceScope]?.[previewDocument];
+  const attachedCuratedSelection = activeDesign?.settings?.curatedTemplateSelection as PdfCuratedTemplateSelection | undefined;
+  const designCuratedSelection = activeId !== 'draft' && appearanceScope === 'document'
+    && activeDesign?.documentTypes?.some(type => normalizePdfTemplateKey(type) === normalizePdfTemplateKey(previewDocument))
+    && attachedCuratedSelection?.templateId && attachedCuratedSelection?.revisionId
+    ? attachedCuratedSelection
+    : undefined;
+  const scopedCuratedSelection = designCuratedSelection || appearanceProfile.curatedTemplates?.[appearanceScope]?.[previewDocument];
   const scopedCuratedTemplate = scopedCuratedSelection
     ? curatedTemplates.find(template => template.id === scopedCuratedSelection.templateId) || null
     : null;
   const scopedCuratedRevision = scopedCuratedTemplate?.revisions.find(revision => revision.id === scopedCuratedSelection?.revisionId) || null;
-  const activeCuratedSelectionScope: PdfCuratedTemplateScope | null = appearanceProfile.curatedTemplates?.document?.[previewDocument]
+  const activeCuratedSelectionScope: PdfCuratedTemplateScope | null = designCuratedSelection
     ? 'document'
-    : appearanceProfile.curatedTemplates?.branch?.[previewDocument] ? 'branch' : null;
+    : appearanceProfile.curatedTemplates?.document?.[previewDocument]
+      ? 'document'
+      : appearanceProfile.curatedTemplates?.branch?.[previewDocument] ? 'branch' : null;
   const activeCuratedSelection = activeCuratedSelectionScope
-    ? appearanceProfile.curatedTemplates?.[activeCuratedSelectionScope]?.[previewDocument] || null
+    ? designCuratedSelection || appearanceProfile.curatedTemplates?.[activeCuratedSelectionScope]?.[previewDocument] || null
     : null;
   const activeCuratedTemplate = activeCuratedSelection
     ? curatedTemplates.find(template => template.id === activeCuratedSelection.templateId) || null
@@ -510,6 +525,17 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const activeCuratedTemplateId = activeCuratedTemplate?.id || '';
   const activeCuratedRevisionId = activeCuratedRevision?.id || '';
   const activeCuratedOverrides = activeCuratedSelection?.overrides;
+  const getCuratedPreviewOverrides = useCallback((
+    templateOverrides: PdfCuratedTemplateSelection['overrides'],
+    targetKey: string,
+    scope: PdfCuratedTemplateScope,
+  ) => resolveCuratedTemplateAppearanceOverrides(
+    templateOverrides,
+    appearanceProfile,
+    scope === 'document' && normalizePdfTemplateKey(targetKey) === normalizePdfTemplateKey(previewDocument)
+      ? appearanceOverrides
+      : {},
+  ), [appearanceOverrides, appearanceProfile, previewDocument]);
   useEffect(() => {
     setCuratedOverridesDraft(scopedCuratedSelection?.overrides ? { ...scopedCuratedSelection.overrides } : {});
   }, [previewDocument, appearanceScope, scopedCuratedSelection?.templateId, scopedCuratedSelection?.revisionId]);
@@ -528,7 +554,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
             revisionId: activeCuratedRevisionId,
             targetKey: previewDocument,
             scope: activeCuratedSelectionScope,
-            overrides: activeCuratedSelectionScope === appearanceScope ? curatedOverridesDraft : activeCuratedOverrides,
+            overrides: getCuratedPreviewOverrides(activeCuratedSelectionScope === appearanceScope ? curatedOverridesDraft : activeCuratedOverrides, previewDocument, activeCuratedSelectionScope),
             data,
           });
         }
@@ -567,7 +593,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [templateDefinition, effectiveSettings, previewDocument, previewData, activeCuratedSelectionTemplateId, activeCuratedSelectionRevisionId, activeCuratedOverrides, activeCuratedSelectionScope, activeCuratedTemplateId, activeCuratedRevisionId, appearanceScope, curatedOverridesDraft]);
+  }, [templateDefinition, effectiveSettings, previewDocument, previewData, activeCuratedSelectionTemplateId, activeCuratedSelectionRevisionId, activeCuratedOverrides, activeCuratedSelectionScope, activeCuratedTemplateId, activeCuratedRevisionId, appearanceScope, curatedOverridesDraft, getCuratedPreviewOverrides]);
   useEffect(() => () => {
     if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
   }, []);
@@ -579,7 +605,6 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     ? appearancePanelValues
     : resolvedEditorAppearance.effective;
   const canEditFooter = appearanceScope === 'branch' ? canEditCompanyProfile : canModifyActive;
-  const activeDesign = designs.find(record => record.id === activeId);
   const savedDocumentTemplateId = (activeDesign?.settings?.appearanceOverrides as Partial<PdfAppearanceOverrides> | undefined)?.documentTemplateId;
   const selectedAppearanceTemplateId = appearanceScope === 'branch'
     ? appearanceProfile.documentTemplateId || 'default-v1'
@@ -636,11 +661,6 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     if (canEditCompanyProfile) setCompanyProfile(previous => ({ ...previous, [key]: value }));
   };
   const reservedDocumentDesign = (id: PdfDocumentType, excludeId = activeId) => designs.find(record => record.isActive && record.id !== excludeId && normalizePdfTemplateKey(record.documentTypes?.[0]) === normalizePdfTemplateKey(id));
-  const firstAvailableDocumentType = (preferred: PdfDocumentType, excludeId = activeId) => {
-    const available = DOCUMENTS.filter(item => !isPdfTemplateFixed(item) && !reservedDocumentDesign(item.key, excludeId));
-    return available.some(item => item.key === preferred) ? preferred : available[0]?.key || preferred;
-  };
-
   const saveCompanyProfile = async () => {
     if (!canEditCompanyProfile || isSavingCompanyProfile) return;
     setIsSavingCompanyProfile(true);
@@ -764,7 +784,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         revisionId: revision.id,
         targetKey,
         scope,
-        overrides,
+        overrides: getCuratedPreviewOverrides(overrides, targetKey, scope),
         data,
       });
       showPdfPreviewBlob(blob, getPdfTemplateTarget(targetKey).label);
@@ -887,24 +907,20 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     }
   };
 
-  const applyCuratedOverrides = async () => {
-    const template = curatedTemplates.find(item => item.id === scopedCuratedSelection?.templateId);
-    const revision = template?.revisions.find(item => item.id === scopedCuratedSelection?.revisionId);
-    if (!template || !revision || revision.status !== 'PUBLISHED') return;
-    await saveCuratedTemplateSelection(template, revision, appearanceScope, curatedOverridesDraft || {});
-  };
-
-  const resetCuratedOverrides = async () => {
-    const template = curatedTemplates.find(item => item.id === scopedCuratedSelection?.templateId);
-    const revision = template?.revisions.find(item => item.id === scopedCuratedSelection?.revisionId);
-    if (!template || !revision || revision.status !== 'PUBLISHED') return;
-    await saveCuratedTemplateSelection(template, revision, appearanceScope, {});
-  };
-
   const clearCuratedTemplateSelection = async () => {
     if (!hasActiveBranchScope || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)) return;
     setCuratedBusy(true);
     try {
+      if (appearanceScope === 'document' && activeDesign?.settings?.curatedTemplateSelection) {
+        setSettings(previous => {
+          const next = { ...previous };
+          delete next.curatedTemplateSelection;
+          return next;
+        });
+        setDesigns(previous => previous.map(record => record.id === activeDesign.id
+          ? { ...record, settings: Object.fromEntries(Object.entries(record.settings || {}).filter(([key]) => key !== 'curatedTemplateSelection')) }
+          : record));
+      }
       await pdfDocumentDesignService.clearCuratedSelection(appearanceScope, previewDocument);
       const savedProfile = await pdfDocumentDesignService.getAppearanceProfile();
       appearanceProfileRef.current = savedProfile;
@@ -920,9 +936,46 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     }
   };
 
+  const saveCuratedTemplateToDesign = async (template: PdfCuratedTemplateRecord, revision: PdfCuratedTemplateRevision, overrides: PdfCuratedTemplateSelection['overrides'] = {}) => {
+    if (!canModifyActive || !revision.manifest.documentTypes.includes(previewDocument)) {
+      toast.error('Selecciona una vista compatible antes de guardar esta plantilla en el diseño.');
+      return;
+    }
+    setCuratedBusy(true);
+    try {
+      let publishedRevision = revision;
+      if (revision.status !== 'PUBLISHED') {
+        await pdfDocumentDesignService.publishCuratedRevision(template.id, revision.id);
+        publishedRevision = { ...revision, status: 'PUBLISHED', publishedAt: new Date().toISOString() };
+        setCuratedTemplates(previous => previous.map(item => item.id === template.id
+          ? { ...item, revisions: item.revisions.map(version => version.id === revision.id ? publishedRevision : version) }
+          : item));
+      }
+      const selection: PdfCuratedTemplateSelection = {
+        templateId: template.id,
+        revisionId: revision.id,
+        version: revision.version,
+        overrides: overrides || {},
+      };
+      const saved = await saveDesign({
+        curatedTemplateSelection: selection,
+        successMessage: `Diseño guardado con «${template.name}»; actívalo cuando quieras usarlo en las exportaciones.`,
+      });
+      if (saved) {
+        setSettings(previous => ({ ...previous, curatedTemplateSelection: selection }));
+        setPreviewedCuratedSelection({ templateId: template.id, revisionId: revision.id, targetKey: previewDocument, scope: 'document', overrides: overrides || {} });
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo guardar la plantilla dentro del diseño.');
+    } finally {
+      setCuratedBusy(false);
+    }
+  };
+
   const saveDesign = async (options: {
     appearanceOverrides?: Partial<PdfAppearanceOverrides>;
     appearanceOverridesExplicit?: boolean;
+    curatedTemplateSelection?: PdfCuratedTemplateSelection | null;
     successMessage?: string;
   } = {}): Promise<boolean> => {
     if (!canEditPdfTemplate(previewDocument)) {
@@ -939,6 +992,10 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       const sourceType: PdfDocumentDesignRecord['sourceType'] = sourceMetadata?.sourceType === 'UPLOADED_PDF' || sourceMetadata?.sourceType === 'UPLOADED_HTML' || sourceMetadata?.sourceType === 'AI_ANALYZED' ? sourceMetadata.sourceType : 'SYSTEM';
       const savedDocumentType = normalizePdfTemplateKey(assignedDocuments[0] || previewDocument);
       const persistedSettings = applyStandardPdfLayoutSettings(savedDocumentType, { ...settings } as Record<string, unknown>);
+      if (options.curatedTemplateSelection !== undefined) {
+        if (options.curatedTemplateSelection) persistedSettings.curatedTemplateSelection = options.curatedTemplateSelection;
+        else delete persistedSettings.curatedTemplateSelection;
+      }
       const persistedAppearanceOverrides = options.appearanceOverrides ?? appearanceOverrides;
       const persistAppearanceOverrides = options.appearanceOverridesExplicit ?? appearanceOverridesExplicit;
       if (persistAppearanceOverrides) persistedSettings.appearanceOverrides = persistedAppearanceOverrides;
@@ -960,13 +1017,17 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
           ...(isPurchasePdfLayoutTarget(savedDocumentType) ? { preset: 'purchase-custom', purchaseLayoutVersion: PURCHASE_PDF_LAYOUT_VERSION } : {}),
         },
       };
-      const savedTemplateKey = activeId === 'draft' ? 'custom' : designs.find(record => record.id === activeId)?.templateKey || 'custom';
-      const payload = { name: name.trim(), description, documentTypes: [savedDocumentType], folderId: selectedFolderId, settings: persistedSettings, templateKey: savedTemplateKey, sourceType, sourceFileUrl: sourceMetadata?.sourceFileUrl, sourceFileName: sourceMetadata?.sourceFileName, analysisStatus: sourceMetadata?.analysisStatus || 'NOT_APPLICABLE', layoutZones: { ...(sourceMetadata?.layoutZones || {}), definition: savedDefinition, fields: templateFields }, engine: 'HTML_TEMPLATE', isActive: true };
-      const saved = activeId === 'draft' ? await pdfDocumentDesignService.create(payload) : await pdfDocumentDesignService.update(activeId, payload);
+      const existingTemplateKey = designs.find(record => record.id === activeId)?.templateKey;
+      const createAsNew = activeId === 'draft' || existingTemplateKey === 'erp-default';
+      const savedTemplateKey = createAsNew ? 'custom' : existingTemplateKey || 'custom';
+      const isActive = createAsNew ? false : Boolean(designs.find(record => record.id === activeId)?.isActive);
+      const payload = { name: name.trim(), description, documentTypes: [savedDocumentType], folderId: selectedFolderId, settings: persistedSettings, templateKey: savedTemplateKey, sourceType, sourceFileUrl: sourceMetadata?.sourceFileUrl, sourceFileName: sourceMetadata?.sourceFileName, analysisStatus: sourceMetadata?.analysisStatus || 'NOT_APPLICABLE', layoutZones: { ...(sourceMetadata?.layoutZones || {}), definition: savedDefinition, fields: templateFields }, engine: 'HTML_TEMPLATE', isActive };
+      const saved = createAsNew ? await pdfDocumentDesignService.create(payload) : await pdfDocumentDesignService.update(activeId, payload);
       clearPdfDesignCache();
       const savedForState = { ...saved, documentTypes: [savedDocumentType], settings: { ...(saved.settings || {}), ...persistedSettings } };
-      setDesigns(previous => activeId === 'draft' ? [savedForState, ...previous] : previous.map(item => item.id === saved.id ? savedForState : item));
+      setDesigns(previous => createAsNew ? [savedForState, ...previous] : previous.map(item => item.id === saved.id ? savedForState : item));
       setActiveId(saved.id); setTemplateDefinition(savedDefinition); setName(saved.name);
+      if (options.curatedTemplateSelection !== undefined) setSettings(previous => ({ ...previous, curatedTemplateSelection: options.curatedTemplateSelection || undefined }));
       toast.success(options.successMessage || (saved.name !== name.trim() ? `Diseño guardado como «${saved.name}»` : 'Diseño PDF guardado'));
       return true;
     } catch (error: any) { toast.error(error?.message || 'No se pudo guardar el diseño'); return false; } finally { setIsSaving(false); }
@@ -984,20 +1045,74 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         toast.error('No se encontró la plantilla que aparece en la vista previa.');
         return;
       }
-      requestCuratedTemplateSave(template, revision, appearanceScope, previewedCuratedSelection.overrides, previewDocument);
+      if (appearanceScope === 'branch') {
+        requestCuratedTemplateSave(template, revision, appearanceScope, previewedCuratedSelection.overrides, previewDocument);
+        return;
+      }
+      void saveCuratedTemplateToDesign(template, revision, previewedCuratedSelection.overrides);
       return;
     }
     if (appearanceScope === 'branch') setGlobalSaveKind('appearance');
     else void saveDesign();
   };
+  const activateDesign = async (record: PdfDocumentDesignRecord) => {
+    if (!hasActiveBranchScope || !canEdit || record.isActive || activatingDesignId) return;
+    const target = normalizePdfTemplateKey(record.documentTypes?.[0] || 'ventas.estimate');
+    if (!canEditPdfTemplate(target)) return;
+    setActivatingDesignId(record.id);
+    try {
+      const activated = await pdfDocumentDesignService.activate(record.id);
+      setDesigns(previous => previous.map(item => normalizePdfTemplateKey(item.documentTypes?.[0] || '') === target
+        ? { ...item, isActive: item.id === activated.id, updatedAt: activated.updatedAt || item.updatedAt }
+        : item));
+      loadDesign(activated);
+      clearPdfDesignCache(target);
+      setActiveMobilePanel('preview');
+      toast.success(`«${record.name}» quedó aplicado a ${documentLabel(target)}.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo aplicar este diseño a la vista.');
+    } finally {
+      setActivatingDesignId(null);
+    }
+  };
+  const restoreCurrentTargetDefault = async () => {
+    if (!hasActiveBranchScope || !canEdit || isRestoringDefault || !selectedTargetEditable) return;
+    setIsRestoringDefault(true);
+    try {
+      const result = await pdfDocumentDesignService.resetActiveTarget(previewDocument);
+      const savedProfile = await pdfDocumentDesignService.getAppearanceProfile().catch(() => appearanceProfileRef.current);
+      appearanceProfileRef.current = savedProfile;
+      savedAppearanceProfileRef.current = savedProfile;
+      setAppearanceProfile(savedProfile);
+      const target = getPdfTemplateTarget(previewDocument);
+      setDesigns(previous => {
+        const next = previous.map(record => normalizePdfTemplateKey(record.documentTypes?.[0] || '') === target.key
+          ? { ...record, isActive: false }
+          : record);
+        const existingIndex = next.findIndex(record => record.id === result.defaultDesign.id);
+        if (existingIndex >= 0) next[existingIndex] = result.defaultDesign;
+        else next.unshift(result.defaultDesign);
+        return next;
+      });
+      setPreviewedCuratedSelection(null);
+      setCuratedOverridesDraft({});
+      clearPdfDesignCache(target.key);
+      loadDesign(result.defaultDesign);
+      toast.success(`Se aplicó el predeterminado del ERP a ${target.label}. Los diseños guardados siguen disponibles.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo volver al diseño predeterminado.');
+    } finally {
+      setIsRestoringDefault(false);
+    }
+  };
   const createDesign = () => {
     if (!hasActiveBranchScope || !canCreate) return;
-    const nextDocumentType = firstAvailableDocumentType(documentType, 'draft');
+    const nextDocumentType = documentType;
     const target = getPdfTemplateTarget(nextDocumentType);
     if (!canEditPdfTemplate(target)) return;
     const nextSettings = applyStandardPdfLayoutSettings(nextDocumentType, { ...DEFAULT_SETTINGS, companyName, primaryColor: corporateColor || DEFAULT_SETTINGS.primaryColor });
     const nextDefinition = createEditorDefaultDefinition(nextDocumentType, nextSettings, logo);
-    setActiveId('draft'); setName(`Nuevo diseño · ${target.label}`); setDescription(`Datos y asignación para ${target.label}; editable para esta sucursal.`); setAssignedDocuments([nextDocumentType]); setDocumentType(nextDocumentType); setSelectedModule(target.module); setSourceMetadata(null); setTemplateFields(createTemplateFields(companyName)); setTemplateDefinition(nextDefinition); setAppearanceOverrides({}); setAppearanceOverridesExplicit(false); setSettings(nextSettings);
+    setActiveId('draft'); setSelectedFolderId(null); setPreviewedCuratedSelection(null); setCuratedOverridesDraft({}); setName(`Nuevo diseño · ${target.label}`); setDescription(`Datos y asignación para ${target.label}; editable para esta sucursal.`); setAssignedDocuments([nextDocumentType]); setDocumentType(nextDocumentType); setSelectedModule(target.module); setSourceMetadata(null); setTemplateFields(createTemplateFields(companyName)); setTemplateDefinition(nextDefinition); setAppearanceOverrides({}); setAppearanceOverridesExplicit(false); setSettings(nextSettings);
   };
   const deleteDesignRecord = (record: PdfDocumentDesignRecord) => { if (canDelete) setDeleteTarget({ kind: 'design', record }); };
   const updateTemplateField = (id: string, changes: Partial<PdfTemplateField>) => { if (canModifyActive) setTemplateFields(fields => fields.map(field => field.id === id ? { ...field, ...changes } : field)); };
@@ -1029,6 +1144,10 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       ...(isSameTarget ? {} : { logoUrl: undefined, templateLogoUrl: undefined, templateLogoUri: undefined, templateLogoTarget: undefined }),
     };
     const normalizedSettings = normalizePdfPaperSettings(target.key, applyStandardPdfLayoutSettings(target.key, nextSettings)) as PdfSettings;
+    setActiveId('draft');
+    setSelectedFolderId(null);
+    setPreviewedCuratedSelection(null);
+    setCuratedOverridesDraft({});
     setSelectedModule(target.module);
     setDocumentType(target.key);
     setAssignedDocuments([target.key]);
@@ -1069,9 +1188,20 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     } finally { setIsDeleting(false); }
   };
   const uploadLogo = async (file: File) => { if (!canEditCompanyProfile) return; if (!file.type.startsWith('image/')) { toast.error('Selecciona una imagen para el logotipo'); return; } try { const uploaded = await storageService.uploadFile('tenant-branding', file, { folder: 'pdf-company-profile', scopeId: tenantId }); const logoSource = uploaded.uri || uploaded.url; setCompanyProfile(previous => ({ ...previous, logo: logoSource })); setResolvedCompanyLogo({ source: logoSource, url: uploaded.url || logoSource }); setTemplateDefinition(previous => ensureLogoNode(previous)); toast.success('Logotipo listo; guarda los datos globales para aplicarlo a todos los PDF'); } catch (error: any) { toast.error(error?.message || 'No se pudo cargar el logotipo'); } };
-  const renderDesign = (record: PdfDocumentDesignRecord) => <div key={record.id} className={cn('flex items-center gap-2 rounded-xl border p-2 transition-colors', activeId === record.id ? 'border-primary bg-primary/10' : 'border-border/40 hover:border-primary/40')}><button type="button" onClick={() => loadDesign(record)} className="min-w-0 flex-1 cursor-pointer p-1 text-left"><div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-bold">{record.name}</span>{record.isActive && <span className="size-2 shrink-0 rounded-full bg-primary" />}</div><p className="mt-1 truncate text-[11px] text-muted-foreground">{documentLabel(record.documentTypes?.[0] || 'estimate')}</p></button>{canDelete && <Button type="button" variant="ghost" size="icon" title="Eliminar plantilla" className="size-8 shrink-0 cursor-pointer text-destructive hover:text-destructive" onClick={() => deleteDesignRecord(record)}><Trash2 className="size-3.5" /></Button>}</div>;
-  const ungroupedDesigns = designs.filter(record => !record.folderId);
-  const selectedFolderDesigns = selectedFolderId ? designs.filter(record => record.folderId === selectedFolderId) : [];
+  const renderDesign = (record: PdfDocumentDesignRecord) => <div key={record.id} className={cn('space-y-2 rounded-xl border p-3 transition-colors', activeId === record.id ? 'border-primary bg-primary/10' : 'border-border/40 hover:border-primary/40')}>
+    <button type="button" onClick={() => loadDesign(record)} className="block w-full min-w-0 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+      <span className="flex min-w-0 items-start justify-between gap-2"><span className="min-w-0"><span className="block break-words text-xs font-bold">{record.name}</span><span className="mt-1 block text-[10px] text-muted-foreground">{documentLabel(record.documentTypes?.[0] || 'estimate')}</span></span><Badge variant={record.isActive ? 'default' : 'outline'} className="shrink-0 text-[9px]">{record.isActive ? 'En uso' : 'Guardado'}</Badge></span>
+      {record.description && <span className="mt-1.5 block line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">{record.description}</span>}
+    </button>
+    <div className="flex flex-wrap items-center justify-end gap-1.5 border-t border-border/40 pt-2">
+      <Button type="button" size="sm" variant="ghost" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => { loadDesign(record); setActiveMobilePanel('preview'); }}><Eye className="mr-1 size-3" />Previsualizar</Button>
+      {!record.isActive && <Button type="button" size="sm" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void activateDesign(record)} disabled={!hasActiveBranchScope || !canEdit || activatingDesignId !== null}><Check className="mr-1 size-3" />{activatingDesignId === record.id ? 'Aplicando…' : 'Aplicar'}</Button>}
+      {canDelete && <Button type="button" variant="ghost" size="icon" title="Eliminar diseño" aria-label={`Eliminar diseño ${record.name}`} className="size-7 cursor-pointer text-destructive hover:text-destructive" onClick={() => deleteDesignRecord(record)}><Trash2 className="size-3.5" /></Button>}
+    </div>
+  </div>;
+  const visibleDesigns = designs.filter(record => record.templateKey !== 'erp-default');
+  const ungroupedDesigns = visibleDesigns.filter(record => !record.folderId);
+  const selectedFolderDesigns = selectedFolderId ? visibleDesigns.filter(record => record.folderId === selectedFolderId) : [];
   return <div className="flex min-w-0 flex-col gap-3 xl:min-h-[calc(100vh-11rem)]">
     <div className={cn('grid grid-cols-3 gap-1 rounded-xl border border-border/60 bg-muted/30 p-1 xl:hidden', isPreviewExpanded && 'hidden')} role="group" aria-label="Panel del editor PDF">
       <Button type="button" size="sm" variant={activeMobilePanel === 'assignment' ? 'default' : 'ghost'} className="cursor-pointer" aria-pressed={activeMobilePanel === 'assignment'} onClick={() => setActiveMobilePanel('assignment')}>Asignación</Button>
@@ -1088,24 +1218,24 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
           </summary>
           <CardContent className="space-y-3 pt-0">
             <Field label="Nombre del diseño"><Input value={name} onChange={event => setName(event.target.value)} disabled={!canModifyActive} placeholder="Ej. Cotización comercial" /></Field>
-            <Field label="Módulo"><select aria-label="Módulo del documento" value={selectedModule} onChange={event => { const moduleId = event.target.value as typeof selectedModule; setSelectedModule(moduleId); const first = DOCUMENTS.find(target => target.module === moduleId && !isPdfTemplateFixed(target) && !reservedDocumentDesign(target.key)); if (first) selectTarget(first.key); }} disabled={!canModifyActive} className="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecciona un módulo</option>{PDF_TEMPLATE_MODULES.map(module => <option key={module.id} value={module.id}>{module.label}</option>)}</select></Field>
-            <Field label="Vista / acción PDF"><select aria-label="Vista o acción del documento" value={previewDocument} onChange={event => { const selectedType = event.target.value; const reservedBy = reservedDocumentDesign(selectedType); if (reservedBy) { loadDesign(reservedBy); toast.info(`Se abrió el diseño «${reservedBy.name}» para esta vista.`); return; } selectTarget(selectedType); }} className="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm">{moduleTargets.map(item => { const reservedBy = reservedDocumentDesign(item.key); return <option key={item.key} value={item.key}>{item.label}{reservedBy ? ' · Abrir diseño: ' + reservedBy.name : ''}</option>; })}</select></Field>
+            <Field label="Módulo"><select aria-label="Módulo del documento" value={selectedModule} onChange={event => { const moduleId = event.target.value as typeof selectedModule; const first = DOCUMENTS.find(target => target.module === moduleId && !isPdfTemplateFixed(target)); if (!first) return; const reservedBy = reservedDocumentDesign(first.key); if (reservedBy && activeId !== 'draft') { loadDesign(reservedBy); return; } selectTarget(first.key); }} disabled={!canModifyActive} className="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecciona un módulo</option>{PDF_TEMPLATE_MODULES.map(module => <option key={module.id} value={module.id}>{module.label}</option>)}</select></Field>
+            <Field label="Vista / acción PDF"><select aria-label="Vista o acción del documento" value={previewDocument} onChange={event => { const selectedType = event.target.value; const reservedBy = reservedDocumentDesign(selectedType); if (reservedBy && activeId !== 'draft') { loadDesign(reservedBy); toast.info(`Se abrió el diseño «${reservedBy.name}» para esta vista.`); return; } selectTarget(selectedType); }} className="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm">{moduleTargets.map(item => { const reservedBy = reservedDocumentDesign(item.key); return <option key={item.key} value={item.key}>{item.label}{reservedBy ? ` · tiene activo «${reservedBy.name}»` : ''}</option>; })}</select></Field>
             <Field label="Carpeta"><div className="flex gap-2"><select aria-label="Carpeta del diseño" value={selectedFolderId || ''} onChange={event => setSelectedFolderId(event.target.value || null)} disabled={!canModifyActive} className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm"><option value="">Sin carpeta</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><Button type="button" variant="outline" size="icon" title="Nueva carpeta" className="size-9 shrink-0 cursor-pointer" onClick={openNewFolder} disabled={!canModifyActive}><FolderPlus className="size-4" /></Button></div></Field>
             <Field label="Descripción"><Textarea value={description} onChange={event => setDescription(event.target.value)} disabled={!canModifyActive} placeholder="Describe cuándo debe utilizarse" rows={2} /></Field>
             <div className="rounded-lg border border-primary/15 bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground"><span className="font-semibold text-primary">{selectedTarget.moduleLabel} · {selectedTarget.label}</span><br />{selectedTargetEditable ? 'Este diseño se guarda para esta vista y sucursal.' : isPdfTemplateFixed(selectedTarget) ? 'Formato físico fijo del sistema.' : 'Este reporte usa el formato predeterminado del ERP y no admite personalización por sucursal.'}</div>
           </CardContent>
         </details>
 
-        <details data-tour="pdf-templates" open className="group rounded-lg border bg-card text-card-foreground shadow-none">
+        <details data-tour="pdf-templates" className="group rounded-lg border bg-card text-card-foreground shadow-none">
           <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-6 pb-3 pt-6 [&::-webkit-details-marker]:hidden">
             <div className="space-y-1.5"><CardTitle className="text-sm">Plantillas</CardTitle><CardDescription className="text-xs">Base compartida para los PDF de esta sucursal.</CardDescription></div>
             <ChevronDown className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
           </summary>
           <CardContent className="pt-0">
-            <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">{appearanceScope === 'branch' ? 'Selecciona la base visual para todos los PDF de esta sucursal.' : `La selección se aplicará solo a ${selectedTarget.label.toLowerCase()}.`}</p>
+            <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">La plantilla predeterminada define la base visual del ERP. Los ajustes de fuente, composición, tamaño y color se controlan en Apariencia del PDF.</p>
             {appearanceScope === 'branch' && appearanceOverrides.documentTemplateId && appearanceOverrides.documentTemplateId !== (appearanceProfile.documentTemplateId || 'default-v1') && <p className="mb-2 rounded-md border border-border/50 bg-muted/40 px-2 py-1.5 text-[10px] leading-relaxed text-muted-foreground">Este PDF conserva una plantilla propia; prevalecerá sobre la de la sucursal hasta que se restablezca en el alcance “Solo este PDF”.</p>}
             <div className="space-y-2">
-              {PDF_DOCUMENT_TEMPLATES.map(template => {
+              {PDF_DOCUMENT_TEMPLATES.filter(template => template.id === PDF_DEFAULT_TEMPLATE_ID).map(template => {
                 const selected = selectedAppearanceTemplateId === template.id;
                 const accent = String(appearancePanelValues.palette?.primary || '#01422c');
                 const decoration: React.CSSProperties = template.id === 'default-v1'
@@ -1144,12 +1274,19 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                 </button>;
               })}
             </div>
-            <div className="mt-3 space-y-2">
-              <p className="text-[10px] leading-relaxed text-muted-foreground">Selecciona una plantilla para verla en el PDF. Guárdala desde el previsualizador según el alcance elegido.</p>
-            </div>
+            <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">Para recuperar esta base en la vista actual, usa “Volver al predeterminado” en el previsualizador.</p>
+          </CardContent>
+        </details>
+
+        <details data-tour="pdf-importations" className="group rounded-lg border bg-card text-card-foreground shadow-none">
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-6 pb-3 pt-6 [&::-webkit-details-marker]:hidden">
+            <div className="space-y-1.5"><CardTitle className="text-sm">Importaciones</CardTitle><CardDescription className="text-xs">Paquetes de diseño propios de esta sucursal.</CardDescription></div>
+            <ChevronDown className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <CardContent className="pt-0">
             <section className="mt-4 space-y-3 border-t border-border/50 pt-4" aria-labelledby="pdf-curated-templates-heading">
               <div className="space-y-2">
-                <div className="min-w-0"><h3 id="pdf-curated-templates-heading" className="text-xs font-semibold">Plantillas de la sucursal</h3><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Paquetes de diseño con archivos y fuentes locales. Al instalarlos se abre una muestra y quedan como borrador.</p></div>
+                <div className="min-w-0"><h3 id="pdf-curated-templates-heading" className="text-xs font-semibold">Paquetes de diseño</h3><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Instala un ZIP, revisa su muestra y guárdalo dentro del diseño abierto. Luego podrás activarlo desde Mis diseños.</p></div>
                 <input ref={curatedPackageInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={event => { const file = event.target.files?.[0]; const templateId = curatedImportTargetIdRef.current; curatedImportTargetIdRef.current = undefined; if (file) void installCuratedPackage(file, templateId); event.currentTarget.value = ''; }} />
                 <Button type="button" size="sm" variant="outline" className="h-8 w-full cursor-pointer justify-center gap-1.5 px-2 text-[10px]" onClick={() => curatedPackageInputRef.current?.click()} disabled={!hasActiveBranchScope || !canImport || curatedBusy}><Upload className="size-3.5" />Instalar ZIP</Button>
               </div>
@@ -1159,10 +1296,12 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                 <p className="text-[10px] text-muted-foreground">{CURATED_TARGET_SET.has(previewDocument)
                   ? 'Opciones preparadas para instalar; revisa la vista previa antes de publicar.'
                   : 'El PDF actual no admite estas plantillas. Puedes instalarlas y ver una muestra en un documento comercial compatible.'}</p>
-                {PREPARED_PDF_PACKAGES.map(item => <div key={item.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-border/50 p-2">
-                  <span aria-hidden="true" className="h-8 w-9 shrink-0 rounded-md border border-border/40" style={{ background: `linear-gradient(150deg, ${item.primary} 0 40%, ${item.secondary} 41% 62%, white 63%)` }} />
-                  <span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-medium">{item.name}</span><span className="block text-[9px] text-muted-foreground">{item.description}</span></span>
-                  <Button type="button" size="sm" variant="ghost" className="h-7 shrink-0 cursor-pointer px-2 text-[10px]" onClick={() => void installPreparedPackage(item.id)} disabled={!hasActiveBranchScope || !canImport || curatedBusy}><Download className="mr-1 size-3" />Preparar</Button>
+                {PREPARED_PDF_PACKAGES.map(item => <div key={item.id} className="space-y-2 rounded-lg border border-border/50 p-3 text-left">
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <span aria-hidden="true" className="mt-0.5 h-9 w-10 shrink-0 rounded-md border border-border/40" style={{ background: `linear-gradient(150deg, ${item.primary} 0 40%, ${item.secondary} 41% 62%, white 63%)` }} />
+                    <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold">{item.name}</span><span className="mt-0.5 block text-[10px] leading-relaxed text-muted-foreground">{item.description}</span></span>
+                  </div>
+                  <div className="flex justify-end border-t border-border/40 pt-2"><Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void installPreparedPackage(item.id)} disabled={!hasActiveBranchScope || !canImport || curatedBusy}><Download className="mr-1 size-3" />Preparar</Button></div>
                 </div>)}
               </div>
               {curatedTemplates.length > 0 && <div className="space-y-2">
@@ -1184,20 +1323,15 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                         <span className="flex min-w-0 flex-wrap items-center gap-1.5"><Badge variant={revision.status === 'PUBLISHED' ? 'secondary' : 'outline'} className="text-[9px]">v{revision.version} · {revision.status === 'PUBLISHED' ? 'Publicada' : 'Borrador'}</Badge>{isScopedActive && <Badge className="text-[9px]"><Check className="mr-1 size-3" />Activa</Badge>}</span>
                         {!supportsTarget && supportedTargets.length > 0 && <label className="block space-y-1 text-[9px] text-muted-foreground"><span>Documento para la muestra</span><select aria-label={`Documento de muestra para ${template.name}, versión ${revision.version}`} value={selectedPreviewTarget} onChange={event => setCuratedPreviewTargets(previous => ({ ...previous, [revision.id]: event.target.value }))} className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[10px] text-foreground">{supportedTargets.map(target => <option key={target} value={target}>{getPdfTemplateTarget(target).label}</option>)}</select></label>}
                         {!supportsTarget && <p className="text-[9px] leading-relaxed text-muted-foreground">El PDF seleccionado no admite esta plantilla. La muestra usa el documento compatible de arriba; para activarla, cambia a un PDF admitido.</p>}
-                        <div className="flex flex-wrap justify-end gap-1.5"><Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void renderCuratedRevisionPreview(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {}, selectedPreviewTarget)} disabled={!selectedPreviewTarget || curatedBusy}><Eye className="mr-1 size-3" />Previsualizar</Button><Button type="button" size="sm" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => requestCuratedTemplateSave(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {})} disabled={!supportsTarget || curatedBusy || (revision.status !== 'PUBLISHED' && !previewed) || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)}>{isScopedActive ? 'Guardar alcance' : revision.status === 'PUBLISHED' ? 'Activar' : 'Publicar y activar'}</Button></div>
+                        <div className="flex justify-end border-t border-border/40 pt-2"><Button type="button" size="sm" variant="outline" className="h-7 cursor-pointer px-2 text-[10px]" onClick={() => void renderCuratedRevisionPreview(template, revision, appearanceScope, isScopedActive ? curatedOverridesDraft : {}, selectedPreviewTarget)} disabled={!selectedPreviewTarget || curatedBusy}><Eye className="mr-1 size-3" />{previewed ? 'Actualizar vista previa' : 'Previsualizar'}</Button></div>
                       </div>;
                     })}
                   </div>
                 </details>)}
               </div>}
-              {scopedCuratedSelection && scopedCuratedRevision && <div className="space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-2.5">
-                <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-semibold">Ajustes · {scopedCuratedTemplate?.name}</p><Button type="button" variant="ghost" size="sm" className="h-6 cursor-pointer px-1.5 text-[9px]" onClick={() => void clearCuratedTemplateSelection()} disabled={curatedBusy || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)}>Quitar</Button></div>
-                <Field label="Color principal"><Input type="color" value={curatedOverridesDraft?.primaryColor || String(scopedCuratedRevision.manifest.defaults.primaryColor || '#164b91')} onChange={event => setCuratedOverridesDraft(previous => ({ ...previous, primaryColor: event.target.value }))} disabled={appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive} className="h-9 cursor-pointer p-1" /></Field>
-                <Field label="Color secundario"><Input type="color" value={curatedOverridesDraft?.secondaryColor || String(scopedCuratedRevision.manifest.defaults.secondaryColor || '#347cb4')} onChange={event => setCuratedOverridesDraft(previous => ({ ...previous, secondaryColor: event.target.value }))} disabled={appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive} className="h-9 cursor-pointer p-1" /></Field>
-                <Field label="Fuente"><Input value={curatedOverridesDraft?.fontFamily ?? String(scopedCuratedRevision.manifest.defaults.fontFamily || 'Arial')} onChange={event => setCuratedOverridesDraft(previous => ({ ...previous, fontFamily: event.target.value }))} disabled={appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive} maxLength={80} /></Field>
-                <Field label="Tamaño de fuente (pt)"><Input type="number" min={6} max={16} step={0.5} value={curatedOverridesDraft?.fontSize ?? Number(scopedCuratedRevision.manifest.defaults.fontSize || 9)} onChange={event => setCuratedOverridesDraft(previous => ({ ...previous, fontSize: Number(event.target.value) }))} disabled={appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive} /></Field>
-                <Field label="Separación antes de la tabla (mm)"><Input type="number" min={0} max={50} step={0.5} value={curatedOverridesDraft?.contentOffsetMm ?? 0} onChange={event => setCuratedOverridesDraft(previous => ({ ...previous, contentOffsetMm: Number(event.target.value) }))} disabled={appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive} /></Field>
-                <div className="flex flex-wrap justify-end gap-1.5"><Button type="button" size="sm" variant="ghost" className="h-8 cursor-pointer px-2 text-[10px]" onClick={() => void resetCuratedOverrides()} disabled={curatedBusy || !scopedCuratedSelection || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)}>Restablecer valores</Button><Button type="button" size="sm" className="h-8 cursor-pointer px-2 text-[10px]" onClick={() => void applyCuratedOverrides()} disabled={curatedBusy || !scopedCuratedSelection || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)}>{curatedBusy ? <Loader2 className="mr-1 size-3 animate-spin" /> : <Check className="mr-1 size-3" />}Aplicar ajustes</Button></div>
+              {scopedCuratedSelection && scopedCuratedTemplate && scopedCuratedRevision && <div className="flex items-start justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 p-2.5">
+                <span className="min-w-0"><span className="block text-[10px] font-semibold">{scopedCuratedTemplate.name}</span><span className="mt-0.5 block text-[9px] text-muted-foreground">v{scopedCuratedRevision.version} · {appearanceScope === 'document' ? 'Guardada en el diseño abierto' : 'Guardada para esta sucursal'}</span></span>
+                <Button type="button" variant="ghost" size="sm" className="h-6 shrink-0 cursor-pointer px-1.5 text-[9px]" onClick={() => void clearCuratedTemplateSelection()} disabled={curatedBusy || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)}>Quitar</Button>
               </div>}
             </section>
           </CardContent>
@@ -1209,18 +1343,18 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
             <ChevronDown className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
           </summary>
           <CardContent className="space-y-3 pt-0">
-            <div className="flex justify-end gap-1"><Button type="button" variant="ghost" size="icon" title="Nueva carpeta" className="size-8 cursor-pointer" onClick={openNewFolder} disabled={!hasActiveBranchScope || !canCreate}><FolderPlus className="size-4" /></Button><Button type="button" variant="ghost" size="icon" title="Nuevo diseño" className="size-8 cursor-pointer" onClick={createDesign} disabled={!hasActiveBranchScope || !canCreate}><Plus className="size-4" /></Button></div>
-            <button type="button" onClick={() => setSelectedFolderId(null)} className={cn('flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-bold transition', selectedFolderId === null ? 'border-primary bg-primary/10 text-primary' : 'border-border/40 hover:border-primary/40')}><span className="flex items-center gap-2"><LayoutTemplate className="size-4" />Todos los diseños</span><span className="text-[10px] text-muted-foreground">{designs.length}</span></button>
-            {isLoading ? <Loader2 className="mx-auto size-5 animate-spin text-primary" /> : <>{folders.map(folder => <div key={folder.id} className="space-y-2"><div className={cn('flex items-center gap-1 rounded-lg border px-2 py-1.5', selectedFolderId === folder.id ? 'border-primary/60 bg-primary/5' : 'border-border/40')}><button type="button" onClick={() => setSelectedFolderId(selectedFolderId === folder.id ? null : folder.id)} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"><Folder className="size-4 shrink-0 text-primary" /><span className="truncate text-xs font-bold">{folder.name}</span><span className="text-[10px] text-muted-foreground">{designs.filter(record => record.folderId === folder.id).length}</span></button><Button variant="ghost" size="icon" title="Renombrar carpeta" className="size-7 cursor-pointer" onClick={() => openEditFolder(folder)}><Pencil className="size-3" /></Button><Button variant="ghost" size="icon" title="Eliminar carpeta" className="size-7 cursor-pointer text-destructive" onClick={() => deleteFolder(folder)}><Trash2 className="size-3" /></Button></div>{selectedFolderId === folder.id && <div className="space-y-2 pl-3">{selectedFolderDesigns.map(renderDesign)}{!selectedFolderDesigns.length && <p className="rounded-lg border border-dashed border-border/50 p-3 text-center text-[11px] text-muted-foreground">Carpeta vacía.</p>}</div>}</div>)}{selectedFolderId === null && ungroupedDesigns.map(renderDesign)}{activeId === 'draft' && <div className="rounded-xl border border-primary/50 bg-primary/5 p-3 text-sm font-bold">{name}<p className="text-[11px] font-normal text-muted-foreground">Borrador sin guardar</p></div>}{selectedFolderId === null && !ungroupedDesigns.length && !folders.length && activeId !== 'draft' && <p className="py-4 text-center text-xs text-muted-foreground">Aún no tienes diseños guardados.</p>}</>}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><Button type="button" variant="outline" size="sm" className="cursor-pointer justify-start gap-2" onClick={openNewFolder} disabled={!hasActiveBranchScope || !canCreate}><FolderPlus className="size-4" />Crear carpeta</Button><Button type="button" size="sm" className="cursor-pointer justify-start gap-2" onClick={createDesign} disabled={!hasActiveBranchScope || !canCreate}><Plus className="size-4" />Nuevo diseño · {selectedTarget.label}</Button></div>
+            <button type="button" onClick={() => setSelectedFolderId(null)} className={cn('flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-bold transition', selectedFolderId === null ? 'border-primary bg-primary/10 text-primary' : 'border-border/40 hover:border-primary/40')}><span className="flex items-center gap-2"><LayoutTemplate className="size-4" />Todos los diseños</span><span className="text-[10px] text-muted-foreground">{visibleDesigns.length}</span></button>
+            {isLoading ? <Loader2 className="mx-auto size-5 animate-spin text-primary" /> : <>{folders.map(folder => <div key={folder.id} className="space-y-2"><div className={cn('flex items-center gap-1 rounded-lg border px-2 py-1.5', selectedFolderId === folder.id ? 'border-primary/60 bg-primary/5' : 'border-border/40')}><button type="button" onClick={() => setSelectedFolderId(selectedFolderId === folder.id ? null : folder.id)} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"><Folder className="size-4 shrink-0 text-primary" /><span className="truncate text-xs font-bold">{folder.name}</span><span className="text-[10px] text-muted-foreground">{visibleDesigns.filter(record => record.folderId === folder.id).length}</span></button><Button variant="ghost" size="icon" title="Renombrar carpeta" className="size-7 cursor-pointer" onClick={() => openEditFolder(folder)}><Pencil className="size-3" /></Button><Button variant="ghost" size="icon" title="Eliminar carpeta" className="size-7 cursor-pointer text-destructive" onClick={() => deleteFolder(folder)}><Trash2 className="size-3" /></Button></div>{selectedFolderId === folder.id && <div className="space-y-2 pl-3">{selectedFolderDesigns.map(renderDesign)}{!selectedFolderDesigns.length && <p className="rounded-lg border border-dashed border-border/50 p-3 text-center text-[11px] text-muted-foreground">Carpeta vacía.</p>}</div>}</div>)}{selectedFolderId === null && ungroupedDesigns.map(renderDesign)}{activeId === 'draft' && <div className="rounded-xl border border-primary/50 bg-primary/5 p-3 text-sm font-bold">{name}<p className="text-[11px] font-normal text-muted-foreground">Borrador sin guardar</p></div>}{selectedFolderId === null && !ungroupedDesigns.length && !folders.length && activeId !== 'draft' && <p className="py-4 text-center text-xs text-muted-foreground">Aún no tienes diseños guardados.</p>}</>}
           </CardContent>
         </details>
       </aside>
 
       <main className={cn('min-w-0', activeMobilePanel === 'preview' ? 'block' : 'hidden', isPreviewExpanded && 'xl:col-span-3')}>
         <Card className={cn('flex min-w-0 flex-col overflow-hidden', isPreviewExpanded ? 'min-h-[640px] xl:min-h-[min(90vh,1400px)]' : 'min-h-[580px] xl:min-h-[min(82vh,1100px)]')}>
-          <CardHeader className="shrink-0 border-b border-border/50 py-3"><div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="flex min-w-0 items-center gap-2 truncate text-sm"><FileText className="size-4 shrink-0 text-primary" /><span className="truncate">Diseño PDF · {selectedTarget.label}</span></CardTitle><CardDescription className="truncate text-xs">{name || 'Diseño sin nombre'} · {selectedTarget.moduleLabel} · {hasActiveBranchScope ? activeBranchLabel : 'Selecciona una sucursal para guardar'}</CardDescription></div><div className="flex shrink-0 items-center gap-1.5"><Badge variant="outline" className="text-[10px]">{activeId === 'draft' ? 'Borrador' : 'Guardado'}</Badge><Badge variant="outline" className="text-[10px]">{settings.paperSize} · {settings.orientation === 'portrait' ? 'Vertical' : 'Horizontal'}</Badge></div></div></CardHeader>
+          <CardHeader className="shrink-0 border-b border-border/50 py-3"><div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="flex min-w-0 items-center gap-2 truncate text-sm"><FileText className="size-4 shrink-0 text-primary" /><span className="truncate">Diseño PDF · {selectedTarget.label}</span></CardTitle><CardDescription className="truncate text-xs">{name || 'Diseño sin nombre'} · {selectedTarget.moduleLabel} · {hasActiveBranchScope ? activeBranchLabel : 'Selecciona una sucursal para guardar'}</CardDescription></div><div className="flex shrink-0 items-center gap-1.5"><Badge variant={activeId !== 'draft' && activeDesign?.isActive ? 'default' : 'outline'} className="text-[10px]">{activeId === 'draft' ? 'Borrador' : activeDesign?.isActive ? 'Aplicado a exportaciones' : 'Guardado · inactivo'}</Badge><Badge variant="outline" className="text-[10px]">{settings.paperSize} · {settings.orientation === 'portrait' ? 'Vertical' : 'Horizontal'}</Badge></div></div></CardHeader>
           <CardContent className="relative flex min-h-0 flex-1 flex-col p-2">
-            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onSave={savePreviewedDesign} saveLabel={appearanceScope === 'branch' ? 'Guardar estos cambios' : 'Guardar diseño'} saveDisabled={!hasActiveBranchScope || isPreviewRendering || curatedBusy || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)} isSaving={isSavingAppearance || isSavingFooterProfile || isSaving || curatedBusy} />
+            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onRestoreDefault={restoreCurrentTargetDefault} restoreDefaultDisabled={!hasActiveBranchScope || !canEdit || !selectedTargetEditable} isRestoringDefault={isRestoringDefault} onSave={savePreviewedDesign} saveLabel={appearanceScope === 'branch' ? 'Guardar estos cambios' : 'Guardar diseño'} saveDisabled={!hasActiveBranchScope || isPreviewRendering || curatedBusy || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)} isSaving={isSavingAppearance || isSavingFooterProfile || isSaving || curatedBusy} />
           </CardContent>
         </Card>
       </main>
