@@ -26,7 +26,7 @@ import { clearPdfDesignCache } from '../../utils/pdfGenerator';
 import { renderPdfTemplateToPdf } from '../../utils/pdf-template-renderer';
 import { PdfLivePreview } from './PdfLivePreview';
 import { PdfAppearanceSettingsPanel } from './PdfAppearanceSettingsPanel';
-import { clearPdfAppearanceFallback, PDF_CURATED_TEMPLATE_TARGETS, PDF_DEFAULT_TEMPLATE_ID, PDF_DOCUMENT_TEMPLATES, resetPdfAppearanceOverride, resolvePdfDesignAppearance, updatePdfAppearanceDraft, type PdfAppearanceDraftKey, type PdfAppearanceDraftScope, type PdfAppearanceOverrides, type PdfAppearanceProfile, type PdfCuratedTemplateSelection } from '../../services/pdf-appearance';
+import { clearPdfAppearanceFallback, PDF_CURATED_TEMPLATE_TARGETS, PDF_DEFAULT_TEMPLATE_ID, PDF_DOCUMENT_TEMPLATES, resetPdfAppearanceOverride, resolvePdfDesignAppearance, updatePdfAppearanceDraft, type PdfAppearanceDraftKey, type PdfAppearanceDraftScope, type PdfAppearanceOverrides, type PdfAppearanceProfile, type PdfAppearanceProfilePatch, type PdfCuratedTemplateSelection } from '../../services/pdf-appearance';
 import { getBase64Image } from '../../utils/export-utils';
 
 const DOCUMENTS = PDF_TEMPLATE_TARGETS.filter(target => target.branchCustomizable !== false);
@@ -625,7 +625,9 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     if (!canEditCompanyProfile || isSavingAppearance) return;
     setIsSavingAppearance(true);
     try {
-      const { templateId: _templateId, templateVersion: _templateVersion, ...editableProfile } = appearanceProfile;
+      const editableProfile = Object.fromEntries(
+        Object.entries(appearanceProfile).filter(([key]) => !['templateId', 'templateVersion', 'curatedTemplates'].includes(key)),
+      ) as PdfAppearanceProfilePatch;
       const savedProfile = await pdfDocumentDesignService.updateAppearanceProfile(editableProfile);
       appearanceProfileRef.current = savedProfile;
       setAppearanceProfile(savedProfile);
@@ -813,22 +815,28 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     }
   };
 
-  const saveDesign = async () => {
+  const saveDesign = async (options: {
+    appearanceOverrides?: Partial<PdfAppearanceOverrides>;
+    appearanceOverridesExplicit?: boolean;
+    successMessage?: string;
+  } = {}): Promise<boolean> => {
     if (!canEditPdfTemplate(previewDocument)) {
       toast.error(isPdfTemplateFixed(previewDocument)
         ? 'Este formato físico se genera con un renderer fijo y no admite diseños editables.'
         : 'Los reportes Manager usan el formato predeterminado y no admiten diseños por sucursal.');
-      return;
+      return false;
     }
-    if (activeId === 'draft' ? !canCreate : !canEdit) return;
-    if (!hasActiveBranchScope) { toast.error('Selecciona o abre una sucursal activa antes de guardar el diseño.'); return; }
-    if (!name.trim() || !assignedDocuments.length) { toast.error('Agrega un nombre y al menos un tipo de documento'); return; }
+    if (activeId === 'draft' ? !canCreate : !canEdit) return false;
+    if (!hasActiveBranchScope) { toast.error('Selecciona o abre una sucursal activa antes de guardar el diseño.'); return false; }
+    if (!name.trim() || !assignedDocuments.length) { toast.error('Agrega un nombre y al menos un tipo de documento'); return false; }
     setIsSaving(true);
     try {
       const sourceType: PdfDocumentDesignRecord['sourceType'] = sourceMetadata?.sourceType === 'UPLOADED_PDF' || sourceMetadata?.sourceType === 'UPLOADED_HTML' || sourceMetadata?.sourceType === 'AI_ANALYZED' ? sourceMetadata.sourceType : 'SYSTEM';
       const savedDocumentType = normalizePdfTemplateKey(assignedDocuments[0] || previewDocument);
       const persistedSettings = applyStandardPdfLayoutSettings(savedDocumentType, { ...settings } as Record<string, unknown>);
-      if (appearanceOverridesExplicit) persistedSettings.appearanceOverrides = appearanceOverrides;
+      const persistedAppearanceOverrides = options.appearanceOverrides ?? appearanceOverrides;
+      const persistAppearanceOverrides = options.appearanceOverridesExplicit ?? appearanceOverridesExplicit;
+      if (persistAppearanceOverrides) persistedSettings.appearanceOverrides = persistedAppearanceOverrides;
       else delete persistedSettings.appearanceOverrides;
       delete persistedSettings.logoUrl;
       if ((typeof persistedSettings.templateLogoUri === 'string' && persistedSettings.templateLogoUri.trim())
@@ -853,8 +861,47 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       clearPdfDesignCache();
       const savedForState = { ...saved, documentTypes: [savedDocumentType], settings: { ...(saved.settings || {}), ...persistedSettings } };
       setDesigns(previous => activeId === 'draft' ? [savedForState, ...previous] : previous.map(item => item.id === saved.id ? savedForState : item));
-      setActiveId(saved.id); setTemplateDefinition(savedDefinition); setName(saved.name); toast.success(saved.name !== name.trim() ? `Diseño guardado como «${saved.name}»` : 'Diseño PDF guardado');
-    } catch (error: any) { toast.error(error?.message || 'No se pudo guardar el diseño'); } finally { setIsSaving(false); }
+      setActiveId(saved.id); setTemplateDefinition(savedDefinition); setName(saved.name);
+      toast.success(options.successMessage || (saved.name !== name.trim() ? `Diseño guardado como «${saved.name}»` : 'Diseño PDF guardado'));
+      return true;
+    } catch (error: any) { toast.error(error?.message || 'No se pudo guardar el diseño'); return false; } finally { setIsSaving(false); }
+  };
+  const selectAppearanceTemplate = async (templateId: string) => {
+    if (appearanceScope === 'branch') {
+      if (!canEditCompanyProfile || isSavingAppearance || isSaving) return;
+      setIsSavingAppearance(true);
+      try {
+        const savedProfile = await pdfDocumentDesignService.updateAppearanceProfile({ documentTemplateId: templateId });
+        const nextProfile = {
+          ...savedProfile,
+          ...appearanceProfile,
+          ...(savedProfile.curatedTemplates ? { curatedTemplates: savedProfile.curatedTemplates } : {}),
+          documentTemplateId: templateId as PdfAppearanceProfilePatch['documentTemplateId'],
+        };
+        appearanceProfileRef.current = nextProfile;
+        setAppearanceProfile(nextProfile);
+        clearPdfDesignCache();
+        toast.success('La plantilla visual quedó guardada para esta sucursal.');
+      } catch (error: any) {
+        toast.error(error?.message || 'No se pudo guardar la plantilla visual.');
+      } finally {
+        setIsSavingAppearance(false);
+      }
+      return;
+    }
+
+    if (!canModifyActive || isSavingAppearance || isSaving) return;
+    const next = updatePdfAppearanceDraft(appearanceScope, appearanceProfile, appearanceOverrides, 'documentTemplateId', templateId);
+    const saved = await saveDesign({
+      appearanceOverrides: next.overrides,
+      appearanceOverridesExplicit: true,
+      successMessage: 'La plantilla visual quedó guardada en este PDF.',
+    });
+    if (!saved) return;
+    appearanceProfileRef.current = next.profile;
+    setAppearanceProfile(next.profile);
+    setAppearanceOverrides(next.overrides);
+    setAppearanceOverridesExplicit(true);
   };
   const createDesign = () => {
     if (!hasActiveBranchScope || !canCreate) return;
@@ -992,8 +1039,8 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                   key={template.id}
                   type="button"
                   aria-pressed={selected}
-                  onClick={() => updateAppearance('documentTemplateId', template.id)}
-                  disabled={appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive}
+                  onClick={() => void selectAppearanceTemplate(template.id)}
+                  disabled={(appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive) || isSavingAppearance || isSaving}
                   className={cn('w-full rounded-xl border p-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60', selected ? 'border-primary/60 bg-primary/5' : 'border-border/50 hover:border-primary/40')}
                 >
                   <div className="flex items-center gap-2.5">
@@ -1013,6 +1060,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
                 </button>;
               })}
             </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">Al elegir una plantilla, se guarda de inmediato en el alcance seleccionado.</p>
             <section className="mt-4 space-y-3 border-t border-border/50 pt-4" aria-labelledby="pdf-curated-templates-heading">
               <div className="space-y-2">
                 <div className="min-w-0"><h3 id="pdf-curated-templates-heading" className="text-xs font-semibold">Plantillas de la sucursal</h3><p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Paquetes de diseño con archivos y fuentes locales. Al instalarlos se abre una muestra y quedan como borrador.</p></div>
