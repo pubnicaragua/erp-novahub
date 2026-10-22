@@ -17,11 +17,12 @@ type PdfLivePreviewProps = {
   onToggleExpanded?: () => void;
   onHelp?: () => void;
   onSave?: () => void;
+  saveLabel?: string;
   saveDisabled?: boolean;
   isSaving?: boolean;
 };
 
-export function PdfLivePreview({ sourceUrl, title, isGenerating = false, error = '', isExpanded = false, onToggleExpanded, onHelp, onSave, saveDisabled = false, isSaving = false }: PdfLivePreviewProps) {
+export function PdfLivePreview({ sourceUrl, title, isGenerating = false, error = '', isExpanded = false, onToggleExpanded, onHelp, onSave, saveLabel = 'Guardar', saveDisabled = false, isSaving = false }: PdfLivePreviewProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
@@ -140,7 +141,7 @@ export function PdfLivePreview({ sourceUrl, title, isGenerating = false, error =
         <Button type="button" variant="ghost" size="icon" className="size-8 cursor-pointer" title="Acercar" aria-label="Acercar" onClick={() => setZoomPercent(value => Math.min(180, value + 10))} disabled={zoomPercent >= 180}><ZoomIn className="size-4" /></Button>
         <Button type="button" variant="outline" size="sm" className="ml-1 h-8 cursor-pointer px-2" title="Ajustar al ancho" onClick={() => setZoomPercent(100)}>Ajustar</Button>
         {onHelp && <Button type="button" variant="outline" size="sm" className="h-8 cursor-pointer gap-1.5 px-2" onClick={onHelp} aria-label="Cómo configurar documentos PDF"><WandSparkles className="size-3.5" /><span>Ayuda</span></Button>}
-        {onSave && <Button type="button" size="sm" className="h-8 cursor-pointer gap-1.5 px-2" data-tour="pdf-save" onClick={onSave} disabled={saveDisabled || isSaving}>{isSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}<span>Guardar</span></Button>}
+        {onSave && <Button type="button" size="sm" className="h-8 cursor-pointer gap-1.5 px-2" data-tour="pdf-save" onClick={onSave} disabled={saveDisabled || isSaving}>{isSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}<span>{saveLabel}</span></Button>}
         {onToggleExpanded && <Button type="button" variant="outline" size="sm" className="h-8 cursor-pointer gap-1.5 px-2" title={isExpanded ? 'Volver a mostrar configuraciones' : 'Ampliar documento'} onClick={onToggleExpanded}>{isExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}<span>{isExpanded ? 'Volver' : 'Ampliar'}</span></Button>}
       </div>
     </div>

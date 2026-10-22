@@ -130,7 +130,7 @@ const PDF_DESIGN_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="pdf-company-identity"]', title: 'Identidad de empresa', description: 'El nombre, logotipo y contacto se comparten entre los PDF de esta sucursal. La composición del encabezado se elige por documento.', placement: 'bottom' },
   { target: '[data-tour="pdf-footer-settings"]', title: 'Texto del pie', description: 'Define el texto y la numeración del documento.', placement: 'bottom' },
   { target: '[data-tour="pdf-fields"]', title: 'Datos del ERP', description: 'Activa o desactiva la información dinámica que se imprime, sin cambiar su orden ni su estructura.', placement: 'left' },
-  { target: '[data-tour="pdf-save"]', title: 'Guardar', description: 'Guarda estos datos para la vista asignada y la sucursal activa.', placement: 'bottom' },
+  { target: '[data-tour="pdf-save"]', title: 'Guardar', description: 'Guarda la plantilla seleccionada para la sucursal o el diseño del PDF.', placement: 'bottom' },
 ];
 
 const CURATED_TARGET_SET = new Set<string>(PDF_CURATED_TEMPLATE_TARGETS);
@@ -562,6 +562,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const isAppearanceTemplateSelectionPending = appearanceScope === 'branch'
     ? selectedAppearanceTemplateId !== (savedAppearanceProfileRef.current.documentTemplateId || 'default-v1')
     : appearanceOverrides.documentTemplateId !== savedDocumentTemplateId;
+  const shouldSaveBranchTemplate = appearanceScope === 'branch' && isAppearanceTemplateSelectionPending;
   const update = <K extends keyof PdfSettings>(key: K, value: PdfSettings[K]) => { if (canModifyActive) setSettings(prev => ({ ...prev, [key]: value })); };
   const updateAppearance = (key: PdfAppearanceDraftKey, value: unknown) => {
     const canChange = appearanceScope === 'branch' ? canEditCompanyProfile : canModifyActive;
@@ -1154,7 +1155,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         <Card className={cn('flex min-w-0 flex-col overflow-hidden', isPreviewExpanded ? 'min-h-[640px] xl:min-h-[min(90vh,1400px)]' : 'min-h-[580px] xl:min-h-[min(82vh,1100px)]')}>
           <CardHeader className="shrink-0 border-b border-border/50 py-3"><div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="flex min-w-0 items-center gap-2 truncate text-sm"><FileText className="size-4 shrink-0 text-primary" /><span className="truncate">Diseño PDF · {selectedTarget.label}</span></CardTitle><CardDescription className="truncate text-xs">{name || 'Diseño sin nombre'} · {selectedTarget.moduleLabel} · {hasActiveBranchScope ? activeBranchLabel : 'Selecciona una sucursal para guardar'}</CardDescription></div><div className="flex shrink-0 items-center gap-1.5"><Badge variant="outline" className="text-[10px]">{activeId === 'draft' ? 'Borrador' : 'Guardado'}</Badge><Badge variant="outline" className="text-[10px]">{settings.paperSize} · {settings.orientation === 'portrait' ? 'Vertical' : 'Horizontal'}</Badge></div></div></CardHeader>
           <CardContent className="relative flex min-h-0 flex-1 flex-col p-2">
-            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onSave={() => void saveDesign()} saveDisabled={!hasActiveBranchScope || !canModifyActive || isSaving} isSaving={isSaving} />
+            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onSave={() => void (shouldSaveBranchTemplate ? saveAppearanceProfile() : saveDesign())} saveLabel={shouldSaveBranchTemplate ? 'Guardar plantilla' : 'Guardar diseño'} saveDisabled={!hasActiveBranchScope || (shouldSaveBranchTemplate ? !canEditCompanyProfile : !canModifyActive)} isSaving={isSavingAppearance || isSaving} />
           </CardContent>
         </Card>
       </main>
