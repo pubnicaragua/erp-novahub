@@ -3035,7 +3035,10 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
       width: Number((section as ConfiguredReportSectionInput & { widths?: number[] }).widths?.[columnIndex]) || 100 / Math.max(section.headers.length, 1),
       align: reportTemplateColumnAlign(header),
     }));
-    const rows = section.rows.map(row => Object.fromEntries(columns.map((column, columnIndex) => [column.token, row[columnIndex] ?? '—'])));
+    const rows = section.rows.map(row => Object.fromEntries(columns.map((column, columnIndex) => {
+      const value = row[columnIndex] ?? '—';
+      return [column.token, /estado|status/i.test(column.label) ? pdfStatusLabel(value) : value];
+    })));
     return { id: section.id || `report-section-${sectionIndex + 1}`, title: section.title, columns, rows, color: section.color };
   });
   if (!reportSections.length && !kpis?.length && !charts?.length) {
@@ -3259,13 +3262,10 @@ export async function generateJournalPDF({
   format?: PdfDownloadFormat;
 }) {
   const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
-  const statusLabel = filterStatus && filterStatus !== 'ALL' ? ` · Estado: ${filterStatus}` : '';
+  const statusLabel = filterStatus && filterStatus !== 'ALL' ? ` · Estado: ${pdfStatusLabel(filterStatus)}` : '';
   const title = `Libro Diario${period ? ` · ${period}` : ''}${statusLabel}`;
   const formatAmount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const formatStatus = (value: unknown) => {
-    const s = String(value || '').toUpperCase();
-    return s === 'DRAFT' ? 'BORRADOR' : s === 'POSTED' ? 'CONTABILIZADO' : s === 'VOIDED' ? 'ANULADO' : s;
-  };
+  const formatStatus = (value: unknown) => pdfStatusLabel(value).toUpperCase();
   const doc = await generateConfiguredReportTemplate({
     targetKey: 'contabilidad.journal',
     title,

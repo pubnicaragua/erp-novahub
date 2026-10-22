@@ -201,7 +201,50 @@ const PDF_STATUS_LABELS: Record<string, string> = {
   NO_APLICA: 'No aplica',
   ERROR: 'Error',
   WARNING: 'Advertencia',
+  BLOCKED: 'Bloqueada',
+  WAITING_APPROVAL: 'Pendiente de aprobación',
+  WAITING_FOR_APPROVAL: 'Pendiente de aprobación',
+  PENDING_PAYMENT: 'Pendiente de pago',
+  UNPAID: 'Sin pagar',
+  NO_SHOW: 'No se presentó',
+  CHECKED_IN: 'Entrada registrada',
+  CHECKED_OUT: 'Salida registrada',
+  CREATED: 'Creado',
+  AUTHORIZED: 'Autorizado',
+  DECLINED: 'Rechazada',
+  PUBLISHED: 'Publicado',
+  PLANNED: 'Planificado',
+  COMMITTED: 'Comprometido',
+  EXECUTED: 'Ejecutado',
+  COMPLETED_MANUAL: 'Completado manualmente',
+  ASSIGNED: 'Asignado',
+  IN_REPAIR: 'En reparación',
+  EARNED: 'Devengada',
+  PAID_IN_PAYROLL: 'Pagada en nómina',
+  QUEUED: 'En cola',
+  READ: 'Leído',
+  DISBURSED: 'Desembolsado',
+  QUOTED: 'Cotizada',
+  ATTENDED: 'Atendida',
+  PREPARING: 'En preparación',
+  OUT_FOR_DELIVERY: 'En reparto',
+  VISITED: 'Visitado',
+  INTERESTED: 'Interesado',
+  DEMO: 'Demostración',
+  NEGOTIATION: 'En negociación',
+  CLIENT: 'Cliente',
+  DISCARDED: 'Descartado',
+  CUSTOMS: 'En aduana',
+  RETURNED: 'Devuelto',
+  ON_HOLD: 'En espera',
+  LOST: 'Extraviado',
+  RECEIVED_AT_WAREHOUSE: 'Recibido en bodega',
+  CONSOLIDATED: 'Consolidado',
+  CUSTOMS_CLEARANCE: 'Despacho aduanero',
+  TODO: 'Por hacer',
 };
+
+const PDF_STATUS_OUTPUT_KEYS = new Set(Object.values(PDF_STATUS_LABELS).map(statusKey));
 
 function statusKey(value: string) {
   return value
@@ -219,8 +262,8 @@ export function pdfStatusLabel(value: unknown, fallback = 'Estado no especificad
   const translated = PDF_STATUS_LABELS[statusKey(raw)];
   if (translated) return translated;
 
-  // Un valor libre ya escrito como texto se conserva; un enum desconocido no
-  // debe filtrarse al PDF en inglés ni con guiones bajos.
-  if (!/^[A-Z0-9_ -]+$/.test(raw)) return raw;
+  // Acepta etiquetas ya traducidas para que la función sea idempotente.
+  // Los enums desconocidos no deben filtrarse al PDF en inglés.
+  if (PDF_STATUS_OUTPUT_KEYS.has(statusKey(raw))) return raw;
   return fallback;
 }

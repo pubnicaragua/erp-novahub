@@ -4,6 +4,8 @@
  * Soporta: listas/reportes, documentos de venta, documentos de compra.
  */
 
+import { pdfStatusLabel } from './pdfStatus';
+
 // ── Helpers ──────────────────────────────────────────────────
 
 export function esc(value: unknown): string {
@@ -161,7 +163,7 @@ export function generateDocumentHtml(data: DocPrintData): string {
     ],
     [
       { label: 'Nº Documento', value: number },
-      ...(status ? [{ label: 'Estado', value: status }] : []),
+      ...(status ? [{ label: 'Estado', value: pdfStatusLabel(status) }] : []),
     ]
   );
 

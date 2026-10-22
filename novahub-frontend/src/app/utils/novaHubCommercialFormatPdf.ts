@@ -5,6 +5,7 @@ import { getBase64Image } from './export-utils';
 import { resolveActiveBrandColor, resolveActiveBrandLogo } from './novaHubFormatPdf';
 import { getSalesAdditionalCharges } from './salesCharges';
 import { buildSalesPdfFileName } from './exportFileNames';
+import { pdfStatusLabel } from './pdfStatus';
 import { isEstimateCustomFieldExpired, normalizeEstimateImages } from '../types';
 
 export interface GenerateNovaHubCommercialPDFParams {
@@ -447,32 +448,7 @@ function translateSalesStatus(status: unknown, documentType: string): string {
   const s = String(status || '').trim().toUpperCase();
   if (!s) return '';
   if (s === 'PAID' && documentType === 'credit-note') return 'Cancelado';
-  const map: Record<string, string> = {
-    DRAFT: 'Borrador',
-    IN_PROCESS: 'En proceso',
-    IN_PROGRESS: 'En proceso',
-    SENT: 'Enviada',
-    APPROVED: 'Aprobada',
-    CONFIRMED: 'Confirmada',
-    DELIVERED: 'Entregada',
-    SHIPPED: 'Enviada',
-    CONVERTED_TO_ORDER: 'Convertida a orden',
-    PAID: 'Pagada',
-    PARTIAL: 'Pago parcial',
-    PENDING: 'Pendiente',
-    CREDIT: 'A crédito',
-    OVERDUE: 'Vencida',
-    ACTIVE: 'Activa',
-    PAUSED: 'Pausada',
-    EXPIRED: 'Vencida',
-    PROCESSED: 'Aplicada',
-    APPLIED: 'Aplicada',
-    ISSUED: 'Emitida',
-    CANCELLED: 'Anulada',
-    VOIDED: 'Anulada',
-    REJECTED: 'Rechazada',
-  };
-  return map[s] || String(status);
+  return pdfStatusLabel(status, '');
 }
 
 function translatePaymentMethod(method: unknown): string {

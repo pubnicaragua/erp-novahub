@@ -6,6 +6,7 @@ import type {
 } from '../services/customer-portal.service';
 import { generateConfiguredReportSectionsPDF } from './pdfGenerator';
 import { buildDatedDownloadFileName } from './exportFileNames';
+import { pdfStatusLabel } from './pdfStatus';
 
 type PortalSalesRow = Record<string, any>;
 
@@ -49,20 +50,7 @@ const dateLabel = (value: unknown) => {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
-const statusLabel = (value: unknown) => {
-  const normalized = String(value || '').toUpperCase();
-  const labels: Record<string, string> = {
-    PAID: 'Pagada',
-    PARTIALLY_PAID: 'Pagada parcialmente',
-    ISSUED: 'Emitida',
-    POSTED: 'Registrada',
-    OPEN: 'Pendiente',
-    OVERDUE: 'Vencida',
-    CANCELLED: 'Cancelada',
-    DRAFT: 'Borrador',
-  };
-  return labels[normalized] || normalized.replace(/_/g, ' ').toLowerCase() || 'Sin estado';
-};
+const statusLabel = (value: unknown) => pdfStatusLabel(value, 'Sin estado');
 
 const attributesLabel = (attributes: CustomerPortalInventoryVariant['attributes']) => attributes.length
   ? attributes.map((attribute) => `${attribute.attributeName || attribute.name || 'Atributo'}: ${attribute.value || '—'}`).join(' · ')
