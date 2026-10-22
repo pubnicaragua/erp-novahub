@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, ChevronDown, RotateCcw, Save, SwatchBook, Type } from 'lucide-react';
+import { Check, ChevronDown, RotateCcw, SwatchBook, Type } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -203,19 +203,16 @@ export interface PdfAppearanceSettingsPanelProps {
   effective: Record<string, any>;
   canEditBranch: boolean;
   canEditDocument: boolean;
-  hasBranchProfile: boolean;
-  isSavingBranch: boolean;
   hasImportedHtmlHeader?: boolean;
   onScopeChange: (scope: PdfAppearanceDraftScope) => void;
   onChange: (key: PdfAppearanceDraftKey, value: unknown) => void;
   onReset: (key: PdfAppearanceDraftKey) => void;
   onResetAll: () => void;
-  onSaveBranch: () => void;
 }
 
 export function PdfAppearanceSettingsPanel({
-  scope, profile, overrides, effective, canEditBranch, canEditDocument, hasBranchProfile, isSavingBranch,
-  hasImportedHtmlHeader = false, onScopeChange, onChange, onReset, onResetAll, onSaveBranch,
+  scope, profile, overrides, effective, canEditBranch, canEditDocument,
+  hasImportedHtmlHeader = false, onScopeChange, onChange, onReset, onResetAll,
 }: PdfAppearanceSettingsPanelProps) {
   const branchScope = scope === 'branch';
   const disabled = branchScope ? !canEditBranch : !canEditDocument;
@@ -273,8 +270,7 @@ export function PdfAppearanceSettingsPanel({
           </div>
         </section>)}
       </div>
-      {branchScope ? <div className="space-y-2 border-t border-border/50 pt-3"><Button type="button" className="w-full gap-2" onClick={onSaveBranch} disabled={!canEditBranch || isSavingBranch}>{isSavingBranch ? <span className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" /> : hasBranchProfile ? <Save className="size-4" /> : <Check className="size-4" />}{isSavingBranch ? 'Guardando apariencia…' : 'Guardar apariencia global'}</Button><p className="text-[10px] text-muted-foreground">Perfil compartido por los PDF de {`la sucursal activa`}.</p></div>
-        : <div className="space-y-2 border-t border-border/50 pt-3"><Button type="button" variant="outline" className="w-full gap-2" onClick={onResetAll} disabled={!canEditDocument || !Object.keys(overrides).length}><RotateCcw className="size-3.5" />Restablecer a apariencia global</Button><p className="text-[10px] text-muted-foreground">Guarda con el botón principal para conservar los cambios en este PDF.</p></div>}
+      {!branchScope && <div className="space-y-2 border-t border-border/50 pt-3"><Button type="button" variant="outline" className="w-full gap-2" onClick={onResetAll} disabled={!canEditDocument || !Object.keys(overrides).length}><RotateCcw className="size-3.5" />Restablecer a apariencia global</Button><p className="text-[10px] text-muted-foreground">Guarda con el botón del previsualizador para conservar los cambios en este PDF.</p></div>}
     </div>
   </details>;
 }

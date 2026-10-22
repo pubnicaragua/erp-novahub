@@ -81,6 +81,10 @@ export interface PdfAppearanceProfile {
   presetId?: PdfAppearancePreset;
   tableStyle?: PdfAppearancePreset;
   palette?: PdfAppearancePalette;
+  footerText?: string;
+  showPageNumber?: boolean;
+  pageNumberFormat?: 'page-of' | 'number-only' | 'custom';
+  pageNumberCustom?: string;
   curatedTemplates?: PdfCuratedTemplateSelections;
 }
 
@@ -126,7 +130,8 @@ const DEFAULT_STYLE_PALETTE: Record<PdfAppearancePaletteKey, string> = {
   tableHeader: '#01422c', tableHeaderText: '#ffffff', tableRow: '#ffffff', tableStripe: '#f8fafc', tableBorder: '#d7dee7',
 };
 const APPEARANCE_KEYS: readonly (PdfAppearanceDraftProperty | 'palette')[] = [
-  'documentTemplateId', 'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'presetId', 'tableStyle', 'palette',
+  'documentTemplateId', 'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'presetId', 'tableStyle',
+  'footerText', 'showPageNumber', 'pageNumberFormat', 'pageNumberCustom', 'palette',
 ];
 
 /** Discards values from an outdated/corrupt profile; API validation remains authoritative. */
@@ -143,6 +148,12 @@ export function normalizePdfAppearanceProfile(value: unknown): PdfAppearanceProf
   if (typeof fontSize === 'number' && Number.isFinite(fontSize) && fontSize >= PDF_APPEARANCE_FONT_SIZE_MIN && fontSize <= PDF_APPEARANCE_FONT_SIZE_MAX) profile.fontSize = fontSize;
   if (PRESETS.includes(source.presetId as PdfAppearancePreset)) profile.presetId = source.presetId as PdfAppearancePreset;
   if (PRESETS.includes(source.tableStyle as PdfAppearancePreset)) profile.tableStyle = source.tableStyle as PdfAppearancePreset;
+  if (typeof source.footerText === 'string') profile.footerText = source.footerText.slice(0, 500);
+  if (typeof source.showPageNumber === 'boolean') profile.showPageNumber = source.showPageNumber;
+  if (['page-of', 'number-only', 'custom'].includes(String(source.pageNumberFormat))) {
+    profile.pageNumberFormat = source.pageNumberFormat as PdfAppearanceProfile['pageNumberFormat'];
+  }
+  if (typeof source.pageNumberCustom === 'string') profile.pageNumberCustom = source.pageNumberCustom.slice(0, 120);
   if (source.templateId === PDF_DEFAULT_TEMPLATE_ID) profile.templateId = PDF_DEFAULT_TEMPLATE_ID;
   if (source.templateVersion === 1) profile.templateVersion = 1;
   if (source.curatedTemplates && typeof source.curatedTemplates === 'object' && !Array.isArray(source.curatedTemplates)) {
@@ -303,6 +314,10 @@ export function resolvePdfDesignAppearance(
     fontSize: Number(style.fontSize || settings.fontSize) || 9,
     presetId: String(style.presetId || settings.pdfStylePreset || 'light') as PdfAppearancePreset,
     tableStyle: String(style.tableStyle || settings.pdfTableStyle || 'light') as PdfAppearancePreset,
+    footerText: typeof settings.footerText === 'string' ? settings.footerText : '',
+    ...(typeof settings.showPageNumber === 'boolean' ? { showPageNumber: settings.showPageNumber } : {}),
+    ...(typeof settings.pageNumberFormat === 'string' ? { pageNumberFormat: settings.pageNumberFormat as PdfAppearanceProfile['pageNumberFormat'] } : {}),
+    ...(typeof settings.pageNumberCustom === 'string' ? { pageNumberCustom: settings.pageNumberCustom } : {}),
     palette: {
       primary: String(legacyPalette.primary || settings.primaryColor || DEFAULT_STYLE_PALETTE.primary),
       secondary: String(legacyPalette.secondary || settings.secondaryColor || DEFAULT_STYLE_PALETTE.secondary),
@@ -416,6 +431,10 @@ export function clearPdfAppearanceFallback(
     fontSize: ['fontSize'],
     presetId: ['pdfStylePreset'],
     tableStyle: ['pdfTableStyle', 'tableLayout'],
+    footerText: ['footerText'],
+    showPageNumber: ['showPageNumber'],
+    pageNumberFormat: ['pageNumberFormat'],
+    pageNumberCustom: ['pageNumberCustom'],
   };
   const paletteSettingKeys: Record<PdfAppearancePaletteKey, string> = {
     primary: 'primaryColor', secondary: 'secondaryColor', text: 'textColor', line: 'lineColor',

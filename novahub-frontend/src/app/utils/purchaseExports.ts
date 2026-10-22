@@ -202,7 +202,7 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
             { id: 'total', label: 'Total', token: 'total', width: 18, align: 'right' as const },
           ];
     const data: PdfTemplateData = {
-      company: { name: tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: settings.curatedTemplateSelection ? configuredLogo || tenantLogo : resolvedLogo },
+      company: { name: tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, footerText: typeof settings.footerText === 'string' ? settings.footerText : '', logo: settings.curatedTemplateSelection ? configuredLogo || tenantLogo : resolvedLogo },
       document: { title: document.title, number: document.number, date: document.date, status: document.status, notes: document.notes || '', extra: fieldSummary },
       supplier,
       party,

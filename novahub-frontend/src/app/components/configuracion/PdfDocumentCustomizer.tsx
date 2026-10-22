@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import {
-  Building2, Check, ChevronDown, Download, Eye, FileText, Folder, FolderPlus, ImagePlus, LayoutTemplate, Loader2, Save,
+  Building2, Check, ChevronDown, Download, Eye, FileText, Folder, FolderPlus, ImagePlus, LayoutTemplate, Loader2,
   PanelBottom, Pencil, Plus, Trash2, Upload
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -130,10 +130,12 @@ const PDF_DESIGN_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="pdf-company-identity"]', title: 'Identidad de empresa', description: 'El nombre, logotipo y contacto se comparten entre los PDF de esta sucursal. La composición del encabezado se elige por documento.', placement: 'bottom' },
   { target: '[data-tour="pdf-footer-settings"]', title: 'Texto del pie', description: 'Define el texto y la numeración del documento.', placement: 'bottom' },
   { target: '[data-tour="pdf-fields"]', title: 'Datos del ERP', description: 'Activa o desactiva la información dinámica que se imprime, sin cambiar su orden ni su estructura.', placement: 'left' },
-  { target: '[data-tour="pdf-save"]', title: 'Guardar', description: 'Guarda la plantilla seleccionada para la sucursal o el diseño del PDF.', placement: 'bottom' },
+  { target: '[data-tour="pdf-save"]', title: 'Guardar', description: 'Guarda el diseño de este PDF o confirma los cambios de apariencia para toda la sucursal, según el alcance seleccionado.', placement: 'bottom' },
 ];
 
 const CURATED_TARGET_SET = new Set<string>(PDF_CURATED_TEMPLATE_TARGETS);
+const PDF_FOOTER_APPEARANCE_KEYS = ['footerText', 'showPageNumber', 'pageNumberFormat', 'pageNumberCustom'] as const;
+const PDF_FOOTER_APPEARANCE_KEY_SET = new Set<string>(PDF_FOOTER_APPEARANCE_KEYS);
 const CURATED_PREVIEW_TARGET_PRIORITY = ['ventas.invoice', 'compras.supplier-invoice', 'ventas.estimate', 'ventas.order', 'compras.purchase-order', 'compras.purchase-record'];
 
 function preferredCuratedPreviewTarget(supportedTargets: string[]) {
@@ -201,7 +203,8 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const [appearanceOverridesExplicit, setAppearanceOverridesExplicit] = useState(false);
   const [appearanceScope, setAppearanceScope] = useState<PdfAppearanceDraftScope>('document');
   const [isSavingAppearance, setIsSavingAppearance] = useState(false);
-  const appearanceScopeChosen = useRef(false);
+  const [isSavingFooterProfile, setIsSavingFooterProfile] = useState(false);
+  const [globalSaveKind, setGlobalSaveKind] = useState<'appearance' | 'footer' | null>(null);
   const [companyProfile, setCompanyProfile] = useState<PdfCompanyProfile>(() => createDefaultPdfCompanyProfile(companyName, logo || ''));
   const [hasSavedCompanyProfile, setHasSavedCompanyProfile] = useState(false);
   const [isSavingCompanyProfile, setIsSavingCompanyProfile] = useState(false);
@@ -365,7 +368,6 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     setFolders([]);
     setCuratedTemplates([]);
     appearanceProfileRef.current = {};
-    appearanceScopeChosen.current = false;
     setAppearanceProfile({});
     setAppearanceOverrides({});
     setAppearanceOverridesExplicit(false);
@@ -412,7 +414,6 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       setAppearanceProfile(normalizedAppearanceProfile);
       setAppearanceOverrides({});
       setAppearanceOverridesExplicit(false);
-      if (!appearanceScopeChosen.current) setAppearanceScope(Object.keys(normalizedAppearanceProfile).length ? 'branch' : 'document');
       setHasSavedCompanyProfile(Boolean(savedCompanyProfile));
       setCompanyProfile(savedCompanyProfile || createDefaultPdfCompanyProfile(companyName, logo || ''));
       const editableRecords = (records || []).filter(record => !(record.documentTypes || []).some(type => getPdfTemplateTarget(type).branchCustomizable === false));
@@ -554,6 +555,10 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const selectedTargetEditable = canEditPdfTemplate(selectedTarget);
   const hasImportedHtmlHeader = Boolean(String((templateDefinition.metadata?.pdfStyleConfig as { htmlTemplate?: { headerHtml?: string } } | undefined)?.htmlTemplate?.headerHtml || '').trim());
   const canModifyActive = hasActiveBranchScope && selectedTargetEditable && (activeId === 'draft' ? canCreate : canEdit);
+  const footerAppearanceValues = appearanceScope === 'branch'
+    ? appearancePanelValues
+    : resolvedEditorAppearance.effective;
+  const canEditFooter = appearanceScope === 'branch' ? canEditCompanyProfile : canModifyActive;
   const activeDesign = designs.find(record => record.id === activeId);
   const savedDocumentTemplateId = (activeDesign?.settings?.appearanceOverrides as Partial<PdfAppearanceOverrides> | undefined)?.documentTemplateId;
   const selectedAppearanceTemplateId = appearanceScope === 'branch'
@@ -562,7 +567,6 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const isAppearanceTemplateSelectionPending = appearanceScope === 'branch'
     ? selectedAppearanceTemplateId !== (savedAppearanceProfileRef.current.documentTemplateId || 'default-v1')
     : appearanceOverrides.documentTemplateId !== savedDocumentTemplateId;
-  const shouldSaveBranchTemplate = appearanceScope === 'branch' && isAppearanceTemplateSelectionPending;
   const update = <K extends keyof PdfSettings>(key: K, value: PdfSettings[K]) => { if (canModifyActive) setSettings(prev => ({ ...prev, [key]: value })); };
   const updateAppearance = (key: PdfAppearanceDraftKey, value: unknown) => {
     const canChange = appearanceScope === 'branch' ? canEditCompanyProfile : canModifyActive;
@@ -581,7 +585,6 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     if (appearanceScope === 'document') setAppearanceOverridesExplicit(true);
   };
   const changeAppearanceScope = (scope: PdfAppearanceDraftScope) => {
-    appearanceScopeChosen.current = true;
     setAppearanceScope(scope);
   };
   const resetAppearanceOverride = (key: PdfAppearanceDraftKey) => {
@@ -634,23 +637,63 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   };
 
   const saveAppearanceProfile = async () => {
-    if (!canEditCompanyProfile || isSavingAppearance) return;
+    if (!canEditCompanyProfile || isSavingAppearance) return false;
     setIsSavingAppearance(true);
     try {
+      const footerDraft = Object.fromEntries(PDF_FOOTER_APPEARANCE_KEYS
+        .filter(key => appearanceProfile[key] !== undefined)
+        .map(key => [key, appearanceProfile[key]]));
       const editableProfile = Object.fromEntries(
-        Object.entries(appearanceProfile).filter(([key]) => !['templateId', 'templateVersion', 'curatedTemplates'].includes(key)),
+        Object.entries(appearanceProfile).filter(([key]) => !['templateId', 'templateVersion', 'curatedTemplates'].includes(key) && !PDF_FOOTER_APPEARANCE_KEY_SET.has(key)),
       ) as PdfAppearanceProfilePatch;
       const savedProfile = await pdfDocumentDesignService.updateAppearanceProfile(editableProfile);
-      appearanceProfileRef.current = savedProfile;
       savedAppearanceProfileRef.current = savedProfile;
-      setAppearanceProfile(savedProfile);
+      const nextDraft = { ...savedProfile, ...footerDraft };
+      appearanceProfileRef.current = nextDraft;
+      setAppearanceProfile(nextDraft);
       clearPdfDesignCache();
       toast.success('Apariencia global guardada para los PDF de esta sucursal');
+      return true;
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo guardar la apariencia global');
+      return false;
     } finally {
       setIsSavingAppearance(false);
     }
+  };
+
+  const saveGlobalFooter = async () => {
+    if (!canEditCompanyProfile || isSavingFooterProfile) return false;
+    setIsSavingFooterProfile(true);
+    try {
+      const footerPatch: PdfAppearanceProfilePatch = {
+        footerText: String(appearancePanelValues.footerText ?? ''),
+        showPageNumber: Boolean(appearancePanelValues.showPageNumber),
+        pageNumberFormat: (appearancePanelValues.pageNumberFormat || 'page-of') as PdfAppearanceProfilePatch['pageNumberFormat'],
+        pageNumberCustom: String(appearancePanelValues.pageNumberCustom ?? ''),
+      };
+      const savedProfile = await pdfDocumentDesignService.updateAppearanceProfile(footerPatch);
+      const generalDraft = Object.fromEntries(Object.entries(appearanceProfile)
+        .filter(([key]) => !PDF_FOOTER_APPEARANCE_KEY_SET.has(key)));
+      const nextDraft = { ...savedProfile, ...generalDraft };
+      savedAppearanceProfileRef.current = savedProfile;
+      appearanceProfileRef.current = nextDraft;
+      setAppearanceProfile(nextDraft);
+      clearPdfDesignCache();
+      toast.success('Datos globales del pie de página guardados para los PDF de esta sucursal');
+      return true;
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudieron guardar los datos globales del pie de página');
+      return false;
+    } finally {
+      setIsSavingFooterProfile(false);
+    }
+  };
+
+  const confirmGlobalSave = async () => {
+    if (!globalSaveKind) return;
+    const saved = globalSaveKind === 'footer' ? await saveGlobalFooter() : await saveAppearanceProfile();
+    if (saved) setGlobalSaveKind(null);
   };
 
   const showPdfPreviewBlob = (blob: Blob, title?: string) => {
@@ -881,40 +924,6 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       return true;
     } catch (error: any) { toast.error(error?.message || 'No se pudo guardar el diseño'); return false; } finally { setIsSaving(false); }
   };
-  const saveAppearanceTemplate = async () => {
-    if (appearanceScope === 'branch') {
-      if (!canEditCompanyProfile || isSavingAppearance || isSaving) return;
-      setIsSavingAppearance(true);
-      try {
-        const templateId = appearanceProfile.documentTemplateId || 'default-v1';
-        const savedProfile = await pdfDocumentDesignService.updateAppearanceProfile({ documentTemplateId: templateId });
-        const nextProfile = {
-          ...savedProfile,
-          ...appearanceProfile,
-          ...(savedProfile.curatedTemplates ? { curatedTemplates: savedProfile.curatedTemplates } : {}),
-          documentTemplateId: templateId as PdfAppearanceProfilePatch['documentTemplateId'],
-        };
-        savedAppearanceProfileRef.current = { ...savedProfile, documentTemplateId: templateId as PdfAppearanceProfilePatch['documentTemplateId'] };
-        appearanceProfileRef.current = nextProfile;
-        setAppearanceProfile(nextProfile);
-        clearPdfDesignCache();
-        toast.success('La plantilla visual quedó guardada para esta sucursal.');
-      } catch (error: any) {
-        toast.error(error?.message || 'No se pudo guardar la plantilla visual.');
-      } finally {
-        setIsSavingAppearance(false);
-      }
-      return;
-    }
-
-    if (!canModifyActive || isSavingAppearance || isSaving) return;
-    const saved = await saveDesign({
-      appearanceOverrides,
-      appearanceOverridesExplicit: true,
-      successMessage: 'La plantilla visual quedó guardada en este PDF.',
-    });
-    if (saved) setAppearanceOverridesExplicit(true);
-  };
   const createDesign = () => {
     if (!hasActiveBranchScope || !canCreate) return;
     const nextDocumentType = firstAvailableDocumentType(documentType, 'draft');
@@ -1070,17 +1079,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
               })}
             </div>
             <div className="mt-3 space-y-2">
-              <p className="text-[10px] leading-relaxed text-muted-foreground">Selecciona una plantilla para verla en el PDF. El cambio se guarda solo cuando pulses el botón.</p>
-              <Button
-                type="button"
-                size="sm"
-                className="w-full cursor-pointer"
-                onClick={() => void saveAppearanceTemplate()}
-                disabled={isLoading || isSavingAppearance || isSaving || !isAppearanceTemplateSelectionPending || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)}
-              >
-                {isSavingAppearance || isSaving ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Save className="mr-1.5 size-3.5" />}
-                {appearanceScope === 'branch' ? 'Guardar para toda la sucursal' : `Guardar en ${selectedTarget.label}`}
-              </Button>
+              <p className="text-[10px] leading-relaxed text-muted-foreground">Selecciona una plantilla para verla en el PDF. Guárdala desde el previsualizador según el alcance elegido.</p>
             </div>
             <section className="mt-4 space-y-3 border-t border-border/50 pt-4" aria-labelledby="pdf-curated-templates-heading">
               <div className="space-y-2">
@@ -1155,7 +1154,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         <Card className={cn('flex min-w-0 flex-col overflow-hidden', isPreviewExpanded ? 'min-h-[640px] xl:min-h-[min(90vh,1400px)]' : 'min-h-[580px] xl:min-h-[min(82vh,1100px)]')}>
           <CardHeader className="shrink-0 border-b border-border/50 py-3"><div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="flex min-w-0 items-center gap-2 truncate text-sm"><FileText className="size-4 shrink-0 text-primary" /><span className="truncate">Diseño PDF · {selectedTarget.label}</span></CardTitle><CardDescription className="truncate text-xs">{name || 'Diseño sin nombre'} · {selectedTarget.moduleLabel} · {hasActiveBranchScope ? activeBranchLabel : 'Selecciona una sucursal para guardar'}</CardDescription></div><div className="flex shrink-0 items-center gap-1.5"><Badge variant="outline" className="text-[10px]">{activeId === 'draft' ? 'Borrador' : 'Guardado'}</Badge><Badge variant="outline" className="text-[10px]">{settings.paperSize} · {settings.orientation === 'portrait' ? 'Vertical' : 'Horizontal'}</Badge></div></div></CardHeader>
           <CardContent className="relative flex min-h-0 flex-1 flex-col p-2">
-            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onSave={() => void (shouldSaveBranchTemplate ? saveAppearanceProfile() : saveDesign())} saveLabel={shouldSaveBranchTemplate ? 'Guardar plantilla' : 'Guardar diseño'} saveDisabled={!hasActiveBranchScope || (shouldSaveBranchTemplate ? !canEditCompanyProfile : !canModifyActive)} isSaving={isSavingAppearance || isSaving} />
+            <PdfLivePreview sourceUrl={previewUrl} title={previewTitle || selectedTarget.label} isGenerating={isPreviewRendering} error={previewError} isExpanded={isPreviewExpanded} onToggleExpanded={() => { setActiveMobilePanel('preview'); setIsPreviewExpanded(value => !value); }} onHelp={() => setShowTutorial(true)} onSave={() => { if (appearanceScope === 'branch') setGlobalSaveKind('appearance'); else void saveDesign(); }} saveLabel={appearanceScope === 'branch' ? 'Guardar estos cambios' : 'Guardar diseño'} saveDisabled={!hasActiveBranchScope || (appearanceScope === 'branch' ? !canEditCompanyProfile : !canModifyActive)} isSaving={isSavingAppearance || isSavingFooterProfile || isSaving} />
           </CardContent>
         </Card>
       </main>
@@ -1168,14 +1167,11 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
           effective={appearancePanelValues as Record<string, any>}
           canEditBranch={canEditCompanyProfile}
           canEditDocument={canModifyActive}
-          hasBranchProfile={Object.keys(appearanceProfile).length > 0}
-          isSavingBranch={isSavingAppearance}
           hasImportedHtmlHeader={hasImportedHtmlHeader}
           onScopeChange={changeAppearanceScope}
           onChange={updateAppearance}
           onReset={resetAppearanceOverride}
           onResetAll={resetAllAppearanceOverrides}
-          onSaveBranch={() => void saveAppearanceProfile()}
         />}
         <details data-tour="pdf-company-identity" className="group rounded-lg border bg-card text-card-foreground shadow-none">
           <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-6 pb-3 pt-6 [&::-webkit-details-marker]:hidden">
@@ -1200,10 +1196,13 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
             <ChevronDown className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
           </summary>
           <CardContent className="space-y-3 pt-0">
-            <Field label="Texto del pie"><Textarea value={settings.footerText} onChange={event => update('footerText', event.target.value)} disabled={!canModifyActive} placeholder="Gracias por confiar en nosotros." rows={2} /></Field>
-            <ToggleRow label="Numeración" description="Muestra la página actual y el total" checked={settings.showPageNumber} onChange={value => update('showPageNumber', value)} disabled={!canModifyActive} />
-            <Field label="Formato de página"><select value={settings.pageNumberFormat} onChange={event => update('pageNumberFormat', event.target.value as PdfSettings['pageNumberFormat'])} disabled={!canModifyActive} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="page-of">Página X de Y</option><option value="number-only">Solo número</option><option value="custom">Personalizado</option></select></Field>
-            {settings.pageNumberFormat === 'custom' && <Field label="Formato personalizado"><Input value={settings.pageNumberCustom} onChange={event => update('pageNumberCustom', event.target.value)} disabled={!canModifyActive} placeholder="Página {page} de {pages}" /></Field>}
+            <Field label="Texto del pie"><Textarea value={String(footerAppearanceValues.footerText ?? '')} onChange={event => updateAppearance('footerText', event.target.value)} disabled={!canEditFooter} placeholder="Gracias por confiar en nosotros." rows={2} /></Field>
+            <ToggleRow label="Numeración" description="Muestra la página actual y el total" checked={Boolean(footerAppearanceValues.showPageNumber)} onChange={value => updateAppearance('showPageNumber', value)} disabled={!canEditFooter} />
+            <Field label="Formato de página"><select value={String(footerAppearanceValues.pageNumberFormat || 'page-of')} onChange={event => updateAppearance('pageNumberFormat', event.target.value as PdfSettings['pageNumberFormat'])} disabled={!canEditFooter} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="page-of">Página X de Y</option><option value="number-only">Solo número</option><option value="custom">Personalizado</option></select></Field>
+            {footerAppearanceValues.pageNumberFormat === 'custom' && <Field label="Formato personalizado"><Input value={String(footerAppearanceValues.pageNumberCustom ?? '')} onChange={event => updateAppearance('pageNumberCustom', event.target.value)} disabled={!canEditFooter} placeholder="Página {page} de {pages}" /></Field>}
+            {appearanceScope === 'branch'
+              ? <div className="space-y-2 border-t border-border/50 pt-3"><Button type="button" className="w-full gap-2" onClick={() => setGlobalSaveKind('footer')} disabled={!canEditCompanyProfile || isSavingFooterProfile || isSavingAppearance}><PanelBottom className="size-4" />Guardar datos globales del pie de página</Button><p className="text-[10px] leading-relaxed text-muted-foreground">Se aplicará a los PDF de la sucursal que hereden esta configuración, después de confirmar.</p></div>
+              : <p className="border-t border-border/50 pt-3 text-[10px] leading-relaxed text-muted-foreground">Los cambios de este pie se guardan únicamente en el PDF con “Guardar diseño”.</p>}
           </CardContent>
         </details>
 
@@ -1226,6 +1225,20 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         </DialogContent>
       </Dialog>
 
+      <ConfirmDialog
+        open={Boolean(globalSaveKind)}
+        onOpenChange={open => { if (!open && !isSavingAppearance && !isSavingFooterProfile) setGlobalSaveKind(null); }}
+        title={globalSaveKind === 'footer' ? '¿Guardar el pie para toda la sucursal?' : '¿Guardar cambios para toda la sucursal?'}
+        description={globalSaveKind === 'footer'
+          ? 'El texto y la numeración se aplicarán a todos los PDF de esta sucursal que hereden la configuración del pie.'
+          : 'La plantilla visual, composición, espaciado, tipografía y colores se aplicarán a los PDF de esta sucursal que hereden esos valores.'}
+        confirmLabel="Guardar para toda la sucursal"
+        cancelLabel="Cancelar"
+        variant="warning"
+        loading={isSavingAppearance || isSavingFooterProfile}
+        closeOnConfirm={false}
+        onConfirm={confirmGlobalSave}
+      />
       <ConfirmDialog open={Boolean(deleteTarget)} onOpenChange={open => { if (!open && !isDeleting) setDeleteTarget(null); }} title={deleteTarget?.kind === 'design' ? '¿Eliminar plantilla?' : '¿Eliminar carpeta?'} description={deleteTarget?.kind === 'design' ? `La plantilla «${deleteTarget.record.name}» y sus archivos asociados se eliminarán. Esta acción no se puede deshacer.` : `La carpeta «${deleteTarget?.record.name || ''}» se eliminará; sus plantillas quedarán sin carpeta.`} confirmLabel="Eliminar" cancelLabel="Cancelar" variant="destructive" loading={isDeleting} onConfirm={confirmDeletion} />
       {showTutorial && <GuidedTour steps={PDF_DESIGN_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Documentos PDF" allowTargetInteraction />}
   </div>;

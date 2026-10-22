@@ -2832,6 +2832,7 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
       email: settings.email || sourceCompany.email,
       slogan: settings.slogan || sourceCompany.slogan,
       website: settings.website || sourceCompany.website,
+      footerText: typeof settings.footerText === 'string' ? settings.footerText : sourceCompany.footerText,
       logo: resolvedLogo,
     },
   };
