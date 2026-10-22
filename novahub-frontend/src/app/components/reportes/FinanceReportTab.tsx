@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart, BarChart, Line, Bar, Area, Cell, LabelList } from 'recharts';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Label } from '../ui/label';
 import { invoicesService, paymentsService } from '../../services/ventas.service';
 import { billsService, paymentsMadeService } from '../../services/compras.service';
 import { incomeService, expensesService, recurringIncomesService, recurringExpensesService } from '../../services/finanzas.service';
@@ -508,11 +507,11 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   }, [raw, exchangeRate]);
 
   useImperativeHandle(ref, () => ({
-    exportPDF: async () => {
+    exportPDF: async (format) => {
       try {
         toast.info("Generando PDF financiero, por favor espere...");
         const pdfSettings = await getPdfDesignSettings('reportes.finance');
-        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'reportes.finance', format));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || user?.tenantName || 'Mi Empresa');
@@ -648,6 +647,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         }), [59, 130, 246]);
 
         const configured = await generateConfiguredReportSectionsPDF({
+          format,
           targetKey: 'reportes.finance', title: 'Reporte Financiero de Negocio', tenantName: companyName, tenantLogo: logoUrl,
           sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_finanzas'], 'pdf', dateRange), periodLabel: rangeLabel,
         });

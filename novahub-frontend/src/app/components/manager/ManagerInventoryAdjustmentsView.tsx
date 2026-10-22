@@ -16,6 +16,7 @@ import { managerStatusLabel } from '../../utils/managerLabels';
 import { ExportMenu } from '../ui/ExportMenu';
 import { exportManagerReportExcel, exportManagerReportPdf } from '../../utils/managerReportExport';
 import { buildManagerReportFilterSummary, buildManagerReportScopeSummary } from '../../utils/managerReportModel';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type WarehouseOption = { id: string; name: string; scopeType: string; clientTenantId: string | null; businessUnitId?: string | null; authorizedBranchIds?: string[] };
@@ -115,7 +116,7 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
   const resetPage = () => setPage(1);
   const updateFilter = (setter: (value: string) => void, value: string) => { setter(value); resetPage(); };
 
-  const exportReport = async (format: 'xlsx' | 'pdf' = 'xlsx') => {
+  const exportReport = async (format: 'xlsx' | PdfDownloadFormat = 'xlsx') => {
     if (!canExport) return;
     setExporting(true);
     try {
@@ -148,8 +149,8 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
         metrics: report.metrics,
         rows: exportRows,
       };
-      if (format === 'pdf') await exportManagerReportPdf(options);
-      else await exportManagerReportExcel(options);
+      if (format === 'xlsx') await exportManagerReportExcel(options);
+      else await exportManagerReportPdf({ ...options, pdfFormat: format === 'pdf' ? 'letter' : format });
     } finally {
       setExporting(false);
     }
@@ -181,7 +182,7 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
           <h3 className="truncate text-2xl font-black uppercase italic tracking-tight sm:text-3xl">Ajustes</h3>
         </div>
         <div className="flex flex-wrap gap-2">
-          <ExportMenu disabled={exporting || query.isLoading} onPdf={() => void exportReport('pdf')} onExcel={() => void exportReport('xlsx')} pdfDescription="PDF del consolidado de ajustes" excelDescription="Todos los ajustes filtrados" />
+          <ExportMenu disabled={exporting || query.isLoading} onPdf={(paperFormat) => void exportReport(paperFormat)} onExcel={() => void exportReport('xlsx')} pdfDescription="PDF del consolidado de ajustes" excelDescription="Todos los ajustes filtrados" />
         </div>
       </div>}
 

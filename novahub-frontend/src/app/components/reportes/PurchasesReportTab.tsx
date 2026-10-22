@@ -5,7 +5,6 @@ import { billsService, paymentsMadeService, supplierCreditsService, purchaseOrde
 import { contabilidadService } from '../../services/contabilidad.service';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Label } from '../ui/label';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
@@ -935,11 +934,11 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   };
 
   useImperativeHandle(ref, () => ({
-    exportPDF: async () => {
+    exportPDF: async (format) => {
       try {
         toast.info('Generando PDF (Compras)...');
         const pdfSettings = await getPdfDesignSettings('reportes.purchases');
-        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'reportes.purchases', format));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || user?.tenantName || 'Mi Empresa');
@@ -1085,6 +1084,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         renderSection('Detalle de retenciones', ['Factura', 'Proveedor', 'Tipo', 'Base', 'Monto', 'Estado'], retenciones.list.slice(0, 24).map(retention => [retention.factura || '—', retention.proveedor, retention.tipo, money(retention.base), money(retention.monto), pdfStatusLabel(retention.estado, 'Registrada')]), [245, 158, 11]);
 
         const configured = await generateConfiguredReportSectionsPDF({
+          format,
           targetKey: 'reportes.purchases', title: 'Reporte de Compras', tenantName: companyName, tenantLogo: logoUrl,
           sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_compras'], 'pdf', dateRange), periodLabel: rangeLabel,
         });

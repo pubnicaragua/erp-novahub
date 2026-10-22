@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Truck, Plus, Search, Edit, Star, Download, Phone, Mail, Building2, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
+import { Plus, Search, Edit, Star, Phone, Mail, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -16,8 +16,9 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { toast } from '@/app/services/toast';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
+import { ExportMenu } from './ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 
 export function ProveedoresPage() {
@@ -67,7 +68,7 @@ export function ProveedoresPage() {
     (p.contactName || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const exportSuppliers = async (format: 'pdf' | 'xlsx') => {
+  const exportSuppliers = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter') => {
     if (!canPerform('PURCHASES_PROVIDERS', 'export')) return;
     const exportResponse = await suppliersService.getAll({
       search: searchTerm.trim() || undefined,
@@ -97,6 +98,7 @@ export function ProveedoresPage() {
           periodLabel: `Registros filtrados: ${rows.length}`,
           sections: [{ id: 'purchase-suppliers', title: 'Proveedores', headers: Object.keys(rows[0]), rows: rows.map((row) => Object.values(row)) }],
           fileName: buildDatedDownloadFileName(['reporte_proveedores'], 'pdf'),
+          format: paperFormat,
         });
       }
       toast.success(`Reporte de proveedores exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
@@ -151,13 +153,7 @@ export function ProveedoresPage() {
       <CurrencyValuationBanner />
       <div className="flex min-w-0 justify-end">
         <div className="flex flex-wrap items-center gap-2">
-          {canPerform('PURCHASES_PROVIDERS', 'export') && <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar <ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="rounded-xl">
-              <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportSuppliers('pdf')}><FileText className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportSuppliers('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>}
+          {canPerform('PURCHASES_PROVIDERS', 'export') && <ExportMenu onPdf={(paperFormat) => void exportSuppliers('pdf', paperFormat)} onExcel={() => void exportSuppliers('xlsx')} />}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {canPerform('PURCHASES_PROVIDERS', 'create') && (
               <DialogTrigger asChild>

@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from './dropdown-menu';
 import type { PaperSize } from '../../hooks/useBrowserPrint';
+import { PDF_DOWNLOAD_OPTIONS } from '../../utils/pdfDownloadFormats';
 
 interface PrintButtonProps {
   onPrint: (paperSize: PaperSize) => void;
@@ -22,12 +23,6 @@ interface PrintButtonProps {
   includeRoll?: boolean;
 }
 
-const PAPER_OPTIONS: { label: string; value: PaperSize; description: string; group: 'standard' | 'roll' }[] = [
-  { label: 'Carta', value: 'letter', description: '8.5" × 11"', group: 'standard' },
-  { label: 'Rollo 80mm', value: 'roll-80', description: 'Papel continuo', group: 'roll' },
-  { label: 'Rollo 58mm', value: 'roll-58', description: 'Papel continuo', group: 'roll' },
-];
-
 export function PrintButton({
   onPrint,
   label = 'Imprimir',
@@ -36,7 +31,6 @@ export function PrintButton({
   size = 'sm',
   disabled = false,
   showDropdown = true,
-  includeRoll = false,
 }: PrintButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -56,9 +50,8 @@ export function PrintButton({
     );
   }
 
-  const standardOptions = PAPER_OPTIONS.filter((o) => o.group === 'standard');
-  const rollOptions = PAPER_OPTIONS.filter((o) => o.group === 'roll');
-  const visibleOptions = includeRoll ? PAPER_OPTIONS : standardOptions;
+  const standardOptions = PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'standard');
+  const rollOptions = PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'roll');
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
@@ -76,32 +69,8 @@ export function PrintButton({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
-        {includeRoll ? (
-          <>
-            {standardOptions.map((option) => (
-              <DropdownMenuItem
-                key={option.value}
-                onClick={() => onPrint(option.value)}
-                className="flex items-center justify-between gap-3"
-              >
-                <span className="font-medium">{option.label}</span>
-                <span className="text-[10px] text-muted-foreground">{option.description}</span>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            {rollOptions.map((option) => (
-              <DropdownMenuItem
-                key={option.value}
-                onClick={() => onPrint(option.value)}
-                className="flex items-center justify-between gap-3"
-              >
-                <span className="font-medium">{option.label}</span>
-                <span className="text-[10px] text-muted-foreground">{option.description}</span>
-              </DropdownMenuItem>
-            ))}
-          </>
-        ) : (
-          visibleOptions.map((option) => (
+        <>
+          {standardOptions.map((option) => (
             <DropdownMenuItem
               key={option.value}
               onClick={() => onPrint(option.value)}
@@ -110,8 +79,19 @@ export function PrintButton({
               <span className="font-medium">{option.label}</span>
               <span className="text-[10px] text-muted-foreground">{option.description}</span>
             </DropdownMenuItem>
-          ))
-        )}
+          ))}
+          <DropdownMenuSeparator />
+          {rollOptions.map((option) => (
+            <DropdownMenuItem
+              key={option.value}
+              onClick={() => onPrint(option.value as PaperSize)}
+              className="flex items-center justify-between gap-3"
+            >
+              <span className="font-medium">{option.label}</span>
+              <span className="text-[10px] text-muted-foreground">{option.description}</span>
+            </DropdownMenuItem>
+          ))}
+        </>
       </DropdownMenuContent>
     </DropdownMenu>
   );

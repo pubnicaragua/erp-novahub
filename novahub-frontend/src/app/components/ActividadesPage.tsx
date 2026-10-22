@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Activity, ListTodo, CalendarDays, Bell, Database, Sparkles } from 'lucide-react';
-import { Badge } from './ui/badge';
+import { ListTodo, CalendarDays, Bell, Database } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { TareasView } from './actividades/TareasView';
@@ -18,6 +17,7 @@ import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefr
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
+import type { PdfDownloadFormat } from '../utils/pdfDownloadFormats';
 import { toast } from '../services/toast';
 
 interface ActividadesPageProps {
@@ -107,7 +107,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
     && canPerform(activeExportTarget.permission, 'view')
     && canPerform(activeExportTarget.permission, 'export'));
 
-  const exportActivities = async (format: 'pdf' | 'xlsx') => {
+  const exportActivities = async (format: 'pdf' | 'xlsx', paperFormat: PdfDownloadFormat = 'letter') => {
     if (!activeExportTarget || !canExportActive) return;
     const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de ${activeExportTarget.label}…`);
     try {
@@ -140,7 +140,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
       if (format === 'xlsx') {
         createReportWorkbook({ fileName: buildDatedDownloadFileName([`reporte_actividades_${activeTab}`], 'xlsx'), sheets: [{ name: activeExportTarget.label, rows }], filters: { Vista: activeExportTarget.label, Alcance: 'Todos los registros autorizados' } });
       } else {
-        await generateConfiguredReportSectionsPDF({ targetKey: activeExportTarget.targetKey, title: activeExportTarget.label, tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, fileName: buildDatedDownloadFileName([`reporte_actividades_${activeTab}`], 'pdf') });
+        await generateConfiguredReportSectionsPDF({ targetKey: activeExportTarget.targetKey, title: activeExportTarget.label, tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, format: paperFormat, fileName: buildDatedDownloadFileName([`reporte_actividades_${activeTab}`], 'pdf') });
       }
       toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`, { id: toastId });
     } catch (error: any) {
@@ -211,7 +211,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
               })}
             </TabsList>
             </div>
-            {canExportActive && <ExportMenu onPdf={() => void exportActivities('pdf')} onExcel={() => void exportActivities('xlsx')} className="shrink-0" pdfDescription="Plantilla configurada para esta vista" excelDescription="Todos los registros autorizados" />}
+            {canExportActive && <ExportMenu onPdf={(paperFormat) => void exportActivities('pdf', paperFormat)} onExcel={() => void exportActivities('xlsx')} className="shrink-0" pdfDescription="Plantilla configurada para esta vista" excelDescription="Todos los registros autorizados" />}
             </div>
             
             <AnimatePresence mode="wait">

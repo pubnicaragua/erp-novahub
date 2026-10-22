@@ -205,11 +205,11 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   }, [fInv, exchangeRate]);
 
   useImperativeHandle(ref, () => ({
-    exportPDF: async () => {
+    exportPDF: async (format) => {
       try {
         toast.info("Generando PDF (Clientes), por favor espere...");
         const pdfSettings = await getPdfDesignSettings('reportes.customers');
-        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'reportes.customers', format));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
@@ -279,6 +279,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         renderSection('Productos Estrella', ['Producto', 'Valor vendido', 'Unidades'], topProducts.map(product => [product.name, money(product.value), product.qty]), [245, 158, 11]);
 
         const configured = await generateConfiguredReportSectionsPDF({
+          format,
           targetKey: 'reportes.customers', title: 'Reporte de Clientes', tenantName: companyName, tenantLogo: logoUrl,
           sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_clientes'], 'pdf', dateRange), periodLabel: dateRange,
         });

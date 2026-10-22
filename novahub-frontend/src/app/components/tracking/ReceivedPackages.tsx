@@ -45,6 +45,7 @@ import { ExportMenu } from '../ui/ExportMenu';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 type View = 'list' | 'quick' | 'import';
 
@@ -146,7 +147,7 @@ export function ReceivedPackages() {
 
   const hasFilters = Object.values(filters).some((v) => Boolean(v));
 
-  const exportPackages = async (outputFormat: 'pdf' | 'xlsx') => {
+  const exportPackages = async (outputFormat: 'pdf' | 'xlsx', paperFormat: PdfDownloadFormat = 'letter') => {
     if (!canPerform('TRACKING_PACKAGES', 'export')) return;
     try {
       const response = await logisticsService.listReceivedPackages({ page: 1, pageSize: 5000, search: search || undefined, sortBy, sortOrder, ...filters, report: true, export: true });
@@ -160,7 +161,7 @@ export function ReceivedPackages() {
         Recibido: pkg.receivedAt ? format(new Date(pkg.receivedAt), 'dd/MM/yyyy', { locale: es }) : '—',
       }));
       if (outputFormat === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_tracking_paquetes'], 'xlsx'), sheets: [{ name: 'Paquetes', rows }], filters: { Búsqueda: search || '—', ...filters } });
-      else await generateConfiguredReportSectionsPDF({ targetKey: 'tracking.packages', title: 'Paquetes recibidos', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections: [{ id: 'packages', title: 'Paquetes recibidos', headers: Object.keys(rows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' }), rows: rows.length ? rows.map((row) => Object.values(row)) : [['Sin registros para el alcance seleccionado']] }], fileName: buildDatedDownloadFileName(['reporte_tracking_paquetes'], 'pdf') });
+      else await generateConfiguredReportSectionsPDF({ targetKey: 'tracking.packages', title: 'Paquetes recibidos', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections: [{ id: 'packages', title: 'Paquetes recibidos', headers: Object.keys(rows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' }), rows: rows.length ? rows.map((row) => Object.values(row)) : [['Sin registros para el alcance seleccionado']] }], format: paperFormat, fileName: buildDatedDownloadFileName(['reporte_tracking_paquetes'], 'pdf') });
       toast.success(`${outputFormat === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`);
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo exportar paquetes recibidos'));
@@ -194,7 +195,7 @@ export function ReceivedPackages() {
         </div>
         {canImportPackages && <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('quick')} data-tour="log-reception-quick"><Zap className="size-4" /> Recepción rápida</Button>}
         {canImportPackages && <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('import')} data-tour="log-reception-import"><Download className="size-4" /> Importar Excel</Button>}
-        {canPerform('TRACKING_PACKAGES', 'export') && <ExportMenu onPdf={() => void exportPackages('pdf')} onExcel={() => void exportPackages('xlsx')} pdfDescription="Reporte configurado de paquetes" excelDescription="Todos los paquetes filtrados" />}
+        {canPerform('TRACKING_PACKAGES', 'export') && <ExportMenu onPdf={(paperFormat) => void exportPackages('pdf', paperFormat)} onExcel={() => void exportPackages('xlsx')} pdfDescription="Reporte configurado de paquetes" excelDescription="Todos los paquetes filtrados" />}
       </div>
 
       {/* Filtros */}

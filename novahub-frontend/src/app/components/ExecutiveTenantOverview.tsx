@@ -7,10 +7,7 @@ import {
   Banknote,
   CalendarDays,
   Check,
-  ChevronRight,
   CircleHelp,
-  FileDown,
-  FileSpreadsheet,
   Loader2,
   Package,
   Receipt,
@@ -47,7 +44,6 @@ import { loadModuleWithChunkRecovery } from '../utils/chunk-recovery';
 import { CurrencyValuationAmount, CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { ProductThumbnail } from './ui/ProductImage';
 import { Button } from './ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
@@ -57,6 +53,8 @@ import { toast } from '@/app/services/toast';
 import { BLOCKS, changeLabel, chartRows, dashboardRange, DEFAULT_PREFERENCES, INDICATORS, normalizePreferences, type DashboardBlock, type DashboardPeriod, type DashboardPreferences, type IndicatorDefinition } from './dashboard/executive-model';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
+import { ExportMenu } from './ui/ExportMenu';
 import { capturePdfChartSnapshot, yieldToBrowser } from '../utils/pdf-template-renderer';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { getBase64Image } from '../utils/reportExportUtils';
@@ -363,7 +361,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
     toast.success('Dashboard actualizado');
   };
 
-  const exportDashboard = async () => {
+  const exportDashboard = async (paperFormat: PdfPaperFormat = 'letter') => {
     if (isExporting) return;
     setIsExporting(true);
     const exportToastId = toast.loading('Preparando el PDF del resumen…');
@@ -433,6 +431,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         dashboardPreferences: { indicators: [...preferences.indicators], blocks: [...preferences.blocks] },
         sections,
         fileName,
+        format: paperFormat,
         onProgress: ({ page, totalPages }) => {
           toast.loading(`Generando PDF · página ${page} de ${totalPages}…`, { id: exportToastId });
         },
@@ -547,13 +546,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
             <SelectTrigger className="executive-period"><CalendarDays className="size-4" /><SelectValue /></SelectTrigger>
             <SelectContent>{Object.entries(PERIOD_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
           </Select>
-          {canPerform('DASHBOARD', 'export') && <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="outline" className="executive-toolbar-button" disabled={isExporting || currentQuery.isFetching} aria-busy={isExporting}><FileDown className="size-4" /> {isExporting ? 'Generando PDF…' : 'Exportar'} <ChevronRight className="size-3.5 rotate-90" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="rounded-xl">
-              <DropdownMenuItem className="gap-2 text-xs" disabled={isExporting} onClick={() => void exportDashboard()}><FileDown className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 text-xs" onClick={exportDashboardExcel}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>}
+          {canPerform('DASHBOARD', 'export') && <ExportMenu onPdf={(paperFormat) => void exportDashboard(paperFormat)} onExcel={() => void exportDashboardExcel()} disabled={isExporting || currentQuery.isFetching} className="executive-toolbar-button" />}
           <Button variant="outline" className="executive-toolbar-button" onClick={() => { setDraftPreferences(preferences); setConfigOpen(true); }}><Settings2 className="size-4" /> Configurar</Button>
           <Button className="executive-toolbar-button executive-ask-button" onClick={() => askNova()}><NovaHubLogo size={17} /> <span>Preguntar a Nova</span></Button>
           <Button variant="outline" size="icon" className="executive-toolbar-icon" onClick={() => void currentQuery.refetch()} aria-label="Actualizar dashboard"><RefreshCw className={`size-4 ${currentQuery.isFetching ? 'animate-spin' : ''}`} /></Button>

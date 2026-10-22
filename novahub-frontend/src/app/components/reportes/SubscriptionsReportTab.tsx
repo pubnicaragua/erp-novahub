@@ -134,7 +134,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
   }, [mrr, exchangeRate]);
 
   useImperativeHandle(ref, () => ({
-    exportPDF: async () => {
+    exportPDF: async (format) => {
       toast.info("Generando PDF (Suscripciones)...");
       try {
         const metrics = [
@@ -159,6 +159,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
           }],
           fileName: buildDatedDownloadFileName(['reporte_suscripciones'], 'pdf'),
           periodLabel: dateRange,
+          format,
         });
         toast.success("PDF Exportado");
       } catch (e) {

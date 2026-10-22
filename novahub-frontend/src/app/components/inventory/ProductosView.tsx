@@ -1,5 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback, type ComponentProps } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, SlidersHorizontal, Tag, Tags, FileText, Columns, Clock, AlertCircle, Filter } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, Tag, Tags, Columns, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
@@ -15,7 +15,6 @@ import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { Checkbox } from '../ui/checkbox';
-import { Label } from '../ui/label';
 import { toast } from '@/app/services/toast';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
@@ -55,8 +54,10 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { resolveInventoryValuation } from '../../utils/inventory-valuation';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from '../ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
+import { ExportMenu } from '../ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { ServicePriceListsDialog } from './ServicePriceListsDialog';
 
@@ -2047,7 +2048,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
       setIsProductExporting(false);
     }
   };
-  const handleProductPdfExport = async () => {
+  const handleProductPdfExport = async (paperFormat: PdfPaperFormat = 'letter') => {
     if (!canPerform(catalogPermissionModule, 'export')) return;
     const sourceRows = summaryProducts && summaryProducts.length > 0 ? filteredSummaryProducts : filteredProducts;
     const rows = sourceRows.map((item: any) => isServiceView
@@ -2071,6 +2072,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
           rows,
         }],
         fileName: buildDatedDownloadFileName([isServiceView ? 'reporte_servicios' : 'reporte_inventario_productos'], 'pdf'),
+        format: paperFormat,
       });
       toast.success(`PDF de ${isServiceView ? 'servicios' : 'productos'} descargado.`);
     } catch (error: any) {
@@ -4160,15 +4162,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
               Actualizar
             </Button>
             {onExport && canPerform(catalogPermissionModule, 'export') && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="outline" size="sm" className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none" title={`Exportar ${isServiceView ? 'servicios' : 'productos'}`}><Download className="size-4" /> Exportar <ChevronDown className="size-3.5" /></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="rounded-xl">
-                  <DropdownMenuItem className="gap-2 text-xs" onClick={() => void handleProductPdfExport()}><FileText className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
-                  <DropdownMenuItem className="gap-2 text-xs" onClick={openProductExportDialog}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <ExportMenu onPdf={(paperFormat) => void handleProductPdfExport(paperFormat)} onExcel={openProductExportDialog} className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" label={`Exportar ${isServiceView ? 'servicios' : 'productos'}`} />
             )}
           </div>
         </div>

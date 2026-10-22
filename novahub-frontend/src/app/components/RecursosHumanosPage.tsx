@@ -42,6 +42,7 @@ import { getNotificationDomainQueryKeys, type NotificationDomainRefreshDetail } 
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
+import type { PdfDownloadFormat } from '../utils/pdfDownloadFormats';
 import { toast } from '../services/toast';
 
 interface RecursosHumanosPageProps {
@@ -381,7 +382,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     return { rows, sections: [{ id: `hr-${tab}`, title: HR_EXPORT_TARGETS[tab]?.label || 'Reporte de RR. HH.', headers, rows: rows.length ? rows.map((row) => headers.map((header) => row[header] as string | number)) : [['Sin registros para el alcance seleccionado']] }] };
   };
 
-  const exportHr = async (format: 'pdf' | 'xlsx') => {
+  const exportHr = async (format: 'pdf' | 'xlsx', paperFormat: PdfDownloadFormat = 'letter') => {
     if (!activeExportTarget || !canExportActiveHr) return;
     const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de ${activeExportTarget.label}…`);
     try {
@@ -398,6 +399,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           tenantName: user?.tenantName || 'Mi Empresa',
           tenantLogo: user?.sessionBranding?.logo || null,
           sections: exportData.sections,
+          format: paperFormat,
           kpis: activeTab === 'dashboard' ? Object.entries(stats).slice(0, 6).map(([label, value]) => ({ label, value: String(value ?? '—'), detail: 'Resumen del período' })) : undefined,
           fileName: buildDatedDownloadFileName([fileStem], 'pdf'),
         });
@@ -469,7 +471,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           </div>
           {canExportActiveHr && (
             <ExportMenu
-              onPdf={() => void exportHr('pdf')}
+              onPdf={(paperFormat) => void exportHr('pdf', paperFormat)}
               onExcel={() => void exportHr('xlsx')}
               className="shrink-0"
               pdfDescription="Plantilla configurada para esta vista"

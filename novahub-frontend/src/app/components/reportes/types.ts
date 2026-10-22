@@ -1,5 +1,7 @@
+import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
+
 export interface ReportExportRef {
-  exportPDF: () => void;
+  exportPDF: (format: PdfPaperFormat) => void;
   exportExcel: () => void;
 }
 

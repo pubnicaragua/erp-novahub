@@ -16,6 +16,7 @@ import { managerStatusLabel as statusLabel } from '../../utils/managerLabels';
 import { ExportMenu } from '../ui/ExportMenu';
 import { exportManagerReportExcel, exportManagerReportPdf } from '../../utils/managerReportExport';
 import { buildManagerReportFilterSummary, buildManagerReportScopeSummary } from '../../utils/managerReportModel';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -49,7 +50,7 @@ export function ManagerReportsModule({ view, onViewChange, groupId, businessUnit
   const showBranch = true;
   useEffect(() => { const timer = window.setTimeout(() => setDebouncedSearch(search), 300); return () => window.clearTimeout(timer); }, [search]);
   const changeView = (next: ManagerReportsView) => { setPage(1); setSearch(''); setStatus(''); setDateFrom(''); setDateTo(''); onViewChange(next); };
-  const exportReport = async (format: 'xlsx' | 'pdf' = 'xlsx') => {
+  const exportReport = async (format: 'xlsx' | PdfDownloadFormat = 'xlsx') => {
     if (!canExport) return;
     setExporting(true);
     try {
@@ -69,15 +70,15 @@ export function ManagerReportsModule({ view, onViewChange, groupId, businessUnit
         metrics: report.metrics,
         rows: exportRows,
       };
-      if (format === 'pdf') await exportManagerReportPdf(options);
-      else await exportManagerReportExcel(options);
+      if (format === 'xlsx') await exportManagerReportExcel(options);
+      else await exportManagerReportPdf({ ...options, pdfFormat: format === 'pdf' ? 'letter' : format });
     } finally { setExporting(false); }
   };
   const Icon = useMemo(() => view === 'overview' ? LayoutDashboard : FileBarChart, [view]);
   return <div className="manager-reports-module min-w-0 space-y-5 overflow-x-hidden p-4 sm:p-6 md:p-8">
     <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div className="flex min-w-0 items-start gap-3"><div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Icon className="size-6" /></div><div className="min-w-0"><h1 className="truncate text-3xl font-black uppercase italic tracking-tighter sm:text-4xl">Reportes <span className="text-primary">consolidados</span></h1><Badge variant="outline" className="mt-3 rounded-md border-primary/20 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary">{branches.length} sucursal(es) en el alcance</Badge></div></div>
-      <div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" className="rounded-xl" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw className={cn('mr-2 size-4', query.isFetching && 'animate-spin')} />Actualizar</Button>{canExport && <ExportMenu disabled={exporting} onPdf={() => void exportReport('pdf')} onExcel={() => void exportReport('xlsx')} pdfDescription="Reporte consolidado de Manager" excelDescription="Todos los registros del alcance" />}</div>
+      <div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" className="rounded-xl" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw className={cn('mr-2 size-4', query.isFetching && 'animate-spin')} />Actualizar</Button>{canExport && <ExportMenu disabled={exporting} onPdf={(paperFormat) => void exportReport(paperFormat)} onExcel={() => void exportReport('xlsx')} pdfDescription="Reporte consolidado de Manager" excelDescription="Todos los registros del alcance" />}</div>
     </div>
     {sidebarCollapsed && <div className="manager-module-subnav flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm">{MANAGER_REPORTS_VIEWS.map((item) => <button key={item.id} type="button" onClick={() => changeView(item.id)} className={cn('flex-none shrink-0 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-wide text-muted-foreground transition-all hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', view === item.id && 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg hover:from-primary hover:to-primary/80 hover:text-primary-foreground')}><span className="sm:hidden">{item.label.slice(0, 3)}</span><span className="hidden sm:inline">{item.label}</span></button>)}</div>}
     {view === 'overview' ? <ReportsOverview metrics={metrics} /> : <><ReportsFilters search={search} setSearch={(value) => { setSearch(value); setPage(1); }} status={status} setStatus={(value) => { setStatus(value); setPage(1); }} dateFrom={dateFrom} setDateFrom={(value) => { setDateFrom(value); setPage(1); }} dateTo={dateTo} setDateTo={(value) => { setDateTo(value); setPage(1); }} layoutMode={effectiveLayoutMode} setLayoutMode={setLayoutMode} /><ReportsKpis view={view} metrics={metrics} />{query.isLoading ? <LoadingState /> : query.error ? <EmptyState title="No se pudo cargar el reporte" description="Verifica el permiso Manager de Reportes y vuelve a actualizar." /> : effectiveLayoutMode === 'cards' ? <ReportsCards view={view} rows={rows} showBranch={showBranch} /> : <ReportsTable view={view} rows={rows} showBranch={showBranch} />}<Pagination page={response?.meta.page || page} totalPages={response?.meta.totalPages || 1} total={response?.meta.total || 0} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} /></>}

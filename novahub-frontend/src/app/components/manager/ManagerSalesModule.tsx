@@ -7,7 +7,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Activity, ArrowUpRight, Building2, Calendar, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, FileCog, FileSpreadsheet, FileText, History, LayoutGrid, List, Loader2, Mail, MapPin, Phone, Receipt, RefreshCw, Search, ShoppingCart, TrendingUp, Truck, UserRound, Users } from 'lucide-react';
+import { Activity, ArrowUpRight, Building2, Calendar, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, FileCog, FileText, History, LayoutGrid, List, Loader2, Mail, MapPin, Phone, Receipt, RefreshCw, Search, ShoppingCart, TrendingUp, Truck, UserRound, Users } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
 import { MANAGER_SALES_VIEWS, VISIBLE_MANAGER_SALES_VIEWS, type ManagerSalesView } from './manager-sales.types';
@@ -15,7 +15,6 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { ScrollArea } from '../ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Skeleton } from '../ui/skeleton';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency, type CurrencyDisplayMode } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -35,6 +34,7 @@ import { toast } from '@/app/services/toast';
 import { ManagerSalesCashSheet, ManagerSalesDeliverySheet, ManagerSalesPriceListSheet } from './ManagerSalesOperationalSheets';
 import { ManagerInvoiceSeriesSettings } from './ManagerInvoiceSeriesSettings';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import { ExportMenu } from '../ui/ExportMenu';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { managerStatusLabel } from '../../utils/managerLabels';
@@ -348,7 +348,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
         extraSheets: view === 'cash' ? [{ name: 'Resumen por caja', rows: (report.metrics?.registerSummary || []).map((row: any) => cashSummaryExportRow(row, amountCurrency, displayMode)) }] : undefined,
       };
       if (format === 'xlsx') await exportManagerReportExcel(options);
-      else await exportManagerReportPdf({ ...options, pdfFormat: format === 'pdf' ? 'configured' : format });
+      else await exportManagerReportPdf({ ...options, pdfFormat: format === 'pdf' ? 'letter' : format });
     } finally {
       setExporting(false);
     }
@@ -417,7 +417,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
     toast.success('WhatsApp quedó preparado con el documento', { id: preparingToastId });
   };
 
-  const downloadCustomerHistory = async () => {
+  const downloadCustomerHistory = async (paperFormat: PdfDownloadFormat = 'letter') => {
     if (!selectedCustomer?.id) return;
     setExportingCustomerHistory(true);
     try {
@@ -439,6 +439,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
         pdfDesign: customer.pdfDesign,
         outputCurrency: displayMode === 'ORIGINAL' ? null : activeReportCurrency,
         displayMode,
+        pdfFormat: paperFormat,
       };
       await exportCustomerTransactionsPdf(options);
     } catch (error: any) {
@@ -456,21 +457,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
         {!isInvoiceSeriesView && <Button variant="outline" className="rounded-xl" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw className={cn('mr-2 size-4', query.isFetching && 'animate-spin')} />Actualizar</Button>}
-        {!isInvoiceSeriesView && canExport && (view === 'quotes' ? <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="rounded-xl" disabled={exporting}>{exporting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}Exportar</Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 rounded-2xl p-1.5">
-            <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={() => void exportReport()}><FileSpreadsheet className="size-4 text-primary" /> Excel (.xlsx)</DropdownMenuItem>
-            <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={() => void exportReport('pdf')}><FileText className="size-4 text-primary" /> PDF (.pdf)</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu> : <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button variant="outline" className="rounded-xl" disabled={exporting}>{exporting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}Exportar</Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 rounded-2xl p-1.5">
-            <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={() => void exportReport()}><FileSpreadsheet className="size-4 text-primary" /> Excel (.xlsx)</DropdownMenuItem>
-            <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={() => void exportReport('pdf')}><FileText className="size-4 text-primary" /> PDF (.pdf)</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>)}
+        {!isInvoiceSeriesView && canExport && <ExportMenu disabled={exporting} onPdf={(paperFormat) => void exportReport(paperFormat)} onExcel={() => void exportReport()} pdfDescription="Reporte con el diseño de esta vista" />}
       </div>
     </div>
 
@@ -482,7 +469,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
       {view === 'cash' && <CashRegisterSummary rows={metrics.registerSummary || []} reportCurrency={activeReportCurrency} />}
       {query.isLoading ? <LoadingState /> : query.error ? <EmptyState title="No se pudo cargar la vista" description="Verifica el permiso Manager de Ventas y vuelve a actualizar." /> : effectiveLayoutMode === 'cards' ? <SalesCards view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} onDetail={openOperationalDetail} priceListMode={priceListMode} /> : <SalesTable view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} displayMode={displayMode} sortState={columnSorts} onSort={changeColumnSort} onDetail={openOperationalDetail} priceListMode={priceListMode} />}
       <Pagination page={response?.meta.page || page} totalPages={response?.meta.totalPages || 1} total={response?.meta.total || 0} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} />
-      <ManagerCustomerDetailSheet groupId={groupId} customer={selectedCustomer} reportCurrency={activeReportCurrency} onOpenChange={(open) => { if (!open) setSelectedCustomer(null); }} onEnterBranch={onEnterBranch} enterableBranchIds={enterableBranchIds} onExportHistory={canExport ? () => { void downloadCustomerHistory(); } : undefined} exportingHistory={exportingCustomerHistory} />
+      <ManagerCustomerDetailSheet groupId={groupId} customer={selectedCustomer} reportCurrency={activeReportCurrency} onOpenChange={(open) => { if (!open) setSelectedCustomer(null); }} onEnterBranch={onEnterBranch} enterableBranchIds={enterableBranchIds} onExportHistory={canExport ? (paperFormat) => { void downloadCustomerHistory(paperFormat); } : undefined} exportingHistory={exportingCustomerHistory} />
       <SalesDocumentDetailSheet
         key={selectedQuote?.id || 'manager-quote-detail'}
         document={selectedQuote ? buildManagerQuotePanel(quoteDetail?.quote || selectedQuote, quoteDetail?.history, displayMode) : null}
@@ -883,7 +870,7 @@ function CustomerCard({ customer, onDetail, openingId }: { customer: any; onDeta
   </Card>;
 }
 
-function ManagerCustomerDetailSheet({ groupId, customer, reportCurrency, onOpenChange, onEnterBranch, enterableBranchIds, onExportHistory, exportingHistory = false }: { groupId: string; customer: any | null; reportCurrency: string; onOpenChange: (open: boolean) => void; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; enterableBranchIds: Set<string>; onExportHistory?: () => void; exportingHistory?: boolean }) {
+function ManagerCustomerDetailSheet({ groupId, customer, reportCurrency, onOpenChange, onEnterBranch, enterableBranchIds, onExportHistory, exportingHistory = false }: { groupId: string; customer: any | null; reportCurrency: string; onOpenChange: (open: boolean) => void; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; enterableBranchIds: Set<string>; onExportHistory?: (paperFormat: PdfDownloadFormat) => void; exportingHistory?: boolean }) {
   const [activeTab, setActiveTab] = useState<'general' | 'facturas' | 'historial'>('general');
   const [detail, setDetail] = useState<ManagerCustomerDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -938,11 +925,8 @@ function ManagerCustomerDetailSheet({ groupId, customer, reportCurrency, onOpenC
           </div>
           <div className="flex justify-end" data-tour="manager-customer-detail-actions">
             <PdfDownloadButton
-              label="Exportar"
-              includeRoll={false}
-              showStandardOptions={false}
-              onDownload={() => undefined}
-              firstOption={{ label: 'Historial de transacciones', description: 'Todas las operaciones del cliente', onSelect: () => onExportHistory?.() }}
+              label="Exportar historial"
+              onDownload={(paperFormat) => onExportHistory?.(paperFormat)}
               disabled={!customer || loading || exportingHistory || transactions.length === 0}
             />
           </div>

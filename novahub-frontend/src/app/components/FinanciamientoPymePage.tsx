@@ -25,6 +25,7 @@ import { ExportMenu } from './ui/ExportMenu';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
+import type { PdfDownloadFormat } from '../utils/pdfDownloadFormats';
 
 const PURPOSES = [
   { value: 'capital_trabajo', label: 'Capital de trabajo' },
@@ -155,7 +156,7 @@ export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange }: F
   };
 
   const canExportApplications = activeTab === 'solicitudes' && canPerform('FINANCING_APPLICATIONS', 'export');
-  const exportApplications = async (format: 'pdf' | 'xlsx') => {
+  const exportApplications = async (format: 'pdf' | 'xlsx', paperFormat: PdfDownloadFormat = 'letter') => {
     if (!canExportApplications) return;
     const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de solicitudes…`);
     try {
@@ -172,7 +173,7 @@ export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange }: F
       const headers = Object.keys(rows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' });
       const sections = [{ id: 'financing-applications', title: 'Solicitudes de financiamiento', headers, rows: rows.length ? rows.map((row: Record<string, unknown>) => headers.map((header) => row[header] as string | number)) : [['Sin registros para el alcance seleccionado']] }];
       if (format === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName(['solicitudes_financiamiento'], 'xlsx'), sheets: [{ name: 'Solicitudes', rows }], filters: { Alcance: 'Todos los registros autorizados' } });
-      else await generateConfiguredReportSectionsPDF({ targetKey: 'financiamiento.applications', title: 'Solicitudes de financiamiento', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, fileName: buildDatedDownloadFileName(['solicitudes_financiamiento'], 'pdf') });
+      else await generateConfiguredReportSectionsPDF({ targetKey: 'financiamiento.applications', title: 'Solicitudes de financiamiento', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, format: paperFormat, fileName: buildDatedDownloadFileName(['solicitudes_financiamiento'], 'pdf') });
       toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`, { id: toastId });
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo exportar las solicitudes', { id: toastId });
@@ -219,7 +220,7 @@ export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange }: F
                   </TabsList>
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-2">
-                  {canExportApplications && <ExportMenu onPdf={() => void exportApplications('pdf')} onExcel={() => void exportApplications('xlsx')} pdfDescription="Reporte configurado de solicitudes" excelDescription="Todas las solicitudes autorizadas" />}
+                  {canExportApplications && <ExportMenu onPdf={(paperFormat) => void exportApplications('pdf', paperFormat)} onExcel={() => void exportApplications('xlsx')} pdfDescription="Reporte configurado de solicitudes" excelDescription="Todas las solicitudes autorizadas" />}
                   <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo usar Financiamiento PyME" title="Cómo usar Financiamiento PyME">
                     <CircleHelp className="size-4" />
                   </Button>

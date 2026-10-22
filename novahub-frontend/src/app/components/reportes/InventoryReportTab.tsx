@@ -664,11 +664,11 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
   // ── Exports ──
   useImperativeHandle(ref, () => ({
-    exportPDF: async () => {
+    exportPDF: async (format) => {
       toast.info("Generando PDF (Inventario)...");
       try {
         const pdfSettings = await getPdfDesignSettings('reportes.inventory');
-        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'reportes.inventory', format));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
@@ -825,6 +825,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         }), [244, 63, 94]);
 
         const configured = await generateConfiguredReportSectionsPDF({
+          format,
           targetKey: 'reportes.inventory', title: 'Reporte de Inventario', tenantName: companyName, tenantLogo: logoUrl,
           sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange), periodLabel: rangeLabel,
         });

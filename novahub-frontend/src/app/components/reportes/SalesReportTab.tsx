@@ -4,7 +4,6 @@ import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieC
 import { invoicesService, paymentsService, salesReturnsService, creditNotesService } from '../../services/ventas.service';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Label } from '../ui/label';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
@@ -726,11 +725,11 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   const sortedPending = useMemo(() => fInv.filter(i => String(i.status || '').toUpperCase() !== 'PAID').sort((a, b) => new Date(a.dueDate || a.date).getTime() - new Date(b.dueDate || b.date).getTime()), [fInv]);
 
   useImperativeHandle(ref, () => ({
-    exportPDF: async () => {
+    exportPDF: async (format) => {
       try {
         toast.info("Generando PDF (Ventas), por favor espere...");
         const pdfSettings = await getPdfDesignSettings('reportes.sales');
-        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'reportes.sales', format));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
@@ -829,6 +828,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         ]), [168, 85, 247]);
 
         const configured = await generateConfiguredReportSectionsPDF({
+          format,
           targetKey: 'reportes.sales', title: 'Reporte de Ventas', tenantName: companyName, tenantLogo: logoUrl,
           sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_ventas'], 'pdf', dateRange), periodLabel: rangeLabel,
         });

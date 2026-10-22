@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Search, FolderKanban, Pencil, Trash2, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -23,6 +23,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import {
   PROJECT_STATUS_META, PRIORITY_META, PROJECT_STATUS_OPTIONS, PRIORITY_OPTIONS,
   money, formatDate, fromLocalDate, toLocalDate,
@@ -88,7 +89,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
       ? canCancel
       : canChangeStatus;
 
-  const exportProjects = async (format: 'pdf' | 'xlsx') => {
+  const exportProjects = async (format: 'pdf' | 'xlsx', paperFormat: PdfDownloadFormat = 'letter') => {
     if (!canExport) return;
     const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de proyectos…`);
     try {
@@ -122,7 +123,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
       if (format === 'xlsx') {
         createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_proyectos'], 'xlsx'), sheets: [{ name: 'Proyectos', rows: exportRows }], filters });
       } else {
-        await generateConfiguredReportSectionsPDF({ targetKey: 'proyectos.list', title: 'Listado de proyectos', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, fileName: buildDatedDownloadFileName(['reporte_proyectos'], 'pdf') });
+        await generateConfiguredReportSectionsPDF({ targetKey: 'proyectos.list', title: 'Listado de proyectos', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, format: paperFormat, fileName: buildDatedDownloadFileName(['reporte_proyectos'], 'pdf') });
       }
       toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} de proyectos exportado`, { id: toastId });
     } catch (error: any) {
@@ -252,11 +253,11 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
             </div>
             {canCreate && (
               <div className="md:col-span-12 lg:col-span-12 xl:col-span-0 flex justify-end">
-              {canExport && <ExportMenu onPdf={() => void exportProjects('pdf')} onExcel={() => void exportProjects('xlsx')} className="mr-2" pdfDescription="Reporte configurado de proyectos" excelDescription="Todos los proyectos filtrados" />}
+              {canExport && <ExportMenu onPdf={(paperFormat) => void exportProjects('pdf', paperFormat)} onExcel={() => void exportProjects('xlsx')} className="mr-2" pdfDescription="Reporte configurado de proyectos" excelDescription="Todos los proyectos filtrados" />}
               <Button data-testid="projects-new-project" onClick={openCreate} className="gap-2"><Plus className="size-4" /> Nuevo proyecto</Button>
               </div>
             )}
-            {!canCreate && canExport && <div className="md:col-span-12 flex justify-end"><ExportMenu onPdf={() => void exportProjects('pdf')} onExcel={() => void exportProjects('xlsx')} pdfDescription="Reporte configurado de proyectos" excelDescription="Todos los proyectos filtrados" /></div>}
+            {!canCreate && canExport && <div className="md:col-span-12 flex justify-end"><ExportMenu onPdf={(paperFormat) => void exportProjects('pdf', paperFormat)} onExcel={() => void exportProjects('xlsx')} pdfDescription="Reporte configurado de proyectos" excelDescription="Todos los proyectos filtrados" /></div>}
           </div>
         </CardContent>
       </Card>

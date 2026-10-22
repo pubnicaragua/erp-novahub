@@ -24,6 +24,7 @@ import { beginNotificationAction, completeNotificationAction, failNotificationAc
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 import { ExportMenu } from '../ui/ExportMenu';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 type PayrollFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'ALL';
@@ -391,14 +392,14 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     Estado: isOverdue(payroll) ? 'Vencida' : pdfStatusLabel(payroll.status),
   }));
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = async (paperFormat: PdfDownloadFormat = 'letter') => {
     if (!canPerform('HR_PAYROLL', 'export')) return;
     try {
       const exportRows = await loadPayrollExportRows();
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: exportRows, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Periodicidad', value: row => payrollFrequencyLabel(row.frequency || row.employee?.payFrequency) }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => (isOverdue(row) ? 'Vencida' : pdfStatusLabel(row.status)) }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: exportRows, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Periodicidad', value: row => payrollFrequencyLabel(row.frequency || row.employee?.payFrequency) }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => (isOverdue(row) ? 'Vencida' : pdfStatusLabel(row.status)) }], format: paperFormat, fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
       if (configured) { toast.success('Reporte PDF descargado'); return; }
       const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
-      const doc = new jsPDF(pdfDesignPaper(pdfSettings)) as any;
+      const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'recursos-humanos.payrolls', paperFormat)) as any;
       doc.text("Reporte de Nominas", 14, 15);
       doc.setFontSize(10);
       doc.text(`Generado: ${new Date().toLocaleDateString()}`, 14, 22);
@@ -533,7 +534,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         </div>
         <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="hr-payroll-actions">
           {canPerform('HR_PAYROLL', 'export') && (
-            <ExportMenu onPdf={() => void handleExportPDF()} onExcel={() => void handleExportExcel()} pdfDescription="Nóminas con la estructura configurada" excelDescription="Todas las nóminas filtradas" />
+            <ExportMenu onPdf={(paperFormat) => void handleExportPDF(paperFormat)} onExcel={() => void handleExportExcel()} pdfDescription="Nóminas con la estructura configurada" excelDescription="Todas las nóminas filtradas" />
           )}
           {pendingToRequestCount > 0 && canPerform('HR_PAYROLL', 'requestPayment') && (
             <Button size="sm" onClick={handleRequestAllPayments} className="bg-primary hover:bg-primary/90 !text-primary-foreground">

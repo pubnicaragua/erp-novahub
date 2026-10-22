@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { UserCircle, Plus, Search, Edit, Mail, Phone, Download, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
+import { UserCircle, Plus, Search, Edit, Mail, Phone } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -19,8 +19,9 @@ import { getApiErrorMessage } from '../services/api';
 import { normalizeCurrency } from '../utils/currency';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './ventas/CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, isCustomerIdentifierValid, isCustomerPhoneValid } from '../utils/customer-data';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
+import { ExportMenu } from './ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { fetchAllPaginatedRows } from '../utils/export-utils';
 import { createReportWorkbook } from '../utils/reportWorkbook';
@@ -74,7 +75,7 @@ export function ClientesPage() {
     (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const exportCustomers = async (format: 'pdf' | 'xlsx') => {
+  const exportCustomers = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter') => {
     if (!canPerform('SALES_CLIENTS', 'export')) return;
     const exportCustomersRows = await fetchAllPaginatedRows<Customer>((page, pageSize) => customersService.getAll({
       search: searchTerm.trim() || undefined,
@@ -113,6 +114,7 @@ export function ClientesPage() {
           ],
           sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: [10, 18, 12, 16, 24, 12, 8], rows: rows.map((row) => Object.values(row)) }],
           fileName: buildDatedDownloadFileName(['reporte_clientes'], 'pdf'),
+          format: paperFormat,
         });
       }
       toast.success(`Reporte de clientes exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
@@ -182,13 +184,7 @@ export function ClientesPage() {
       <CurrencyValuationBanner />
       <div className="flex min-w-0 justify-end">
         <div className="flex flex-wrap items-center gap-2">
-          {canPerform('SALES_CLIENTS', 'export') && <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar <ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="rounded-xl">
-              <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportCustomers('pdf')}><FileText className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportCustomers('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>}
+          {canPerform('SALES_CLIENTS', 'export') && <ExportMenu onPdf={(paperFormat) => void exportCustomers('pdf', paperFormat)} onExcel={() => void exportCustomers('xlsx')} />}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {canPerform('SALES_CLIENTS', 'create') && (
               <DialogTrigger asChild>

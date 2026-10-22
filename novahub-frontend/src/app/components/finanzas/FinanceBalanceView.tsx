@@ -5,12 +5,10 @@ import { Badge } from '../ui/badge';
 import {
   ArrowUpRight, ArrowDownRight, Scale, TrendingUp, TrendingDown,
   CalendarClock, Filter, BarChart3, Wallet, PieChart as PieChartIcon, Activity, X,
-  Download, FileSpreadsheet, FileText
 } from 'lucide-react';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { cn } from '../ui/utils';
 import { toast } from '@/app/services/toast';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
@@ -26,6 +24,8 @@ import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceToolti
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { getReadableForeground } from '../../utils/color-contrast';
+import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
+import { ExportMenu } from '../ui/ExportMenu';
 
 interface FinanceBalanceViewProps {
   incomes: any[];
@@ -417,12 +417,12 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
 
   const fmtNum = (n: number) => formatCurrentAmount(n, displayCurrency);
 
-  const exportPDF = async () => {
+  const exportPDF = async (paperFormat: PdfPaperFormat = 'letter') => {
     if (!canExport) return;
     try {
       toast.info("Generando PDF, por favor espere...");
       const pdfSettings = await getPdfDesignSettings('finanzas.balance');
-      const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+      const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'finanzas.balance', paperFormat));
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const companyName = (themeConfig.tenantName || user?.tenantName || 'Mi Empresa').toUpperCase();
@@ -431,7 +431,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         ...fIncomes.map((row: any) => ({ ...row, reportType: 'Ingreso' })),
         ...fExpenses.map((row: any) => ({ ...row, reportType: 'Gasto' })),
       ];
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.balance', title: 'Balance general', tenantName: companyName, tenantLogo: logoUrl, rows: reportRows, columns: [{ header: 'Concepto', value: row => row.description || row.concept || row.category || '—' }, { header: 'Tipo', value: row => row.reportType }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Monto', value: row => fmtNum(Math.abs(cv(row))), align: 'right' }], totals: { 'Total Ingresos': fmtNum(totalIncome), 'Total Gastos': fmtNum(totalExpense), 'Balance Neto': fmtNum(balance) }, fileName: buildDateFilteredLabeledPdfFileName('Balance general', 'pdf', dateRange.start, dateRange.end) });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.balance', title: 'Balance general', tenantName: companyName, tenantLogo: logoUrl, rows: reportRows, columns: [{ header: 'Concepto', value: row => row.description || row.concept || row.category || '—' }, { header: 'Tipo', value: row => row.reportType }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Monto', value: row => fmtNum(Math.abs(cv(row))), align: 'right' }], totals: { 'Total Ingresos': fmtNum(totalIncome), 'Total Gastos': fmtNum(totalExpense), 'Balance Neto': fmtNum(balance) }, fileName: buildDateFilteredLabeledPdfFileName('Balance general', 'pdf', dateRange.start, dateRange.end), format: paperFormat });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const primaryColor = pdfSettings.primaryColor || '#01422c';
       const rgbPrimary = primaryColor.startsWith('#') 
@@ -1109,19 +1109,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
             ))}
           </div>
           
-          {canExport && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center justify-center gap-2 w-full sm:w-auto rounded-xl border border-border/60 bg-background px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all hover:bg-muted hover:shadow-md">
-                  <Download className="size-4" /> Exportar
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="rounded-xl border-border/50">
-                <DropdownMenuItem onClick={exportExcel} className="rounded-lg cursor-pointer"><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
-                <DropdownMenuItem onClick={exportPDF} className="rounded-lg cursor-pointer"><FileText className="size-4 mr-2 text-red-500" /> PDF (.pdf)</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          {canExport && <ExportMenu onPdf={(paperFormat) => void exportPDF(paperFormat)} onExcel={() => void exportExcel()} className="w-full rounded-xl py-2 text-[10px] font-black uppercase tracking-widest sm:w-auto" />}
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, Download, FileSpreadsheet, Image as ImageIcon, ReceiptText, Sparkles } from 'lucide-react';
+import { ChevronDown, Download, FileSpreadsheet, Image as ImageIcon, ReceiptText } from 'lucide-react';
 import { Button } from './button';
 import { cn } from './utils';
 import {
@@ -13,14 +13,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './dropdown-menu';
-import { PDF_DOWNLOAD_OPTIONS, type PdfDownloadFormat, type PdfExportScope } from '../../utils/pdfDownloadFormats';
+import { PDF_DOWNLOAD_OPTIONS, type PdfPaperFormat, type PdfExportScope } from '../../utils/pdfDownloadFormats';
 
 export interface PdfDownloadExtraOptions {
   withImages?: boolean;
 }
 
 interface PdfDownloadButtonProps {
-  onDownload: (format: PdfDownloadFormat, scope?: PdfExportScope, filter?: string, options?: PdfDownloadExtraOptions) => void;
+  onDownload: (format: PdfPaperFormat, scope?: PdfExportScope, filter?: string, options?: PdfDownloadExtraOptions) => void;
   onExcel?: (scope?: PdfExportScope, filter?: string) => void;
   className?: string;
   disabled?: boolean;
@@ -30,15 +30,6 @@ interface PdfDownloadButtonProps {
   hasImages?: boolean;
   imagesCount?: number;
   label?: string;
-  standardLabel?: string;
-  standardDescription?: string;
-  showStandardOptions?: boolean;
-  showNovaHubFormat?: boolean;
-  firstOption?: {
-    label: string;
-    description?: string;
-    onSelect: () => void;
-  };
   scopeSelector?: {
     defaultScope?: PdfExportScope;
     pageCount?: number;
@@ -52,15 +43,14 @@ interface PdfDownloadButtonProps {
 }
 
 /** Menú único para previsualizar una transacción sin ofrecer reportes de la tabla. */
-export function PdfDownloadButton({ onDownload, onExcel, className, disabled = false, size = 'sm', includeRoll = false, includePageSizes = false, hasImages = false, imagesCount = 0, label = 'Descargar', standardLabel = 'PDF normal', standardDescription = 'Diseño asignado o global', showStandardOptions = true, showNovaHubFormat = true, firstOption, scopeSelector, filterSelector }: PdfDownloadButtonProps) {
+export function PdfDownloadButton({ onDownload, onExcel, className, disabled = false, size = 'sm', hasImages = false, imagesCount = 0, label = 'Descargar', scopeSelector, filterSelector }: PdfDownloadButtonProps) {
   const [scope, setScope] = useState<PdfExportScope>(scopeSelector?.defaultScope || 'page');
   const [filter, setFilter] = useState(filterSelector?.defaultValue || filterSelector?.options[0]?.value || '');
   const [includeAttachedImages, setIncludeAttachedImages] = useState(true);
-  const [useNovaHubFormat, setUseNovaHubFormat] = useState(false);
-  const rollOptions = includeRoll ? PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'roll') : [];
-  const pageSizeOptions = includePageSizes ? PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'standard') : [];
+  const rollOptions = PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'roll');
+  const pageSizeOptions = PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'standard');
 
-  const triggerDownload = (format: PdfDownloadFormat) => {
+  const triggerDownload = (format: PdfPaperFormat) => {
     onDownload(
       format,
       scopeSelector ? scope : undefined,
@@ -100,14 +90,6 @@ export function PdfDownloadButton({ onDownload, onExcel, className, disabled = f
             <DropdownMenuSeparator />
           </>
         )}
-        {firstOption && <DropdownMenuItem onClick={firstOption.onSelect} className="gap-2 rounded-xl py-2.5 [&_svg]:text-foreground/80 data-[highlighted]:[&_svg]:!text-primary-foreground">
-          <Download className="size-4" />
-          <span className="min-w-0 flex-1">
-            <span className="block font-bold">{firstOption.label}</span>
-            {firstOption.description && <span className="block text-[10px] text-popover-foreground/75">{firstOption.description}</span>}
-          </span>
-        </DropdownMenuItem>}
-        {firstOption && showStandardOptions && <DropdownMenuSeparator />}
         {scopeSelector && <>
           <DropdownMenuLabel className="px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] text-popover-foreground/75">Alcance del reporte</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={scope} onValueChange={(value) => setScope(value as PdfExportScope)}>
@@ -145,56 +127,10 @@ export function PdfDownloadButton({ onDownload, onExcel, className, disabled = f
             <FileSpreadsheet className="size-4" />
             <span className="min-w-0 flex-1"><span className="block font-bold">Exportar Excel</span><span className="block text-[10px] text-popover-foreground/75">Todos los registros filtrados</span></span>
           </DropdownMenuItem>
-          {(showStandardOptions || includeRoll) && <DropdownMenuSeparator />}
-        </>}
-        {showStandardOptions && (
-          <>
-            {showNovaHubFormat && (
-              <>
-                <DropdownMenuCheckboxItem
-                  checked={useNovaHubFormat}
-                  onCheckedChange={setUseNovaHubFormat}
-                  className="py-2 text-primary"
-                  onSelect={(event) => event.preventDefault()}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 font-bold">
-                      <Sparkles className="size-3.5 text-primary" /> Exportar con NovaHubFormat
-                    </span>
-                    <span className="block text-[10px] text-popover-foreground/75">
-                      Diseño empresarial independiente con color de marca
-                    </span>
-                  </span>
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuSeparator />
-              </>
-            )}
-            <DropdownMenuItem onClick={() => triggerDownload(useNovaHubFormat ? 'novahub-format' : 'configured')} className="gap-2 rounded-xl py-2.5 [&_svg]:text-foreground/80 data-[highlighted]:[&_svg]:!text-primary-foreground">
-              <Download className="size-4" />
-              <span className="min-w-0 flex-1">
-                <span className="block font-bold">
-                  {useNovaHubFormat
-                    ? 'Exportar PDF · NovaHubFormat'
-                    : includePageSizes && standardLabel === 'PDF normal'
-                      ? 'Exportar PDF · Diseño asignado'
-                      : standardLabel === 'PDF normal'
-                        ? 'Exportar PDF · Carta'
-                        : standardLabel}
-                </span>
-                <span className="block text-[10px] text-popover-foreground/75">
-                  {useNovaHubFormat
-                    ? 'Formato empresarial sólido e independiente'
-                    : includePageSizes
-                      ? 'Usa el papel y diseño configurados'
-                      : `Carta vertical · ${standardDescription}`}
-                </span>
-              </span>
-            </DropdownMenuItem>
-          </>
-        )}
-        {pageSizeOptions.length > 0 && <>
           <DropdownMenuSeparator />
-          <DropdownMenuLabel className="px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] text-popover-foreground/75">Tamaño de página</DropdownMenuLabel>
+        </>}
+        <DropdownMenuLabel className="px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] text-popover-foreground/75">Tamaño de página</DropdownMenuLabel>
+        {pageSizeOptions.length > 0 && <>
           {pageSizeOptions.map((option) => (
             <DropdownMenuItem key={option.value} onClick={() => triggerDownload(option.value)} className="gap-2 rounded-xl py-2 [&_svg]:text-primary data-[highlighted]:[&_svg]:!text-primary-foreground">
               <Download className="size-3.5" />

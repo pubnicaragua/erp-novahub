@@ -17,6 +17,7 @@ import { ExportMenu } from './ui/ExportMenu';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
+import type { PdfDownloadFormat } from '../utils/pdfDownloadFormats';
 import { toast } from '../services/toast';
 
 interface SupportAgent {
@@ -139,7 +140,7 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
   const activeExportTarget = ticketExportTargets[activeTab];
   const canExportActive = Boolean(activeExportTarget && canPerform(activeExportTarget.permission, 'export'));
 
-  const exportTickets = async (format: 'pdf' | 'xlsx') => {
+  const exportTickets = async (format: 'pdf' | 'xlsx', paperFormat: PdfDownloadFormat = 'letter') => {
     if (!activeExportTarget || !canExportActive) return;
     const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de ${activeExportTarget.label}…`);
     try {
@@ -158,7 +159,7 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
       const sections = [{ id: activeExportTarget.targetKey, title: activeExportTarget.label, headers, rows: rows.length ? rows.map((row) => headers.map((header) => row[header] as string | number)) : [['Sin registros para el alcance seleccionado']] }];
       const filters = { Vista: activeExportTarget.label, Alcance: 'Todos los registros autorizados' };
       if (format === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName([`reporte_${activeTab === 'tickets' ? 'tickets' : activeTab === 'faqs' ? 'base_conocimiento' : 'agentes'}`], 'xlsx'), sheets: [{ name: activeExportTarget.label, rows }], filters });
-      else await generateConfiguredReportSectionsPDF({ targetKey: activeExportTarget.targetKey, title: activeExportTarget.label, tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, fileName: buildDatedDownloadFileName([`reporte_${activeTab}`], 'pdf') });
+      else await generateConfiguredReportSectionsPDF({ targetKey: activeExportTarget.targetKey, title: activeExportTarget.label, tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, format: paperFormat, fileName: buildDatedDownloadFileName([`reporte_${activeTab}`], 'pdf') });
       toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`, { id: toastId });
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo generar la exportación', { id: toastId });
@@ -195,7 +196,7 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
               ))}
               </TabsList>
               </div>
-              {canExportActive && <ExportMenu onPdf={() => void exportTickets('pdf')} onExcel={() => void exportTickets('xlsx')} className="shrink-0" pdfDescription="Reporte configurado de soporte" excelDescription="Todos los registros autorizados" />}
+              {canExportActive && <ExportMenu onPdf={(paperFormat) => void exportTickets('pdf', paperFormat)} onExcel={() => void exportTickets('xlsx')} className="shrink-0" pdfDescription="Reporte configurado de soporte" excelDescription="Todos los registros autorizados" />}
             </div>
             
             <AnimatePresence mode="wait">

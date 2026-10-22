@@ -178,11 +178,11 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   }, [fBills, exchangeRate]);
 
   useImperativeHandle(ref, () => ({
-    exportPDF: async () => {
+    exportPDF: async (format) => {
       try {
         toast.info('Generando PDF (Proveedores)...');
         const pdfSettings = await getPdfDesignSettings('reportes.providers');
-        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'reportes.providers', format));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || user?.tenantName || 'Mi Empresa');
@@ -271,6 +271,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         renderSection('Insumos con Mayor Gasto', ['Insumo', 'Monto', 'Unidades'], topProducts.map(product => [product.name, money(product.value), product.qty]), [59, 130, 246]);
 
         const configured = await generateConfiguredReportSectionsPDF({
+          format,
           targetKey: 'reportes.providers', title: 'Reporte de Proveedores', tenantName: companyName, tenantLogo: logoUrl,
           sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_proveedores'], 'pdf', dateRange), periodLabel: dateRange,
         });

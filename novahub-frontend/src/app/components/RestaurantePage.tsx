@@ -27,9 +27,7 @@ import {
   Utensils,
   X,
   Download,
-  FileSpreadsheet,
   FileText,
-  ChevronDown,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
@@ -48,8 +46,9 @@ import { cajaService } from '../services/caja.service';
 import { RestaurantViewTutorial } from './RestaurantViewTutorial';
 import { RestaurantMenuWorkspace } from './restaurant/RestaurantMenuWorkspace';
 import { RestaurantConfigurationPage } from './restaurant/RestaurantConfigurationPage';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
+import { ExportMenu } from './ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import {
   restaurantService,
@@ -535,7 +534,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
 
   const refresh = () => void loadData();
 
-  const exportRestaurantReport = async (format: 'pdf' | 'xlsx') => {
+  const exportRestaurantReport = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter') => {
     if (!canPerform('RESTAURANT_REPORTS', 'export')) return;
     if (!summary) { toast.error('No hay datos de restaurante para exportar.'); return; }
     const topItems = (summary.topItems || []).map((item) => ({ Platillo: item.description, Total: Number(item._sum.total || 0) }));
@@ -560,6 +559,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
           ],
           fileName: buildDatedDownloadFileName(['reporte_restaurante'], 'pdf'),
           forceNative: true,
+          format: paperFormat,
         });
       }
       toast.success(`Reporte de restaurante exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
@@ -1606,8 +1606,8 @@ function ReportsVisuals({ summary }: { summary: RestaurantSummary | null }) {
   </section>;
 }
 
-function ReportsBoard({ summary, canExport, onExport }: { summary: RestaurantSummary | null; canExport: boolean; onExport: (format: 'pdf' | 'xlsx') => void }) {
+function ReportsBoard({ summary, canExport, onExport }: { summary: RestaurantSummary | null; canExport: boolean; onExport: (format: 'pdf' | 'xlsx', paperFormat?: PdfPaperFormat) => void }) {
   const averageTicket = summary && summary.orders > 0 ? summary.total / summary.orders : 0;
   const bestSeller = summary?.topItems?.[0]?.description || 'Sin datos';
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Rendimiento de restaurante</p><h2 className="mt-1 font-serif text-2xl font-medium italic">Ventas y productos destacados</h2><p className="mt-1 text-sm text-muted-foreground">Lectura rápida del período operativo actual.</p></div>{canExport && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="gap-2"><Download className="size-4" />Exportar<ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="rounded-xl"><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('pdf')}><FileText className="size-3.5 text-rose-600" />Exportar PDF</DropdownMenuItem><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" />Exportar Excel</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}</div>{!summary ? <EmptyState icon={<BarChart3 className="size-8" />} title="Sin datos todavía" description="El resumen aparecerá cuando se registren comandas." /> : <><div className="mb-5 grid gap-3 sm:grid-cols-3"><RestaurantMetricCard label="Ticket promedio" value={money(averageTicket)} hint="Por comanda operativa" icon={CreditCard} /><RestaurantMetricCard label="Impuestos" value={money(summary.tax)} hint="Incluidos en el período" icon={BarChart3} /><RestaurantMetricCard label="Más vendido" value={bestSeller} hint="Según total acumulado" icon={Check} /></div><div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><div className="rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Ventas operativas</p><p className="mt-2 text-4xl font-black">{money(summary.total)}</p><p className="mt-2 text-sm text-primary-foreground/70">{summary.orders} comandas no canceladas</p><div className="mt-6 space-y-3 text-sm"><div className="flex justify-between"><span>Subtotal</span><span>{money(summary.subtotal)}</span></div><div className="flex justify-between"><span>Impuestos</span><span>{money(summary.tax)}</span></div></div></div><div><h3 className="font-serif text-xl font-medium italic">Top de platillos</h3><div className="mt-3 space-y-2">{summary.topItems?.map((item) => <div key={item.description} className="flex items-center justify-between rounded-xl border border-border/60 p-3"><span className="text-sm font-semibold">{item.description}</span><span className="text-sm font-black text-primary">{money(item._sum.total)}</span></div>)}</div></div></div></>}</section>;
+  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Rendimiento de restaurante</p><h2 className="mt-1 font-serif text-2xl font-medium italic">Ventas y productos destacados</h2><p className="mt-1 text-sm text-muted-foreground">Lectura rápida del período operativo actual.</p></div>{canExport && <ExportMenu onPdf={(paperFormat) => onExport('pdf', paperFormat)} onExcel={() => onExport('xlsx')} />}</div>{!summary ? <EmptyState icon={<BarChart3 className="size-8" />} title="Sin datos todavía" description="El resumen aparecerá cuando se registren comandas." /> : <><div className="mb-5 grid gap-3 sm:grid-cols-3"><RestaurantMetricCard label="Ticket promedio" value={money(averageTicket)} hint="Por comanda operativa" icon={CreditCard} /><RestaurantMetricCard label="Impuestos" value={money(summary.tax)} hint="Incluidos en el período" icon={BarChart3} /><RestaurantMetricCard label="Más vendido" value={bestSeller} hint="Según total acumulado" icon={Check} /></div><div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><div className="rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Ventas operativas</p><p className="mt-2 text-4xl font-black">{money(summary.total)}</p><p className="mt-2 text-sm text-primary-foreground/70">{summary.orders} comandas no canceladas</p><div className="mt-6 space-y-3 text-sm"><div className="flex justify-between"><span>Subtotal</span><span>{money(summary.subtotal)}</span></div><div className="flex justify-between"><span>Impuestos</span><span>{money(summary.tax)}</span></div></div></div><div><h3 className="font-serif text-xl font-medium italic">Top de platillos</h3><div className="mt-3 space-y-2">{summary.topItems?.map((item) => <div key={item.description} className="flex items-center justify-between rounded-xl border border-border/60 p-3"><span className="text-sm font-semibold">{item.description}</span><span className="text-sm font-black text-primary">{money(item._sum.total)}</span></div>)}</div></div></div></>}</section>;
 }

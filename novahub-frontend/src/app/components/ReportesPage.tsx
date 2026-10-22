@@ -1,10 +1,7 @@
 ﻿import { cn } from './ui/utils';
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Badge } from './ui/badge';
-import { Download, FileSpreadsheet, BarChart3, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 import { FinanceReportTab } from './reportes/FinanceReportTab';
@@ -16,7 +13,8 @@ import { InventoryReportTab } from './reportes/InventoryReportTab';
 import { HRReportTab } from './reportes/HRReportTab';
 import type { ReportExportRef } from './reportes/types';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { ExportMenu } from './ui/ExportMenu';
+import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 
 interface ReportesPageProps {
   activeSubModule?: string;
@@ -81,16 +79,16 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
     if (onSubModuleChange) onSubModuleChange(value);
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = (paperFormat: PdfPaperFormat) => {
     if (!canExportActiveReport) return;
     switch (activeTab) {
-      case 'reportes-financieros': financeRef.current?.exportPDF(); break;
-      case 'reportes-ventas': salesRef.current?.exportPDF(); break;
-      case 'reportes-compras': purchasesRef.current?.exportPDF(); break;
-      case 'reportes-proveedores': providersRef.current?.exportPDF(); break;
-      case 'reportes-clientes': customersRef.current?.exportPDF(); break;
-      case 'reportes-inventario': inventoryRef.current?.exportPDF(); break;
-      case 'reportes-rrhh': hrRef.current?.exportPDF(); break;
+      case 'reportes-financieros': financeRef.current?.exportPDF(paperFormat); break;
+      case 'reportes-ventas': salesRef.current?.exportPDF(paperFormat); break;
+      case 'reportes-compras': purchasesRef.current?.exportPDF(paperFormat); break;
+      case 'reportes-proveedores': providersRef.current?.exportPDF(paperFormat); break;
+      case 'reportes-clientes': customersRef.current?.exportPDF(paperFormat); break;
+      case 'reportes-inventario': inventoryRef.current?.exportPDF(paperFormat); break;
+      case 'reportes-rrhh': hrRef.current?.exportPDF(paperFormat); break;
     }
   };
 
@@ -128,13 +126,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
               <SelectItem value="todo">Histórico completo</SelectItem>
             </SelectContent>
           </Select>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="outline" size="sm" disabled={!canExportActiveReport} className="gap-2"><Download className="size-4" /> Exportar <ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="rounded-xl">
-              <DropdownMenuItem className="gap-2 text-xs" onClick={handleExportPDF}><Download className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 text-xs" onClick={handleExportExcel}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu disabled={!canExportActiveReport} onPdf={handleExportPDF} onExcel={handleExportExcel} />
       </div>
 
       <CurrencyValuationBanner />

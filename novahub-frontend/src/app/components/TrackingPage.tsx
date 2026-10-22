@@ -55,6 +55,7 @@ import { ExportMenu } from './ui/ExportMenu';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
+import type { PdfDownloadFormat } from '../utils/pdfDownloadFormats';
 
 type TrackingTab = 'transit' | 'reception' | 'batches' | 'packages' | 'reconciliation' | 'billing' | 'config';
 
@@ -151,7 +152,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   const canDeleteTransit = canPerform('TRACKING_TRANSIT', 'delete');
   const canExportTransit = tab === 'transit' && canPerform('TRACKING_TRANSIT', 'export');
 
-  const exportTransit = async (outputFormat: 'pdf' | 'xlsx') => {
+  const exportTransit = async (outputFormat: 'pdf' | 'xlsx', paperFormat: PdfDownloadFormat = 'letter') => {
     if (!canExportTransit) return;
     const toastId = toast.loading(`Preparando ${outputFormat === 'pdf' ? 'PDF' : 'Excel'} de envíos…`);
     try {
@@ -167,7 +168,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       const headers = Object.keys(rows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' });
       const sections = [{ id: 'tracking-transit', title: 'Envíos en tránsito', headers, rows: rows.length ? rows.map((row) => headers.map((header) => row[header] as string | number)) : [['Sin registros para el alcance seleccionado']] }];
       if (outputFormat === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_tracking'], 'xlsx'), sheets: [{ name: 'Envíos', rows }], filters: { Búsqueda: search || '—', Estado: statusFilter ? TRACKING_STATUS_LABELS[statusFilter] : 'Todos' } });
-      else await generateConfiguredReportSectionsPDF({ targetKey: 'tracking.transit', title: 'Envíos en tránsito', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, fileName: buildDatedDownloadFileName(['reporte_tracking'], 'pdf') });
+      else await generateConfiguredReportSectionsPDF({ targetKey: 'tracking.transit', title: 'Envíos en tránsito', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, format: paperFormat, fileName: buildDatedDownloadFileName(['reporte_tracking'], 'pdf') });
       toast.success(`${outputFormat === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`, { id: toastId });
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo exportar tracking'), { id: toastId });
@@ -398,7 +399,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
         ))}
         <div className="ml-auto pb-1">
           <div className="flex items-center gap-2">
-            {canExportTransit && <ExportMenu onPdf={() => void exportTransit('pdf')} onExcel={() => void exportTransit('xlsx')} pdfDescription="Reporte configurado de tracking" excelDescription="Todos los envíos filtrados" />}
+            {canExportTransit && <ExportMenu onPdf={(paperFormat) => void exportTransit('pdf', paperFormat)} onExcel={() => void exportTransit('xlsx')} pdfDescription="Reporte configurado de tracking" excelDescription="Todos los envíos filtrados" />}
             <TrackingViewTutorial view={tab} />
           </div>
         </div>

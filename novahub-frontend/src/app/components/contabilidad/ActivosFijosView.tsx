@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Plus, Search, RefreshCw, DollarSign, Package, Tags, Calculator, Upload, LayoutGrid, X, FileSpreadsheet, Download, Loader2 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
@@ -22,6 +22,7 @@ import { ActivosFijosImportTab } from './ActivosFijosImportTab';
 import { ActivoFormDialog } from './ActivoFormDialog';
 import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import { PDF_DOWNLOAD_OPTIONS, type PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 
 interface FixedAsset {
   id: string;
@@ -98,7 +99,7 @@ export function ActivosFijosView() {
     }
   };
 
-  async function handleExport(scope: 'all' | 'selected', format: 'pdf' | 'xlsx' = 'xlsx') {
+  async function handleExport(scope: 'all' | 'selected', format: 'pdf' | 'xlsx' = 'xlsx', paperFormat: PdfPaperFormat = 'letter') {
     if (!canExportAssets) return;
     const ids = scope === 'selected' ? selectedIds : assets.map(a => a.id);
     if (scope === 'selected' && ids.length === 0) { toast.error('No hay activos seleccionados'); return; }
@@ -123,6 +124,7 @@ export function ActivosFijosView() {
           ],
           totals: { 'Total de activos': details.length, 'Costo de adquisición': formatCurrency(details.reduce((sum, row) => sum + convertAmount(Number(row.cost || 0), row.currency, row.exchangeRate), 0), displayCurrency) },
           fileName: buildDatedDownloadFileName(['reporte_activos_fijos'], 'pdf'),
+          format: paperFormat,
         });
       }
       toast.success(`Exportados ${details.length} activo${details.length !== 1 ? 's' : ''}`);
@@ -165,15 +167,21 @@ export function ActivosFijosView() {
             <DropdownMenuContent align="end" className="min-w-56">
               <DropdownMenuLabel className="text-xs">Exportar activos fijos</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleExport('all', 'pdf')} disabled={exporting} className="cursor-pointer gap-2 text-xs">
-                <Download className="size-3.5" /> Todos en PDF ({assets.length})
-              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={exporting} className="cursor-pointer gap-2 text-xs"><Download className="size-3.5" /> Todos en PDF ({assets.length})</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="max-h-[min(80vh,34rem)] overflow-y-auto rounded-xl">
+                  {PDF_DOWNLOAD_OPTIONS.map((option) => <DropdownMenuItem key={option.value} onClick={() => void handleExport('all', 'pdf', option.value)} className="cursor-pointer text-xs">{option.label}</DropdownMenuItem>)}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuItem onClick={() => handleExport('all', 'xlsx')} disabled={exporting} className="cursor-pointer gap-2 text-xs">
                 <FileSpreadsheet className="size-3.5" /> Todos en Excel ({assets.length})
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('selected', 'pdf')} disabled={exporting || selectedIds.length === 0} className="cursor-pointer gap-2 text-xs">
-                <Download className="size-3.5" /> Seleccionados en PDF ({selectedIds.length})
-              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={exporting || selectedIds.length === 0} className="cursor-pointer gap-2 text-xs"><Download className="size-3.5" /> Seleccionados en PDF ({selectedIds.length})</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="max-h-[min(80vh,34rem)] overflow-y-auto rounded-xl">
+                  {PDF_DOWNLOAD_OPTIONS.map((option) => <DropdownMenuItem key={option.value} onClick={() => void handleExport('selected', 'pdf', option.value)} className="cursor-pointer text-xs">{option.label}</DropdownMenuItem>)}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuItem onClick={() => handleExport('selected', 'xlsx')} disabled={exporting || selectedIds.length === 0} className="cursor-pointer gap-2 text-xs">
                 <FileSpreadsheet className="size-3.5" /> Seleccionados en Excel ({selectedIds.length})
               </DropdownMenuItem>

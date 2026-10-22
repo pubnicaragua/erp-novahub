@@ -27,7 +27,6 @@ import {
   Copy,
   RefreshCcw,
   X,
-  TrendingUp,
   Banknote,
   Download,
   Loader2,
@@ -82,15 +81,14 @@ import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
 import { formatPdfVariantDetails } from '../../utils/pdf-line-details';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
-import { getInvoicePaymentPresentation, paymentMethodLabel } from '../../utils/paymentMethods';
+import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
+import { getInvoicePaymentPresentation } from '../../utils/paymentMethods';
 import { getSalesAdditionalCharges, normalizeSalesExtraCharges } from '../../utils/salesCharges';
 import { normalizeCurrency } from '../../utils/currency';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { runWithReportRequestLimit } from '../../utils/report-request-limiter';
 import { toast } from '@/app/services/toast';
 import type { Customer, Estimate, Invoice } from '../../types';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
 import { countryCodeFromLegacy, formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 
@@ -232,7 +230,6 @@ export function CustomerDetailDrawer({
   const [historyExportScope, setHistoryExportScope] = useState<HistoryExportScope>('ALL');
   const [historyExportFilter, setHistoryExportFilter] = useState<string>('ALL');
   const [historyExportCurrency, setHistoryExportCurrency] = useState<HistoryExportCurrency>(baseCurrency);
-  const [historyExportNovaHubFormat, setHistoryExportNovaHubFormat] = useState(false);
 
   useEffect(() => {
     if (!customerId) {
@@ -434,7 +431,7 @@ export function CustomerDetailDrawer({
   const auditActor = (event: any) => event?.user?.name || event?.user?.email || (event?.userId ? `Usuario ${String(event.userId).slice(0, 8)}` : 'No disponible');
   const auditDate = (event: any) => event?.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : 'Fecha no disponible';
 
-  const downloadHistory = async (exportFormat: PdfDownloadFormat = 'configured', scope: HistoryExportScope = 'ALL') => {
+  const downloadHistory = async (exportFormat: PdfPaperFormat = 'letter', scope: HistoryExportScope = 'ALL') => {
     if (!customer?.id) return;
     setExportingHistory(true);
     try {
@@ -484,9 +481,9 @@ export function CustomerDetailDrawer({
     setHistoryExportDialogOpen(true);
   };
 
-  const confirmHistoryExport = () => {
+  const confirmHistoryExport = (paperFormat: PdfPaperFormat) => {
     setHistoryExportDialogOpen(false);
-    void downloadHistory(historyExportNovaHubFormat ? 'novahub-format' : 'configured', historyExportScope);
+    void downloadHistory(paperFormat, historyExportScope);
   };
 
   const createPortalLink = async () => {
@@ -1001,24 +998,13 @@ export function CustomerDetailDrawer({
             </Select>
             <p className="text-[11px] text-muted-foreground">Los montos se convertirán a la moneda seleccionada antes de generar el PDF.</p>
           </div>
-          <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-primary/25 bg-primary/5 p-3 transition-colors hover:bg-primary/10">
-            <input
-              type="checkbox"
-              checked={historyExportNovaHubFormat}
-              onChange={(e) => setHistoryExportNovaHubFormat(e.target.checked)}
-              className="mt-0.5 size-4 rounded border-primary text-primary focus:ring-primary"
-            />
-            <span className="min-w-0">
-              <span className="block text-xs font-black text-primary">Exportar con NovaHubFormat</span>
-              <span className="block text-[10px] text-muted-foreground">Diseño corporativo estructurado e independiente, adaptado a Marca y Tema.</span>
-            </span>
-          </label>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setHistoryExportDialogOpen(false)} disabled={exportingHistory}>Cancelar</Button>
-            <Button type="button" onClick={confirmHistoryExport} disabled={!selectedHistoryRows.length || exportingHistory} className="gap-2">
-              {exportingHistory && <Loader2 className="size-4 animate-spin" />}
-              {exportingHistory ? 'Generando…' : `Exportar ${selectedHistoryRows.length} transacciones`}
-            </Button>
+            <PdfDownloadButton
+              label={exportingHistory ? 'Generando…' : `Exportar ${selectedHistoryRows.length} transacciones`}
+              onDownload={(paperFormat) => confirmHistoryExport(paperFormat)}
+              disabled={!selectedHistoryRows.length || exportingHistory}
+            />
           </DialogFooter>
         </DialogContent>
       </Dialog>

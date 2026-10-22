@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Building2, X, Upload, FileDown, Download, Paperclip, ExternalLink, FileSpreadsheet, CalendarClock, ChevronDown, FileText } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Building2, X, Upload, FileDown, Paperclip, ExternalLink, FileSpreadsheet, CalendarClock } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { toast } from '@/app/services/toast';
 import * as XLSX from 'xlsx';
@@ -25,8 +25,9 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
+import { ExportMenu } from '../ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
 const CATEGORIES = [
@@ -613,7 +614,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
     setPage(1);
   };
 
-  const exportAssets = async (format: 'pdf' | 'xlsx') => {
+  const exportAssets = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter') => {
     if (!canExportAssets) return;
     try {
       let exportSource = assets;
@@ -666,6 +667,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           periodLabel: `Registros filtrados: ${rows.length}`,
           sections: [{ id: 'inventory-assets', title: 'Mobiliario y equipos', headers: Object.keys(rows[0]), rows: rows.map((row) => Object.values(row)) }],
           fileName: buildDatedDownloadFileName(['reporte_mobiliario_equipos'], 'pdf'),
+          format: paperFormat,
         });
       }
       toast.success(`Reporte de mobiliario y equipos exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
@@ -705,13 +707,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
            <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
            </Button>
-           {canExportAssets && <DropdownMenu>
-             <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Download className="size-4" /> Exportar <ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
-             <DropdownMenuContent align="end" className="rounded-xl">
-               <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportAssets('pdf')}><FileText className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
-               <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportAssets('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
-             </DropdownMenuContent>
-           </DropdownMenu>}
+           {canExportAssets && <ExportMenu onPdf={(paperFormat) => void exportAssets('pdf', paperFormat)} onExcel={() => void exportAssets('xlsx')} className="h-10 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto" />}
           {canImportAssets && <Button variant="outline" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <FileDown className="size-4" /> Plantilla
           </Button>}

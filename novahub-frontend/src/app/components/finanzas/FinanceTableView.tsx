@@ -8,13 +8,10 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import {
-  Plus, Trash2, Search, Download, Eye, Ban, Pause, Play,
-  CheckCircle2, Edit3, FileSpreadsheet, FileText, X,
+  Plus, Trash2, Search, Eye, Ban, Pause, Play,
+  CheckCircle2, Edit3, X,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
-} from '../ui/dropdown-menu';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle
 } from '../ui/dialog';
@@ -34,6 +31,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
+import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
+import { ExportMenu } from '../ui/ExportMenu';
 
 interface Column {
   key: string;
@@ -454,15 +453,15 @@ export function FinanceTableView({
     }
   };
 
-  const exportPDF = async () => {
+  const exportPDF = async (paperFormat: PdfPaperFormat = 'letter') => {
     if (!canExport) return;
     try {
       toast.info("Generando PDF, por favor espere...");
       const reportColumns = exportColumns || columns;
       const summary = exportSummary?.(filteredData);
       const pdfSettings = await getPdfDesignSettings('finanzas.transactions');
-      const doc = new jsPDF(pdfDesignPaper(pdfSettings));
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: filteredData, columns: reportColumns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), tableSummary: summary, fileName: buildDateFilteredLabeledPdfFileName(title, 'pdf', dateRange.start, dateRange.end) });
+      const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'finanzas.transactions', paperFormat));
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: filteredData, columns: reportColumns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), tableSummary: summary, fileName: buildDateFilteredLabeledPdfFileName(title, 'pdf', dateRange.start, dateRange.end), format: paperFormat });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const pageWidth = doc.internal.pageSize.getWidth();
       const primaryColor = pdfSettings.primaryColor || '#01422c';
@@ -609,17 +608,7 @@ export function FinanceTableView({
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-10 w-full sm:w-56 md:w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" />
           </div>
-          {canExport && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button data-toolbar-role="print" className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/50 bg-background/50 px-4 h-10 text-[10px] font-black uppercase tracking-widest hover:bg-muted sm:w-auto"><Download className="size-4" /> Exportar</button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
-                <DropdownMenuItem onClick={exportPDF}><FileText className="size-4 mr-2 text-red-500" /> PDF (.pdf)</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          {canExport && <ExportMenu onPdf={(paperFormat) => void exportPDF(paperFormat)} onExcel={() => void exportExcel()} className="h-10 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto" />}
           {canCreate && (
             <button onClick={onAdd} data-toolbar-role="primary" className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 h-10 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 transition-colors sm:w-auto shadow-xl shadow-primary/20 border border-primary/20"><Plus className="size-4" /> Nuevo Registro</button>
           )}

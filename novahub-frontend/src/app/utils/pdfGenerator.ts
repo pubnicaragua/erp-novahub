@@ -4,7 +4,7 @@ import { pdfDocumentDesignService } from '../services/pdf-document-design.servic
 import { getPdfTemplateTarget, isPdfTemplateFixed } from '../services/pdf-document-catalog';
 import { getBase64Image } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
-import type { PdfDownloadFormat } from './pdfDownloadFormats';
+import type { PdfDownloadFormat, PdfPaperFormat } from './pdfDownloadFormats';
 import { generateNovaHubFormatReport } from './novaHubFormatPdf';
 import { buildDateFilteredLabeledPdfFileName, buildDateFilteredPdfFileName, buildHumanPdfFileName, buildLabeledPdfFileName, buildPdfFileName, buildSalesPdfFileName } from './exportFileNames';
 import { getSalesAdditionalCharges } from './salesCharges';
@@ -522,11 +522,14 @@ function rememberedPdfSessionLogo(): string {
   }
 }
 
-export function pdfDesignPaper(settings: Record<string, any>, targetKey?: string) {
-  const requestedPaperSize = String(settings.paperSize || 'LETTER').toUpperCase();
+export function pdfDesignPaper(settings: Record<string, any>, targetKey?: string, format?: PdfPaperFormat) {
+  const requestedPaperSize = format
+    ? format === 'roll-80' ? 'ROLL-80' : format === 'roll-58' ? 'ROLL-58' : format === 'A4' ? 'A4' : format.toUpperCase()
+    : String(settings.paperSize || 'LETTER').toUpperCase();
   const physical = requestedPaperSize === 'LABEL' || requestedPaperSize === 'ROLL-58' || requestedPaperSize === 'ROLL-80';
   const allowsLandscapeReport = targetKey === 'ventas.customers';
-  const paperSize = physical ? requestedPaperSize : 'LETTER';
+  const supportedPaperSizes = ['LETTER', 'A4', 'OFICIO', 'LEGAL', 'LABEL', 'ROLL-58', 'ROLL-80'];
+  const paperSize = supportedPaperSizes.includes(requestedPaperSize) ? requestedPaperSize : 'LETTER';
   return {
     format: paperSize === 'A4'
       ? 'a4'
@@ -2527,7 +2530,7 @@ const configuredHistoryPaper = (settings: Record<string, any>, format: PdfDownlo
  * rasterizar un canvas completo por cada página como los documentos
  * individuales.
  */
-export async function generateFastGlobalReportPDF({ targetKey, title, tenantName, tenantLogo, settings, columns, rows, totals, tableSummary, fileName, save = true, subtitle, designOverride }: {
+export async function generateFastGlobalReportPDF({ targetKey, title, tenantName, tenantLogo, settings: inputSettings, columns, rows, totals, tableSummary, fileName, save = true, subtitle, designOverride, format = 'configured' }: {
   targetKey: string;
   title: string;
   tenantName: string;
@@ -2541,7 +2544,15 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
   save?: boolean;
   subtitle?: string;
   designOverride?: any;
+  format?: PdfDownloadFormat;
 }) {
+  const normalizedFormat = format === 'novahub-format' ? 'configured' : format;
+  const baseDesign = designOverride || await getPdfDesign(targetKey);
+  const mergedSettings = { ...(baseDesign?.settings || {}), ...inputSettings };
+  const design = normalizedFormat === 'configured'
+    ? { ...(baseDesign || {}), settings: mergedSettings }
+    : withPdfDownloadFormat({ ...(baseDesign || {}), settings: mergedSettings }, normalizedFormat);
+  const settings = design?.settings || mergedSettings;
   const templateColumns = columns.map((column, index) => ({
     id: `column-${index}`,
     label: String(column.header || column.label || `Columna ${index + 1}`),
@@ -2550,7 +2561,6 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
     align: column.align || 'left' as const,
   }));
   const mappedRows = rows.map(row => Object.fromEntries(columns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])));
-  const design = designOverride || await getPdfDesign(targetKey);
   const generatedAt = new Date().toLocaleString('es-NI');
   const semanticData: PdfTemplateData = {
     company: { name: settings.companyName || tenantName, logo: tenantLogo },
@@ -2580,7 +2590,7 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
       tenantLogo,
       fileName,
       save,
-      designOverride: { ...design, settings: { ...(design?.settings || {}), ...settings } },
+      designOverride: design,
     });
     if (configured) return configured;
   }

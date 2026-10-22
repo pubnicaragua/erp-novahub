@@ -988,11 +988,11 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   };
   // ── Export PDF ──
   useImperativeHandle(ref, () => ({
-    exportPDF: async () => {
+    exportPDF: async (format) => {
       toast.info("Generando PDF (RRHH)...");
       try {
         const pdfSettings = await getPdfDesignSettings('reportes.hr');
-        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'reportes.hr', format));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
@@ -1194,6 +1194,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           [72, 42, 68]);
 
         const configured = await generateConfiguredReportSectionsPDF({
+          format,
           targetKey: 'reportes.hr', title: 'Reporte de Recursos Humanos', tenantName: companyName, tenantLogo: logoUrl,
           sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_recursos_humanos'], 'pdf', dateRange), periodLabel: dateRange,
         });
