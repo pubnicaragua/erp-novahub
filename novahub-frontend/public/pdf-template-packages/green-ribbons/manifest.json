@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "name": "Cintas verdes",
+  "description": "Diseño limpio con cintas translúcidas y márgenes laterales verdes.",
+  "documentTypes": ["ventas.estimate", "ventas.order", "ventas.invoice", "ventas.recurring", "ventas.return", "ventas.credit", "ventas.credit-note", "compras.purchase-record", "compras.recurring-supplier-invoice", "compras.purchase-order", "compras.supplier-invoice"],
+  "page": { "size": "LETTER", "orientation": "portrait", "contentArea": { "topMm": 10, "bottomMm": 9 } },
+  "defaults": { "fontFamily": "Arial", "fontSize": 8, "primaryColor": "#2e658f", "secondaryColor": "#c5e2dc", "contentTopMm": 8, "marginMm": 15 },
+  "files": { "html": "template.html", "css": "styles.css" }
+}

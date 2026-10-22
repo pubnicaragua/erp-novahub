@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "name": "Ondas azules",
+  "description": "Cabecera y pie con curvas en azul corporativo.",
+  "documentTypes": ["ventas.estimate", "ventas.order", "ventas.invoice", "ventas.recurring", "ventas.return", "ventas.credit", "ventas.credit-note", "compras.purchase-record", "compras.recurring-supplier-invoice", "compras.purchase-order", "compras.supplier-invoice"],
+  "page": { "size": "LETTER", "orientation": "portrait", "contentArea": { "topMm": 30, "bottomMm": 24 } },
+  "defaults": { "fontFamily": "Arial", "fontSize": 9, "primaryColor": "#164b91", "secondaryColor": "#347cb4", "contentTopMm": 8, "marginMm": 13 },
+  "files": { "html": "template.html", "css": "styles.css" }
+}

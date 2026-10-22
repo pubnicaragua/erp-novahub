@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "name": "Bordes índigo",
+  "description": "Composición editorial en índigo con acentos laterales redondeados.",
+  "documentTypes": ["ventas.estimate", "ventas.order", "ventas.invoice", "ventas.recurring", "ventas.return", "ventas.credit", "ventas.credit-note", "compras.purchase-record", "compras.recurring-supplier-invoice", "compras.purchase-order", "compras.supplier-invoice"],
+  "page": { "size": "LETTER", "orientation": "portrait", "contentArea": { "topMm": 10, "bottomMm": 0 } },
+  "defaults": { "fontFamily": "Arial", "fontSize": 8, "primaryColor": "#29336f", "secondaryColor": "#aeb4df", "contentTopMm": 8, "marginMm": 16 },
+  "files": { "html": "template.html", "css": "styles.css" }
+}

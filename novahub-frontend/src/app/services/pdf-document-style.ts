@@ -193,6 +193,11 @@ export function applyPdfStyleToDefinition<T extends { nodes: any[]; metadata?: R
   const normalizedDefinition = normalizePdfFrameGeometry(definition);
   const sizeRatio = config.fontSize / 9;
   const tablePresentation = getPdfTablePresentation(config.tableStyle);
+  const selectedHeaderLayout = String(normalizedDefinition.metadata?.pdfDocumentTemplateHeaderLayout || '');
+  const selectedFooterLayout = String(normalizedDefinition.metadata?.pdfDocumentTemplateFooterLayout || '');
+  const compactTemplateFrame = Boolean(normalizedDefinition.metadata?.pdfDocumentTemplateCompactFrame);
+  const filledHeaderLayouts = new Set(['banner', 'double-band', 'fluid', 'aurora', 'diagonal', 'ink', 'ticket', 'steps']);
+  const filledFooterLayouts = new Set(['band', 'wave', 'layers', 'notch']);
   return {
     ...normalizedDefinition,
     nodes: normalizedDefinition.nodes.map(node => {
@@ -211,6 +216,12 @@ export function applyPdfStyleToDefinition<T extends { nodes: any[]; metadata?: R
       const isHeaderRule = node.type === 'divider' && node.id === 'header-accent';
       const isHeaderFrame = isPdfFrameHeaderNode(node);
       const isFooterFrame = isPdfFrameFooterNode(node);
+      const companyNameOnFilledHeader = !compactTemplateFrame && node.id === 'company-name'
+        && (selectedHeaderLayout === 'ribbon' || filledHeaderLayouts.has(selectedHeaderLayout));
+      const companySummaryOnFilledHeader = !compactTemplateFrame && node.id === 'company-summary' && filledHeaderLayouts.has(selectedHeaderLayout);
+      const footerTextOnFilledFooter = !compactTemplateFrame
+        && ['footer-contact', 'footer-page'].includes(String(node.id || ''))
+        && filledFooterLayouts.has(selectedFooterLayout);
       const isFrameDecoration = (isHeaderFrame || isFooterFrame) && node.type === 'section';
       const isFooterBand = node.id === 'footer-band';
       const isFooterLayer = node.id === 'footer-layer';
@@ -218,7 +229,7 @@ export function applyPdfStyleToDefinition<T extends { nodes: any[]; metadata?: R
       const isFooterWaveAccent = node.id === 'footer-accent' && node.shape === 'wave';
       const sourceFrameFill = String(node.backgroundColor || '').trim().toLowerCase();
       const mappedFrameFill = sourceFrameFill && !isLightNeutralColor(sourceFrameFill) && sourceFrameFill !== 'transparent'
-        ? (isFooterLayer || isFooterWaveAccent || /band|shadow/.test(String(node.id || '')) ? config.palette.secondary : config.palette.primary)
+        ? (isFooterLayer || isFooterWaveAccent || /band|shadow|ribbon-accent/.test(String(node.id || '')) ? config.palette.secondary : config.palette.primary)
         : node.backgroundColor;
       const footerY = node.id === 'footer-band' ? 95.2
         : node.id === 'footer-layer' ? 96.65
@@ -267,12 +278,14 @@ export function applyPdfStyleToDefinition<T extends { nodes: any[]; metadata?: R
         ...(isSplitFooterAccent ? { width: 65 } : {}),
         fontFamily: config.fontFamily,
         fontSize: Math.max(5, Math.min(72, styledFontSize)),
-        color: reportKpiText ? readableTextOn(reportKpiTextBackground) : accent ? config.palette.primary : config.palette.text,
+        color: reportKpiText ? readableTextOn(reportKpiTextBackground)
+          : companyNameOnFilledHeader || companySummaryOnFilledHeader || footerTextOnFilledFooter ? '#ffffff'
+            : accent ? config.palette.primary : config.palette.text,
         borderColor: reportKpiCard ? reportKpiBackground : isTable ? config.palette.tableBorder
           : isHeaderRule ? config.palette.primary
             : isHeaderSection && !isLightNeutralColor(String(node.borderColor || '')) ? config.palette.primary
               : isFooterBand || isFooterAccent ? (sourceFrameFill && !isLightNeutralColor(sourceFrameFill) ? (isFooterLayer || isFooterWaveAccent ? config.palette.secondary : config.palette.primary) : config.palette.line)
-                : isHeaderFrame && isFrameDecoration && sourceFrameFill && !isLightNeutralColor(sourceFrameFill) ? (/band|shadow/.test(String(node.id || '')) ? config.palette.secondary : config.palette.primary)
+                : isHeaderFrame && isFrameDecoration && sourceFrameFill && !isLightNeutralColor(sourceFrameFill) ? (/band|shadow|ribbon-accent/.test(String(node.id || '')) ? config.palette.secondary : config.palette.primary)
                   : isHeaderSection || isPartySection || isFooterFrame ? config.palette.line : config.palette.line,
         ...(reportKpiCard ? { backgroundColor: reportKpiBackground } : isFrameDecoration ? { backgroundColor: mappedFrameFill } : {}),
         ...(isHeaderSection ? { pdfHeaderDecoration: undefined, pdfHeaderAccentColor: undefined } : {}),

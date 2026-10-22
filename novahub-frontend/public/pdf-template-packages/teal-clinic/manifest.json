@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "name": "Clínica turquesa",
+  "description": "Cabecera ondulada, datos ordenados y tabla en azul con acentos turquesa.",
+  "documentTypes": ["ventas.estimate", "ventas.order", "ventas.invoice", "ventas.recurring", "ventas.return", "ventas.credit", "ventas.credit-note", "compras.purchase-record", "compras.recurring-supplier-invoice", "compras.purchase-order", "compras.supplier-invoice"],
+  "page": { "size": "LETTER", "orientation": "portrait", "contentArea": { "topMm": 31, "bottomMm": 10 } },
+  "defaults": { "fontFamily": "Arial", "fontSize": 8, "primaryColor": "#2e70a2", "secondaryColor": "#b8e0d8", "contentTopMm": 8, "marginMm": 13 },
+  "files": { "html": "template.html", "css": "styles.css" }
+}

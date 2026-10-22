@@ -1,11 +1,11 @@
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
-import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
+import { getPdfTemplateTarget, isPdfTemplateFixed } from '../services/pdf-document-catalog';
 import { applyPdfHeaderComposition, applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfSettings, ensureDashboardChartNodes, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, isSalesPdfLayoutTarget, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, pdfTemplateImageShapeStyles, resolveTemplateToken, type PdfHeaderComposition, type PdfHeaderContentSpacing, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
 import { applyPdfStyleToDefinition, createDefaultPdfStyleConfig, getPdfTableCellBorders, getPdfTablePresentation, isPdfFrameFooterNode, isPdfFrameHeaderNode, normalizePdfFrameGeometry, normalizePdfFontFamily, normalizePdfStyleConfig, resolvePdfHtmlTokens, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfTableStyle } from '../services/pdf-document-style';
-import { PDF_APPEARANCE_FONT_GROUPS, PDF_APPEARANCE_FONTS, pdfFontFacesSupportWeight, pdfFontUsesSystemFallback } from '../services/pdf-appearance';
+import { PDF_APPEARANCE_FONT_GROUPS, PDF_APPEARANCE_FONTS, PDF_DOCUMENT_TEMPLATES, pdfFontFacesSupportWeight, pdfFontUsesSystemFallback } from '../services/pdf-appearance';
 import { normalizePdfHeaderContentSpacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM } from '../services/pdf-header-spacing';
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
 import { inlinePdfFontFaceRules } from './pdf-font-embedding';
@@ -26,6 +26,7 @@ export interface PdfTemplateRenderSettings {
   margins?: number;
   tableLayout?: string;
   pdfTableStyle?: PdfTableStyle;
+  pdfDocumentTemplateId?: string;
   footerText?: string;
   showPageNumber?: boolean;
   pageNumberFormat?: 'page-of' | 'number-only' | 'custom';
@@ -809,6 +810,180 @@ export function resolvePdfStyleConfigForRender(value: unknown, settings: Record<
       tableBorder: palette.tableBorder || settings.tableBorderColor || base.palette.tableBorder,
     },
   });
+}
+
+function applyPdfDocumentTemplateFrame<T extends PdfTemplateDefinition>(definition: T, targetKey: string, settings: Record<string, unknown>): T {
+  const templateId = String(settings.pdfDocumentTemplateId || 'default-v1');
+  const template = PDF_DOCUMENT_TEMPLATES.find(item => item.id === templateId);
+  if (!template || template.id === 'default-v1' || isPdfTemplateFixed(targetKey)) return definition;
+
+  const existingFrameNodes = new Map(definition.nodes
+    .filter(node => isPdfFrameHeaderNode(node) || isPdfFrameFooterNode(node))
+    .map(node => [node.id, node] as const));
+  const frameDefinition = createDefaultTemplateDefinition(targetKey, {
+    ...settings,
+    logoUrl: existingFrameNodes.has('company-logo') ? 'configured-logo' : settings.logoUrl,
+    headerLayout: template.headerLayout,
+    footerLayout: template.footerLayout,
+  });
+  const replacementFrameNodes = frameDefinition.nodes
+    .filter(node => isPdfFrameHeaderNode(node) || isPdfFrameFooterNode(node))
+    .map(frameNode => {
+      const existing = existingFrameNodes.get(frameNode.id);
+      if (!existing) return frameNode;
+      return {
+        ...frameNode,
+        ...(existing.token !== undefined ? { token: existing.token } : {}),
+        ...(existing.text !== undefined ? { text: existing.text } : {}),
+        ...(existing.sample !== undefined ? { sample: existing.sample } : {}),
+        ...(existing.enabled !== undefined ? { enabled: existing.enabled } : {}),
+        ...(existing.firstPageOnly !== undefined ? { firstPageOnly: existing.firstPageOnly } : {}),
+        ...(existing.subsequentY !== undefined ? { subsequentY: existing.subsequentY } : {}),
+        ...(existing.subsequentHeight !== undefined ? { subsequentHeight: existing.subsequentHeight } : {}),
+      };
+    });
+  return {
+    ...definition,
+    nodes: [
+      ...definition.nodes.filter(node => !isPdfFrameHeaderNode(node) && !isPdfFrameFooterNode(node)),
+      ...replacementFrameNodes,
+    ],
+    metadata: {
+      ...(definition.metadata || {}),
+      pdfDocumentTemplateId: template.id,
+      pdfDocumentTemplateHeaderLayout: template.headerLayout,
+      pdfDocumentTemplateFooterLayout: template.footerLayout,
+      pdfDocumentTemplateCompactFrame: isStandardPdfLayoutTarget(targetKey),
+    },
+  };
+}
+
+/**
+ * Las plantillas decorativas se diseñaron para facturas con cabeceras amplias.
+ * En los reportes/historiales esa geometría ocupa el área de datos y el estilo
+ * PDF volvía a agrandar los pies al final del pipeline. Normalizamos solo esas
+ * plantillas y solo para páginas estándar; Predeterminada y formatos físicos
+ * especiales conservan su composición.
+ */
+function normalizeDecorativeTemplateFrame<T extends PdfTemplateDefinition>(
+  definition: T,
+  targetKey: string,
+  settings: Record<string, unknown>,
+): T {
+  const templateId = String(definition.metadata?.pdfDocumentTemplateId || 'default-v1');
+  if (templateId === 'default-v1' || !isStandardPdfLayoutTarget(targetKey)) return definition;
+
+  const template = PDF_DOCUMENT_TEMPLATES.find(item => item.id === templateId);
+  if (!template) return definition;
+
+  const style = normalizePdfStyleConfig(definition.metadata?.pdfStyleConfig);
+  const primary = style?.palette.primary || String(settings.primaryColor || '#01422c');
+  const secondary = style?.palette.secondary || String(settings.secondaryColor || primary);
+  const line = style?.palette.line || String(settings.lineColor || '#d7dee7');
+  const sourceDecorations = definition.nodes.filter(node =>
+    (node.type === 'section' || node.type === 'divider')
+    && (/^header(?:-|$)/.test(node.id) || /^footer-/.test(node.id))
+    && !['footer-contact', 'footer-page'].includes(node.id),
+  );
+  const sourceById = new Map(sourceDecorations.map(node => [node.id, node] as const));
+  const makeSection = (
+    id: string,
+    label: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color: string,
+    options: Pick<PdfTemplateNode, 'shape' | 'clipPath' | 'opacity'> = {},
+  ): PdfTemplateNode => ({
+    ...(sourceById.get(id) || {} as PdfTemplateNode),
+    id,
+    type: 'section',
+    label,
+    x,
+    y,
+    width,
+    height,
+    backgroundColor: color,
+    borderColor: color,
+    borderStyle: 'none',
+    borderRadius: 0,
+    padding: 0,
+    shape: options.shape,
+    clipPath: options.clipPath,
+    opacity: options.opacity ?? 1,
+    enabled: true,
+    text: '',
+  });
+  const makeDivider = (id: string, label: string, color: string, width = 90, x = 5): PdfTemplateNode => ({
+    ...(sourceById.get(id) || {} as PdfTemplateNode),
+    id,
+    type: 'divider',
+    label,
+    x,
+    y: 95.35,
+    width,
+    height: 0.2,
+    borderColor: color,
+    borderStyle: 'solid',
+    enabled: true,
+  });
+
+  let headerDecorations: PdfTemplateNode[];
+  switch (template.headerLayout) {
+    case 'sidebar':
+      headerDecorations = [makeSection('header-accent', 'Acento lateral', 1.4, 6.5, 0.8, 8, primary)];
+      break;
+    case 'fluid':
+      headerDecorations = [
+        makeSection('header', 'Onda superior', 5, 3.8, 90, 1.7, primary, { shape: 'wave-bottom' }),
+        makeSection('header-band', 'Onda secundaria', 5, 4.2, 90, 0.9, secondary, { shape: 'wave-bottom', opacity: 0.55 }),
+      ];
+      break;
+    case 'ribbon':
+      headerDecorations = [
+        makeSection('header', 'Cinta superior', 5, 3.8, 36, 1.7, primary, { shape: 'angled' }),
+        makeSection('header-ribbon-accent', 'Acento de cinta', 33, 3.8, 13, 1.7, secondary, { shape: 'angled', opacity: 0.75 }),
+      ];
+      break;
+    case 'diagonal':
+      headerDecorations = [
+        makeSection('header', 'Franja diagonal', 5, 3.8, 90, 1.7, primary, { clipPath: 'polygon(0 0,100% 0,100% 58%,0 100%)' }),
+        makeSection('header-band', 'Acento diagonal', 5, 3.8, 90, 1.7, secondary, { clipPath: 'polygon(44% 0,100% 0,100% 100%,58% 100%)', opacity: 0.62 }),
+      ];
+      break;
+    case 'editorial':
+      headerDecorations = [makeDivider('header-accent', 'Regla editorial', primary, 90, 5)];
+      headerDecorations[0] = { ...headerDecorations[0], y: 4.2, height: 0.2 };
+      break;
+    default:
+      headerDecorations = [];
+  }
+
+  const footerAccent = template.footerLayout === 'layers' || template.footerLayout === 'band'
+    ? makeSection('footer-accent', 'Acento del pie', 5, 95.25, 25, 0.3, secondary)
+    : template.footerLayout === 'notch'
+      ? makeSection('footer-accent', 'Remate del pie', 75, 95.25, 20, 0.3, secondary)
+      : template.footerLayout === 'split'
+        ? makeSection('footer-accent', 'Acento editorial', 5, 95.25, 30, 0.3, primary)
+        : makeSection('footer-accent', 'Acento mínimo', 5, 95.25, 12, 0.3, primary);
+  const footerDecorations = [
+    makeDivider('footer-divider', 'Línea inferior', line),
+    footerAccent,
+  ];
+  const allDecorationIds = new Set(sourceDecorations.map(node => node.id));
+  const contentAndLabels = definition.nodes.filter(node =>
+    !allDecorationIds.has(node.id)
+    && !((node.type === 'section' || node.type === 'divider') && (/^header(?:-|$)/.test(node.id) || /^footer-/.test(node.id)) && !['footer-contact', 'footer-page'].includes(node.id)),
+  );
+  const footerTextNodes = contentAndLabels.filter(node => ['footer-contact', 'footer-page'].includes(node.id));
+  const contentNodes = contentAndLabels.filter(node => !['footer-contact', 'footer-page'].includes(node.id));
+
+  return {
+    ...definition,
+    nodes: [...headerDecorations, ...contentNodes, ...footerDecorations, ...footerTextNodes],
+    metadata: { ...(definition.metadata || {}), pdfDocumentTemplateCompactFrame: true },
+  };
 }
 
 /**
@@ -1752,8 +1927,12 @@ function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRend
   const activeChartIds = new Set((data.dashboardCharts || []).map(chart => chart.id));
   const detailChartNodes = definition.nodes.filter(node => node.type === 'chart' && !isDashboardTrendNode(node) && activeChartIds.has(String(node.token || '')));
   const styleConfig = normalizePdfStyleConfig(definition.metadata?.pdfStyleConfig);
+  const hasSelectedDocumentTemplate = Boolean(definition.metadata?.pdfDocumentTemplateId)
+    && definition.metadata?.pdfDocumentTemplateId !== 'default-v1';
+  const useHtmlHeader = Boolean(styleConfig?.htmlTemplate?.headerHtml.trim()) && !hasSelectedDocumentTemplate;
+  const useHtmlFooter = Boolean(styleConfig?.htmlTemplate?.footerHtml.trim()) && !hasSelectedDocumentTemplate;
   const isStandardLayout = isStandardPdfLayoutTarget(targetKey);
-  const fallbackRepeatedHeaderBottom = styleConfig?.htmlTemplate?.headerHtml.trim() ? 17 : 8;
+  const fallbackRepeatedHeaderBottom = useHtmlHeader ? 17 : 8;
   const repeatedHeaderBottom = definition.nodes
     .filter(node => node.enabled !== false && isPdfFrameHeaderNode(node) && !isPdfFirstPageOnlyInfoNode(node.id))
     .reduce((bottom, node) => Math.max(bottom, Number(node.y || 0) + Number(node.height || 0)), fallbackRepeatedHeaderBottom);
@@ -1762,8 +1941,8 @@ function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRend
   const hasParty = definition.nodes.some(node => partyField(node) && hasRenderablePartyValue(node, data));
   definition.nodes
     .filter(node => node.enabled !== false && (node.page || 1) === 1)
-    .filter(node => !(styleConfig?.htmlTemplate?.headerHtml.trim() && isPdfFrameHeaderNode(node)))
-    .filter(node => !(styleConfig?.htmlTemplate?.footerHtml.trim() && isPdfFrameFooterNode(node)))
+    .filter(node => !(useHtmlHeader && isPdfFrameHeaderNode(node)))
+    .filter(node => !(useHtmlFooter && isPdfFrameFooterNode(node)))
     .filter(node => !(data.dashboardCover === true && node.type === 'report-sections'))
     .filter(node => !(isStandardLayout && pageNumber > 1 && (isPdfFirstPageOnlyInfoNode(node.id) || node.id === 'party-section' || node.id.startsWith('party-') || node.id.startsWith('cashier-'))))
     .filter(node => !(isStandardLayout && ['notes', 'document-notes'].includes(node.id)))
@@ -1781,7 +1960,7 @@ function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRend
     .forEach(node => {
       const logoScale = node.id === 'company-logo' ? Math.max(0.53, Math.min(1.5, (Number(settings.logoSize) || 34) / 34)) : 1;
       const scaledLogoWidth = node.width * logoScale;
-      const canCenterLogoInSlot = node.id === 'company-logo' && !styleConfig?.htmlTemplate?.headerHtml.trim();
+      const canCenterLogoInSlot = node.id === 'company-logo' && !useHtmlHeader;
       const logoX = canCenterLogoInSlot ? node.x + (node.width - scaledLogoWidth) / 2 : node.x;
       const scaledLogoHeight = node.height * logoScale;
       const logoY = canCenterLogoInSlot ? node.y + (node.height - scaledLogoHeight) / 2 : node.y;
@@ -1799,12 +1978,14 @@ function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRend
       renderedNode.dataset.pdfNodeType = positionedNode.type;
       page.appendChild(renderedNode);
     });
-  if (styleConfig?.htmlTemplate) {
+  if (styleConfig?.htmlTemplate && (useHtmlHeader || useHtmlFooter)) {
     const style = document.createElement('style');
     style.textContent = sanitizePdfTemplateCss(styleConfig.htmlTemplate.css, styleConfig.fontFamily);
     page.appendChild(style);
     const logo = typeof data.logo === 'string' ? data.logo : typeof data.company?.logo === 'string' ? data.company.logo : undefined;
     const appendRegion = (zone: 'header' | 'footer') => {
+      if (zone === 'header' && !useHtmlHeader) return;
+      if (zone === 'footer' && !useHtmlFooter) return;
       const source = styleConfig.htmlTemplate?.[zone === 'header' ? 'headerHtml' : 'footerHtml'] || '';
       if (!source) return;
       const region = document.createElement('div');
@@ -2448,10 +2629,16 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
     })()
     : logoAdjustedDefinition;
   const ensuredDefinition = ensureDashboardChartNodes(normalizePdfFrameGeometry(logoReadyDefinition), targetKey, { ...settings });
-  const composedDefinition = pdfStyleConfig?.htmlTemplate?.headerHtml.trim()
+  const hasCustomHtmlHeader = Boolean(pdfStyleConfig?.htmlTemplate?.headerHtml.trim())
+    && String(settings.pdfDocumentTemplateId || 'default-v1') === 'default-v1';
+  const templateDefinition = hasCustomHtmlHeader
     ? ensuredDefinition
-    : applyPdfHeaderComposition(ensuredDefinition, settings.headerComposition, targetKey);
-  const styledDefinition = pdfStyleConfig ? applyPdfStyleToDefinition(composedDefinition, pdfStyleConfig) : composedDefinition;
+    : applyPdfDocumentTemplateFrame(ensuredDefinition, targetKey, settings);
+  const composedDefinition = hasCustomHtmlHeader
+    ? templateDefinition
+    : applyPdfHeaderComposition(templateDefinition, settings.headerComposition, targetKey);
+  const initiallyStyledDefinition = pdfStyleConfig ? applyPdfStyleToDefinition(composedDefinition, pdfStyleConfig) : composedDefinition;
+  const styledDefinition = normalizeDecorativeTemplateFrame(initiallyStyledDefinition, target.key, settings);
   const baseDefinition = target.templateMode === 'fixed'
     ? styledDefinition
     : applyPdfDocumentFontFamily(styledDefinition, settings.fontFamily);

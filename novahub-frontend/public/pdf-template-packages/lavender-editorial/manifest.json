@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "name": "Editorial lavanda",
+  "description": "Factura de tono cálido con tipografía serif, marcos y acentos lavanda.",
+  "documentTypes": ["ventas.estimate", "ventas.order", "ventas.invoice", "ventas.recurring", "ventas.return", "ventas.credit", "ventas.credit-note", "compras.purchase-record", "compras.recurring-supplier-invoice", "compras.purchase-order", "compras.supplier-invoice"],
+  "page": { "size": "LETTER", "orientation": "portrait", "contentArea": { "topMm": 18, "bottomMm": 0 } },
+  "defaults": { "fontFamily": "Arial", "fontSize": 9, "primaryColor": "#8587c5", "secondaryColor": "#b8b9df", "contentTopMm": 8, "marginMm": 13 },
+  "files": { "html": "template.html", "css": "styles.css" }
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "name": "Curva clínica",
+  "description": "Composición limpia en azul para consultorios y servicios profesionales.",
+  "documentTypes": ["ventas.estimate", "ventas.order", "ventas.invoice", "ventas.recurring", "ventas.return", "ventas.credit", "ventas.credit-note", "compras.purchase-record", "compras.recurring-supplier-invoice", "compras.purchase-order", "compras.supplier-invoice"],
+  "page": { "size": "LETTER", "orientation": "portrait", "contentArea": { "topMm": 47, "bottomMm": 9 } },
+  "defaults": { "fontFamily": "Arial", "fontSize": 8, "primaryColor": "#1d4d91", "secondaryColor": "#327ab8", "contentTopMm": 7, "marginMm": 13 },
+  "files": { "html": "template.html", "css": "styles.css" }
+}

@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import jspdfAutoTable from 'jspdf-autotable';
-import { generateFastGlobalReportPDF, getGlobalReportSettings, getPdfDesign, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
+import { generateFastGlobalReportPDF, getGlobalReportSettings, getPdfDesign, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignColor, pdfDesignPaper, renderCuratedTemplateToPdf } from './pdfGenerator';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
 import { getPdfTemplatePartyConfig, getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
@@ -156,7 +156,7 @@ function renderRollPdf({ document, tenantName, format, settings }: { document: P
   return doc;
 }
 
-export async function generatePurchaseRecordPDF({ document, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.purchase-record', designOverride }: { document: PurchasePdfDocument; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string; designOverride?: any }) {
+export async function generatePurchaseRecordPDF({ document, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.purchase-record', designOverride, allowCuratedTemplate = true }: { document: PurchasePdfDocument; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string; designOverride?: any; allowCuratedTemplate?: boolean }) {
   const configuredDesign = designOverride || await getPdfDesign(targetKey);
   const overrideSettings = configuredDesign?.settings && typeof configuredDesign.settings === 'object' ? configuredDesign.settings : null;
   const settings = overrideSettings || await getPdfDesignSettings(targetKey);
@@ -202,7 +202,7 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
             { id: 'total', label: 'Total', token: 'total', width: 18, align: 'right' as const },
           ];
     const data: PdfTemplateData = {
-      company: { name: tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: resolvedLogo },
+      company: { name: tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: settings.curatedTemplateSelection ? configuredLogo || tenantLogo : resolvedLogo },
       document: { title: document.title, number: document.number, date: document.date, status: document.status, notes: document.notes || '', extra: fieldSummary },
       supplier,
       party,
@@ -212,6 +212,15 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
       tableColumns,
       ...fieldData,
     };
+    if (allowCuratedTemplate && settings.curatedTemplateSelection) {
+      const rendered = await renderCuratedTemplateToPdf({
+        targetKey,
+        data: data as Record<string, unknown>,
+        fileName: buildLabeledPdfFileName(document.title, document.number, format),
+        save: true,
+      });
+      return rendered.doc;
+    }
     const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data, fileName: buildLabeledPdfFileName(document.title, document.number, format), save: true });
     return rendered.doc;
   }

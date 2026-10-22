@@ -1,5 +1,5 @@
-import { api } from './api';
-import type { PdfAppearanceProfile, PdfAppearanceProfilePatch } from './pdf-appearance';
+import { api, getApiUrl, getAuthHeaders } from './api';
+import type { PdfAppearanceProfile, PdfAppearanceProfilePatch, PdfCuratedTemplateSelection } from './pdf-appearance';
 
 /** Identificador de una salida PDF. Puede ser legacy (Ventas) o module.subview. */
 export type PdfDocumentType = string;
@@ -43,6 +43,52 @@ export interface PdfCompanyProfile {
   logo: string;
 }
 
+export interface PdfCuratedTemplateRevision {
+  id: string;
+  version: number;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  manifest: { name: string; description?: string; documentTypes: string[]; page: { size: 'LETTER'; orientation: 'portrait' | 'landscape' }; defaults: Record<string, unknown> };
+  createdAt: string;
+  publishedAt?: string | null;
+}
+
+export interface PdfCuratedTemplateRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  revisions: PdfCuratedTemplateRevision[];
+}
+
+export type PdfCuratedTemplateScope = 'branch' | 'document';
+
+async function base64FromFile(file: File) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+  }
+  return btoa(binary);
+}
+
+async function fetchPdfBlob(path: string, body: unknown) {
+  const response = await fetch(getApiUrl(path), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    cache: 'no-store',
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let message = '';
+    try {
+      const error = await response.json();
+      message = typeof error?.message === 'string' ? error.message : Array.isArray(error?.message) ? error.message.join(', ') : '';
+    } catch { /* Se usa el error HTTP como reserva. */ }
+    throw new Error(message || `No se pudo generar el PDF (HTTP ${response.status}).`);
+  }
+  return response.blob();
+}
+
 export type { PdfAppearanceOverrides, PdfAppearanceProfile } from './pdf-appearance';
 
 export const pdfDocumentDesignService = {
@@ -62,4 +108,16 @@ export const pdfDocumentDesignService = {
   convertToHtml: (id: string) => api.post<PdfDocumentDesignRecord>(`/pdf-document-designs/${id}/convert-html`, {}),
   update: (id: string, data: Partial<PdfDocumentDesignRecord>) => api.patch<PdfDocumentDesignRecord>(`/pdf-document-designs/${id}`, data),
   remove: (id: string) => api.delete(`/pdf-document-designs/${id}`),
+  listCuratedTemplates: () => api.get<PdfCuratedTemplateRecord[]>('/pdf-document-templates'),
+  importCuratedTemplate: async (file: File, templateId?: string) => api.post<PdfCuratedTemplateRecord>('/pdf-document-templates/import-package', {
+    fileName: file.name,
+    packageBase64: await base64FromFile(file),
+    ...(templateId ? { templateId } : {}),
+  }),
+  publishCuratedRevision: (templateId: string, revisionId: string) => api.post<{ id: string; status: string; publishedAt: string }>(`/pdf-document-templates/${encodeURIComponent(templateId)}/publish/${encodeURIComponent(revisionId)}`, {}),
+  selectCuratedTemplate: (selection: { templateId: string; revisionId: string; targetKey: string; scope: PdfCuratedTemplateScope; overrides?: PdfCuratedTemplateSelection['overrides'] }) => api.post<PdfCuratedTemplateSelection & { targetKey: string; scope: PdfCuratedTemplateScope }>('/pdf-document-templates/selections', selection),
+  clearCuratedSelection: (scope: PdfCuratedTemplateScope, targetKey: string) => api.delete(`/pdf-document-templates/selections/${encodeURIComponent(scope)}/${encodeURIComponent(targetKey)}`),
+  previewCuratedTemplate: (templateId: string, body: { revisionId: string; targetKey: string; scope: PdfCuratedTemplateScope; overrides?: PdfCuratedTemplateSelection['overrides']; data: Record<string, unknown> }) => fetchPdfBlob(`/pdf-document-templates/${encodeURIComponent(templateId)}/preview`, body),
+  renderSelectedCuratedTemplate: (targetKey: string, data: Record<string, unknown>) => fetchPdfBlob('/pdf-document-templates/render', { targetKey, data }),
+  getCuratedSelections: () => api.get<{ branch: Record<string, PdfCuratedTemplateSelection>; document: Record<string, PdfCuratedTemplateSelection> }>('/pdf-document-templates/selections'),
 };

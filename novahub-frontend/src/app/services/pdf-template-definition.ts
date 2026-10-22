@@ -1494,8 +1494,7 @@ function createBaseTemplateDefinition(targetKey: string, requestedSettings?: Rec
   } else if (headerLayout === 'topline') {
     headerNodes.push(node({ type: 'section', label: 'Línea de color', x: 5, y: 4, width: 90, height: 1.5, backgroundColor: primary, borderColor: primary }, 'header-accent'));
   } else if (headerLayout === 'sidebar') {
-    headerNodes.push(node({ type: 'section', label: 'Acento lateral', x: 5, y: 4, width: 2.4, height: 18, backgroundColor: primary, borderColor: primary, borderRadius: 4, clipPath: 'ellipse(100% 50% at 0% 50%)' }, 'header-accent'));
-    headerNodes.push(node({ type: 'section', label: 'Sombra lateral', x: 6.8, y: 6, width: 1.4, height: 14, backgroundColor: secondary, borderColor: secondary, borderRadius: 4, clipPath: 'ellipse(100% 50% at 0% 50%)', opacity: 0.28 }, 'header-sidebar-shadow'));
+    headerNodes.push(node({ type: 'section', label: 'Acento lateral', x: 4, y: 6.5, width: 0.7, height: 10, backgroundColor: primary, borderColor: primary, borderRadius: 1 }, 'header-accent'));
   } else if (headerLayout === 'centered') {
     headerNodes.push(node({ type: 'section', label: 'Píldora de marca', x: 32, y: 4, width: 36, height: 3, backgroundColor: primary, borderColor: primary, borderRadius: 4 }, 'header-accent'));
   } else if (headerLayout === 'corner') {
@@ -1934,11 +1933,11 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
 
   const settings = normalizePdfPaperSettings(target.key, applyStandardPdfLayoutSettings(target.key, requestedSettings || {}));
   const base = createBaseTemplateDefinition(target.key, settings);
-  if (isPurchasePdfLayoutTarget(target.key)) return createStandardPurchaseDefinition(target.key, settings, base);
+  if (isPurchasePdfLayoutTarget(target.key)) return applyPdfDocumentTemplateFrameToStandardDefinition(createStandardPurchaseDefinition(target.key, settings, base), base, settings);
   if (['ventas.cash-session', 'ventas.cash-historical-report', 'ventas.customer-history', 'ventas.customers'].includes(target.key)) {
-    return createStandardSalesReportDefinition(target.key, settings, base);
+    return applyPdfDocumentTemplateFrameToStandardDefinition(createStandardSalesReportDefinition(target.key, settings, base), base, settings);
   }
-  if (!isSalesPdfLayoutTarget(target.key)) return createStandardModuleDefinition(target.key, settings, base);
+  if (!isSalesPdfLayoutTarget(target.key)) return applyPdfDocumentTemplateFrameToStandardDefinition(createStandardModuleDefinition(target.key, settings, base), base, settings);
   const party = getPdfTemplatePartyConfig(target.key);
   const primary = settingsValue(settings, 'primaryColor', '#01422c');
   const text = settingsValue(settings, 'textColor', '#334155');
@@ -2003,12 +2002,101 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
     node({ type: 'field', label: 'Página', token: 'page.number', x: 72, y: 95.45, width: 23, height: 3.1, fontSize: 6.5, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2 }, 'footer-page'),
   );
 
-  return {
+  return applyPdfDocumentTemplateFrameToStandardDefinition({
     version: 1,
     page: base.page,
     nodes,
     metadata: { preset: 'sales-standard', salesLayoutVersion: SALES_PDF_LAYOUT_VERSION },
+  }, base, settings);
+}
+
+/**
+ * Los layouts estándar reconstruyen sus propios campos de empresa/documento.
+ * Conservamos esos campos y el cuerpo, pero intercambiamos las decoraciones de
+ * cabecera y pie por las de la plantilla elegida. El predeterminado mantiene
+ * intacta su geometría histórica.
+ */
+function applyPdfDocumentTemplateFrameToStandardDefinition(
+  definition: PdfTemplateDefinition,
+  base: PdfTemplateDefinition,
+  settings: Record<string, unknown>,
+): PdfTemplateDefinition {
+  const templateId = String(settings.pdfDocumentTemplateId || 'default-v1');
+  if (!templateId || templateId === 'default-v1') return definition;
+
+  const headerLayout = String(settings.headerLayout || '');
+  const footerLayout = String(settings.footerLayout || '');
+  const compactHeaderNodes = compactPdfTemplateHeaderForStandardDocument(
+    base.nodes.filter(item => item.id === 'header' || item.id.startsWith('header-')),
+    headerLayout,
+  );
+  const templateFooterNodes = base.nodes
+    .filter(item => item.id.startsWith('footer-'))
+    // El trazo blanco de las capas tapa el pie en el formato compacto de reportes.
+    .filter(item => !(footerLayout === 'layers' && item.id === 'footer-accent' && item.shape === 'pill'));
+  const contentNodes = definition.nodes
+    .filter(item => item.id !== 'header' && !item.id.startsWith('header-') && !item.id.startsWith('footer-'));
+
+  return {
+    ...definition,
+    nodes: [...compactHeaderNodes, ...contentNodes, ...templateFooterNodes],
+    metadata: {
+      ...(definition.metadata || {}),
+      pdfDocumentTemplateId: templateId,
+      pdfDocumentTemplateHeaderLayout: headerLayout,
+      pdfDocumentTemplateFooterLayout: footerLayout,
+      pdfDocumentTemplateCompactFrame: true,
+    },
   };
+}
+
+/**
+ * Las plantillas se diseñaron con una cabecera amplia para facturas. Los
+ * reportes conservan una cabecera más baja, así que aquí reducimos únicamente
+ * sus adornos y dejamos intactos el nombre, los datos y el logo de empresa.
+ */
+function compactPdfTemplateHeaderForStandardDocument(nodes: PdfTemplateNode[], layout: string): PdfTemplateNode[] {
+  if (layout === 'sidebar') {
+    return nodes
+      .filter(item => item.id !== 'header-sidebar-shadow')
+      .map(item => item.id === 'header-accent'
+        ? {
+          ...item,
+          x: 4,
+          y: 6.5,
+          width: 0.7,
+          height: 10,
+          borderRadius: 1,
+          clipPath: undefined,
+          shape: undefined,
+          opacity: 1,
+        }
+        : item);
+  }
+
+  if (layout === 'fluid') {
+    return nodes
+      .filter(item => !(item.id === 'header-accent' && item.shape === 'pill'))
+      .map(item => item.id === 'header'
+        ? { ...item, y: 3.1, height: 1.15 }
+        : item.id === 'header-band'
+          ? { ...item, y: 3.75, height: 0.8 }
+          : item);
+  }
+
+  if (layout === 'ribbon') {
+    return nodes.map(item => item.id === 'header' || item.id === 'header-band' || item.id === 'header-ribbon-accent'
+      ? { ...item, y: 3.1, height: 1.45 }
+      : item);
+  }
+
+  if (layout === 'diagonal') {
+    return nodes.map(item => item.id === 'header' || item.id === 'header-band'
+      ? { ...item, y: 3.1, height: 1.45 }
+      : item);
+  }
+
+  return nodes;
 }
 
 /** Añade las gráficas estándar a definiciones de dashboard antiguas que aún no tenían nodos de gráfica. */

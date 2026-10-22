@@ -687,6 +687,50 @@ try {
   );
   assert.equal(historicalCashPages.length, 1, 'Un reporte histórico con una sesión y sus cinco formas de pago debe caber en una página, sin separar la última fila de su sección.');
 
+  const curatedService = designService.pdfDocumentDesignService;
+  const originalCuratedRender = curatedService.renderSelectedCuratedTemplate;
+  let curatedRenderCall;
+  curatedService.renderSelectedCuratedTemplate = async (targetKey, data) => {
+    curatedRenderCall = { targetKey, data };
+    return new Blob(['%PDF-curated-test'], { type: 'application/pdf' });
+  };
+  try {
+    const curatedResult = await generator.renderCuratedTemplateToPdf({
+      targetKey: 'ventas.invoice', data: { document: { number: 'FAC-TEST' } }, fileName: 'factura.pdf', save: false,
+    });
+    assert.equal(curatedRenderCall.targetKey, 'ventas.invoice', 'La exportación preparada debe conservar el destino comercial.');
+    assert.equal(curatedRenderCall.data.document.number, 'FAC-TEST', 'La exportación preparada debe transportar los datos actuales del documento.');
+    assert.equal(await curatedResult.doc.output('blob').text(), '%PDF-curated-test', 'La vista previa y la descarga deben utilizar el Blob que produjo el renderer aislado.');
+  } finally {
+    curatedService.renderSelectedCuratedTemplate = originalCuratedRender;
+  }
+
+  const curatedTargetSet = new Set(appearance.PDF_CURATED_TEMPLATE_TARGETS);
+  const curatedPackageIds = ['blue-waves', 'dental-curve', 'lavender-editorial', 'indigo-sides', 'teal-clinic', 'green-ribbons'];
+  const curatedHtml = await readFile(new URL('../public/pdf-template-packages/common/template.html', import.meta.url), 'utf8');
+  const curatedSlots = ['company', 'document', 'counterparty', 'items', 'totals', 'footer'];
+  for (const packageId of curatedPackageIds) {
+    const manifest = JSON.parse(await readFile(new URL(`../public/pdf-template-packages/${packageId}/manifest.json`, import.meta.url), 'utf8'));
+    const css = await readFile(new URL(`../public/pdf-template-packages/${packageId}/styles.css`, import.meta.url), 'utf8');
+    assert.equal(manifest.page.size, 'LETTER', `${packageId} debe estar adaptada a Carta.`);
+    assert.ok(manifest.documentTypes.every(target => curatedTargetSet.has(target)), `${packageId} no debe ofrecer destinos de reportes, historiales o impresos.`);
+    if (['blue-waves', 'dental-curve', 'lavender-editorial', 'teal-clinic'].includes(packageId)) {
+      assert.match(css, /@top-left/, `${packageId} debe dibujar su cabecera dentro del margen de página repetido, sin invadir la tabla.`);
+    }
+    if (['blue-waves', 'dental-curve', 'green-ribbons', 'teal-clinic'].includes(packageId)) {
+      assert.match(css, /@bottom-left/, `${packageId} debe dibujar el pie dentro del margen de página repetido, sin invadir la tabla.`);
+    }
+    for (const slot of curatedSlots) {
+      assert.equal((curatedHtml.match(new RegExp(`\\{\\{slot:${slot}\\}\\}`, 'g')) || []).length, 1, `${packageId} debe conservar una región dinámica ${slot}.`);
+    }
+    assert.doesNotMatch(css, /https?:|@import|<script/i, `${packageId} debe cargar recursos locales y CSS declarativo.`);
+  }
+  assert.equal(curatedTargetSet.has('reportes.sales'), false, 'Los reportes Manager no deben heredar plantillas por sucursal.');
+  const purchaseExportsSource = await readFile(new URL('../src/app/utils/purchaseExports.ts', import.meta.url), 'utf8');
+  const managerPurchasesSource = await readFile(new URL('../src/app/components/manager/ManagerPurchasesModule.tsx', import.meta.url), 'utf8');
+  assert.match(purchaseExportsSource, /allowCuratedTemplate && settings\.curatedTemplateSelection/, 'Los registros comerciales de compra deben usar la ruta Chromium cuando tienen una revisión seleccionada.');
+  assert.match(managerPurchasesSource, /allowCuratedTemplate:\s*false/, 'El detalle PDF del módulo Manager no debe heredar la plantilla de la sucursal.');
+
   console.log(`Validación PDF aprobada: ${targets.length} destinos, muestras por vista, gráficas y paginación.`);
 } finally {
   await server.close();

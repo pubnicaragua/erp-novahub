@@ -363,9 +363,14 @@ export async function getPdfDesign(targetKey: string) {
       definition,
       profile,
     );
+    const selectedCuratedTemplate = profile?.curatedTemplates?.document[normalizedTarget]
+      || profile?.curatedTemplates?.branch[normalizedTarget];
     return {
       ...design,
-      settings: appearance.settings,
+      settings: {
+        ...appearance.settings,
+        ...(selectedCuratedTemplate ? { curatedTemplateSelection: selectedCuratedTemplate } : {}),
+      },
       appearance: { profile, overrides: appearance.overrides, effective: appearance.effective },
     };
   })();
@@ -1205,6 +1210,24 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       images: estimate.images,
     };
     const settings = applyStandardPdfLayoutSettings(targetKey, { ...design, paperSize: renderFormat === 'configured' ? design.paperSize : paperSettingForDownload(renderFormat as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>), orientation: design.orientation || 'portrait' });
+    if (settings.curatedTemplateSelection) {
+      const preparedAttachments = withImages === false ? [] : await Promise.all(normalizedEstimateImages.items.slice(0, 8).map(async image => {
+        const dataUrl = await getBase64Image(image.url);
+        return dataUrl ? { title: image.title || image.name || '', description: image.description || image.caption || '', image: dataUrl } : null;
+      }));
+      const attachmentSize = preparedAttachments.reduce((total, item) => total + (item?.image.length || 0), 0);
+      const curatedData = {
+        ...data,
+        images: attachmentSize <= 4_500_000 ? preparedAttachments.filter(Boolean) : [],
+      };
+      const renderedCurated = await renderCuratedTemplateToPdf({
+        targetKey,
+        data: curatedData,
+        fileName: buildSalesPdfFileName(documentType, estimate.number, renderFormat),
+        save,
+      });
+      return renderedCurated;
+    }
     const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(savedDesign.layoutZones.definition, targetKey, settings), settings, targetKey, data, fileName: buildSalesPdfFileName(documentType, estimate.number, renderFormat), save: false });
     if (withImages !== false && normalizedEstimateImages.items.length > 0 && rendered.doc) {
       await appendAttachedImagesToPdf({
@@ -2732,6 +2755,7 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
 
 const LEGACY_LAYOUT_PRESERVED_SETTINGS = [
   'paperSize', 'orientation', 'margins',
+  'curatedTemplateSelection',
   'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'pdfStylePreset', 'pdfTableStyle', 'tableLayout',
   'primaryColor', 'secondaryColor', 'textColor', 'lineColor', 'tableHeaderColor', 'tableHeaderTextColor',
   'tableRowColor', 'tableStripeColor', 'tableBorderColor', 'pdfAppearancePalette', 'appearanceOverrides',
@@ -2811,7 +2835,28 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
       logo: resolvedLogo,
     },
   };
+  if (settings.curatedTemplateSelection) {
+    return renderCuratedTemplateToPdf({ targetKey, data: enrichedData as Record<string, unknown>, fileName, save });
+  }
   return renderPdfTemplateToPdf({ definition: definitionWithGeneratedFallback, settings: renderSettings, targetKey, data: enrichedData, fileName, save, onProgress });
+}
+
+export async function renderCuratedTemplateToPdf({ targetKey, data, fileName, save }: { targetKey: string; data: Record<string, unknown>; fileName: string; save: boolean }) {
+  const source = data && typeof data === 'object' ? data as Record<string, any> : {};
+  const company = source.company && typeof source.company === 'object' ? source.company as Record<string, any> : {};
+  const logoSource = String(company.logo || source.logo || '').trim();
+  const logo = /^data:image\/(?:png|jpeg|webp);base64,/i.test(logoSource) ? logoSource : logoSource ? await getBase64Image(logoSource) || '' : '';
+  const renderData = { ...source, logo, company: { ...company, logo } };
+  const blob = await pdfDocumentDesignService.renderSelectedCuratedTemplate(targetKey, renderData);
+  const doc = new jsPDF({ format: 'letter', orientation: 'portrait', unit: 'mm' });
+  const originalOutput = doc.output.bind(doc);
+  (doc as any).output = (type = 'blob', ...args: unknown[]) => type === 'blob' ? blob : originalOutput(type as any, ...(args as any[]));
+  (doc as any).save = (name = fileName) => {
+    savePdfBlob(blob, String(name || fileName));
+    return doc;
+  };
+  if (save) savePdfBlob(blob, fileName);
+  return { doc, blob, curated: true };
 }
 
 export async function generateConfiguredReportTemplate({

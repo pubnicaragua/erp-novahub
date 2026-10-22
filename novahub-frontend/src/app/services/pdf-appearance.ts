@@ -29,6 +29,15 @@ export const PDF_APPEARANCE_FONT_SIZE_MIN = 2;
 export const PDF_APPEARANCE_FONT_SIZE_MAX = 20;
 export type PdfHeaderComposition = 'company-left-logo-right' | 'logo-left-company-right' | 'centered-stack';
 export type PdfAppearancePreset = 'light' | 'boxed' | 'bold' | 'striped' | 'bubble' | 'wave' | 'folder';
+export const PDF_DOCUMENT_TEMPLATES = [
+  { id: 'default-v1', name: 'Predeterminada', description: 'Empresa a la izquierda, logotipo a la derecha y líneas verdes.', headerLayout: 'classic', footerLayout: 'line' },
+  { id: 'invoice-wave-v1', name: 'Ondas corporativas', description: 'Cabecera fluida y pie con capas curvas.', headerLayout: 'fluid', footerLayout: 'layers' },
+  { id: 'invoice-ribbon-v1', name: 'Cinta moderna', description: 'Franja de marca en la cabecera y banda inferior.', headerLayout: 'ribbon', footerLayout: 'band' },
+  { id: 'invoice-diagonal-v1', name: 'Diagonal dinámica', description: 'Composición diagonal con remate geométrico.', headerLayout: 'diagonal', footerLayout: 'notch' },
+  { id: 'invoice-editorial-v1', name: 'Editorial limpia', description: 'Jerarquía tipográfica con reglas y pie dividido.', headerLayout: 'editorial', footerLayout: 'split' },
+  { id: 'invoice-sidebar-v1', name: 'Acento lateral', description: 'Detalle vertical discreto y pie minimalista.', headerLayout: 'sidebar', footerLayout: 'minimal' },
+] as const;
+export type PdfDocumentTemplateId = typeof PDF_DOCUMENT_TEMPLATES[number]['id'];
 
 export const PDF_APPEARANCE_PALETTE_KEYS = [
   'primary', 'secondary', 'text', 'line', 'tableHeader', 'tableHeaderText', 'tableRow', 'tableStripe', 'tableBorder',
@@ -38,9 +47,33 @@ export type PdfAppearancePaletteKey = typeof PDF_APPEARANCE_PALETTE_KEYS[number]
 export type PdfAppearancePalette = Partial<Record<PdfAppearancePaletteKey, string>>;
 export const PDF_DEFAULT_TEMPLATE_ID = 'default-v1' as const;
 
+export interface PdfCuratedTemplateSelection {
+  templateId: string;
+  revisionId: string;
+  version: number;
+  overrides?: {
+    primaryColor?: string;
+    secondaryColor?: string;
+    fontFamily?: string;
+    fontSize?: number;
+    contentOffsetMm?: number;
+  };
+}
+
+export interface PdfCuratedTemplateSelections {
+  branch: Record<string, PdfCuratedTemplateSelection>;
+  document: Record<string, PdfCuratedTemplateSelection>;
+}
+
+export const PDF_CURATED_TEMPLATE_TARGETS = [
+  'ventas.estimate', 'ventas.order', 'ventas.invoice', 'ventas.recurring', 'ventas.return', 'ventas.credit', 'ventas.credit-note',
+  'compras.purchase-record', 'compras.recurring-supplier-invoice', 'compras.purchase-order', 'compras.supplier-invoice',
+] as const;
+
 export interface PdfAppearanceProfile {
   templateId?: typeof PDF_DEFAULT_TEMPLATE_ID;
   templateVersion?: 1;
+  documentTemplateId?: PdfDocumentTemplateId;
   headerComposition?: PdfHeaderComposition;
   headerContentSpacing?: number;
   fontFamily?: PdfAppearanceFontFamily;
@@ -48,15 +81,17 @@ export interface PdfAppearanceProfile {
   presetId?: PdfAppearancePreset;
   tableStyle?: PdfAppearancePreset;
   palette?: PdfAppearancePalette;
+  curatedTemplates?: PdfCuratedTemplateSelections;
 }
 
 /** Legacy string values remain representable until the user resets an old design. */
 export type PdfAppearanceOverrides = Omit<PdfAppearanceProfile, 'fontFamily'> & { fontFamily?: string };
 export type PdfAppearanceProperty = keyof PdfAppearanceProfile;
-export type PdfAppearanceProfilePatch = Omit<Partial<PdfAppearanceProfile>, 'palette' | 'templateId' | 'templateVersion'> & {
+export type PdfAppearanceDraftProperty = Exclude<PdfAppearanceProperty, 'palette' | 'templateId' | 'templateVersion' | 'curatedTemplates'>;
+export type PdfAppearanceProfilePatch = Omit<Partial<PdfAppearanceProfile>, 'palette' | 'templateId' | 'templateVersion' | 'curatedTemplates'> & {
   palette?: Partial<Record<PdfAppearancePaletteKey, string | null>> | null;
 };
-export type PdfAppearanceDraftKey = PdfAppearanceProperty | `palette.${PdfAppearancePaletteKey}`;
+export type PdfAppearanceDraftKey = PdfAppearanceDraftProperty | `palette.${PdfAppearancePaletteKey}`;
 export type PdfAppearanceDraftScope = 'branch' | 'document';
 export interface PdfAppearanceDraftState {
   profile: Partial<PdfAppearanceProfile>;
@@ -90,8 +125,8 @@ const DEFAULT_STYLE_PALETTE: Record<PdfAppearancePaletteKey, string> = {
   primary: '#01422c', secondary: '#01422c', text: '#334155', line: '#01422c',
   tableHeader: '#01422c', tableHeaderText: '#ffffff', tableRow: '#ffffff', tableStripe: '#f8fafc', tableBorder: '#d7dee7',
 };
-const APPEARANCE_KEYS: readonly PdfAppearanceProperty[] = [
-  'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'presetId', 'tableStyle', 'palette',
+const APPEARANCE_KEYS: readonly (PdfAppearanceDraftProperty | 'palette')[] = [
+  'documentTemplateId', 'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'presetId', 'tableStyle', 'palette',
 ];
 
 /** Discards values from an outdated/corrupt profile; API validation remains authoritative. */
@@ -99,6 +134,7 @@ export function normalizePdfAppearanceProfile(value: unknown): PdfAppearanceProf
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const source = value as Record<string, unknown>;
   const profile: PdfAppearanceProfile = {};
+  if (PDF_DOCUMENT_TEMPLATES.some(item => item.id === source.documentTemplateId)) profile.documentTemplateId = source.documentTemplateId as PdfDocumentTemplateId;
   if (HEADER_COMPOSITIONS.includes(source.headerComposition as PdfHeaderComposition)) profile.headerComposition = source.headerComposition as PdfHeaderComposition;
   const headerContentSpacing = parsePdfHeaderContentSpacing(source.headerContentSpacing);
   if (headerContentSpacing !== null) profile.headerContentSpacing = headerContentSpacing;
@@ -109,6 +145,34 @@ export function normalizePdfAppearanceProfile(value: unknown): PdfAppearanceProf
   if (PRESETS.includes(source.tableStyle as PdfAppearancePreset)) profile.tableStyle = source.tableStyle as PdfAppearancePreset;
   if (source.templateId === PDF_DEFAULT_TEMPLATE_ID) profile.templateId = PDF_DEFAULT_TEMPLATE_ID;
   if (source.templateVersion === 1) profile.templateVersion = 1;
+  if (source.curatedTemplates && typeof source.curatedTemplates === 'object' && !Array.isArray(source.curatedTemplates)) {
+    const rawSelections = source.curatedTemplates as Record<string, unknown>;
+    const normalizeScope = (scope: unknown): Record<string, PdfCuratedTemplateSelection> => {
+      const records = scope && typeof scope === 'object' && !Array.isArray(scope) ? scope as Record<string, unknown> : {};
+      const normalized: Record<string, PdfCuratedTemplateSelection> = {};
+      for (const [targetKey, rawSelection] of Object.entries(records)) {
+        if (!PDF_CURATED_TEMPLATE_TARGETS.includes(targetKey as typeof PDF_CURATED_TEMPLATE_TARGETS[number]) || !rawSelection || typeof rawSelection !== 'object' || Array.isArray(rawSelection)) continue;
+        const selection = rawSelection as Record<string, unknown>;
+        if (typeof selection.templateId !== 'string' || !selection.templateId.trim() || typeof selection.revisionId !== 'string' || !selection.revisionId.trim()) continue;
+        const version = Number(selection.version);
+        if (!Number.isInteger(version) || version < 1) continue;
+        const rawOverrides = selection.overrides && typeof selection.overrides === 'object' && !Array.isArray(selection.overrides)
+          ? selection.overrides as Record<string, unknown>
+          : {};
+        const overrides: PdfCuratedTemplateSelection['overrides'] = {};
+        for (const key of ['primaryColor', 'secondaryColor'] as const) {
+          const color = rawOverrides[key];
+          if (typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)) overrides[key] = color;
+        }
+        if (typeof rawOverrides.fontFamily === 'string' && rawOverrides.fontFamily.length <= 80) overrides.fontFamily = rawOverrides.fontFamily;
+        if (typeof rawOverrides.fontSize === 'number' && Number.isFinite(rawOverrides.fontSize) && rawOverrides.fontSize >= 6 && rawOverrides.fontSize <= 16) overrides.fontSize = rawOverrides.fontSize;
+        if (typeof rawOverrides.contentOffsetMm === 'number' && Number.isFinite(rawOverrides.contentOffsetMm) && rawOverrides.contentOffsetMm >= 0 && rawOverrides.contentOffsetMm <= 50) overrides.contentOffsetMm = rawOverrides.contentOffsetMm;
+        normalized[targetKey] = { templateId: selection.templateId, revisionId: selection.revisionId, version, overrides };
+      }
+      return normalized;
+    };
+    profile.curatedTemplates = { branch: normalizeScope(rawSelections.branch), document: normalizeScope(rawSelections.document) };
+  }
   if (source.palette && typeof source.palette === 'object' && !Array.isArray(source.palette)) {
     const paletteSource = source.palette as Record<string, unknown>;
     const palette: PdfAppearancePalette = {};
@@ -167,6 +231,7 @@ export function inferLegacyPdfAppearanceOverrides(
     ? styleCandidate as Record<string, unknown>
     : {};
   const defaults: Record<string, unknown> = {
+    documentTemplateId: 'default-v1',
     headerComposition: 'company-left-logo-right',
     headerContentSpacing: PDF_HEADER_CONTENT_SPACING_DEFAULT_MM,
     fontFamily: 'Arial',
@@ -177,8 +242,8 @@ export function inferLegacyPdfAppearanceOverrides(
   };
   const overrides: Record<string, unknown> = {};
 
-  const directProperties: Exclude<PdfAppearanceProperty, 'palette'>[] = [
-    'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'presetId', 'tableStyle',
+  const directProperties: PdfAppearanceDraftProperty[] = [
+    'documentTemplateId', 'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'presetId', 'tableStyle',
   ];
   for (const property of directProperties) {
     const rawValue = style[property] !== undefined ? style[property] : source[property];
@@ -229,6 +294,9 @@ export function resolvePdfDesignAppearance(
   const legacyPalette = style.palette && typeof style.palette === 'object' ? style.palette : {};
   const configuredFontFamily = String(style.fontFamily || settings.fontFamily || 'Arial');
   const fallback: PdfAppearanceOverrides = {
+    documentTemplateId: (PDF_DOCUMENT_TEMPLATES.some(item => item.id === settings.pdfDocumentTemplateId)
+      ? settings.pdfDocumentTemplateId
+      : 'default-v1') as PdfDocumentTemplateId,
     headerComposition: settings.headerComposition as PdfHeaderComposition || 'company-left-logo-right',
     headerContentSpacing: parsePdfHeaderContentSpacing(settings.headerContentSpacing) ?? PDF_HEADER_CONTENT_SPACING_DEFAULT_MM,
     fontFamily: normalizeLegacyFontForComparison(configuredFontFamily) === 'arial' ? 'Arial' : configuredFontFamily,
@@ -258,6 +326,7 @@ export function resolvePdfDesignAppearance(
     settings: {
       ...settings,
       ...effective,
+      pdfDocumentTemplateId: effective.documentTemplateId || 'default-v1',
       appearanceOverrides: overrides,
       pdfAppearancePalette: effective.palette,
       pdfStylePreset: effective.presetId,
@@ -339,7 +408,8 @@ export function clearPdfAppearanceFallback(
     : {};
   const style = { ...sourceStyle };
   const stylePalette = { ...(sourceStyle.palette || {}) };
-  const settingKeys: Record<Exclude<PdfAppearanceProperty, 'palette'>, string[]> = {
+  const settingKeys: Record<PdfAppearanceDraftProperty, string[]> = {
+    documentTemplateId: ['pdfDocumentTemplateId'],
     headerComposition: ['headerComposition'],
     headerContentSpacing: ['headerContentSpacing'],
     fontFamily: ['fontFamily'],
@@ -363,7 +433,7 @@ export function clearPdfAppearanceFallback(
       delete stylePalette[paletteKey];
       return;
     }
-    const property = item as Exclude<PdfAppearanceProperty, 'palette'>;
+    const property = item as PdfAppearanceDraftProperty;
     for (const settingKey of settingKeys[property]) delete settings[settingKey];
     delete style[property];
   };
