@@ -793,10 +793,6 @@ function OverviewContent({ overview, groupId, canExport = false, onEnterBranch, 
   const activeBranches = visibleBranches.filter((branch) => branch.isActive !== false).length;
   const exportOverviewPdf = async (format: import('../utils/pdfDownloadFormats').PdfPaperFormat) => {
     if (!groupId || !overview || !canExport) return;
-    const moduleMetrics = Object.fromEntries((overview.moduleSummaries || []).flatMap((summary) => [
-      [`${summary.section}EligibleBranches`, summary.eligibleBranchCount],
-      ...Object.entries(summary.metrics || {}).flatMap(([key, value]) => typeof value === 'number' ? [[`${summary.section}_${key}`, value]] : []),
-    ]));
     await exportManagerReportPdf({
       groupId,
       targetKey: 'manager.overview.overview.pdf',
@@ -805,7 +801,7 @@ function OverviewContent({ overview, groupId, canExport = false, onEnterBranch, 
       tenantName: overview.group.name,
       tenantLogo: overview.group.logo,
       scopeSummary: `Grupo ${overview.group.name} · ${visibleBranches.length} sucursal(es) autorizada(s)`,
-      metrics: { ...(metrics || {}), ...moduleMetrics },
+      metrics: { ...(metrics || {}) },
       rows: visibleBranches.map((branch) => ({
         Sucursal: branch.name,
         Rubro: branch.businessUnit?.name || branch.businessType || getBusinessTypeLabel(branch.industry, branch.subIndustry || undefined),
@@ -814,10 +810,6 @@ function OverviewContent({ overview, groupId, canExport = false, onEnterBranch, 
         Productos: branch._count.products ?? 0,
         Bodegas: branch._count.warehouses ?? 0,
       })),
-      extraSheets: (overview.moduleSummaries || []).map((summary) => ({
-        name: `Módulo · ${summary.section}`,
-        rows: Object.entries(summary.metrics || {}).map(([key, value]) => ({ Indicador: key, Valor: value })),
-      })).filter((sheet) => sheet.rows.length),
       pdfFormat: format,
     });
   };
@@ -832,7 +824,6 @@ function OverviewContent({ overview, groupId, canExport = false, onEnterBranch, 
   return <>
     {canExport && <div className="flex justify-end"><ExportMenu onPdf={(format) => void exportOverviewPdf(format).catch((error) => toast.error(error instanceof Error ? error.message : 'No se pudo generar el resumen PDF'))} pdfLabel="Resumen gerencial PDF" pdfDescription="Métricas del grupo y sucursales autorizadas" /></div>}
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{cards.map((card, index) => { const Icon = card.icon; return <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}><Card className="h-full rounded-3xl border-border/60 bg-card/70 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><CardContent className="p-5"><div className={`mb-4 flex size-11 items-center justify-center rounded-2xl ${card.tone}`}><Icon className="size-5" /></div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className="mt-1 text-3xl font-black tracking-tight">{typeof card.value === 'string' ? card.value : formatNumber(card.value)}</p><p className="mt-1 text-[11px] text-muted-foreground">{card.detail}</p></CardContent></Card></motion.div>; })}</div>
-    {!!overview?.moduleSummaries?.length && <section aria-label="Indicadores por módulo habilitado" className="space-y-3"><div><h2 className="text-sm font-black uppercase tracking-widest text-foreground">Consolidados por módulo</h2><p className="mt-1 text-xs text-muted-foreground">Cada tarjeta respeta los módulos activos y las subvistas disponibles para tu acceso.</p></div><div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{overview.moduleSummaries.map((summary) => { const title = MANAGER_SECTIONS.find((item) => item.id === summary.section)?.label || summary.section; const values = Object.entries(summary.metrics || {}).filter(([key, value]) => typeof value === 'number' && !/amount|cost|debit|credit|balance|price|value|bytes|volume|weight|income|expense|paid|revenue|rate/i.test(key)); return <Card key={summary.section} className="min-w-0 rounded-2xl border-border/60"><CardContent className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><h3 className="min-w-0 truncate text-xs font-black uppercase tracking-wide">{title}</h3><Badge variant="outline" className="shrink-0 text-[9px]">{summary.eligibleBranchCount} sucursal(es)</Badge></div>{summary.status === 'NO_ELIGIBLE_BRANCHES' ? <p className="text-xs text-muted-foreground">Sin sucursales habilitadas en este alcance.</p> : summary.status === 'ERROR' ? <p className="text-xs text-destructive">No se pudo cargar esta fuente.</p> : values.length ? <div className="grid grid-cols-2 gap-2">{values.map(([key, value]) => <div key={key} className="min-w-0 rounded-xl bg-muted/30 p-2"><p className="truncate text-[9px] font-semibold uppercase text-muted-foreground">{key.replace(/([A-Z])/g, ' $1')}</p><p className="mt-0.5 truncate text-base font-black tabular-nums">{formatNumber(value)}</p></div>)}</div> : <p className="text-xs text-muted-foreground">Sin indicadores cuantitativos en esta vista.</p>}</CardContent></Card>; })}</div></section>}
     <Card className="rounded-3xl border-primary/20 bg-primary/[0.04]">
       <CardContent className="space-y-4 p-5 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

@@ -89,12 +89,6 @@ export interface ManagerOverview {
     storageObjects?: number;
     storageBytes?: number;
   };
-  moduleSummaries?: Array<{
-    section: string;
-    status: 'AVAILABLE' | 'NO_ELIGIBLE_BRANCHES' | 'ERROR';
-    eligibleBranchCount: number;
-    metrics: Record<string, unknown>;
-  }>;
   warehouses: Array<{
     id: string;
     name: string;
