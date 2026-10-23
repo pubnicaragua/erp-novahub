@@ -362,6 +362,7 @@ type ManagerShellProps = {
   reportCurrency: string;
   onReportCurrencyChange: (currency: string) => void;
   allowedSections?: ManagerSection[];
+  availableViews?: Partial<Record<ManagerSection, string[]>>;
   settingsView?: ManagerSettingsView;
   onSettingsViewChange?: (view: ManagerSettingsView) => void;
   canViewAudit?: boolean;
@@ -396,6 +397,7 @@ export function ManagerShell({
   onBranchChange,
   onReportCurrencyChange,
   allowedSections,
+  availableViews,
   settingsView = "theme",
   onSettingsViewChange,
   canViewAudit = true,
@@ -772,6 +774,7 @@ export function ManagerShell({
           onProfileAvatarChange={handleProfileAvatarChange}
           canViewCorporateWarehouses={canReadCorporateWarehouses(group)}
           sections={visibleSections}
+          availableViews={availableViews}
           settingsView={settingsView}
           onSettingsViewChange={onSettingsViewChange}
           canViewAudit={canViewAudit}
@@ -1080,6 +1083,7 @@ function ManagerSidebar({
   onProfileAvatarChange,
   canViewCorporateWarehouses,
   sections = MANAGER_SECTIONS,
+  availableViews,
   settingsView = "theme",
   onSettingsViewChange,
   canViewAudit = true,
@@ -1112,6 +1116,7 @@ function ManagerSidebar({
   onProfileAvatarChange?: (file: File) => void;
   canViewCorporateWarehouses: boolean;
   sections?: typeof MANAGER_SECTIONS;
+  availableViews?: Partial<Record<ManagerSection, string[]>>;
   settingsView?: ManagerSettingsView;
   onSettingsViewChange?: (view: ManagerSettingsView) => void;
   canViewAudit?: boolean;
@@ -1328,7 +1333,7 @@ function ManagerSidebar({
                                         : item.id === "reports"
                                           ? MANAGER_REPORTS_VIEWS
                                           : MANAGER_HR_VIEWS
-                              ).map((view) => {
+                              ).filter((view) => !availableViews?.[item.id] || availableViews[item.id]?.includes(view.id)).map((view) => {
                                 const operationModule = isManagerOperationSection(item.id) ? item.id : null;
                                 const isOperation = operationModule !== null;
                                 const isInventory = item.id === "inventory";

@@ -7,6 +7,7 @@ export interface ManagerGroup {
   consolidationCurrency?: string | null;
   logo?: string | null;
   enabledModules?: string[];
+  modulePolicies?: Record<string, { state?: string; viewIds?: string[] | null }>;
   catalogMode: string;
   inventoryMode: string;
   branches: Array<{
@@ -17,6 +18,8 @@ export interface ManagerGroup {
     isActive: boolean;
     businessUnitId?: string | null;
     businessType?: string | null;
+    enabledModules?: string[];
+    moduleViewOverrides?: Record<string, string[]>;
   }>;
   businessUnits?: Array<{
     id: string;
@@ -24,6 +27,13 @@ export interface ManagerGroup {
     slug?: string;
     isActive?: boolean;
     enabledModules?: string[];
+    moduleViewOverrides?: Record<string, string[]>;
+  }>;
+  managerAssignableWarehouses?: Array<{
+    id: string;
+    name: string;
+    businessUnitId: string;
+    authorizedBranchIds: string[];
   }>;
   managerAccess?: {
     id?: string;
@@ -35,6 +45,7 @@ export interface ManagerGroup {
     branchIds: string[];
     scopeRules?: Array<{ businessUnitId: string; branchMode: 'ALL_CURRENT_AND_FUTURE' | 'SELECTED_BRANCHES'; branchIds?: string[] }>;
     warehouseIds: string[];
+    warehouseScopeRestricted?: boolean;
     branchAccess?: Array<{ scopeType: 'GROUP' | 'BUSINESS_UNIT' | 'BRANCH'; scopeId: string; mode: 'FULL' | 'CUSTOM' | 'NONE'; permissions: any[] }>;
     permissions: unknown;
   } | null;
@@ -56,21 +67,21 @@ export interface ManagerOverview {
     businessUnitId?: string | null;
     businessUnit?: { id: string; name: string; isActive?: boolean } | null;
     isActive?: boolean;
-    _count: { users: number; products: number; warehouses: number };
+    _count: { users?: number; products?: number; warehouses?: number };
   }>;
   metrics: {
     branches: number;
-    users: number;
-    activeUsers: number;
-    warehouses: number;
-    inventoryLines: number;
-    inventoryUnits: number;
-    reservedUnits: number;
-    accountingMovements: number;
-    debit: number;
-    credit: number;
-    storageObjects: number;
-    storageBytes: number;
+    users?: number;
+    activeUsers?: number;
+    warehouses?: number;
+    inventoryLines?: number;
+    inventoryUnits?: number;
+    reservedUnits?: number;
+    accountingMovements?: number;
+    debit?: number;
+    credit?: number;
+    storageObjects?: number;
+    storageBytes?: number;
   };
   warehouses: Array<{
     id: string;
@@ -82,12 +93,30 @@ export interface ManagerOverview {
     authorizedBranchIds?: string[];
     clientTenant?: { id: string; name: string } | null;
   }>;
-  accounts: Array<{
+  accounts?: Array<{
     code: string;
     name: string;
     totalBalance: number;
     branches: number;
   }>;
+}
+
+export interface ManagerAssignmentPayload {
+  name?: string;
+  email?: string;
+  password?: string;
+  userId?: string;
+  scopeRules?: unknown;
+  accessScopeMode?: string;
+  businessUnitIds?: string[];
+  branchIds?: string[];
+  branchAccess?: unknown;
+  warehouseIds?: string[];
+  warehouseScopeRestricted?: boolean;
+  permissions?: unknown;
+  canManageManagers?: boolean;
+  canEdit?: boolean;
+  isOwner?: boolean;
 }
 
 export interface ManagerUserActivityItem {
@@ -1005,14 +1034,14 @@ export const enterpriseGroupsService = {
     api.get<any[]>(`/enterprise-groups/manager/${groupId}/managers`, {
       signal,
     }),
-  assignManager: (groupId: string, body: any) =>
+  assignManager: (groupId: string, body: ManagerAssignmentPayload) =>
     api.idempotentPost(`/enterprise-groups/manager/${groupId}/managers`, body),
-  createManager: (groupId: string, body: any) =>
+  createManager: (groupId: string, body: ManagerAssignmentPayload) =>
     api.idempotentPost(
       `/enterprise-groups/manager/${groupId}/managers/create`,
       body,
     ),
-  updateManager: (groupId: string, userId: string, body: any) =>
+  updateManager: (groupId: string, userId: string, body: ManagerAssignmentPayload) =>
     api.idempotentPatch(
       `/enterprise-groups/manager/${groupId}/managers/${userId}`,
       body,
@@ -1122,11 +1151,13 @@ export const enterpriseGroupsService = {
     groupId: string,
     dateFrom?: string,
     dateTo?: string,
+    branchId?: string,
+    businessUnitId?: string,
     signal?: AbortSignal,
   ) =>
     api.get<any>(
       `/enterprise-groups/manager/${groupId}/accounting/consolidated/branch-comparison`,
-      { params: { dateFrom, dateTo }, signal },
+      { params: { dateFrom, dateTo, branchId, businessUnitId }, signal },
     ),
   getTransfers: (groupId: string, branchId?: string, signal?: AbortSignal, businessUnitId?: string) =>
     api.get<any[]>(`/enterprise-groups/manager/${groupId}/transfers`, {

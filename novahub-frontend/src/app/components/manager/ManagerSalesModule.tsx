@@ -101,7 +101,7 @@ const statusBadgeClass = (value: unknown) => {
 
 const statusBadge = (value: unknown) => <Badge variant="outline" className={cn('font-black', statusBadgeClass(value))}>{statusLabel(value)}</Badge>;
 
-export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId, branchId, branches, reportCurrency, onEnterBranch, enterableBranchIds = new Set<string>(), canExport = true }: { view: ManagerSalesView; onViewChange: (view: ManagerSalesView) => void; groupId: string; businessUnitId?: string; branchId?: string; branches: BranchOption[]; reportCurrency: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; enterableBranchIds?: Set<string>; canExport?: boolean }) {
+export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId, branchId, branches, reportCurrency, onEnterBranch, enterableBranchIds = new Set<string>(), canExport = true, availableViews }: { view: ManagerSalesView; onViewChange: (view: ManagerSalesView) => void; groupId: string; businessUnitId?: string; branchId?: string; branches: BranchOption[]; reportCurrency: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; enterableBranchIds?: Set<string>; canExport?: boolean; availableViews?: string[] }) {
   const { sidebarCollapsed } = useManagerShellNavigation();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -139,6 +139,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
   const { displayMode } = useCurrency();
   const { themeConfig } = useTheme();
   const isInvoiceSeriesView = view === 'invoice-series';
+  const canViewCustomerDetail = availableViews === undefined || availableViews.includes('customer-detail');
   const query = useTenantQuery<ManagerSalesModuleResponse>(
     ['manager-sales', groupId, view, businessUnitId || 'all', branchId || 'all', debouncedSearch, status, customerType, dateFrom, dateTo, registerId, deliveryBranchId, paymentStatus, priceListMode, reportCurrency || 'group-default', page, pageSize],
     (signal) => enterpriseGroupsService.getSalesModule(groupId, { view, businessUnitId, branchId, search: debouncedSearch || undefined, status: status || undefined, customerType: customerType || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, registerId: registerId || undefined, deliveryBranchId: deliveryBranchId || undefined, paymentStatus: paymentStatus || undefined, priceListMode: view === 'pricelists' ? priceListMode : undefined, reportCurrency: reportCurrency || undefined, page, pageSize }, signal),
@@ -162,6 +163,10 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    if (!canViewCustomerDetail) setSelectedCustomer(null);
+  }, [canViewCustomerDetail]);
 
   const changeView = (next: ManagerSalesView) => {
     setPage(1);
@@ -249,7 +254,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
     if (view === 'deliveries') return openDeliveryDetail(row);
     if (view === 'cash') return openCashSessionDetail(row);
     if (view === 'pricelists') return openPriceListDetail(row);
-    if (view === 'customers') return setSelectedCustomer(row);
+    if (view === 'customers' && canViewCustomerDetail) return setSelectedCustomer(row);
     if (view === 'quotes') return openQuoteDetail(row);
     if (['orders', 'invoices', 'recurring', 'payments', 'creditnotes', 'credits'].includes(view)) return openSalesDocumentDetail(row);
   };
@@ -461,15 +466,15 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
       </div>
     </div>
 
-    {sidebarCollapsed && <div className="sales-subnav flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm">{VISIBLE_MANAGER_SALES_VIEWS.map((item) => <button key={item.id} type="button" onClick={() => changeView(item.id)} className={cn('flex-none shrink-0 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-wide text-muted-foreground transition-all hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', view === item.id && 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg hover:from-primary hover:to-primary/80 hover:text-primary-foreground')}><span className="sm:hidden">{item.label.slice(0, 3)}</span><span className="hidden sm:inline">{item.label}</span></button>)}</div>}
+    {sidebarCollapsed && <div className="sales-subnav flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm">{VISIBLE_MANAGER_SALES_VIEWS.filter((item) => !availableViews || availableViews.includes(item.id)).map((item) => <button key={item.id} type="button" onClick={() => changeView(item.id)} className={cn('flex-none shrink-0 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-wide text-muted-foreground transition-all hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', view === item.id && 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg hover:from-primary hover:to-primary/80 hover:text-primary-foreground')}><span className="sm:hidden">{item.label.slice(0, 3)}</span><span className="hidden sm:inline">{item.label}</span></button>)}</div>}
 
     {view === 'invoice-series' ? <ManagerInvoiceSeriesSettings groupId={groupId} businessUnitId={businessUnitId} branchId={branchId} /> : view === 'overview' ? <SalesOverview metrics={metrics} reportCurrency={activeReportCurrency} /> : <>
       <SalesFilters view={view} search={search} setSearch={(value) => { setSearch(value); setPage(1); }} status={status} setStatus={(value) => { setStatus(value); setPage(1); }} customerType={customerType} setCustomerType={(value) => { setCustomerType(value); setPage(1); }} dateFrom={dateFrom} setDateFrom={(value) => { setDateFrom(value); setPage(1); }} dateTo={dateTo} setDateTo={(value) => { setDateTo(value); setPage(1); }} statusOptions={activeStatusOptions} layoutMode={effectiveLayoutMode} setLayoutMode={setLayoutMode} registerId={registerId} setRegisterId={(value) => { setRegisterId(value); setPage(1); }} registerOptions={metrics.registers || []} deliveryBranchId={deliveryBranchId} setDeliveryBranchId={(value) => { setDeliveryBranchId(value); setPage(1); }} branches={branches} paymentStatus={paymentStatus} setPaymentStatus={(value) => { setPaymentStatus(value); setPage(1); }} priceListMode={priceListMode} setPriceListMode={(value) => { setPriceListMode(value); setPage(1); }} />
       <SalesKpis view={view} metrics={metrics} reportCurrency={activeReportCurrency} status={status} onStatusChange={(value) => { setStatus(value); setPage(1); }} />
       {view === 'cash' && <CashRegisterSummary rows={metrics.registerSummary || []} reportCurrency={activeReportCurrency} />}
-      {query.isLoading ? <LoadingState /> : query.error ? <EmptyState title="No se pudo cargar la vista" description="Verifica el permiso Manager de Ventas y vuelve a actualizar." /> : effectiveLayoutMode === 'cards' ? <SalesCards view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} onDetail={openOperationalDetail} priceListMode={priceListMode} /> : <SalesTable view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} displayMode={displayMode} sortState={columnSorts} onSort={changeColumnSort} onDetail={openOperationalDetail} priceListMode={priceListMode} />}
+      {query.isLoading ? <LoadingState /> : query.error ? <EmptyState title="No se pudo cargar la vista" description="Verifica el permiso Manager de Ventas y vuelve a actualizar." /> : effectiveLayoutMode === 'cards' ? <SalesCards view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} onDetail={view === 'customers' && !canViewCustomerDetail ? undefined : openOperationalDetail} priceListMode={priceListMode} /> : <SalesTable view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} displayMode={displayMode} sortState={columnSorts} onSort={changeColumnSort} onDetail={view === 'customers' && !canViewCustomerDetail ? undefined : openOperationalDetail} priceListMode={priceListMode} />}
       <Pagination page={response?.meta.page || page} totalPages={response?.meta.totalPages || 1} total={response?.meta.total || 0} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} />
-      <ManagerCustomerDetailSheet groupId={groupId} customer={selectedCustomer} reportCurrency={activeReportCurrency} onOpenChange={(open) => { if (!open) setSelectedCustomer(null); }} onEnterBranch={onEnterBranch} enterableBranchIds={enterableBranchIds} onExportHistory={canExport ? (paperFormat) => { void downloadCustomerHistory(paperFormat); } : undefined} exportingHistory={exportingCustomerHistory} />
+      <ManagerCustomerDetailSheet groupId={groupId} customer={selectedCustomer} reportCurrency={activeReportCurrency} onOpenChange={(open) => { if (!open) setSelectedCustomer(null); }} onEnterBranch={onEnterBranch} enterableBranchIds={enterableBranchIds} onExportHistory={canExport && canViewCustomerDetail ? (paperFormat) => { void downloadCustomerHistory(paperFormat); } : undefined} exportingHistory={exportingCustomerHistory} />
       <SalesDocumentDetailSheet
         key={selectedQuote?.id || 'manager-quote-detail'}
         document={selectedQuote ? buildManagerQuotePanel(quoteDetail?.quote || selectedQuote, quoteDetail?.history, displayMode) : null}
