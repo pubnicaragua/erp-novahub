@@ -29,7 +29,7 @@ import { MANAGER_REPORTS_VIEWS, type ManagerReportsView } from './manager/manage
 import { ManagerHRModule } from './manager/ManagerHRModule';
 import { MANAGER_HR_VIEWS, type ManagerHrView } from './manager/manager-hr.types';
 import { MANAGER_OPERATION_VIEWS } from './manager/manager-operations.types';
-import { allowedManagerEnterpriseViews } from './manager/managerModuleAvailability';
+import { allowedManagerEnterpriseViews, managerSectionEnabledForGroup } from './manager/managerModuleAvailability';
 import { ManagerOperationsModule as ManagerOperationsView } from './manager/ManagerOperationsModule';
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
 import { BrandLogo } from './BrandLogo';
@@ -146,7 +146,11 @@ const MANAGER_OPERATION_PERMISSION: Record<ManagerOperationsModule, string> = {
   tickets: 'MANAGER_TICKETS',
   documents: 'MANAGER_DOCUMENTS',
   restaurant: 'MANAGER_RESTAURANT',
+  hotel: 'MANAGER_HOTEL',
   logistics: 'MANAGER_LOGISTICS',
+  'intl-imports': 'MANAGER_INTL_IMPORTS',
+  asana: 'MANAGER_ASANA',
+  notifications: 'MANAGER_NOTIFICATIONS',
   financing: 'MANAGER_FINANCING',
   legal: 'MANAGER_LEGAL',
   novachat: 'MANAGER_NOVACHAT',
@@ -265,7 +269,18 @@ export function ManagerPage() {
   );
   const availableManagerViews = useMemo(() => {
     if (!group) return {} as Partial<Record<ManagerSection, string[]>>;
-    const allowed = (section: string, viewIds: string[]) => allowedManagerEnterpriseViews(group, section, viewIds, managerAvailabilityScope);
+    const allowed = (section: string, viewIds: string[]) => {
+      const serverAvailability = group.managerAvailability?.[section];
+      if (serverAvailability) {
+        return viewIds.filter((viewId) => {
+          const view = serverAvailability.views.find((candidate) => candidate.id === viewId);
+          return Boolean(view?.branchIds.some((branchId) => group.branches.some((branch) => branch.id === branchId
+            && (!managerAvailabilityScope.branchId || branch.id === managerAvailabilityScope.branchId)
+            && (!managerAvailabilityScope.businessUnitId || branch.businessUnitId === managerAvailabilityScope.businessUnitId))));
+        });
+      }
+      return allowedManagerEnterpriseViews(group, section, viewIds, managerAvailabilityScope);
+    };
     const views: Partial<Record<ManagerSection, string[]>> = {
       overview: allowed('overview', ['overview']),
       inventory: allowed('inventory', MANAGER_INVENTORY_VIEWS.map((view) => view.id))
@@ -551,6 +566,7 @@ export function ManagerPage() {
   const loading = groupsQuery.isLoading || (section === 'overview' && overviewQuery.isLoading);
   const managersContentProps = {
     data: managersQuery.data || [], businessUnits, branches: managerAssignableBranches,
+    enterpriseModules: group?.enabledModules || [], modulePolicies: group?.modulePolicies || {},
     warehouseOptions: group?.managerAssignableWarehouses || [], warehouseIds: managerWarehouseIds,
     setWarehouseIds: setManagerWarehouseIds, warehouseScopeRestricted: managerWarehouseScopeRestricted,
     setWarehouseScopeRestricted: setManagerWarehouseScopeRestricted, isOwner: Boolean(group?.managerAccess?.isOwner),
@@ -627,7 +643,8 @@ export function ManagerPage() {
         {section === 'accounting' && allowedSections.includes('accounting') && <ManagerAccountingModule view={effectiveAccountingView} onViewChange={setAccountingView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportAccounting} availableViews={availableManagerViews.accounting} branchComparison={consolidatedBranchComparison.data} branchComparisonLoading={consolidatedBranchComparison.isLoading} branchComparisonDateFrom={consDateFrom} setBranchComparisonDateFrom={setConsDateFrom} branchComparisonDateTo={consDateTo} setBranchComparisonDateTo={setConsDateTo} />}
         {section === 'reports' && allowedSections.includes('reports') && <ManagerReportsModule view={effectiveReportView} onViewChange={setReportView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportReports} availableViews={availableManagerViews.reports} />}
         {section === 'hr' && allowedSections.includes('hr') && <ManagerHRModule view={effectiveHrView} onViewChange={setHrView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportHr} availableViews={availableManagerViews.hr} />}
-        {activeOperationModule && allowedSections.includes(section) && <ManagerOperationsView key={activeOperationModule} module={activeOperationModule} view={activeOperationView} onViewChange={(view) => setOperationViews((current) => ({ ...current, [activeOperationModule]: view }))} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={managerAccessAllowsAction(group?.managerAccess, MANAGER_OPERATION_PERMISSION[activeOperationModule], 'export')} availableViews={availableManagerViews[activeOperationModule]} />}
+        {activeOperationModule && allowedSections.includes(section) && !(availableManagerViews[activeOperationModule]?.length) && <Card className="rounded-3xl border-dashed"><CardContent className="p-8 text-center text-sm text-muted-foreground">Sin sucursales habilitadas en este alcance</CardContent></Card>}
+        {activeOperationModule && allowedSections.includes(section) && Boolean(availableManagerViews[activeOperationModule]?.length) && <ManagerOperationsView key={activeOperationModule} module={activeOperationModule} view={activeOperationView} onViewChange={(view) => setOperationViews((current) => ({ ...current, [activeOperationModule]: view }))} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={managerAccessAllowsAction(group?.managerAccess, MANAGER_OPERATION_PERMISSION[activeOperationModule], 'export')} availableViews={availableManagerViews[activeOperationModule]} />}
         {section === 'users' && <div className="space-y-5">
           <div role="tablist" aria-label="Administración de usuarios del grupo" className="flex max-w-full gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-muted/20 p-2">
             {([{ id: 'users', label: 'Usuarios del grupo', allowed: canViewManagerUsers }, { id: 'managers', label: 'Managers', allowed: canViewManagerAssignments || canConfigureManagers }, { id: 'access', label: 'Accesos Manager', allowed: canConfigureManagers }] as const).map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={usersTab === tab.id} disabled={!tab.allowed} onClick={() => setUsersTab(tab.id)} className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${usersTab === tab.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>{tab.label}</button>)}
@@ -682,7 +699,11 @@ const MANAGER_SECTION_MODULES: Partial<Record<ManagerSection, string>> = {
   tickets: 'MANAGER_TICKETS',
   documents: 'MANAGER_DOCUMENTS',
   restaurant: 'MANAGER_RESTAURANT',
+  hotel: 'MANAGER_HOTEL',
   logistics: 'MANAGER_LOGISTICS',
+  'intl-imports': 'MANAGER_INTL_IMPORTS',
+  asana: 'MANAGER_ASANA',
+  notifications: 'MANAGER_NOTIFICATIONS',
   financing: 'MANAGER_FINANCING',
   legal: 'MANAGER_LEGAL',
   novachat: 'MANAGER_NOVACHAT',
@@ -703,7 +724,10 @@ function getAllowedManagerSections(
   return MANAGER_SECTIONS.filter((item) => {
     if (item.id === 'settings') return true;
     if (item.id === 'users') return !access || access.isOwner || managerPermissionGranted(permissions, 'MANAGER_USERS') || managerPermissionGranted(permissions, 'MANAGER_MANAGERS') || Boolean(access.canManageManagers);
-    if (!(availableViews[item.id]?.length)) return false;
+    const serverAvailability = group.managerAvailability?.[item.id];
+    if (serverAvailability) {
+      if (!serverAvailability.enabled || !serverAvailability.read) return false;
+    } else if (!managerSectionEnabledForGroup(group, item.id) || !(availableViews[item.id]?.length)) return false;
     if (!access || access.isOwner) return true;
     // Los Managers creados antes de separar Finanzas y Contabilidad pueden
     // conservar el permiso legado. Se mantiene visible Finanzas para no
@@ -834,7 +858,7 @@ function InventoryContent({ data, loading, branches, warehouses, search, setSear
 }) {
   const term = search.trim().toLowerCase();
   const filtered = data.filter((row) => !term || [row.product?.name, row.product?.code, row.clientTenant?.name, row.warehouse?.name].some((value) => String(value || '').toLowerCase().includes(term)));
-  const grouped = Array.from(filtered.reduce((map, row) => {
+  const grouped: Array<{ key: string; product: any; total: number; reserved: number; locations: any[] }> = Array.from(filtered.reduce((map, row) => {
     const key = row.product?.id || row.product?.code || row.id;
     const current = map.get(key) || { key, product: row.product, total: 0, reserved: 0, locations: [] as any[] };
     current.total += Number(row.quantity || 0); current.reserved += Number(row.reserved || 0); current.locations.push(row); map.set(key, current); return map;
@@ -1141,8 +1165,10 @@ function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourc
 
 type ManagersContentProps = {
   data: any[];
-  businessUnits: Array<{ id: string; name: string; isActive?: boolean }>;
-  branches: Array<{ id: string; name: string; businessUnitId?: string | null }>;
+  businessUnits: Array<{ id: string; name: string; isActive?: boolean; enabledModules?: string[]; moduleViewOverrides?: Record<string, string[]> }>;
+  branches: Array<{ id: string; name: string; businessUnitId?: string | null; enabledModules?: string[]; moduleViewOverrides?: Record<string, string[]> }>;
+  enterpriseModules: string[];
+  modulePolicies: Record<string, { state?: string; viewIds?: string[] | null }>;
   canConfigureManagers: boolean;
   canEditOwner: boolean;
   editingManagerId: string;
@@ -1180,7 +1206,7 @@ type ManagersContentProps = {
 };
 
 function ManagersContent({
-  data, businessUnits, branches, warehouseOptions, canConfigureManagers, canEditOwner,
+  data, businessUnits, branches, enterpriseModules, modulePolicies, warehouseOptions, canConfigureManagers, canEditOwner,
   editingManagerId, name, email, password, scopeRules,
   branchAccess, warehouseIds, warehouseScopeRestricted, isOwner, canManageManagers, permissionState, setEditingManagerId,
   setName, setEmail, setPassword, setScopeRules,
@@ -1200,7 +1226,7 @@ function ManagersContent({
     setName(assignment.user?.name || '');
     setEmail(assignment.user?.email || '');
     setPassword('');
-    const assignedWarehouseIds = Array.isArray(assignment.warehouseIds) ? [...new Set(assignment.warehouseIds.map(String))] : [];
+    const assignedWarehouseIds: string[] = Array.isArray(assignment.warehouseIds) ? [...new Set((assignment.warehouseIds as unknown[]).map((id) => String(id)))] : [];
     setWarehouseIds(assignedWarehouseIds);
     setWarehouseScopeRestricted(Boolean(assignment.warehouseScopeRestricted || assignedWarehouseIds.length));
     let storedRules = (Array.isArray(assignment.branchAccess) ? assignment.branchAccess : []) as ManagerBranchAccessRule[];
@@ -1288,11 +1314,11 @@ function ManagersContent({
           <label className="min-w-0 space-y-2 text-sm font-semibold md:col-span-2"><span>{isEditing ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'}</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={isEditing ? 'Déjala vacía para conservarla' : 'Contraseña segura'} className="h-10 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm font-normal" /><PasswordRequirements value={password} required={!isEditing} /></label>
         </div>
 
-        <ManagerBranchAccessEditor scopeRules={scopeRules} setScopeRules={setScopeRules} branchAccess={branchAccess} setBranchAccess={setBranchAccess} businessUnits={businessUnits} branches={branches} />
+        <ManagerBranchAccessEditor scopeRules={scopeRules} setScopeRules={setScopeRules} branchAccess={branchAccess} setBranchAccess={setBranchAccess} businessUnits={businessUnits} branches={branches} enterpriseModules={enterpriseModules} modulePolicies={modulePolicies} />
         <ManagerWarehouseAccessEditor warehouses={warehouseOptions} branches={branches} scopeRules={scopeRules} selectedWarehouseIds={warehouseIds} setSelectedWarehouseIds={setWarehouseIds} warehouseScopeRestricted={warehouseScopeRestricted} setWarehouseScopeRestricted={setWarehouseScopeRestricted} isOwner={isOwner} />
 
         <details open className="group rounded-2xl border border-border/60 bg-muted/15">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 marker:hidden [&::-webkit-details-marker]:hidden"><span className="min-w-0"><span className="block text-xs font-black uppercase tracking-widest">Vista Manager</span><span className="mt-1 block text-xs text-muted-foreground">Módulos consolidados y acciones disponibles dentro del alcance geográfico.</span></span><span className="flex shrink-0 items-center gap-2"><Badge variant="outline">{configuredModules} módulo(s)</Badge><ChevronRight className="size-4 transition-transform group-open:rotate-90" /></span></summary>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 marker:hidden [&::-webkit-details-marker]:hidden"><span className="min-w-0"><span className="block text-xs font-black uppercase tracking-widest">Permisos por vista Manager</span><span className="mt-1 block text-xs text-muted-foreground">Elige qué vistas consolidadas puede abrir y qué acciones tiene en cada una.</span></span><span className="flex shrink-0 items-center gap-2"><Badge variant="outline">{configuredModules} vista(s)</Badge><ChevronRight className="size-4 transition-transform group-open:rotate-90" /></span></summary>
           <div className="space-y-3 border-t border-border/50 p-4">
             <p className="text-xs text-muted-foreground">El alcance por rubro limita los datos consolidados. Los permisos operativos de sucursal no cambian la visibilidad de estos módulos.</p>
             {MANAGER_PERMISSION_OPTIONS.map((option) => {

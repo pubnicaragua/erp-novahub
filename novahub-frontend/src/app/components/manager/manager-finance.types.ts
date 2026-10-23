@@ -9,7 +9,9 @@ export type ManagerFinanceView =
   | 'calendar'
   | 'analysis'
   | 'balance'
-  | 'losses';
+  | 'losses'
+  | 'journal'
+  | 'ledger';
 
 export const MANAGER_FINANCE_VIEWS: Array<{ id: ManagerFinanceView; label: string }> = [
   { id: 'overview', label: 'Resumen financiero' },
@@ -23,4 +25,6 @@ export const MANAGER_FINANCE_VIEWS: Array<{ id: ManagerFinanceView; label: strin
   { id: 'analysis', label: 'Análisis ingresos y gastos' },
   { id: 'balance', label: 'Balance general' },
   { id: 'losses', label: 'Pérdidas' },
+  { id: 'journal', label: 'Diario financiero' },
+  { id: 'ledger', label: 'Libro mayor financiero' },
 ];

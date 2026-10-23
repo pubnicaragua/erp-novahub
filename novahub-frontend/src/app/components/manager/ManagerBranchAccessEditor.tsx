@@ -4,6 +4,7 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { SIDEBAR_PERMISSION_PARENT_ORDER, SIDEBAR_PERMISSION_SUBMODULES } from '../../utils/sidebarPermissions';
 import { getPermissionActionKeys, type PermissionMatrixAction, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS } from '../../utils/permissions';
+import { filterManagerBranchViewOptionsForScopes } from '../../utils/managerBranchPermissions';
 
 export type ManagerBranchAccessRule = {
   scopeType: 'BUSINESS_UNIT' | 'BRANCH' | 'GROUP';
@@ -46,22 +47,30 @@ const ACTION_LABELS = new Map<string, string>([
 
 function canDelegateBranchModule(module: string) {
   const normalized = String(module || '').toUpperCase();
-  return normalized !== 'SUBSCRIPTIONS' && !normalized.startsWith('MANAGER_') && !normalized.startsWith('PLATFORM_');
+  return normalized !== 'SUBSCRIPTIONS'
+    && normalized !== 'CONFIGURATION'
+    && normalized !== 'MY_COMPANY'
+    && normalized !== 'AUDIT_LOGS'
+    && !normalized.startsWith('CONFIG_')
+    && !normalized.startsWith('MANAGER_')
+    && !normalized.startsWith('PLATFORM_');
 }
 
-function PermissionMatrix({ permissions, onChange }: {
+function PermissionMatrix({ permissions, onChange, availableViews }: {
   permissions: ManagerBranchAccessRule['permissions'];
   onChange: (permissions: ManagerBranchAccessRule['permissions']) => void;
+  availableViews: ModuleOption[];
 }) {
   const [search, setSearch] = useState('');
+  const availableViewIds = useMemo(() => new Set(availableViews.map((view) => view.id)), [availableViews]);
   const grouped = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('es');
     return SIDEBAR_PERMISSION_PARENT_ORDER.map((parent) => ({
       parent,
       label: PARENT_LABELS[parent] || parent,
-      modules: MODULE_OPTIONS.filter((module) => canDelegateBranchModule(module.id) && module.parent === parent && (!query || `${module.label} ${module.id}`.toLocaleLowerCase('es').includes(query))),
+      modules: MODULE_OPTIONS.filter((module) => availableViewIds.has(module.id) && canDelegateBranchModule(module.id) && module.parent === parent && (!query || `${module.label} ${module.id}`.toLocaleLowerCase('es').includes(query))),
     })).filter((group) => group.modules.length);
-  }, [search]);
+  }, [availableViewIds, search]);
 
   const update = (module: string, action: PermissionMatrixAction, enabled: boolean) => {
     const current = permissions.find((permission) => permission.module === module) || { module };
@@ -103,16 +112,17 @@ function PermissionMatrix({ permissions, onChange }: {
           })}
         </div>
       </details>)}
-      {!grouped.length && <p className="py-4 text-center text-xs text-muted-foreground">No hay vistas que coincidan con la búsqueda.</p>}
+      {!grouped.length && <p className="py-4 text-center text-xs text-muted-foreground">No hay vistas activas que coincidan con la búsqueda.</p>}
     </div>
   </div>;
 }
 
-function RuleEditor({ rule, label, modeOptions, onChange }: {
+function RuleEditor({ rule, label, modeOptions, onChange, availableViews }: {
   rule: ManagerBranchAccessRule;
   label: string;
   modeOptions: Array<{ value: ManagerBranchAccessRule['mode']; label: string }>;
   onChange: (rule: ManagerBranchAccessRule) => void;
+  availableViews: ModuleOption[];
 }) {
   return <div className="rounded-xl border border-border/60 bg-muted/15 p-3">
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -123,7 +133,7 @@ function RuleEditor({ rule, label, modeOptions, onChange }: {
     </div>
     {rule.mode === 'CUSTOM' && <details className="mt-3 rounded-xl border border-border/50 bg-background p-2">
       <summary className="cursor-pointer list-none text-xs font-bold text-primary marker:hidden [&::-webkit-details-marker]:hidden"><ShieldCheck className="mr-1 inline size-3.5" />Configurar vistas y acciones</summary>
-      <div className="mt-3"><PermissionMatrix permissions={rule.permissions} onChange={(permissions) => onChange({ ...rule, permissions })} /></div>
+      <div className="mt-3"><PermissionMatrix permissions={rule.permissions} onChange={(permissions) => onChange({ ...rule, permissions })} availableViews={availableViews} /></div>
     </details>}
   </div>;
 }
@@ -135,16 +145,19 @@ export function ManagerBranchAccessEditor({
   setBranchAccess,
   businessUnits,
   branches,
+  enterpriseModules,
+  modulePolicies,
 }: {
   scopeRules: ManagerBranchScopeRule[];
   setScopeRules: (rules: ManagerBranchScopeRule[]) => void;
   branchAccess: ManagerBranchAccessRule[];
   setBranchAccess: (rules: ManagerBranchAccessRule[]) => void;
-  businessUnits: Array<{ id: string; name: string; isActive?: boolean }>;
-  branches: Array<{ id: string; name: string; businessUnitId?: string | null }>;
+  businessUnits: Array<{ id: string; name: string; isActive?: boolean; enabledModules?: string[]; moduleViewOverrides?: Record<string, string[]> }>;
+  branches: Array<{ id: string; name: string; businessUnitId?: string | null; enabledModules?: string[]; moduleViewOverrides?: Record<string, string[]> }>;
+  enterpriseModules: string[];
+  modulePolicies: Record<string, { state?: string; viewIds?: string[] | null }>;
 }) {
   const activeUnits = businessUnits.filter((unit) => unit.isActive !== false);
-  const selectedUnitSet = useMemo(() => new Set(scopeRules.map((rule) => rule.businessUnitId)), [scopeRules]);
   const setRule = (rule: ManagerBranchAccessRule) => setBranchAccess([
     ...branchAccess.filter((candidate) => !(candidate.scopeType === rule.scopeType && candidate.scopeId === rule.scopeId)),
     rule,
@@ -154,6 +167,26 @@ export function ManagerBranchAccessEditor({
       || { scopeType, scopeId, mode: scopeType === 'BUSINESS_UNIT' ? 'NONE' : 'CUSTOM', permissions: [] };
 
   const branchesForUnit = (unitId: string) => branches.filter((branch) => String(branch.businessUnitId || '') === unitId);
+  const unitAvailableViews = (unitId: string) => {
+    const unit = businessUnits.find((candidate) => candidate.id === unitId);
+    const enabledModules = unit?.enabledModules?.length ? unit.enabledModules : enterpriseModules;
+    return filterManagerBranchViewOptionsForScopes(
+      MODULE_OPTIONS, enterpriseModules, enabledModules, enabledModules, modulePolicies,
+      { unit: unit?.moduleViewOverrides || {} },
+    );
+  };
+  const branchAvailableViews = (branch: (typeof branches)[number]) => {
+    const unit = businessUnits.find((candidate) => candidate.id === branch.businessUnitId);
+    const unitModules = unit?.enabledModules?.length ? unit.enabledModules : enterpriseModules;
+    return filterManagerBranchViewOptionsForScopes(
+      MODULE_OPTIONS,
+      enterpriseModules,
+      unitModules,
+      branch.enabledModules || [],
+      modulePolicies,
+      { unit: unit?.moduleViewOverrides || {}, branch: branch.moduleViewOverrides || {} },
+    );
+  };
   const branchesInScope = (scope: ManagerBranchScopeRule) => scope.branchMode === 'ALL_CURRENT_AND_FUTURE'
     ? branchesForUnit(scope.businessUnitId)
     : branchesForUnit(scope.businessUnitId).filter((branch) => (scope.branchIds || []).includes(branch.id));
@@ -193,7 +226,7 @@ export function ManagerBranchAccessEditor({
   };
 
   const selectedBranchCount = scopeRules.reduce((count, scope) => count + (scope.branchMode === 'ALL_CURRENT_AND_FUTURE' ? branchesForUnit(scope.businessUnitId).length : (scope.branchIds || []).length), 0);
-  const operationalModes = [{ value: 'FULL' as const, label: 'Completo en módulos operativos' }, { value: 'CUSTOM' as const, label: 'Personalizado por módulo y acción' }, { value: 'NONE' as const, label: 'Sin acceso operativo' }];
+  const operationalModes = [{ value: 'FULL' as const, label: 'Completo en módulos activos' }, { value: 'CUSTOM' as const, label: 'Personalizado por vista y acción' }, { value: 'NONE' as const, label: 'Sin acceso operativo' }];
 
   return <div className="space-y-4">
     <details open className="group rounded-2xl border border-border/60 bg-muted/15">
@@ -238,7 +271,7 @@ export function ManagerBranchAccessEditor({
         <ChevronDown className="size-4 shrink-0 transition-transform group-open:rotate-180" />
       </summary>
       <div className="space-y-2 border-t border-border/50 p-4">
-        <p className="text-xs text-muted-foreground">Una sucursal seguirá visible en la Vista Manager aunque su operación esté en «Sin acceso».</p>
+        <p className="text-xs text-muted-foreground">Configura qué vistas activas puede abrir al entrar a cada sucursal. Las reglas de rubro se limitan además por las suscripciones y restricciones vigentes en cada sucursal.</p>
         {scopeRules.map((scope) => {
           const unit = businessUnits.find((candidate) => candidate.id === scope.businessUnitId);
           const scopedBranches = branchesInScope(scope);
@@ -250,7 +283,7 @@ export function ManagerBranchAccessEditor({
               <span className="flex shrink-0 items-center gap-2"><Badge variant="outline">{overrideCount} excepción(es)</Badge><ChevronDown className="size-4 transition-transform group-open:rotate-180" /></span>
             </summary>
             <div className="space-y-3 border-t border-border/50 p-3">
-              <RuleEditor label={`Regla base · ${unit?.name || 'Rubro'}`} rule={baseRule} modeOptions={operationalModes} onChange={setRule} />
+              <RuleEditor label={`Regla base · ${unit?.name || 'Rubro'}`} rule={baseRule} modeOptions={operationalModes} onChange={setRule} availableViews={unitAvailableViews(scope.businessUnitId)} />
               <details className="rounded-xl border border-border/50 p-3">
                 <summary className="cursor-pointer text-xs font-bold">Excepciones por sucursal ({scopedBranches.length})</summary>
                 <div className="mt-3 space-y-2">{scopedBranches.map((branch) => {
@@ -260,7 +293,7 @@ export function ManagerBranchAccessEditor({
                       if (event.target.value === 'INHERIT') setBranchAccess(branchAccess.filter((rule) => !(rule.scopeType === 'BRANCH' && rule.scopeId === branch.id)));
                       else setRule({ scopeType: 'BRANCH', scopeId: branch.id, mode: event.target.value as ManagerBranchAccessRule['mode'], permissions: override?.permissions || [] });
                     }} className="h-9 w-full max-w-full rounded-lg border border-border bg-background px-2 sm:w-56"><option value="INHERIT">Heredar rubro</option><option value="NONE">Sin acceso operativo</option><option value="FULL">Completo operativo</option><option value="CUSTOM">Personalizado</option></select></label>
-                    {override?.mode === 'CUSTOM' && <RuleEditor label={`Excepción · ${branch.name}`} rule={override} modeOptions={operationalModes} onChange={setRule} />}
+                    {override?.mode === 'CUSTOM' && <RuleEditor label={`Excepción · ${branch.name}`} rule={override} modeOptions={operationalModes} onChange={setRule} availableViews={branchAvailableViews(branch)} />}
                   </div>;
                 })}{!scopedBranches.length && <p className="py-2 text-xs text-muted-foreground">No hay sucursales actuales dentro de esta selección.</p>}</div>
               </details>

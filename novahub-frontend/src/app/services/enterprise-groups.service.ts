@@ -49,6 +49,12 @@ export interface ManagerGroup {
     branchAccess?: Array<{ scopeType: 'GROUP' | 'BUSINESS_UNIT' | 'BRANCH'; scopeId: string; mode: 'FULL' | 'CUSTOM' | 'NONE'; permissions: any[] }>;
     permissions: unknown;
   } | null;
+  managerAvailability?: Record<string, {
+    enabled: boolean;
+    read: boolean;
+    export: boolean;
+    views: Array<{ id: string; branchIds: string[] }>;
+  }>;
 }
 
 export interface ManagerOverview {
@@ -468,7 +474,7 @@ export interface ManagerHrModuleResponse {
   metrics: Record<string, any>;
 }
 
-export type ManagerOperationsModule = 'activities' | 'projects' | 'tickets' | 'documents' | 'restaurant' | 'logistics' | 'financing' | 'legal' | 'novachat' | 'support';
+export type ManagerOperationsModule = 'activities' | 'projects' | 'tickets' | 'documents' | 'restaurant' | 'hotel' | 'logistics' | 'intl-imports' | 'asana' | 'notifications' | 'financing' | 'legal' | 'novachat' | 'support';
 
 export interface ManagerOperationsModuleResponse {
   module: ManagerOperationsModule;

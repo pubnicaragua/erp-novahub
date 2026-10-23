@@ -5,9 +5,10 @@ import { queryClient } from '../services/query-client';
 import { clearSessionCache } from '../services/session-cache';
 import { clearStorageUrlCache } from '../services/storage.service';
 import { BrandLogoLoader } from '../components/BrandLogo';
-import { LEGACY_VIEW_PERMISSION_ALIASES, SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_PARENT_ORDER, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
+import { LEGACY_VIEW_PERMISSION_ALIASES, SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_PARENT_ORDER, SIDEBAR_PERMISSION_MODULE_IDS, SIDEBAR_PERMISSION_SUBMODULES } from '../utils/sidebarPermissions';
 import { canAccessModuleShell, canAccessModuleView, type ModuleViewPolicies } from '../utils/moduleViewAccess';
 import { approvalActionValue } from '../utils/permissions';
+import { managerBranchCanReadView } from '../utils/managerBranchPermissions';
 import type { UserThemeSettings } from '../services/branding.service';
 
 const SIDEBAR_PERMISSION_PARENT_MODULE_IDS = new Set<string>(SIDEBAR_PERMISSION_PARENT_ORDER);
@@ -217,6 +218,10 @@ export interface User {
   isTenantAdmin: boolean;
   /** Sesión temporal de trabajo de un Manager dentro de una sucursal. */
   managerMode?: boolean;
+  /** La política efectiva de sucursal permite todos sus módulos operativos activos. */
+  managerFullBranchAccess?: boolean;
+  /** Módulos con suscripción activa en la sucursal de la sesión Manager. */
+  managerEnabledModules?: string[];
   /** Acceso a costos de inventario en la sucursal validada del grupo. */
   managerCanViewInventoryCost?: boolean;
   managerCanEdit?: boolean;
@@ -318,9 +323,12 @@ function tenantPermissionSubscriptionCandidates(module: string): string[] {
 
 function tenantAdminHasModuleEnabled(user: User, module: string): boolean {
   const normalized = String(module || '').toUpperCase();
-  if (TENANT_SYSTEM_PERMISSION_MODULES.has(normalized)) return true;
-  if (normalized === 'PROJECTS' || normalized === 'PROYECTOS' || normalized.startsWith('PROJECTS_')) return true;
-  const enabledModules = new Set((user.enabledModules || []).map((item) => String(item).toUpperCase()));
+  if (TENANT_SYSTEM_PERMISSION_MODULES.has(normalized) && (!user.managerMode || normalized === 'DASHBOARD')) return true;
+  if (!user.managerMode && (normalized === 'PROJECTS' || normalized === 'PROYECTOS' || normalized.startsWith('PROJECTS_'))) return true;
+  const sourceModules = user.managerMode && Array.isArray(user.managerEnabledModules)
+    ? user.managerEnabledModules
+    : user.enabledModules || [];
+  const enabledModules = new Set(sourceModules.map((item) => String(item).toUpperCase()));
   const cashViewHasSalesScope = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(normalized)
     && [...enabledModules].some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
   return cashViewHasSalesScope || tenantPermissionSubscriptionCandidates(normalized).some((candidate) => enabledModules.has(candidate));
@@ -703,6 +711,10 @@ const createUserObject = (apiPayload: any): User => {
     isTenantUser: !isPlatformAdmin && !isPlatformSupportAgent,
     isTenantAdmin: userType === 'admin' && role === 'admin' && !isPlatformAdmin,
     managerMode: Boolean(apiUser.managerMode),
+    managerFullBranchAccess: apiUser.managerFullBranchAccess === true,
+    managerEnabledModules: Array.isArray(apiUser.managerEnabledModules)
+      ? apiUser.managerEnabledModules.map((module: unknown) => String(module).toUpperCase())
+      : undefined,
     managerCanViewInventoryCost: apiUser.managerCanViewInventoryCost === true,
     managerCanEdit: Boolean(apiUser.managerCanEdit),
     branchIds: apiUser.branchIds || apiUser.branchAccess?.map((b: any) => b.id) || undefined,
@@ -1021,13 +1033,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     // HR es especial: buscar cualquier submódulo HR_*
     const subscriptionCandidates = tenantPermissionSubscriptionCandidates(backendModuleName);
+    const tenantEnabledModules = user.managerMode && Array.isArray(user.managerEnabledModules)
+      ? user.managerEnabledModules
+      : user.enabledModules;
     const cashViewHasSalesScope = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(backendModuleName)
-      && user.enabledModules.some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
-    let isSubscribed = coreModules.includes(module)
-      || isAdminControlModule
+      && tenantEnabledModules.some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
+    let isSubscribed = (user.managerMode ? module === 'dashboard' : coreModules.includes(module))
+      || (!user.managerMode && isAdminControlModule)
       || cashViewHasSalesScope
-      || subscriptionCandidates.some((candidate) => user.enabledModules.includes(candidate))
-      || groupModules.some(m => user.enabledModules.includes(m));
+      || subscriptionCandidates.some((candidate) => tenantEnabledModules.includes(candidate))
+      || groupModules.some(m => tenantEnabledModules.includes(m));
     
     if (module === 'rh' && !isSubscribed) {
       isSubscribed = user.enabledModules.some(m => m.startsWith('HR_'));
@@ -1035,10 +1050,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!isSubscribed) return false;
 
-    // Al entrar a una sucursal, el Manager debe ver el mismo menú operativo
-    // que el usuario administrador de esa sucursal. El backend sigue
-    // validando la suscripción y el contexto Manager en cada request.
-    if (user.managerMode) return true;
+    if (user.managerMode) {
+      if (user.managerFullBranchAccess) return true;
+      const requestedModule = backendModuleName.toUpperCase();
+      const childParent = SIDEBAR_PERMISSION_SUBMODULES.find((item) => item.id === requestedModule)?.parent;
+      const childViews = SIDEBAR_PERMISSION_SUBMODULES
+        .filter((item) => item.parent === requestedModule)
+        .map((item) => item.id);
+      const relatedModules = [
+        backendModuleName,
+        childParent || '',
+        ...childViews,
+        ...(LEGACY_VIEW_PERMISSION_ALIASES[requestedModule] || []),
+        ...(SIDEBAR_PERMISSION_PARENT_ALIASES[requestedModule] || []),
+      ];
+      return managerBranchCanReadView(user.permissions, module, relatedModules);
+    }
 
     // El ADMIN tiene todas las acciones, pero únicamente dentro de los
     // módulos habilitados para su empresa.
@@ -1089,7 +1116,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return user.isPlatformAdmin && user.role === 'superadmin';
     }
     if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, module)) return false;
-    if (user.managerMode) {
+    if (user.managerMode && !tenantAdminHasModuleEnabled(user, module)) return false;
+    if (user.managerMode && user.managerFullBranchAccess) {
       if (action !== 'viewCost') return tenantAdminHasModuleEnabled(user, module);
       const inventoryCostModules = new Set([
         'INVENTORY',
@@ -1102,6 +1130,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ]);
       return user.managerCanViewInventoryCost === true
         && inventoryCostModules.has(String(module || '').toUpperCase())
+        && tenantAdminHasModuleEnabled(user, module);
+    }
+    if (user.managerMode && action === 'viewCost') {
+      const inventoryCostModules = new Set([
+        'INVENTORY', 'INVENTORY_PRODUCTS', 'INVENTORY_SERVICES',
+        'INVENTORY_MOVEMENTS', 'INVENTORY_ASSETS', 'INVENTORY_LOSSES', 'INVENTORY_ADJUSTMENTS',
+      ]);
+      return user.managerCanViewInventoryCost === true
+        && inventoryCostModules.has(upperModule)
         && tenantAdminHasModuleEnabled(user, module);
     }
     // El administrador de la empresa tiene todas las acciones de los módulos

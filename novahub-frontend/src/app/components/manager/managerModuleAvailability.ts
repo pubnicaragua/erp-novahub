@@ -4,7 +4,8 @@ export const MANAGER_SECTION_ENTERPRISE_MODULE: Record<string, string> = {
   overview: 'DASHBOARD', sales: 'SALES', purchases: 'PURCHASES', inventory: 'INVENTORY', finances: 'FINANCIAL',
   accounting: 'ACCOUNTING', reports: 'REPORTS', hr: 'HR', activities: 'ACTIVITIES', projects: 'PROJECTS',
   tickets: 'TICKETS', documents: 'DOCUMENTS', restaurant: 'RESTAURANT', logistics: 'TRACKING', financing: 'FINANCING',
-  legal: 'LEGAL', novachat: 'NOVACHAT', support: 'SUPPORT_TECH', transfers: 'INVENTORY', catalog: 'INVENTORY', consolidated: 'ACCOUNTING',
+  legal: 'LEGAL', novachat: 'NOVACHAT', support: 'SUPPORT_TECH', hotel: 'HOTEL', 'intl-imports': 'TRACKING',
+  asana: 'ASANA', notifications: 'NOTIFICATIONS', transfers: 'INVENTORY', catalog: 'INVENTORY', consolidated: 'ACCOUNTING',
 };
 
 const VIEW_IDS: Record<string, Record<string, string[]>> = {
@@ -26,12 +27,13 @@ const VIEW_IDS: Record<string, Record<string, string[]>> = {
     overview: ['PURCHASES_PROVIDERS', 'PURCHASES_ORDERS', 'PURCHASES_RECEIPTS', 'PURCHASES_INVOICES_REC', 'PURCHASES_PAYMENTS', 'PURCHASES_RETURNS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC', 'PURCHASES_REQUESTS'],
     suppliers: ['PURCHASES_PROVIDERS'], orders: ['PURCHASES_ORDERS'], receipts: ['PURCHASES_RECEIPTS'], recurring: ['PURCHASES_INVOICES_REC'],
     payments: ['PURCHASES_PAYMENTS'], credits: ['PURCHASES_RETURNS'], expenses: ['PURCHASES_EXPENSES'], recurringexpenses: ['PURCHASES_EXPENSES_REC'], requests: ['PURCHASES_REQUESTS'],
+    invoices: ['PURCHASES_INVOICES'], management: ['PURCHASES_REQUESTS', 'PURCHASES_ORDERS'],
   },
   finances: {
     overview: ['FINANCIAL_DASHBOARD', 'FINANCIAL_BANK', 'FINANCIAL_RECEIVABLES', 'FINANCIAL_PAYABLES', 'FINANCIAL_INCOMES', 'FINANCIAL_EXPENSES', 'FINANCIAL_EXPENSES_REC', 'FINANCIAL_INCOMES_REC', 'FINANCIAL_CALENDAR', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE', 'FINANCIAL_LOSSES'],
     cash: ['FINANCIAL_BANK', 'FINANCIAL_ACCOUNTS'], receivables: ['FINANCIAL_RECEIVABLES'], payables: ['FINANCIAL_PAYABLES'], income: ['FINANCIAL_INCOMES'],
     expenses: ['FINANCIAL_EXPENSES'], recurring: ['FINANCIAL_EXPENSES_REC', 'FINANCIAL_INCOMES_REC'], calendar: ['FINANCIAL_CALENDAR'], analysis: ['FINANCIAL_ANALYSIS'],
-    balance: ['FINANCIAL_BALANCE'], losses: ['FINANCIAL_LOSSES'],
+    balance: ['FINANCIAL_BALANCE'], losses: ['FINANCIAL_LOSSES'], journal: ['FINANCIAL_JOURNAL'], ledger: ['FINANCIAL_LEDGER'],
   },
   accounting: {
     overview: ['ACCOUNTING_CHART', 'ACCOUNTING_JOURNAL', 'ACCOUNTING_LEDGER', 'ACCOUNTING_TRIAL_BALANCE', 'ACCOUNTING_PROFIT_LOSS', 'ACCOUNTING_BALANCE_SHEET', 'ACCOUNTING_CASH_FLOW', 'ACCOUNTING_EXCHANGE_DIFFERENCES', 'ACCOUNTING_EQUITY', 'ACCOUNTING_ASSETS', 'ACCOUNTING_RECONCILIATION', 'ACCOUNTING_PERIODS', 'ACCOUNTING_FISCAL', 'ACCOUNTING_INVOICE_AUDIT', 'ACCOUNTING_BUDGET', 'ACCOUNTING_EXPENSE_CATEGORIES', 'ACCOUNTING_HR_PAYMENT_REQUESTS'],
@@ -48,10 +50,14 @@ const VIEW_IDS: Record<string, Record<string, string[]>> = {
   },
   activities: { overview: ['ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_LOGS'], activities: ['ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS'], calendar: ['ACTIVITIES_CALENDAR'], meetings: ['ACTIVITIES_MEETINGS'], reminders: ['ACTIVITIES_REMINDERS'], logs: ['ACTIVITIES_LOGS'] },
   projects: { overview: ['PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS'], projects: ['PROJECTS_LIST'], tasks: ['PROJECTS_TASKS'], milestones: ['PROJECTS_MILESTONES'], costs: ['PROJECTS_EXPENSES'], budget: ['PROJECTS_EXPENSES'], resources: ['PROJECTS_LIST'], documents: ['PROJECTS_DOCUMENTS'], activities: ['PROJECTS_LIST'] },
-  tickets: { overview: ['TICKETS_LIST', 'TICKETS_KNOWLEDGE_BASE', 'TICKETS_AGENTS'], tickets: ['TICKETS_LIST'], faqs: ['TICKETS_KNOWLEDGE_BASE'], agents: ['TICKETS_AGENTS'] },
-  documents: { overview: ['DOCUMENTS_FILES', 'DOCUMENTS_REPORTS'], documents: ['DOCUMENTS_FILES'], reports: ['DOCUMENTS_REPORTS'] },
+  tickets: { overview: ['TICKETS_LIST', 'TICKETS_FAQS', 'TICKETS_AGENTS'], tickets: ['TICKETS_LIST'], categories: ['TICKETS_LIST'], faqs: ['TICKETS_FAQS'], agents: ['TICKETS_AGENTS'] },
+  documents: { overview: ['DOCUMENTS_FILES', 'DOCUMENTS_REPORTS', 'DOCUMENTS_CONTRACTS', 'DOCUMENTS_INVOICES', 'DOCUMENTS_FOLDERS'], documents: ['DOCUMENTS_FILES'], reports: ['DOCUMENTS_REPORTS'], contracts: ['DOCUMENTS_CONTRACTS'], invoices: ['DOCUMENTS_INVOICES'], folders: ['DOCUMENTS_FOLDERS'] },
   restaurant: { overview: ['RESTAURANT_ORDERS', 'RESTAURANT_KITCHEN', 'RESTAURANT_SALON', 'RESTAURANT_MENU', 'RESTAURANT_REPORTS'], orders: ['RESTAURANT_ORDERS'], kitchen: ['RESTAURANT_KITCHEN'], tables: ['RESTAURANT_SALON'], menu: ['RESTAURANT_MENU'], reports: ['RESTAURANT_REPORTS'] },
+  hotel: { overview: ['HOTEL_ROOMS', 'HOTEL_RESERVATIONS'], rooms: ['HOTEL_ROOMS'], calendar: ['HOTEL_ROOMS', 'HOTEL_RESERVATIONS'], reservations: ['HOTEL_RESERVATIONS'], stays: ['HOTEL_RESERVATIONS'] },
   logistics: { overview: ['TRACKING_TRANSIT', 'TRACKING_RECEPTION', 'TRACKING_BATCHES', 'TRACKING_PACKAGES', 'TRACKING_RECONCILIATION', 'TRACKING_BILLING'], shipments: ['TRACKING_TRANSIT'], packages: ['TRACKING_PACKAGES'], batches: ['TRACKING_BATCHES', 'TRACKING_RECEPTION'], reconciliation: ['TRACKING_RECONCILIATION'], billing: ['TRACKING_BILLING'] },
+  'intl-imports': { overview: ['IMPORT_INTL', 'IMPORT_INTL_ORIGIN', 'IMPORT_INTL_CONTAINERS', 'IMPORT_INTL_CUSTOMS'], origin: ['IMPORT_INTL_ORIGIN'], containers: ['IMPORT_INTL_CONTAINERS'], customs: ['IMPORT_INTL_CUSTOMS'] },
+  asana: { overview: ['ASANA', 'ASANA_TASKS'], boards: ['ASANA'], tasks: ['ASANA_TASKS'] },
+  notifications: { overview: ['NOTIFICATIONS_ALERTS', 'NOTIFICATIONS_PUSH'], alerts: ['NOTIFICATIONS_ALERTS'], push: ['NOTIFICATIONS_PUSH'] },
   financing: { overview: ['FINANCING_APPLICATIONS'], applications: ['FINANCING_APPLICATIONS'] },
   legal: { overview: ['LEGAL_CASES', 'LEGAL_REMINDERS'], cases: ['LEGAL_CASES'], reminders: ['LEGAL_REMINDERS'] },
   transfers: { transfers: ['INVENTORY_TRANSFERS'] }, catalog: { catalog: ['INVENTORY_PRODUCTS'] },
@@ -59,7 +65,7 @@ const VIEW_IDS: Record<string, Record<string, string[]>> = {
 };
 
 const UNMAPPED_MANAGER_VIEWS: Record<string, Set<string>> = {
-  sales: new Set(), purchases: new Set(['invoices', 'management']), tickets: new Set(['categories']),
+  sales: new Set(), purchases: new Set(), tickets: new Set(),
   reports: new Set(), hr: new Set(['training']),
   novachat: new Set(['overview', 'conversations', 'channels', 'contacts', 'agents']), support: new Set(['overview', 'tickets']),
 };
@@ -90,7 +96,7 @@ function managerViewRequirements(section: string, view: string): ManagerViewRequ
   if (section === 'hr' && normalizedView === 'training') return [{ moduleId: 'HR_TRAINING' }];
   const viewIds = VIEW_IDS[section]?.[normalizedView];
   const requirements: ManagerViewRequirement[] = [{ moduleId, ...(viewIds ? { viewIds } : {}) }];
-  if (section === 'reports') {
+  if (section === 'reports' && normalizedView !== 'overview') {
     const source: Record<string, ManagerViewRequirement[]> = {
       overview: [
         { moduleId: 'SALES', viewIds: ['SALES_INVOICES', 'RETAIL_POS', 'SALES_CLIENTS'] },
@@ -137,7 +143,11 @@ function isRequirementAvailable(group: ManagerGroup, branch: ManagerGroup['branc
   const viewName = String(view || '').trim().toLowerCase();
   if (viewName === 'overview' && selective && UNMAPPED_MANAGER_VIEWS[section]?.size) return false;
   if (UNMAPPED_MANAGER_VIEWS[section]?.has(viewName)) return false;
-  return [groupViews, unitViews, branchViews].every((allowed) => allowed === null || viewIds.every((id) => allowed.includes(id)));
+  return [groupViews, unitViews, branchViews].every((allowed) => allowed === null || (
+    section === 'reports' && viewName === 'overview'
+      ? viewIds.some((id) => allowed.includes(id))
+      : viewIds.every((id) => allowed.includes(id))
+  ));
 }
 
 export function canViewManagerEnterpriseView(
@@ -162,4 +172,17 @@ export function allowedManagerEnterpriseViews(
   scope?: { branchId?: string; businessUnitId?: string },
 ): string[] {
   return viewIds.filter((view) => canViewManagerEnterpriseView(group, section, view, scope));
+}
+
+export function managerSectionEnabledForGroup(group: ManagerGroup | undefined, section: string): boolean {
+  if (!group) return false;
+  const moduleId = MANAGER_SECTION_ENTERPRISE_MODULE[section];
+  if (!moduleId || !moduleSet(group.enabledModules).has(moduleId)) return false;
+  const policy = group.modulePolicies?.[moduleId];
+  if (String(policy?.state || 'VISIBLE').toUpperCase() !== 'VISIBLE') return false;
+  if (Array.isArray(policy?.viewIds)) {
+    const sectionViews = [...new Set(Object.values(VIEW_IDS[section] || {}).flat().map((id) => String(id).trim().toUpperCase()))];
+    return sectionViews.some((viewId) => policy.viewIds!.some((allowed) => String(allowed).trim().toUpperCase() === viewId));
+  }
+  return true;
 }

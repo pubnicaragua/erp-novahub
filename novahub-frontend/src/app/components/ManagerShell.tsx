@@ -21,10 +21,12 @@ import {
   ClipboardCheck,
   ChevronDown,
   History,
+  Hotel,
   LayoutDashboard,
   Menu,
   Moon,
   Package,
+  Plane,
   ShieldCheck,
   Settings2,
   Sun,
@@ -186,6 +188,8 @@ const MANAGER_FINANCE_VIEW_ICONS: Record<ManagerFinanceView, LucideIcon> = {
   income: TrendingUp,
   expenses: Wallet,
   recurring: Repeat2,
+  journal: FileText,
+  ledger: BookOpen,
   calendar: CalendarDays,
   analysis: BarChart3,
   balance: Landmark,
@@ -257,7 +261,11 @@ export type ManagerSection =
   | "tickets"
   | "documents"
   | "restaurant"
+  | "hotel"
   | "logistics"
+  | "intl-imports"
+  | "asana"
+  | "notifications"
   | "financing"
   | "legal"
   | "novachat"
@@ -287,16 +295,20 @@ export const MANAGER_SECTIONS: Array<{
   },
   { id: "reports", label: "Reportes", icon: BarChart3, group: "Consolidado" },
   { id: "hr", label: "Recursos Humanos", icon: Users, group: "Consolidado" },
-  { id: "activities", label: "Actividades", icon: Activity, group: "Operaciones" },
-  { id: "projects", label: "Proyectos", icon: FolderKanban, group: "Operaciones" },
-  { id: "tickets", label: "Tickets", icon: Ticket, group: "Operaciones" },
-  { id: "documents", label: "Documentos", icon: Cloud, group: "Operaciones" },
-  { id: "restaurant", label: "Restaurante", icon: Utensils, group: "Operaciones" },
-  { id: "logistics", label: "Logística", icon: Package, group: "Operaciones" },
-  { id: "financing", label: "Financiamiento PYME", icon: Banknote, group: "Operaciones" },
-  { id: "legal", label: "Asesoría legal", icon: Scale, group: "Operaciones" },
-  { id: "novachat", label: "NovaChat", icon: MessageCircle, group: "Operaciones" },
-  { id: "support", label: "Soporte técnico", icon: Wrench, group: "Operaciones" },
+  { id: "activities", label: "Actividades", icon: Activity, group: "Consolidado" },
+  { id: "projects", label: "Proyectos", icon: FolderKanban, group: "Consolidado" },
+  { id: "tickets", label: "Tickets", icon: Ticket, group: "Consolidado" },
+  { id: "documents", label: "Nova Cloud", icon: Cloud, group: "Consolidado" },
+  { id: "restaurant", label: "Restaurante", icon: Utensils, group: "Consolidado" },
+  { id: "hotel", label: "Hotel", icon: Hotel, group: "Consolidado" },
+  { id: "logistics", label: "Tracking de Importaciones", icon: Package, group: "Consolidado" },
+  { id: "intl-imports", label: "Importaciones Internacionales", icon: Plane, group: "Consolidado" },
+  { id: "asana", label: "Asana", icon: FolderKanban, group: "Consolidado" },
+  { id: "notifications", label: "Notificaciones", icon: Bell, group: "Consolidado" },
+  { id: "financing", label: "Financiamiento PYME", icon: Banknote, group: "Consolidado" },
+  { id: "legal", label: "Asesoría legal", icon: Scale, group: "Consolidado" },
+  { id: "novachat", label: "Nova Suite", icon: MessageCircle, group: "Consolidado" },
+  { id: "support", label: "Soporte técnico", icon: Wrench, group: "Consolidado" },
   {
     id: "transfers",
     label: "Transferencias",
