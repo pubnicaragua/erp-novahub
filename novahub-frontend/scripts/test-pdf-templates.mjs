@@ -329,8 +329,20 @@ try {
     '<img src="https://example.com/logo.png" onerror="alert(1)">',
   ]) assert.throws(() => styles.parsePdfHtmlShell(maliciousHtml), /scripts|recursos remotos|etiquetas no admitidas/i, 'El importador debe rechazar scripts, iframes, eventos y recursos remotos.');
 
-  assert.equal(targets.length, 84, 'El catálogo debe incluir todas las salidas PDF activas encontradas en los módulos.');
+  const branchTargets = targets.filter(target => target.module !== 'manager');
+  const managerTargets = targets.filter(target => target.module === 'manager');
+  assert.equal(branchTargets.length, 84, 'El catálogo de sucursal debe conservar todas sus salidas PDF existentes.');
+  assert.ok(managerTargets.length > 300, 'El catálogo gerencial debe cubrir las subvistas consolidables y sus reportes fuente.');
   assert.equal(new Set(targets.map(({ key }) => key)).size, targets.length, 'Las claves del catálogo deben ser únicas.');
+  for (const key of [
+    'manager.overview.overview.pdf',
+    'manager.hotel.reservations.pdf',
+    'manager.intl-imports.customs.pdf',
+    'manager.asana.tasks.pdf',
+    'manager.reports.source-sales-customer-history.pdf',
+  ]) assert.ok(managerTargets.some(target => target.key === key), `${key} debe tener un destino PDF gerencial propio.`);
+  assert.equal(managerTargets.some(target => target.key === 'manager.sales.invoice-series.pdf'), false, 'Las vistas administrativas no deben inventar un destino PDF.');
+  assert.equal(managerTargets.some(target => target.key === 'manager.inventory.corporateWarehouses.pdf'), false, 'La administración de almacenes no debe inventar un destino PDF.');
   assert.ok(targets.some(target => target.key === 'contabilidad.balance-sheet'), 'El balance general de Contabilidad debe tener un destino propio.');
   assert.ok(targets.some(target => target.key === 'restaurante.menu'), 'La carta del Restaurante debe tener un destino propio.');
   for (const target of targets) {
@@ -611,14 +623,15 @@ try {
   assert.deepEqual(inventoryProducts.reportSections?.[0]?.columns.map(column => column.label), ['Código', 'Nombre', 'Categoría', 'Unidad', 'Stock', 'Precio', 'Estado'], 'La muestra de productos debe usar las columnas reales del inventario.');
   assert.ok(inventoryProducts.reportSections?.[0]?.rows.some(row => String(row['column-0']).startsWith('PROD-')), 'La primera columna de inventario debe mostrar códigos y no descripciones de venta.');
   assert.ok(!inventoryProducts.reportSections?.[0]?.rows.some(row => String(row['column-0']).includes('SKU variante')), 'El preview de inventario no debe reutilizar una descripción de cotización.');
-  for (const [key, module] of [
-    ['inventario.manager-adjustments', 'inventario'],
-    ['finanzas.manager-consolidated', 'finanzas'],
-    ['contabilidad.manager-consolidated', 'contabilidad'],
+  for (const [key, module, sourceTarget] of [
+    ['manager.inventory.adjustments.pdf', 'inventario', "'manager.inventory.adjustments.pdf'"],
+    ['manager.finances.overview.pdf', 'finanzas', 'manager.finances.${view}.pdf'],
+    ['manager.accounting.overview.pdf', 'contabilidad', 'manager.accounting.${view}.pdf'],
   ]) {
     const target = targets.find(item => item.key === key);
-    const source = await readFile(new URL(`../src/app/components/manager/${key.startsWith('inventario.') ? 'ManagerInventoryAdjustmentsView.tsx' : key.startsWith('finanzas.') ? 'ManagerFinanceModule.tsx' : 'ManagerAccountingModule.tsx'}`, import.meta.url), 'utf8');
-    assert.ok(source.includes(`'${key}'`), `${module} debe enviar su clave de diseño al exportador PDF.`);
+    const source = await readFile(new URL(`../src/app/components/manager/${module === 'inventario' ? 'ManagerInventoryAdjustmentsView.tsx' : module === 'finanzas' ? 'ManagerFinanceModule.tsx' : 'ManagerAccountingModule.tsx'}`, import.meta.url), 'utf8');
+    assert.ok(target, `${module} debe estar registrado en el catálogo PDF del Manager.`);
+    assert.ok(source.includes(sourceTarget), `${module} debe enviar su clave de diseño al exportador PDF.`);
   }
 
   const inventoryColumns = [

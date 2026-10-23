@@ -218,7 +218,7 @@ const MANAGER_ACCOUNTING_VIEW_ICONS: Record<ManagerAccountingView, LucideIcon> =
   hrPaymentRequests: ClipboardCheck,
 };
 
-const MANAGER_REPORTS_VIEW_ICONS: Record<ManagerReportsView, LucideIcon> = {
+const MANAGER_REPORTS_VIEW_ICONS: Partial<Record<ManagerReportsView, LucideIcon>> = {
   overview: LayoutDashboard,
   sales: ShoppingCart,
   purchases: Truck,
@@ -331,7 +331,7 @@ const ManagerShellNavigationContext = createContext({
 });
 export const useManagerShellNavigation = () =>
   useContext(ManagerShellNavigationContext);
-export type ManagerSettingsView = "theme" | "audit";
+export type ManagerSettingsView = "theme" | "audit" | "pdf";
 
 interface ThemeTransition {
   finished: Promise<void>;
@@ -378,6 +378,7 @@ type ManagerShellProps = {
   settingsView?: ManagerSettingsView;
   onSettingsViewChange?: (view: ManagerSettingsView) => void;
   canViewAudit?: boolean;
+  canViewPdf?: boolean;
 };
 
 export function ManagerShell({
@@ -413,6 +414,7 @@ export function ManagerShell({
   settingsView = "theme",
   onSettingsViewChange,
   canViewAudit = true,
+  canViewPdf = false,
 }: ManagerShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -790,6 +792,7 @@ export function ManagerShell({
           settingsView={settingsView}
           onSettingsViewChange={onSettingsViewChange}
           canViewAudit={canViewAudit}
+          canViewPdf={canViewPdf}
           inventoryView={inventoryView}
           onInventoryViewChange={onInventoryViewChange}
           salesView={salesView}
@@ -1099,6 +1102,7 @@ function ManagerSidebar({
   settingsView = "theme",
   onSettingsViewChange,
   canViewAudit = true,
+  canViewPdf = false,
   inventoryView,
   onInventoryViewChange,
   salesView,
@@ -1132,6 +1136,7 @@ function ManagerSidebar({
   settingsView?: ManagerSettingsView;
   onSettingsViewChange?: (view: ManagerSettingsView) => void;
   canViewAudit?: boolean;
+  canViewPdf?: boolean;
   inventoryView: ManagerInventoryView;
   onInventoryViewChange: (view: ManagerInventoryView) => void;
   salesView: ManagerSalesView;
@@ -1329,6 +1334,23 @@ function ManagerSidebar({
                                       <span className="flex-1 truncate text-left">Logs y auditoría</span>
                                     </button>
                                   )}
+                                  {canViewPdf && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onSettingsViewChange?.("pdf")}
+                                      aria-current={settingsView === "pdf" ? "page" : undefined}
+                                      className={cn(
+                                        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150",
+                                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                                        settingsView === "pdf"
+                                          ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+                                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                      )}
+                                    >
+                                      <FileText className="size-4 shrink-0" />
+                                      <span className="flex-1 truncate text-left">Documentos PDF</span>
+                                    </button>
+                                  )}
                                 </>
                               ) : (isManagerOperationSection(item.id)
                                 ? MANAGER_OPERATION_VIEWS[item.id]
@@ -1367,7 +1389,7 @@ function ManagerSidebar({
                                         : isAccounting
                                           ? MANAGER_ACCOUNTING_VIEW_ICONS[view.id as ManagerAccountingView]
                                   : isReports
-                                            ? MANAGER_REPORTS_VIEW_ICONS[view.id as ManagerReportsView]
+                                            ? MANAGER_REPORTS_VIEW_ICONS[view.id as ManagerReportsView] || BarChart3
                                             : MANAGER_HR_VIEW_ICONS[view.id as ManagerHrView]) || FileText;
                                 const subActive = operationModule
                                   ? (operationViews[operationModule] || 'overview') === view.id

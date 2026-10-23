@@ -2,13 +2,16 @@ import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64Image } from './reportExportUtils';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfTemplateLogo, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
 import { formatCurrencyDescriptor } from './currency';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { buildDateFilteredDownloadFileName, buildDateFilteredPdfFileName } from './exportFileNames';
 import { pdfStatusLabel } from './pdfStatus';
+import { resolveManagerPdfRender } from './managerPdfRender';
 
 type ManagerSalesExportOptions = {
+  groupId: string;
+  targetKey: string;
   rows: Array<Record<string, unknown>>;
   tenantName: string;
   tenantLogo?: string | null;
@@ -22,8 +25,6 @@ type ManagerSalesExportOptions = {
   pdfFormat?: PdfDownloadFormat;
   dateFrom?: unknown;
   dateTo?: unknown;
-  /** Diseño resuelto para el tenant de la sucursal cuando se descarga un registro. */
-  pdfDesign?: { settings?: Record<string, any> } | Record<string, any> | null;
 };
 
 function pdfPaperForFormat(settings: Record<string, any>, format?: PdfDownloadFormat) {
@@ -146,6 +147,9 @@ export async function exportManagerSalesExcel(options: ManagerSalesExportOptions
 }
 
 export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) {
+  const managerPdf = await resolveManagerPdfRender(options.groupId, options.targetKey);
+  const tenantName = managerPdf.tenantName || options.tenantName;
+  const tenantLogo = managerPdf.tenantLogo || options.tenantLogo;
   const availableKeys = Object.keys(options.rows[0] || {});
   const preferredKeys = ['number', 'documentNumber', 'branchName', 'customerName', 'supplierName', 'date', 'dueDate', 'expiryDate', 'status', 'total', 'amount', 'balance', 'currency'];
   const reportKeys = (options.rows.length
@@ -153,13 +157,10 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
     : ['Mensaje']);
   const reportLabels: Record<string, string> = { number: 'Documento', documentNumber: 'Documento', branchName: 'Sucursal', customerName: 'Cliente', supplierName: 'Proveedor', date: 'Fecha', dueDate: 'Vencimiento', expiryDate: 'Validez', status: 'Estado', total: 'Total', amount: 'Monto', balance: 'Saldo', currency: 'Moneda' };
   const configured = options.pdfFormat !== 'roll-58' && options.pdfFormat !== 'roll-80'
-    ? await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: options.title, tenantName: options.tenantName, tenantLogo: options.tenantLogo, designOverride: options.pdfDesign, rows: options.rows, columns: reportKeys.map((key) => ({ header: reportLabels[key] || key, value: row => /estado|status/i.test(key) ? pdfStatusLabel(row[key]) : row[key], align: ['total', 'amount', 'balance'].includes(key) ? 'right' as const : 'left' as const })), fileName: buildDateFilteredPdfFileName([options.fileBase], 'configured', options.dateFrom, options.dateTo) })
+    ? await generateConfiguredReportTemplate({ targetKey: options.targetKey, title: options.title, tenantName, tenantLogo, designOverride: managerPdf.design, rows: options.rows, columns: reportKeys.map((key) => ({ header: reportLabels[key] || key, value: row => /estado|status/i.test(key) ? pdfStatusLabel(row[key]) : row[key], align: ['total', 'amount', 'balance'].includes(key) ? 'right' as const : 'left' as const })), fileName: buildDateFilteredPdfFileName([options.fileBase], 'configured', options.dateFrom, options.dateTo) })
     : null;
   if (configured) return configured;
-  const configuredSettings = options.pdfDesign && typeof options.pdfDesign === 'object' && 'settings' in options.pdfDesign
-    ? options.pdfDesign.settings
-    : options.pdfDesign;
-  const settings = (configuredSettings && typeof configuredSettings === 'object' ? configuredSettings : await getPdfDesignSettings('reportes.sales')) as Record<string, any>;
+  const settings = (managerPdf.design.settings || {}) as Record<string, any>;
   const primary = pdfDesignColor(settings.primaryColor || options.primaryColor, [16, 185, 129]);
   const rollFormat = options.pdfFormat === 'roll-80' || options.pdfFormat === 'roll-58';
   const doc = new jsPDF(rollFormat ? { ...pdfPaperForFormat(settings, options.pdfFormat), orientation: 'portrait' } : pdfPaperForFormat(settings, options.pdfFormat));
@@ -167,14 +168,14 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 12;
   let currentY = 15;
-  const logo = await getBase64Image(getPdfTemplateLogo(settings, options.tenantLogo, 'reportes.sales'));
+  const logo = await getBase64Image(getPdfTemplateLogo(settings, tenantLogo, options.targetKey));
   if (logo) {
     try { doc.addImage(logo, 'PNG', margin, currentY, 20, 20, undefined, 'FAST'); currentY += 23; } catch { /* el reporte continúa sin logo incompatible */ }
   }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
   doc.setTextColor(primary[0], primary[1], primary[2]);
-  doc.text(options.tenantName || 'NovaHub', margin, currentY);
+  doc.text(tenantName || 'NovaHub', margin, currentY);
   currentY += 7;
   doc.setFontSize(13);
   doc.setTextColor(51, 65, 85);
@@ -225,7 +226,7 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
     doc.setPage(page);
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text(`${options.tenantName || 'NovaHub'} · Página ${page} de ${pageCount}`, pageWidth / 2, pageHeight - 7, { align: 'center' });
+    doc.text(`${tenantName || 'NovaHub'} · Página ${page} de ${pageCount}`, pageWidth / 2, pageHeight - 7, { align: 'center' });
   }
   doc.save(buildDateFilteredPdfFileName([options.fileBase], options.pdfFormat, options.dateFrom, options.dateTo));
 }

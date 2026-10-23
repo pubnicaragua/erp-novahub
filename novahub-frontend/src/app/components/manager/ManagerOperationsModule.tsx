@@ -116,6 +116,8 @@ export function ManagerOperationsModule({ module, view: requestedView, onViewCha
       const exportRows = rows.map((row: any) => ({ Sucursal: branchNameOf(row, branches), Registro: primaryOf(row), Detalle: formatDetail(detailOf(row)), Fecha: formatDate(dateOf(row)), Estado: formatStatus(row.status), Valor: amountOf(row) == null ? '' : formatValue(amountOf(row)), Rubro: row.businessUnitName || '' }));
       const scopeGroupName = branches.length === 1 ? branches[0].name : 'Grupo empresarial';
       const options = {
+        groupId,
+        targetKey: `manager.${module}.${activeView}.pdf`,
         title: `Operaciones consolidadas · ${definition.label} · ${activeView}`,
         fileBase: `manager_${module}_${activeView}`,
         tenantName: scopeGroupName,

@@ -19,7 +19,8 @@ export type PdfTemplateModule =
   | 'tracking'
   | 'tickets'
   | 'financiamiento'
-  | 'auditoria';
+  | 'auditoria'
+  | 'manager';
 
 /** Contrato único de una salida que puede descargar una vista del ERP. */
 export interface PdfTemplateTarget {
@@ -80,6 +81,75 @@ export const PDF_EXPORT_ADAPTERS: Record<PdfExportAdapterKind, PdfExportAdapter>
   administrative: { id: 'semantic.administrative', kind: 'administrative', pdfRenderer: 'configured-template', excelRenderer: 'report-workbook' },
   fixed: { id: 'physical.fixed', kind: 'fixed', pdfRenderer: 'physical', excelRenderer: 'none' },
 };
+
+const MANAGER_PDF_TARGET_SECTIONS: Array<{ id: string; label: string; permission: string; views: string[] }> = [
+  { id: 'overview', label: 'Resumen', permission: 'MANAGER_OVERVIEW', views: ['overview'] },
+  { id: 'reports', label: 'Reportes', permission: 'MANAGER_REPORTS', views: ['overview', 'sales', 'purchases', 'financial', 'inventory', 'customers', 'providers', 'hr', 'subscriptions', 'source-sales', 'source-purchases', 'source-inventory', 'source-finances', 'source-accounting', 'source-hr', 'source-activities', 'source-projects', 'source-tickets', 'source-documents', 'source-restaurant', 'source-hotel', 'source-logistics', 'source-intl-imports', 'source-asana', 'source-notifications', 'source-financing', 'source-legal', 'source-novachat', 'source-support'] },
+  { id: 'sales', label: 'Ventas', permission: 'MANAGER_SALES', views: ['overview', 'customers', 'customer-history', 'quotes', 'orders', 'invoices', 'recurring', 'payments', 'creditnotes', 'credits', 'deliveries', 'cash', 'pricelists'] },
+  { id: 'purchases', label: 'Compras', permission: 'MANAGER_PURCHASES', views: ['overview', 'suppliers', 'orders', 'receipts', 'invoices', 'recurring', 'payments', 'credits', 'expenses', 'recurringexpenses', 'requests', 'management'] },
+  { id: 'inventory', label: 'Inventario', permission: 'MANAGER_INVENTORY', views: ['overview', 'branchInventory', 'corporateInventory', 'products', 'services', 'brands', 'warehouses', 'transfers', 'adjustments', 'audits', 'losses', 'movements', 'assets'] },
+  { id: 'finances', label: 'Finanzas', permission: 'MANAGER_FINANCE', views: ['overview', 'cash', 'receivables', 'payables', 'income', 'expenses', 'recurring', 'calendar', 'analysis', 'balance', 'losses', 'journal', 'ledger'] },
+  { id: 'accounting', label: 'Contabilidad', permission: 'MANAGER_ACCOUNTING', views: ['overview', 'chart', 'journal', 'ledger', 'trialBalance', 'profitLoss', 'balanceSheet', 'cashFlow', 'exchange', 'equity', 'assets', 'bankBook', 'reconciliation', 'periods', 'fiscal', 'invoiceAudit', 'budgets', 'expenseCategories', 'hrPaymentRequests'] },
+  { id: 'hr', label: 'Recursos Humanos', permission: 'MANAGER_HR', views: ['overview', 'employees', 'departments', 'payroll', 'commissions', 'attendance', 'leaves', 'performance', 'kpi', 'training', 'benefits'] },
+  { id: 'activities', label: 'Actividades', permission: 'MANAGER_ACTIVITIES', views: ['overview', 'activities', 'calendar', 'meetings', 'reminders', 'logs'] },
+  { id: 'projects', label: 'Proyectos', permission: 'MANAGER_PROJECTS', views: ['overview', 'projects', 'tasks', 'milestones', 'costs', 'budget', 'resources', 'documents', 'activities', 'quotes', 'costing', 'baselines', 'evm', 'progress', 'evidence', 'memories'] },
+  { id: 'tickets', label: 'Tickets', permission: 'MANAGER_TICKETS', views: ['overview', 'tickets', 'categories', 'faqs', 'agents'] },
+  { id: 'documents', label: 'Nova Cloud', permission: 'MANAGER_DOCUMENTS', views: ['overview', 'documents', 'reports', 'contracts', 'invoices', 'folders'] },
+  { id: 'restaurant', label: 'Restaurante', permission: 'MANAGER_RESTAURANT', views: ['overview', 'orders', 'kitchen', 'tables', 'menu', 'reports'] },
+  { id: 'hotel', label: 'Hotel', permission: 'MANAGER_HOTEL', views: ['overview', 'rooms', 'calendar', 'reservations', 'stays'] },
+  { id: 'logistics', label: 'Tracking de Importaciones', permission: 'MANAGER_LOGISTICS', views: ['overview', 'shipments', 'packages', 'batches', 'reconciliation', 'billing'] },
+  { id: 'intl-imports', label: 'Importaciones Internacionales', permission: 'MANAGER_INTL_IMPORTS', views: ['overview', 'origin', 'containers', 'customs'] },
+  { id: 'asana', label: 'Asana', permission: 'MANAGER_ASANA', views: ['overview', 'boards', 'tasks'] },
+  { id: 'notifications', label: 'Notificaciones', permission: 'MANAGER_NOTIFICATIONS', views: ['overview', 'alerts', 'push'] },
+  { id: 'financing', label: 'Financiamiento PYME', permission: 'MANAGER_FINANCING', views: ['overview', 'applications'] },
+  { id: 'legal', label: 'Asesoría legal', permission: 'MANAGER_LEGAL', views: ['overview', 'cases', 'reminders'] },
+  { id: 'novachat', label: 'Nova Suite', permission: 'MANAGER_NOVACHAT', views: ['overview', 'conversations', 'channels', 'contacts', 'agents'] },
+  { id: 'support', label: 'Soporte técnico', permission: 'MANAGER_SUPPORT', views: ['overview', 'tickets'] },
+];
+
+const MANAGER_REPORT_SOURCE_VIEW_ALIASES: Record<string, Record<string, string>> = {
+  sales: { 'customer-detail': 'customer-history' },
+};
+
+export function getManagerReportSourceViews(section: string): string[] {
+  const aliases = MANAGER_REPORT_SOURCE_VIEW_ALIASES[section] || {};
+  const targetViews = MANAGER_PDF_TARGET_SECTIONS.find((candidate) => candidate.id === section)?.views || [];
+  return targetViews.map((view) => Object.entries(aliases).find(([, targetView]) => targetView === view)?.[0] || view);
+}
+
+const managerViewLabel = (view: string) => view === 'overview' ? 'Resumen'
+  : view.startsWith('source-') ? `Reporte · ${view.slice(7)}`
+  : view.replace(/([A-Z])/g, ' $1').replace(/-/g, ' ').replace(/^./, (char) => char.toUpperCase());
+
+const MANAGER_DIRECT_PDF_TARGETS: PdfTemplateTarget[] = MANAGER_PDF_TARGET_SECTIONS.flatMap((section) => section.views.map((view) => ({
+  key: `manager.${section.id}.${view}.pdf`,
+  module: 'manager' as const,
+  moduleLabel: section.label,
+  label: `${section.label} · ${managerViewLabel(view)}`,
+  structure: view === 'overview' ? 'dashboard' as const : 'report' as const,
+  branchCustomizable: false,
+  exportPermission: section.permission,
+  source: `Manager ${section.id} ${view} export`,
+})));
+
+const MANAGER_REPORT_SOURCE_PDF_TARGETS: PdfTemplateTarget[] = MANAGER_PDF_TARGET_SECTIONS
+  .filter((section) => !['overview', 'reports'].includes(section.id))
+  .flatMap((section) => section.views.map((view) => ({
+    key: `manager.reports.source-${section.id}-${MANAGER_REPORT_SOURCE_VIEW_ALIASES[section.id]?.[view] || view}.pdf`,
+    module: 'manager' as const,
+    moduleLabel: 'Reportes',
+    label: `Reportes · ${section.label} · ${managerViewLabel(view)}`,
+    structure: 'report' as const,
+    branchCustomizable: false,
+    exportPermission: 'MANAGER_REPORTS',
+    source: `Manager reports ${section.id}/${view} export`,
+  })));
+
+const MANAGER_PDF_TARGETS: PdfTemplateTarget[] = [...MANAGER_DIRECT_PDF_TARGETS, ...MANAGER_REPORT_SOURCE_PDF_TARGETS];
+
+export const getManagerPdfTargetKey = (section: string, view: string) => `manager.${section}.${view}.pdf`;
+export const getManagerReportSourcePdfTargetKey = (section: string, view: string) =>
+  `manager.reports.source-${section}-${MANAGER_REPORT_SOURCE_VIEW_ALIASES[section]?.[view] || view}.pdf`;
 
 /**
  * Catálogo único de salidas PDF/imprimibles del ERP.
@@ -178,6 +248,7 @@ const BASE_PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'tickets.agents', module: 'tickets', moduleLabel: 'Tickets', label: 'Agentes de soporte', structure: 'report', source: 'TicketsPage.export' },
   { key: 'financiamiento.applications', module: 'financiamiento', moduleLabel: 'Financiamiento', label: 'Solicitudes de financiamiento', structure: 'report', source: 'FinanciamientoPymePage.export' },
   { key: 'restaurante.menu', module: 'restaurante', moduleLabel: 'Restaurante', label: 'Carta de restaurante', structure: 'report', source: 'RestaurantMenuWorkspace.exportMenu' },
+  ...MANAGER_PDF_TARGETS,
 ];
 
 export const FIXED_PDF_TEMPLATE_KEYS = new Set<string>([
@@ -274,7 +345,8 @@ function decoratePdfTemplateTarget(target: PdfTemplateTarget): PdfExportTarget {
                         : target.module === 'tickets' ? 'TICKETS'
                           : target.module === 'financiamiento' ? 'FINANCING'
                             : target.module === 'auditoria' ? 'AUDIT_LOGS'
-                              : target.module === 'portal-clientes' ? 'SALES_CLIENTS'
+            : target.module === 'manager' ? 'MANAGER_PDF'
+            : target.module === 'portal-clientes' ? 'SALES_CLIENTS'
                                 : 'REPORTS');
   return {
     ...target,
@@ -284,8 +356,8 @@ function decoratePdfTemplateTarget(target: PdfTemplateTarget): PdfExportTarget {
     branchCustomizable: target.branchCustomizable !== false,
     exportPermission,
     capabilities: {
-      editableCanvas: !fixed && target.branchCustomizable !== false,
-      importable: !fixed && target.branchCustomizable !== false,
+      editableCanvas: !fixed && (target.branchCustomizable !== false || target.module === 'manager'),
+      importable: !fixed && (target.branchCustomizable !== false || target.module === 'manager'),
       repeatableTable: tabular,
       exportPdf: true,
       exportExcel: adapter.excelRenderer !== 'none' && !fixed && tabular,
@@ -349,7 +421,7 @@ export function isPdfTemplateFixed(keyOrTarget: string | PdfTemplateTarget | nul
 
 export function canEditPdfTemplate(keyOrTarget: string | PdfTemplateTarget | null | undefined): boolean {
   const target = typeof keyOrTarget === 'string' ? getPdfTemplateTarget(keyOrTarget) : keyOrTarget;
-  return Boolean(target && !isPdfTemplateFixed(target) && target.branchCustomizable !== false);
+  return Boolean(target && !isPdfTemplateFixed(target) && (target.branchCustomizable !== false || target.module === 'manager'));
 }
 
 export type PdfTemplatePartyMode = 'customer' | 'supplier' | 'requester' | 'payee' | 'none';

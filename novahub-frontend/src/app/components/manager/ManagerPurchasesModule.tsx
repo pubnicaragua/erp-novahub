@@ -137,6 +137,8 @@ export function ManagerPurchasesModule({ view, onViewChange, groupId, businessUn
       const exportRows = rows.map((row: any) => exportRow(view, row, activeReportCurrency, displayMode));
       const tenantName = themeConfig?.tenantName || user?.tenantName || 'Empresa';
       const options = {
+        groupId,
+        targetKey: `manager.purchases.${view}.pdf`,
         rows: exportRows,
         tenantName,
         tenantLogo: themeConfig?.logo,

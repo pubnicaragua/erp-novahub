@@ -1,7 +1,7 @@
 import { Fragment, createElement, useMemo, useState, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from '@/app/services/toast';
-import { ArrowRight, ArrowUpRight, Boxes, Building2, CalendarDays, ChevronRight, ClipboardCheck, Download, Eye, FileUp, History, Landmark, Package, Plus, RefreshCw, Search, Scale, ShieldCheck, Tags, TrendingDown, TrendingUp, Warehouse, Wrench } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Boxes, Building2, CalendarDays, ChevronRight, ClipboardCheck, Eye, FileUp, History, Landmark, Package, Plus, RefreshCw, Search, Scale, ShieldCheck, Tags, TrendingDown, TrendingUp, Warehouse, Wrench } from 'lucide-react';
 import { fetchAllReportPages, useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type ManagerInventoryModuleResponse } from '../../services/enterprise-groups.service';
 import { Badge } from '../ui/badge';
@@ -17,8 +17,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { ManagerInventoryAdjustmentsView } from './ManagerInventoryAdjustmentsView';
 import { ManagerInventoryImportView } from './ManagerInventoryImportDialog';
 import { MANAGER_INVENTORY_VIEWS, type ManagerInventoryView } from './manager-inventory.types';
-import { exportManagerReportExcel } from '../../utils/managerReportExport';
+import { exportManagerReportExcel, exportManagerReportPdf } from '../../utils/managerReportExport';
 import { buildManagerReportFilterSummary, buildManagerReportScopeSummary } from '../../utils/managerReportModel';
+import { ExportMenu } from '../ui/ExportMenu';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { useManagerShellNavigation } from '../ManagerShell';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { managerStatusLabel } from '../../utils/managerLabels';
@@ -180,7 +182,7 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
   const updateFilter = (setter: (value: string) => void, value: string) => { setter(value); setPage(1); };
   const clearFilters = () => { setSearch(''); setStatus(''); setMovementType(''); setCatalogBranchId(''); setWarehouseType(''); setWarehouseId(''); setDateFrom(''); setDateTo(''); setPage(1); };
 
-  const exportReport = async () => {
+  const exportReport = async (format: 'xlsx' | PdfDownloadFormat = 'xlsx') => {
     if (!canExport) return;
     setExporting(true);
     try {
@@ -189,7 +191,9 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
       const rows = await fetchAllReportPages((pageFilters) => enterpriseGroupsService.getInventoryModule(groupId, { ...filters, ...pageFilters }), filters, undefined, report);
       const exportRows = rows.map((row: any) => exportRow(view, row, canViewInventoryCost));
       const scopeGroupName = branches.length === 1 ? branches[0].name : 'Grupo empresarial';
-      await exportManagerReportExcel({
+      const options = {
+        groupId,
+        targetKey: `manager.inventory.${view}.pdf`,
         title: viewLabels[view],
         fileBase: `reporte_inventario_${viewLabels[view]}`,
         tenantName: scopeGroupName,
@@ -200,7 +204,9 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
         currency: String(report.metrics?.amountCurrency || ''),
         metrics: report.metrics,
         rows: exportRows,
-      });
+      };
+      if (format === 'xlsx') await exportManagerReportExcel(options);
+      else await exportManagerReportPdf({ ...options, pdfFormat: format === 'pdf' ? 'letter' : format });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo generar el reporte');
     } finally {
@@ -219,7 +225,7 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
         </div>
       </div>
       <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
-        {!showImportSubview && <><>{view === 'products' && canImportInventory && <Button type="button" size="sm" className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" onClick={() => setImportOpen(true)}><FileUp className="mr-2 size-4" />Importar por rubro</Button>}</><Button type="button" variant="outline" size="sm" className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" onClick={() => { setRefreshKey((current) => current + 1); void moduleQuery.refetch(); if (onRefreshScope) void onRefreshScope(); }} disabled={moduleQuery.isFetching}><RefreshCw className={`mr-2 size-4 ${moduleQuery.isFetching ? 'animate-spin' : ''}`} />Actualizar</Button>{canExport && view !== 'corporateWarehouses' && <Button type="button" variant="outline" size="sm" className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" onClick={exportReport} disabled={exporting || moduleQuery.isLoading}><Download className="mr-2 size-4" />{exporting ? 'Preparando…' : 'Exportar'}</Button>}</>}
+        {!showImportSubview && <><>{view === 'products' && canImportInventory && <Button type="button" size="sm" className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" onClick={() => setImportOpen(true)}><FileUp className="mr-2 size-4" />Importar por rubro</Button>}</><Button type="button" variant="outline" size="sm" className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" onClick={() => { setRefreshKey((current) => current + 1); void moduleQuery.refetch(); if (onRefreshScope) void onRefreshScope(); }} disabled={moduleQuery.isFetching}><RefreshCw className={`mr-2 size-4 ${moduleQuery.isFetching ? 'animate-spin' : ''}`} />Actualizar</Button>{canExport && view !== 'corporateWarehouses' && <ExportMenu size="sm" className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" disabled={exporting || moduleQuery.isLoading} onPdf={(format) => void exportReport(format)} onExcel={() => void exportReport('xlsx')} pdfDescription="Reporte consolidado de inventario de Manager" excelDescription="Todos los registros filtrados" />}</>}
       </div>
     </div>
 
@@ -249,9 +255,24 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
   </div>;
 }
 
-function Metrics({ view, metrics, branchWarehouseCount, canViewInventoryCost }: { view: ManagerInventoryView; metrics: Record<string, number>; branchWarehouseCount: number; canViewInventoryCost: boolean }) {
+function Metrics({ view, metrics, branchWarehouseCount, canViewInventoryCost }: { view: ManagerInventoryView; metrics: Record<string, any>; branchWarehouseCount: number; canViewInventoryCost: boolean }) {
+  const sourceValue = (source: string, value: ReactNode) => Number(metrics.sourceBranchCounts?.[source] || 0) > 0 ? value : '—';
   const cards: Array<{ label: string; value: ReactNode; icon: any; tone?: string }> = view === 'overview'
-    ? [{ label: 'Productos', value: metrics.products, icon: Package }, { label: 'Servicios', value: metrics.services, icon: Wrench, tone: 'text-info bg-info/10' }, { label: 'Stock de mi sucursal', value: metrics.branchInventoryUnits, icon: Package, tone: 'text-success bg-success/10' }, { label: 'Stock corporativo', value: metrics.corporateInventoryUnits, icon: Warehouse, tone: 'text-info bg-info/10' }, { label: 'Bodegas', value: branchWarehouseCount, icon: Warehouse, tone: 'text-warning bg-warning/10' }, { label: 'Transferencias', value: metrics.transfers, icon: ArrowRight, tone: 'text-info bg-info/10' }, { label: 'Movimientos', value: metrics.movements, icon: History, tone: 'text-info bg-info/10' }, { label: 'Auditorías', value: metrics.audits, icon: ClipboardCheck, tone: 'text-warning bg-warning/10' }]
+    ? [
+      { label: 'Productos', value: sourceValue('products', metrics.products), icon: Package },
+      { label: 'Servicios', value: sourceValue('services', metrics.services), icon: Wrench, tone: 'text-info bg-info/10' },
+      { label: 'Stock de sucursales', value: sourceValue('branchInventory', metrics.branchInventoryUnits), icon: Package, tone: 'text-success bg-success/10' },
+      { label: 'Reservado en sucursales', value: sourceValue('branchInventory', metrics.branchReservedUnits), icon: Scale, tone: 'text-warning bg-warning/10' },
+      { label: 'Stock corporativo', value: sourceValue('corporateInventory', metrics.corporateInventoryUnits), icon: Warehouse, tone: 'text-info bg-info/10' },
+      { label: 'Reservado corporativo', value: sourceValue('corporateInventory', metrics.corporateReservedUnits), icon: Scale, tone: 'text-warning bg-warning/10' },
+      { label: 'Bodegas', value: sourceValue('warehouses', branchWarehouseCount), icon: Warehouse, tone: 'text-warning bg-warning/10' },
+      { label: 'Transferencias', value: sourceValue('transfers', metrics.transfers), icon: ArrowRight, tone: 'text-info bg-info/10' },
+      { label: 'Movimientos', value: sourceValue('movements', metrics.movements), icon: History, tone: 'text-info bg-info/10' },
+      { label: 'Auditorías', value: sourceValue('audits', metrics.audits), icon: ClipboardCheck, tone: 'text-warning bg-warning/10' },
+      { label: 'Lotes vencidos', value: sourceValue('lots', metrics.expiredLotLines), icon: History, tone: 'text-destructive bg-destructive/10' },
+      { label: 'Lotes por vencer · 30 días', value: sourceValue('lots', metrics.expiringLotLinesWithin30Days), icon: History, tone: 'text-warning bg-warning/10' },
+      { label: 'Productos sin movimiento · 90 días', value: sourceValue('products', metrics.lowRotationProducts90Days), icon: Package, tone: 'text-info bg-info/10' },
+    ]
     : view === 'branchInventory' || view === 'corporateInventory'
       ? [{ label: 'Líneas visibles', value: metrics.lines, icon: Package }, { label: 'Productos', value: metrics.products, icon: ShieldCheck, tone: 'text-info bg-info/10' }, { label: 'Stock disponible', value: metrics.availableUnits, icon: Boxes, tone: view === 'branchInventory' ? 'text-success bg-success/10' : 'text-info bg-info/10' }, { label: 'Reservado', value: metrics.reservedUnits, icon: Scale, tone: 'text-warning bg-warning/10' }]
     : view === 'products' || view === 'services'

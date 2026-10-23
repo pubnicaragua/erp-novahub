@@ -3378,11 +3378,35 @@ function ModuleSelector({
 
 function moduleViewsFor(parentId: string) {
   const seen = new Set<string>();
-  return PERMISSION_SUBMODULES.filter((view) => {
-    if (view.parent !== parentId || seen.has(view.id)) return false;
+  const views = PERMISSION_SUBMODULES.filter((view) => {
+    const importedTrackingView = parentId === 'TRACKING' && view.parent === 'IMPORT_INTL';
+    if ((view.parent !== parentId && !importedTrackingView) || seen.has(view.id)) return false;
     seen.add(view.id);
     return true;
   });
+  if (parentId === 'REPORTS' && !seen.has('REPORTS_SUBSCRIPTIONS')) {
+    views.push({ id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', parent: 'REPORTS' });
+  }
+  if (parentId === 'REPORTS') {
+    const managerSources = [
+      ['sales', 'Ventas gerenciales'], ['purchases', 'Compras gerenciales'], ['inventory', 'Inventario gerencial'],
+      ['finances', 'Finanzas gerenciales'], ['accounting', 'Contabilidad gerencial'], ['hr', 'Recursos Humanos gerencial'],
+      ['activities', 'Actividades gerenciales'], ['projects', 'Proyectos gerenciales'], ['tickets', 'Tickets gerenciales'],
+      ['documents', 'Nova Cloud gerencial'], ['restaurant', 'Restaurante gerencial'], ['hotel', 'Hotel gerencial'],
+      ['logistics', 'Tracking gerencial'], ['intl-imports', 'Importaciones internacionales gerenciales'],
+      ['asana', 'Asana gerencial'], ['notifications', 'Notificaciones gerenciales'],
+      ['financing', 'Financiamiento gerencial'], ['legal', 'Asesoría legal gerencial'],
+      ['novachat', 'Nova Suite gerencial'], ['support', 'Soporte técnico gerencial'],
+    ] as const;
+    for (const [source, label] of managerSources) {
+      const id = `REPORTS_MANAGER_${source.replace(/-/g, '_').toUpperCase()}`;
+      if (!seen.has(id)) {
+        seen.add(id);
+        views.push({ id, label, parent: 'REPORTS' });
+      }
+    }
+  }
+  return views;
 }
 
 function ModulePolicyEditor({

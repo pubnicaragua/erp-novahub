@@ -89,6 +89,12 @@ export interface ManagerOverview {
     storageObjects?: number;
     storageBytes?: number;
   };
+  moduleSummaries?: Array<{
+    section: string;
+    status: 'AVAILABLE' | 'NO_ELIGIBLE_BRANCHES' | 'ERROR';
+    eligibleBranchCount: number;
+    metrics: Record<string, unknown>;
+  }>;
   warehouses: Array<{
     id: string;
     name: string;
@@ -465,6 +471,14 @@ export interface ManagerReportsModuleResponse {
   data: any[];
   meta: { total: number; page: number; pageSize: number; totalPages: number };
   metrics: Record<string, any>;
+  scope?: { status: 'AVAILABLE' | 'NO_ELIGIBLE_BRANCHES'; eligibleBranchCount: number };
+}
+
+export interface ManagerPdfRenderConfig {
+  targetKey: string;
+  design: import('./pdf-document-design.service').PdfDocumentDesignRecord | null;
+  companyProfile: import('./pdf-document-design.service').PdfCompanyProfile;
+  appearanceProfile: Record<string, unknown>;
 }
 
 export interface ManagerHrModuleResponse {
@@ -923,6 +937,8 @@ export const enterpriseGroupsService = {
     groupId: string,
     params: {
       view: string;
+      sourceView?: string;
+      sourceModule?: string;
       businessUnitId?: string;
       branchId?: string;
       status?: string;
@@ -939,6 +955,11 @@ export const enterpriseGroupsService = {
     api.get<ManagerReportsModuleResponse>(
       `/enterprise-groups/manager/${groupId}/reports/module`,
       { params, signal },
+    ),
+  getManagerPdfRenderConfig: (groupId: string, targetKey: string, signal?: AbortSignal) =>
+    api.get<ManagerPdfRenderConfig>(
+      `/enterprise-groups/manager/${groupId}/pdf-document-designs/render-config`,
+      { params: { targetKey }, signal },
     ),
   getHrModule: (
     groupId: string,

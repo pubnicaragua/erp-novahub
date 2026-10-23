@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import jspdfAutoTable from 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
-import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
+import { createManagerPdfDocumentDesignService, pdfDocumentDesignService } from '../services/pdf-document-design.service';
 import { getPdfTemplateTarget, isPdfTemplateFixed } from '../services/pdf-document-catalog';
 import { getBase64Image } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
@@ -2794,7 +2794,7 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
 
 const LEGACY_LAYOUT_PRESERVED_SETTINGS = [
   'paperSize', 'orientation', 'margins',
-  'curatedTemplateSelection',
+  'curatedTemplateSelection', 'managerGroupId',
   'headerComposition', 'headerContentSpacing', 'fontFamily', 'fontSize', 'pdfStylePreset', 'pdfTableStyle', 'tableLayout',
   'primaryColor', 'secondaryColor', 'textColor', 'lineColor', 'tableHeaderColor', 'tableHeaderTextColor',
   'tableRowColor', 'tableStripeColor', 'tableBorderColor', 'pdfAppearancePalette', 'appearanceOverrides',
@@ -2875,7 +2875,7 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
     },
   };
   if (settings.curatedTemplateSelection) {
-    return renderCuratedTemplateToPdf({ targetKey, data: enrichedData as Record<string, unknown>, fileName, save, format: resolveCuratedPaperFormat(format, settings.paperSize) });
+    return renderCuratedTemplateToPdf({ targetKey, data: enrichedData as Record<string, unknown>, fileName, save, format: resolveCuratedPaperFormat(format, settings.paperSize), managerGroupId: settings.managerGroupId });
   }
   if (format === 'roll-58' || format === 'roll-80') return null;
   return renderPdfTemplateToPdf({ definition: definitionWithGeneratedFallback, settings: renderSettings, targetKey, data: enrichedData, fileName, save, onProgress });
@@ -2903,13 +2903,14 @@ function curatedPaperDimensions(format: PdfPaperFormat): [number, number] {
   return [215.9, 279.4];
 }
 
-export async function renderCuratedTemplateToPdf({ targetKey, data, fileName, save, format = 'letter' }: { targetKey: string; data: Record<string, unknown>; fileName: string; save: boolean; format?: PdfPaperFormat }) {
+export async function renderCuratedTemplateToPdf({ targetKey, data, fileName, save, format = 'letter', managerGroupId }: { targetKey: string; data: Record<string, unknown>; fileName: string; save: boolean; format?: PdfPaperFormat; managerGroupId?: string }) {
   const source = data && typeof data === 'object' ? data as Record<string, any> : {};
   const company = source.company && typeof source.company === 'object' ? source.company as Record<string, any> : {};
   // La vista previa usa el perfil PDF de la sucursal. Las exportaciones reales
   // también deben consumir esa misma identidad para que el encabezado no cambie
   // según el documento o el motor que inició la descarga.
-  const companyProfile = await pdfDocumentDesignService.getCompanyProfile().catch(() => null);
+  const managerService = managerGroupId ? createManagerPdfDocumentDesignService(managerGroupId) : null;
+  const companyProfile = await (managerService ? managerService.getCompanyProfile() : pdfDocumentDesignService.getCompanyProfile()).catch(() => null);
   const effectiveCompany = companyProfile ? { ...company, ...companyProfile } : company;
   const logoSource = String(companyProfile ? companyProfile.logo || '' : company.logo || source.logo || '').trim();
   const logo = /^data:image\/(?:png|jpeg|webp);base64,/i.test(logoSource) ? logoSource : logoSource ? await getBase64Image(logoSource) || '' : '';
@@ -2918,7 +2919,9 @@ export async function renderCuratedTemplateToPdf({ targetKey, data, fileName, sa
     logo,
     company: { ...effectiveCompany, logo },
   };
-  const blob = await pdfDocumentDesignService.renderSelectedCuratedTemplate(targetKey, renderData, format);
+  const blob = await (managerService
+    ? managerService.renderSelectedCuratedTemplate(targetKey, renderData, format)
+    : pdfDocumentDesignService.renderSelectedCuratedTemplate(targetKey, renderData, format));
   const doc = new jsPDF({ format: curatedPaperDimensions(format), orientation: 'portrait', unit: 'mm' });
   const originalOutput = doc.output.bind(doc);
   (doc as any).output = (type = 'blob', ...args: unknown[]) => type === 'blob' ? blob : originalOutput(type as any, ...(args as any[]));

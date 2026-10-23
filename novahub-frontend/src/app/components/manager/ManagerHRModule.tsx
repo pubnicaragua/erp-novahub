@@ -60,6 +60,8 @@ export function ManagerHRModule({ view, onViewChange, groupId, businessUnitId, b
       const exportRows = rows.map((row: any) => ({ Sucursal: row.branchName || 'Sucursal no identificada', Vista: labels[view], Registro: row.employeeName || row.name || row.employeeNumber || row.id, Fecha: formatDate(row.date || row.createdAt || row.periodEnd || row.startDate), Estado: statusLabel(row.status || row.employmentStatus || row.paymentStatus), Valor: row.netPay ?? row.amount ?? row.salary ?? row.cost ?? row.days ?? '', Rubro: row.businessUnitName || '' }));
       const scopeGroupName = branches.length === 1 ? branches[0].name : 'Grupo empresarial';
       const options = {
+        groupId,
+        targetKey: `manager.hr.${view}.pdf`,
         title: `RR. HH. consolidado · ${labels[view]}`,
         fileBase: `reporte_recursos_humanos_${labels[view]}`,
         tenantName: scopeGroupName,

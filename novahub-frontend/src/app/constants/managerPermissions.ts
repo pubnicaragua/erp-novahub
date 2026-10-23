@@ -1,4 +1,4 @@
-export type ManagerPermissionAction = 'read' | 'create' | 'edit' | 'delete' | 'approve' | 'export' | 'manage';
+export type ManagerPermissionAction = 'read' | 'create' | 'edit' | 'delete' | 'approve' | 'export' | 'manage' | 'import';
 export type ManagerPermissionState = Record<string, Record<ManagerPermissionAction, boolean>>;
 
 export const MANAGER_PERMISSION_OPTIONS = [
@@ -15,6 +15,7 @@ export const MANAGER_PERMISSION_OPTIONS = [
   { id: 'MANAGER_PROJECTS', label: 'Proyectos consolidados', description: 'Proyectos, tareas, hitos y costos operativos por sucursal' },
   { id: 'MANAGER_TICKETS', label: 'Tickets consolidados', description: 'Soporte operativo, categorías y cumplimiento de SLA por sucursal' },
   { id: 'MANAGER_DOCUMENTS', label: 'Documentos consolidados', description: 'Archivos y reportes persistidos de las sucursales' },
+  { id: 'MANAGER_PDF', label: 'Documentos PDF del Manager', description: 'Administrar diseños, identidad y apariencia PDF del grupo empresarial' },
   { id: 'MANAGER_RESTAURANT', label: 'Restaurante consolidado', description: 'Comandas, cocina, mesas y carta por sucursal' },
   { id: 'MANAGER_HOTEL', label: 'Hotel consolidado', description: 'Habitaciones, ocupación, calendario, reservas y estadías' },
   { id: 'MANAGER_LOGISTICS', label: 'Logística consolidada', description: 'Envíos, paquetes recibidos y recepciones por sucursal' },
@@ -41,6 +42,7 @@ export const MANAGER_PERMISSION_ACTIONS: Array<{ key: ManagerPermissionAction; l
   { key: 'approve', label: 'Aprobar y aplicar ajuste' },
   { key: 'export', label: 'Exportar' },
   { key: 'manage', label: 'Administrar' },
+  { key: 'import', label: 'Importar paquetes PDF' },
 ];
 
 // Actions are limited to the operations exposed by the consolidated Manager
@@ -60,6 +62,7 @@ export const MANAGER_PERMISSION_ACTIONS_BY_MODULE: Record<string, readonly Manag
   MANAGER_PROJECTS: READ_EXPORT,
   MANAGER_TICKETS: READ_EXPORT,
   MANAGER_DOCUMENTS: READ_EXPORT,
+  MANAGER_PDF: ['read', 'create', 'edit', 'delete', 'import'],
   MANAGER_RESTAURANT: READ_EXPORT,
   MANAGER_HOTEL: READ_EXPORT,
   MANAGER_LOGISTICS: READ_EXPORT,
@@ -83,7 +86,7 @@ export function managerPermissionActionsFor(module: string) {
   return MANAGER_PERMISSION_ACTIONS.filter((action) => supported.has(action.key));
 }
 
-const emptyActions = (): Record<ManagerPermissionAction, boolean> => ({ read: false, create: false, edit: false, delete: false, approve: false, export: false, manage: false });
+const emptyActions = (): Record<ManagerPermissionAction, boolean> => ({ read: false, create: false, edit: false, delete: false, approve: false, export: false, manage: false, import: false });
 
 export const emptyManagerPermissionState = (): ManagerPermissionState => Object.fromEntries(
   MANAGER_PERMISSION_OPTIONS.map((option) => [option.id, emptyActions()]),

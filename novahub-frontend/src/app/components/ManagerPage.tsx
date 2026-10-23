@@ -5,6 +5,7 @@ import { toast } from '@/app/services/toast';
 import { Activity, ArrowRightLeft, ArrowUpRight, BarChart3, Building2, Boxes, ChevronLeft, ChevronRight, Download, KeyRound, Landmark, MapPin, Package, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, Users, UserCheck, UserX, Warehouse, RefreshCw, Tags, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
+import { ExportMenu } from './ui/ExportMenu';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { ConfirmDialog } from './ui/ConfirmDialog';
@@ -25,7 +26,7 @@ import { MANAGER_FINANCE_VIEWS, type ManagerFinanceView } from './manager/manage
 import { ManagerAccountingModule } from './manager/ManagerAccountingModule';
 import { MANAGER_ACCOUNTING_VIEWS, type ManagerAccountingView } from './manager/manager-accounting.types';
 import { ManagerReportsModule } from './manager/ManagerReportsModule';
-import { MANAGER_REPORTS_VIEWS, type ManagerReportsView } from './manager/manager-reports.types';
+import { MANAGER_REPORTS_VIEWS, MANAGER_REPORT_SOURCES, type ManagerReportsView } from './manager/manager-reports.types';
 import { ManagerHRModule } from './manager/ManagerHRModule';
 import { MANAGER_HR_VIEWS, type ManagerHrView } from './manager/manager-hr.types';
 import { MANAGER_OPERATION_VIEWS } from './manager/manager-operations.types';
@@ -33,6 +34,7 @@ import { allowedManagerEnterpriseViews, managerSectionEnabledForGroup } from './
 import { ManagerOperationsModule as ManagerOperationsView } from './manager/ManagerOperationsModule';
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
 import { BrandLogo } from './BrandLogo';
+import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { InventoryDetailPanel } from './inventory/InventoryDetailPanel';
 import { emptyManagerPermissionState, MANAGER_PERMISSION_OPTIONS, managerPermissionActionsFor, managerPermissionsToState, managerStateToPermissions, type ManagerPermissionAction, type ManagerPermissionState } from '../constants/managerPermissions';
 import { ManagerBranchAccessEditor, type ManagerBranchAccessRule, type ManagerBranchScopeRule } from './manager/ManagerBranchAccessEditor';
@@ -48,6 +50,9 @@ import { getPasswordError } from '../utils/accountValidation';
 import { PasswordRequirements } from './PasswordRequirements';
 import { auditActionLabel, auditDescriptionLabel, auditModuleLabel, auditRoleLabel } from './AuditoriaPage';
 import { managerStatusLabel } from '../utils/managerLabels';
+import { createManagerPdfDocumentDesignService } from '../services/pdf-document-design.service';
+import { exportManagerReportPdf } from '../utils/managerReportExport';
+import { getManagerReportSourceViews } from '../services/pdf-document-catalog';
 
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });
 const USER_TYPE_LABELS: Record<string, string> = {
@@ -112,7 +117,7 @@ function readManagerNavigation(userId: string): ManagerNavigationSnapshot {
     return {
       section: storedManagerOption(MANAGER_SECTIONS, saved.section, defaults.section),
       usersTab: ['users', 'managers', 'access'].includes(saved.usersTab) ? saved.usersTab : defaults.usersTab,
-      settingsView: ['theme', 'audit'].includes(saved.settingsView) ? saved.settingsView : defaults.settingsView,
+      settingsView: ['theme', 'audit', 'pdf'].includes(saved.settingsView) ? saved.settingsView : defaults.settingsView,
       inventoryView: storedManagerOption(MANAGER_INVENTORY_VIEWS, saved.inventoryView, defaults.inventoryView),
       salesView: storedManagerOption(MANAGER_SALES_VIEWS, saved.salesView, defaults.salesView),
       purchasesView: storedManagerOption(MANAGER_PURCHASES_VIEWS, saved.purchasesView, defaults.purchasesView),
@@ -356,25 +361,37 @@ export function ManagerPage() {
   }, [group?.managerAccess]);
   const canManageManagersFromUsers = canConfigureManagers;
   const canViewManagerAudit = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_USERS', 'read'), [group?.managerAccess]);
+  const canViewManagerPdf = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_PDF', 'read'), [group?.managerAccess]);
+  const canEditManagerPdf = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_PDF', 'edit'), [group?.managerAccess]);
+  const canCreateManagerPdf = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_PDF', 'create'), [group?.managerAccess]);
+  const canDeleteManagerPdf = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_PDF', 'delete'), [group?.managerAccess]);
+  const canImportManagerPdf = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_PDF', 'import'), [group?.managerAccess]);
+  const managerPdfDesignService = useMemo(() => groupId ? createManagerPdfDocumentDesignService(groupId) : undefined, [groupId]);
   const canApproveManagerTransfers = useMemo(() => {
     return managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'edit');
   }, [group?.managerAccess]);
   const canApproveManagerInventoryAdjustments = useMemo(() => {
     return managerAccessAllowsAction(group?.managerAccess, 'MANAGER_INVENTORY', 'approve');
   }, [group?.managerAccess]);
-  const canExportSales = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_SALES', 'export');
-  const canExportPurchases = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_PURCHASES', 'export');
-  const canExportInventory = managerAccessAllowsAction(group?.managerAccess, effectiveInventoryView === 'transfers' ? 'MANAGER_TRANSFERS' : 'MANAGER_INVENTORY', 'export');
-  const canExportOverview = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_OVERVIEW', 'export');
+  const managerCanExport = (sectionId: ManagerSection, permission: string) => {
+    const serverAction = group?.managerAvailability?.[sectionId]?.export;
+    return typeof serverAction === 'boolean' ? serverAction : managerAccessAllowsAction(group?.managerAccess, permission, 'export');
+  };
+  const canExportSales = managerCanExport('sales', 'MANAGER_SALES');
+  const canExportPurchases = managerCanExport('purchases', 'MANAGER_PURCHASES');
+  const canExportInventory = effectiveInventoryView === 'transfers'
+    ? managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'export')
+    : managerCanExport('inventory', 'MANAGER_INVENTORY');
+  const canExportOverview = managerCanExport('overview', 'MANAGER_OVERVIEW');
   const canViewCorporateWarehouses = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_WAREHOUSES', 'read');
   const canCreateCorporateWarehouses = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_WAREHOUSES', 'create');
   const canEditCorporateWarehouses = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_WAREHOUSES', 'edit');
   const canCreateSharedCatalog = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_CATALOG', 'create');
   const canEditSharedCatalog = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_CATALOG', 'edit');
-  const canExportFinance = ['MANAGER_FINANCE', 'MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED'].some((module) => managerAccessAllowsAction(group?.managerAccess, module, 'export'));
-  const canExportAccounting = ['MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED'].some((module) => managerAccessAllowsAction(group?.managerAccess, module, 'export'));
-  const canExportReports = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_REPORTS', 'export');
-  const canExportHr = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_HR', 'export');
+  const canExportFinance = managerCanExport('finances', 'MANAGER_FINANCE') || managerAccessAllowsAction(group?.managerAccess, 'MANAGER_ACCOUNTING', 'export') || managerAccessAllowsAction(group?.managerAccess, 'MANAGER_CONSOLIDATED', 'export');
+  const canExportAccounting = managerCanExport('accounting', 'MANAGER_ACCOUNTING') || managerAccessAllowsAction(group?.managerAccess, 'MANAGER_CONSOLIDATED', 'export');
+  const canExportReports = managerCanExport('reports', 'MANAGER_REPORTS');
+  const canExportHr = managerCanExport('hr', 'MANAGER_HR');
 
   useEffect(() => {
     if (selectedBusinessUnitId && !businessUnits.some((unit) => unit.id === selectedBusinessUnitId && unit.isActive !== false)) setSelectedBusinessUnitId('');
@@ -615,10 +632,12 @@ export function ManagerPage() {
       settingsView={settingsView}
       onSettingsViewChange={(view) => {
         if (view === 'audit' && !canViewManagerAudit) return;
+        if (view === 'pdf' && !canViewManagerPdf) return;
         setSettingsView(view);
         setSection('settings');
       }}
       canViewAudit={canViewManagerAudit}
+      canViewPdf={canViewManagerPdf}
       selectedBranchId={effectiveSelectedBranchId}
       onBranchChange={(branchId) => { setSelectedBranchId(branchId); setUsersActivityPage(1); }}
       reportCurrency={activeManagerCurrency}
@@ -635,16 +654,17 @@ export function ManagerPage() {
         {!loading && !groupsQuery.isError && !groupId && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">SuperAdmin todavía no ha asignado este usuario a un grupo empresarial.</CardContent></Card>}
 
         {!loading && groupId && !allowedSections.includes(section) && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">Este acceso Manager no tiene permisos para esta vista.</CardContent></Card>}
-        {!loading && groupId && section === 'overview' && allowedSections.includes('overview') && <OverviewContent overview={overview} groupId={groupId} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} />}
-        {section === 'inventory' && allowedSections.includes('inventory') && <ManagerInventoryModule view={effectiveInventoryView} onViewChange={setInventoryView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} warehouses={scopedWarehouses} businessUnits={businessUnits} canViewCorporateWarehouses={canViewCorporateWarehouses} availableViews={availableManagerViews.inventory} canCreateTransfers={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'create')} canApproveTransfers={canApproveManagerTransfers} canApproveAdjustments={canApproveManagerInventoryAdjustments} approvingTransferId={approveTransferMutation.isPending ? String(approveTransferMutation.variables || '') : ''} onApproveTransfer={setTransferToApprove} canImportInventory={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_INVENTORY', 'create')} canViewInventoryCost={managerAccessCanViewInventoryCost(group?.managerAccess)} canExport={canExportInventory} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} onRefreshScope={() => groupsQuery.refetch()} corporateWarehouseContent={<WarehouseContent overview={overview} inventoryWarehouses={corporateWarehousesQuery.data?.data || []} warehousesLoading={corporateWarehousesQuery.isLoading} branches={branchOptions} units={group?.businessUnits || []} name={warehouseName} location={warehouseLocation} businessUnitId={warehouseBusinessUnitId} branchIds={warehouseBranchIds} setName={setWarehouseName} setLocation={setWarehouseLocation} setBusinessUnitId={(value) => { setWarehouseBusinessUnitId(value); setWarehouseBranchIds([]); }} setBranchIds={setWarehouseBranchIds} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} canCreate={canCreateCorporateWarehouses} canEdit={canEditCorporateWarehouses} onSyncCatalog={(warehouseId) => syncWarehouseCatalogMutation.mutate(warehouseId)} syncingCatalogId={syncWarehouseCatalogMutation.isPending ? String(syncWarehouseCatalogMutation.variables || '') : ''} />} />}
-        {section === 'sales' && allowedSections.includes('sales') && <ManagerSalesModule view={effectiveSalesView} onViewChange={setSalesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} canExport={canExportSales} availableViews={availableManagerViews.sales} />}
-        {section === 'purchases' && allowedSections.includes('purchases') && <ManagerPurchasesModule view={effectivePurchasesView} onViewChange={setPurchasesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} canExport={canExportPurchases} availableViews={availableManagerViews.purchases} />}
-        {section === 'finances' && allowedSections.includes('finances') && <ManagerFinanceModule view={effectiveFinanceView} onViewChange={setFinanceView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} canExport={canExportFinance} availableViews={availableManagerViews.finances} />}
-        {section === 'accounting' && allowedSections.includes('accounting') && <ManagerAccountingModule view={effectiveAccountingView} onViewChange={setAccountingView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportAccounting} availableViews={availableManagerViews.accounting} branchComparison={consolidatedBranchComparison.data} branchComparisonLoading={consolidatedBranchComparison.isLoading} branchComparisonDateFrom={consDateFrom} setBranchComparisonDateFrom={setConsDateFrom} branchComparisonDateTo={consDateTo} setBranchComparisonDateTo={setConsDateTo} />}
-        {section === 'reports' && allowedSections.includes('reports') && <ManagerReportsModule view={effectiveReportView} onViewChange={setReportView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportReports} availableViews={availableManagerViews.reports} />}
-        {section === 'hr' && allowedSections.includes('hr') && <ManagerHRModule view={effectiveHrView} onViewChange={setHrView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportHr} availableViews={availableManagerViews.hr} />}
+        {!loading && groupId && section === 'overview' && allowedSections.includes('overview') && <OverviewContent overview={overview} groupId={groupId} canExport={canExportOverview} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} />}
+        {section === 'inventory' && allowedSections.includes('inventory') && Boolean(availableManagerViews.inventory?.length) && <ManagerInventoryModule view={effectiveInventoryView} onViewChange={setInventoryView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} warehouses={scopedWarehouses} businessUnits={businessUnits} canViewCorporateWarehouses={canViewCorporateWarehouses} availableViews={availableManagerViews.inventory} canCreateTransfers={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'create')} canApproveTransfers={canApproveManagerTransfers} canApproveAdjustments={canApproveManagerInventoryAdjustments} approvingTransferId={approveTransferMutation.isPending ? String(approveTransferMutation.variables || '') : ''} onApproveTransfer={setTransferToApprove} canImportInventory={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_INVENTORY', 'create')} canViewInventoryCost={managerAccessCanViewInventoryCost(group?.managerAccess)} canExport={canExportInventory} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} onRefreshScope={() => groupsQuery.refetch()} corporateWarehouseContent={<WarehouseContent overview={overview} inventoryWarehouses={corporateWarehousesQuery.data?.data || []} warehousesLoading={corporateWarehousesQuery.isLoading} branches={branchOptions} units={group?.businessUnits || []} name={warehouseName} location={warehouseLocation} businessUnitId={warehouseBusinessUnitId} branchIds={warehouseBranchIds} setName={setWarehouseName} setLocation={setWarehouseLocation} setBusinessUnitId={(value) => { setWarehouseBusinessUnitId(value); setWarehouseBranchIds([]); }} setBranchIds={setWarehouseBranchIds} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} canCreate={canCreateCorporateWarehouses} canEdit={canEditCorporateWarehouses} onSyncCatalog={(warehouseId) => syncWarehouseCatalogMutation.mutate(warehouseId)} syncingCatalogId={syncWarehouseCatalogMutation.isPending ? String(syncWarehouseCatalogMutation.variables || '') : ''} />} />}
+        {!loading && groupId && allowedSections.includes(section) && MANAGER_SECTION_MODULES[section] && !(availableManagerViews[section]?.length) && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-sm text-muted-foreground">Sin sucursales habilitadas en este alcance</CardContent></Card>}
+        {section === 'sales' && allowedSections.includes('sales') && Boolean(availableManagerViews.sales?.length) && <ManagerSalesModule view={effectiveSalesView} onViewChange={setSalesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} canExport={canExportSales} availableViews={availableManagerViews.sales} />}
+        {section === 'purchases' && allowedSections.includes('purchases') && Boolean(availableManagerViews.purchases?.length) && <ManagerPurchasesModule view={effectivePurchasesView} onViewChange={setPurchasesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} canExport={canExportPurchases} availableViews={availableManagerViews.purchases} />}
+        {section === 'finances' && allowedSections.includes('finances') && Boolean(availableManagerViews.finances?.length) && <ManagerFinanceModule view={effectiveFinanceView} onViewChange={setFinanceView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} canExport={canExportFinance} availableViews={availableManagerViews.finances} />}
+        {section === 'accounting' && allowedSections.includes('accounting') && Boolean(availableManagerViews.accounting?.length) && <ManagerAccountingModule view={effectiveAccountingView} onViewChange={setAccountingView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportAccounting} availableViews={availableManagerViews.accounting} branchComparison={consolidatedBranchComparison.data} branchComparisonLoading={consolidatedBranchComparison.isLoading} branchComparisonDateFrom={consDateFrom} setBranchComparisonDateFrom={setConsDateFrom} branchComparisonDateTo={consDateTo} setBranchComparisonDateTo={setConsDateTo} />}
+        {section === 'reports' && allowedSections.includes('reports') && Boolean(availableManagerViews.reports?.length) && <ManagerReportsModule view={effectiveReportView} onViewChange={setReportView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportReports} availableViews={availableManagerViews.reports} sourceViewsByModule={Object.fromEntries(MANAGER_REPORT_SOURCES.map((source) => [source.id, (availableManagerViews[source.id] || []).filter((view) => getManagerReportSourceViews(source.id).includes(view))]))} sourceExportAccess={Object.fromEntries(MANAGER_REPORT_SOURCES.map((source) => [source.id, group?.managerAvailability?.[source.id]?.export === true]))} />}
+        {section === 'hr' && allowedSections.includes('hr') && Boolean(availableManagerViews.hr?.length) && <ManagerHRModule view={effectiveHrView} onViewChange={setHrView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportHr} availableViews={availableManagerViews.hr} />}
         {activeOperationModule && allowedSections.includes(section) && !(availableManagerViews[activeOperationModule]?.length) && <Card className="rounded-3xl border-dashed"><CardContent className="p-8 text-center text-sm text-muted-foreground">Sin sucursales habilitadas en este alcance</CardContent></Card>}
-        {activeOperationModule && allowedSections.includes(section) && Boolean(availableManagerViews[activeOperationModule]?.length) && <ManagerOperationsView key={activeOperationModule} module={activeOperationModule} view={activeOperationView} onViewChange={(view) => setOperationViews((current) => ({ ...current, [activeOperationModule]: view }))} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={managerAccessAllowsAction(group?.managerAccess, MANAGER_OPERATION_PERMISSION[activeOperationModule], 'export')} availableViews={availableManagerViews[activeOperationModule]} />}
+        {activeOperationModule && allowedSections.includes(section) && Boolean(availableManagerViews[activeOperationModule]?.length) && <ManagerOperationsView key={activeOperationModule} module={activeOperationModule} view={activeOperationView} onViewChange={(view) => setOperationViews((current) => ({ ...current, [activeOperationModule]: view }))} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={managerCanExport(activeOperationModule, MANAGER_OPERATION_PERMISSION[activeOperationModule])} availableViews={availableManagerViews[activeOperationModule]} />}
         {section === 'users' && <div className="space-y-5">
           <div role="tablist" aria-label="Administración de usuarios del grupo" className="flex max-w-full gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-muted/20 p-2">
             {([{ id: 'users', label: 'Usuarios del grupo', allowed: canViewManagerUsers }, { id: 'managers', label: 'Managers', allowed: canViewManagerAssignments || canConfigureManagers }, { id: 'access', label: 'Accesos Manager', allowed: canConfigureManagers }] as const).map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={usersTab === tab.id} disabled={!tab.allowed} onClick={() => setUsersTab(tab.id)} className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${usersTab === tab.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>{tab.label}</button>)}
@@ -654,6 +674,7 @@ export function ManagerPage() {
           {usersTab === 'access' && canConfigureManagers && <ManagersContent {...managersContentProps} showForm showList={false} />}
         </div>}
         {section === 'settings' && settingsView === 'audit' && canViewManagerAudit && <UsersContent showActivity auditOnly data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={usersActivityQuery.data} activityLoading={usersActivityQuery.isLoading} activityError={usersActivityQuery.error} activitySearch={usersActivitySearch} activityModule={usersActivityModule} activityPage={usersActivityPage} setActivitySearch={(value) => { setUsersActivitySearch(value); setUsersActivityPage(1); }} setActivityModule={(value) => { setUsersActivityModule(value); setUsersActivityPage(1); }} activityBusinessUnitId={selectedBusinessUnitId} activityBranchId={effectiveSelectedBranchId} activityBusinessUnits={businessUnits} activityBranches={branchOptions} setActivityBusinessUnitId={(value) => { setSelectedBusinessUnitId(value); setSelectedBranchId(''); setUsersActivityPage(1); }} setActivityBranchId={(value) => { setSelectedBranchId(value); setUsersActivityPage(1); }} onActivityPageChange={setUsersActivityPage} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={() => undefined} togglingUserId="" onCreateManager={() => undefined} />}
+        {section === 'settings' && settingsView === 'pdf' && canViewManagerPdf && groupId && managerPdfDesignService && <PdfDocumentCustomizer managerScope tenantId={groupId} branchName={group?.name || 'Grupo empresarial'} companyName={group?.name || 'Grupo empresarial'} logo={group?.logo || null} canEdit={canEditManagerPdf} canCreate={canCreateManagerPdf} canDelete={canDeleteManagerPdf} canImport={canImportManagerPdf} designService={managerPdfDesignService} />}
         {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} canShare={canCreateSharedCatalog} canEditCatalog={canEditSharedCatalog} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
         {section === 'transfers' && <TransfersContent data={transfersQuery.data || []} loading={transfersQuery.isLoading} canApprove={canApproveManagerTransfers} approvingId={approveTransferMutation.isPending ? String(approveTransferMutation.variables || '') : ''} onApprove={setTransferToApprove} />}
       </div>
@@ -766,10 +787,40 @@ function managerAccessCanViewInventoryCost(access: ManagerOverview['group']['man
   return managerPermissionGranted(permissions, 'MANAGER_INVENTORY_COST');
 }
 
-function OverviewContent({ overview, groupId, onEnterBranch, enterableBranchIds = new Set<string>() }: { overview?: ManagerOverview; groupId?: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; enterableBranchIds?: Set<string> }) {
+function OverviewContent({ overview, groupId, canExport = false, onEnterBranch, enterableBranchIds = new Set<string>() }: { overview?: ManagerOverview; groupId?: string; canExport?: boolean; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; enterableBranchIds?: Set<string> }) {
   const metrics = overview?.metrics;
   const visibleBranches = overview?.branches || [];
   const activeBranches = visibleBranches.filter((branch) => branch.isActive !== false).length;
+  const exportOverviewPdf = async (format: import('../utils/pdfDownloadFormats').PdfPaperFormat) => {
+    if (!groupId || !overview || !canExport) return;
+    const moduleMetrics = Object.fromEntries((overview.moduleSummaries || []).flatMap((summary) => [
+      [`${summary.section}EligibleBranches`, summary.eligibleBranchCount],
+      ...Object.entries(summary.metrics || {}).flatMap(([key, value]) => typeof value === 'number' ? [[`${summary.section}_${key}`, value]] : []),
+    ]));
+    await exportManagerReportPdf({
+      groupId,
+      targetKey: 'manager.overview.overview.pdf',
+      title: 'Resumen gerencial del grupo',
+      fileBase: 'resumen_gerencial_grupo',
+      tenantName: overview.group.name,
+      tenantLogo: overview.group.logo,
+      scopeSummary: `Grupo ${overview.group.name} · ${visibleBranches.length} sucursal(es) autorizada(s)`,
+      metrics: { ...(metrics || {}), ...moduleMetrics },
+      rows: visibleBranches.map((branch) => ({
+        Sucursal: branch.name,
+        Rubro: branch.businessUnit?.name || branch.businessType || getBusinessTypeLabel(branch.industry, branch.subIndustry || undefined),
+        Estado: branch.isActive === false ? 'Inactiva' : 'Activa',
+        Usuarios: branch._count.users ?? 0,
+        Productos: branch._count.products ?? 0,
+        Bodegas: branch._count.warehouses ?? 0,
+      })),
+      extraSheets: (overview.moduleSummaries || []).map((summary) => ({
+        name: `Módulo · ${summary.section}`,
+        rows: Object.entries(summary.metrics || {}).map(([key, value]) => ({ Indicador: key, Valor: value })),
+      })).filter((sheet) => sheet.rows.length),
+      pdfFormat: format,
+    });
+  };
   const cards = [
     { label: 'Sucursales visibles', detail: 'Cobertura del grupo', value: metrics?.branches, icon: Building2, tone: 'text-primary bg-primary/10' },
     { label: 'Usuarios generales', detail: 'Accesos configurados', value: metrics?.users, icon: Users, tone: 'text-primary bg-primary/10' },
@@ -779,7 +830,9 @@ function OverviewContent({ overview, groupId, onEnterBranch, enterableBranchIds 
     { label: 'Movimientos contables', detail: 'Actividad registrada', value: metrics?.accountingMovements, icon: Landmark, tone: 'text-primary bg-primary/10' },
   ].filter((card) => card.value !== undefined && card.value !== null);
   return <>
+    {canExport && <div className="flex justify-end"><ExportMenu onPdf={(format) => void exportOverviewPdf(format).catch((error) => toast.error(error instanceof Error ? error.message : 'No se pudo generar el resumen PDF'))} pdfLabel="Resumen gerencial PDF" pdfDescription="Métricas del grupo y sucursales autorizadas" /></div>}
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{cards.map((card, index) => { const Icon = card.icon; return <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}><Card className="h-full rounded-3xl border-border/60 bg-card/70 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><CardContent className="p-5"><div className={`mb-4 flex size-11 items-center justify-center rounded-2xl ${card.tone}`}><Icon className="size-5" /></div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className="mt-1 text-3xl font-black tracking-tight">{typeof card.value === 'string' ? card.value : formatNumber(card.value)}</p><p className="mt-1 text-[11px] text-muted-foreground">{card.detail}</p></CardContent></Card></motion.div>; })}</div>
+    {!!overview?.moduleSummaries?.length && <section aria-label="Indicadores por módulo habilitado" className="space-y-3"><div><h2 className="text-sm font-black uppercase tracking-widest text-foreground">Consolidados por módulo</h2><p className="mt-1 text-xs text-muted-foreground">Cada tarjeta respeta los módulos activos y las subvistas disponibles para tu acceso.</p></div><div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{overview.moduleSummaries.map((summary) => { const title = MANAGER_SECTIONS.find((item) => item.id === summary.section)?.label || summary.section; const values = Object.entries(summary.metrics || {}).filter(([key, value]) => typeof value === 'number' && !/amount|cost|debit|credit|balance|price|value|bytes|volume|weight|income|expense|paid|revenue|rate/i.test(key)); return <Card key={summary.section} className="min-w-0 rounded-2xl border-border/60"><CardContent className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><h3 className="min-w-0 truncate text-xs font-black uppercase tracking-wide">{title}</h3><Badge variant="outline" className="shrink-0 text-[9px]">{summary.eligibleBranchCount} sucursal(es)</Badge></div>{summary.status === 'NO_ELIGIBLE_BRANCHES' ? <p className="text-xs text-muted-foreground">Sin sucursales habilitadas en este alcance.</p> : summary.status === 'ERROR' ? <p className="text-xs text-destructive">No se pudo cargar esta fuente.</p> : values.length ? <div className="grid grid-cols-2 gap-2">{values.map(([key, value]) => <div key={key} className="min-w-0 rounded-xl bg-muted/30 p-2"><p className="truncate text-[9px] font-semibold uppercase text-muted-foreground">{key.replace(/([A-Z])/g, ' $1')}</p><p className="mt-0.5 truncate text-base font-black tabular-nums">{formatNumber(value)}</p></div>)}</div> : <p className="text-xs text-muted-foreground">Sin indicadores cuantitativos en esta vista.</p>}</CardContent></Card>; })}</div></section>}
     <Card className="rounded-3xl border-primary/20 bg-primary/[0.04]">
       <CardContent className="space-y-4 p-5 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

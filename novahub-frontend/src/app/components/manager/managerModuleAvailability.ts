@@ -1,4 +1,5 @@
 import type { ManagerGroup } from '../../services/enterprise-groups.service';
+import { MANAGER_REPORT_SOURCES } from './manager-reports.types';
 
 export const MANAGER_SECTION_ENTERPRISE_MODULE: Record<string, string> = {
   overview: 'DASHBOARD', sales: 'SALES', purchases: 'PURCHASES', inventory: 'INVENTORY', finances: 'FINANCIAL',
@@ -27,7 +28,7 @@ const VIEW_IDS: Record<string, Record<string, string[]>> = {
     overview: ['PURCHASES_PROVIDERS', 'PURCHASES_ORDERS', 'PURCHASES_RECEIPTS', 'PURCHASES_INVOICES_REC', 'PURCHASES_PAYMENTS', 'PURCHASES_RETURNS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC', 'PURCHASES_REQUESTS'],
     suppliers: ['PURCHASES_PROVIDERS'], orders: ['PURCHASES_ORDERS'], receipts: ['PURCHASES_RECEIPTS'], recurring: ['PURCHASES_INVOICES_REC'],
     payments: ['PURCHASES_PAYMENTS'], credits: ['PURCHASES_RETURNS'], expenses: ['PURCHASES_EXPENSES'], recurringexpenses: ['PURCHASES_EXPENSES_REC'], requests: ['PURCHASES_REQUESTS'],
-    invoices: ['PURCHASES_INVOICES'], management: ['PURCHASES_REQUESTS', 'PURCHASES_ORDERS'],
+    invoices: ['PURCHASES_RECEIPTS'], management: ['PURCHASES_REQUESTS', 'PURCHASES_ORDERS'],
   },
   finances: {
     overview: ['FINANCIAL_DASHBOARD', 'FINANCIAL_BANK', 'FINANCIAL_RECEIVABLES', 'FINANCIAL_PAYABLES', 'FINANCIAL_INCOMES', 'FINANCIAL_EXPENSES', 'FINANCIAL_EXPENSES_REC', 'FINANCIAL_INCOMES_REC', 'FINANCIAL_CALENDAR', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE', 'FINANCIAL_LOSSES'],
@@ -42,22 +43,30 @@ const VIEW_IDS: Record<string, Record<string, string[]>> = {
     bankBook: ['ACCOUNTING_LEDGER'], reconciliation: ['ACCOUNTING_RECONCILIATION'], periods: ['ACCOUNTING_PERIODS'], fiscal: ['ACCOUNTING_FISCAL'],
     invoiceAudit: ['ACCOUNTING_INVOICE_AUDIT'], budgets: ['ACCOUNTING_BUDGET'], expenseCategories: ['ACCOUNTING_EXPENSE_CATEGORIES'], hrPaymentRequests: ['ACCOUNTING_HR_PAYMENT_REQUESTS'],
   },
-  reports: { overview: ['REPORTS_SALES', 'REPORTS_PURCHASES', 'REPORTS_FINANCIAL', 'REPORTS_INVENTORY', 'REPORTS_CLIENTS', 'REPORTS_PROVIDERS', 'REPORTS_HR', 'REPORTS_SUBSCRIPTIONS'], sales: ['REPORTS_SALES'], purchases: ['REPORTS_PURCHASES'], financial: ['REPORTS_FINANCIAL'], inventory: ['REPORTS_INVENTORY'], customers: ['REPORTS_CLIENTS'], providers: ['REPORTS_PROVIDERS'], hr: ['REPORTS_HR'], subscriptions: ['REPORTS_SUBSCRIPTIONS'] },
+  reports: { overview: ['REPORTS_SALES', 'REPORTS_PURCHASES', 'REPORTS_FINANCIAL', 'REPORTS_INVENTORY', 'REPORTS_CLIENTS', 'REPORTS_PROVIDERS', 'REPORTS_HR', 'REPORTS_SUBSCRIPTIONS', ...MANAGER_REPORT_SOURCES.map((source) => `REPORTS_MANAGER_${source.id.replace(/-/g, '_').toUpperCase()}`)], sales: ['REPORTS_SALES'], purchases: ['REPORTS_PURCHASES'], financial: ['REPORTS_FINANCIAL'], inventory: ['REPORTS_INVENTORY'], customers: ['REPORTS_CLIENTS'], providers: ['REPORTS_PROVIDERS'], hr: ['REPORTS_HR'], subscriptions: ['REPORTS_SUBSCRIPTIONS'] },
   hr: {
     overview: ['HR_DASHBOARD', 'HR_EMPLOYEES', 'HR_DEPARTMENTS', 'HR_PAYROLL', 'HR_COMMISSIONS', 'HR_ATTENDANCE', 'HR_LEAVES', 'HR_PERFORMANCE', 'HR_BENEFITS'],
     employees: ['HR_EMPLOYEES'], departments: ['HR_DEPARTMENTS'], payroll: ['HR_PAYROLL'], commissions: ['HR_COMMISSIONS'], attendance: ['HR_ATTENDANCE'],
     leaves: ['HR_LEAVES'], performance: ['HR_PERFORMANCE'], kpi: ['HR_DASHBOARD'], benefits: ['HR_BENEFITS'],
   },
   activities: { overview: ['ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_LOGS'], activities: ['ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS'], calendar: ['ACTIVITIES_CALENDAR'], meetings: ['ACTIVITIES_MEETINGS'], reminders: ['ACTIVITIES_REMINDERS'], logs: ['ACTIVITIES_LOGS'] },
-  projects: { overview: ['PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS'], projects: ['PROJECTS_LIST'], tasks: ['PROJECTS_TASKS'], milestones: ['PROJECTS_MILESTONES'], costs: ['PROJECTS_EXPENSES'], budget: ['PROJECTS_EXPENSES'], resources: ['PROJECTS_LIST'], documents: ['PROJECTS_DOCUMENTS'], activities: ['PROJECTS_LIST'] },
-  tickets: { overview: ['TICKETS_LIST', 'TICKETS_FAQS', 'TICKETS_AGENTS'], tickets: ['TICKETS_LIST'], categories: ['TICKETS_LIST'], faqs: ['TICKETS_FAQS'], agents: ['TICKETS_AGENTS'] },
+  projects: {
+    overview: ['PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_QUOTATIONS', 'PROJECTS_COSTEO6D', 'PROJECTS_TIME', 'PROJECTS_EVM', 'PROJECTS_PROGRESS', 'PROJECTS_MEMORIAS'],
+    projects: ['PROJECTS_LIST'], tasks: ['PROJECTS_TASKS'], milestones: ['PROJECTS_MILESTONES'], costs: ['PROJECTS_EXPENSES'], budget: ['PROJECTS_EXPENSES'], resources: ['PROJECTS_LIST'], documents: ['PROJECTS_DOCUMENTS'], activities: ['PROJECTS_LIST'],
+    quotes: ['PROJECTS_QUOTATIONS'], costing: ['PROJECTS_COSTEO6D'], baselines: ['PROJECTS_TIME'], evm: ['PROJECTS_EVM'], progress: ['PROJECTS_PROGRESS'], evidence: ['PROJECTS_PROGRESS'], memories: ['PROJECTS_MEMORIAS'],
+  },
+  tickets: { overview: ['TICKETS_LIST', 'TICKETS_KNOWLEDGE_BASE', 'TICKETS_AGENTS'], tickets: ['TICKETS_LIST'], categories: ['TICKETS_LIST'], faqs: ['TICKETS_KNOWLEDGE_BASE'], agents: ['TICKETS_AGENTS'] },
   documents: { overview: ['DOCUMENTS_FILES', 'DOCUMENTS_REPORTS', 'DOCUMENTS_CONTRACTS', 'DOCUMENTS_INVOICES', 'DOCUMENTS_FOLDERS'], documents: ['DOCUMENTS_FILES'], reports: ['DOCUMENTS_REPORTS'], contracts: ['DOCUMENTS_CONTRACTS'], invoices: ['DOCUMENTS_INVOICES'], folders: ['DOCUMENTS_FOLDERS'] },
   restaurant: { overview: ['RESTAURANT_ORDERS', 'RESTAURANT_KITCHEN', 'RESTAURANT_SALON', 'RESTAURANT_MENU', 'RESTAURANT_REPORTS'], orders: ['RESTAURANT_ORDERS'], kitchen: ['RESTAURANT_KITCHEN'], tables: ['RESTAURANT_SALON'], menu: ['RESTAURANT_MENU'], reports: ['RESTAURANT_REPORTS'] },
   hotel: { overview: ['HOTEL_ROOMS', 'HOTEL_RESERVATIONS'], rooms: ['HOTEL_ROOMS'], calendar: ['HOTEL_ROOMS', 'HOTEL_RESERVATIONS'], reservations: ['HOTEL_RESERVATIONS'], stays: ['HOTEL_RESERVATIONS'] },
   logistics: { overview: ['TRACKING_TRANSIT', 'TRACKING_RECEPTION', 'TRACKING_BATCHES', 'TRACKING_PACKAGES', 'TRACKING_RECONCILIATION', 'TRACKING_BILLING'], shipments: ['TRACKING_TRANSIT'], packages: ['TRACKING_PACKAGES'], batches: ['TRACKING_BATCHES', 'TRACKING_RECEPTION'], reconciliation: ['TRACKING_RECONCILIATION'], billing: ['TRACKING_BILLING'] },
   'intl-imports': { overview: ['IMPORT_INTL', 'IMPORT_INTL_ORIGIN', 'IMPORT_INTL_CONTAINERS', 'IMPORT_INTL_CUSTOMS'], origin: ['IMPORT_INTL_ORIGIN'], containers: ['IMPORT_INTL_CONTAINERS'], customs: ['IMPORT_INTL_CUSTOMS'] },
-  asana: { overview: ['ASANA', 'ASANA_TASKS'], boards: ['ASANA'], tasks: ['ASANA_TASKS'] },
+  asana: { overview: ['ASANA_TASKS'], boards: ['ASANA_TASKS'], tasks: ['ASANA_TASKS'] },
   notifications: { overview: ['NOTIFICATIONS_ALERTS', 'NOTIFICATIONS_PUSH'], alerts: ['NOTIFICATIONS_ALERTS'], push: ['NOTIFICATIONS_PUSH'] },
+  novachat: {
+    overview: ['NOVACHAT'], conversations: ['NOVACHAT'], channels: ['NOVACHAT'], contacts: ['NOVACHAT'], agents: ['NOVACHAT'],
+  },
+  support: { overview: ['SUPPORT_TECH'], tickets: ['SUPPORT_TECH'] },
   financing: { overview: ['FINANCING_APPLICATIONS'], applications: ['FINANCING_APPLICATIONS'] },
   legal: { overview: ['LEGAL_CASES', 'LEGAL_REMINDERS'], cases: ['LEGAL_CASES'], reminders: ['LEGAL_REMINDERS'] },
   transfers: { transfers: ['INVENTORY_TRANSFERS'] }, catalog: { catalog: ['INVENTORY_PRODUCTS'] },
@@ -67,7 +76,7 @@ const VIEW_IDS: Record<string, Record<string, string[]>> = {
 const UNMAPPED_MANAGER_VIEWS: Record<string, Set<string>> = {
   sales: new Set(), purchases: new Set(), tickets: new Set(),
   reports: new Set(), hr: new Set(['training']),
-  novachat: new Set(['overview', 'conversations', 'channels', 'contacts', 'agents']), support: new Set(['overview', 'tickets']),
+  novachat: new Set(), support: new Set(),
 };
 
 type ManagerViewRequirement = { moduleId: string; viewIds?: string[] };
@@ -93,8 +102,18 @@ function managerViewRequirements(section: string, view: string): ManagerViewRequ
   const moduleId = MANAGER_SECTION_ENTERPRISE_MODULE[section];
   if (!moduleId) return [];
   const normalizedView = String(view || '').trim().toLowerCase();
+  if (section === 'reports' && normalizedView.startsWith('source-')) {
+    const source = MANAGER_REPORT_SOURCES.find((item) => item.id === normalizedView.slice(7));
+    const sourceIds = source && VIEW_IDS[source.id]?.overview;
+    if (!source || !sourceIds?.length) return [];
+    return [
+      { moduleId: 'REPORTS', viewIds: [`REPORTS_MANAGER_${source.id.replace(/-/g, '_').toUpperCase()}`] },
+      { moduleId: MANAGER_SECTION_ENTERPRISE_MODULE[source.id], viewIds: sourceIds },
+    ];
+  }
   if (section === 'hr' && normalizedView === 'training') return [{ moduleId: 'HR_TRAINING' }];
-  const viewIds = VIEW_IDS[section]?.[normalizedView];
+  const viewIds = Object.entries(VIEW_IDS[section] || {})
+    .find(([id]) => id.toLowerCase() === normalizedView)?.[1];
   const requirements: ManagerViewRequirement[] = [{ moduleId, ...(viewIds ? { viewIds } : {}) }];
   if (section === 'reports' && normalizedView !== 'overview') {
     const source: Record<string, ManagerViewRequirement[]> = {
@@ -144,7 +163,7 @@ function isRequirementAvailable(group: ManagerGroup, branch: ManagerGroup['branc
   if (viewName === 'overview' && selective && UNMAPPED_MANAGER_VIEWS[section]?.size) return false;
   if (UNMAPPED_MANAGER_VIEWS[section]?.has(viewName)) return false;
   return [groupViews, unitViews, branchViews].every((allowed) => allowed === null || (
-    section === 'reports' && viewName === 'overview'
+    ['reports', 'projects', 'hotel', 'intl-imports', 'asana', 'notifications', 'novachat', 'support', 'inventory'].includes(section) && (viewName === 'overview' || viewName.startsWith('source-'))
       ? viewIds.some((id) => allowed.includes(id))
       : viewIds.every((id) => allowed.includes(id))
   ));

@@ -5,6 +5,7 @@ import { formatCurrencyAmount } from './currency';
 import { buildDownloadFileName, sanitizeDownloadPart } from './exportFileNames';
 import type { CurrencyDisplayMode } from '../contexts/CurrencyContext';
 import { pdfStatusLabel } from './pdfStatus';
+import { resolveManagerPdfRender } from './managerPdfRender';
 
 export interface CustomerTransactionExportRow {
   id?: string;
@@ -23,6 +24,8 @@ export interface CustomerTransactionExportRow {
 }
 
 interface CustomerTransactionsExportOptions {
+  groupId?: string;
+  targetKey?: string;
   rows: CustomerTransactionExportRow[];
   customerName: string;
   customerData?: Record<string, unknown>;
@@ -116,21 +119,24 @@ export async function exportCustomerTransactionsExcel(options: CustomerTransacti
 }
 
 export async function exportCustomerTransactionsPdf(options: CustomerTransactionsExportOptions) {
+  const managerPdf = options.groupId && options.targetKey
+    ? await resolveManagerPdfRender(options.groupId, options.targetKey)
+    : null;
   const rows = Array.isArray(options.rows) ? options.rows : [];
   const outputCurrency = options.outputCurrency ? String(options.outputCurrency).toUpperCase() : null;
   const originalOnly = options.displayMode === 'ORIGINAL';
   const amountHeader = originalOnly ? 'Monto original' : outputCurrency ? `Monto (${outputCurrency})` : 'Monto';
   await generateConfiguredHistoryPDF({
-    targetKey: 'ventas.customer-history',
+    targetKey: options.targetKey || 'ventas.customer-history',
     title: 'HISTORIAL DEL CLIENTE',
     subtitle: [options.branchName, outputCurrency ? `Moneda: ${outputCurrency}` : ''].filter(Boolean).join(' · '),
     subjectLabel: 'Cliente',
     subjectName: options.customerName || '',
     subjectData: options.customerData,
-    tenantName: options.tenantName || '',
-    tenantLogo: options.tenantLogo,
+    tenantName: managerPdf?.tenantName || options.tenantName || '',
+    tenantLogo: managerPdf?.tenantLogo || options.tenantLogo,
     format: options.pdfFormat || 'configured',
-    designOverride: options.pdfDesign || undefined,
+    designOverride: managerPdf?.design || options.pdfDesign || undefined,
     rows,
     fileName: fileStem(options.customerName),
     columns: [

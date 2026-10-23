@@ -61,7 +61,8 @@ export function ManagerAccountingModule({ view, onViewChange, groupId, businessU
       }));
       const scopeGroupName = branches.length === 1 ? branches[0].name : 'Grupo empresarial';
       const options = {
-        targetKey: 'contabilidad.manager-consolidated',
+        groupId,
+        targetKey: `manager.accounting.${view}.pdf`,
         title: `Contabilidad consolidada · ${labels[view]}`,
         fileBase: `reporte_contabilidad_${labels[view]}`,
         tenantName: scopeGroupName,

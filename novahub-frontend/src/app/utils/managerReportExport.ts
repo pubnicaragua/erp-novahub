@@ -4,6 +4,7 @@ import { createSystemDefaultPdfDesign } from '../services/pdf-template-definitio
 import { buildDateFilteredDownloadFileName, buildDateFilteredPdfFileName } from './exportFileNames';
 import { buildManagerReportModel, formatManagerReportValue } from './managerReportModel';
 import type { ManagerReportModel, ManagerReportOptions } from './managerReportModel';
+import { resolveManagerPdfRender } from './managerPdfRender';
 
 export { buildManagerCsv, buildManagerReportModel } from './managerReportModel';
 export type { ManagerReportColumn, ManagerReportOptions } from './managerReportModel';
@@ -96,10 +97,11 @@ export async function exportManagerReportExcel(options: ManagerReportOptions) {
 
 export async function exportManagerReportPdf(options: ManagerReportOptions) {
   const model = buildManagerReportModel(options);
-  const targetKey = options.targetKey || 'reportes.finance';
-  // Los reportes Manager consolidan varias sucursales. Usan el diseño base
-  // del ERP y no heredan diseños ni apariencia PDF guardados por sucursal.
-  const design = createSystemDefaultPdfDesign(targetKey);
+  const targetKey = options.targetKey || (options.groupId ? 'manager.reports.overview.pdf' : 'reportes.finance');
+  const managerConfig = options.groupId ? await resolveManagerPdfRender(options.groupId, targetKey) : null;
+  const design = managerConfig?.design || createSystemDefaultPdfDesign(targetKey);
+  const tenantName = managerConfig?.tenantName || model.tenantName;
+  const tenantLogo = managerConfig?.tenantLogo || model.tenantLogo;
   const settings = { ...(design?.settings || {}) };
   const virtualDefault = isVirtualSystemDefaultDesign(design);
   const defaultDefinition = design?.layoutZones?.definition;
@@ -161,8 +163,8 @@ export async function exportManagerReportPdf(options: ManagerReportOptions) {
   await generateConfiguredReportSectionsPDF({
     targetKey,
     title: model.title,
-    tenantName: model.tenantName,
-    tenantLogo: model.tenantLogo,
+    tenantName,
+    tenantLogo,
     sections,
     fileName: buildDateFilteredPdfFileName([model.fileBase], options.pdfFormat || 'configured', options.dateFrom, options.dateTo),
     periodLabel: model.dateRange,

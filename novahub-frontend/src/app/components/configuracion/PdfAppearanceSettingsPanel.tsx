@@ -227,6 +227,7 @@ export interface PdfAppearanceSettingsPanelProps {
   effective: Record<string, any>;
   canEditBranch: boolean;
   canEditDocument: boolean;
+  sharedScopeLabel?: string;
   hasImportedHtmlHeader?: boolean;
   packagedFontFamilies?: string[];
   onScopeChange: (scope: PdfAppearanceDraftScope) => void;
@@ -237,6 +238,7 @@ export interface PdfAppearanceSettingsPanelProps {
 
 export function PdfAppearanceSettingsPanel({
   scope, profile, overrides, effective, canEditBranch, canEditDocument,
+  sharedScopeLabel = 'sucursal',
   hasImportedHtmlHeader = false, onScopeChange, onChange, onReset, onResetAll,
   packagedFontFamilies = [],
 }: PdfAppearanceSettingsPanelProps) {
@@ -255,7 +257,7 @@ export function PdfAppearanceSettingsPanel({
         </div>
       </div>
       {control}
-      {branchScope && value !== undefined && <span className="sr-only">Valor compartido entre los PDF de la sucursal activa</span>}
+      {branchScope && value !== undefined && <span className="sr-only">Valor compartido entre los PDF del {sharedScopeLabel} activo</span>}
     </div>
   );
 
@@ -267,12 +269,12 @@ export function PdfAppearanceSettingsPanel({
     <div className="space-y-3 px-6 pb-5 pt-0">
       <Field label="Alcance de esta configuración">
         <select aria-label="Alcance de la apariencia PDF" value={scope} disabled={(!canEditBranch && !canEditDocument)} onChange={event => onScopeChange(event.target.value as PdfAppearanceDraftScope)} className="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60">
-          <option value="branch" disabled={!canEditBranch}>Todos los PDF de esta sucursal</option>
+          <option value="branch" disabled={!canEditBranch}>Todos los PDF {sharedScopeLabel === 'sucursal' ? 'de esta sucursal' : `del ${sharedScopeLabel}`}</option>
           <option value="document" disabled={!canEditDocument}>Solo este PDF</option>
         </select>
       </Field>
       <p className="rounded-md border border-primary/15 bg-primary/5 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
-        {branchScope ? `Los cambios guardados se aplicarán a los PDF editables de esta sucursal que hereden cada propiedad.${configuredGlobalProperties ? ` Hay ${configuredGlobalProperties} propiedades globales configuradas.` : ' Aún no hay propiedades globales guardadas.'}` : 'Los cambios se guardan únicamente en el diseño abierto. Las propiedades sin override siguen heredando la configuración global.'}
+        {branchScope ? `Los cambios guardados se aplicarán a los PDF editables del ${sharedScopeLabel} que hereden cada propiedad.${configuredGlobalProperties ? ` Hay ${configuredGlobalProperties} propiedades globales configuradas.` : ' Aún no hay propiedades globales guardadas.'}` : 'Los cambios se guardan únicamente en el diseño abierto. Las propiedades sin override siguen heredando la configuración global.'}
       </p>
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold"><Type className="size-3.5 text-primary" />Encabezado y tipografía</div>
@@ -284,7 +286,7 @@ export function PdfAppearanceSettingsPanel({
       </div>
       <div className="space-y-2 border-t border-border/50 pt-3">
         <div className="flex items-center gap-2 text-xs font-semibold"><SwatchBook className="size-3.5 text-primary" />Colores del PDF</div>
-        <p className="text-[10px] leading-relaxed text-muted-foreground">Estos colores pertenecen al PDF y se conservan aunque cambies el tema de la aplicación. Elige si aplicarlos a todos los PDF de la sucursal o solo a este diseño.</p>
+        <p className="text-[10px] leading-relaxed text-muted-foreground">Estos colores pertenecen al PDF y se conservan aunque cambies el tema de la aplicación. Elige si aplicarlos a todos los PDF del {sharedScopeLabel} o solo a este diseño.</p>
         {PALETTE_GROUPS.map(group => <section key={group.label} className="space-y-2" aria-label={group.label}>
           <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</h4>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
