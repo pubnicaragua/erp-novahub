@@ -29,7 +29,7 @@ import { ManagerReportsModule } from './manager/ManagerReportsModule';
 import { MANAGER_REPORTS_VIEWS, MANAGER_REPORT_SOURCES, type ManagerReportsView } from './manager/manager-reports.types';
 import { ManagerHRModule } from './manager/ManagerHRModule';
 import { MANAGER_HR_VIEWS, type ManagerHrView } from './manager/manager-hr.types';
-import { MANAGER_OPERATION_VIEWS } from './manager/manager-operations.types';
+import { MANAGER_OPERATION_BY_SECTION, MANAGER_OPERATION_VIEWS } from './manager/manager-operations.types';
 import { allowedManagerEnterpriseViews, managerSectionEnabledForGroup } from './manager/managerModuleAvailability';
 import { ManagerOperationsModule as ManagerOperationsView } from './manager/ManagerOperationsModule';
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
@@ -131,19 +131,6 @@ function readManagerNavigation(userId: string): ManagerNavigationSnapshot {
     return defaults;
   }
 }
-
-const MANAGER_OPERATION_BY_SECTION: Partial<Record<ManagerSection, ManagerOperationsModule>> = {
-  activities: 'activities',
-  projects: 'projects',
-  tickets: 'tickets',
-  documents: 'documents',
-  restaurant: 'restaurant',
-  logistics: 'logistics',
-  financing: 'financing',
-  legal: 'legal',
-  novachat: 'novachat',
-  support: 'support',
-};
 
 const MANAGER_OPERATION_PERMISSION: Record<ManagerOperationsModule, string> = {
   activities: 'MANAGER_ACTIVITIES',

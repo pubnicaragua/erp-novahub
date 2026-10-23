@@ -217,3 +217,7 @@ export const MANAGER_OPERATION_VIEWS = Object.fromEntries(
   MANAGER_OPERATION_DEFINITIONS.map((definition) => [definition.id, definition.views]),
 ) as Record<ManagerOperationsModule, ManagerOperationView[]>;
 
+export const MANAGER_OPERATION_BY_SECTION = Object.fromEntries(
+  MANAGER_OPERATION_DEFINITIONS.map(({ id }) => [id, id]),
+) as Partial<Record<string, ManagerOperationsModule>>;
+

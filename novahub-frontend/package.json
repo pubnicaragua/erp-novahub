@@ -9,6 +9,7 @@
     "test:support-target-selection": "node --experimental-strip-types e2e/scripts/test-support-target-selection.mjs",
     "test:support-agent-password": "node --experimental-strip-types e2e/scripts/test-support-agent-password.mjs",
     "test:manager-branch-views": "node --experimental-strip-types e2e/scripts/test-manager-branch-views.mjs",
+    "test:manager-consolidation-views": "node --experimental-strip-types e2e/scripts/test-manager-consolidation-views.mjs",
     "test:pdf-templates": "node scripts/test-pdf-templates.mjs",
     "test:customer-history-import": "node --experimental-strip-types scripts/test-customer-history-import.mjs",
     "test:sales-import-templates": "node --experimental-strip-types scripts/test-sales-import-templates.mjs",
