@@ -1,0 +1,19 @@
+{
+  "name": "NovaHub ERP",
+  "short_name": "NovaHub",
+  "description": "Gestión empresarial NovaHub",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6faf8",
+  "theme_color": "#08785a",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/novahub-isotipo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QA visual de PDFs</title>
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #e5e7eb; color: #334155; font: 14px Arial, sans-serif; }
+    header { position: sticky; top: 0; z-index: 2; display: flex; gap: 16px; align-items: center; padding: 8px 12px; background: #fff; border-bottom: 1px solid #cbd5e1; }
+    main { min-height: calc(100vh - 42px); display: grid; place-items: center; padding: 12px; box-sizing: border-box; }
+    iframe { display: block; width: min(1180px, 96vw); height: calc(100vh - 66px); border: 0; background: white; box-shadow: 0 8px 30px #0f172a22; }
+    #download[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong id="state">Preparando PDF…</strong>
+    <a id="download" hidden>Descargar PDF generado</a>
+  </header>
+  <main id="preview"></main>
+  <script type="module" src="./qa-layout-regressions.ts"></script>
+</body>
+</html>
