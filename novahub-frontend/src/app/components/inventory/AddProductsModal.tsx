@@ -151,6 +151,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   ]);
   const effectivePriceLists = resolveStandardProductPriceLists(priceLists && priceLists.length > 0 ? priceLists : internalPriceLists);
   const catalogItemType = itemType;
+  const categoryRequired = catalogItemType !== 'SERVICE';
   const isPagePresentation = presentation === 'page';
 
   const [productsList, setProductsList] = useState<any[]>([]);
@@ -517,7 +518,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   };
 
   const handleAddToList = async () => {
-    if (!draftProduct.code.trim() || !draftProduct.name.trim() || !draftProduct.categoryId) {
+    if (!draftProduct.code.trim() || !draftProduct.name.trim() || (categoryRequired && !draftProduct.categoryId)) {
       toast.error('Código, Nombre y Categoría son obligatorios');
       return;
     }
@@ -680,7 +681,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     }));
 
     if (productsList.length === 0) {
-      if (!draftProduct.code.trim() || !draftProduct.name.trim() || !draftProduct.categoryId) {
+      if (!draftProduct.code.trim() || !draftProduct.name.trim() || (categoryRequired && !draftProduct.categoryId)) {
         toast.error('Código, Nombre y Categoría son obligatorios');
         return;
       }
