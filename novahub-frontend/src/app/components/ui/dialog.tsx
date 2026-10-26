@@ -12,6 +12,8 @@ const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
 
 const hasExplicitDialogWidth = (className?: string) => /(?:^|\s)(?:[a-z-]+:)*!?(?:w-|max-w-)/.test(className || "");
+const hasExplicitDialogScrollRegion = (className?: string) =>
+  (className || "").split(/\s+/).some((token) => token.split(":").pop()?.replace(/^!/, "") === "overflow-hidden");
 
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
@@ -41,13 +43,22 @@ const DialogContent = React.forwardRef<
       data-slot="dialog-content"
       data-overlay-surface="novahub-modal"
       className={cn(
-        "bg-background/95 border-border/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 flex min-h-0 min-w-0 w-full max-w-[calc(100%-2rem)] max-h-[min(88vh,calc(100dvh-3rem))] flex-col translate-x-[-50%] translate-y-[-50%] gap-4 overflow-x-hidden overflow-y-auto overscroll-contain rounded-3xl border p-4 shadow-2xl backdrop-blur-xl duration-200 sm:p-6",
+        "bg-background/95 border-border/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 flex min-h-0 min-w-0 w-full max-w-[calc(100%-2rem)] max-h-[min(88vh,calc(100dvh-3rem))] flex-col translate-x-[-50%] translate-y-[-50%] gap-4 overflow-hidden overscroll-contain rounded-3xl border p-4 shadow-2xl backdrop-blur-xl duration-200 sm:p-6",
         !hasExplicitDialogWidth(className) && "sm:!w-[calc(100%-2rem)] sm:!max-w-lg",
-        className
+        className,
+        "!overflow-hidden"
       )}
       {...props}
     >
-      {children}
+      {hasExplicitDialogScrollRegion(className) ? children : (
+        <div
+          data-slot="dialog-scroll-content"
+          className="flex min-h-0 min-w-0 flex-auto flex-col overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-overlay"
+          style={{ gap: "inherit" }}
+        >
+          {children}
+        </div>
+      )}
       <DialogPrimitive.Close aria-label="Cerrar diálogo" title="Cerrar" className="text-muted-foreground hover:bg-muted hover:text-foreground ring-offset-background focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-foreground absolute top-3 right-3 z-20 inline-flex size-9 touch-manipulation items-center justify-center rounded-lg bg-background/80 opacity-90 backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none sm:top-4 sm:right-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
         <XIcon />
         <span className="sr-only">Cerrar diálogo</span>

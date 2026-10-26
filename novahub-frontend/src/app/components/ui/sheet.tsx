@@ -60,20 +60,27 @@ function SheetContent({
         data-slot="sheet-content"
         data-overlay-surface="novahub-panel"
         className={cn(
-          "bg-background/95 data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex min-h-0 min-w-0 max-w-[100vw] flex-col gap-4 overscroll-contain border-border/60 shadow-2xl backdrop-blur-xl transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+          "bg-background/95 data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex min-h-0 min-w-0 max-w-[100vw] flex-col gap-4 overflow-hidden overscroll-contain border-border/60 shadow-2xl backdrop-blur-xl transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
           side === "right" &&
             "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-dvh w-[min(100vw,28rem)] max-w-full overflow-hidden border-l sm:max-w-sm",
           side === "left" &&
             "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-dvh w-[min(100vw,28rem)] max-w-full overflow-hidden border-r sm:max-w-sm",
           side === "top" &&
-            "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto max-h-[min(90dvh,48rem)] overflow-y-auto border-b",
+            "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto max-h-[min(90dvh,48rem)] border-b",
           side === "bottom" &&
-            "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto max-h-[min(90dvh,48rem)] overflow-y-auto border-t",
+            "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto max-h-[min(90dvh,48rem)] border-t",
           className,
+          "!overflow-hidden",
         )}
         {...props}
       >
-        {children}
+        <div
+          data-slot="sheet-scroll-content"
+          className="flex min-h-0 min-w-0 flex-auto flex-col overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-overlay"
+          style={{ gap: "inherit" }}
+        >
+          {children}
+        </div>
         <SheetPrimitive.Close aria-label="Cerrar panel" title="Cerrar" className="text-muted-foreground hover:bg-muted hover:text-foreground ring-offset-background focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-foreground absolute top-3 right-3 z-20 inline-flex size-9 touch-manipulation items-center justify-center rounded-lg bg-background/80 opacity-90 backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none sm:top-4 sm:right-4">
           <XIcon className="size-4" />
           <span className="sr-only">Cerrar panel</span>

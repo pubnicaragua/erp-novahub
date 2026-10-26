@@ -1143,15 +1143,15 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
       </Dialog>
 
       <Dialog open={isUserDialogOpen} onOpenChange={(open) => { setIsUserDialogOpen(open); if (!open) { setSelectedCreateEmployeeId(''); setNewUserWarehouseIds([]); setUserDialogMode('plain'); } }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[450px]">
-          <DialogHeader>
+        <DialogContent className="!flex max-h-[90vh] overflow-hidden p-0 sm:max-w-[450px]">
+          <DialogHeader className="shrink-0 border-b border-border/40 px-5 py-5 pr-12 sm:px-6">
             <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
               <Users className="size-6 text-primary" />
               Nuevo Usuario
             </DialogTitle>
             <DialogDescription>Asigna un nuevo integrante al equipo de {tenant.name}.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div data-slot="dialog-scroll-content" className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto overscroll-contain scrollbar-overlay p-5 sm:p-6">
             {canViewEmployees && (
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleado (opcional)</Label>
@@ -1262,7 +1262,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
               {getPasswordError(userForm.password) && <p className="text-xs text-destructive">{getPasswordError(userForm.password)}</p>}
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t border-border/40 p-5 sm:p-6">
             <Button variant="outline" onClick={() => setIsUserDialogOpen(false)} disabled={uploading} className="h-11 px-6">Cancelar</Button>
             <Button 
               className="bg-primary text-primary-foreground font-bold h-11 px-8" 

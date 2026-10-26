@@ -47,6 +47,7 @@ function AlertDialogOverlay({
 
 function AlertDialogContent({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
   return (
@@ -56,11 +57,20 @@ function AlertDialogContent({
         data-slot="alert-dialog-content"
         data-overlay-surface="novahub-modal"
         className={cn(
-          "bg-background/95 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 flex min-h-0 min-w-0 w-full max-w-[calc(100%-2rem)] max-h-[min(88vh,calc(100dvh-3rem))] flex-col translate-x-[-50%] translate-y-[-50%] gap-4 overflow-x-hidden overflow-y-auto overscroll-contain rounded-3xl border border-border/60 p-4 shadow-2xl backdrop-blur-xl duration-200 sm:p-6 sm:max-w-lg",
+          "bg-background/95 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 flex min-h-0 min-w-0 w-full max-w-[calc(100%-2rem)] max-h-[min(88vh,calc(100dvh-3rem))] flex-col translate-x-[-50%] translate-y-[-50%] gap-4 overflow-hidden overscroll-contain rounded-3xl border border-border/60 p-4 shadow-2xl backdrop-blur-xl duration-200 sm:p-6 sm:max-w-lg",
           className,
+          "!overflow-hidden",
         )}
         {...props}
-      />
+      >
+        <div
+          data-slot="alert-dialog-scroll-content"
+          className="flex min-h-0 min-w-0 flex-auto flex-col overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-overlay"
+          style={{ gap: "inherit" }}
+        >
+          {children}
+        </div>
+      </AlertDialogPrimitive.Content>
     </AlertDialogPortal>
   );
 }
