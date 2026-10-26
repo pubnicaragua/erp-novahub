@@ -196,6 +196,9 @@ function normalizeErrorMessage(message?: string, status?: number, context?: stri
     if (lower.includes('column') && lower.includes('does not exist')) {
       return `${prefix}La base de datos no tiene una columna requerida por esta version del sistema. Aplica las migraciones pendientes.`;
     }
+    if (lower.includes('relation') && lower.includes('does not exist') || lower.includes('table') && lower.includes('does not exist') || lower.includes('p2021')) {
+      return `${prefix}La base de datos todavía no tiene las tablas de este módulo. Ejecuta las migraciones pendientes y reinicia el backend.`;
+    }
     if (lower.includes('unique constraint failed') || lower.includes('already exists')) {
       return `${prefix}Ya existe un registro con esos datos.`;
     }
@@ -241,6 +244,15 @@ function extractServerMessages(errorBody: ApiErrorBody | null) {
 async function apiRequestInternal<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, rawBody, params, headers = {}, signal } = options;
   const context = describeRequest(path, method);
+  const auditTenantId = path.startsWith('/audit/v1/')
+    ? localStorage.getItem('nova-audit-tenant-id') || ''
+    : '';
+  const auditEngagementId = path.startsWith('/audit/v1/')
+    ? localStorage.getItem('nova-audit-engagement-id') || ''
+    : '';
+  const resolvedPath = auditEngagementId
+    ? path.replace('/engagements/engagement-001', `/engagements/${encodeURIComponent(auditEngagementId)}`)
+    : path;
 
   let response: Response;
   const requestInit: RequestInit = {
@@ -248,6 +260,7 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
       headers: {
         ...(rawBody === undefined ? { 'Content-Type': 'application/json' } : {}),
         ...getAuthHeaders(),
+        ...(auditTenantId ? { 'X-Nova-Audit-Tenant': auditTenantId } : {}),
         ...headers,
       },
       cache: 'no-store',
@@ -255,7 +268,7 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
       signal,
   };
   try {
-    response = await fetch(buildUrl(path, params), requestInit);
+    response = await fetch(buildUrl(resolvedPath, params), requestInit);
   } catch (error: any) {
     // Una petición cancelada no es un error real: el usuario cambió de vista,
     // la query fue invalidada o el componente se desmontó. Se relanza como un
@@ -268,7 +281,7 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
     // Retrying with the same key safely replays the original response.
     if (headers['Idempotency-Key']) {
       try {
-        response = await fetch(buildUrl(path, params), requestInit);
+        response = await fetch(buildUrl(resolvedPath, params), requestInit);
       } catch {
         throw new ApiRequestError(normalizeErrorMessage(error?.message, undefined, context), undefined, path);
       }

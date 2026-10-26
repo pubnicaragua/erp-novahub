@@ -16,6 +16,7 @@ interface GuidedTourProps {
   steps: GuidedTourStep[];
   onClose: () => void;
   onComplete?: () => void;
+  onStepChange?: (stepIndex: number) => void;
   title?: string;
   allowTargetInteraction?: boolean;
 }
@@ -53,7 +54,7 @@ function findVisibleTarget(selector: string) {
   }) || candidates[0] || null;
 }
 
-export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiado', allowTargetInteraction = false }: GuidedTourProps) {
+export function GuidedTour({ steps, onClose, onComplete, onStepChange, title = 'Tutorial guiado', allowTargetInteraction = false }: GuidedTourProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [highlight, setHighlight] = useState<HighlightRect | null>(null);
   const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -65,6 +66,10 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
   useEffect(() => {
     window.dispatchEvent(new Event(GUIDED_TOUR_STARTED_EVENT));
   }, []);
+
+  useEffect(() => {
+    onStepChange?.(stepIndex);
+  }, [onStepChange, stepIndex]);
 
   const updateHighlight = useCallback(() => {
     if (!currentStep) return;

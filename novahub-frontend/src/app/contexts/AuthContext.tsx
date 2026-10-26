@@ -210,6 +210,8 @@ export interface User {
   permissions: Permission[];
   platformPermissions: string[];
   enabledModules: string[];
+  /** Audit se habilita únicamente para tenants cuyo giro corresponde a una firma auditora. */
+  auditWorkspaceEnabled?: boolean;
   /** Políticas operativas heredadas del grupo, rubro y sucursal activa. */
   moduleAccessPolicies?: ModuleViewPolicies;
   isPlatformAdmin: boolean;
@@ -241,6 +243,7 @@ export interface User {
    *  (validada contra el servidor, no un flag local editable). */
   clientTenant?: {
     name?: string;
+    businessType?: string;
     expiresAt?: string | null;
     isActive?: boolean;
     plan?: string;
@@ -268,8 +271,6 @@ const TENANT_SYSTEM_PERMISSION_MODULES = new Set([
   'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF', 'CONFIG_SECURITY',
   'CONFIG_CURRENCY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DOMAINS',
   'CONFIG_DEPARTMENTS', 'CONFIG_NOVA_PULSE', 'AUDIT_LOGS',
-  'PROJECTS', 'PROYECTOS', 'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES',
-  'PROJECTS_QUOTATIONS', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_TIME', 'PROJECTS_PROGRESS',
 ]);
 
 const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
@@ -309,6 +310,7 @@ const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
   PROJECTS_DOCUMENTS: ['PROJECTS_DOCUMENTS', 'PROJECTS', 'PROYECTOS'],
   PROJECTS_TIME: ['PROJECTS_TIME', 'PROJECTS', 'PROYECTOS'],
   PROJECTS_PROGRESS: ['PROJECTS_PROGRESS', 'PROJECTS_DOCUMENTS', 'PROJECTS', 'PROYECTOS'],
+  FORCE_SALES: ['FORCE_SALES'],
 };
 
 function tenantPermissionSubscriptionCandidates(module: string): string[] {
@@ -324,7 +326,6 @@ function tenantPermissionSubscriptionCandidates(module: string): string[] {
 function tenantAdminHasModuleEnabled(user: User, module: string): boolean {
   const normalized = String(module || '').toUpperCase();
   if (TENANT_SYSTEM_PERMISSION_MODULES.has(normalized) && (!user.managerMode || normalized === 'DASHBOARD')) return true;
-  if (!user.managerMode && (normalized === 'PROJECTS' || normalized === 'PROYECTOS' || normalized.startsWith('PROJECTS_'))) return true;
   const sourceModules = user.managerMode && Array.isArray(user.managerEnabledModules)
     ? user.managerEnabledModules
     : user.enabledModules || [];
@@ -703,6 +704,7 @@ const createUserObject = (apiPayload: any): User => {
       ? apiUser.platformPermissions.map((permission: unknown) => String(permission))
       : [],
     enabledModules: apiUser.enabledModules || [],
+    auditWorkspaceEnabled: Boolean(apiUser.auditWorkspaceEnabled),
     moduleAccessPolicies: apiUser.moduleAccessPolicies && typeof apiUser.moduleAccessPolicies === 'object'
       ? apiUser.moduleAccessPolicies as ModuleViewPolicies
       : undefined,
@@ -734,6 +736,7 @@ const createUserObject = (apiPayload: any): User => {
     clientTenant: apiUser.clientTenant
       ? {
           name: apiUser.clientTenant.name,
+          businessType: apiUser.clientTenant.businessType,
           expiresAt: apiUser.clientTenant.expiresAt ?? null,
           isActive: apiUser.clientTenant.isActive,
           plan: apiUser.clientTenant.plan,
@@ -881,8 +884,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasAccess = useCallback((module: string): boolean => {
     if (!user) return false;
+    if (!user.isPlatformAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
+
+    // Audit is a separate tenant surface. The legacy AUDIT_LOGS permission
+    // remains available for configuration logs, but it must not implicitly
+    // expose the 16-module Audit workspace to every ERP tenant.
+    if (module === 'auditoria' && !user.isPlatformAdmin) return Boolean(user.auditWorkspaceEnabled);
+
     if (module === 'fuerza-comercial') {
-      return user.isPlatformAdmin && user.role === 'superadmin';
+      return user.isPlatformAdmin ? user.role === 'superadmin' : tenantAdminHasModuleEnabled(user, 'FORCE_SALES');
     }
     if (!user.isPlatformAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
 
@@ -899,7 +909,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const platformModules = [
         'dashboard', 'suscripciones', 'tenant-admin', 'notificaciones',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
-        'qa-console',
+        'qa-console', 'fuerza-comercial',
         'auditoria', 'platform-users',
       ];
       const platformConfigurationModules = [
@@ -920,7 +930,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Algunos módulos de sistema siempre están activos
     const coreModules = [
       'configuracion', 'dashboard', 'suscripciones', 'notificaciones',
-      'auditoria', 'proyectos',
+      'auditoria',
     ];
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
@@ -1112,9 +1122,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return false;
     const normalizedModule = String(module || '');
     const upperModule = normalizedModule.toUpperCase();
-    if (upperModule === 'FORCE_SALES') {
-      return user.isPlatformAdmin && user.role === 'superadmin';
-    }
     if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, module)) return false;
     if (user.managerMode && !tenantAdminHasModuleEnabled(user, module)) return false;
     if (user.managerMode && user.managerFullBranchAccess) {

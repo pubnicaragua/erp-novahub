@@ -187,36 +187,36 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  </div>
  <div class="scroll">
  <div class="kpis">
-   <div class="kpi" data-pipeline="found"><b id="foundCount">0</b><span>Encontrados</span></div>
-   <div class="kpi" data-pipeline="selected"><b id="selectedCount">0</b><span>Seleccionados</span></div>
-   <div class="kpi" data-pipeline="kanban"><b id="kanbanCount">0</b><span>En Kanban</span></div>
+   <div class="kpi discovery-only" data-pipeline="found"><b id="foundCount">0</b><span>Encontrados</span></div>
+   <div class="kpi discovery-only" data-pipeline="selected"><b id="selectedCount">0</b><span>Seleccionados</span></div>
+   <div class="kpi discovery-only" data-pipeline="kanban"><b id="kanbanCount">0</b><span>En Kanban</span></div>
    <div class="kpi" data-pipeline="visited"><b id="visitedCount">0</b><span>Visitados</span></div>
-  <div class="kpi" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
+  <div class="kpi discovery-only" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
  </div>
   <div class="view-tabs" id="viewTabs" aria-label="Vistas comerciales">
    <button class="active" data-view="map" type="button">Mapa</button>
-   <button data-view="kanban" type="button">Kanban</button>
+   <button class="discovery-only" data-view="kanban" type="button">Kanban</button>
    <button data-view="history" type="button">Historial</button>
   </div>
   <div class="workspace-heading" id="workspaceHeading" hidden><b id="workspaceHeadingTitle"></b><span id="workspaceHeadingMeta"></span></div>
 
-  <div class="search-row">
+  <div class="search-row discovery-only">
    <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off"><button id="searchGoogle" type="button" title="Buscar negocios de Nova">⌕</button></div>
    <button class="search-zone" id="searchViewport" type="button">Buscar vista</button>
   </div>
-  <div class="search-meta"><span id="searchStatus">Escribe un rubro o usa el mapa para buscar nuevos negocios.</span><button id="clearGoogleCache" type="button">Actualizar datos</button></div>
+  <div class="search-meta discovery-only"><span id="searchStatus">Escribe un rubro o usa el mapa para buscar nuevos negocios.</span><button id="clearGoogleCache" type="button">Actualizar datos</button></div>
   <div class="search-tools">
-   <button id="searchNearby" type="button">◎ Cerca de mí</button>
-   <select id="nearbyRadius" aria-label="Radio de búsqueda cercana"><option value="2000">2 km</option><option value="5000" selected>5 km</option><option value="10000">10 km</option></select>
+   <button id="searchNearby" class="discovery-only" type="button">◎ Cerca de mí</button>
+   <select id="nearbyRadius" class="discovery-only" aria-label="Radio de búsqueda cercana"><option value="2000">2 km</option><option value="5000" selected>5 km</option><option value="10000">10 km</option></select>
    <button id="toggle3d" type="button" title="Activar vista inclinada">3D</button>
   </div>
 
-  <div class="sect">
+  <div class="sect discovery-only">
    <div class="stitle"><span>Zonas rápidas</span><span>Deslice →</span></div>
    <div class="chips" id="zoneChips"></div>
   </div>
 
-  <div class="sect">
+  <div class="sect discovery-only">
    <div class="stitle"><span>Filtros comerciales</span></div>
    <div class="filters">
     <select id="category"><option value="all">Todos los rubros</option></select>
@@ -231,15 +231,15 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   </div>
 
   <div class="actions">
-   <button class="btn primary" id="refresh">↻ Actualizar negocios Nova</button>
+   <button class="btn primary discovery-only" id="refresh">↻ Actualizar negocios Nova</button>
    <button class="btn secondary" id="locationSettings" type="button" hidden>Privacidad de ubicación</button>
-   <button class="btn secondary" id="zoneManager">▦ Zonas y vendedores</button>
-   <button class="btn secondary" id="opportunities">✦ Ver oportunidades</button>
-   <button class="btn secondary" id="kanbanToggle">▦ Ver Kanban</button>
+   <button class="btn secondary discovery-only" id="zoneManager">▦ Zonas y vendedores</button>
+   <button class="btn secondary discovery-only" id="opportunities">✦ Ver oportunidades</button>
+   <button class="btn secondary discovery-only" id="kanbanToggle">▦ Ver Kanban</button>
    <button class="btn secondary" id="historyToggle">◷ Ver historial</button>
   </div>
 
-  <div class="bulkbar" id="bulkbar">
+  <div class="bulkbar discovery-only" id="bulkbar">
    <b id="selectionSummary">0 seleccionados</b>
    <button id="selectVisible">Seleccionar visibles</button>
    <button id="clearSelection">Limpiar selección</button>
@@ -250,7 +250,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
    <button id="bulkDiscard">Descartar</button>
   </div>
 
-  <div class="resultsHead"><b>Fuerza Comercial</b><span id="resultText"></span></div>
+  <div class="resultsHead"><b id="resultsTitle">Fuerza Comercial</b><span id="resultText"></span></div>
   <div class="list" id="list"></div>
   <div class="kanban-board" id="kanbanBoard" hidden></div>
   <div class="history-list" id="historyView" hidden></div>
@@ -280,6 +280,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   <p id="locationHelpText">La ubicación del teléfono puede estar activa, pero el navegador tiene bloqueado el permiso para este sitio.</p>
   <ol class="location-steps" id="locationSteps"><li>Abre el candado o el icono de ajustes junto a la dirección.</li><li>En <b>Ubicación</b> selecciona <b>Permitir</b>.</li><li>Recarga NovaHub y vuelve a intentarlo.</li></ol>
   <div class="location-privacy" id="locationPrivacy" hidden><b>Compartir mi ubicación con el equipo</b><span>Esta opción solo controla tu última ubicación visible para vendedores autorizados. No cambia el permiso del teléfono.</span><button id="togglePresence" type="button">Ocultar mi ubicación</button></div>
+  <div class="location-privacy" id="commercialModeSettings" hidden><b>Modo de operación</b><span>Define si esta empresa buscará nuevos negocios o usará el mapa para visitas y presencia del equipo.</span><select id="forceSalesMode"><option value="discovery">Prospección y seguimiento</option><option value="tracking">Visitas y presencia</option></select><button id="saveForceSalesMode" type="button">Guardar modo</button></div>
+  <div class="location-privacy" id="mapConfigurationSettings" hidden><b>Proveedor y fuente del mapa</b><span>Super Admin o administrador puede elegir Google Maps, OpenStreetMap o una fuente propia. Las URLs deben ser HTTPS y las claves permanecen fuera de la base de datos.</span><label for="mapProviderSelect">Proveedor</label><select id="mapProviderSelect"><option value="GOOGLE">Google Maps</option><option value="OPENSTREETMAP">OpenStreetMap</option><option value="CUSTOM">Mapa propio</option></select><label for="mapSearchModeSelect">Búsqueda</label><select id="mapSearchModeSelect"><option value="EXTERNAL">Geocodificador configurado</option><option value="OWN_CATALOG">Catálogo propio</option><option value="DISABLED">Sin búsqueda</option></select><label for="mapTileUrlInput">URL de mosaicos (opcional para OSM)</label><input id="mapTileUrlInput" type="url" placeholder="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"><label for="mapGeocoderUrlInput">URL de geocodificación</label><input id="mapGeocoderUrlInput" type="url" placeholder="https://tu-dominio/geocode/search"><button id="saveMapConfiguration" type="button">Guardar configuración</button><small id="mapConfigurationHelp"></small></div>
   <div class="confirm-modal-actions"><button class="cancel" id="locationClose" type="button">Cerrar</button><button class="save" id="locationRetry" type="button">Volver a intentar</button></div>
  </div>
 </div>
@@ -358,6 +360,24 @@ window.gm_authFailure = function(){
 <script>
 window.__novaMapsReady = new Promise((resolve, reject) => {
  const params = new URLSearchParams(location.search);
+ const provider = String(params.get('mapProvider') || 'GOOGLE').toUpperCase();
+ window.__novaMapProvider = provider;
+ window.__novaMapSearchMode = String(params.get('mapSearchMode') || 'EXTERNAL').toUpperCase();
+ window.__novaMapTileUrl = params.get('mapTileUrl') || '';
+ window.__novaMapGeocoderUrl = params.get('mapGeocoderUrl') || '';
+ if(provider === 'OPENSTREETMAP' || provider === 'CUSTOM'){
+  const stylesheet = document.createElement('link');
+  stylesheet.rel = 'stylesheet';
+  stylesheet.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+  document.head.appendChild(stylesheet);
+  const leafletScript = document.createElement('script');
+  leafletScript.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  leafletScript.async = true;
+  leafletScript.onload = () => resolve();
+  leafletScript.onerror = () => { window.__novaShowMapError('No se pudo cargar el motor de mapas configurado.'); reject(new Error('Map engine failed to load')); };
+  document.head.appendChild(leafletScript);
+  return;
+ }
  const key = params.get('mapsKey') || '';
 if(!key){window.__novaShowMapError('Falta configurar la clave de mapas de Nova en el frontend.'); reject(new Error('Nova Maps key missing')); return}
  let settled = false;
@@ -401,7 +421,90 @@ if(!key){window.__novaShowMapError('Falta configurar la clave de mapas de Nova e
 });
 </script>
 <script>
+function setupNovaLeafletAdapter(){
+ if(window.__novaLeafletReady)return;
+ const Leaflet=window.L;
+ if(!Leaflet)throw new Error('Leaflet unavailable');
+ const params=new URLSearchParams(location.search);
+ const tileUrl=window.__novaMapTileUrl || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+ const attribution=String(window.__novaMapProvider||'')==='CUSTOM' ? 'Mapa personalizado · NovaHub' : '© OpenStreetMap contributors';
+ const point=(value)=>({lat:()=>Number(value?.lat ?? value?.[0] ?? 0),lng:()=>Number(value?.lng ?? value?.[1] ?? 0)});
+ const latLng=(value)=>({lat:Number(value?.lat ?? value?.[0] ?? 0),lng:Number(value?.lng ?? value?.[1] ?? 0)});
+ class LeafletMapAdapter{
+  constructor(element,options={}){
+   this._map=Leaflet.map(element,{zoomControl:options.zoomControl!==false,scrollWheelZoom:options.scrollwheel!==false,attributionControl:true}).setView([options.center?.lat||12.115,options.center?.lng||-86.26],options.zoom||11);
+   Leaflet.tileLayer(tileUrl,{maxZoom:20,attribution}).addTo(this._map);
+   this._map.on('click',event=>this._mapClick?.({latLng:point(event.latlng)}));
+  }
+  addListener(event,handler){
+   if(event==='click'){this._mapClick=handler;return {remove:()=>{this._mapClick=null}};}
+   const mapped=event==='zoom_changed'?'zoomend':event==='tilesloaded'?'load':event;
+   this._map.on(mapped,handler);
+   return {remove:()=>this._map.off(mapped,handler)};
+  }
+  getZoom(){return this._map.getZoom()}
+  getCenter(){return point(this._map.getCenter())}
+  setCenter(value){this._map.setView([Number(value.lat),Number(value.lng)],this._map.getZoom())}
+  panTo(value){this._map.panTo([Number(value.lat),Number(value.lng)])}
+  setZoom(value){this._map.setZoom(Number(value))}
+  getBounds(){const bounds=this._map.getBounds();return {getNorthEast:()=>point(bounds.getNorthEast()),getSouthWest:()=>point(bounds.getSouthWest()),contains:(value)=>bounds.contains([Number(value.lat),Number(value.lng)])}}
+  fitBounds(bounds,padding){this._map.fitBounds(bounds._bounds || bounds,{padding:[padding||0,padding||0]})}
+  setTilt(){}
+  setHeading(){}
+ }
+ class LeafletMarkerAdapter{
+  constructor(options={}){
+   this.position=latLng(options.position);
+   this._map=null;
+   const content=options.content;
+   const html=content?.outerHTML || (options.title ? `<span class="nova-leaflet-marker" title="${String(options.title).replace(/"/g,'&quot;')}">${String(options.title).slice(0,1)}</span>` : '<span class="nova-leaflet-marker">•</span>');
+   const icon=Leaflet.divIcon({className:'nova-leaflet-marker-icon',html,iconSize:[44,44],iconAnchor:[22,22]});
+   this._marker=Leaflet.marker([this.position.lat,this.position.lng],{icon,title:options.title||'',zIndexOffset:Number(options.zIndex||0)});
+   if(options.map)this.setMap(options.map);
+  }
+  setMap(map){if(this._map)this._map.removeLayer(this._marker);this._map=map?._map||map||null;if(this._map)this._marker.addTo(this._map);return this}
+  get map(){return this._map}
+  set map(value){this.setMap(value)}
+  setPosition(value){this.position=latLng(value);this._marker.setLatLng([this.position.lat,this.position.lng]);return this}
+  addListener(event,handler){const mapped=event==='gmp-click'?'click':event;this._marker.on(mapped,handler);return {remove:()=>this._marker.off(mapped,handler)}}
+  addEventListener(event,handler){return this.addListener(event,handler)}
+  setLabel(value){if(value?.text)this._marker.bindTooltip(String(value.text),{permanent:true,direction:'top',offset:[0,-18]});else this._marker.unbindTooltip();return this}
+ }
+ class LeafletInfoWindowAdapter{
+  setContent(value){this.content=value}
+  open(_options,marker){const target=marker?._marker||marker;if(target){target.bindPopup(this.content || '').openPopup()}}
+  close(){document.querySelectorAll('.leaflet-popup-close-button').forEach(button=>button.click())}
+ }
+ class LeafletShapeAdapter{
+  constructor(layer){this.layer=layer}
+  setMap(map){if(this.layer){if(map)this.layer.addTo(map?._map||map);else this.layer.remove()}}
+  addListener(event,handler){this.layer?.on(event,handler);return {remove:()=>this.layer?.off(event,handler)}}
+  setCenter(value){this.layer?.setLatLng([Number(value.lat),Number(value.lng)])}
+ }
+ class LeafletBoundsAdapter{
+  constructor(){this._bounds=Leaflet.latLngBounds([])}
+  extend(value){this._bounds.extend([Number(value.lat),Number(value.lng)]);return this}
+  getNorthEast(){return point(this._bounds.getNorthEast())}
+  getSouthWest(){return point(this._bounds.getSouthWest())}
+ }
+ const eventApi={addListener:(target,event,handler)=>target.addListener(event,handler),addListenerOnce:(target,event,handler)=>{const listener=target.addListener(event,()=>{listener.remove?.();handler()});return listener},trigger:()=>{}};
+ window.__novaAdvancedMarkerElement=LeafletMarkerAdapter;
+ window.google={maps:{Map:LeafletMapAdapter,InfoWindow:LeafletInfoWindowAdapter,places:{},Size:class{constructor(width,height){this.width=width;this.height=height}},Point:class{constructor(x,y){this.x=x;this.y=y}},LatLngBounds:LeafletBoundsAdapter,Polygon:class{constructor(options={}){this.layer=Leaflet.polygon((options.paths||[]).map(path=>[Number(path.lat),Number(path.lng)]),{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight,fillColor:options.fillColor,fillOpacity:options.fillOpacity});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}addListener(event,handler){this.layer.on(event,handler);return {remove:()=>this.layer.off(event,handler)}}},Circle:class{constructor(options={}){this.layer=Leaflet.circle([Number(options.center?.lat||12.115),Number(options.center?.lng||-86.26)],{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight,fillColor:options.fillColor,fillOpacity:options.fillOpacity,radius:Number(options.radius||20)});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}setCenter(value){this.layer.setLatLng([Number(value.lat),Number(value.lng)])}},Polyline:class{constructor(options={}){this.layer=Leaflet.polyline((options.path||[]).map(value=>[Number(value.lat),Number(value.lng)]),{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}},event:eventApi}};
+ window.__novaLeafletReady=true;
+}
 async function novaMapsLibrary(name){
+  if(window.__novaMapProvider==='OPENSTREETMAP' || window.__novaMapProvider==='CUSTOM'){
+   setupNovaLeafletAdapter();
+   if(name==='marker')return {AdvancedMarkerElement:window.__novaAdvancedMarkerElement};
+   if(name==='places')return {Place:{searchByText:async(request)=>{
+    if(window.__novaMapSearchMode==='OWN_CATALOG' || window.__novaMapSearchMode==='DISABLED')return {places:[]};
+    const endpoint=window.__novaMapGeocoderUrl;
+    if(!endpoint)throw new Error('Geocoder not configured');
+    const url=new URL(endpoint,location.href);url.searchParams.set('q',request.textQuery || '');url.searchParams.set('format','jsonv2');url.searchParams.set('limit',String(Math.min(20,Math.max(1,Number(request.maxResultCount)||20))));
+    const response=await fetch(url.toString(),{headers:{Accept:'application/json'}});if(!response.ok)throw new Error('Geocoder HTTP '+response.status);
+    const rows=await response.json();return {places:(Array.isArray(rows)?rows:[]).map(row=>({id:`osm-${row.place_id || row.osm_id || Math.random()}`,displayName:row.name || row.display_name?.split(',')[0] || 'Ubicación sin nombre',formattedAddress:row.display_name || '',location:{lat:Number(row.lat),lng:Number(row.lon)},types:[row.type || 'place'],url:row.osm_id?`https://www.openstreetmap.org/${row.osm_type || 'node'}/${row.osm_id}`:''}))};
+   }}};
+  }
   for(let attempt=0;attempt<20;attempt+=1){
     if(typeof google.maps.importLibrary==='function')return google.maps.importLibrary(name);
     if(name==='marker' && google.maps.marker?.AdvancedMarkerElement)return google.maps.marker;
@@ -491,7 +594,9 @@ applyForceSalesPermissionVisibility();
 // Fuerza Comercial. La privacidad siempre es de la propia ubicación; nunca
 // permite administrar la presencia de otro vendedor.
 let CAN_SHARE_PRESENCE = true;
+let CAN_MANAGE_CONFIGURATION = false;
 let LOCATION_REQUIRED = false;
+let LEAD_DISCOVERY_ENABLED = true;
 let forceSalesConfig = null;
 let lastForceSalesConfigRefreshAt = 0;
 let remoteRoutes = [];
@@ -571,7 +676,7 @@ let routeStopMarkers = new Map();
 let activeRouteAssigneeId = null;
 let zonePolygons = new Map();
 let zonesVisible = false;
-let map3DEnabled = false;
+let map3DEnabled = mapQuery.get('map3d') !== 'false';
 let activeNearbyCenter = null;
 let activeNearbyRadius = null;
 
@@ -587,9 +692,13 @@ if(!window.google?.maps?.Map){
 const googleMap = new google.maps.Map(document.getElementById('map'), {
   center: {lat:12.115,lng:-86.26}, zoom:11,
   mapId: mapQuery.get('mapId') || 'DEMO_MAP_ID',
+  tilt: map3DEnabled ? 45 : 0,
+  heading: 0,
   mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
   zoomControl:true, clickableIcons:false, gestureHandling:'greedy', scrollwheel:true
 });
+const initial3dButton=document.getElementById('toggle3d');
+if(initial3dButton){initial3dButton.classList.toggle('active',map3DEnabled);initial3dButton.textContent=map3DEnabled?'2D':'3D'}
 let googleTilesLoaded = false;
 google.maps.event.addListenerOnce(googleMap, 'tilesloaded', () => {
   googleTilesLoaded = true;
@@ -844,6 +953,10 @@ async function loadForceSalesConfiguration(){
     ROUTE_LOGO_URI=forceSalesConfig?.routeLogoUri || mapQuery.get('companyLogo') || NOVAHUB_ISOTIPO_URL;
     LOCATION_REQUIRED=forceSalesConfig?.locationRequiredNow ?? forceSalesConfig?.locationRequired===true;
     CAN_SHARE_PRESENCE=forceSalesConfig?.canDisableLocation!==false;
+    CAN_MANAGE_CONFIGURATION=forceSalesConfig?.canManageConfiguration===true;
+    LEAD_DISCOVERY_ENABLED=forceSalesConfig?.leadDiscoveryEnabled!==false;
+    applyOperatingMode();
+    applyMapConfigurationSettings();
     if(LOCATION_REQUIRED && forceSalesConfig?.canDisableLocation===false){
       presenceSharingEnabled=true;
       localStorage.setItem(PRESENCE_STORAGE_KEY,'true');
@@ -856,6 +969,60 @@ async function loadForceSalesConfiguration(){
   }catch(error){
     console.warn('No se pudo cargar la política de ubicación de Fuerza Comercial',error);
   }
+}
+function applyOperatingMode(){
+  document.querySelectorAll('.discovery-only').forEach(node=>{node.hidden=!LEAD_DISCOVERY_ENABLED});
+  if(!LEAD_DISCOVERY_ENABLED && activeView==='kanban')activeView='map';
+  const title=document.getElementById('resultsTitle');
+  if(title)title.textContent=LEAD_DISCOVERY_ENABLED?'Fuerza Comercial':'Visitas y presencia';
+  const mode=document.getElementById('forceSalesMode');
+  if(mode)mode.value=LEAD_DISCOVERY_ENABLED?'discovery':'tracking';
+  const settings=document.getElementById('commercialModeSettings');
+  if(settings)settings.hidden=!CAN_MANAGE_CONFIGURATION;
+  mergeBusinesses();
+  populateFilters();
+  render();
+}
+function applyMapConfigurationSettings(){
+  const settings=document.getElementById('mapConfigurationSettings');
+  if(settings)settings.hidden=!CAN_MANAGE_CONFIGURATION;
+  const provider=document.getElementById('mapProviderSelect');
+  const searchMode=document.getElementById('mapSearchModeSelect');
+  const tile=document.getElementById('mapTileUrlInput');
+  const geocoder=document.getElementById('mapGeocoderUrlInput');
+  if(provider)provider.value=String(forceSalesConfig?.mapProvider || window.__novaMapProvider || 'GOOGLE').toUpperCase();
+  if(searchMode)searchMode.value=String(forceSalesConfig?.mapSearchMode || window.__novaMapSearchMode || 'EXTERNAL').toUpperCase();
+  if(tile)tile.value=String(forceSalesConfig?.mapTileUrl || window.__novaMapTileUrl || '');
+  if(geocoder)geocoder.value=String(forceSalesConfig?.mapGeocoderUrl || window.__novaMapGeocoderUrl || '');
+  const help=document.getElementById('mapConfigurationHelp');
+  if(help)help.textContent=String(forceSalesConfig?.mapProvider || window.__novaMapProvider || 'GOOGLE').toUpperCase()==='GOOGLE'
+    ? 'Google Maps usa la clave pública configurada en el entorno del frontend.'
+    : 'El cambio se aplicará al recargar el mapa y requiere un geocodificador propio cuando la búsqueda externa esté activa.';
+}
+async function saveMapConfiguration(){
+  if(!CAN_MANAGE_CONFIGURATION)return;
+  const provider=document.getElementById('mapProviderSelect')?.value || 'GOOGLE';
+  const mapSearchMode=document.getElementById('mapSearchModeSelect')?.value || 'EXTERNAL';
+  const mapTileUrl=document.getElementById('mapTileUrlInput')?.value.trim() || null;
+  const mapGeocoderUrl=document.getElementById('mapGeocoderUrlInput')?.value.trim() || null;
+  try{
+    const saved=await forceSalesRequest('/force-sales/config',{method:'PATCH',body:JSON.stringify({mapProvider:provider,mapSearchMode,mapTileUrl,mapGeocoderUrl})});
+    forceSalesConfig={...(forceSalesConfig||{}),...saved};
+    applyMapConfigurationSettings();
+    window.parent?.postMessage({source:'novahub-force-sales',type:'configuration-updated',configuration:forceSalesConfig},'*');
+    toast('Configuración de mapas guardada · recargando motor');
+  }catch(error){toast('No se pudo guardar la configuración de mapas')}
+}
+async function saveForceSalesMode(){
+  if(!CAN_MANAGE_CONFIGURATION)return;
+  const mode=document.getElementById('forceSalesMode')?.value || 'discovery';
+  try{
+    const saved=await forceSalesRequest('/force-sales/config',{method:'PATCH',body:JSON.stringify({leadDiscoveryEnabled:mode!=='tracking'})});
+    forceSalesConfig={...(forceSalesConfig||{}),...saved,leadDiscoveryEnabled:mode!=='tracking'};
+    LEAD_DISCOVERY_ENABLED=mode!=='tracking';
+    applyOperatingMode();
+    toast(LEAD_DISCOVERY_ENABLED?'Prospección y seguimiento habilitados':'Modo visitas y presencia activado');
+  }catch(error){toast('No se pudo guardar el modo de operación')}
 }
 async function loadRemoteRoutes(){
   if(!localStorage.getItem('nh-auth-token'))return;
@@ -1115,7 +1282,9 @@ async function loadRemoteProspects(){
     const data=await forceSalesRequest('/force-sales/prospects');
     if(!Array.isArray(data)) return;
     const remoteGoogleKeys=new Set(data.filter(prospect=>prospect.googlePlaceId).map(prospect=>String(prospect.googlePlaceId)));
-    const legacyLocal=googlePlaces.filter(place=>place.googlePlaceId && !remoteGoogleKeys.has(String(place.googlePlaceId))).slice(0,500);
+    const legacyLocal=LEAD_DISCOVERY_ENABLED
+      ? googlePlaces.filter(place=>place.googlePlaceId && !remoteGoogleKeys.has(String(place.googlePlaceId))).slice(0,500)
+      : [];
     if(legacyLocal.length && !legacyCatalogSyncInFlight){
       legacyCatalogSyncInFlight=true;
       let migrated=null;
@@ -1137,7 +1306,7 @@ async function loadRemoteProspects(){
     });
     // Online, NovaHub is the shared catalog. The device cache remains only as
     // a fallback while offline so different devices converge on one count.
-    googlePlaces=remoteProspects.filter(item=>item.googlePlaceId);
+    if(LEAD_DISCOVERY_ENABLED)googlePlaces=remoteProspects.filter(item=>item.googlePlaceId);
     localStorage.setItem(GOOGLE_CATALOG_KEY,JSON.stringify(googlePlaces));
     persistCommercial(); mergeBusinesses(); populateFilters(); render();
   }catch(e){/* El modo local sigue operativo si el backend aún no tiene este módulo. */}
@@ -1196,7 +1365,8 @@ function scoreFor(cat, tags={}){
 }
 function mergeBusinesses(){
   const m = new Map();
-  [...seed, ...localPoints, ...googlePlaces, ...remoteProspects].forEach(b => {
+  const catalog = LEAD_DISCOVERY_ENABLED ? [...seed, ...localPoints, ...googlePlaces, ...remoteProspects] : [...remoteProspects];
+  catalog.forEach(b => {
     if(deletedBusinessKeys.has(String(keyOf(b))))return;
     const key = b.googlePlaceId ? `google:${b.googlePlaceId}` : `record:${b.id || norm(b.name) + '|' + norm(b.zone)}`;
     if(!m.has(key)) m.set(key, b);
@@ -2084,7 +2254,8 @@ function googlePlaceBiz(place){
   if(rating)score+=Math.round(Math.max(0,rating-3.5)*5);
   if(reviews>=100)score+=5;
   score=Math.min(95,score);
-  return {id:`google-${placeId}`,googlePlaceId:placeId,name,zone:nearestZone(lat,lng),category,address:place.formattedAddress||place.formatted_address||'Dirección disponible en Nova',source:'Nova',sourceUrl:place.googleMapsURI||place.url||`https://www.google.com/maps/search/?api=1&query=Nova&query_place_id=${encodeURIComponent(placeId)}`,lat,lng,precision:'Ubicación y ficha devueltas por Nova',score,priority:score>=78?'A':score>=60?'B':'C',owner:'Fuerza Comercial',phone:place.nationalPhoneNumber||place.formattedPhoneNumber||place.formatted_phone_number||'',website:place.websiteURI||place.website||'',rating,reviews};
+  const isGoogle=window.__novaMapProvider==='GOOGLE';
+  return {id:`${isGoogle?'google':'map'}-${placeId}`,googlePlaceId:placeId,name,zone:nearestZone(lat,lng),category,address:place.formattedAddress||place.formatted_address||'Dirección disponible en Nova',source:isGoogle?'Google Maps':'OpenStreetMap',sourceUrl:place.googleMapsURI||place.url||(isGoogle?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`:''),lat,lng,precision:isGoogle?'Ubicación y ficha devueltas por Google Maps':'Ubicación devuelta por el geocodificador configurado; validar antes de visitar',score,priority:score>=78?'A':score>=60?'B':'C',owner:'Fuerza Comercial',phone:place.nationalPhoneNumber||place.formattedPhoneNumber||place.formatted_phone_number||'',website:place.websiteURI||place.website||'',rating,reviews};
 }
 function boundsKey(bounds){
   if(!bounds)return 'managua';
@@ -2537,6 +2708,8 @@ document.getElementById('bulkWhatsApp').addEventListener('click',sendSelectedWha
 document.getElementById('bulkDiscard').addEventListener('click',discardSelected);
 document.getElementById('locateMe').addEventListener('click',locateMe);
 document.getElementById('locationSettings').addEventListener('click',()=>{document.getElementById('locationModal').hidden=false;updatePresenceToggle()});
+document.getElementById('saveForceSalesMode').addEventListener('click',()=>void saveForceSalesMode());
+document.getElementById('saveMapConfiguration').addEventListener('click',()=>void saveMapConfiguration());
 map.on('zoomend', applyLabels);
 function updateOfflineStatus(){
   const label=document.getElementById('offlineStatusText');
@@ -2629,10 +2802,16 @@ updateToggle();
 populateFilters();
 render();
 updateOfflineStatus();
-setTimeout(() => { loadForceSalesConfiguration(); loadAssignees(); flushOutbox().finally(() => loadRemoteProspects()).finally(() => loadRemoteRoutes()).finally(() => {
-  setSearchStatus('Datos locales cargados. Pulsa Buscar zona para consultar negocios de Nova.');
-  loadSellerPresence();
-}); }, 450);
+setTimeout(() => {
+  loadForceSalesConfiguration().finally(() => {
+    loadAssignees();
+    flushOutbox().finally(() => loadRemoteProspects()).finally(() => loadRemoteRoutes()).finally(() => {
+      if(LEAD_DISCOVERY_ENABLED)setSearchStatus('Datos locales cargados. Pulsa Buscar zona para consultar negocios de Nova.');
+      else setSearchStatus('Modo visitas y presencia activo. La prospección está deshabilitada para esta empresa.');
+      loadSellerPresence();
+    });
+  });
+}, 450);
 }).catch(error => {
   console.warn('No se pudo iniciar Nova Maps',error);
   window.__novaShowMapError('Nova Maps no pudo iniciar. Verifica la clave, el dominio autorizado y vuelve a intentar.');

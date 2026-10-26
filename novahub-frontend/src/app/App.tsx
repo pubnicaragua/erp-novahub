@@ -68,7 +68,7 @@ const DocumentosPage = lazyWithChunkRecovery(() => import('./components/Document
 const NotificacionesPage = lazyWithChunkRecovery(() => import('./components/NotificacionesPage').then(m => ({ default: m.NotificacionesPage })), 'notificaciones');
 const ReportesPage = lazyWithChunkRecovery(() => import('./components/ReportesPage').then(m => ({ default: m.ReportesPage })), 'reportes');
 const ConfiguracionPage = lazyWithChunkRecovery(() => import('./components/ConfiguracionPage').then(m => ({ default: m.ConfiguracionPage })), 'configuracion');
-const AuditoriaPage = lazyWithChunkRecovery(() => import('./components/AuditoriaPage').then(m => ({ default: m.AuditoriaPage })), 'auditoria');
+const AuditWorkspacePage = lazyWithChunkRecovery(() => import('./components/AuditWorkspacePage').then(m => ({ default: m.AuditWorkspacePage })), 'audit-workspace');
 const SuscripcionesPage = lazyWithChunkRecovery(() => import('./components/SuscripcionesPage').then(m => ({ default: m.SuscripcionesPage })), 'suscripciones');
 const PrismaSchemaPage = lazyWithChunkRecovery(() => import('./components/PrismaSchemaPage').then(m => ({ default: m.PrismaSchemaPage })), 'schema');
 const FinanciamientoPymePage = lazyWithChunkRecovery(() => import('./components/FinanciamientoPymePage').then(m => ({ default: m.FinanciamientoPymePage })), 'financiamiento');
@@ -476,7 +476,7 @@ function DashboardLayout() {
       case 'transferencias': return <InventarioPage activeSubModule="transferencias" isSidebarCollapsed={isCollapsed} />;
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} onTabChange={setActiveSubModule} /></ModuleErrorBoundary>;
-      case 'auditoria': return <ModuleErrorBoundary moduleName="Logs y auditoría"><AuditoriaPage /></ModuleErrorBoundary>;
+      case 'auditoria': return <ModuleErrorBoundary moduleName="NovaHub Audit"><AuditWorkspacePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView initialTab={activeSubModule === 'plan-sucursal' ? 'module-requests' : activeSubModule} onTabChange={setActiveSubModule} /> : <SuscripcionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'platform-users': return user?.role === 'superadmin' ? <PlatformUsersView /> : <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6"><div className="text-center"><h1 className="text-2xl font-semibold tracking-tight">Acceso Denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para gestionar usuarios de plataforma</p></div></div>;
       // Alias de compatibilidad para enlaces antiguos: la administración de

@@ -1,8 +1,10 @@
 ﻿import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import '../../../styles/restaurant-menu-workspace.css';
+/* The template preview is kept as a compact JSX expression; its URL quotes are intentional. */
+/* eslint-disable no-useless-escape */
 import {
-  ArrowDown, ArrowLeft, ArrowUp, BookOpen, Boxes, CakeSlice, Check, Clock3, Coffee, Copy, Download, Eye, EyeOff,
-  Globe2, ImagePlus, Languages, Package, Pencil, Plus, QrCode, Search, SlidersHorizontal,
+  ArrowDown, ArrowLeft, ArrowUp, BookOpen, Boxes, CakeSlice, Check, ChevronDown, Clock3, Coffee, Copy, Download, Eye, EyeOff,
+  FileSpreadsheet, FileText, Globe2, ImagePlus, Languages, Package, Pencil, Plus, QrCode, Search, SlidersHorizontal,
   Salad, Smartphone, Tags, Trash2, Upload, Utensils, X,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';

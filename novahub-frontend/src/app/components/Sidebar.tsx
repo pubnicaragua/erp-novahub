@@ -186,6 +186,17 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
+    id: 'fuerza-comercial',
+    label: 'Fuerza Comercial',
+    icon: <MapPinned className="size-5" />,
+    section: 'Operaciones',
+    submenu: [
+      { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
+      { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
+      { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: <History className="size-4" /> },
+    ],
+  },
+  {
     id: 'tracking',
     label: 'Tracking de Importaciones',
     icon: <Ship className="size-5" />,
@@ -440,6 +451,23 @@ const menuItems: MenuItem[] = [
 /** Orden canónico de módulos: debe coincidir con el orden visual del sidebar. */
 export const SIDEBAR_MODULE_ORDER: Array<Module | 'overview'> = menuItems.map((item) => item.id);
 
+// Audit es una superficie adicional del tenant. Solo se agrega al sidebar
+// cuando el backend marca el tenant como firma auditora; el menú ERP original
+// permanece intacto para las demás organizaciones.
+const auditWorkspaceMenuItem: MenuItem = {
+  id: 'auditoria',
+  label: 'NovaHub Audit',
+  icon: <ShieldCheck className="size-5" />,
+  section: 'NovaHub Audit',
+  submenu: [
+    { id: 'resumen-auditoria', label: 'Resumen de auditoría', icon: <LayoutDashboard className="size-4" /> },
+    { id: 'clientes-auditados', label: 'Clientes y empresas auditadas', icon: <Building2 className="size-4" /> },
+    { id: 'encargos-auditoria', label: 'Encargos de auditoría', icon: <BriefcaseBusiness className="size-4" /> },
+    { id: 'aceptacion-auditoria', label: 'Aceptación e independencia', icon: <ClipboardCheck className="size-4" /> },
+    { id: 'logs-auditoria', label: 'Bitácora de auditoría', icon: <History className="size-4" /> },
+  ],
+};
+
 const platformMenuItems: MenuItem[] = [
   {
     id: 'overview',
@@ -478,12 +506,7 @@ const platformMenuItems: MenuItem[] = [
     section: 'NovaHub Platform',
     superadminOnly: true,
   },
-  {
-    id: 'auditoria',
-    label: 'Logs y auditoría',
-    icon: <History className="size-5" />,
-    section: 'Ajustes',
-  },
+  auditWorkspaceMenuItem,
   {
     id: 'centro-capacitacion',
     label: 'Capacitación ERP',
@@ -541,12 +564,18 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
   }
 
-  const activeMenuArray = (user?.isPlatformAdmin ? platformMenuItems : menuItems).filter((item) => (
-    (!item.superadminOnly || user?.role === 'superadmin')
-    && (!item.platformPermission
-      || user?.role === 'superadmin'
-      || user?.platformPermissions.includes(item.platformPermission))
-  ));
+  const tenantMenuItems = user?.auditWorkspaceEnabled ? [...menuItems, auditWorkspaceMenuItem] : menuItems;
+  const activeMenuArray = Array.from(new Map(
+    (user?.isPlatformAdmin ? platformMenuItems : tenantMenuItems)
+      .filter((item) => (
+        (!item.superadminOnly || user?.role === 'superadmin')
+        && (!item.platformPermission
+          || user?.role === 'superadmin'
+          || user?.platformPermissions.includes(item.platformPermission)
+          || (item.id === 'fuerza-comercial' && user?.platformPermissions.includes('PLATFORM_QUOTES')))
+      ))
+      .map((item) => [item.id, item] as const),
+  ).values());
 
   const toggleMenu = (id: string) => {
     setExpandedMenus(prev => {
@@ -628,6 +657,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     'soporte-tecnico': 'SUPPORT_TECH',
     restaurante: 'RESTAURANT',
     hospedaje: 'HOTEL',
+    'fuerza-comercial': 'FORCE_SALES',
     tracking: 'TRACKING',
     'intl-imports': 'IMPORT_INTL',
     configuracion: 'CONFIGURATION',
@@ -636,9 +666,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
-    if (parentId === 'fuerza-comercial') {
-      return user.isPlatformAdmin && user.role === 'superadmin' && hasAccess('fuerza-comercial');
-    }
+    if (parentId === 'auditoria' && (user.isPlatformAdmin || user.auditWorkspaceEnabled)) return true;
     // Operación POS is the restaurant's main entry point. Keep it visible when
     // the order permission is available even if an older module-view policy
     // has not yet persisted this newly introduced view id.

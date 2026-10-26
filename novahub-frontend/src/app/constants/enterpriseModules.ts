@@ -16,6 +16,7 @@ export const ENTERPRISE_MODULE_OPTIONS: EnterpriseModuleOption[] = [
   { id: 'SALES_VOICE_QUICK', label: 'Venta rápida por voz', description: 'Dictado local de productos, cantidades, cliente, forma de pago y precio para negocios de alto volumen' },
   { id: 'RESTAURANT', label: 'Restaurante POS', description: 'Mesas, comandas, cocina y cobro POS; se habilita bajo demanda' },
   { id: 'HOTEL', label: 'Hotel', description: 'Habitaciones, disponibilidad, reservas, check-in y check-out' },
+  { id: 'FORCE_SALES', label: 'Fuerza Comercial', description: 'Gestores, rutas, clientes, visitas y seguimiento en campo' },
 { id: 'TRACKING', label: 'Tracking de Importaciones', description: 'Envíos de agencia por código de tracking con estados' },
   { id: 'PURCHASES', label: 'Compras', description: 'Proveedores, órdenes, recepción y créditos del proveedor' },
   { id: 'INVENTORY', label: 'Inventario de mercancías', description: 'Productos, servicios, stock, bodegas y transferencias' },
@@ -40,5 +41,5 @@ export const ENTERPRISE_MODULE_OPTIONS: EnterpriseModuleOption[] = [
 // Los módulos experimentales o de contratación adicional no se activan en
 // nuevos grupos automáticamente. El SuperAdmin los habilita por empresa.
 export const DEFAULT_ENTERPRISE_MODULES = ENTERPRISE_MODULE_OPTIONS
-  .filter((module) => !['RESTAURANT', 'HOTEL', 'SALES_VOICE_QUICK'].includes(module.id))
+  .filter((module) => !['RESTAURANT', 'HOTEL', 'SALES_VOICE_QUICK', 'FORCE_SALES'].includes(module.id))
   .map((module) => module.id);

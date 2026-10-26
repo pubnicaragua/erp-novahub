@@ -1112,7 +1112,9 @@ function RestaurantSalonView({ tables, orders, selectedTableId, onSelectTable, o
     const customZones = Array.from(new Set(tables.map((table) => table.zone?.trim()).filter((zone): zone is string => Boolean(zone && !canonicalZones.includes(zone)))));
     return ['ALL', ...canonicalZones, ...customZones];
   }, [tables]);
-  const [detailTab, setDetailTab] = useState<'summary' | 'orders' | 'qr'>('summary');
+  const [detailTabState, setDetailTabState] = useState<{ tableId: string | null; tab: 'summary' | 'orders' | 'qr' }>({ tableId: selectedTableId, tab: 'summary' });
+  const detailTab = detailTabState.tableId === selectedTableId ? detailTabState.tab : 'summary';
+  const setDetailTab = (tab: 'summary' | 'orders' | 'qr') => setDetailTabState({ tableId: selectedTableId, tab });
   const [guestCounts, setGuestCounts] = useState<Record<string, number>>({});
   const [tableDraft, setTableDraft] = useState({ name: '', zone: '', seats: '' });
   const [nextTableStatus, setNextTableStatus] = useState<'RESERVED' | 'CLEANING' | ''>('');
@@ -1213,8 +1215,10 @@ function RestaurantPosView({ tables, selectedTable, orders, menu, cartLines, car
   const tableOrders = orders.filter((order) => selectedTable && order.table?.id === selectedTable.id);
   const openAccount = tableOrders.find(restaurantOrderIsOperational);
   const openAccountForItems = openAccount && openAccount.status !== 'PAID' ? openAccount : null;
-  const [guestCount, setGuestCount] = useState(Math.min(selectedTable?.seats || 2, 4));
-  useEffect(() => setGuestCount(Math.min(selectedTable?.seats || 2, 4)), [selectedTable?.id, selectedTable?.seats]);
+  const defaultGuestCount = Math.min(selectedTable?.seats || 2, 4);
+  const [guestCountState, setGuestCountState] = useState<{ tableId: string | null; value: number }>({ tableId: selectedTable?.id || null, value: defaultGuestCount });
+  const guestCount = guestCountState.tableId === (selectedTable?.id || null) ? guestCountState.value : defaultGuestCount;
+  const setGuestCount = (value: number) => setGuestCountState({ tableId: selectedTable?.id || null, value });
 
   const canCreateCurrentOrder = (orderType !== 'DINE_IN' || Boolean(selectedTable)) && cartLines.length > 0 && canCreateOrders;
   const canAddCurrentItem = orderType === 'DINE_IN' && openAccountForItems ? canAddOrderItems : canCreateOrders;
@@ -1325,14 +1329,10 @@ function OrderBoardContent({ orders, targetOrderId, onTargetHandled, onSend, onS
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'KITCHEN' | 'READY' | 'DELIVERY' | 'TAKEAWAY'>('ALL');
 
+  const resolvedSelectedOrderId = targetOrderId || (selectedOrderId && orderedOrders.some((order) => order.id === selectedOrderId) ? selectedOrderId : orderedOrders[0]?.id || null);
   useEffect(() => {
-    if (targetOrderId) {
-      setSelectedOrderId(targetOrderId);
-      onTargetHandled?.();
-    } else if (!selectedOrderId || !orderedOrders.some((order) => order.id === selectedOrderId)) {
-      setSelectedOrderId(orderedOrders[0]?.id || null);
-    }
-  }, [onTargetHandled, orderedOrders, selectedOrderId, targetOrderId]);
+    if (targetOrderId) onTargetHandled?.();
+  }, [onTargetHandled, targetOrderId]);
 
   const visibleOrders = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('es');
@@ -1353,7 +1353,7 @@ function OrderBoardContent({ orders, targetOrderId, onTargetHandled, onSend, onS
     });
   }, [filter, orderedOrders, query]);
 
-  const selectedOrder = orderedOrders.find((order) => order.id === selectedOrderId) || null;
+  const selectedOrder = orderedOrders.find((order) => order.id === resolvedSelectedOrderId) || null;
   const filters = [
     { id: 'ALL' as const, label: `Todas (${orderedOrders.length})` },
     { id: 'IN_PROGRESS' as const, label: 'En curso' },
@@ -1525,7 +1525,8 @@ function DeliveryBoard({ orders, canEditDetails, canQueue, canStartPreparation, 
   const [deliveryReference, setDeliveryReference] = useState('');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'DELIVERY' | 'TAKEAWAY' | 'PREPARING' | 'READY' | 'OUT_FOR_DELIVERY'>('ALL');
-  const selected = deliveryOrders.find((order) => order.id === selectedId) || deliveryOrders[0] || null;
+  const resolvedSelectedId = selectedId && deliveryOrders.some((order) => order.id === selectedId) ? selectedId : deliveryOrders[0]?.id || null;
+  const selected = deliveryOrders.find((order) => order.id === resolvedSelectedId) || null;
   const visibleOrders = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('es');
     return deliveryOrders.filter((order) => {

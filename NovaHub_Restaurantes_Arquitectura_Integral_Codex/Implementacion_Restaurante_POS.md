@@ -287,7 +287,10 @@ La contabilidad no se ejecuta como una pantalla aislada del restaurante: se disp
 - `npx prisma generate` — **pasó previamente**.
 - `npm run build` — **pasó después de la migración de ejes y el orquestador por línea**, `Successfully compiled: 506 files with swc`.
 - `npm test -- --runInBand src/restaurant/restaurant.service.spec.ts src/caja/caja.service.spec.ts src/common/payment-methods.spec.ts` — **pasó**, 3 suites y 27 pruebas.
-- `node e2e/scripts/verify-backend-surfaces.mjs` — **pasó**, 62 controllers y 1324 rutas clasificadas; esta verificación es estática y no sustituye un runtime.
+- `node e2e/scripts/verify-backend-surfaces.mjs` — **pasó**, 62 controllers y 1326 rutas clasificadas; esta verificación es estática y no sustituye un runtime.
+- `npx prisma migrate status` — **no listo para runtime**, la base configurada reporta cuatro migraciones pendientes: `20261012100000_complete_restaurant_pos_contract`, `20261013100000_enable_commercial_force_sales`, `20261013110000_add_restaurant_order_state_axes` y `20261013120000_add_branch_restaurant_configuration`. No se aplicaron porque `migrate deploy` modifica la base y la migración de Fuerza Comercial es ajena al POS.
+- `npx tsc --noEmit -p tsconfig.build.json` — **no pasa globalmente** por errores preexistentes en módulos ajenos (Contabilidad, Ventas, Inventario, Compras, Logística, etc.); después del ajuste del checkout no quedan errores reportados en `src/restaurant` ni en las líneas afectadas de `src/caja`.
+- Lint focalizado de `RestaurantePage.tsx` y `RestaurantMenuWorkspace.tsx` — **sin errores**, únicamente tres advertencias `no-explicit-any` en el workspace de carta. El lint global no es gate válido todavía: reporta deuda preexistente en todo el ERP.
 
 ### Frontend
 
@@ -312,7 +315,8 @@ Antes de producción se debe ejecutar con una base de datos de prueba del tenant
 5. verificar reintentos idempotentes y conflicto de versión;
 6. probar permisos por rol y aislamiento entre tenant/sucursal;
 7. mantener room service a folio deshabilitado hasta implementar y probar el adaptador PMS/webhook;
-8. confirmar migraciones, variables de entorno, despliegue y logs del ambiente objetivo.
+8. autorizar y aplicar las migraciones del ambiente correcto; si se usa `prisma migrate deploy`, revisar también la migración pendiente de Fuerza Comercial antes de ejecutarla;
+9. confirmar variables de entorno, despliegue y logs del ambiente objetivo.
 
 Hasta completar esos gates, el estado correcto es **funcional en código y validado por compilación/pruebas focalizadas; pendiente de certificación runtime/deployment**, no “100% productivo”.
 
