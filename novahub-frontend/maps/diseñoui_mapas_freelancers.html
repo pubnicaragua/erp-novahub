@@ -232,6 +232,9 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 
   <div class="actions">
    <button class="btn primary discovery-only" id="refresh">↻ Actualizar negocios Nova</button>
+   <button class="btn secondary" id="routeImportQuick" type="button" hidden>⇧ Importar clientes / rutas</button>
+   <button class="btn secondary" id="routePlannerQuick" type="button" hidden>☷ Rutas y gestores</button>
+   <button class="btn secondary" id="mapConfigurationButton" type="button" hidden>⚙ Configurar mapa</button>
    <button class="btn secondary" id="locationSettings" type="button" hidden>Privacidad de ubicación</button>
    <button class="btn secondary discovery-only" id="zoneManager">▦ Zonas y vendedores</button>
    <button class="btn secondary discovery-only" id="opportunities">✦ Ver oportunidades</button>
@@ -579,7 +582,7 @@ function applyForceSalesPermissionVisibility(){
   const visibility = {
     refresh: 'importProspects', searchGoogle: 'importProspects', searchViewport: 'importProspects', newPoint: 'importProspects',
     zoneManager: 'assignProspect', bulkKanban: 'changeStage', bulkRoute: 'createRoute', bulkVisit: 'registerVisit', bulkWhatsApp: 'send', bulkDiscard: 'discardProspect',
-    routeImport: 'importProspects', routeClear: 'editRoute', routeOptimize: 'editRoute', routeCompleteStop: 'completeRouteStop', routeSave: ['createRoute', 'editRoute'],
+    routeImport: 'importProspects', routeImportQuick: 'importProspects', routePlannerQuick: ['createRoute', 'editRoute', 'assignRoute'], routeClear: 'editRoute', routeOptimize: 'editRoute', routeCompleteStop: 'completeRouteStop', routeSave: ['createRoute', 'editRoute'],
     routeAssignee: 'assignRoute', zoneAssign: 'assignProspect', quickCaptureTakePhoto: 'attachEvidence', quickCaptureRetake: 'attachEvidence',
     quickCaptureSave: 'importProspects',
   };
@@ -1004,6 +1007,8 @@ function applyOperatingMode(){
 function applyMapConfigurationSettings(){
   const settings=document.getElementById('mapConfigurationSettings');
   if(settings)settings.hidden=!CAN_MANAGE_CONFIGURATION;
+  const quickButton=document.getElementById('mapConfigurationButton');
+  if(quickButton)quickButton.hidden=!CAN_MANAGE_CONFIGURATION;
   const provider=document.getElementById('mapProviderSelect');
   const searchMode=document.getElementById('mapSearchModeSelect');
   const tile=document.getElementById('mapTileUrlInput');
@@ -1030,6 +1035,35 @@ async function saveMapConfiguration(){
     window.parent?.postMessage({source:'novahub-force-sales',type:'configuration-updated',configuration:forceSalesConfig},'*');
     toast('Configuración de mapas guardada · recargando motor');
   }catch(error){toast('No se pudo guardar la configuración de mapas')}
+}
+function openMapConfiguration(){
+  if(!CAN_MANAGE_CONFIGURATION){toast('Solo el administrador de la empresa puede configurar el mapa');return}
+  const title=document.getElementById('locationTitle');
+  const help=document.getElementById('locationHelpText');
+  const steps=document.getElementById('locationSteps');
+  const privacy=document.getElementById('locationPrivacy');
+  const mode=document.getElementById('commercialModeSettings');
+  const settings=document.getElementById('mapConfigurationSettings');
+  if(title)title.textContent='Configuración del mapa';
+  if(help)help.textContent='Elige el proveedor, la fuente de búsqueda y cómo se georreferenciarán los clientes importados.';
+  if(steps)steps.hidden=true;
+  if(privacy)privacy.hidden=true;
+  if(mode)mode.hidden=true;
+  if(settings)settings.hidden=false;
+  document.getElementById('locationModal').hidden=false;
+  applyMapConfigurationSettings();
+}
+function openLocationSettings(){
+  const title=document.getElementById('locationTitle');
+  const help=document.getElementById('locationHelpText');
+  const steps=document.getElementById('locationSteps');
+  const settings=document.getElementById('mapConfigurationSettings');
+  if(title)title.textContent='Ubicación y privacidad';
+  if(help)help.textContent='La ubicación del teléfono puede estar activa, pero el navegador tiene bloqueado el permiso para este sitio.';
+  if(steps)steps.hidden=false;
+  if(settings)settings.hidden=true;
+  document.getElementById('locationModal').hidden=false;
+  updatePresenceToggle();
 }
 async function saveForceSalesMode(){
   if(!CAN_MANAGE_CONFIGURATION)return;
@@ -2709,7 +2743,6 @@ function openRoutePlanner(ids){
   const requested=(ids || []).map(findBusiness).filter(Boolean);
   if(requested.length&&!requireForceSales('createRoute'))return;
   routeBusinesses=(requested.length ? requested : routeBusinessesFromStore()).slice(0,ROUTE_MAX_STOPS);
-  if(!routeBusinesses.length){toast('Selecciona negocios para armar una ruta');return}
   if(requested.length){routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=null;routeStopIds=new Map()}
   renderRoutePlanner();
   document.getElementById('routeModal').hidden=false;
@@ -2960,11 +2993,14 @@ document.getElementById('selectVisible').addEventListener('click',()=>{filtered.
 document.getElementById('clearSelection').addEventListener('click',()=>{businesses.forEach(b=>stateOf(b).selected=false);persistCommercial();render();toast('Selección limpiada')});
 document.getElementById('bulkKanban').addEventListener('click',addSelectedToKanban);
 document.getElementById('bulkRoute').addEventListener('click',addSelectedToRoute);
+document.getElementById('routeImportQuick').addEventListener('click',()=>{openRoutePlanner([]);window.parent?.postMessage({source:'novahub-force-sales',type:'request-import-file'},'*')});
+document.getElementById('routePlannerQuick').addEventListener('click',()=>openRoutePlanner([]));
 document.getElementById('bulkVisit').addEventListener('click',visitSelected);
 document.getElementById('bulkWhatsApp').addEventListener('click',sendSelectedWhatsApp);
 document.getElementById('bulkDiscard').addEventListener('click',discardSelected);
 document.getElementById('locateMe').addEventListener('click',locateMe);
-document.getElementById('locationSettings').addEventListener('click',()=>{document.getElementById('locationModal').hidden=false;updatePresenceToggle()});
+document.getElementById('locationSettings').addEventListener('click',openLocationSettings);
+document.getElementById('mapConfigurationButton').addEventListener('click',openMapConfiguration);
 document.getElementById('saveForceSalesMode').addEventListener('click',()=>void saveForceSalesMode());
 document.getElementById('saveMapConfiguration').addEventListener('click',()=>void saveMapConfiguration());
 map.on('zoomend', applyLabels);
