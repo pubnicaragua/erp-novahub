@@ -1,5 +1,6 @@
 import { MapPinned, ShieldAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
@@ -8,6 +9,7 @@ import mapUrl from '../../../maps/diseñoui_mapas_freelancers.html?url';
 export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: string; onSubModuleChange?: (value: string) => void }) {
   const { user, hasAccess, canPerform } = useAuth();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const routeImportInputRef = useRef<HTMLInputElement>(null);
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [mapConfig, setMapConfig] = useState<{ mapProvider?: string; mapSearchMode?: string; mapTileUrl?: string | null; mapGeocoderUrl?: string | null } | null>(null);
   const isSuperAdmin = user?.role === 'superadmin';
@@ -46,6 +48,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
       if (event.data?.source !== 'novahub-force-sales') return;
       if (event.data?.type === 'fullscreen') setMapFullscreen(Boolean(event.data.active));
       if (event.data?.type === 'configuration-updated') setMapConfig(event.data.configuration || {});
+      if (event.data?.type === 'request-import-file') routeImportInputRef.current?.click();
     };
     window.addEventListener('message', onMapMessage);
     return () => window.removeEventListener('message', onMapMessage);
@@ -84,6 +87,38 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
         referrerPolicy="strict-origin-when-cross-origin"
         className="block h-full min-h-0 w-full border-0"
       />}
+      <input
+        ref={routeImportInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv,.tsv"
+        className="sr-only"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (!file) return;
+          try {
+            const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+            const sheets = Object.fromEntries(workbook.SheetNames.map((name) => [
+              name,
+              XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[name], { defval: '' }),
+            ]));
+            const firstSheet = workbook.SheetNames[0];
+            iframeRef.current?.contentWindow?.postMessage({
+              source: 'novahub-force-sales',
+              type: 'force-sales-import-rows',
+              fileName: file.name,
+              rows: firstSheet ? sheets[firstSheet] || [] : [],
+              sheets,
+            }, '*');
+          } catch {
+            iframeRef.current?.contentWindow?.postMessage({
+              source: 'novahub-force-sales',
+              type: 'force-sales-import-error',
+              message: 'No se pudo leer el archivo. Usa la plantilla XLSX o un CSV/TSV válido.',
+            }, '*');
+          }
+        }}
+      />
       {!mapConfig && <div className="flex h-full items-center justify-center text-sm font-semibold text-[#123f35]">Cargando configuración de mapas…</div>}
     </section>
   );
