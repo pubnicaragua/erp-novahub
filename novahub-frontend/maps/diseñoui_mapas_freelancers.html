@@ -309,9 +309,14 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   <p id="routeDescription">Organiza hasta 30 prospectos, define el orden de visita y abre cada parada directamente en Waze.</p>
   <div class="route-summary"><div class="route-stat"><b id="routeStopCount">0/30</b><span>Paradas</span></div><div class="route-stat"><b id="routeCompletedCount">0</b><span>Completadas</span></div><div class="route-stat"><b id="routeNextStop">—</b><span>Siguiente</span></div></div>
   <div class="route-progress"><span id="routeProgressBar" style="width:0%"></span></div>
-  <div class="route-toolbar"><span>Orden de visita · 1 → 30</span><button id="routeClear" type="button">Limpiar ruta</button></div>
+  <div class="route-toolbar"><span>Orden de visita · 1 → 30</span><button id="routeImport" type="button">Importar clientes / rutas</button><button id="routeClear" type="button">Limpiar ruta</button></div>
+  <label for="routeFilterAssignee">Filtrar rutas por gestor</label>
+  <select id="routeFilterAssignee"><option value="">Todas las rutas</option></select>
+  <label for="routeSavedRoute">Ruta guardada</label>
+  <select id="routeSavedRoute"><option value="">Selecciona una ruta existente</option></select>
   <label for="routeAssignee">Vendedor responsable</label>
   <select id="routeAssignee"><option value="">Mi ruta</option></select>
+  <div class="meta" id="routeImportStatus">Puedes importar XLSX, XLS, CSV o TSV; los clientes con el mismo nombre/código se vinculan a la ruta indicada.</div>
   <div class="route-stops" id="routeStops"></div>
   <div class="confirm-modal-actions">
    <button class="cancel" id="routeClose" type="button">Cerrar</button>
@@ -525,7 +530,7 @@ function readStore(key, fallback){
 }
 const followups = readStore('novaManaguaFollowupsV4', {});
 const commercialState = readStore('novaFuerzaComercialV1', {});
-const localPoints = readStore('novaFuerzaLocalPointsV1', []);
+let localPoints = [];
 const OFFLINE_DB_NAME = 'nova-force-sales-offline-v1';
 const OFFLINE_STORE = 'outbox';
 let offlineDbPromise = null;
@@ -563,6 +568,10 @@ const NOVAHUB_ISOTIPO_URL = mapQuery.get('isotipo') || '';
 let ROUTE_LOGO_URI = mapQuery.get('companyLogo') || NOVAHUB_ISOTIPO_URL;
 const CURRENT_USER_ID = mapQuery.get('userId') || '';
 const CURRENT_TENANT_ID = mapQuery.get('tenantId') || '';
+const HAS_AUTHENTICATED_TENANT = Boolean(localStorage.getItem('nh-auth-token'));
+const SESSION_SCOPE_KEY = CURRENT_TENANT_ID || CURRENT_USER_ID || 'authenticated';
+const LOCAL_POINTS_KEY = HAS_AUTHENTICATED_TENANT ? `novaFuerzaLocalPointsV1:${SESSION_SCOPE_KEY}` : 'novaFuerzaLocalPointsV1';
+localPoints = readStore(LOCAL_POINTS_KEY, []);
 const IS_PLATFORM_ADMIN = mapQuery.get('platformAdmin') === 'true';
 const CAN_ASSIGN_TEAM = mapQuery.get('canAssignTeam') === 'true';
 const CAN_DELETE_TEST = IS_PLATFORM_ADMIN;
@@ -570,7 +579,7 @@ function applyForceSalesPermissionVisibility(){
   const visibility = {
     refresh: 'importProspects', searchGoogle: 'importProspects', searchViewport: 'importProspects', newPoint: 'importProspects',
     zoneManager: 'assignProspect', bulkKanban: 'changeStage', bulkRoute: 'createRoute', bulkVisit: 'registerVisit', bulkWhatsApp: 'send', bulkDiscard: 'discardProspect',
-    routeClear: 'editRoute', routeOptimize: 'editRoute', routeCompleteStop: 'completeRouteStop', routeSave: ['createRoute', 'editRoute'],
+    routeImport: 'importProspects', routeClear: 'editRoute', routeOptimize: 'editRoute', routeCompleteStop: 'completeRouteStop', routeSave: ['createRoute', 'editRoute'],
     routeAssignee: 'assignRoute', zoneAssign: 'assignProspect', quickCaptureTakePhoto: 'attachEvidence', quickCaptureRetake: 'attachEvidence',
     quickCaptureSave: 'importProspects',
   };
@@ -605,7 +614,7 @@ let routeStopIds = new Map();
 const PRESENCE_STORAGE_KEY = `novaFuerzaPresenceSharingV1:${CURRENT_USER_ID || 'anonymous'}`;
 const GOOGLE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const GOOGLE_SEARCH_MAX_RESULTS = 100;
-const GOOGLE_CATALOG_KEY = 'novaGooglePlacesCatalogV1';
+const GOOGLE_CATALOG_KEY = HAS_AUTHENTICATED_TENANT ? `novaGooglePlacesCatalogV1:${SESSION_SCOPE_KEY}` : 'novaGooglePlacesCatalogV1';
 const DELETED_BUSINESSES_KEY = 'novaFuerzaDeletedBusinessesV1';
 const NOVA_SEARCH_CURSOR_KEY = 'novaDiscoveryCursorV1';
 const NOVA_DISCOVERY_AREAS = [
@@ -635,7 +644,7 @@ const NOVA_DISCOVERY_QUERIES = [
 let googlePlaces = readStore(GOOGLE_CATALOG_KEY, []);
 const deletedBusinessKeys = new Set(readStore(DELETED_BUSINESSES_KEY, []));
 let remoteProspects = [];
-let businesses = [...seed];
+let businesses = HAS_AUTHENTICATED_TENANT ? [] : [...seed];
 let filtered = [];
 let listLimit = 140;
 let selectedZone = 'Todos';
@@ -672,6 +681,7 @@ const ROUTE_STORAGE_KEY = 'novaFuerzaRouteV2';
 const ROUTE_PROGRESS_KEY = 'novaFuerzaRouteProgressV2';
 let routeProgress = Math.max(0, Number(readStore(ROUTE_PROGRESS_KEY, 0)) || 0);
 let routePolyline = null;
+let routeDirectionsRequestId = 0;
 let routeStopMarkers = new Map();
 let activeRouteAssigneeId = null;
 let zonePolygons = new Map();
@@ -941,9 +951,17 @@ function apiHeaders(){
 }
 async function forceSalesRequest(path, options={}){
   const response=await fetch(`${API_BASE}${path}`,{...options,headers:{...apiHeaders(),...(options.headers||{})},cache:'no-store'});
-  if(!response.ok) throw new Error(`HTTP ${response.status}`);
   const text=await response.text();
-  return text ? JSON.parse(text) : null;
+  let body=null;
+  try{body=text ? JSON.parse(text) : null}catch(error){body=text || null}
+  if(!response.ok){
+    const message=typeof body==='string' ? body : body?.message || body?.error || `HTTP ${response.status}`;
+    const failure=new Error(String(message));
+    failure.status=response.status;
+    failure.payload=body;
+    throw failure;
+  }
+  return body;
 }
 async function loadForceSalesConfiguration(){
   if(!localStorage.getItem('nh-auth-token'))return;
@@ -1029,16 +1047,62 @@ async function loadRemoteRoutes(){
   try{
     const rows=await forceSalesRequest('/force-sales/routes');
     remoteRoutes=Array.isArray(rows)?rows:[];
-    const active=remoteRoutes.find(route=>['PLANNED','IN_PROGRESS'].includes(String(route.status).toUpperCase())) || remoteRoutes[0];
-    if(!active)return;
-    activeRemoteRouteId=active.id;
-    activeRouteAssigneeId=active.assignedToId || CURRENT_USER_ID || null;
-    routeBusinesses=(active.stops || []).map(stop=>businesses.find(item=>String(stateOf(item).remoteId||'')===String(stop.prospectId))).filter(Boolean).slice(0,ROUTE_MAX_STOPS);
-    routeStopIds=new Map((active.stops || []).map(stop=>[String(stop.prospectId),String(stop.id)]));
-    routeProgress=(active.stops || []).filter(stop=>String(stop.status).toUpperCase()==='COMPLETED').length;
-    persistRoute();
-    renderRoutePlanner();
+    renderSavedRouteOptions();
+    const active=remoteRoutes.find(route=>String(route.id)===String(activeRemoteRouteId))
+      || remoteRoutes.find(route=>['PLANNED','IN_PROGRESS'].includes(String(route.status).toUpperCase()))
+      || remoteRoutes[0];
+    if(active)hydrateRemoteRoute(active);
   }catch(error){console.warn('No se pudieron cargar las rutas persistentes',error)}
+}
+function routeAssigneeName(route){
+  const assigned=route?.assignedTo || assignees.find(item=>String(item.id)===String(route?.assignedToId));
+  return assigned?.name || assigned?.email || 'Sin gestor';
+}
+function renderSavedRouteOptions(){
+  const filter=document.getElementById('routeFilterAssignee');
+  const saved=document.getElementById('routeSavedRoute');
+  if(filter){
+    const current=filter.value;
+    filter.innerHTML='<option value="">Todas las rutas</option>' + assignees.map(item=>`<option value="${esc(item.id)}">${esc(item.name || item.email || 'Gestor')}</option>`).join('');
+    if(current)filter.value=current;
+  }
+  const assigneeId=filter?.value || '';
+  const visible=remoteRoutes.filter(route=>!assigneeId || String(route.assignedToId||'')===String(assigneeId));
+  if(saved){
+    const current=saved.value;
+    saved.innerHTML='<option value="">Selecciona una ruta existente</option>' + visible.map(route=>`<option value="${esc(route.id)}">${esc(route.name || 'Ruta sin nombre')} · ${esc(routeAssigneeName(route))} · ${(route.stops || []).length} paradas</option>`).join('');
+    if(current && visible.some(route=>String(route.id)===String(current)))saved.value=current;
+  }
+}
+function hydrateRemoteRoute(route){
+  if(!route?.id)return;
+  const routeChanged=String(activeRemoteRouteId || '')!==String(route.id);
+  const hydrated=(route.stops || []).map(stop=>{
+    const existing=businesses.find(item=>String(stateOf(item).remoteId||'')===String(stop.prospectId));
+    if(existing)return existing;
+    if(!stop.prospect)return null;
+    const business=remoteBusiness({...stop.prospect,id:stop.prospect.id});
+    const state=stateOf(business);
+    state.remoteId=stop.prospect.id;
+    state.assignedToId=stop.prospect.assignedToId || route.assignedToId || null;
+    remoteProspects.push(business);
+    return business;
+  }).filter(Boolean).slice(0,ROUTE_MAX_STOPS);
+  if(hydrated.length){mergeBusinesses();populateFilters();render();}
+  activeRemoteRouteId=route.id;
+  activeRouteAssigneeId=route.assignedToId || CURRENT_USER_ID || null;
+  routeBusinesses=hydrated;
+  routeStopIds=new Map((route.stops || []).map(stop=>[String(stop.prospectId),String(stop.id)]));
+  routeProgress=(route.stops || []).filter(stop=>String(stop.status).toUpperCase()==='COMPLETED').length;
+  persistRoute();
+  renderRoutePlanner();
+  if(routeChanged&&routeBusinesses.filter(item=>Number.isFinite(item.lat)&&Number.isFinite(item.lng)).length>1)void drawRouteOnMap({closeModal:false});
+}
+function openSavedRoute(routeId){
+  const route=remoteRoutes.find(item=>String(item.id)===String(routeId));
+  if(!route)return;
+  hydrateRemoteRoute(route);
+  document.getElementById('routeModal').hidden=false;
 }
 function clearRouteMarkers(){
   routeStopMarkers.forEach(marker=>setNovaMarkerMap(marker,null));
@@ -1272,7 +1336,9 @@ async function persistProspectAction(b,action,suffix,body,evidenceFile=null){
 }
 function remoteBusiness(prospect){
   const id=prospect.googlePlaceId ? `google-${prospect.googlePlaceId}` : prospect.sourceKey || `remote-${prospect.id}`;
-  return {id,googlePlaceId:prospect.googlePlaceId || undefined,zoneCellId:prospect.zoneCellId || undefined,name:prospect.name || 'Prospecto sin nombre',zone:prospect.zone || nearestZone(Number(prospect.lat)||12.115,Number(prospect.lng)||-86.26),category:prospect.category || 'Comercio / servicios',address:prospect.address || 'Dirección pendiente de validar',source:prospect.googlePlaceId?'Nova':'Fuerza Comercial',sourceUrl:prospect.sourceUrl || '',lat:Number(prospect.lat)||12.115,lng:Number(prospect.lng)||-86.26,precision:'Prospecto persistido en NovaHub',score:Number(prospect.novaFitScore)||0,priority:prospect.priority || 'C',owner:'Fuerza Comercial',phone:prospect.phone || '',website:prospect.website || '',rating:prospect.rating || null,reviews:prospect.reviews || 0};
+  const lat=Number(prospect.lat),lng=Number(prospect.lng);
+  const hasCoordinates=Number.isFinite(lat)&&Number.isFinite(lng);
+  return {id,googlePlaceId:prospect.googlePlaceId || undefined,zoneCellId:prospect.zoneCellId || undefined,name:prospect.name || 'Prospecto sin nombre',zone:prospect.zone || nearestZone(hasCoordinates?lat:12.115,hasCoordinates?lng:-86.26),category:prospect.category || 'Comercio / servicios',address:prospect.address || 'Dirección pendiente de validar',source:prospect.googlePlaceId?'Nova':'Fuerza Comercial',sourceUrl:prospect.sourceUrl || '',lat:hasCoordinates?lat:null,lng:hasCoordinates?lng:null,precision:hasCoordinates?'Prospecto persistido en NovaHub':'Pendiente de georreferenciar',score:Number(prospect.novaFitScore)||0,priority:prospect.priority || 'C',owner:'Fuerza Comercial',phone:prospect.phone || '',website:prospect.website || '',rating:prospect.rating || null,reviews:prospect.reviews || 0};
 }
 async function loadRemoteProspects(){
   if(!localStorage.getItem('nh-auth-token') || remoteProspectsLoading) return;
@@ -1347,7 +1413,151 @@ async function loadAssignees(){
     const unique=new Map();
     (Array.isArray(rows) ? rows : []).filter(item=>item?.id && item?.isActive !== false).forEach(item=>unique.set(String(item.id),item));
     assignees=[...unique.values()];
+    renderSavedRouteOptions();
+    renderRoutePlanner();
   }catch(error){console.warn('No se pudo cargar la lista de vendedores',error)}
+}
+function normalizeImportHeader(value){
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+}
+function importCell(row, aliases){
+  const entries=Object.entries(row || {});
+  const wanted=new Set(aliases.map(normalizeImportHeader));
+  const match=entries.find(([header])=>wanted.has(normalizeImportHeader(header)));
+  return match?.[1] ?? '';
+}
+function importNumber(value){
+  if(typeof value==='number'&&Number.isFinite(value))return value;
+  const normalized=String(value ?? '').replace(/[^0-9,.-]/g,'').replace(/\.(?=.*\.)/g,'').replace(',','.');
+  const parsed=Number(normalized);
+  return Number.isFinite(parsed)?parsed:null;
+}
+function importAssignee(value){
+  const token=normalizeImportHeader(value);
+  if(!token)return null;
+  return assignees.find(item=>[item.id,item.name,item.email].some(candidate=>normalizeImportHeader(candidate)===token)) || null;
+}
+function importedBusinessFromRow(row,index){
+  const name=String(importCell(row,['Nombre del Cliente','Cliente','Nombre','Razón social','Razon social']) || '').trim();
+  if(!name)return null;
+  const sourceKey=String(importCell(row,['No.','No','Código','Codigo','ID cliente','Cuenta','Cédula','Cedula']) || `${name}-${index+1}`).trim();
+  const routeName=String(importCell(row,['Ruta','Ruta comercial','Nombre de ruta','Route']) || '').trim();
+  const assigneeValue=importCell(row,['Gestor','Vendedor','Responsable','Assigned to','Usuario']);
+  const assignee=importAssignee(assigneeValue);
+  const lat=importNumber(importCell(row,['Latitud','Lat','Latitude']));
+  const lng=importNumber(importCell(row,['Longitud','Lng','Long','Longitude']));
+  const address=String(importCell(row,['Dirección','Direccion','Domicilio','Dirección del cliente','Address']) || '').trim();
+  const phone=String(importCell(row,['Teléfono','Telefono','Celular','Móvil','Movil','WhatsApp','Phone']) || '').trim();
+  const zone=String(importCell(row,['Zona','Barrio','Sector','Municipio','Ciudad']) || '').trim();
+  const category=String(importCell(row,['Categoría','Categoria','Tipo de cliente','Giro','Rubro']) || 'Cliente de crédito').trim();
+  const business={
+    id:sourceKey || `import-${index}`, name, sourceKey, zone:zone || nearestZone(lat ?? 12.115,lng ?? -86.26), category,
+    address:address || 'Dirección pendiente de georreferenciar', source:'Importación de clientes', sourceUrl:'',
+    lat, lng, precision:lat!==null&&lng!==null?'Coordenadas importadas':'Pendiente de georreferenciar', score:0, priority:'C', owner:'Fuerza Comercial', phone,
+    importRouteName:routeName, importAssigneeId:assignee?.id || '', importAssigneeLabel:String(assigneeValue || '').trim(), importSourceKey:sourceKey,
+  };
+  const state=stateOf(business);
+  state.assignedToId=assignee?.id || null;
+  state.selected=true;
+  return business;
+}
+function geocodeImportedAddress(address){
+  if(!address)return Promise.resolve(null);
+  if(window.google?.maps?.Geocoder){
+    return new Promise(resolve=>{
+      new google.maps.Geocoder().geocode({address:`${address}, Nicaragua`},(results,status)=>{
+        if(status!=='OK'||!results?.[0]?.geometry?.location){resolve(null);return}
+        const location=results[0].geometry.location;resolve({lat:location.lat(),lng:location.lng(),precision:'Georreferenciado por Google Maps'});
+      });
+    });
+  }
+  const geocoder=forceSalesConfig?.mapGeocoderUrl;
+  if(!geocoder)return Promise.resolve(null);
+  const separator=geocoder.includes('?')?'&':'?';
+  return fetch(`${geocoder}${separator}q=${encodeURIComponent(address)}`,{headers:apiHeaders(),cache:'no-store'}).then(response=>response.ok?response.json():null).then(result=>{
+    const item=Array.isArray(result)?result[0]:result?.results?.[0] || result;
+    const lat=importNumber(item?.lat ?? item?.latitude),lng=importNumber(item?.lon ?? item?.lng ?? item?.longitude);
+    return lat===null||lng===null?null:{lat,lng,precision:'Georreferenciado por el catálogo configurado'};
+  }).catch(()=>null);
+}
+async function geocodeImportedBusinesses(items){
+  const pending=items.filter(item=>Number.isFinite(item.lat)===false||Number.isFinite(item.lng)===false).filter(item=>item.address && !/^direccion pendiente/i.test(item.address));
+  for(let index=0;index<pending.length;index++){
+    const item=pending[index];
+    const location=await geocodeImportedAddress(item.address);
+    if(location){item.lat=location.lat;item.lng=location.lng;item.precision=location.precision}
+    const status=document.getElementById('routeImportStatus');
+    if(status)status.textContent=`Georreferenciando ${index+1}/${pending.length} · ${item.name}`;
+  }
+}
+async function persistImportedRouteGroups(items){
+  const groups=new Map();
+  items.forEach(item=>{
+    const routeName=String(item.importRouteName || '').trim();
+    const remoteId=stateOf(item).remoteId;
+    if(!routeName||!remoteId)return;
+    const key=normalizeImportHeader(routeName);
+    if(!groups.has(key))groups.set(key,{name:routeName,assigneeId:stateOf(item).assignedToId || CURRENT_USER_ID || null,prospectIds:[]});
+    const group=groups.get(key);
+    group.prospectIds.push(remoteId);
+    if(!group.assigneeId&&stateOf(item).assignedToId)group.assigneeId=stateOf(item).assignedToId;
+  });
+  for(const group of groups.values()){
+    if(!group.prospectIds.length)continue;
+    const existing=remoteRoutes.find(route=>normalizeImportHeader(route.name)===normalizeImportHeader(group.name));
+    if(existing){
+      const existingIds=new Set((existing.stops || []).map(stop=>String(stop.prospectId)));
+      const appendProspectIds=[...new Set(group.prospectIds)].filter(prospectId=>!existingIds.has(String(prospectId)));
+      if(appendProspectIds.length){
+        const updated=await forceSalesRequest(`/force-sales/routes/${encodeURIComponent(existing.id)}`,{method:'PATCH',body:JSON.stringify({appendProspectIds})});
+        if(updated)remoteRoutes=[updated,...remoteRoutes.filter(route=>route.id!==updated.id)];
+      }
+      continue;
+    }
+    const payload={name:group.name,prospectIds:[...new Set(group.prospectIds)],logoUri:ROUTE_LOGO_URI || null};
+    if(group.assigneeId&&CAN_ASSIGN_TEAM&&canForceSales('assignRoute'))payload.assignedToId=group.assigneeId;
+    const saved=await forceSalesRequest('/force-sales/routes',{method:'POST',body:JSON.stringify(payload)});
+    if(saved)remoteRoutes=[saved,...remoteRoutes.filter(route=>route.id!==saved.id)];
+  }
+  renderSavedRouteOptions();
+}
+async function importForceSalesRows(message){
+  if(!canForceSales('importProspects')){toast('Tu rol no puede importar clientes');return}
+  const rows=Array.isArray(message?.rows)?message.rows.map(row=>({...row})):[];
+  const sheets=message?.sheets && typeof message.sheets==='object' ? message.sheets : {};
+  const routeRows=Object.entries(sheets).filter(([name])=>normalizeImportHeader(name).includes('ruta')).flatMap(([,items])=>Array.isArray(items)?items:[]);
+  if(routeRows.length){
+    const routeByClient=new Map(routeRows.map(row=>[
+      String(importCell(row,['No.','No','Código','Codigo','ID cliente','Cuenta','Cédula','Cedula']) || '').trim(),
+      {route:importCell(row,['Ruta','Ruta comercial','Nombre de ruta','Route']),assignee:importCell(row,['Gestor','Vendedor','Responsable','Assigned to','Usuario'])},
+    ]).filter(([key])=>key));
+    rows.forEach(row=>{
+      const key=String(importCell(row,['No.','No','Código','Codigo','ID cliente','Cuenta','Cédula','Cedula']) || '').trim();
+      const route=routeByClient.get(key);
+      if(route){if(!importCell(row,['Ruta','Ruta comercial','Nombre de ruta','Route']))row.Ruta=route.route;if(!importCell(row,['Gestor','Vendedor','Responsable','Assigned to','Usuario']))row.Gestor=route.assignee}
+    });
+  }
+  const imported=rows.map(importedBusinessFromRow).filter(Boolean).slice(0,500);
+  if(!imported.length){toast('El archivo no contiene filas con nombre de cliente');return}
+  const status=document.getElementById('routeImportStatus');
+  if(status)status.textContent=`Preparando ${imported.length} clientes…`;
+  await geocodeImportedBusinesses(imported);
+  const existingKeys=new Set(localPoints.map(item=>String(item.sourceKey || keyOf(item))));
+  imported.forEach(item=>{if(!existingKeys.has(String(item.sourceKey || keyOf(item))))localPoints.push(item)});
+  localStorage.setItem(LOCAL_POINTS_KEY,JSON.stringify(localPoints));
+  mergeBusinesses();populateFilters();render();
+  const result=await syncProspects(imported);
+  if(!result && imported.some(item=>!stateOf(item).remoteId)){
+    if(status)status.textContent='Clientes guardados localmente; se sincronizarán al recuperar conexión.';
+    toast('Importación guardada offline');
+    return;
+  }
+  await loadRemoteProspects();
+  await loadRemoteRoutes();
+  await persistImportedRouteGroups(imported);
+  const routeCount=new Set(imported.map(item=>item.importRouteName).filter(Boolean)).size;
+  if(status)status.textContent=`${imported.length} clientes importados${routeCount?` · ${routeCount} rutas vinculadas`:''}.`;
+  toast(`${imported.length} clientes importados correctamente`);
 }
 function nearestZone(lat,lng){
   let best='Managua', d=Infinity;
@@ -1365,12 +1575,20 @@ function scoreFor(cat, tags={}){
 }
 function mergeBusinesses(){
   const m = new Map();
-  const catalog = LEAD_DISCOVERY_ENABLED ? [...seed, ...localPoints, ...googlePlaces, ...remoteProspects] : [...remoteProspects];
+  const catalog = HAS_AUTHENTICATED_TENANT
+    ? [...localPoints.filter(item=>Boolean(stateOf(item).remoteId)), ...remoteProspects]
+    : (LEAD_DISCOVERY_ENABLED ? [...seed, ...localPoints, ...googlePlaces, ...remoteProspects] : [...remoteProspects]);
   catalog.forEach(b => {
     if(deletedBusinessKeys.has(String(keyOf(b))))return;
-    const key = b.googlePlaceId ? `google:${b.googlePlaceId}` : `record:${b.id || norm(b.name) + '|' + norm(b.zone)}`;
+    const remoteId=stateOf(b).remoteId;
+    const key = b.googlePlaceId ? `google:${b.googlePlaceId}` : remoteId ? `remote:${remoteId}` : `record:${b.id || norm(b.name) + '|' + norm(b.zone)}`;
     if(!m.has(key)) m.set(key, b);
-    else {const old=m.get(key);m.set(key,{...old,...b,source:old.source===b.source?b.source:`${old.source} + ${b.source}`})}
+    else {
+      const old=m.get(key);
+      const oldState=stateOf(old),nextState=stateOf(b);
+      Object.assign(nextState,oldState,nextState);
+      m.set(key,{...old,...b,source:old.source===b.source?b.source:`${old.source} + ${b.source}`});
+    }
   });
   businesses = [...m.values()];
 }
@@ -1580,7 +1798,7 @@ function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',det
   const address='Punto capturado · ' + coords.lat.toFixed(6) + ', ' + coords.lng.toFixed(6);
   const business={id,name,zone:nearestZone(coords.lat,coords.lng),category:'Prospecto por validar',address,source:'Captura móvil NovaHub',sourceUrl:'',lat:coords.lat,lng:coords.lng,precision:'Coordenada exacta capturada por el vendedor',score:0,priority:'C',owner:'Fuerza Comercial',phone:'',website:'',rating:null,reviews:0};
   localPoints.unshift(business);
-  localStorage.setItem('novaFuerzaLocalPointsV1',JSON.stringify(localPoints.slice(0,2000)));
+    localStorage.setItem(LOCAL_POINTS_KEY,JSON.stringify(localPoints.slice(0,2000)));
   const c=stateOf(business); Object.assign(c,{selected:true,stage:'Nuevo'});
   if(evidenceFile){c.evidenceName=evidenceFile.name;c.evidenceType=evidenceFile.type;c.evidencePending=true}
   persistCommercial();
@@ -1615,6 +1833,9 @@ document.getElementById('locationRetry').addEventListener('click',()=>{closeLoca
 document.getElementById('locationModal').addEventListener('click',event=>{if(event.target===event.currentTarget)closeLocationHelp()});
 document.getElementById('routeClose').addEventListener('click',()=>{document.getElementById('routeModal').hidden=true});
 document.getElementById('routeClear').addEventListener('click',clearRoute);
+document.getElementById('routeImport').addEventListener('click',()=>window.parent?.postMessage({source:'novahub-force-sales',type:'request-import-file'},'*'));
+document.getElementById('routeFilterAssignee').addEventListener('change',()=>{renderSavedRouteOptions();});
+document.getElementById('routeSavedRoute').addEventListener('change',event=>{if(event.currentTarget.value){openSavedRoute(event.currentTarget.value);event.currentTarget.value=''}});
 document.getElementById('routeOptimize').addEventListener('click',optimizeRoute);
 document.getElementById('routeDraw').addEventListener('click',drawRouteOnMap);
 document.getElementById('routeOpenMaps').addEventListener('click',openRouteInMaps);
@@ -1622,6 +1843,11 @@ document.getElementById('routeCompleteStop').addEventListener('click',completeCu
 document.getElementById('routeSave').addEventListener('click',()=>{void saveRouteAssignment()});
 document.getElementById('routeModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
 document.getElementById('routeTop').addEventListener('click',()=>{if(selectedBusinesses().length&&canForceSales('createRoute'))addSelectedToRoute();else openRoutePlanner([])});
+window.addEventListener('message',event=>{
+  if(event.data?.source!=='novahub-force-sales')return;
+  if(event.data?.type==='force-sales-import-error'){toast(event.data.message || 'No se pudo leer el archivo');return}
+  if(event.data?.type==='force-sales-import-rows')void importForceSalesRows(event.data);
+});
 document.getElementById('searchNearby').addEventListener('click',searchNearbyFromDevice);
 document.getElementById('toggle3d').addEventListener('click',toggleMap3D);
 document.getElementById('zoneManager').addEventListener('click',openZoneManager);
@@ -1757,7 +1983,7 @@ async function confirmDeleteBusiness(){
     googlePlaces=googlePlaces.filter(item=>String(keyOf(item))!==businessKey);
     deletedBusinessKeys.add(businessKey);
     delete commercialState[businessKey];delete commercialState[b.id];delete followups[b.id];
-    localStorage.setItem('novaFuerzaLocalPointsV1',JSON.stringify(localPoints));
+    localStorage.setItem(LOCAL_POINTS_KEY,JSON.stringify(localPoints));
     localStorage.setItem(GOOGLE_CATALOG_KEY,JSON.stringify(googlePlaces));
     localStorage.setItem(DELETED_BUSINESSES_KEY,JSON.stringify([...deletedBusinessKeys]));
     localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));
@@ -2438,6 +2664,7 @@ function refreshRoutePermissionVisibility(){
 }
 function renderRoutePlanner(){
   routeProgress=Math.max(0,Math.min(routeProgress,routeBusinesses.length));
+  renderSavedRouteOptions();
   refreshRoutePermissionVisibility();
   const canManage=canManageCurrentRoute();
   const canRemoveStops=!activeRemoteRouteId&&canForceSales('createRoute');
@@ -2445,7 +2672,7 @@ function renderRoutePlanner(){
   if(select){
     const current=select.value;
     select.innerHTML='<option value="">Mi ruta</option>' + assignees.map(item=>'<option value="' + esc(item.id) + '">' + esc(item.name || item.email || 'Vendedor') + '</option>').join('');
-    const selected=current || activeRouteAssigneeId || '';
+    const selected=activeRouteAssigneeId || current || '';
     if(selected)select.value=selected;
   }
   const completed=document.getElementById('routeCompletedCount');
@@ -2500,17 +2727,47 @@ function optimizeRoute(){
   }
   routeBusinesses=ordered;routeProgress=0;renderRoutePlanner();toast('Ruta ordenada por cercanía desde la primera parada');
 }
-function drawRouteOnMap(){
+function requestGoogleDirections(service,request){
+  return new Promise((resolve,reject)=>{
+    try{
+      service.route(request,(result,status)=>status==='OK'&&result?.routes?.[0] ? resolve(result) : reject(new Error(`No se pudo calcular la ruta por carretera (${status || 'sin respuesta'})`)));
+    }catch(error){reject(error)}
+  });
+}
+async function drawRouteOnMap(options={}){
   if(!routeBusinesses.length){toast('Selecciona negocios para armar una ruta');return}
-  const path=[...(lastKnownCoords?[{lat:Number(lastKnownCoords.latitude),lng:Number(lastKnownCoords.longitude)}]:[]),...routeBusinesses.map(b=>({lat:Number(b.lat),lng:Number(b.lng)}))].filter(point=>Number.isFinite(point.lat)&&Number.isFinite(point.lng));
-  if(!path.length)return;
+  const points=[...(lastKnownCoords?[{lat:Number(lastKnownCoords.latitude),lng:Number(lastKnownCoords.longitude)}]:[]),...routeBusinesses.map(b=>({lat:Number(b.lat),lng:Number(b.lng)}))].filter(point=>Number.isFinite(point.lat)&&Number.isFinite(point.lng));
+  if(points.length<2){toast('La ruta necesita al menos dos paradas con coordenadas válidas');return}
+  if(!window.google?.maps?.DirectionsService){toast('El motor de rutas por carretera no está disponible');return}
+  const requestId=++routeDirectionsRequestId;
+  const service=new google.maps.DirectionsService();
+  const roadPath=[];
+  try{
+    // Google Directions admite un número limitado de waypoints por consulta.
+    // Se divide una ruta larga en tramos contiguos y se conserva el orden elegido.
+    let start=0;
+    while(start<points.length-1){
+      const end=Math.min(points.length-1,start+23);
+      const result=await requestGoogleDirections(service,{
+        origin:points[start],destination:points[end],waypoints:points.slice(start+1,end).map(location=>({location,stopover:true})),
+        optimizeWaypoints:false,travelMode:google.maps.TravelMode.DRIVING,
+      });
+      const overview=result.routes[0].overview_path || [];
+      overview.forEach((point,index)=>{
+        if(start>0&&index===0)return;
+        roadPath.push({lat:point.lat(),lng:point.lng()});
+      });
+      start=end;
+    }
+  }catch(error){console.warn('No se pudo calcular la ruta por carretera',error);toast(error?.message || 'No se pudo calcular la ruta por carretera');return}
+  if(requestId!==routeDirectionsRequestId||roadPath.length<2)return;
   routePolyline?.setMap(null);
-  routePolyline=new google.maps.Polyline({map:googleMap,path,geodesic:true,strokeColor:'#08785a',strokeOpacity:.9,strokeWeight:4,zIndex:1100});
+  routePolyline=new google.maps.Polyline({map:googleMap,path:roadPath,geodesic:false,strokeColor:'#08785a',strokeOpacity:.95,strokeWeight:5,zIndex:1100});
   const bounds=new google.maps.LatLngBounds();
-  path.forEach(point=>bounds.extend(point));
-  if(path.length>1)googleMap.fitBounds(bounds,64);
-  document.getElementById('routeModal').hidden=true;
-  toast(`${routeBusinesses.length} paradas trazadas en Nova Maps`);
+  roadPath.forEach(point=>bounds.extend(point));
+  googleMap.fitBounds(bounds,64);
+  if(options.closeModal!==false)document.getElementById('routeModal').hidden=true;
+  toast(`${routeBusinesses.length} paradas trazadas por carretera`);
 }
 function openRouteStop(index){
   const stop=routeBusinesses[index];
@@ -2605,7 +2862,7 @@ async function saveRouteAssignment(){
     routeBusinesses.forEach(business=>{stateOf(business).routeId=activeRemoteRouteId});
     persistCommercial();persistRoute();document.getElementById('routeModal').hidden=true;
     toast(isExisting?'Ruta actualizada en el ERP':'Ruta guardada en el ERP');
-  }catch(error){console.warn('No se pudo persistir la ruta en el ERP',error);toast('El ERP rechazó guardar la ruta');}
+  }catch(error){console.warn('No se pudo persistir la ruta en el ERP',error);toast(`No se pudo guardar la ruta: ${error?.message || 'el ERP rechazó la operación'}`);}
 }
 function addSelectedToRoute(){
   if(!requireForceSales('createRoute'))return;
@@ -2716,7 +2973,7 @@ function updateOfflineStatus(){
   if(!label)return;
   label.textContent=navigator.onLine?'Conectado · los cambios se sincronizan con NovaHub':'Modo offline · cambios, ubicación y evidencias quedan en cola local';
 }
-window.addEventListener('online',()=>{updateOfflineStatus();flushOutbox().finally(()=>loadRemoteProspects());loadSellerPresence();startPresenceWatch()});
+window.addEventListener('online',()=>{updateOfflineStatus();flushOutbox().finally(()=>loadRemoteProspects()).finally(()=>loadRemoteRoutes());loadSellerPresence();startPresenceWatch()});
 window.addEventListener('offline',updateOfflineStatus);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&navigator.onLine){loadSellerPresence();startPresenceWatch()}else if(document.visibilityState!=='visible')stopPresenceWatch()});
 window.setInterval(()=>{
@@ -2728,11 +2985,11 @@ window.setInterval(()=>{
     loadSellerPresence();
     if(Date.now()-lastOutboxFlushAt>=10000){
       lastOutboxFlushAt=Date.now();
-      flushOutbox().finally(()=>loadRemoteProspects());
+      flushOutbox().finally(()=>loadRemoteProspects()).finally(()=>loadRemoteRoutes());
     }
     if(Date.now()-lastRemoteRefreshAt>=12000){
       lastRemoteRefreshAt=Date.now();
-      loadRemoteProspects();
+      loadRemoteProspects().finally(()=>loadRemoteRoutes());
     }
   },3000);
 
