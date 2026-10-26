@@ -132,10 +132,13 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
   const [isTenantDialogOpen, setIsTenantDialogOpen] = useState(false);
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
+  const [isCreateTenantUserDialogOpen, setIsCreateTenantUserDialogOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
   const [tenantUsers, setTenantUsers] = useState<any[]>([]);
+  const [tenantUserForm, setTenantUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
+  const [creatingTenantUser, setCreatingTenantUser] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [tenantDetails, setTenantDetails] = useState<any>(null);
@@ -381,6 +384,46 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
   const handleViewDetails = async (tenant: any) => {
     setTenantDetails(tenant);
     setIsDetailsDialogOpen(true);
+  };
+
+  const handleOpenCreateTenantUser = () => {
+    if (!selectedTenant || !canPerform('CONFIG_USERS', 'create')) return;
+    setTenantUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
+    setIsUserDialogOpen(false);
+    setIsCreateTenantUserDialogOpen(true);
+  };
+
+  const handleCreateTenantUser = async () => {
+    if (!selectedTenant || !canPerform('CONFIG_USERS', 'create')) return;
+    const name = tenantUserForm.name.trim();
+    const email = normalizeEmail(tenantUserForm.email);
+    const passwordError = getPasswordError(tenantUserForm.password);
+
+    if (!name || !isValidEmail(email) || passwordError) {
+      toast.error(passwordError || 'Completa nombre y un correo válido');
+      return;
+    }
+
+    try {
+      setCreatingTenantUser(true);
+      const response: any = await tenantsService.addUser({
+        clientTenantId: selectedTenant.id,
+        name,
+        email,
+        password: tenantUserForm.password,
+        role: tenantUserForm.role,
+      });
+      const createdUser = response?.data || response;
+      setTenantUsers((current) => createdUser?.id ? [...current, createdUser] : current);
+      toast.success(`Usuario creado en ${selectedTenant.name}`);
+      setTenantUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
+      setIsCreateTenantUserDialogOpen(false);
+      await fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo crear el usuario');
+    } finally {
+      setCreatingTenantUser(false);
+    }
   };
 
   const resetTenantForm = () => {
@@ -1217,8 +1260,79 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
               </div>
             )) : <p className="text-center py-10 text-muted-foreground italic text-xs">No hay usuarios registrados</p>}
           </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            {canPerform('CONFIG_USERS', 'create') && <Button className="w-full rounded-xl sm:w-auto" onClick={handleOpenCreateTenantUser}>
+              <Plus className="mr-2 size-4" /> Crear usuario
+            </Button>}
+            <Button variant="outline" className="w-full rounded-xl sm:w-auto" onClick={() => setIsUserDialogOpen(false)}>Cerrar Panel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCreateTenantUserDialogOpen} onOpenChange={setIsCreateTenantUserDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-black">
+              <Users className="size-5 text-primary" /> Crear usuario
+            </DialogTitle>
+            <DialogDescription>
+              Crea un acceso operativo para {selectedTenant?.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="platform-tenant-user-name">Nombre completo</Label>
+              <Input
+                id="platform-tenant-user-name"
+                value={tenantUserForm.name}
+                onChange={(event) => setTenantUserForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="Ej: Juan Pérez"
+                disabled={creatingTenantUser}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="platform-tenant-user-email">Correo electrónico</Label>
+              <Input
+                id="platform-tenant-user-email"
+                type="email"
+                value={tenantUserForm.email}
+                onChange={(event) => setTenantUserForm((current) => ({ ...current, email: event.target.value }))}
+                placeholder="juan@empresa.com"
+                disabled={creatingTenantUser}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo de acceso</Label>
+              <Select
+                value={tenantUserForm.role}
+                onValueChange={(role) => setTenantUserForm((current) => ({ ...current, role }))}
+                disabled={creatingTenantUser}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SYSTEM_ROLE_OPTIONS.map((role) => <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="platform-tenant-user-password">Contraseña temporal</Label>
+              <Input
+                id="platform-tenant-user-password"
+                type="password"
+                value={tenantUserForm.password}
+                onChange={(event) => setTenantUserForm((current) => ({ ...current, password: event.target.value }))}
+                placeholder="8 caracteres, mayúscula, número y símbolo"
+                disabled={creatingTenantUser}
+              />
+              <PasswordRequirements value={tenantUserForm.password} />
+              {getPasswordError(tenantUserForm.password) && <p className="text-xs text-destructive">{getPasswordError(tenantUserForm.password)}</p>}
+            </div>
+          </div>
           <DialogFooter>
-            <Button variant="outline" className="w-full rounded-xl" onClick={() => setIsUserDialogOpen(false)}>Cerrar Panel</Button>
+            <Button variant="outline" onClick={() => setIsCreateTenantUserDialogOpen(false)} disabled={creatingTenantUser}>Cancelar</Button>
+            <Button onClick={() => void handleCreateTenantUser()} disabled={creatingTenantUser || !tenantUserForm.name.trim() || !isValidEmail(tenantUserForm.email) || !!getPasswordError(tenantUserForm.password)}>
+              {creatingTenantUser ? 'Creando...' : 'Crear usuario'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -310,7 +310,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 <div class="modal-backdrop" id="routeModal" hidden>
  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="routeTitle">
   <h2 id="routeTitle">Planificar ruta comercial</h2>
-  <p id="routeDescription">Organiza hasta 30 prospectos, define el orden de visita y abre cada parada directamente en Waze.</p>
+  <p id="routeDescription">Organiza la cantidad de clientes que necesites, define el orden de visita y abre cada parada directamente en Waze.</p>
   <div class="route-summary"><div class="route-stat"><b id="routeStopCount">0</b><span>Paradas</span></div><div class="route-stat"><b id="routeCompletedCount">0</b><span>Completadas</span></div><div class="route-stat"><b id="routeNextStop">—</b><span>Siguiente</span></div></div>
   <div class="route-progress"><span id="routeProgressBar" style="width:0%"></span></div>
   <div class="route-toolbar"><span>Orden de visita · sin límite fijo</span><button id="routeImport" type="button">Importar clientes / rutas</button><button id="routeClear" type="button">Limpiar ruta</button></div>
@@ -1787,12 +1787,17 @@ async function locationPermissionState(){
   if(!navigator.permissions?.query)return 'prompt';
   try{return (await navigator.permissions.query({name:'geolocation'})).state}catch(error){return 'prompt'}
 }
-async function withLocationAccess(onSuccess,onFailure){
-  if(!navigator.geolocation){toast('Este dispositivo no permite obtener ubicación');return}
-  if(await locationPermissionState()==='denied'){showLocationHelp();return}
+async function withLocationAccess(onSuccess,onFailure,onFallback){
+  if(!navigator.geolocation){onFallback?.();return}
+  if(await locationPermissionState()==='denied'){
+    if(onFallback){onFallback();return}
+    showLocationHelp();
+    return
+  }
   navigator.geolocation.getCurrentPosition(onSuccess,error=>{
-    if(error?.code===1){showLocationHelp();return}
-    if(error?.code===3){toast('La ubicación tardó demasiado. Acerca el teléfono al exterior e inténtalo de nuevo');return}
+    if(error?.code===1){if(onFallback){onFallback();return}showLocationHelp();return}
+    if(error?.code===3){if(onFallback){onFallback();return}toast('La ubicación tardó demasiado. Acerca el teléfono al exterior e inténtalo de nuevo');return}
+    if(onFallback){onFallback();return}
     toast(onFailure || 'No se pudo obtener la ubicación. Revisa el permiso del navegador.')
   },{enableHighAccuracy:true,timeout:12000,maximumAge:30000});
 }
@@ -1839,7 +1844,7 @@ function openQuickPointAt(lat,lng,source='mapa'){
   panel.hidden=false;
   resetQuickCapture();
   panel.hidden=false;
-  window.setTimeout(beginQuickPointCapture,80);
+  nameInput.focus();
 }
 function openQuickPointFromDevice(){
   toast('Obteniendo tu ubicación…');
@@ -1848,7 +1853,13 @@ function openQuickPointFromDevice(){
     googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
     googleMap.setZoom(17);
     openQuickPointAt(position.coords.latitude,position.coords.longitude,'ubicación actual');
-  },'No se pudo capturar la ubicación para marcar el negocio');
+  },'No se pudo capturar la ubicación; puedes marcar el cliente directamente en el mapa',()=>{
+    const center=googleMap.getCenter?.();
+    const lat=typeof center?.lat==='function'?center.lat():Number(center?.lat);
+    const lng=typeof center?.lng==='function'?center.lng():Number(center?.lng);
+    if(Number.isFinite(lat)&&Number.isFinite(lng))openQuickPointAt(lat,lng,'centro del mapa');
+    else toast('Haz clic en el mapa para marcar el cliente');
+  });
 }
 function saveQuickPoint(){
   if(!requireForceSales('importProspects'))return;
