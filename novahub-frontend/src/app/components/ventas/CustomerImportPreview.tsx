@@ -32,6 +32,8 @@ export type CustomerImportRow = {
   department: string;
   country: string;
   countryCode: string;
+  createdAt: string;
+  createdAtError?: boolean;
   creditLimit: number | '';
   creditLimitCurrency: 'NIO' | 'USD';
   creditLimitCurrencyError?: boolean;
@@ -159,6 +161,7 @@ function CustomerImportMobileCard({
             <SelectContent><SelectItem value="INDIVIDUAL">Particular</SelectItem><SelectItem value="COMPANY">Empresa</SelectItem></SelectContent>
           </Select>
         </ImportField>
+        <ImportField label="Fecha de ingreso"><Input className={fieldClass} type="date" value={row.createdAt} onChange={(event) => update('createdAt', event.target.value)} disabled={importing} /></ImportField>
         {row.type === 'COMPANY' && <ImportField label="Nombre de empresa" className="sm:col-span-2"><Input className={fieldClass} value={row.companyName} onChange={(event) => update('companyName', event.target.value)} disabled={importing} /></ImportField>}
         <ImportField label="Régimen fiscal">
           <Input className={fieldClass} value={row.fiscalRegime} placeholder="General" onChange={(event) => update('fiscalRegime', event.target.value)} disabled={importing} />
@@ -241,7 +244,7 @@ export function CustomerImportPreview({
   });
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
-  const gridTemplate = '80px 288px 160px 224px 192px 224px 192px 176px 256px 176px 176px 288px 160px 192px 160px 176px 144px 160px 144px 144px 144px 288px';
+  const gridTemplate = '80px 288px 160px 160px 224px 192px 224px 192px 176px 256px 176px 176px 288px 160px 192px 160px 176px 144px 160px 144px 144px 144px 288px';
   const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 58);
   const validRows = rows.filter((row) => !row.error).length;
   const errorRows = rows.filter((row) => row.error).length;
@@ -309,11 +312,12 @@ export function CustomerImportPreview({
 
         {!historyOnly && <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex">
           <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 flex-1" tableClassName="scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="overflow-visible" containerStyle={{ width: '4200px', minWidth: '4200px', maxWidth: 'none' }} className="block w-[4200px] min-w-[4200px]">
+          <Table containerClassName="overflow-visible" containerStyle={{ width: '4400px', minWidth: '4400px', maxWidth: 'none' }} className="block w-[4400px] min-w-[4400px]">
             <TableHeader className="sticky top-0 z-10 block bg-muted/95 backdrop-blur">
               <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
                 <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Estado</TableHead>
                 <TableHead className="w-72 min-w-72 whitespace-nowrap">Nombre *</TableHead>
+                <TableHead className="w-40 min-w-40 whitespace-nowrap">Fecha de ingreso</TableHead>
                 <TableHead className="w-40 min-w-40 whitespace-nowrap">Tipo *</TableHead>
                 <TableHead className="w-56 min-w-56 whitespace-nowrap">Nombre de empresa</TableHead>
                 <TableHead className="w-48 min-w-48 whitespace-nowrap">Régimen fiscal</TableHead>
@@ -344,6 +348,7 @@ export function CustomerImportPreview({
                 <TableRow key={virtualRow.key} ref={tableVirtualizer.measureElement} data-index={virtualRow.index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row.warning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                   <TableCell><Input className={fieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={fieldClass} type="date" aria-label={`Fecha de ingreso de ${row.name || `fila ${index + 1}`}`} value={row.createdAt} onChange={(event) => onRowUpdate(index, 'createdAt', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Select value={row.type} onValueChange={(value) => onRowUpdate(index, 'type', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="INDIVIDUAL">Particular</SelectItem><SelectItem value="COMPANY">Empresa</SelectItem></SelectContent></Select></TableCell>
                   <TableCell>{row.type === 'COMPANY' && <Input className={fieldClass} value={row.companyName} onChange={(event) => onRowUpdate(index, 'companyName', event.target.value)} disabled={importing} />}</TableCell>
                   <TableCell><Input className={fieldClass} value={row.fiscalRegime} placeholder="General" onChange={(event) => onRowUpdate(index, 'fiscalRegime', event.target.value)} disabled={importing} /></TableCell>
@@ -379,7 +384,7 @@ export function CustomerImportPreview({
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
           </div>
           <div className="flex min-h-0 flex-1 flex-col">
-            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={540} overscan={2} className="pt-3 pr-1" renderItem={(index) => <div className="pb-3"><CustomerImportMobileCard row={rows[index]} index={index} priceLists={priceLists} countries={countryOptions} importing={importing} onRowUpdate={onRowUpdate} /></div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={600} overscan={2} className="pt-3 pr-1" renderItem={(index) => <div className="pb-3"><CustomerImportMobileCard row={rows[index]} index={index} priceLists={priceLists} countries={countryOptions} importing={importing} onRowUpdate={onRowUpdate} /></div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
           </div>
         </section>}
 

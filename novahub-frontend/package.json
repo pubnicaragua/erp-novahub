@@ -12,6 +12,7 @@
     "test:manager-consolidation-views": "node --experimental-strip-types e2e/scripts/test-manager-consolidation-views.mjs",
     "test:pdf-templates": "node scripts/test-pdf-templates.mjs",
     "test:customer-history-import": "node --experimental-strip-types scripts/test-customer-history-import.mjs",
+    "test:customer-import-date": "node --experimental-strip-types scripts/test-customer-import-date.mjs",
     "test:sales-import-templates": "node --experimental-strip-types scripts/test-sales-import-templates.mjs",
     "test:sales-stock": "node --experimental-strip-types e2e/scripts/test-sales-stock.mjs",
     "architecture:check": "depcruise --config .dependency-cruiser.cjs src",
