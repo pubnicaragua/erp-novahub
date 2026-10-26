@@ -171,6 +171,10 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [userEmailError, setUserEmailError] = useState('');
   const [checkingUserEmail, setCheckingUserEmail] = useState(false);
+  const userEmailFormatError = userForm.email.trim() && !isValidEmail(userForm.email)
+    ? 'Escribe un correo válido, por ejemplo nombre@empresa.com.'
+    : '';
+  const userEmailFeedback = userEmailError || userEmailFormatError;
   const [userDialogMode, setUserDialogMode] = useState<'plain' | 'withEmployee'>('plain');
   const [selectedCreateEmployeeId, setSelectedCreateEmployeeId] = useState('');
   const [activeTab, setActiveTab] = useState('general');
@@ -1179,10 +1183,16 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                 placeholder="juan@empresa.com" 
                 value={userForm.email}
                 onChange={e => setUserForm({...userForm, email: e.target.value})}
-                aria-invalid={!!userEmailError}
-                className={cn('bg-muted/10 h-11', userEmailError && 'border-destructive')}
+                aria-invalid={!!userEmailFeedback}
+                className={cn('bg-muted/10 h-11', userEmailFeedback && 'border-destructive')}
               />
-              {userEmailError && <p className="text-xs text-destructive">{userEmailError}</p>}
+              {userEmailFeedback ? (
+                <p className="text-xs text-destructive" role="alert">{userEmailFeedback}</p>
+              ) : checkingUserEmail ? (
+                <p className="text-xs text-muted-foreground" role="status">Verificando disponibilidad del correo...</p>
+              ) : !userForm.email.trim() ? (
+                <p className="text-xs text-muted-foreground">Escribe un correo con formato nombre@empresa.com para habilitar la creación.</p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo de Acceso</Label>
