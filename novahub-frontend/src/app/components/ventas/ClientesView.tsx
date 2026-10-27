@@ -104,7 +104,7 @@ const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO', coun
   country, countryCode, creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE',
 });
 
-const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'status', 'createdAt'];
+const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'createdAt', 'status'];
 
 type CustomerColumnPreferences = string[] | { version: 1; keys: string[] };
 
@@ -988,7 +988,6 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   };
 
   const columns: ColumnDef<Customer>[] = [
-    { key: 'createdAt', header: 'Fecha de ingreso', width: '140px', render: (value) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(value)}</span> },
     { 
       key: 'code', 
       header: 'ID / Código',
@@ -1082,6 +1081,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         );
       },
     },
+    { key: 'createdAt', header: 'Fecha de ingreso', width: '140px', render: (value) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(value)}</span> },
     { 
       key: 'status', 
       header: 'Estado', 
@@ -1120,7 +1120,6 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     }))
     : [{ title: 'Cartera pendiente', value: formatConvertedAmount(totalDue, baseCurrency) }];
   const columnOptions = [
-    { key: 'createdAt', label: 'Fecha de ingreso' },
     { key: 'code', label: 'Código' },
     { key: 'name', label: 'Nombre' },
     { key: 'taxId', label: 'Cédula' },
@@ -1134,6 +1133,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     { key: 'creditLimit', label: 'Límite de crédito' },
     { key: 'creditDays', label: 'Plazo crédito' },
     { key: 'balance', label: 'Saldos del cliente' },
+    { key: 'createdAt', label: 'Fecha de ingreso' },
     { key: 'status', label: 'Estado' },
   ];
   const renderHistoryColumnSelector = (field: CustomerHistoryColumn, label: string, required = false) => (
