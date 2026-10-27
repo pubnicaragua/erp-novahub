@@ -21,7 +21,7 @@ button,input,select,textarea{font:inherit}
 .brand{padding:18px;background:radial-gradient(circle at 82% 12%,rgba(96,225,178,.28),transparent 34%),linear-gradient(145deg,#0b2f29,#08705a);color:white}
 .topline{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .logo{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800}
-.logoicon{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#72e5ba,#c0ffe5);display:grid;place-items:center;color:#0b493d;overflow:hidden}.logoicon img{width:100%;height:100%;object-fit:contain;padding:2px}
+.logoicon{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,#72e5ba,#c0ffe5);display:grid;place-items:center;color:#0b493d;overflow:hidden;box-shadow:0 5px 14px rgba(0,0,0,.16)}.logoicon img{width:100%;height:100%;object-fit:contain;padding:4px}
 .badge{font-size:9px;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:6px 8px;background:rgba(255,255,255,.10)}
 .brand h1{font-size:21px;line-height:1.15;margin:14px 0 6px;letter-spacing:-.5px}
 .brand p{font-size:10px;line-height:1.5;margin:0;color:rgba(255,255,255,.75)}
@@ -135,7 +135,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .brand{padding:10px 14px 11px;border-radius:22px 22px 0 0}
  .brand h1{font-size:15px;margin:8px 0 2px}
  .brand p{font-size:9px}
- .logo{font-size:10px;gap:6px}.logoicon{width:25px;height:25px;border-radius:8px}
+ .logo{font-size:10px;gap:7px}.logoicon{width:38px;height:38px;border-radius:10px}
  .badge{font-size:7.5px;padding:5px 7px}
  .scroll{padding:10px 11px 18px;overscroll-behavior-y:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}
  .kpis{display:flex;gap:5px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}.kpis::-webkit-scrollbar{display:none}.kpi{flex:0 0 84px;padding:7px 6px;border-radius:11px}.kpi b{font-size:15px}.kpi span{font-size:7px}
@@ -593,7 +593,7 @@ function applyForceSalesPermissionVisibility(){
     clearCatalog: 'delete',
     zoneManager: 'assignProspect', bulkKanban: 'changeStage', bulkRoute: 'createRoute', bulkVisit: 'registerVisit', bulkWhatsApp: 'send', bulkDiscard: 'discardProspect',
     routeImport: 'importProspects', routeImportQuick: 'importProspects', routePlannerQuick: ['createRoute', 'editRoute', 'assignRoute'], routeClear: 'editRoute', routeOptimize: 'editRoute', routeCompleteStop: 'completeRouteStop', routeSave: ['createRoute', 'editRoute'],
-    routeAssignee: 'assignRoute', zoneAssign: 'assignProspect', quickCaptureTakePhoto: 'attachEvidence', quickCaptureRetake: 'attachEvidence',
+    routeAssignee: 'assignRoute', zoneAssign: 'assignProspect', quickCaptureTakePhoto: ['attachEvidence', 'importProspects'], quickCaptureRetake: ['attachEvidence', 'importProspects'],
     quickCaptureSave: 'importProspects',
   };
   Object.entries(visibility).forEach(([id, action])=>{
@@ -726,6 +726,13 @@ if(NOVAHUB_ISOTIPO_URL){
   const brandIcon=document.querySelector('.logoicon');
   if(brandIcon) brandIcon.innerHTML=`<img src="${esc(NOVAHUB_ISOTIPO_URL)}" alt="NovaHub">`;
 }
+function setCompanyLogo(uri){
+  const brandIcon=document.querySelector('.logoicon');
+  const logo=String(uri || '').trim();
+  if(!brandIcon)return;
+  brandIcon.innerHTML=logo ? `<img src="${esc(logo)}" alt="Logo de la empresa">` : '<span>NH</span>';
+}
+setCompanyLogo(ROUTE_LOGO_URI);
 
 if(!window.google?.maps?.Map){
   window.__novaShowMapError('Nova Maps no está disponible. Verifica la clave y el origen actual del ERP.');
@@ -1001,6 +1008,7 @@ async function loadForceSalesConfiguration(){
     forceSalesConfig=await forceSalesRequest('/force-sales/config');
     lastForceSalesConfigRefreshAt=Date.now();
     ROUTE_LOGO_URI=forceSalesConfig?.routeLogoUri || mapQuery.get('companyLogo') || NOVAHUB_ISOTIPO_URL;
+    setCompanyLogo(ROUTE_LOGO_URI);
     LOCATION_REQUIRED=forceSalesConfig?.locationRequiredNow ?? forceSalesConfig?.locationRequired===true;
     CAN_SHARE_PRESENCE=forceSalesConfig?.canDisableLocation!==false;
     CAN_MANAGE_CONFIGURATION=forceSalesConfig?.canManageConfiguration===true;
@@ -1247,7 +1255,7 @@ async function readOfflineProspects(){
   try{return (await offlineTransaction('readonly',store=>store.getAll())) || []}catch(error){console.warn('No se pudo leer la cola offline',error);return []}
 }
 async function uploadEvidence(file){
-  if(!requireForceSales('attachEvidence'))throw new Error('No tienes permiso para adjuntar evidencia');
+  if(!canForceSales('attachEvidence')&&!canForceSales('importProspects'))throw new Error('No tienes permiso para adjuntar evidencia');
   const metadata=await forceSalesRequest('/storage/uploads/force-sales-evidence',{method:'POST',body:JSON.stringify({fileName:file.name,mimeType:file.type || 'application/octet-stream',size:file.size})});
   if(!metadata?.signedUrl || !metadata?.uri) throw new Error('El ERP no autorizó la subida de evidencia');
   const upload=await fetch(metadata.signedUrl,{method:'PUT',headers:{'Content-Type':file.type || 'application/octet-stream'},body:file});
@@ -1329,7 +1337,7 @@ async function syncProspects(list, evidenceFile=null){
   const items=list.filter(Boolean);
   if(!items.length) return null;
   const pendingEvidence=evidenceFile;
-  if(pendingEvidence && !requireForceSales('attachEvidence'))return null;
+  if(pendingEvidence && !canForceSales('attachEvidence')&&!canForceSales('importProspects')){toast('Tu rol no tiene permiso para subir imágenes');return null}
   const syncable=items.filter(item=>{
     const state=stateOf(item);
     return state.remoteId ? canForceSales('updateProspect') || Boolean(pendingEvidence&&canForceSales('attachEvidence')) : canForceSales('importProspects');
@@ -1818,7 +1826,7 @@ function resetQuickCapture(){
   if(panel)panel.hidden=true;
 }
 function beginQuickPointCapture(){
-  if(!requireForceSales('attachEvidence'))return;
+  if(!canForceSales('attachEvidence')&&!canForceSales('importProspects')){toast('Tu rol no tiene permiso para subir imágenes');return}
   const input=document.getElementById('quickEvidenceInput');
   if(!input){toast('La cámara no está disponible en este dispositivo');return}
   pendingQuickPointPhoto=true;
@@ -1878,7 +1886,7 @@ function saveQuickPoint(){
 }
 function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',details={},evidenceFile=null){
   if(!requireForceSales('importProspects'))return;
-  if(evidenceFile && !requireForceSales('attachEvidence'))return;
+  if(evidenceFile && !canForceSales('attachEvidence')&&!canForceSales('importProspects')){toast('Tu rol no tiene permiso para subir imágenes');return}
   const coords={lat:Number(lat),lng:Number(lng)};
   if(!Number.isFinite(coords.lat)||!Number.isFinite(coords.lng))return;
   const id=`quick-${Date.now()}`;
@@ -2134,7 +2142,7 @@ document.getElementById('quickEvidenceInput')?.addEventListener('change',async e
   const file=input.files?.[0];
   if(pendingQuickPointPhoto){
     pendingQuickPointPhoto=false;
-    if(!requireForceSales('attachEvidence'))return;
+    if(!canForceSales('attachEvidence')&&!canForceSales('importProspects')){toast('Tu rol no tiene permiso para subir imágenes');return}
     if(!file){toast('Toma una foto para registrar el punto');return}
     if(!file.type.startsWith('image/')){toast('Para un punto nuevo toma una foto desde la cámara');return}
     if(file.size>10*1024*1024){toast('La evidencia supera el límite de 10 MB');return}
