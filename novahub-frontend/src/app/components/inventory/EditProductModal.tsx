@@ -16,15 +16,18 @@ interface EditProductModalProps {
   product: any | null;
   categories: any[];
   itemType?: 'PRODUCT' | 'SERVICE';
+  baseCurrency: string;
+  exchangeRate: number;
   onClose: () => void;
   onRefresh: () => void;
 }
 
-export function EditProductModal({ product, categories, itemType = 'PRODUCT', onClose, onRefresh }: EditProductModalProps) {
+export function EditProductModal({ product, categories, itemType = 'PRODUCT', baseCurrency, exchangeRate, onClose, onRefresh }: EditProductModalProps) {
   const [draft, setDraft] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
   const isService = itemType === 'SERVICE' || String(product?.itemType || product?.type || '').toUpperCase() === 'SERVICE';
+  const tenantBaseCurrency = String(baseCurrency || 'NIO').toUpperCase();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -55,7 +58,9 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', on
             product.serialNumberTracking ||
             String(product.trackingType || '').toUpperCase() === 'SERIAL',
           ),
-          itemType: (product.itemType || 'PRODUCT').toUpperCase(),
+          itemType: String(product.itemType || product.type || itemType || 'PRODUCT').toUpperCase(),
+          salePrice: product.salePriceOriginal ?? product.salePrice ?? 0,
+          priceCurrency: String(product.priceCurrency || tenantBaseCurrency).toUpperCase(),
           isActive: product.isActive !== false,
           unit: product.unit || 'unidad',
           imageUrl: product.imageUrl,
@@ -77,7 +82,7 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', on
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [product]);
+  }, [product, itemType, isService, tenantBaseCurrency]);
 
   useEffect(() => {
     if (!product) return;
@@ -171,6 +176,12 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', on
       return;
     }
 
+    const servicePrice = Number(draft.salePrice);
+    if (isService && (draft.salePrice === '' || !Number.isFinite(servicePrice) || servicePrice < 0)) {
+      toast.error('Ingresa un precio válido mayor o igual a cero');
+      return;
+    }
+
     setIsSaving(true);
     const actionToken = beginNotificationAction();
     let uploadedImageUri: string | undefined;
@@ -182,6 +193,19 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', on
         uploadedImageUri = uploaded.uri;
       }
       const nextImageUrl = uploadedImageUri ?? (draft.removeImage ? null : (draft.imageStorageUri || draft.imageUrl));
+      const priceCurrency = String(draft.priceCurrency || tenantBaseCurrency).toUpperCase();
+      const currentExchangeRate = Number(exchangeRate);
+      const storedExchangeRate = Number(product.priceExchangeRate);
+      const appliedExchangeRate = priceCurrency === tenantBaseCurrency
+        ? 1
+        : currentExchangeRate > 0
+          ? currentExchangeRate
+          : storedExchangeRate > 0 ? storedExchangeRate : 1;
+      const baseServicePrice = priceCurrency === tenantBaseCurrency
+        ? servicePrice
+        : priceCurrency === 'USD'
+          ? servicePrice * appliedExchangeRate
+          : servicePrice / appliedExchangeRate;
 
       await inventoryService.updateProduct(draft.id, {
         code: draft.code,
@@ -190,13 +214,19 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', on
         commercialNote: draft.commercialNote || '',
         categoryId: draft.categoryId,
         trackSerialNumbers: Boolean(draft.trackSerialNumbers),
-        itemType: draft.itemType || 'PRODUCT',
+        itemType: draft.itemType || itemType || 'PRODUCT',
         isVariable: Boolean(draft.isVariable),
-        isActive: draft.isActive !== false,
+        ...(draft.isActive !== (product.isActive !== false) ? { isActive: draft.isActive !== false } : {}),
         unit: draft.unit,
         brand: draft.brand || '',
         trackBatch: Boolean(draft.trackBatch),
         imageUrl: nextImageUrl,
+        ...(isService ? {
+          salePrice: baseServicePrice,
+          salePriceOriginal: servicePrice,
+          priceCurrency,
+          priceExchangeRate: appliedExchangeRate,
+        } : {}),
         attributeIds: draft.attributeIds?.length > 0 ? draft.attributeIds : [],
         linkedAttributes: draft.linkedAttributes?.length > 0 ? draft.linkedAttributes : [],
       });
@@ -305,6 +335,22 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', on
                   </SelectContent>
                 </Select>
               </div>
+
+              {isService && (
+                <div className="col-span-1 sm:col-span-2 md:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio del servicio ({draft.priceCurrency || tenantBaseCurrency}) *</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={draft.salePrice}
+                    onChange={(event) => handleUpdate('salePrice', event.target.value)}
+                    className="mt-1 h-8 text-xs text-right tabular-nums"
+                    aria-label={`Precio del servicio en ${draft.priceCurrency || tenantBaseCurrency}`}
+                    disabled={isSaving}
+                  />
+                </div>
+              )}
 
               {!isService && (
                 <div className="col-span-1">

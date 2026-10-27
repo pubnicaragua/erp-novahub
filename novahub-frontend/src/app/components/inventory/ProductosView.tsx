@@ -4946,6 +4946,8 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
         product={modalProduct}
         categories={categories}
         itemType={catalogItemType}
+        baseCurrency={baseCurrency}
+        exchangeRate={Number(exchangeRate || 1)}
         onClose={() => setModalProduct(null)}
         onRefresh={onRefresh}
       />
