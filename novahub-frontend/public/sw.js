@@ -2,6 +2,8 @@ const CACHE_PREFIX = 'novahub-shell-';
 const BUILD_ID = new URL(self.location.href).searchParams.get('v') || 'unversioned';
 const CACHE_NAME = `${CACHE_PREFIX}${BUILD_ID}`;
 const STATIC_DESTINATIONS = new Set(['script', 'style', 'image', 'font', 'manifest']);
+const LOCATION_DB_NAME = 'novahub-force-sales-location-v1';
+const LOCATION_SYNC_TAG = 'novahub-force-sales-location-points';
 
 function contentType(response) {
   return (response.headers.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
@@ -90,6 +92,87 @@ self.addEventListener('notificationclick', (event) => {
     }
     await self.clients.openWindow(targetUrl);
   })());
+});
+
+function openLocationDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(LOCATION_DB_NAME, 1);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Location queue is unavailable'));
+  });
+}
+
+function idbRequest(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Location queue read failed'));
+  });
+}
+
+function idbTransactionDone(transaction) {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = resolve;
+    transaction.onabort = () => reject(transaction.error || new Error('Location queue write failed'));
+    transaction.onerror = () => reject(transaction.error || new Error('Location queue write failed'));
+  });
+}
+
+async function replayLocationPoints() {
+  const database = await openLocationDatabase();
+  try {
+    const read = database.transaction(['points', 'sessions'], 'readonly');
+    const sessionsPromise = idbRequest(read.objectStore('sessions').getAll());
+    const pointsPromise = idbRequest(read.objectStore('points').getAll());
+    const [sessions, points] = await Promise.all([sessionsPromise, pointsPromise]);
+    for (const session of sessions) {
+      if (!session.active || !session.accessToken) continue;
+      const scopedPoints = points
+        .filter((point) => point.scopeKey === session.scopeKey)
+        .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
+      if (!scopedPoints.length) continue;
+      let remaining = scopedPoints.length;
+      for (let offset = 0; offset < scopedPoints.length && offset < 1000; offset += 200) {
+        const batch = scopedPoints.slice(offset, offset + 200);
+        const response = await fetch(`${session.apiBase}/force-sales/location-points/batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.accessToken}` },
+          body: JSON.stringify({ points: batch.map(({ key: _key, scopeKey: _scope, storedAt: _stored, ...point }) => point) }),
+          cache: 'no-store',
+        });
+        if (response.status === 401 || response.status === 403) {
+          const write = database.transaction('sessions', 'readwrite');
+          write.objectStore('sessions').put({ ...session, active: false, accessToken: null });
+          await idbTransactionDone(write);
+          break;
+        }
+        if (!response.ok) throw new Error(`Location sync failed with HTTP ${response.status}`);
+        const payload = await response.json();
+        const accepted = new Set(Array.isArray(payload.acceptedIds) ? payload.acceptedIds : []);
+        if (!accepted.size) throw new Error('Location server did not confirm the batch');
+        const write = database.transaction(['points', 'sessions'], 'readwrite');
+        const pointStore = write.objectStore('points');
+        for (const point of batch) if (accepted.has(point.eventId)) pointStore.delete(point.key);
+        const sessionStore = write.objectStore('sessions');
+        const sessionRequest = sessionStore.get(session.scopeKey);
+        sessionRequest.onsuccess = () => {
+          const current = sessionRequest.result;
+          if (current?.active) sessionStore.put({ ...current, lastSyncedAt: new Date().toISOString() });
+        };
+        await idbTransactionDone(write);
+        remaining -= accepted.size;
+      }
+      if (remaining > 0 && session.active && session.accessToken) {
+        const registration = self.registration;
+        if (registration.sync?.register) await registration.sync.register(LOCATION_SYNC_TAG);
+      }
+    }
+  } finally {
+    database.close();
+  }
+}
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === LOCATION_SYNC_TAG) event.waitUntil(replayLocationPoints());
 });
 
 async function cacheStatic(request) {

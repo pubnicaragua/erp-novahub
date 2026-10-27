@@ -10,6 +10,7 @@ import mapUrl from '../../../maps/diseñoui_mapas_freelancers.html?url';
 export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: string; onSubModuleChange?: (value: string) => void }) {
   const { user, hasAccess, canPerform } = useAuth();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const mapSectionRef = useRef<HTMLElement>(null);
   const routeImportInputRef = useRef<HTMLInputElement>(null);
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [mapConfig, setMapConfig] = useState<{ mapProvider?: string; mapSearchMode?: string; mapTileUrl?: string | null; mapGeocoderUrl?: string | null } | null>(null);
@@ -41,11 +42,84 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
 
   const mapProvider = String(mapConfig?.mapProvider || 'GOOGLE').toUpperCase();
   const mapSearchMode = String(mapConfig?.mapSearchMode || 'EXTERNAL').toUpperCase();
-  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(tenantLogo)}&companyLogo=${encodeURIComponent(tenantLogo)}&view=${view}&userId=${encodeURIComponent(user?.id || '')}&tenantId=${encodeURIComponent(user?.clientTenantId || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&canAssignTeam=${canAssignTeam ? 'true' : 'false'}&permissions=${encodeURIComponent(JSON.stringify(workflowPermissions))}&mapId=${encodeURIComponent(googleMapsMapId)}&mapProvider=${encodeURIComponent(mapProvider)}&mapSearchMode=${encodeURIComponent(mapSearchMode)}${mapConfig?.mapTileUrl ? `&mapTileUrl=${encodeURIComponent(mapConfig.mapTileUrl)}` : ''}${mapConfig?.mapGeocoderUrl ? `&mapGeocoderUrl=${encodeURIComponent(mapConfig.mapGeocoderUrl)}` : ''}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
+  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(tenantLogo)}&companyLogo=${encodeURIComponent(tenantLogo)}&view=${view}&userId=${encodeURIComponent(user?.id || '')}&tenantId=${encodeURIComponent(user?.clientTenantId || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&canAssignTeam=${canAssignTeam ? 'true' : 'false'}&durableTracking=true&permissions=${encodeURIComponent(JSON.stringify(workflowPermissions))}&mapId=${encodeURIComponent(googleMapsMapId)}&mapProvider=${encodeURIComponent(mapProvider)}&mapSearchMode=${encodeURIComponent(mapSearchMode)}${mapConfig?.mapTileUrl ? `&mapTileUrl=${encodeURIComponent(mapConfig.mapTileUrl)}` : ''}${mapConfig?.mapGeocoderUrl ? `&mapGeocoderUrl=${encodeURIComponent(mapConfig.mapGeocoderUrl)}` : ''}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
+
+  useEffect(() => {
+    const frame = iframeRef.current;
+    const section = mapSectionRef.current;
+    if (!frame || !section) return undefined;
+
+    let scheduledFrame = 0;
+    const publishUiContext = () => {
+      scheduledFrame = 0;
+      const target = frame.contentWindow;
+      if (!target) return;
+
+      const visualViewport = window.visualViewport;
+      const viewportTop = visualViewport?.offsetTop ?? 0;
+      const viewportHeight = visualViewport?.height ?? window.innerHeight;
+      const frameBounds = frame.getBoundingClientRect();
+      const visibleTop = Math.max(frameBounds.top, viewportTop);
+      const visibleBottom = Math.min(frameBounds.bottom, viewportTop + viewportHeight);
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+      const styles = getComputedStyle(document.documentElement);
+      const color = (token: string, fallback: string) => {
+        const value = styles.getPropertyValue(token).trim();
+        return value && CSS.supports('color', value) ? value : fallback;
+      };
+
+      target.postMessage({
+        source: 'novahub-force-sales',
+        type: 'ui-context',
+        viewport: {
+          top: visibleHeight ? Math.round(visibleTop - frameBounds.top) : 0,
+          bottom: visibleHeight ? Math.round(frameBounds.bottom - visibleBottom) : 0,
+          height: Math.round(visibleHeight),
+        },
+        theme: {
+          dark: document.documentElement.classList.contains('dark'),
+          colors: {
+            background: color('--background', '#f8fafc'),
+            foreground: color('--foreground', '#11241f'),
+            card: color('--card', '#ffffff'),
+            muted: color('--muted', '#ececf0'),
+            mutedForeground: color('--muted-foreground', '#6c7c77'),
+            border: color('--border', 'rgba(0,0,0,.1)'),
+            primary: color('--primary', '#01422c'),
+          },
+        },
+      }, window.location.origin);
+    };
+    const scheduleUiContext = () => {
+      if (scheduledFrame) return;
+      scheduledFrame = requestAnimationFrame(publishUiContext);
+    };
+    const resizeObserver = new ResizeObserver(scheduleUiContext);
+    const themeObserver = new MutationObserver(scheduleUiContext);
+    resizeObserver.observe(section);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
+    window.addEventListener('resize', scheduleUiContext, { passive: true });
+    window.addEventListener('scroll', scheduleUiContext, { passive: true, capture: true });
+    window.visualViewport?.addEventListener('resize', scheduleUiContext, { passive: true });
+    window.visualViewport?.addEventListener('scroll', scheduleUiContext, { passive: true });
+    frame.addEventListener('load', scheduleUiContext);
+    scheduleUiContext();
+
+    return () => {
+      if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
+      resizeObserver.disconnect();
+      themeObserver.disconnect();
+      window.removeEventListener('resize', scheduleUiContext);
+      window.removeEventListener('scroll', scheduleUiContext, true);
+      window.visualViewport?.removeEventListener('resize', scheduleUiContext);
+      window.visualViewport?.removeEventListener('scroll', scheduleUiContext);
+      frame.removeEventListener('load', scheduleUiContext);
+    };
+  }, [mapSrc, mapFullscreen]);
 
   useEffect(() => {
     const onMapMessage = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) return;
+      if (event.source !== iframeRef.current?.contentWindow || event.origin !== window.location.origin) return;
       if (event.data?.source !== 'novahub-force-sales') return;
       if (event.data?.type === 'fullscreen') setMapFullscreen(Boolean(event.data.active));
       if (event.data?.type === 'configuration-updated') setMapConfig(event.data.configuration || {});
@@ -74,7 +148,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   }
 
   return (
-    <section className={mapFullscreen ? 'fixed inset-0 z-[100] h-[100dvh] min-h-0 overflow-hidden bg-[#e8f0ed]' : 'relative h-[calc(100dvh-4rem)] min-h-0 overflow-hidden bg-[#e8f0ed]'}>
+    <section ref={mapSectionRef} className={mapFullscreen ? 'fixed inset-0 z-[100] h-[100dvh] min-h-0 overflow-hidden bg-background' : 'relative h-[calc(100dvh-4rem)] min-h-0 overflow-hidden bg-background'}>
       <div className="pointer-events-none absolute left-4 top-4 z-10 hidden items-center gap-2 rounded-2xl border border-white/70 bg-white/90 px-3 py-2 text-xs font-bold text-[#123f35] shadow-lg backdrop-blur md:flex">
         <MapPinned className="size-4 text-[#08785a]" />
         NovaHub Force · {mapProvider === 'OPENSTREETMAP' ? 'OpenStreetMap' : mapProvider === 'CUSTOM' ? 'Mapa propio' : 'Google Maps'}

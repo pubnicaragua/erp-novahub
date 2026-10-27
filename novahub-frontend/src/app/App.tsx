@@ -36,6 +36,9 @@ import { readPersistedDarkMode } from './utils/theme-mode';
 import { useResponsiveNativeTables } from './hooks/useResponsiveNativeTables';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from './utils/sidebarPermissions';
 import { GUIDED_TOUR_REQUEST_EVENT, type GuidedTourRequestResult } from './services/guided-tour.service';
+import { ForceSalesTrackingRuntime } from './components/ForceSalesTrackingRuntime';
+import { ForceSalesOfflineTrackingFallback } from './components/ForceSalesOfflineTrackingFallback';
+import { getOfflineRouteEligibility } from './services/force-sales-location-queue';
 
 function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(loader: () => Promise<T>, moduleName: string) {
   return lazy(() => loadModuleWithChunkRecovery(loader, moduleName));
@@ -560,6 +563,12 @@ function DashboardLayout() {
         onClose={() => setSidebarOpen(false)}
         onOverview={handleOverview}
       />
+      <ForceSalesTrackingRuntime
+        activeModule={String(currentModule)}
+        user={user}
+        canTrack={hasAccess('fuerza-comercial') && canPerform('FORCE_SALES', 'updatePresence')}
+        canHide={canPerform('FORCE_SALES', 'hidePresence')}
+      />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar
           onMenuClick={() => setSidebarOpen(true)}
@@ -733,6 +742,8 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
+    const offlineRouteIdentity = getOfflineRouteEligibility();
+    if (offlineRouteIdentity) return <ForceSalesOfflineTrackingFallback identity={offlineRouteIdentity} />;
     return <LoginPage onLogin={login} />;
   }
 

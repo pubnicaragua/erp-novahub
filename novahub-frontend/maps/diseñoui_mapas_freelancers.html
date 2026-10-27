@@ -78,6 +78,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .kanban-card button{width:100%;margin-top:4px;border:1px solid #d8e9e2;border-radius:7px;background:#eff8f4;color:#08785a;padding:5px;font-size:7.5px;font-weight:800;cursor:pointer}
 .kanban-empty{grid-column:1/-1;border:1px dashed #b9d9cb;border-radius:12px;background:#f4faf7;padding:15px;text-align:center;color:#6c7c77;font-size:9px;line-height:1.45}
 .history-list{display:flex;flex-direction:column;gap:7px}.history-card{border:1px solid #dce8e3;border-radius:13px;background:white;padding:11px}.history-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.history-card h3{font-size:10px;line-height:1.3;margin:0}.history-card .history-status{font-size:7.5px;font-weight:800;color:#08785a;background:#e9f7f0;border-radius:999px;padding:4px 6px;white-space:nowrap}.history-card .meta{line-height:1.45}.history-card-actions{display:flex;gap:6px;margin-top:8px}.history-card-actions button{flex:1;border:1px solid #d8e9e2;border-radius:8px;background:#f2f8f5;color:#0b7155;padding:7px 5px;font-size:8px;font-weight:800;cursor:pointer}.history-card-actions button.primary-action{background:#123f35;color:white;border-color:#123f35}.history-empty{border:1px dashed #b9d9cb;border-radius:12px;background:#f4faf7;padding:18px;text-align:center;color:#6c7c77;font-size:9px;line-height:1.5}
+.location-trail-fields{display:grid;grid-template-columns:1fr;gap:7px;margin:10px 0}.location-trail-fields label{display:grid;gap:4px;font-size:8px;font-weight:700;color:#50615b}.location-trail-fields input,.location-trail-fields select{width:100%;min-width:0;height:32px;border:1px solid #d8e5df;border-radius:8px;background:#fff;padding:5px 7px;font:inherit;color:#123f35}.location-trail-fields button{min-height:32px;border:1px solid #123f35;border-radius:8px;background:#123f35;color:white;padding:6px 9px;font-size:8px;font-weight:800;cursor:pointer}@media(min-width:520px){.location-trail-fields{grid-template-columns:1fr 1fr auto;align-items:end}}
 .item{border:1px solid var(--line);border-radius:12px;background:white;padding:9px 10px;cursor:pointer}
 .itemtop{display:flex;gap:8px;align-items:flex-start}
 .pill{flex:0 0 24px;width:24px;height:24px;border-radius:8px;color:white;display:grid;place-items:center;font-weight:800;font-size:9px}
@@ -167,6 +168,39 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .filters{grid-template-columns:1fr}
  .badge{display:none}
 }
+/* The map is an HTML document in an iframe. The parent supplies the real
+   visible viewport, its theme tokens, and the space obscured by the keyboard. */
+:root{--nova-visible-top:0px;--nova-visible-bottom:0px;--nova-visible-height:100vh;--nova-ui-background:#e8f0ed;--nova-ui-foreground:#11241f;--nova-ui-card:#fbfdfc;--nova-ui-muted:#edf5f1;--nova-ui-muted-foreground:#6c7c77;--nova-ui-border:#dce8e3;--nova-ui-primary:#08785a;--ink:var(--nova-ui-foreground);--muted:var(--nova-ui-muted-foreground);--line:var(--nova-ui-border);--panel:var(--nova-ui-card)}
+html,body{background:var(--nova-ui-background);color:var(--nova-ui-foreground)}
+body.theme-dark{color-scheme:dark}
+body.theme-dark .sidebar,body.theme-dark .item,body.theme-dark .history-card,body.theme-dark .kanban-card,body.theme-dark .route-stop,body.theme-dark .route-stat,body.theme-dark .confirm-modal,body.theme-dark .quick-capture,body.theme-dark .search input,body.theme-dark select,body.theme-dark .quick-capture input{background:var(--nova-ui-card);color:var(--nova-ui-foreground);border-color:var(--nova-ui-border)}
+body.theme-dark .scroll,body.theme-dark .kanban-column,body.theme-dark .route-stops,body.theme-dark .evidence-preview,body.theme-dark .quick-capture-photo{background:var(--nova-ui-background);color:var(--nova-ui-foreground)}
+body.theme-dark .itemname,body.theme-dark .kanban-card b,body.theme-dark .history-card h3,body.theme-dark .route-stop b,body.theme-dark .confirm-modal h2,body.theme-dark .quick-capture h2{color:var(--nova-ui-foreground)}
+body.theme-dark .meta,body.theme-dark .quick-capture p,body.theme-dark .confirm-modal p{color:var(--nova-ui-muted-foreground)}
+body.theme-dark .stitle,body.theme-dark .workspace-heading span,body.theme-dark .resultsHead,body.theme-dark .kanban-column-head,body.theme-dark .route-toolbar,body.theme-dark .route-stat span,body.theme-dark .confirm-modal label,body.theme-dark .location-trail-fields label{color:var(--nova-ui-muted-foreground)}
+body.theme-dark .seller-summary,body.theme-dark .kanban-empty,body.theme-dark .history-empty,body.theme-dark .location-trail-fields{background:var(--nova-ui-muted);border-color:var(--nova-ui-border);color:var(--nova-ui-foreground)}
+body.theme-dark .seller-summary span,body.theme-dark .history-status{color:var(--nova-ui-muted-foreground)}
+body.theme-dark .confirm-modal select,body.theme-dark .confirm-modal textarea,body.theme-dark .confirm-modal input[type="text"],body.theme-dark .location-trail-fields input,body.theme-dark .location-trail-fields select{background:var(--nova-ui-background);border-color:var(--nova-ui-border);color:var(--nova-ui-foreground)}
+body.theme-dark .history-status{background:var(--nova-ui-muted)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--nova-ui-primary);outline-offset:2px}
+.mobile-more-actions{position:relative;display:none}.mobile-more-actions>summary{display:flex;min-height:44px;align-items:center;justify-content:center;padding:0 12px;border:1px solid rgba(25,77,63,.12);border-radius:12px;background:var(--nova-ui-card);color:var(--nova-ui-foreground);font-size:14px;font-weight:800;box-shadow:0 7px 22px rgba(18,57,47,.13);cursor:pointer;list-style:none;touch-action:manipulation}.mobile-more-actions>summary::-webkit-details-marker{display:none}.mobile-more-menu{position:absolute;right:0;top:calc(100% + 8px);display:grid;min-width:190px;gap:6px;padding:8px;border:1px solid var(--nova-ui-border);border-radius:14px;background:var(--nova-ui-card);box-shadow:0 12px 32px rgba(12,53,43,.2)}.mobile-more-menu .float{min-height:44px;background:var(--nova-ui-muted);color:var(--nova-ui-foreground);font-size:14px}
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.quick-capture{z-index:1900;max-height:calc(var(--nova-visible-height) - 24px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}.quick-capture h2{font-size:18px;line-height:1.3;overflow-wrap:anywhere}.quick-capture p{font-size:14px;line-height:1.45;overflow-wrap:anywhere}.quick-capture .quick-capture-hint{font-size:14px!important;line-height:1.45!important;color:var(--nova-ui-muted-foreground)!important}.quick-capture-grid label{display:block;margin:6px 0;color:var(--nova-ui-muted-foreground);font-size:14px;font-weight:700}.quick-capture input{height:48px;padding:0 12px;font-size:16px}.quick-capture-photo{min-width:0}.quick-capture-photo img{width:68px;height:68px;flex:none}.quick-capture-photo span{min-width:0;overflow-wrap:anywhere;font-size:13px}.quick-capture-photo button,.quick-capture-actions button{min-height:44px;font-size:14px;touch-action:manipulation}.quick-capture-actions .save{grid-column:1/-1}.quick-capture-actions .gallery{background:var(--nova-ui-muted);color:var(--nova-ui-primary)}
+.confirm-modal{max-height:calc(var(--nova-visible-height) - 24px);overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;color:var(--nova-ui-foreground);background:var(--nova-ui-card)}
+.evidence-source-picker{width:min(480px,100%)}.evidence-source-picker h2{font-size:18px}.evidence-source-picker p{font-size:14px}.evidence-source-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}.evidence-source-actions button{min-height:48px;border:1px solid var(--nova-ui-border);border-radius:12px;background:var(--nova-ui-muted);color:var(--nova-ui-foreground);padding:10px;font-size:14px;font-weight:800;touch-action:manipulation}.evidence-source-actions button:last-child{grid-column:1/-1}.evidence-source-actions .cancel{background:var(--nova-ui-background);color:var(--nova-ui-muted-foreground)}
+@media(max-width:820px){
+ .sidebar{height:var(--nova-sheet-height);max-height:var(--nova-visible-height);padding-bottom:env(safe-area-inset-bottom)}.sidebar.workspace-view{height:min(var(--nova-workspace-height),var(--nova-visible-height))}.sidebar.collapsed,.sidebar.workspace-view.collapsed{height:90px}
+ .modal-backdrop{top:calc(var(--nova-visible-top) + env(safe-area-inset-top));right:0;bottom:calc(var(--nova-visible-bottom) + env(safe-area-inset-bottom));left:0;overflow-y:auto;overscroll-behavior:contain;padding:12px max(12px,env(safe-area-inset-right)) 12px max(12px,env(safe-area-inset-left))}
+ .scroll{min-width:0;padding:12px 14px calc(24px + env(safe-area-inset-bottom));overflow-x:hidden;overflow-y:auto}.fabbar{left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));top:calc(var(--nova-visible-top) + env(safe-area-inset-top) + 8px);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.45fr) minmax(64px,.8fr) auto;align-items:start;gap:7px;padding:0}.fabbar>button,.mobile-more-actions>summary{min-width:0;min-height:48px;font-size:14px;padding:8px;white-space:normal;text-align:center}.mobile-more-actions{display:block}.fabbar #routeTop,.fabbar #fullscreenMap{max-width:none;overflow:visible;text-overflow:clip;white-space:normal}
+ .quick-capture{left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));bottom:calc(var(--nova-visible-bottom) + env(safe-area-inset-bottom) + 10px);width:auto;max-height:calc(var(--nova-visible-height) - 20px);padding:16px;border-radius:22px 22px 14px 14px}.quick-capture-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.quick-capture-actions .save{min-height:50px}.quick-capture-actions .cancel{grid-column:1/-1;grid-row:2}.quick-capture-actions .save{grid-column:1/-1;grid-row:3}
+ .kanban-board{grid-template-columns:minmax(0,1fr);gap:10px}.kanban-column{min-width:0;padding:0;overflow:hidden}.kanban-column-head{min-height:50px;margin:0;padding:8px 12px;font-size:14px;touch-action:manipulation}.kanban-column-head button{display:flex;width:100%;min-width:0;min-height:44px;align-items:center;justify-content:space-between;gap:10px;border:0;background:transparent;color:var(--nova-ui-foreground);font-size:14px;font-weight:800;text-align:left;overflow-wrap:anywhere}.kanban-column-head button span{flex:none;min-width:28px;height:28px;font-size:13px}.kanban-cards{gap:9px;padding:0 10px 10px}.kanban-card{min-width:0;padding:12px;border-radius:12px}.kanban-card b{font-size:15px;line-height:1.4;overflow-wrap:anywhere}.kanban-card .meta{font-size:13px;line-height:1.45;overflow-wrap:anywhere}.kanban-card select,.kanban-card button{min-height:44px;font-size:14px}.kanban-card button{margin-top:8px}.kanban-cards[hidden]{display:none}
+ .item{min-width:0;padding:14px}.itemname{font-size:15px;line-height:1.4;overflow-wrap:anywhere}.meta{font-size:13px;line-height:1.45;overflow-wrap:anywhere;white-space:normal}.search input{font-size:16px}.search-zone,.search-tools button,.search-tools select,.chips .chip,.filters select,.segment button,.view-tabs button,.actions .btn{min-height:44px;font-size:14px}.filters{grid-template-columns:1fr}.search-tools{grid-template-columns:minmax(0,1fr) auto auto}.search-tools button,.search-tools select{min-width:0}.search-meta{font-size:12px;line-height:1.4}.search-meta button{min-height:40px;font-size:13px}.stitle{min-height:36px;font-size:12px}.workspace-heading b{font-size:18px}.resultsHead,.resultsHead b{font-size:14px}
+ .history-card{min-width:0;padding:14px}.history-card-top{min-width:0;flex-wrap:wrap}.history-card h3{font-size:15px;line-height:1.4;overflow-wrap:anywhere}.history-status{font-size:12px!important}.history-card-actions{flex-wrap:wrap}.history-card-actions button{min-width:0;min-height:44px;font-size:14px;overflow-wrap:anywhere}.route-toolbar{align-items:flex-start;flex-wrap:wrap;font-size:13px}.route-toolbar button,.route-day-actions button,.route-stop-actions button{min-height:44px;font-size:13px;padding:9px}.route-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.route-stat b{font-size:16px}.route-stat span{font-size:11px}.route-stop{min-width:0;align-items:flex-start;flex-wrap:wrap}.route-stop-copy{overflow-wrap:anywhere}.route-stop-copy b,.route-stop-copy span{white-space:normal;overflow-wrap:anywhere}.route-stop-actions{flex-wrap:wrap}.route-schedule-grid,.location-trail-fields{grid-template-columns:1fr}.confirm-modal label,.location-privacy b{font-size:14px}.confirm-modal select,.confirm-modal textarea,.confirm-modal input[type="text"]{min-height:44px;font-size:16px}.confirm-modal-actions{display:grid;grid-template-columns:1fr 1fr}.confirm-modal-actions button{min-height:44px;font-size:14px}
+ .toast{top:calc(var(--nova-visible-top) + env(safe-area-inset-top) + 68px);bottom:auto;max-width:calc(100vw - 32px);font-size:14px;text-align:center}.popup{font-size:14px}.popup h3{font-size:18px}.crm label{font-size:13px}.crm select,.crm input,.crm textarea,.crm button{min-height:44px;font-size:15px}.crm input[type=file]{font-size:13px}.history-empty,.kanban-empty{font-size:14px;line-height:1.5}
+}
+@media(max-width:390px){.fabbar{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) 58px auto;gap:5px}.fabbar>button,.mobile-more-actions>summary{min-height:46px;padding:6px;font-size:13px}.quick-capture{padding:14px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}
+@media(min-width:821px){.mobile-more-actions{display:contents}.mobile-more-actions>summary{display:none}.mobile-more-menu{position:static;display:flex;gap:7px;min-width:0;padding:0;border:0;background:transparent;box-shadow:none}}
 </style>
 </head>
 <body>
@@ -265,22 +299,32 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 </aside>
 
 <div class="fabbar">
- <button class="float" id="routeTop" type="button">Armar ruta</button>
  <button class="float" id="locateMe" type="button">◎ Mi ubicación</button>
  <button class="float primary-float" id="newPoint" type="button">＋ Nuevo punto</button>
- <button class="float fullscreen-float" id="fullscreenMap" type="button" title="Ver mapa en pantalla completa" aria-label="Ver mapa en pantalla completa">⛶</button>
- <button class="float" id="mobileSheetToggle" type="button">Filtros ↑</button>
+ <button class="float" id="mobileSheetToggle" type="button" aria-label="Abrir panel">Panel</button>
+ <details class="mobile-more-actions"><summary aria-label="Más acciones">Más</summary><div class="mobile-more-menu"><button class="float" id="routeTop" type="button">Armar ruta</button><button class="float fullscreen-float" id="fullscreenMap" type="button" title="Ver mapa en pantalla completa" aria-label="Ver mapa en pantalla completa">⛶ Pantalla completa</button></div></details>
 </div>
 <div class="legend"><b>Potencial Nova Hub</b><div class="lr"><i class="ld" style="background:#08785a"></i>A · visita prioritaria</div><div class="lr"><i class="ld" style="background:#eea13d"></i>B · prospecto viable</div><div class="lr"><i class="ld" style="background:#83928d"></i>C · validar operación</div><div class="lr"><i class="ld" style="background:#2364d2"></i>Vendedor activo · últimos 10 min</div></div>
 <div class="toast" id="toast"></div>
-<input id="quickEvidenceInput" type="file" accept="image/*,.pdf" capture="environment" hidden>
-<div class="quick-capture" id="quickCapture" hidden>
- <h2>Nuevo negocio en este punto</h2>
- <p id="quickCaptureLocation">Coordenada capturada</p>
- <p class="quick-capture-hint">Arrastra el pin o toca otro punto del mapa para ajustar la ubicación.</p>
- <div class="quick-capture-photo" id="quickCapturePhoto" hidden><img id="quickCapturePhotoImage" alt="Evidencia del nuevo negocio"><span id="quickCapturePhotoName">Foto lista para guardar</span><button id="quickCaptureRetake" type="button">Cambiar</button></div>
- <div class="quick-capture-grid"><input id="quickCaptureName" type="text" maxlength="180" placeholder="Nombre del negocio *" required></div>
-  <div class="quick-capture-actions"><button class="cancel" id="quickCaptureCancel" type="button">Cancelar</button><button class="camera" id="quickCaptureTakePhoto" type="button">Tomar foto opcional</button><button class="save" id="quickCaptureSave" type="button" disabled>Guardar negocio</button></div>
+<input id="quickPointCameraInput" type="file" accept="image/*" capture="environment" hidden>
+<input id="quickPointGalleryInput" type="file" accept="image/*" hidden>
+<input id="quickEvidenceInput" type="file" accept="application/pdf" hidden>
+<div class="quick-capture" id="quickCapture" role="region" aria-labelledby="quickCaptureTitle" hidden>
+ <h2 id="quickCaptureTitle">Nuevo negocio en este punto</h2>
+ <p id="quickCaptureLocation" aria-live="polite">Coordenada capturada</p>
+ <p class="quick-capture-hint">Ajusta el pin en el mapa. La fotografía es opcional.</p>
+ <div class="quick-capture-photo" id="quickCapturePhoto" hidden><img id="quickCapturePhotoImage" alt="Vista previa de la fotografía del negocio"><span id="quickCapturePhotoName">Foto lista para guardar</span><button id="quickCaptureRemovePhoto" type="button" aria-label="Quitar fotografía">Quitar</button></div>
+ <div class="quick-capture-grid"><label for="quickCaptureName">Nombre del negocio</label><input id="quickCaptureName" type="text" maxlength="180" placeholder="Ej. Casa de zinc" autocomplete="organization" required></div>
+ <div class="quick-capture-actions"><button class="cancel" id="quickCaptureCancel" type="button">Cancelar</button><button class="camera" id="quickCaptureTakePhoto" type="button">Tomar foto</button><button class="gallery" id="quickCaptureChoosePhoto" type="button">Elegir de galería</button><button class="save" id="quickCaptureSave" type="button" disabled>Guardar negocio</button></div>
+</div>
+<input id="quickEvidenceCameraInput" type="file" accept="image/*" capture="environment" hidden>
+<input id="quickEvidenceGalleryInput" type="file" accept="image/*" hidden>
+<div class="modal-backdrop evidence-source-backdrop" id="evidenceSourcePicker" hidden>
+ <div class="confirm-modal evidence-source-picker" role="dialog" aria-modal="true" aria-labelledby="evidenceSourceTitle">
+  <h2 id="evidenceSourceTitle">Adjuntar evidencia</h2>
+  <p>Elige una fotografía nueva, una de la galería o un documento PDF.</p>
+  <div class="evidence-source-actions"><button id="evidenceSourceCamera" type="button">Tomar foto</button><button id="evidenceSourceGallery" type="button">Elegir de galería</button><button id="evidenceSourceDocument" type="button">Elegir documento PDF</button><button class="cancel" id="evidenceSourceCancel" type="button">Cancelar</button></div>
+ </div>
 </div>
 <div class="modal-backdrop" id="locationModal" hidden>
  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="locationTitle">
@@ -495,7 +539,36 @@ window.NovaForceSalesLocation = (()=>{
     const accuracyText=gps&&Number.isFinite(accuracyMeters)&&accuracyMeters>=0 ? ` · GPS ±${Math.round(accuracyMeters)} m` : '';
     return `${label} · ${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}${accuracyText}`;
   }
-  return Object.freeze({normalizeCoordinates,readMarkerCoordinates,createDraftMarker,selectMapBusinesses,formatCaptureLocation});
+  function splitRouteSegments(points,gapMs=5*60*1000){
+    const segments=[];
+    let segment=[];
+    for(const point of points || []){
+      const previous=segment[segment.length-1];
+      if(previous && new Date(point.capturedAt).getTime()-new Date(previous.capturedAt).getTime()>gapMs){segments.push(segment);segment=[]}
+      segment.push(point);
+    }
+    if(segment.length)segments.push(segment);
+    return segments;
+  }
+  function validateEvidenceFile(file,{allowPdf=false}={}){
+    if(!file)return {valid:false,error:null};
+    const allowedImages=new Set(['image/jpeg','image/png','image/webp','image/gif','image/avif']);
+    const isImage=allowedImages.has(String(file.type||'').toLowerCase());
+    const isPdf=allowPdf&&String(file.type||'').toLowerCase()==='application/pdf';
+    if(!isImage&&!isPdf)return {valid:false,error:allowPdf?'Formato no admitido. Usa JPG, PNG, WebP, GIF, AVIF o PDF.':'Formato de imagen no admitido. Usa JPG, PNG, WebP, GIF o AVIF.'};
+    if(!Number.isFinite(Number(file.size))||Number(file.size)<0)return {valid:false,error:'No se pudo leer el archivo seleccionado'};
+    if(Number(file.size)>10*1024*1024)return {valid:false,error:'La evidencia supera el límite de 10 MB'};
+    return {valid:true,error:null};
+  }
+  function visibleFrameArea({frameTop,frameHeight,viewportTop,viewportHeight}){
+    const frameBottom=frameTop+frameHeight;
+    const viewportBottom=viewportTop+viewportHeight;
+    const visibleTop=Math.max(frameTop,viewportTop);
+    const visibleBottom=Math.min(frameBottom,viewportBottom);
+    const height=Math.max(0,visibleBottom-visibleTop);
+    return {top:height?visibleTop-frameTop:Math.min(frameHeight,Math.max(0,viewportTop-frameTop)),bottom:height?frameBottom-visibleBottom:0,height};
+  }
+  return Object.freeze({normalizeCoordinates,readMarkerCoordinates,createDraftMarker,selectMapBusinesses,formatCaptureLocation,splitRouteSegments,validateEvidenceFile,visibleFrameArea});
 })();
 </script>
 <script>
@@ -614,6 +687,50 @@ async function novaMapsLibrary(name){
   }
   throw new Error('Nova Maps library unavailable: '+name);
 }
+// Install the parent bridge before waiting for the map provider. The iframe
+// can receive theme and keyboard viewport changes while map assets load.
+let viewportResizeTimer = null;
+let parentVisibleViewport = null;
+function syncNovaViewport(){
+  const height=Math.max(1,Math.round(parentVisibleViewport?.height || window.visualViewport?.height || window.innerHeight || 0));
+  const root=document.documentElement;
+  root.style.setProperty('--nova-vh',`${height}px`);
+  root.style.setProperty('--nova-visible-top',`${Math.max(0,Math.round(parentVisibleViewport?.top || 0))}px`);
+  root.style.setProperty('--nova-visible-bottom',`${Math.max(0,Math.round(parentVisibleViewport?.bottom || 0))}px`);
+  root.style.setProperty('--nova-visible-height',`${height}px`);
+  root.style.setProperty('--nova-sheet-height',`${Math.min(Math.round(height*.68),620)}px`);
+  root.style.setProperty('--nova-workspace-height',`${Math.min(Math.round(height*.86),760)}px`);
+}
+function scheduleNovaViewportSync(){
+  window.clearTimeout(viewportResizeTimer);
+  viewportResizeTimer=window.setTimeout(syncNovaViewport,120);
+}
+syncNovaViewport();
+window.addEventListener('resize',scheduleNovaViewportSync,{passive:true});
+window.addEventListener('orientationchange',scheduleNovaViewportSync,{passive:true});
+window.visualViewport?.addEventListener('resize',scheduleNovaViewportSync,{passive:true});
+window.addEventListener('message',event=>{
+  if(event.source!==window.parent||event.origin!==window.location.origin||event.data?.source!=='novahub-force-sales'||event.data?.type!=='ui-context')return;
+  const viewport=event.data.viewport;
+  if(viewport&&[viewport.top,viewport.bottom,viewport.height].every(value=>Number.isFinite(Number(value))&&Number(value)>=0)){
+    parentVisibleViewport={top:Number(viewport.top),bottom:Number(viewport.bottom),height:Number(viewport.height)};
+    scheduleNovaViewportSync();
+  }
+  const theme=event.data.theme;
+  const colors=theme?.colors;
+  if(!theme||!colors)return;
+  const root=document.documentElement;
+  for(const [key,token,fallback] of [
+    ['background','--nova-ui-background','#e8f0ed'],['foreground','--nova-ui-foreground','#11241f'],
+    ['card','--nova-ui-card','#fbfdfc'],['muted','--nova-ui-muted','#edf5f1'],
+    ['mutedForeground','--nova-ui-muted-foreground','#6c7c77'],['border','--nova-ui-border','#dce8e3'],
+    ['primary','--nova-ui-primary','#08785a'],
+  ]){
+    const value=String(colors[key]||fallback);
+    root.style.setProperty(token,CSS.supports('color',value)?value:fallback);
+  }
+  document.body.classList.toggle('theme-dark',theme.dark===true);
+});
 window.__novaMapsReady.then(async () => {
 const markerLibrary = await novaMapsLibrary('marker');
 const AdvancedMarkerElement = markerLibrary.AdvancedMarkerElement;
@@ -643,23 +760,8 @@ function requireForceSales(action){
   toast('Tu rol no tiene permiso para esta acción');
   return false;
 }
-let viewportResizeTimer = null;
-function syncNovaViewport(){
-  const height=Math.max(320,Math.round(window.visualViewport?.height || window.innerHeight || 0));
-  const root=document.documentElement;
-  root.style.setProperty('--nova-vh',`${height}px`);
-  root.style.setProperty('--nova-sheet-height',`${Math.min(Math.round(height*.68),620)}px`);
-  root.style.setProperty('--nova-workspace-height',`${Math.min(Math.round(height*.86),760)}px`);
-}
-function scheduleNovaViewportSync(){
-  window.clearTimeout(viewportResizeTimer);
-  viewportResizeTimer=window.setTimeout(syncNovaViewport,120);
-}
-syncNovaViewport();
-window.addEventListener('resize',scheduleNovaViewportSync,{passive:true});
-window.addEventListener('orientationchange',scheduleNovaViewportSync,{passive:true});
-window.visualViewport?.addEventListener('resize',scheduleNovaViewportSync,{passive:true});
 const API_BASE = (mapQuery.get('api') || localStorage.getItem('novaApiBase') || 'http://localhost:3000/api').replace(/\/$/, '');
+const EXTERNAL_DURABLE_TRACKING = mapQuery.get('durableTracking') === 'true';
 const NOVAHUB_ISOTIPO_URL = mapQuery.get('isotipo') || '';
 let ROUTE_LOGO_URI = mapQuery.get('companyLogo') || NOVAHUB_ISOTIPO_URL;
 const CURRENT_USER_ID = mapQuery.get('userId') || '';
@@ -677,7 +779,7 @@ function applyForceSalesPermissionVisibility(){
     clearCatalog: 'delete',
     zoneManager: 'assignProspect', bulkKanban: 'changeStage', bulkRoute: 'createRoute', bulkVisit: 'registerVisit', bulkWhatsApp: 'send', bulkDiscard: 'discardProspect',
     routeImport: 'importProspects', routeImportQuick: 'importProspects', routePlannerQuick: ['createRoute', 'editRoute', 'assignRoute'], routeClear: 'editRoute', routeOptimize: 'editRoute', routeCompleteStop: 'completeRouteStop', routeSave: ['createRoute', 'editRoute'],
-    routeAssignee: 'assignRoute', zoneAssign: 'assignProspect', quickCaptureTakePhoto: ['attachEvidence', 'importProspects'], quickCaptureRetake: ['attachEvidence', 'importProspects'],
+    routeAssignee: 'assignRoute', zoneAssign: 'assignProspect', quickCaptureTakePhoto: ['attachEvidence', 'importProspects'], quickCaptureChoosePhoto: ['attachEvidence', 'importProspects'], quickCaptureRemovePhoto: ['attachEvidence', 'importProspects'],
     quickCaptureSave: 'importProspects',
   };
   Object.entries(visibility).forEach(([id, action])=>{
@@ -749,6 +851,7 @@ let labelMode = 'smart';
 let pipelineFilter = 'all';
 const initialView = ['map','kanban','history'].includes(mapQuery.get('view') || '') ? mapQuery.get('view') : 'map';
 let activeView = initialView;
+const kanbanStageExpanded = new Map();
 let googleSearchRun = 0;
 let markerById = new Map();
 let userLocationMarker = null;
@@ -758,6 +861,7 @@ let pendingEvidenceBusinessId = null;
 let pendingQuickPointPhoto = false;
 let pendingQuickPointFile = null;
 let pendingQuickPointPreviewUrl = null;
+let evidencePickerReturnFocus = null;
 let pendingPointSource = 'mapa';
 let pendingPointAccuracy = null;
 let pendingPointMarker = null;
@@ -1168,6 +1272,7 @@ async function loadForceSalesConfiguration(){
     if(LOCATION_REQUIRED && forceSalesConfig?.canDisableLocation===false){
       presenceSharingEnabled=true;
       localStorage.setItem(PRESENCE_STORAGE_KEY,'true');
+      if(EXTERNAL_DURABLE_TRACKING)window.parent.postMessage({source:'novahub-force-sales',type:'presence-sharing-changed',enabled:true},location.origin);
       presenceWatchRequested=true;
       requestCurrentLocation();
       startPresenceWatch();
@@ -1686,6 +1791,7 @@ async function loadAssignees(){
     assignees=[...unique.values()];
     renderSavedRouteOptions();
     renderRoutePlanner();
+    if(activeView==='history')renderHistory();
   }catch(error){console.warn('No se pudo cargar la lista de vendedores',error)}
 }
 function normalizeImportHeader(value){
@@ -2078,13 +2184,26 @@ function resetQuickCapture(){
   if(save)save.disabled=false;
   if(panel)panel.hidden=true;
 }
-function beginQuickPointCapture(){
+function updateQuickCaptureSaveState(){
+  const input=document.getElementById('quickCaptureName');
+  const save=document.getElementById('quickCaptureSave');
+  if(save)save.disabled=!String(input?.value||'').trim();
+}
+function beginQuickPointCapture(source='camera'){
   if(!canForceSales('attachEvidence')&&!canForceSales('importProspects')){toast('Tu rol no tiene permiso para subir imágenes');return}
-  const input=document.getElementById('quickEvidenceInput');
-  if(!input){toast('La cámara no está disponible en este dispositivo');return}
+  const input=document.getElementById(source==='gallery'?'quickPointGalleryInput':'quickPointCameraInput');
+  if(!input){toast(source==='gallery'?'La galería no está disponible en este dispositivo':'La cámara no está disponible en este dispositivo');return}
   pendingQuickPointPhoto=true;
   input.value='';
-  try{input.click()}catch(error){pendingQuickPointPhoto=false;toast('Pulsa Tomar foto para continuar')}
+  try{input.click()}catch(error){pendingQuickPointPhoto=false;toast(source==='gallery'?'No se pudo abrir la galería':'No se pudo abrir la cámara')}
+}
+function clearQuickPointPhoto(){
+  pendingQuickPointFile=null;
+  if(pendingQuickPointPreviewUrl){URL.revokeObjectURL(pendingQuickPointPreviewUrl);pendingQuickPointPreviewUrl=null}
+  const photo=document.getElementById('quickCapturePhoto');
+  const image=document.getElementById('quickCapturePhotoImage');
+  if(photo)photo.hidden=true;
+  if(image)image.removeAttribute('src');
 }
 function renderQuickPointPhoto(file){
   const photo=document.getElementById('quickCapturePhoto');
@@ -2116,6 +2235,7 @@ function openQuickPointAt(lat,lng,source='mapa',accuracy=null){
     nameInput.value='';
   }
   panel.hidden=false;
+  updateQuickCaptureSaveState();
   updatePendingQuickPointPosition(coordinates,{source,accuracy});
   if(!pendingPointMarker){
     pendingPointMarker=window.NovaForceSalesLocation.createDraftMarker({
@@ -2148,7 +2268,7 @@ function saveQuickPoint(){
   const coords={...pendingPointCoords};
   const locationDetails={captureSource:pendingPointSource,accuracy:pendingPointAccuracy};
   const name=(nameInput?.value || '').trim();
-  if(!name){nameInput?.focus();toast('Escribe el nombre del negocio para continuar');return}
+  if(!name){nameInput?.focus({preventScroll:true});toast('Escribe el nombre del negocio para continuar');return}
   if(pendingQuickPointFile && !canForceSales('attachEvidence')&&!canForceSales('importProspects')){toast('Tu rol no tiene permiso para subir imágenes');return}
   const evidenceFile=pendingQuickPointFile;
   clearPendingQuickPointMarker();
@@ -2181,7 +2301,7 @@ function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',det
   updateView();
   focusQuickPoint(business);
   render();
-  toast(evidenceFile?'Punto y foto guardados':'Punto registrado');
+  toast(evidenceFile?'Punto y foto guardados en el dispositivo · sincronizando…':'Punto guardado en el dispositivo · sincronizando…');
   void (async()=>{
     if(evidenceFile)await saveOfflineProspect(business,evidenceFile,[],true);
     const syncResult=await syncProspects([business],evidenceFile);
@@ -2189,9 +2309,13 @@ function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',det
     if(syncResult && syncedState.remoteId && !syncedState.syncPending && !syncedState.evidencePending)await removeOfflineProspect(keyOf(business));
     render();
     refreshFocusedQuickPointPopup();
-    if(!syncedState.remoteId){toast('Punto marcado en el mapa; se sincronizará al recuperar la conexión');return}
+    if(!syncedState.remoteId||syncedState.syncPending||syncedState.evidencePending){
+      toast(evidenceFile&&syncedState.evidencePending?'Punto guardado localmente; la foto sigue pendiente de sincronización.':'Punto guardado localmente; la sincronización sigue pendiente.');
+      return;
+    }
     await loadRemoteProspects();
     setSearchStatus('Negocio sincronizado · visible en todos los dispositivos autorizados.');
+    toast('Punto sincronizado con NovaHub');
     if(canForceSales('registerVisit')){
       const visitedAt=new Date().toISOString();
       const saved=await persistProspectAction(business,'registerVisit','/visit',{visitLat:business.lat,visitLng:business.lng,visitedAt});
@@ -2201,9 +2325,53 @@ function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',det
 }
 document.getElementById('newPoint').addEventListener('click',openQuickPointFromDevice);
 document.getElementById('quickCaptureCancel').addEventListener('click',()=>{quickPointLocationRequestId+=1;pendingPointCoords=null;clearPendingQuickPointMarker();resetQuickCapture()});
-document.getElementById('quickCaptureTakePhoto').addEventListener('click',beginQuickPointCapture);
-document.getElementById('quickCaptureRetake').addEventListener('click',beginQuickPointCapture);
+document.getElementById('quickCaptureTakePhoto').addEventListener('click',()=>beginQuickPointCapture('camera'));
+document.getElementById('quickCaptureChoosePhoto').addEventListener('click',()=>beginQuickPointCapture('gallery'));
+document.getElementById('quickCaptureRemovePhoto').addEventListener('click',clearQuickPointPhoto);
+document.getElementById('quickCaptureName').addEventListener('input',updateQuickCaptureSaveState);
 document.getElementById('quickCaptureSave').addEventListener('click',saveQuickPoint);
+const mobileMoreActions=document.querySelector('.mobile-more-actions');
+mobileMoreActions?.addEventListener('click',event=>{
+  if(event.target instanceof Element&&event.target.closest('button'))mobileMoreActions.open=false;
+});
+document.addEventListener('click',event=>{
+  if(mobileMoreActions?.open&&event.target instanceof Node&&!mobileMoreActions.contains(event.target))mobileMoreActions.open=false;
+});
+document.getElementById('evidenceSourceCamera').addEventListener('click',()=>chooseExistingEvidenceSource('camera'));
+document.getElementById('evidenceSourceGallery').addEventListener('click',()=>chooseExistingEvidenceSource('gallery'));
+document.getElementById('evidenceSourceDocument').addEventListener('click',()=>chooseExistingEvidenceSource('document'));
+document.getElementById('evidenceSourceCancel').addEventListener('click',()=>{
+  document.getElementById('evidenceSourcePicker').hidden=true;
+  pendingEvidenceBusinessId=null;
+  restoreEvidencePickerFocus();
+});
+document.getElementById('evidenceSourcePicker').addEventListener('click',event=>{
+  if(event.target!==event.currentTarget)return;
+  event.currentTarget.hidden=true;
+  pendingEvidenceBusinessId=null;
+  restoreEvidencePickerFocus();
+});
+document.addEventListener('keydown',event=>{
+  const picker=document.getElementById('evidenceSourcePicker');
+  if(!picker||picker.hidden){
+    if(event.key==='Escape'&&mobileMoreActions?.open){mobileMoreActions.open=false;mobileMoreActions.querySelector('summary')?.focus({preventScroll:true})}
+    return;
+  }
+  if(event.key==='Escape'){
+    event.preventDefault();
+    picker.hidden=true;
+    pendingEvidenceBusinessId=null;
+    restoreEvidencePickerFocus();
+    return;
+  }
+  if(event.key!=='Tab')return;
+  const controls=[...picker.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+    .filter(control=>control.getClientRects().length>0);
+  if(!controls.length)return;
+  const first=controls[0],last=controls[controls.length-1];
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
+});
 document.getElementById('discardCancel').addEventListener('click',closeDiscardDialog);
 document.getElementById('discardConfirm').addEventListener('click',confirmDiscardDialog);
 document.getElementById('discardModal').addEventListener('click',event=>{if(event.target===event.currentTarget)closeDiscardDialog()});
@@ -2237,7 +2405,7 @@ document.getElementById('routeSave').addEventListener('click',()=>{void saveRout
 document.getElementById('routeModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
 document.getElementById('routeTop').addEventListener('click',()=>{if(selectedBusinesses().length&&canForceSales('createRoute'))addSelectedToRoute();else openRoutePlanner([])});
 window.addEventListener('message',event=>{
-  if(event.data?.source!=='novahub-force-sales')return;
+  if(event.source!==window.parent||event.origin!==window.location.origin||event.data?.source!=='novahub-force-sales')return;
   if(event.data?.type==='force-sales-import-error'){toast(event.data.message || 'No se pudo leer el archivo');return}
   if(event.data?.type==='force-sales-import-rows')void importForceSalesRows(event.data);
 });
@@ -2415,33 +2583,49 @@ document.addEventListener('change',event=>{
 });
 function requestEvidenceCapture(id){
   if(!requireForceSales('attachEvidence'))return;
-  const input=document.getElementById('quickEvidenceInput');
   const b=findBusiness(id);
-  if(!input || !b)return;
+  const picker=document.getElementById('evidenceSourcePicker');
+  if(!picker || !b)return;
   pendingEvidenceBusinessId=id;
-  input.value='';
-  try{input.click()}catch(error){console.warn(error);toast('Visita guardada. Pulsa Guardar seguimiento para adjuntar evidencia.');}
+  evidencePickerReturnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  picker.hidden=false;
+  document.getElementById('evidenceSourceCamera')?.focus({preventScroll:true});
 }
-document.getElementById('quickEvidenceInput')?.addEventListener('change',async event=>{
-  const input=event.currentTarget;
+function chooseExistingEvidenceSource(source){
+  if(!pendingEvidenceBusinessId)return;
+  const input=document.getElementById(source==='camera'?'quickEvidenceCameraInput':source==='gallery'?'quickEvidenceGalleryInput':'quickEvidenceInput');
+  const picker=document.getElementById('evidenceSourcePicker');
+  if(!input){toast('No se pudo abrir la opción de evidencia');return}
+  if(picker)picker.hidden=true;
+  input.value='';
+  try{input.click()}
+  catch(error){console.warn(error);pendingEvidenceBusinessId=null;toast('No se pudo abrir el selector de archivos');evidencePickerReturnFocus?.focus?.({preventScroll:true})}
+}
+function restoreEvidencePickerFocus(){
+  const focusTarget=evidencePickerReturnFocus;
+  evidencePickerReturnFocus=null;
+  if(focusTarget?.isConnected)focusTarget.focus({preventScroll:true});
+}
+async function handleEvidenceFileSelection(input){
   const file=input.files?.[0];
-  if(pendingQuickPointPhoto){
-    pendingQuickPointPhoto=false;
+  input.value='';
+  const isQuickPoint=pendingQuickPointPhoto;
+  if(isQuickPoint)pendingQuickPointPhoto=false;
+  const validation=window.NovaForceSalesLocation.validateEvidenceFile(file,{allowPdf:!isQuickPoint&&input.id==='quickEvidenceInput'});
+  if(!file)return;
+  if(!validation.valid){toast(validation.error||'No se pudo leer la evidencia');return}
+  if(isQuickPoint){
     if(!canForceSales('attachEvidence')&&!canForceSales('importProspects')){toast('Tu rol no tiene permiso para subir imágenes');return}
-    if(!file){toast('Toma una foto para registrar el punto');return}
-    if(!file.type.startsWith('image/')){toast('Para un punto nuevo toma una foto desde la cámara');return}
-    if(file.size>10*1024*1024){toast('La evidencia supera el límite de 10 MB');return}
     pendingQuickPointFile=file;
     document.getElementById('quickCapture').hidden=false;
     renderQuickPointPhoto(file);
-    document.getElementById('quickCaptureName')?.focus();
+    updateQuickCaptureSaveState();
     return;
   }
   const id=pendingEvidenceBusinessId;
-  pendingEvidenceBusinessId=null;
   if(!file || !id)return;
+  pendingEvidenceBusinessId=null;
   if(!requireForceSales('attachEvidence'))return;
-  if(file.size>10*1024*1024){toast('La evidencia supera el límite de 10 MB');return}
   const b=findBusiness(id);
   if(!b)return;
   const c=stateOf(b);
@@ -2456,7 +2640,16 @@ document.getElementById('quickEvidenceInput')?.addEventListener('change',async e
   if(!saved)return;
   render();
   toast(navigator.onLine?'Evidencia guardada':'Evidencia guardada offline; se sincronizará al volver la conexión');
-});
+}
+for(const inputId of ['quickPointCameraInput','quickPointGalleryInput','quickEvidenceCameraInput','quickEvidenceGalleryInput','quickEvidenceInput']){
+  const input=document.getElementById(inputId);
+  input?.addEventListener('change',()=>void handleEvidenceFileSelection(input));
+  input?.addEventListener('cancel',()=>{
+    if(inputId==='quickPointCameraInput'||inputId==='quickPointGalleryInput')pendingQuickPointPhoto=false;
+    else pendingEvidenceBusinessId=null;
+    restoreEvidencePickerFocus();
+  });
+}
 function showUserLocation(coords){
   if(!userLocationMarker){
     const locationContent=document.createElement('div');
@@ -2529,7 +2722,7 @@ function stopPresenceWatch(){
   presenceWatchId=null;
 }
 function startPresenceWatch(){
-  if(!canForceSales('updatePresence')||!presenceWatchRequested||!presenceSharingEnabled||presenceWatchId!==null||!navigator.geolocation)return;
+  if(EXTERNAL_DURABLE_TRACKING||!canForceSales('updatePresence')||!presenceWatchRequested||!presenceSharingEnabled||presenceWatchId!==null||!navigator.geolocation)return;
   presenceWatchId=navigator.geolocation.watchPosition(
     position=>showUserLocation(position.coords),
     error=>console.warn('No se pudo actualizar la ubicación en vivo',error),
@@ -2590,6 +2783,7 @@ async function setPresenceSharing(enabled){
   if(!enabled && LOCATION_REQUIRED && !CAN_SHARE_PRESENCE){toast('La empresa exige compartir ubicación durante la operación');return}
   presenceSharingEnabled=enabled;
   localStorage.setItem(PRESENCE_STORAGE_KEY,String(enabled));
+  if(EXTERNAL_DURABLE_TRACKING)window.parent.postMessage({source:'novahub-force-sales',type:'presence-sharing-changed',enabled},location.origin);
   if(!enabled){
     stopPresenceWatch();
     presenceWatchRequested=false;
@@ -2692,15 +2886,27 @@ function applyLabels(){
 function renderKanban(){
   const board=document.getElementById('kanbanBoard');
   if(!board) return;
+  const mobile=window.innerWidth<=820;
   const kanbanBusinesses=businesses.filter(b=>isKanban(b)&&!isDiscarded(b));
   board.innerHTML=stages.filter(stage=>stage!=='Descartado').map(stage=>{
     const cards=kanbanBusinesses.filter(b=>statusOf(b)===stage);
-    return `<section class="kanban-column"><div class="kanban-column-head"><strong>${stage}</strong><span>${cards.length}</span></div><div class="kanban-cards">${cards.length ? cards.map(b=>{
+    const expanded=kanbanStageExpanded.has(stage)?kanbanStageExpanded.get(stage):cards.length>0;
+    const cardsId=`kanban-stage-${safeId(stage)}`;
+    const heading=mobile
+      ? `<div class="kanban-column-head"><button type="button" data-kanban-toggle="${esc(stage)}" aria-expanded="${expanded}" aria-controls="${cardsId}"><strong>${esc(stage)}</strong><span>${cards.length}</span></button></div>`
+      : `<div class="kanban-column-head"><strong>${esc(stage)}</strong><span>${cards.length}</span></div>`;
+    return `<section class="kanban-column">${heading}<div class="kanban-cards" id="${cardsId}"${mobile&&!expanded?' hidden':''}>${cards.length ? cards.map(b=>{
       const sid=safeId(b.id);
       const stageControl=canForceSales('changeStage') ? `<select data-kanban-stage="${esc(b.id)}" aria-label="Cambiar etapa de ${esc(b.name)}">${stages.filter(x=>x!=='Descartado').map(x=>`<option ${x===stage?'selected':''}>${x}</option>`).join('')}</select>` : `<span class="meta">${esc(stage)}</span>`;
       return `<article class="kanban-card"><b>${esc(b.name)}</b><div class="meta">${esc(b.zone)} · ${esc(b.category)}</div><div class="meta">${b.score}% afinidad${b.phone ? ` · ${esc(b.phone)}` : ''}</div>${stageControl}<button data-kanban-open="${esc(b.id)}">Ver en mapa</button></article>`;
     }).join('') : '<div class="meta">Sin prospectos</div>'}</div></section>`;
   }).join('') + (kanbanBusinesses.length ? '' : '<div class="kanban-empty">Todavía no hay negocios en Fuerza Comercial. Selecciona negocios en el mapa y pulsa <b>Kanban</b>.</div>');
+  board.querySelectorAll('[data-kanban-toggle]').forEach(button=>button.addEventListener('click',()=>{
+    const stage=button.dataset.kanbanToggle;
+    const expanded=button.getAttribute('aria-expanded')==='true';
+    kanbanStageExpanded.set(stage,!expanded);
+    renderKanban();
+  }));
   board.querySelectorAll('[data-kanban-stage]').forEach(el=>el.addEventListener('change',()=>{
     if(!requireForceSales('changeStage'))return;
     const b=findBusiness(el.dataset.kanbanStage); if(!b)return;
@@ -2713,6 +2919,84 @@ function renderKanban(){
     activeView='map'; updateView(); pipelineFilter='kanban'; render(); map.flyTo([b.lat,b.lng],16,{duration:.65}); setTimeout(()=>markerById.get(b.id)?.openPopup(),600);
   }));
 }
+let locationTrailArtifacts=[];
+function clearLocationTrail(){
+  locationTrailArtifacts.forEach(artifact=>artifact?.setMap?.(null));
+  locationTrailArtifacts=[];
+}
+function locationTrailSegments(points){
+  return window.NovaForceSalesLocation.splitRouteSegments(points,5*60*1000);
+}
+function localDateInputValue(date=new Date()){
+  const offset=date.getTimezoneOffset()*60000;
+  return new Date(date.getTime()-offset).toISOString().slice(0,10);
+}
+async function loadLocationTrail(){
+  const status=document.getElementById('locationTrailStatus');
+  const dateInput=document.getElementById('locationTrailDate');
+  const userSelect=document.getElementById('locationTrailUser');
+  const day=String(dateInput?.value||localDateInputValue());
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)){if(status)status.textContent='Selecciona un día válido.';return}
+  const start=new Date(`${day}T00:00:00`);
+  const end=new Date(start);end.setDate(end.getDate()+1);
+  const from=start.toISOString();const to=end.toISOString();
+  const selectedUser=CAN_ASSIGN_TEAM?String(userSelect?.value||''):'';
+  clearLocationTrail();
+  if(status)status.textContent='Cargando posiciones guardadas…';
+  const points=[];
+  let cursor='';
+  let truncated=false;
+  try{
+    for(let page=0;page<10;page++){
+      const query=new URLSearchParams({from,to,limit:'1000'});
+      if(cursor)query.set('cursor',cursor);
+      if(selectedUser)query.set('userId',selectedUser);
+      const result=await forceSalesRequest(`/force-sales/location-points?${query.toString()}`);
+      points.push(...(Array.isArray(result?.points)?result.points:[]));
+      cursor=String(result?.nextCursor||'');
+      if(!cursor)break;
+      if(page===9)truncated=true;
+    }
+    if(!points.length){
+      if(status)status.textContent='No hay puntos guardados para ese día. Si el rastreo estuvo suspendido, aquí no se inventan posiciones.';
+      return;
+    }
+    points.sort((a,b)=>String(a.capturedAt).localeCompare(String(b.capturedAt))||String(a.eventId).localeCompare(String(b.eventId)));
+    const pointsBySeller=new Map();
+    points.forEach(point=>{
+      const key=String(point.userId||point.userName||'seller');
+      if(!pointsBySeller.has(key))pointsBySeller.set(key,[]);
+      pointsBySeller.get(key).push(point);
+    });
+    const routeColors=['#08785a','#2364d2','#cb5a2b','#8557b8','#b18a00','#167d8d'];
+    let segmentCount=0;let gaps=0;
+    [...pointsBySeller.values()].forEach((sellerPoints,sellerIndex)=>{
+      const segments=locationTrailSegments(sellerPoints);
+      segmentCount+=segments.length;
+      gaps+=Math.max(0,segments.length-1);
+      segments.forEach(segment=>{
+        const path=segment.map(point=>({lat:Number(point.lat),lng:Number(point.lng)}));
+        if(path.length>1){
+          locationTrailArtifacts.push(new google.maps.Polyline({map:googleMap,path,geodesic:false,strokeColor:routeColors[sellerIndex%routeColors.length],strokeOpacity:.9,strokeWeight:5,zIndex:1150}));
+        }else{
+          locationTrailArtifacts.push(new google.maps.Circle({map:googleMap,center:path[0],radius:10,fillColor:routeColors[sellerIndex%routeColors.length],fillOpacity:.85,strokeColor:'#ffffff',strokeOpacity:1,strokeWeight:2}));
+        }
+      });
+    });
+    if(points.length>1){
+      const bounds=new google.maps.LatLngBounds();
+      points.forEach(point=>bounds.extend({lat:Number(point.lat),lng:Number(point.lng)}));
+      googleMap.fitBounds(bounds,64);
+    }else googleMap.panTo({lat:Number(points[0].lat),lng:Number(points[0].lng)});
+    const first=new Date(points[0].capturedAt).toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'});
+    const last=new Date(points[points.length-1].capturedAt).toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'});
+    const sellerNames=[...new Set(points.map(point=>String(point.userName||'Vendedor')))].slice(0,3).map(esc).join(', ');
+    const sellerLabel=selectedUser&&sellerNames?` · ${sellerNames}`:` · ${pointsBySeller.size} vendedor${pointsBySeller.size===1?'':'es'}`;
+    if(status)status.textContent=`${points.length}${truncated?' o más':''} puntos${sellerLabel} · ${segmentCount} tramo${segmentCount===1?'':'s'} · ${gaps} interrupción${gaps===1?'':'es'} mayor${gaps===1?'':'es'} a 5 min · ${first}–${last}${truncated?' · continúa filtrando por vendedor para ver más':''}. Cada vendedor tiene su propio recorrido; los tramos vacíos no se interpolan.`;
+  }catch(error){
+    if(status)status.textContent=error instanceof Error?`No se pudo cargar el recorrido: ${error.message}`:'No se pudo cargar el recorrido.';
+  }
+}
 function renderHistory(){
   const history=document.getElementById('historyView');
   if(!history) return;
@@ -2721,7 +3005,8 @@ function renderHistory(){
     const bDate=stateOf(b).visitedAt || followups[b.id]?.updatedAt || '';
     return String(bDate).localeCompare(String(aDate));
   });
-  history.innerHTML=tracked.length ? tracked.map(b=>{
+  const userOptions=CAN_ASSIGN_TEAM ? `<label for="locationTrailUser">Vendedor<select id="locationTrailUser"><option value="">Todos los vendedores</option>${assignees.map(item=>`<option value="${esc(item.id)}">${esc(item.name||item.email||'Vendedor')}</option>`).join('')}</select></label>` : '';
+  history.innerHTML=`<section class="history-card location-trail-controls"><div class="history-card-top"><div><h3>Recorrido GPS</h3><div class="meta">Historial recibido del dispositivo · los huecos de más de 5 minutos se muestran como interrupciones</div></div></div><div class="location-trail-fields"><label for="locationTrailDate">Día<input id="locationTrailDate" type="date" value="${localDateInputValue()}"></label>${userOptions}<button class="primary-action" id="loadLocationTrail" type="button">Ver recorrido</button></div><div class="meta" id="locationTrailStatus" role="status" aria-live="polite">Elige un día para consultar los puntos sincronizados.</div></section>` + (tracked.length ? tracked.map(b=>{
     const c=stateOf(b); const f=followups[b.id] || {};
     const when=c.visitedAt || f.updatedAt;
     return `<article class="history-card">
@@ -2731,7 +3016,8 @@ function renderHistory(){
       ${c.evidenceName ? `<div class="meta">Evidencia: ${esc(c.evidenceName)}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</div>` : ''}
       <div class="history-card-actions"><button class="primary-action" data-history-open="${esc(b.id)}">Ver en mapa</button>${c.evidenceUri ? `<button data-history-evidence="${esc(b.id)}">Ver evidencia</button>` : ''}</div>
     </article>`;
-  }).join('') : '<div class="history-empty">Todavía no hay seguimientos guardados. Desde un negocio puedes registrar visita, añadir una nota y adjuntar evidencia.</div>';
+  }).join('') : '<div class="history-empty">Todavía no hay seguimientos comerciales guardados. Los recorridos GPS aparecerán arriba cuando existan puntos sincronizados.</div>');
+  history.querySelector('#loadLocationTrail')?.addEventListener('click',()=>void loadLocationTrail());
   history.querySelectorAll('[data-history-open]').forEach(el=>el.addEventListener('click',()=>{
     const b=findBusiness(el.dataset.historyOpen); if(!b)return;
     activeView='map'; updateView(); pipelineFilter='all'; render();
@@ -3450,7 +3736,12 @@ if(canForceSales('updatePresence')&&presenceSharingEnabled){
 }
 let sheetDrag=null;
 let lastSheetDragMoved=false;
-function updateToggle(){ toggle.textContent = sheet.classList.contains('collapsed') ? 'Abrir panel' : 'Ocultar panel'; }
+function updateToggle(){
+  const expanded=!sheet.classList.contains('collapsed');
+  toggle.textContent='Panel';
+  toggle.setAttribute('aria-label',expanded?'Ocultar panel':'Abrir panel');
+  toggle.setAttribute('aria-expanded',String(expanded));
+}
 function setSheetPreset(mode){
   if(innerWidth>820)return;
   sheet.classList.remove('dragging');
