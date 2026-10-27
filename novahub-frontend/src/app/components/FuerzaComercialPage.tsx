@@ -1,6 +1,7 @@
 import { MapPinned, ShieldAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { MapPinned, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
