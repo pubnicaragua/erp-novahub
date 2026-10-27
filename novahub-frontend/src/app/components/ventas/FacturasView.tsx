@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Inbox, Link2, Smartphone, Upload
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Inbox, Link2, Smartphone, Upload, Printer
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -26,7 +26,7 @@ import { Switch } from '../ui/switch';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
+import { previewSalesTransactionPDF, printSalesPaymentTicket } from '../../utils/pdfGenerator';
 import { canShowInvoiceSubmitAction, getInvoicePaymentBalance, shouldSubmitExistingDraftBeforePayment } from '../../utils/invoicePaymentWorkflow';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
@@ -884,7 +884,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       setPaymentDialogOpen(false);
       try {
         setPaymentLoading(true);
-        await handleSaveInvoice('PAYMENT', {
+        const savedResult = await handleSaveInvoice('PAYMENT', {
           payments: submittedPaymentLines.map((line) => ({
             ...line,
             accountId: salesAccountingRequired ? line.accountId : undefined,
@@ -898,6 +898,42 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           cashRegisterId,
           cashSessionId: cashSession?.id,
         });
+        const savedInvoice = savedResult?.invoice || savedResult;
+        if (savedInvoice?.id) {
+          let receiptInvoice = savedInvoice as Invoice;
+          try {
+            receiptInvoice = await invoicesService.getById(savedInvoice.id);
+          } catch (error) {
+            console.warn('No se pudo cargar el detalle de la factura recién creada para el ticket.', error);
+          }
+          const registeredRows = Array.isArray((receiptInvoice as any).payments) ? (receiptInvoice as any).payments : [];
+          const sameCurrency = submittedPaymentLines.every((line) => line.currency === submittedPaymentLines[0]?.currency);
+          const voucherCurrency = sameCurrency ? submittedPaymentLines[0]?.currency || paymentCurrency : baseCurrency;
+          const voucherRate = sameCurrency ? Number(submittedPaymentLines[0]?.exchangeRate || 1) : 1;
+          const paymentForVoucher = registeredRows.length > 0
+            ? {
+              ...registeredRows[0],
+              total: amount,
+              invoice: receiptInvoice,
+              customer: receiptInvoice.customer || paymentCustomer,
+              payments: registeredRows,
+            }
+            : {
+              id: '',
+              number: '',
+              customerId: receiptInvoice.customerId,
+              customer: receiptInvoice.customer || paymentCustomer,
+              invoice: receiptInvoice,
+              date: new Date(`${paymentDate}T12:00:00`).toISOString(),
+              amount,
+              total: amount,
+              currency: voucherCurrency,
+              exchangeRate: voucherRate,
+              method: submittedPaymentLines.length > 1 ? 'MIXED' : submittedPaymentLines[0]?.method || 'CASH',
+              payments: submittedPaymentLines,
+            };
+          setPaymentVoucher({ payment: paymentForVoucher as PaymentReceived, invoice: receiptInvoice, remaining, change: paymentChangeInInvoiceCurrency });
+        }
       } finally {
         setPaymentLoading(false);
       }
@@ -1098,9 +1134,10 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           ? 'Creando y enviando a crédito...'
           : 'Guardando factura en proceso...',
     );
+    let createdInvoiceResult: any = null;
     try {
       if (isCreating) {
-        await invoicesService.create({
+        createdInvoiceResult = await invoicesService.create({
           customerId: localDoc.customerId || undefined,
           date: new Date(localDoc.date).toISOString(),
           dueDate: new Date(localDoc.dueDate).toISOString(),
@@ -1181,9 +1218,11 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       localDocRef.current = null;
       commitLocalDoc(null);
       onRefresh();
+      return action === 'PAYMENT' && isCreating ? createdInvoiceResult : undefined;
     } catch (e: any) {
       const msg = e.response?.data?.message;
       toast.error(`No se pudo guardar: ${Array.isArray(msg) ? msg.join(', ') : (msg || e.message)}`, { id: saveToastId });
+      return undefined;
     }
   };
 
@@ -1488,7 +1527,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     }
   };
 
-  const handleDownloadPaymentVoucher = async (payment: PaymentReceived, invoice: Invoice, format: PdfDownloadFormat = 'configured', remainingOverride?: number) => {
+  const handleDownloadPaymentVoucher = async (payment: PaymentReceived, invoice: Invoice, format: PdfDownloadFormat = 'configured', remainingOverride?: number, autoPrint = false) => {
     const paymentRows = payment.payments?.length ? payment.payments : [payment];
     const documentReference = invoice.number || payment.invoice?.number || 'Factura';
     const sameCurrency = paymentRows.every((row) => String(row.currency || '').toUpperCase() === String(paymentRows[0]?.currency || '').toUpperCase());
@@ -1513,7 +1552,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       invoice,
       creditNote: creditForVoucher,
       customer: payment.customer || invoice.customer,
-      number: payment.number || `PAGO-${documentReference}`,
+      number: payment.number || '',
       currency: voucherCurrency,
       exchangeRate: voucherRate,
       remaining,
@@ -1539,10 +1578,40 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         tenantLogo: themeConfig?.logo,
         documentType: 'payment',
         format,
+        autoPrint,
       });
-      toast.success('Voucher listo para descargar desde el visor del navegador.', { id: previewToastId });
+      toast.success(autoPrint ? 'Ticket abierto para imprimir.' : 'Voucher listo para descargar desde el visor del navegador.', { id: previewToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo preparar el voucher del pago', { id: previewToastId });
+    }
+  };
+
+  const handlePrintPaymentVoucher = async (payment: PaymentReceived, invoice: Invoice, remainingOverride?: number) => {
+    const paymentRows = payment.payments?.length ? payment.payments : [payment];
+    const remaining = Math.max(0, Number(remainingOverride ?? getInvoiceBalance(invoice) ?? 0));
+    const creditSource = payment.creditNote || invoice.creditNotes?.find((credit) => credit.id === payment.creditNoteId);
+    const voucher = {
+      ...payment,
+      invoice,
+      creditNote: creditSource ? { ...creditSource, invoiceId: invoice.id, balance: remaining, status: remaining > 0.01 ? 'PARTIAL' : 'PAID' } : payment.creditNote,
+      customer: payment.customer || invoice.customer,
+      remaining,
+      balance: remaining,
+      paymentLabel: remaining > 0.01 ? 'Pago parcial' : 'Pago completo',
+      payments: paymentRows,
+    };
+    const printToastId = toast.loading('Preparando el ticket de pago...');
+    try {
+      await printSalesPaymentTicket({
+        payment: voucher,
+        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Empresa',
+        formatAmount: formatConvertedAmount as any,
+        tenantLogo: themeConfig?.logo,
+        baseCurrency,
+      });
+      toast.success('Ticket abierto para imprimir.', { id: printToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo preparar el ticket de pago', { id: printToastId });
     }
   };
 
@@ -2881,7 +2950,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 : paymentVoucher?.remaining && paymentVoucher.remaining > 0.01 ? 'Pago parcial registrado' : 'Pago registrado'}
             </DialogTitle>
             <DialogDescription>
-              Revisa el resultado del cobro y descarga el Voucher desde este comprobante.
+              Revisa el resultado del cobro, imprime el ticket ahora o descarga el voucher.
             </DialogDescription>
           </DialogHeader>
           {paymentVoucher && (() => {
@@ -2967,7 +3036,10 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           })()}
           <DialogFooter className="gap-2 sm:justify-between">
             <Button type="button" variant="outline" onClick={() => setPaymentVoucher(null)}>Cerrar</Button>
-            {paymentVoucher && <PdfDownloadButton onDownload={(format) => { void handleDownloadPaymentVoucher(paymentVoucher.payment, paymentVoucher.invoice, format, paymentVoucher.remaining); }} includePageSizes includeRoll />}
+            {paymentVoucher && <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button type="button" onClick={() => void handlePrintPaymentVoucher(paymentVoucher.payment, paymentVoucher.invoice, paymentVoucher.remaining)} className="gap-2 font-black"><Printer className="size-4" />Imprimir ticket</Button>
+              <PdfDownloadButton onDownload={(format) => { void handleDownloadPaymentVoucher(paymentVoucher.payment, paymentVoucher.invoice, format, paymentVoucher.remaining); }} includePageSizes includeRoll />
+            </div>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

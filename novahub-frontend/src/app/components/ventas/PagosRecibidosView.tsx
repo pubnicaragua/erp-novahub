@@ -21,7 +21,7 @@ import { Switch } from '../ui/switch';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
+import { previewSalesTransactionPDF, printSalesPaymentTicket } from '../../utils/pdfGenerator';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
@@ -41,6 +41,7 @@ import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorT
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentTotalBase, getPaymentTotalBaseForSettlement } from '../../utils/paymentSettlement';
+import { SalesPaymentReceiptDialog } from './SalesPaymentReceiptDialog';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -177,6 +178,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
   const [cashSession, setCashSession] = useState<CashRegisterSession | null>(null);
   const [cashLoading, setCashLoading] = useState(false);
   const [detailPayment, setDetailPayment] = useState<PaymentReceived | null>(null);
+  const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceived | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const localDocRef = useRef<any>(null);
   const hydratedDraftKeyRef = useRef<string | null>(null);
@@ -560,8 +562,9 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
         cardCommissionAmount: isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionAmount || undefined : undefined,
         cardCommissionAccountId: isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionAccountId || undefined : undefined,
       } as any;
+      let savedPayment: PaymentReceived;
       if (submittedLines.length > 1) {
-        await paymentsService.createMixed({
+        savedPayment = await paymentsService.createMixed({
           ...payload,
           payments: submittedLines.map((line) => ({
             method: line.method,
@@ -578,8 +581,50 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
           })),
         } as any);
       } else {
-        await paymentsService.create(payload as any);
+        savedPayment = await paymentsService.create(payload as any);
       }
+      const savedRows = savedPayment.payments?.length
+        ? savedPayment.payments
+        : submittedLines.map((line, index) => ({
+          ...savedPayment,
+          id: submittedLines.length > 1 ? `${savedPayment.id}:${index}` : savedPayment.id,
+          amount: line.amount,
+          baseAmount: toBaseAmount(line.amount, line.currency, Number(line.exchangeRate || globalRate || 1)),
+          currency: line.currency,
+          exchangeRate: line.exchangeRate,
+          method: line.method,
+          reference: line.reference,
+          bankAccountId: line.bankAccountId,
+        } as PaymentReceived));
+      const sameCurrency = savedRows.every((row) => String(row.currency || baseCurrency).toUpperCase() === String(savedRows[0]?.currency || baseCurrency).toUpperCase());
+      const receiptCurrency = sameCurrency ? savedRows[0]?.currency || baseCurrency : baseCurrency;
+      const receiptRate = sameCurrency ? Number(savedRows[0]?.exchangeRate || 1) : 1;
+      const receiptTotal = sameCurrency
+        ? savedRows.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+        : savedRows.reduce((sum, row) => sum + Number(row.baseAmount ?? toBaseAmount(Number(row.amount || 0), row.currency, Number(row.exchangeRate || globalRate || 1))), 0);
+      const savedInvoice = savedPayment.invoice || (localDoc.invoiceId && linkedPaymentDocument
+        ? { ...linkedPaymentDocument, balance: paymentRemainingInDocumentCurrency }
+        : undefined);
+      const savedCredit = savedPayment.creditNote || (localDoc.creditNoteId && linkedPaymentDocument
+        ? { ...linkedPaymentDocument, balance: paymentRemainingInCreditCurrency }
+        : undefined);
+      setPaymentReceipt({
+        ...savedPayment,
+        amount: receiptTotal,
+        total: receiptTotal,
+        currency: receiptCurrency as any,
+        exchangeRate: receiptRate,
+        date: payload.date,
+        customer: savedPayment.customer || paymentCustomer,
+        invoice: savedInvoice as any,
+        creditNote: savedCredit as any,
+        balanceApplicationType: payload.balanceApplicationType,
+        change: paymentChangeInDocumentCurrency,
+        paymentLabel: linkedPaymentDocument
+          ? remainingToApplyBase > 0.01 ? 'Pago parcial' : 'Pago completo'
+          : isGeneralBalancePayment ? 'Abono al saldo general' : 'Anticipo',
+        payments: savedRows,
+      } as PaymentReceived);
       toast.success('Pago registrado', { id: saveToastId });
       clearSalesEditorDraft(salesDraftStorageKey);
       localDocRef.current = null;
@@ -593,11 +638,21 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
       const tenantName = user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa';
       const paymentRows = row.payments?.length ? row.payments : [row];
       const documentReference = row.invoice?.number || row.creditNote?.number || (row.balanceApplicationType === 'GENERAL_BALANCE' ? 'Saldo general del cliente' : 'Anticipo');
+      const sameCurrency = paymentRows.every((payment) => String(payment.currency || '').toUpperCase() === String(paymentRows[0]?.currency || '').toUpperCase());
+      const voucherCurrency = sameCurrency ? paymentRows[0]?.currency || row.currency : baseCurrency;
+      const voucherRate = sameCurrency ? Number(paymentRows[0]?.exchangeRate || 1) : 1;
+      const voucherTotal = sameCurrency
+        ? paymentRows.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+        : paymentRows.reduce((sum, payment) => sum + Number(payment.baseAmount ?? toBaseAmount(Number(payment.amount || 0), payment.currency, Number(payment.exchangeRate || globalRate || 1))), 0);
       await previewSalesTransactionPDF({
         document: {
           ...row,
           number: row.number,
           customer: row.customer,
+          amount: voucherTotal,
+          total: voucherTotal,
+          currency: voucherCurrency,
+          exchangeRate: voucherRate,
           notes: `${row.notes || ''}${row.notes ? '\n' : ''}Documento aplicado: ${documentReference}`,
           items: paymentRows.map((payment) => ({
             description: `Pago ${paymentMethodLabel(String(payment.method || row.method).toUpperCase())}${payment.reference ? ` · Ref. ${payment.reference}` : ''}`,
@@ -615,6 +670,22 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
       });
       toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo abrir la previsualización', { id: previewToastId }); }
+  };
+
+  const handlePrintPaymentTicket = async (payment: PaymentReceived) => {
+    const printToastId = toast.loading('Preparando el ticket de pago...');
+    try {
+      await printSalesPaymentTicket({
+        payment,
+        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Empresa',
+        formatAmount: formatConvertedAmount,
+        tenantLogo: themeConfig?.logo,
+        baseCurrency,
+      });
+      toast.success('Ticket abierto para imprimir.', { id: printToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo preparar el ticket de pago', { id: printToastId });
+    }
   };
 
   // Invoices filtered by selected customer
@@ -1091,6 +1162,13 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
         </SheetContent>
       </Sheet>
 
+      <SalesPaymentReceiptDialog
+        payment={paymentReceipt}
+        open={Boolean(paymentReceipt)}
+        onOpenChange={(open) => !open && setPaymentReceipt(null)}
+        formatAmount={formatConvertedAmount}
+        onPrint={() => paymentReceipt && handlePrintPaymentTicket(paymentReceipt)}
+      />
     </div>
   );
 }

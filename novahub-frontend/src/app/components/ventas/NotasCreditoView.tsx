@@ -14,7 +14,7 @@ import { useSalesIntegrationPolicy } from '../../hooks/useSalesIntegrationPolicy
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { CreditNote, Customer, Product, SalesPaginationControls } from '../../types';
+import type { CreditNote, Customer, PaymentReceived, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -23,7 +23,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
+import { previewSalesTransactionPDF, printSalesPaymentTicket } from '../../utils/pdfGenerator';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
@@ -51,6 +51,7 @@ import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker'
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase } from '../../utils/paymentSettlement';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
+import { SalesPaymentReceiptDialog } from './SalesPaymentReceiptDialog';
 
 interface NotasCreditoViewProps {
   data: CreditNote[];
@@ -139,6 +140,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const [isCreating, setIsCreating] = useState(false);
   const [paymentCredit, setPaymentCredit] = useState<CreditNote | null>(null);
   const [paymentLines, setPaymentLines] = useState<CreditPaymentLine[]>([]);
+  const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceived | null>(null);
   const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
   const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -572,7 +574,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     try {
       setPaymentLoading(true);
       const firstLine = submittedLines[0];
-      await creditNotesService.apply(paymentCredit.id, {
+      const updatedCredit = await creditNotesService.apply(paymentCredit.id, {
         amount: Number(firstLine.amount),
         currency: firstLine.currency,
         paymentMethod: firstLine.method,
@@ -591,6 +593,54 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           reference: hasPaymentReferenceField(line.method) ? line.reference : undefined,
         })),
       });
+      const availableRows: any[] = Array.isArray((updatedCredit as any)?.payments) ? [...(updatedCredit as any).payments] : [];
+      availableRows.sort((left, right) => new Date(right.createdAt || right.date || 0).getTime() - new Date(left.createdAt || left.date || 0).getTime());
+      const receiptRows = submittedLines.map((line, index) => {
+        const lineAmount = Number(String(line.amount || '').replace(/,/g, '') || 0);
+        const matchingIndex = availableRows.findIndex((row) =>
+          String(row.method || '').toUpperCase() === String(line.method || '').toUpperCase()
+          && String(row.currency || '').toUpperCase() === String(line.currency || '').toUpperCase()
+          && Math.abs(Number(row.amount || 0) - lineAmount) <= 0.01
+          && (!line.reference || String(row.reference || '').trim() === String(line.reference || '').trim()),
+        );
+        const matchedRow = matchingIndex >= 0 ? availableRows.splice(matchingIndex, 1)[0] : null;
+        return {
+          ...(matchedRow || {}),
+          id: matchedRow?.id || `credit-payment-${index}`,
+          number: matchedRow?.number || '',
+          customerId: paymentCredit.customerId,
+          customer: matchedRow?.customer || (updatedCredit as any)?.customer || customerFor(paymentCredit.customerId),
+          creditNoteId: paymentCredit.id,
+          creditNote: updatedCredit,
+          date: matchedRow?.date || new Date().toISOString(),
+          amount: lineAmount,
+          baseAmount: matchedRow?.baseAmount ?? toBaseAmount(lineAmount, line.currency, Number(line.exchangeRate || globalRate || 1)),
+          currency: line.currency,
+          exchangeRate: line.exchangeRate,
+          method: line.method,
+          reference: line.reference,
+        } as PaymentReceived;
+      });
+      const sameCurrency = receiptRows.every((row) => String(row.currency || '').toUpperCase() === String(receiptRows[0]?.currency || '').toUpperCase());
+      const receiptCurrency = sameCurrency ? receiptRows[0]?.currency || paymentCredit.currency : baseCurrency;
+      const receiptRate = sameCurrency ? Number(receiptRows[0]?.exchangeRate || 1) : 1;
+      const receiptTotal = sameCurrency
+        ? receiptRows.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+        : receiptRows.reduce((sum, row) => sum + Number(row.baseAmount || 0), 0);
+      setPaymentReceipt({
+        ...receiptRows[0],
+        amount: receiptTotal,
+        total: receiptTotal,
+        currency: receiptCurrency as any,
+        exchangeRate: receiptRate,
+        method: receiptRows.length > 1 ? 'MIXED' : receiptRows[0]?.method || firstLine.method,
+        paymentLabel: paymentRemainingBase > 0.01 ? 'Pago parcial' : 'Pago completo',
+        customer: (updatedCredit as any)?.customer || customerFor(paymentCredit.customerId),
+        creditNote: updatedCredit as any,
+        creditNoteId: paymentCredit.id,
+        payments: receiptRows,
+        balance: Number((updatedCredit as any)?.balance ?? paymentRemainingBase),
+      } as PaymentReceived);
       toast.success('Pago registrado y enviado a Pagos Recibidos', { id: paymentToastId });
       setPaymentCredit(null);
       setPaymentLines([]);
@@ -611,6 +661,22 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir la previsualización', { id: previewToastId });
+    }
+  };
+
+  const handlePrintPaymentTicket = async (payment: PaymentReceived) => {
+    const printToastId = toast.loading('Preparando el ticket de pago...');
+    try {
+      await printSalesPaymentTicket({
+        payment,
+        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Empresa',
+        formatAmount: formatConvertedAmount as any,
+        tenantLogo: themeConfig?.logo,
+        baseCurrency,
+      });
+      toast.success('Ticket abierto para imprimir.', { id: printToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo preparar el ticket de pago', { id: printToastId });
     }
   };
 
@@ -1181,6 +1247,14 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <SalesPaymentReceiptDialog
+        payment={paymentReceipt}
+        open={Boolean(paymentReceipt)}
+        onOpenChange={(open) => !open && setPaymentReceipt(null)}
+        formatAmount={formatConvertedAmount}
+        onPrint={() => paymentReceipt && handlePrintPaymentTicket(paymentReceipt)}
+        title="Pago del crédito registrado"
+      />
     </div>
   );
 }

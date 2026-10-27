@@ -2353,6 +2353,7 @@ export async function previewSalesTransactionPDF({
   documentType = 'estimate',
   format = 'configured',
   withImages = true,
+  autoPrint = false,
 }: {
   document: any | Promise<any>;
   tenantName: string;
@@ -2361,6 +2362,7 @@ export async function previewSalesTransactionPDF({
   documentType?: SalesTransactionDocumentType;
   format?: PdfDownloadFormat;
   withImages?: boolean;
+  autoPrint?: boolean;
 }) {
   const title = SALES_TRANSACTION_TITLES[documentType];
   const previewWindow = window.open('', '_blank', 'width=1000,height=850');
@@ -2390,6 +2392,16 @@ export async function previewSalesTransactionPDF({
     // cuanto termina el render, sin cambiar los datos ni el diseño aplicado.
     previewUrl = URL.createObjectURL(blob);
     previewWindow.location.replace(previewUrl);
+    if (autoPrint) {
+      let didPrint = false;
+      const print = () => {
+        if (didPrint) return;
+        didPrint = true;
+        try { previewWindow.focus(); previewWindow.print(); } catch { /* El visor permite imprimir manualmente. */ }
+      };
+      previewWindow.addEventListener('load', print, { once: true });
+      window.setTimeout(print, 900);
+    }
     // Mantener la URL durante la vida normal del visor y liberarla después
     // para no acumular PDFs grandes si el usuario genera varios reportes.
     window.setTimeout(() => URL.revokeObjectURL(previewUrl), 10 * 60 * 1000);
@@ -2399,6 +2411,60 @@ export async function previewSalesTransactionPDF({
     previewWindow.close();
     throw error;
   }
+}
+
+export async function printSalesPaymentTicket({
+  payment,
+  tenantName,
+  formatAmount,
+  tenantLogo,
+  baseCurrency = 'NIO',
+}: {
+  payment: any;
+  tenantName: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  tenantLogo?: string;
+  baseCurrency?: string;
+}) {
+  const paymentRows = Array.isArray(payment?.payments) && payment.payments.length > 0
+    ? payment.payments
+    : [payment];
+  const firstCurrency = String(paymentRows[0]?.currency || payment?.currency || baseCurrency).toUpperCase();
+  const sameCurrency = paymentRows.every((row: any) => String(row?.currency || firstCurrency).toUpperCase() === firstCurrency);
+  const currency = sameCurrency ? firstCurrency : baseCurrency;
+  const exchangeRate = sameCurrency ? Number(paymentRows[0]?.exchangeRate || payment?.exchangeRate || 1) : 1;
+  const total = sameCurrency
+    ? paymentRows.reduce((sum: number, row: any) => sum + Number(row?.amount || 0), 0)
+    : paymentRows.reduce((sum: number, row: any) => sum + Number(row?.baseAmount ?? (Number(row?.amount || 0) * Number(row?.exchangeRate || 1))), 0);
+  const documentReference = payment?.invoice?.number
+    || payment?.creditNote?.number
+    || (payment?.balanceApplicationType === 'GENERAL_BALANCE' ? 'Saldo general del cliente' : 'Anticipo');
+  const receipt = {
+    ...payment,
+    number: payment?.number || '',
+    currency,
+    exchangeRate,
+    amount: total,
+    total,
+    payments: paymentRows,
+    notes: `${payment?.notes || ''}${payment?.notes ? '\n' : ''}Documento aplicado: ${documentReference}`,
+    items: paymentRows.map((row: any) => ({
+      description: `Pago ${String(row?.method || payment?.method || '').toUpperCase()}${row?.reference ? ` · Ref. ${row.reference}` : ''}`,
+      quantity: 1,
+      unitPrice: Number(row?.amount || 0),
+      total: Number(row?.amount || 0),
+      currency: row?.currency,
+    })),
+  };
+  return previewSalesTransactionPDF({
+    document: receipt,
+    tenantName,
+    formatAmount,
+    tenantLogo,
+    documentType: 'payment',
+    format: 'roll-80',
+    autoPrint: true,
+  });
 }
 
 export async function generateSalesTransactionPDF({
