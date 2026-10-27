@@ -30,7 +30,8 @@ export function useNotifications() {
     useEffect(() => {
         if (!authUser?.id || !localStorage.getItem('nh-auth-token')) return undefined;
         const streamIdentity = `${tenantKey}:${userKey}`;
-        return subscribeToNotificationEvents(streamIdentity, () => {
+        return subscribeToNotificationEvents(streamIdentity, event => {
+            if (event.type !== 'notifications-invalidated') return;
             void queryClient.invalidateQueries({
                 queryKey: ['tenant-module', tenantKey, 'notifications', userKey, 'inbox'],
             });

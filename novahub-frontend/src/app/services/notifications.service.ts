@@ -2,7 +2,7 @@ import { api, getApiUrl, getAuthHeaders } from './api';
 import type { Notification } from '../types';
 
 export interface NotificationStreamEvent {
-  type: 'notifications-invalidated';
+  type: 'notifications-invalidated' | 'force-sales-invalidated';
   audience?: 'tenant' | 'manager';
   managerGroupId?: string;
   eventId: string;
@@ -11,6 +11,10 @@ export interface NotificationStreamEvent {
   notificationIds?: string[];
   supportConversationId?: string;
   messageThreadId?: string;
+  clientTenantId?: string;
+  resource?: 'prospect' | 'presence' | 'route' | 'location-trail';
+  entityId?: string;
+  action?: 'created' | 'updated' | 'deleted';
 }
 
 export class NotificationStreamError extends Error {
@@ -51,7 +55,7 @@ export async function consumeNotificationEvents(
 
     try {
       const parsed = JSON.parse(data) as Partial<NotificationStreamEvent>;
-      if (parsed.type === 'notifications-invalidated' && parsed.eventId) {
+      if ((parsed.type === 'notifications-invalidated' || parsed.type === 'force-sales-invalidated') && parsed.eventId) {
         onEvent(parsed as NotificationStreamEvent);
       }
     } catch {
@@ -72,12 +76,15 @@ export async function consumeNotificationEvents(
 }
 
 type NotificationStreamListener = (event: NotificationStreamEvent) => void;
+export type NotificationStreamStatus = 'connected' | 'reconnecting';
 const notificationStreamListeners = new Set<NotificationStreamListener>();
+const notificationStreamStatusListeners = new Set<(status: NotificationStreamStatus) => void>();
 let notificationStreamController: AbortController | null = null;
 let notificationStreamReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let notificationStreamIdentity = '';
 let notificationStreamReconnectAttempt = 0;
 let notificationStreamHadConnection = false;
+let notificationStreamCurrentStatus: NotificationStreamStatus | null = null;
 
 /**
  * Comparte una sola conexión SSE por sesión del navegador aunque Topbar,
@@ -86,6 +93,7 @@ let notificationStreamHadConnection = false;
 export function subscribeToNotificationEvents(
   identity: string,
   listener: NotificationStreamListener,
+  onStatus?: (status: NotificationStreamStatus) => void,
 ): () => void {
   if (!identity) return () => undefined;
   if (notificationStreamIdentity && notificationStreamIdentity !== identity) {
@@ -95,10 +103,15 @@ export function subscribeToNotificationEvents(
 
   notificationStreamIdentity = identity;
   notificationStreamListeners.add(listener);
+  if (onStatus) {
+    notificationStreamStatusListeners.add(onStatus);
+    if (notificationStreamCurrentStatus) onStatus(notificationStreamCurrentStatus);
+  }
   ensureNotificationEventStream(identity);
 
   return () => {
     notificationStreamListeners.delete(listener);
+    if (onStatus) notificationStreamStatusListeners.delete(onStatus);
     if (notificationStreamListeners.size === 0) stopNotificationEventStream();
   };
 }
@@ -108,11 +121,15 @@ function ensureNotificationEventStream(identity: string): void {
 
   const controller = new AbortController();
   notificationStreamController = controller;
+  notificationStreamCurrentStatus = 'reconnecting';
+  notificationStreamStatusListeners.forEach(listener => listener('reconnecting'));
   void consumeNotificationEvents(
     controller.signal,
     (event) => notificationStreamListeners.forEach((listener) => listener(event)),
     () => {
       notificationStreamReconnectAttempt = 0;
+      notificationStreamCurrentStatus = 'connected';
+      notificationStreamStatusListeners.forEach(listener => listener('connected'));
       // Una reconexión también sirve como catch-up: si el proceso reinició o
       // el cliente perdió un evento, el inbox persistido se vuelve a leer una
       // sola vez al recuperar el canal.
@@ -126,7 +143,10 @@ function ensureNotificationEventStream(identity: string): void {
       }
       notificationStreamHadConnection = true;
     },
-  ).catch(() => undefined).finally(() => {
+  ).catch(() => {
+    notificationStreamCurrentStatus = 'reconnecting';
+    notificationStreamStatusListeners.forEach(listener => listener('reconnecting'));
+  }).finally(() => {
     if (notificationStreamController !== controller || controller.signal.aborted) return;
     notificationStreamController = null;
     scheduleNotificationEventReconnect(identity);
@@ -152,6 +172,8 @@ function stopNotificationEventStream(): void {
   notificationStreamIdentity = '';
   notificationStreamReconnectAttempt = 0;
   notificationStreamHadConnection = false;
+  notificationStreamCurrentStatus = null;
+  notificationStreamStatusListeners.forEach(listener => listener('reconnecting'));
 }
 
 const managerNotificationStreamListeners = new Set<NotificationStreamListener>();

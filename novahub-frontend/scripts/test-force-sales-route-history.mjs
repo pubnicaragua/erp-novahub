@@ -9,30 +9,34 @@ for (const [index, match] of [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/sc
 }
 
 const helperScript = html.match(/<script\s+id="nova-force-sales-location-core">([\s\S]*?)<\/script>/i)?.[1];
-assert.ok(helperScript, 'Fuerza Comercial debe exponer el helper de segmentos del recorrido');
+assert.ok(helperScript, 'Fuerza Comercial debe exponer el procesador de historial GPS');
 const sandbox = { window: {} };
 vm.runInNewContext(helperScript, sandbox, { filename: 'force-sales-route-history-core.js' });
 
 const points = [
-  { capturedAt: '2026-10-27T10:00:00.000Z', lat: 12, lng: -86 },
-  { capturedAt: '2026-10-27T10:02:00.000Z', lat: 12.01, lng: -86.01 },
-  { capturedAt: '2026-10-27T10:10:00.000Z', lat: 12.05, lng: -86.05 },
+  { id: 'third', eventId: 'third', userId: 'seller-1', accuracy: 5, capturedAt: '2026-10-27T10:04:01.000Z', lat: 12.002, lng: -86 },
+  { id: 'first', eventId: 'first', userId: 'seller-1', accuracy: 5, capturedAt: '2026-10-27T10:00:00.000Z', lat: 12, lng: -86 },
+  { id: 'second', eventId: 'second', userId: 'seller-1', accuracy: 5, capturedAt: '2026-10-27T10:02:00.000Z', lat: 12.001, lng: -86 },
 ];
-const segments = sandbox.window.NovaForceSalesLocation.splitRouteSegments(points);
-assert.deepEqual(Array.from(segments, (segment) => segment.length), [2, 1], 'Un hueco mayor a cinco minutos debe crear un corte');
-assert.equal(segments.flat().length, points.length, 'Todos los puntos recibidos se conservan y no se interpolan posiciones');
-assert.equal(segments[1][0].lat, 12.05, 'El siguiente tramo empieza en una posición real recibida');
+const processed = sandbox.window.NovaForceSalesLocation.processLocationTrail(points);
+assert.deepEqual(Array.from(processed.segments, segment => Array.from(segment.points, point => point.id)), [['first', 'second']], 'Las posiciones fuera de orden se ordenan y el corte ocurre al superar 120 segundos');
+assert.ok(processed.interruptions.some(item => item.reason === 'time-gap'), 'El historial informa el motivo del corte');
+assert.equal(processed.originalPoints.length, points.length, 'Las lecturas recibidas permanecen disponibles sin interpolar posiciones');
+assert.equal(processed.isolatedPoints[0].point.id, 'third', 'El siguiente tramo empieza en una lectura real recibida, aislada tras la interrupción');
 const realtimeMapScript = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
   .map(match => match[2])
-  .find(script => script.includes('startForceSalesEventStream')) || '';
-const invalidationHandler = realtimeMapScript.match(/if\(event\.type==='notifications-invalidated'&&event\.reason==='updated'\)\{([\s\S]*?)\n\s*\}\s*catch/)
-  ?.[1] || '';
-assert.match(invalidationHandler, /void\s+loadLocationTrail\(\{fitCamera:false\}\)/, 'Un evento de cambios debe refrescar los puntos GPS también en el mapa activo sin mover la cámara');
-assert.doesNotMatch(invalidationHandler, /activeView==='history'[\s\S]*loadLocationTrail/, 'El refresco GPS por SSE no debe depender de estar en Historial');
-assert.match(realtimeMapScript, /if\(CAN_ASSIGN_TEAM&&Date\.now\(\)-lastLocationTrailRefreshAt>=15000\)void loadLocationTrail\(\{fitCamera:false\}\)/, 'Los administradores deben reconciliar el recorrido del mapa aunque el SSE se interrumpa');
+  .find(script => script.includes('function refreshForceSalesData')) || '';
+const refreshHandler = realtimeMapScript.match(/function refreshForceSalesData\(event=\{\}\)\{([\s\S]*?)\n\}/)?.[1] || '';
+assert.match(refreshHandler, /shouldLoadLocationTrail\(\)&&refreshTrail\)work\.push\(loadLocationTrail\(\{fitCamera:false\}\)\)/, 'Los eventos solo consultan el recorrido mientras su capa o el historial estén abiertos y no mueven la cámara');
+assert.match(realtimeMapScript, /function shouldLoadLocationTrail\(\)\{return CAN_ASSIGN_TEAM&&\(\(activeView==='map'&&mapLayers\.gpsTrail\)\|\|activeView==='history'\)\}/, 'El historial no se consulta en segundo plano cuando ambas vistas están cerradas');
+assert.match(realtimeMapScript, /if\(event\.data\?\.type==='force-sales-refresh'\)refreshForceSalesData\(event\.data\.event\|\|\{\}\)/, 'El iframe recibe cambios por el stream compartido del shell');
+assert.match(realtimeMapScript, /if\(forceSalesRealtimeConnected\)refreshForceSalesData\(\{resource:'location-trail'\}\)/, 'La reconexión solicita reconciliación, limitada por la capa abierta');
+assert.match(realtimeMapScript, /if\(shouldLoadLocationTrail\(\)&&Date\.now\(\)-lastLocationTrailRefreshAt>=15000\)void loadLocationTrail\(\{fitCamera:false\}\)/, 'El respaldo de 15 segundos solo corre mientras la capa o el historial estén abiertos');
 assert.match(realtimeMapScript, /async function loadLocationTrail\(options=\{\}\)/, 'El cargador de recorridos acepta refrescos que preservan la cámara');
-assert.match(realtimeMapScript, /if\(options\.fitCamera\)\{[\s\S]*?googleMap\.fitBounds\(bounds,64\)[\s\S]*?googleMap\.panTo\(/, 'La cámara solo se ajusta cuando la carga se solicita para enfocar el recorrido');
-assert.match(realtimeMapScript, /const selectedUser=CAN_ASSIGN_TEAM&&activeView==='history'\?String\(userSelect\?\.value\|\|''\):''/, 'El mapa principal de administradores siempre carga el equipo completo aunque el historial tenga un filtro');
+assert.match(realtimeMapScript, /if\(!shouldLoadLocationTrail\(\)\)\{locationTrailRefreshRequested=false;return\}/, 'Una respuesta no inicia consultas de historial si la capa se apagó');
+assert.match(realtimeMapScript, /requestId!==locationTrailRequestId\|\|!shouldLoadLocationTrail\(\)/, 'Una respuesta tardía no puede volver a dibujar una capa apagada');
+assert.match(realtimeMapScript, /if\(current\.fitCamera&&cameraPoints\.length\)[\s\S]*?googleMap\.fitBounds\(bounds,64\)[\s\S]*?googleMap\.panTo\(/, 'Solo una acción explícita de ver el recorrido cambia el encuadre');
+assert.match(realtimeMapScript, /const selectedUser=CAN_ASSIGN_TEAM\?String\(userSelect\?\.value\|\|''\):''/, 'El mapa y el historial consultan el usuario seleccionado, incluido el selector del mapa');
 
 const trackingRuntime = await readFile(new URL('../src/app/components/ForceSalesTrackingRuntime.tsx', import.meta.url), 'utf8');
 assert.match(trackingRuntime, /import \{ MapPin \} from 'lucide-react'/, 'El indicador GPS móvil usa un icono pequeño de ubicación');

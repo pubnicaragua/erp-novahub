@@ -18,14 +18,15 @@ import {
   Search,
   Sparkles
 } from 'lucide-react';
-import { notificationsService as inboxService } from '../../services/notifications.service';
+import { notificationMetadataObject, notificationsService as inboxService, type NotificationRecordLike } from '../../services/notifications.service';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
+import { getNotificationNavigation } from '../../utils/notificationNavigation';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface InboxViewProps {
-  data: any[];
+  data: NotificationRecordLike[];
   loading: boolean;
   onRefresh: () => void;
 }
@@ -62,18 +63,25 @@ export const InboxView: React.FC<InboxViewProps> = ({ data, loading, onRefresh }
     }
   };
 
-  const handleAction = (item: any) => {
-    const content = (item.content || '').toUpperCase();
-    const metadata = item.metadata || {};
+  const handleAction = (item: NotificationRecordLike) => {
+    const content = String(item.content || item.message || '').toUpperCase();
+    const metadata = notificationMetadataObject(item.metadata);
+    const navigation = notificationMetadataObject(metadata.navigation);
     
-    if (metadata.module) {
+    if (navigation.module) {
+      const destination = getNotificationNavigation(item);
+      window.dispatchEvent(new CustomEvent('navigate-module', { detail: destination }));
+      toast.success(`Navegando a ${destination.module}`);
+    } else if (metadata.module) {
+      const module = String(metadata.module);
       window.dispatchEvent(new CustomEvent('navigate-module', { 
         detail: { 
-          module: metadata.module.toLowerCase(), 
-          subModule: metadata.subModule || undefined 
+          module: module.toLowerCase(),
+          subModule: typeof metadata.subModule === 'string' ? metadata.subModule : undefined,
+          targetId: typeof metadata.targetId === 'string' ? metadata.targetId : typeof metadata.entityId === 'string' ? metadata.entityId : undefined,
         } 
       }));
-      toast.success(`Navegando a ${metadata.module}`);
+      toast.success(`Navegando a ${module}`);
     } else if (content.includes('TAREA')) {
       window.dispatchEvent(new CustomEvent('navigate-module', { 
         detail: { module: 'actividades', subModule: 'tareas' } 

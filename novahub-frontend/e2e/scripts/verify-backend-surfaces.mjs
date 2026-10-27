@@ -22,6 +22,7 @@ const SURFACE_CLASSIFICATION = {
   'src/asana/asana-boards.controller.ts': { category: 'ui', uiModule: 'asana' },
   'src/asana/asana-tasks.controller.ts': { category: 'ui', uiModule: 'asana' },
   'src/audit/audit.controller.ts': { category: 'ui', uiModule: 'auditoria' },
+  'src/audit-workspace/audit-workspace.controller.ts': { category: 'ui', uiModule: 'auditoria' },
   'src/auth/auth.controller.ts': { category: 'infrastructure', reason: 'autenticación y sesión' },
   'src/branding/branding.controller.ts': { category: 'ui', uiModule: 'configuracion' },
   'src/caja/caja.controller.ts': { category: 'ui', uiModule: 'ventas' },

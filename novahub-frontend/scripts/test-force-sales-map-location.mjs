@@ -50,6 +50,22 @@ assert.ok(html.indexOf("type==='ui-context'") < html.indexOf('window.__novaMapsR
 assert.match(html, /quick-capture-hint\{font-size:14px!important/, 'La ayuda de captura conserva legibilidad en móvil');
 assert.match(html, /Punto guardado en el dispositivo · sincronizando/, 'El primer feedback identifica el guardado local mientras sincroniza');
 assert.match(html, /Punto sincronizado con NovaHub/, 'La sincronización completada se comunica por separado');
+const automaticLocationRequest = html.match(/function requestCurrentLocation\(\)\{([\s\S]*?)\n\}/)?.[1] || '';
+assert.ok(automaticLocationRequest, 'La política GPS debe poder solicitar ubicación sin mezclarla con acciones de cámara');
+assert.doesNotMatch(automaticLocationRequest, /locateMe|panTo|setCenter|flyTo/, 'Actualizar GPS requerido no debe mover la cámara');
+assert.match(html, /type==='force-sales-refresh'/, 'El mapa debe aceptar invalidaciones del stream compartido');
+assert.match(html, /force-sales-focus-prospect/, 'El mapa debe aceptar destinos de notificaciones con el punto exacto');
+assert.match(html, /\/force-sales\/prospects\//, 'El destino puede cargar puntos que no están en el catálogo ya hidratado');
+assert.match(html, /crypto\.randomUUID\(\)/, 'Los puntos nuevos usan identificadores UUID y conservan el prefijo legacy quick-');
+assert.match(html, /forceSalesRefreshInFlight/, 'Los eventos simultáneos se agrupan para evitar consultas superpuestas');
+assert.ok(['Sin sincronizar', 'Reconectando', 'Conectado'].every(status => html.includes(status)), 'El mapa distingue datos no sincronizados, reconexión y stream conectado');
+assert.match(html, /type==='force-sales-stream-status'[\s\S]*refreshForceSalesData/, 'La reconexión reconcilia el catálogo compartido');
+assert.match(html, /forceSalesSyncErrors\.delete\('catálogo'\)/, 'El mapa limpia el error de sincronización cuando vuelve el catálogo compartido');
+assert.doesNotMatch(html, /startForceSalesEventStream/, 'El iframe no abre una segunda conexión SSE');
+assert.match(html, /loadLocationTrail\(\{fitCamera:false\}\)/, 'La actualización automática del historial conserva la cámara');
+const routeHydration = html.match(/function hydrateRemoteRoute\(route\)\{([\s\S]*?)\n\}/)?.[1] || '';
+assert.ok(routeHydration, 'Las rutas persistidas se hidratan sin reconstruir el mapa');
+assert.doesNotMatch(routeHydration, /panTo|fitBounds|setZoom|flyTo/, 'La ruta seleccionada automáticamente no cambia centro ni zoom');
 
 const candidates = Array.from({ length: 320 }, (_, index) => ({ id: `point-${index}` }));
 const focusedPoint = { id: 'just-created' };

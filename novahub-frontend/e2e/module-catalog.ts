@@ -26,7 +26,7 @@ export const E2E_MODULE_CATALOG: readonly E2eModuleDefinition[] = [
   { id: 'proveedores', label: 'Proveedores' },
   { id: 'actividades', label: 'Actividades', subModule: 'tareas' },
   { id: 'proyectos', label: 'Proyectos', subModule: 'proyectos' },
-  { id: 'fuerza-comercial', label: 'Fuerza Comercial', requiresPlatformRole: true },
+  { id: 'fuerza-comercial', label: 'Fuerza Comercial', accessModule: 'FORCE_SALES' },
   { id: 'tickets', label: 'Gestión de tickets', subModule: 'tickets' },
   { id: 'documentos', label: 'Nova Cloud', subModule: 'archivos' },
   { id: 'notificaciones', label: 'Notificaciones', subModule: 'alertas' },

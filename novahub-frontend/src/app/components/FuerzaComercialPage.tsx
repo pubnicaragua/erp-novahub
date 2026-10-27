@@ -1,26 +1,41 @@
 import { MapPinned, ShieldAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { MapPinned, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { subscribeToNotificationEvents } from '../services/notifications.service';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
 import mapUrl from '../../../maps/diseñoui_mapas_freelancers.html?url';
+
+interface ForceSalesMapConfig {
+  mapProvider?: string;
+  mapSearchMode?: string;
+  mapTileUrl?: string | null;
+  mapGeocoderUrl?: string | null;
+}
 
 export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: string; onSubModuleChange?: (value: string) => void }) {
   const { user, hasAccess, canPerform } = useAuth();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const mapSectionRef = useRef<HTMLElement>(null);
   const routeImportInputRef = useRef<HTMLInputElement>(null);
+  const pendingProspectTargetRef = useRef<string | null>(null);
+  const streamStatusRef = useRef<'connected' | 'reconnecting'>('reconnecting');
+  const [previousSubModule, setPreviousSubModule] = useState(activeSubModule);
   const [mapFullscreen, setMapFullscreen] = useState(false);
-  const [mapConfig, setMapConfig] = useState<{ mapProvider?: string; mapSearchMode?: string; mapTileUrl?: string | null; mapGeocoderUrl?: string | null } | null>(null);
+  if (previousSubModule !== activeSubModule) {
+    setPreviousSubModule(activeSubModule);
+    setMapFullscreen(false);
+  }
+  const [mapConfig, setMapConfig] = useState<ForceSalesMapConfig | null>(null);
   const isSuperAdmin = user?.role === 'superadmin';
   const normalizedRole = String(user?.role || '').toUpperCase();
-  const canAssignTeam = isSuperAdmin || ['SUPER_ADMIN', 'SUPERADMIN', 'PLATFORM_ADMIN', 'PARTNER', 'ADMIN', 'MANAGER'].includes(normalizedRole) || Boolean((user as any)?.isTenantAdmin) || Boolean((user as any)?.managerContext?.canEdit);
+  const normalizedUserType = String(user?.userType || '').toUpperCase();
+  const canAssignTeam = isSuperAdmin || ['SUPER_ADMIN', 'SUPERADMIN', 'PLATFORM_ADMIN', 'PARTNER', 'ADMIN', 'MANAGER'].includes(normalizedRole) || normalizedUserType === 'ADMIN' || Boolean(user?.isTenantAdmin) || Boolean(user?.managerCanEdit);
   const isAuthorizedUser = Boolean(user) && hasAccess('fuerza-comercial');
   const apiBase = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://backenderpnh.onrender.com/api' : 'http://localhost:3000/api');
   const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-  const googleMapsMapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
+  const googleMapsMapId = String(import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || '').trim() || 'DEMO_MAP_ID';
   const tenantLogo = user?.clientTenant?.logo || user?.sessionBranding?.logo || isotipoUrl;
   const view = activeSubModule === 'fuerza-comercial-kanban' ? 'kanban' : activeSubModule === 'fuerza-comercial-historial' ? 'history' : 'map';
   const workflowActions = [
@@ -32,13 +47,44 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   useEffect(() => {
     let cancelled = false;
     if (!isAuthorizedUser) return undefined;
-    void api.get<any>('/force-sales/config').then((configuration) => {
+    void api.get<ForceSalesMapConfig>('/force-sales/config').then((configuration) => {
       if (!cancelled) setMapConfig(configuration || {});
     }).catch(() => {
       if (!cancelled) setMapConfig({});
     });
     return () => { cancelled = true; };
   }, [isAuthorizedUser, user?.clientTenantId]);
+
+  useEffect(() => {
+    if (!isAuthorizedUser || !user?.id || !user?.clientTenantId) return undefined;
+    const send = (type: string, detail: Record<string, unknown> = {}) => {
+      iframeRef.current?.contentWindow?.postMessage({ source: 'novahub-force-sales', type, ...detail }, window.location.origin);
+    };
+    const unsubscribe = subscribeToNotificationEvents(
+      `${user.clientTenantId}:${user.id}`,
+      event => {
+        if (event.type !== 'force-sales-invalidated' || event.clientTenantId !== user.clientTenantId) return;
+        send('force-sales-refresh', { event });
+      },
+      status => {
+        streamStatusRef.current = status;
+        send('force-sales-stream-status', { status });
+      },
+    );
+    const onNavigate = (event: Event) => {
+      const detail = (event as CustomEvent<Record<string, unknown>>).detail || {};
+      if (!['fuerza-comercial', 'force-sales'].includes(String(detail.module || '').toLowerCase())) return;
+      const targetId = String(detail.targetId || detail.entityId || '').trim();
+      if (!targetId) return;
+      pendingProspectTargetRef.current = targetId;
+      send('force-sales-focus-prospect', { targetId });
+    };
+    window.addEventListener('navigate-module', onNavigate);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('navigate-module', onNavigate);
+    };
+  }, [isAuthorizedUser, user?.id, user?.clientTenantId]);
 
   const mapProvider = String(mapConfig?.mapProvider || 'GOOGLE').toUpperCase();
   const mapSearchMode = String(mapConfig?.mapSearchMode || 'EXTERNAL').toUpperCase();
@@ -102,7 +148,13 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     window.addEventListener('scroll', scheduleUiContext, { passive: true, capture: true });
     window.visualViewport?.addEventListener('resize', scheduleUiContext, { passive: true });
     window.visualViewport?.addEventListener('scroll', scheduleUiContext, { passive: true });
-    frame.addEventListener('load', scheduleUiContext);
+    const onFrameLoad = () => {
+      scheduleUiContext();
+      frame.contentWindow?.postMessage({ source: 'novahub-force-sales', type: 'force-sales-stream-status', status: streamStatusRef.current }, window.location.origin);
+      const targetId = pendingProspectTargetRef.current;
+      if (targetId) frame.contentWindow?.postMessage({ source: 'novahub-force-sales', type: 'force-sales-focus-prospect', targetId }, window.location.origin);
+    };
+    frame.addEventListener('load', onFrameLoad);
     scheduleUiContext();
 
     return () => {
@@ -113,7 +165,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
       window.removeEventListener('scroll', scheduleUiContext, true);
       window.visualViewport?.removeEventListener('resize', scheduleUiContext);
       window.visualViewport?.removeEventListener('scroll', scheduleUiContext);
-      frame.removeEventListener('load', scheduleUiContext);
+      frame.removeEventListener('load', onFrameLoad);
     };
   }, [mapSrc, mapFullscreen]);
 
@@ -124,14 +176,11 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
       if (event.data?.type === 'fullscreen') setMapFullscreen(Boolean(event.data.active));
       if (event.data?.type === 'configuration-updated') setMapConfig(event.data.configuration || {});
       if (event.data?.type === 'request-import-file') routeImportInputRef.current?.click();
+      if (event.data?.type === 'force-sales-focus-complete') pendingProspectTargetRef.current = null;
     };
     window.addEventListener('message', onMapMessage);
     return () => window.removeEventListener('message', onMapMessage);
   }, []);
-
-  useEffect(() => {
-    setMapFullscreen(false);
-  }, [activeSubModule]);
 
   if (!isAuthorizedUser) {
     return (
