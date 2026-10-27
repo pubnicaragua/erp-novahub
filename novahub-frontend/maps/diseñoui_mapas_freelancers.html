@@ -1245,6 +1245,7 @@ async function startForceSalesEventStream(){
           const event=JSON.parse(data);
           if(event.type==='notifications-invalidated'&&event.reason==='updated'){
             void Promise.all([loadRemoteProspects(),loadRemoteRoutes(),loadSellerPresence()]);
+            if(activeView==='history')void loadLocationTrail();
           }
         }catch(error){console.warn('Evento SSE de Fuerza Comercial inválido',error)}
       });
@@ -2941,6 +2942,9 @@ function renderKanban(){
   }));
 }
 let locationTrailArtifacts=[];
+let locationTrailLoading=false;
+let locationTrailRefreshRequested=false;
+let lastLocationTrailRefreshAt=0;
 function clearLocationTrail(){
   locationTrailArtifacts.forEach(artifact=>artifact?.setMap?.(null));
   locationTrailArtifacts=[];
@@ -2953,17 +2957,20 @@ function localDateInputValue(date=new Date()){
   return new Date(date.getTime()-offset).toISOString().slice(0,10);
 }
 async function loadLocationTrail(){
+  if(locationTrailLoading){locationTrailRefreshRequested=true;return}
+  locationTrailLoading=true;
+  locationTrailRefreshRequested=false;
+  lastLocationTrailRefreshAt=Date.now();
   const status=document.getElementById('locationTrailStatus');
   const dateInput=document.getElementById('locationTrailDate');
   const userSelect=document.getElementById('locationTrailUser');
   const day=String(dateInput?.value||localDateInputValue());
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)){if(status)status.textContent='Selecciona un día válido.';return}
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)){if(status)status.textContent='Selecciona un día válido.';locationTrailLoading=false;return}
   const start=new Date(`${day}T00:00:00`);
   const end=new Date(start);end.setDate(end.getDate()+1);
   const from=start.toISOString();const to=end.toISOString();
   const selectedUser=CAN_ASSIGN_TEAM?String(userSelect?.value||''):'';
-  clearLocationTrail();
-  if(status)status.textContent='Cargando posiciones guardadas…';
+  if(status&&!locationTrailArtifacts.length)status.textContent='Cargando posiciones guardadas…';
   const points=[];
   let cursor='';
   let truncated=false;
@@ -2979,11 +2986,13 @@ async function loadLocationTrail(){
       if(page===9)truncated=true;
     }
     if(!points.length){
+      clearLocationTrail();
       if(status)status.textContent='No hay puntos guardados para ese día. Si el rastreo estuvo suspendido, aquí no se inventan posiciones.';
       return;
     }
     points.sort((a,b)=>String(a.capturedAt).localeCompare(String(b.capturedAt))||String(a.eventId).localeCompare(String(b.eventId)));
     const pointsBySeller=new Map();
+    const nextArtifacts=[];
     points.forEach(point=>{
       const key=String(point.userId||point.userName||'seller');
       if(!pointsBySeller.has(key))pointsBySeller.set(key,[]);
@@ -2998,12 +3007,14 @@ async function loadLocationTrail(){
       segments.forEach(segment=>{
         const path=segment.map(point=>({lat:Number(point.lat),lng:Number(point.lng)}));
         if(path.length>1){
-          locationTrailArtifacts.push(new google.maps.Polyline({map:googleMap,path,geodesic:false,strokeColor:routeColors[sellerIndex%routeColors.length],strokeOpacity:.9,strokeWeight:5,zIndex:1150}));
+          nextArtifacts.push(new google.maps.Polyline({map:googleMap,path,geodesic:false,strokeColor:routeColors[sellerIndex%routeColors.length],strokeOpacity:.9,strokeWeight:5,zIndex:1150}));
         }else{
-          locationTrailArtifacts.push(new google.maps.Circle({map:googleMap,center:path[0],radius:10,fillColor:routeColors[sellerIndex%routeColors.length],fillOpacity:.85,strokeColor:'#ffffff',strokeOpacity:1,strokeWeight:2}));
+          nextArtifacts.push(new google.maps.Circle({map:googleMap,center:path[0],radius:10,fillColor:routeColors[sellerIndex%routeColors.length],fillOpacity:.85,strokeColor:'#ffffff',strokeOpacity:1,strokeWeight:2}));
         }
       });
     });
+    clearLocationTrail();
+    locationTrailArtifacts=nextArtifacts;
     if(points.length>1){
       const bounds=new google.maps.LatLngBounds();
       points.forEach(point=>bounds.extend({lat:Number(point.lat),lng:Number(point.lng)}));
@@ -3016,6 +3027,12 @@ async function loadLocationTrail(){
     if(status)status.textContent=`${points.length}${truncated?' o más':''} puntos${sellerLabel} · ${segmentCount} tramo${segmentCount===1?'':'s'} · ${gaps} interrupción${gaps===1?'':'es'} mayor${gaps===1?'':'es'} a 5 min · ${first}–${last}${truncated?' · continúa filtrando por vendedor para ver más':''}. Cada vendedor tiene su propio recorrido; los tramos vacíos no se interpolan.`;
   }catch(error){
     if(status)status.textContent=error instanceof Error?`No se pudo cargar el recorrido: ${error.message}`:'No se pudo cargar el recorrido.';
+  }finally{
+    locationTrailLoading=false;
+    if(locationTrailRefreshRequested&&activeView==='history'){
+      locationTrailRefreshRequested=false;
+      void loadLocationTrail();
+    }
   }
 }
 function renderHistory(){
@@ -3039,6 +3056,8 @@ function renderHistory(){
     </article>`;
   }).join('') : '<div class="history-empty">Todavía no hay seguimientos comerciales guardados. Los recorridos GPS aparecerán arriba cuando existan puntos sincronizados.</div>');
   history.querySelector('#loadLocationTrail')?.addEventListener('click',()=>void loadLocationTrail());
+  history.querySelector('#locationTrailDate')?.addEventListener('change',()=>void loadLocationTrail());
+  history.querySelector('#locationTrailUser')?.addEventListener('change',()=>void loadLocationTrail());
   history.querySelectorAll('[data-history-open]').forEach(el=>el.addEventListener('click',()=>{
     const b=findBusiness(el.dataset.historyOpen); if(!b)return;
     activeView='map'; updateView(); pipelineFilter='all'; render();
@@ -3743,6 +3762,7 @@ window.setInterval(()=>{
       lastRemoteRefreshAt=Date.now();
       loadRemoteProspects().finally(()=>loadRemoteRoutes());
     }
+    if(activeView==='history'&&Date.now()-lastLocationTrailRefreshAt>=5000)void loadLocationTrail();
   },3000);
 
 const sheet = document.getElementById('sheet');

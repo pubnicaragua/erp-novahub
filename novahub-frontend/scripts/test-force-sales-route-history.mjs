@@ -22,5 +22,10 @@ const segments = sandbox.window.NovaForceSalesLocation.splitRouteSegments(points
 assert.deepEqual(Array.from(segments, (segment) => segment.length), [2, 1], 'Un hueco mayor a cinco minutos debe crear un corte');
 assert.equal(segments.flat().length, points.length, 'Todos los puntos recibidos se conservan y no se interpolan posiciones');
 assert.equal(segments[1][0].lat, 12.05, 'El siguiente tramo empieza en una posición real recibida');
+const realtimeMapScript = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+  .map(match => match[2])
+  .find(script => script.includes('startForceSalesEventStream')) || '';
+assert.ok(/if\(activeView==='history'\)\s*void\s+loadLocationTrail\(\)/.test(realtimeMapScript), 'Un evento de cambios debe refrescar inmediatamente el recorrido GPS abierto');
+assert.ok(/activeView==='history'\s*&&\s*Date\.now\(\)-lastLocationTrailRefreshAt>=5000/.test(realtimeMapScript), 'El historial GPS abierto debe reconciliarse periódicamente aunque no llegue SSE');
 
 console.log('force-sales route history: inline syntax and real-point-only gap segmentation passed');
