@@ -1313,7 +1313,7 @@ function profilePayloadFromPayload(payload){
 function prospectPayload(b){
   const c=stateOf(b);
   return {
-    sourceKey:keyOf(b), googlePlaceId:b.googlePlaceId || null, name:b.name, phone:b.phone || null,
+    sourceKey:keyOf(b), clientTenantId:CURRENT_TENANT_ID || null, googlePlaceId:b.googlePlaceId || null, name:b.name, phone:b.phone || null,
     website:b.website || null, address:b.address || null, zone:b.zone || null, category:b.category || null,
     lat:b.lat, lng:b.lng, rating:b.rating || null, reviews:b.reviews || 0, novaFitScore:b.score || 0,
     priority:b.priority || 'C', selected:Boolean(c.selected), stage:stageToApi(statusOf(b)),
@@ -1405,7 +1405,7 @@ async function persistProspectAction(b,action,suffix,body,evidenceFile=null){
     if(!requireForceSales('importProspects'))return false;
     await syncProspects([b]);
   }
-  if(!state.remoteId){toast('El prospecto todavía no está sincronizado con el ERP');return false}
+  if(!state.remoteId){toast('Punto guardado en el mapa; la sincronización con el ERP sigue pendiente');return false}
   const requestBody={...(body || {})};
   if(evidenceFile){
     if(!requireForceSales('attachEvidence'))return false;
@@ -1661,7 +1661,7 @@ function scoreFor(cat, tags={}){
 function mergeBusinesses(){
   const m = new Map();
   const catalog = HAS_AUTHENTICATED_TENANT
-    ? [...localPoints.filter(item=>Boolean(stateOf(item).remoteId)), ...remoteProspects]
+    ? [...localPoints, ...remoteProspects]
     : (LEAD_DISCOVERY_ENABLED ? [...seed, ...localPoints, ...googlePlaces, ...remoteProspects] : [...remoteProspects]);
   catalog.forEach(b => {
     if(deletedBusinessKeys.has(String(keyOf(b))))return;
@@ -1880,7 +1880,7 @@ function saveQuickPoint(){
   const coords={...pendingPointCoords};
   const name=(nameInput?.value || '').trim();
   if(!name){nameInput?.focus();toast('Escribe el nombre del negocio para continuar');return}
-  if(pendingQuickPointFile && !requireForceSales('attachEvidence'))return;
+  if(pendingQuickPointFile && !canForceSales('attachEvidence')&&!canForceSales('importProspects')){toast('Tu rol no tiene permiso para subir imágenes');return}
   pendingPointCoords=null;
   createQuickPointAt(coords.lat,coords.lng,name,{},pendingQuickPointFile);
 }
@@ -1907,6 +1907,8 @@ function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',det
   toast(evidenceFile?'Punto y foto guardados':'Punto registrado');
   void (async()=>{
     await syncProspects([business],evidenceFile);
+    const syncedState=stateOf(business);
+    if(!syncedState.remoteId){toast('Punto marcado en el mapa; se sincronizará al recuperar la conexión');return}
     if(canForceSales('registerVisit')){
       const visitedAt=new Date().toISOString();
       const saved=await persistProspectAction(business,'registerVisit','/visit',{visitLat:business.lat,visitLng:business.lng,visitedAt});
