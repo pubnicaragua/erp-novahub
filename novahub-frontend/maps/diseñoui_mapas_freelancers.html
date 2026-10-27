@@ -1285,7 +1285,7 @@ async function flushOutbox(){
         }
         if(!remoteId && (entry.evidence?.blob || entry.pendingOperations?.length))continue;
         if(entry.evidence?.blob){
-          if(!canForceSales('attachEvidence'))continue;
+          if(!canForceSales('attachEvidence')&&!canForceSales('importProspects'))continue;
           const uploaded=await uploadEvidence(entry.evidence.blob);
           await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(remoteId)}`,{method:'PATCH',body:JSON.stringify({evidenceUri:uploaded.uri,evidenceName:entry.evidence.name,evidenceType:entry.evidence.type})});
           if(business){const state=stateOf(business);state.evidenceUri=uploaded.uri;state.evidencePending=false;persistCommercial()}
@@ -1759,6 +1759,7 @@ function popupHtml(b){
       <input id="ev-${sid}" type="file" accept="image/*,.pdf" capture="environment">
       <div class="evidence-preview" id="ev-preview-${sid}" hidden></div>
       ` : ''}
+      ${c.evidencePreviewUrl ? `<div class="evidence-preview"><img src="${esc(c.evidencePreviewUrl)}" alt="Vista previa de evidencia"><span>Imagen cargada${c.evidencePending ? ' · pendiente de sincronizar' : ''}</span></div>` : ''}
       ${c.evidenceName ? `<div class="meta">Evidencia: ${esc(c.evidenceName)}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</div>` : ''}
       ${c.evidenceUri ? `<button type="button" onclick="openEvidence('${b.id}')">Ver evidencia</button>` : ''}
       ${(canForceSales('updateProspect') || canForceSales('changeStage') || canForceSales('attachEvidence')) ? `<button onclick="saveFollowup('${b.id}')">Guardar seguimiento</button>` : ''}
@@ -1896,7 +1897,7 @@ function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',det
   localPoints.unshift(business);
     localStorage.setItem(LOCAL_POINTS_KEY,JSON.stringify(localPoints.slice(0,2000)));
   const c=stateOf(business); Object.assign(c,{selected:true,stage:'Nuevo'});
-  if(evidenceFile){c.evidenceName=evidenceFile.name;c.evidenceType=evidenceFile.type;c.evidencePending=true}
+  if(evidenceFile){c.evidenceName=evidenceFile.name;c.evidenceType=evidenceFile.type;c.evidencePreviewUrl=URL.createObjectURL(evidenceFile);c.evidencePending=true}
   persistCommercial();
   mergeBusinesses(); populateFilters();
   document.getElementById('quickCapture').hidden=true;
@@ -2164,6 +2165,7 @@ document.getElementById('quickEvidenceInput')?.addEventListener('change',async e
   const c=stateOf(b);
   c.evidenceName=file.name;
   c.evidenceType=file.type;
+  c.evidencePreviewUrl=URL.createObjectURL(file);
   c.evidencePending=true;
   persistCommercial();
   render();

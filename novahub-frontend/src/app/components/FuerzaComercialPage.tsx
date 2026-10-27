@@ -16,7 +16,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   const normalizedRole = String(user?.role || '').toUpperCase();
   const canAssignTeam = isSuperAdmin || ['SUPER_ADMIN', 'SUPERADMIN', 'PLATFORM_ADMIN', 'PARTNER', 'ADMIN', 'MANAGER'].includes(normalizedRole) || Boolean((user as any)?.isTenantAdmin) || Boolean((user as any)?.managerContext?.canEdit);
   const isAuthorizedUser = Boolean(user) && hasAccess('fuerza-comercial');
-  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+  const apiBase = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://backenderpnh.onrender.com/api' : 'http://localhost:3000/api');
   const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const googleMapsMapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
   const tenantLogo = user?.clientTenant?.logo || user?.sessionBranding?.logo || isotipoUrl;
