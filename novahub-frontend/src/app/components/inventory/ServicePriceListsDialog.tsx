@@ -138,7 +138,7 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
           <div className="space-y-3 py-2">
             {rows.map(({ list, configured, price, currency, exchangeRate }) => {
               const draft = drafts[list.id] || {
-                price: configured ? price : '',
+                price,
                 currency,
                 exchangeRate,
               };
