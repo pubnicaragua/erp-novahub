@@ -1709,6 +1709,11 @@ export interface Notification {
   link?: string | null;
   dedupeKey?: string | null;
   metadata?: unknown;
+  isGroup?: boolean;
+  groupCount?: number;
+  unreadCount?: number;
+  latestNotificationId?: string;
+  notificationGroupId?: string;
 }
 
 export interface Transfer {

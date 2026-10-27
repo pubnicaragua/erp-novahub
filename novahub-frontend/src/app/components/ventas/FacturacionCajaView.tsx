@@ -67,7 +67,6 @@ import { formatPdfVariantAttributes } from '../../utils/pdf-line-details';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
-import { playNotificationSound } from '../../utils/notificationSound';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { SalesOtherLocationsDialog } from './SalesOtherLocationsDialog';
 import { getAvailableSalesStock, getSalesStockOptionLabel } from '../../utils/sales-stock';
@@ -689,7 +688,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           (event) => {
             if (controller.signal.aborted) return;
             setCashQueueConnection('LIVE');
-            if (event.status === 'PENDING') playNotificationSound();
             void loadCashQueue();
           },
           () => {

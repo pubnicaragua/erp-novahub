@@ -56,6 +56,8 @@ import { getPasswordError } from '../utils/accountValidation';
 import { PasswordRequirements } from './PasswordRequirements';
 import { useImpersonation } from '../contexts/ImpersonationContext';
 import { tenantsService, type TenantBillingInvoice } from '../services/tenants.service';
+import { NotificationGroupDetailsDialog } from './notifications/NotificationGroupDetailsDialog';
+import type { Notification } from '../types';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -157,8 +159,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     return () => window.clearTimeout(timeout);
   }, [isBranchManagerSession, branch?.id]);
   const hasPosAccess = canPerform('RETAIL_POS', 'view');
-  const { unreadCount, markAsRead, markAllAsRead, notifications } = useNotifications();
+  const { unreadCount, markAsRead, markGroupAsRead, notifications } = useNotifications();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [selectedNotificationGroup, setSelectedNotificationGroup] = useState<Notification | null>(null);
   const [billingHistory, setBillingHistory] = useState<{ history?: TenantBillingInvoice[] } | null>(null);
   const [billingHistoryLoading, setBillingHistoryLoading] = useState(false);
   const billingLoadedTenantRef = useRef<string | null>(null);
@@ -730,12 +733,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         {/* Notifications */}
         <Popover
           open={notificationsOpen}
-          onOpenChange={(open) => {
-            setNotificationsOpen(open);
-            if (open && unreadCount > 0) {
-              void markAllAsRead();
-            }
-          }}
+          onOpenChange={setNotificationsOpen}
         >
           <PopoverTrigger asChild>
             <Button
@@ -797,14 +795,15 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                       className="topbar-notification-item group flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                       onClick={() => {
                         setNotificationsOpen(false);
-                        void markAsRead(n.id);
-                        navigateToNotification(n);
+                        setSelectedNotificationGroup(n);
                       }}
                     >
                       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? 'bg-muted-foreground/60' : 'bg-primary'}`} />
                       <div className="min-w-0 flex-1">
                         <span className="topbar-notification-title block break-words text-sm font-semibold leading-5">{n.title}</span>
-                        <span className="topbar-notification-detail mt-1 block whitespace-pre-line break-words text-xs leading-4">{readableDetail}</span>
+                        <span className="topbar-notification-detail mt-1 block whitespace-pre-line break-words text-xs leading-4">
+                          {n.isGroup ? n.message : readableDetail}
+                        </span>
                       </div>
                     </button>
                   );
@@ -831,6 +830,18 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             )}
           </PopoverContent>
         </Popover>
+
+        <NotificationGroupDetailsDialog
+          open={Boolean(selectedNotificationGroup)}
+          group={selectedNotificationGroup}
+          onOpenChange={(open) => { if (!open) setSelectedNotificationGroup(null); }}
+          onOpenNotification={(notification) => {
+            setSelectedNotificationGroup(null);
+            void markAsRead(notification.id);
+            navigateToNotification(notification);
+          }}
+          onMarkGroupRead={markGroupAsRead}
+        />
 
         {/* User Menu */}
         <DropdownMenu>

@@ -76,6 +76,7 @@ import { BrandLogo } from "./BrandLogo";
 import { cn } from "./ui/utils";
 import { notificationsService, subscribeToManagerNotificationEvents } from "../services/notifications.service";
 import { playNotificationSound } from "../utils/notificationSound";
+import { claimNotificationPresentation } from "../utils/notification-presentation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatCurrencyDescriptor, getCurrencyMetadata } from "../utils/currency";
 import { getReadableForeground } from "../utils/color-contrast";
@@ -124,6 +125,8 @@ import {
   type ManagerHrView,
 } from "./manager/manager-hr.types";
 import { MANAGER_OPERATION_VIEWS } from "./manager/manager-operations.types";
+import { NotificationGroupDetailsDialog } from "./notifications/NotificationGroupDetailsDialog";
+import type { Notification } from "../types";
 
 const MANAGER_INVENTORY_VIEW_ICONS: Record<ManagerInventoryView, LucideIcon> = {
   overview: LayoutDashboard,
@@ -438,6 +441,7 @@ export function ManagerShell({
   );
   const profileAvatarKey = `novahub:manager-avatar:${user?.id || "current"}`;
   const [profileAvatar, setProfileAvatar] = useState(() => safeGetItem(profileAvatarKey) || user?.avatar || "");
+  const [selectedManagerNotificationGroup, setSelectedManagerNotificationGroup] = useState<Notification | null>(null);
 
   useEffect(() => {
     setProfileAvatar(safeGetItem(profileAvatarKey) || user?.avatar || "");
@@ -484,9 +488,10 @@ export function ManagerShell({
     refetchInterval: false,
     refetchOnWindowFocus: false,
   });
-  const managerNotifications = managerNotificationsQuery.data || [];
+  const managerNotifications = managerNotificationsQuery.data?.items || [];
   const unreadManagerNotifications = managerNotifications.filter((notification) => !notification.read);
-  const managerNotificationIdsRef = useRef<Set<string> | null>(null);
+  const unreadManagerGroupCount = managerNotificationsQuery.data?.unreadGroupCount ?? unreadManagerNotifications.length;
+  const managerNotificationVersionsRef = useRef<Map<string, string> | null>(null);
   const managerNotificationScopeRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -552,7 +557,11 @@ export function ManagerShell({
     await managerNotificationsQuery.refetch();
   };
 
-  const openManagerNotification = (notification: { id: string; metadata?: unknown }) => {
+  const openManagerNotification = (notification: Notification) => {
+    setSelectedManagerNotificationGroup(notification);
+  };
+
+  const navigateManagerNotification = (notification: Notification) => {
     void markManagerNotificationRead(notification.id);
     const metadata = notification.metadata && typeof notification.metadata === 'object' && !Array.isArray(notification.metadata)
       ? notification.metadata as { navigation?: { module?: string; subModule?: string; filter?: string } }
@@ -605,31 +614,54 @@ export function ManagerShell({
     onInventoryViewChange(filter === 'transfers' ? 'transfers' : 'adjustments');
   };
 
+  const markManagerGroupRead = async (notification: Notification, throughNotificationId: string) => {
+    if (!group?.id) return;
+    await notificationsService.markManagerGroupRead(
+      group.id,
+      notification.notificationGroupId || notification.id,
+      throughNotificationId,
+    );
+    await managerNotificationsQuery.refetch();
+  };
+
   useEffect(() => {
     if (!managerNotificationsQuery.isFetched) return;
 
     const scope = `${group?.id || ""}:${user?.id || ""}`;
-    const currentIds = new Set(managerNotifications.map((notification) => notification.id));
+    const currentVersions = new Map(managerNotifications.map((notification) => [
+      notification.id,
+      notification.latestNotificationId || notification.id,
+    ]));
 
     // The first response only establishes the baseline; the sound is reserved
     // for notifications that arrive after the Manager has opened the panel.
     if (managerNotificationScopeRef.current !== scope) {
       managerNotificationScopeRef.current = scope;
-      managerNotificationIdsRef.current = currentIds;
+      managerNotificationVersionsRef.current = currentVersions;
       return;
     }
 
-    const newUnreadNotifications = managerNotifications.filter(
-      (notification) => !notification.read && !managerNotificationIdsRef.current?.has(notification.id),
-    );
-    managerNotificationIdsRef.current = currentIds;
-    newUnreadNotifications.forEach((notification) => {
-      playNotificationSound();
-      toast.info(notification.title || 'Nueva notificación del Manager', {
-        description: notification.message || 'Tienes una novedad pendiente de revisar.',
-        position: 'top-right',
-        action: { label: 'Abrir', onClick: () => openManagerNotification(notification) },
-      });
+    const changedUnreadGroups = managerNotifications.filter((notification) => (
+      !notification.read
+      && managerNotificationVersionsRef.current?.get(notification.id) !== (notification.latestNotificationId || notification.id)
+    ));
+    const previousVersions = managerNotificationVersionsRef.current || new Map<string, string>();
+    managerNotificationVersionsRef.current = currentVersions;
+    changedUnreadGroups.forEach((notification) => {
+      void (async () => {
+        const identity = `manager:${group?.id}:${user?.id}`;
+        const latestId = notification.latestNotificationId || notification.id;
+        if (!await claimNotificationPresentation(identity, `event:${latestId}`)) return;
+        const shouldSound = !previousVersions.has(notification.id)
+          && await claimNotificationPresentation(identity, `sound:${notification.id}`);
+        if (shouldSound) playNotificationSound();
+        toast.info(notification.title || 'Nueva notificación del Manager', {
+          description: notification.message || 'Tienes una novedad pendiente de revisar.',
+          position: 'top-right',
+          id: `manager-notification:${group?.id}:${user?.id}:${notification.id}`,
+          action: { label: 'Abrir', onClick: () => openManagerNotification(notification) },
+        });
+      })();
     });
   }, [group?.id, managerNotificationScopeRef, managerNotifications, managerNotificationsQuery.isFetched, user?.id]);
 
@@ -933,13 +965,13 @@ export function ManagerShell({
                       variant="ghost"
                       size="icon"
                       className="relative size-10 rounded-xl"
-                      aria-label="Notificaciones del Manager"
+                      aria-label={unreadManagerGroupCount > 0 ? `Notificaciones del Manager, ${unreadManagerGroupCount} grupos sin leer` : "Notificaciones del Manager"}
                       title="Notificaciones del Manager"
                     >
                       <Bell className="size-5" />
-                      {unreadManagerNotifications.length > 0 && (
+                      {unreadManagerGroupCount > 0 && (
                         <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white ring-2 ring-background">
-                          {unreadManagerNotifications.length > 9 ? '9+' : unreadManagerNotifications.length}
+                          {unreadManagerGroupCount > 9 ? '9+' : unreadManagerGroupCount}
                         </span>
                       )}
                     </Button>
@@ -1042,6 +1074,17 @@ export function ManagerShell({
               </div>
             </div>
           </header>
+          <NotificationGroupDetailsDialog
+            open={Boolean(selectedManagerNotificationGroup)}
+            group={selectedManagerNotificationGroup}
+            managerGroupId={group?.id}
+            onOpenChange={(open) => { if (!open) setSelectedManagerNotificationGroup(null); }}
+            onOpenNotification={(notification) => {
+              setSelectedManagerNotificationGroup(null);
+              navigateManagerNotification(notification);
+            }}
+            onMarkGroupRead={markManagerGroupRead}
+          />
           <main
             className={cn(
               "min-h-0 flex-1 overflow-x-hidden overflow-y-auto mx-auto w-full max-w-[1700px] min-w-0",

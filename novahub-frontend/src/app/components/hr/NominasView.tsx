@@ -350,9 +350,14 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       return;
     }
     const actionToken = beginNotificationAction();
+    const notificationBatchId = globalThis.crypto.randomUUID();
     try {
       await Promise.all(
-        pendingPayrolls.map((p: any) => hrService.createPaymentRequest({ requestType: 'PAYROLL', sourceId: p.id }))
+        pendingPayrolls.map((p: any) => hrService.createPaymentRequest({
+          requestType: 'PAYROLL',
+          sourceId: p.id,
+          notificationBatchId,
+        }))
       );
       toast.success(`${pendingPayrolls.length} solicitudes enviadas a Contabilidad`);
       completeNotificationAction(actionToken);

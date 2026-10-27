@@ -250,6 +250,24 @@ interface InboxNotificationDto {
   link?: string | null;
   dedupeKey?: string | null;
   metadata?: unknown;
+  isGroup?: boolean;
+  groupCount?: number;
+  unreadCount?: number;
+  latestNotificationId?: string;
+  notificationGroupId?: string;
+}
+
+export interface NotificationGroupPage {
+  items: Notification[];
+  nextCursor: string | null;
+  unreadGroupCount: number;
+  unreadNotificationCount: number;
+}
+
+export interface NotificationGroupItemsPage {
+  items: Notification[];
+  nextCursor: string | null;
+  latestNotificationId: string;
 }
 
 const mapNotificationType = (type: InboxNotificationDto['type']): Notification['type'] => {
@@ -430,20 +448,93 @@ const mapInboxNotification = (item: InboxNotificationDto): Notification => {
     link: item.link || null,
     dedupeKey: item.dedupeKey || null,
     metadata: item.metadata,
+    isGroup: item.isGroup,
+    groupCount: item.groupCount,
+    unreadCount: item.unreadCount,
+    latestNotificationId: item.latestNotificationId,
+    notificationGroupId: item.notificationGroupId,
   };
 };
+
+const mapNotificationGroupPage = (data: {
+  items?: InboxNotificationDto[];
+  nextCursor?: string | null;
+  unreadGroupCount?: number;
+  unreadNotificationCount?: number;
+}): NotificationGroupPage => ({
+  items: (data.items || []).map(mapInboxNotification),
+  nextCursor: data.nextCursor || null,
+  unreadGroupCount: Number(data.unreadGroupCount) || 0,
+  unreadNotificationCount: Number(data.unreadNotificationCount) || 0,
+});
+
+const mapNotificationGroupItemsPage = (data: {
+  items?: InboxNotificationDto[];
+  nextCursor?: string | null;
+  latestNotificationId?: string;
+}): NotificationGroupItemsPage => ({
+  items: (data.items || []).map(mapInboxNotification),
+  nextCursor: data.nextCursor || null,
+  latestNotificationId: String(data.latestNotificationId || ''),
+});
 
 export const notificationsService = {
   getAll: async (signal?: AbortSignal) => {
     const data = await api.get<InboxNotificationDto[]>('/notifications/inbox', { signal });
     return dedupeNotificationRecords(data.map(mapInboxNotification));
   },
+  getInboxGroups: async (signal?: AbortSignal) => {
+    const data = await api.get<{
+      items?: InboxNotificationDto[];
+      nextCursor?: string | null;
+      unreadGroupCount?: number;
+      unreadNotificationCount?: number;
+    }>('/notifications/inbox/groups', { signal });
+    return mapNotificationGroupPage(data);
+  },
+  getInboxGroupItems: async (groupId: string, cursor?: string | null, signal?: AbortSignal) => {
+    const data = await api.get<{
+      items?: InboxNotificationDto[];
+      nextCursor?: string | null;
+      latestNotificationId?: string;
+    }>(`/notifications/inbox/groups/${encodeURIComponent(groupId)}/items`, {
+      params: { ...(cursor ? { cursor } : {}), limit: 50 },
+      signal,
+    });
+    return mapNotificationGroupItemsPage(data);
+  },
+  markInboxGroupRead: (groupId: string, throughNotificationId: string) =>
+    api.patch<{ success: boolean; count: number }>(
+      `/notifications/inbox/groups/${encodeURIComponent(groupId)}/read`,
+      { throughNotificationId },
+    ),
   markAsRead: (id: string) => api.patch<{ success: boolean }>(`/notifications/inbox/${id}/read`, {}),
   markAllAsRead: () => api.patch('/notifications/inbox/read-all', {}),
   getManagerInbox: async (groupId: string, signal?: AbortSignal) => {
-    const data = await api.get<InboxNotificationDto[]>(`/notifications/manager-inbox/${groupId}`, { signal });
-    return dedupeNotificationRecords(data.map(mapInboxNotification));
+    const data = await api.get<{
+      items?: InboxNotificationDto[];
+      nextCursor?: string | null;
+      unreadGroupCount?: number;
+      unreadNotificationCount?: number;
+    }>(`/notifications/manager-inbox/${encodeURIComponent(groupId)}/groups`, { signal });
+    return mapNotificationGroupPage(data);
   },
+  getManagerInboxGroupItems: async (managerGroupId: string, notificationGroupId: string, cursor?: string | null, signal?: AbortSignal) => {
+    const data = await api.get<{
+      items?: InboxNotificationDto[];
+      nextCursor?: string | null;
+      latestNotificationId?: string;
+    }>(`/notifications/manager-inbox/${encodeURIComponent(managerGroupId)}/groups/${encodeURIComponent(notificationGroupId)}/items`, {
+      params: { ...(cursor ? { cursor } : {}), limit: 50 },
+      signal,
+    });
+    return mapNotificationGroupItemsPage(data);
+  },
+  markManagerGroupRead: (managerGroupId: string, notificationGroupId: string, throughNotificationId: string) =>
+    api.patch<{ success: boolean; count: number }>(
+      `/notifications/manager-inbox/${encodeURIComponent(managerGroupId)}/groups/${encodeURIComponent(notificationGroupId)}/read`,
+      { throughNotificationId },
+    ),
   markManagerAsRead: (groupId: string, id: string) => api.patch<{ success: boolean }>(`/notifications/manager-inbox/${groupId}/${id}/read`, {}),
   delete: (id: string) => api.delete(`/notifications/inbox/${id}`),
   getViewAlertReadIds: async (namespace: string, signal?: AbortSignal) => {

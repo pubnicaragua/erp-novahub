@@ -52,6 +52,8 @@ export async function showPersistentBrowserNotification({
   tag,
   url = '/',
   notificationId,
+  renotify = true,
+  silent = false,
   onClick,
 }: {
   title: string;
@@ -59,6 +61,8 @@ export async function showPersistentBrowserNotification({
   tag?: string;
   url?: string;
   notificationId?: string;
+  renotify?: boolean;
+  silent?: boolean;
   onClick?: () => void;
 }) {
   if (!isBrowserNotificationsEnabled()) return false;
@@ -68,9 +72,9 @@ export async function showPersistentBrowserNotification({
     icon: '/novahub-isotipo.png',
     badge: '/novahub-isotipo.png',
     data: { url, notificationId },
-    renotify: true,
+    renotify,
     requireInteraction: false,
-    vibrate: [180, 80, 180],
+    ...(silent ? { silent: true } : { vibrate: [180, 80, 180] }),
   } as NotificationOptions;
 
   try {

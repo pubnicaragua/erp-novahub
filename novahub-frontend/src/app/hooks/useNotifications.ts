@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { notificationsService, subscribeToNotificationEvents } from '../services/notifications.service';
+import { notificationsService, subscribeToNotificationEvents, type NotificationGroupPage } from '../services/notifications.service';
 import type { Notification } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTenantQuery } from './useTenantQuery';
@@ -14,9 +14,9 @@ export function useNotifications() {
     // El buzón es tenant + usuario: evitar reutilizar en memoria el inbox de
     // otra sesión cuando se cambia de cuenta sin recargar la aplicación.
     const queryKey = ['tenant-module', tenantKey, 'notifications', userKey, 'inbox'] as const;
-    const notificationsQuery = useTenantQuery<Notification[]>(
+    const notificationsQuery = useTenantQuery<NotificationGroupPage>(
         ['notifications', userKey, 'inbox'],
-        signal => notificationsService.getAll(signal),
+        signal => notificationsService.getInboxGroups(signal),
         {
             refetchOnWindowFocus: false,
             // SSE delivers the notification with low latency. This periodic
@@ -36,8 +36,10 @@ export function useNotifications() {
             });
         });
     }, [authUser?.id, tenantKey, userKey, queryClient]);
-    const notifications = notificationsQuery.data ?? [];
-    const unreadCount = notifications.filter(notification => !notification.read).length;
+    const inbox = notificationsQuery.data;
+    const notifications = inbox?.items ?? [];
+    const unreadCount = inbox?.unreadGroupCount ?? notifications.filter(notification => !notification.read).length;
+    const unreadNotificationCount = inbox?.unreadNotificationCount ?? unreadCount;
 
     useEffect(() => {
         if (typeof navigator === 'undefined') return;
@@ -54,21 +56,41 @@ export function useNotifications() {
     const markAsRead = async (id: string) => {
         try {
             await notificationsService.markAsRead(id);
-            queryClient.setQueryData<Notification[]>(queryKey, previous =>
-                (previous ?? []).map(notification =>
-                    notification.id === id ? { ...notification, read: true } : notification,
+            queryClient.setQueryData<NotificationGroupPage>(queryKey, previous => previous ? ({
+                ...previous,
+                items: previous.items.map(notification =>
+                    notification.id === id ? { ...notification, read: true, unreadCount: 0 } : notification,
                 ),
-            );
+                unreadGroupCount: Math.max(0, previous.unreadGroupCount - (previous.items.some(item => item.id === id && !item.read) ? 1 : 0)),
+                unreadNotificationCount: Math.max(0, previous.unreadNotificationCount - (previous.items.find(item => item.id === id)?.unreadCount || 0)),
+            }) : previous);
+            await queryClient.invalidateQueries({ queryKey });
         } catch (error) {
             console.error('Error marking notification as read:', error);
+        }
+    };
+
+    const markGroupAsRead = async (group: Notification, throughNotificationId?: string) => {
+        const groupId = group.notificationGroupId || group.id;
+        const readThroughId = throughNotificationId || group.latestNotificationId || group.id;
+        try {
+            await notificationsService.markInboxGroupRead(groupId, readThroughId);
+            await queryClient.invalidateQueries({ queryKey });
+        } catch (error) {
+            console.error('Error marking notification group as read:', error);
+            throw error;
         }
     };
 
     const markAllAsRead = async () => {
         try {
             await notificationsService.markAllAsRead();
-            queryClient.setQueryData<Notification[]>(queryKey, previous =>
-                (previous ?? []).map(notification => ({ ...notification, read: true })),
+            queryClient.setQueryData<NotificationGroupPage>(queryKey, previous => previous ? ({
+                ...previous,
+                items: previous.items.map(notification => ({ ...notification, read: true, unreadCount: 0 })),
+                unreadGroupCount: 0,
+                unreadNotificationCount: 0,
+            }) : previous,
             );
         } catch (error) {
             console.error('Error marking all notifications as read:', error);
@@ -85,7 +107,9 @@ export function useNotifications() {
     return {
         notifications,
         unreadCount,
+        unreadNotificationCount,
         markAsRead,
+        markGroupAsRead,
         markAllAsRead,
         clearAll,
         refresh: notificationsQuery.refetch,

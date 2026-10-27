@@ -41,7 +41,6 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { storageService } from '../../services/storage.service';
 import { asList, invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
-import { playNotificationSound } from '../../utils/notificationSound';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
 import { ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { TareasKanban } from './TareasKanban';
@@ -305,7 +304,6 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         customFields: buildCustomFieldsPayload(newTask.customFields),
       });
       toast.success('Tarea creada exitosamente');
-      playNotificationSound();
       setIsAddOpen(false);
       resetNewTaskForm();
       onRefresh();
