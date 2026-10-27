@@ -136,8 +136,12 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
           </div>
         ) : (
           <div className="space-y-3 py-2">
-            {rows.map(({ list, configured }) => {
-              const draft = drafts[list.id] || { price: '', currency: baseCurrency, exchangeRate: 1 };
+            {rows.map(({ list, configured, price, currency, exchangeRate }) => {
+              const draft = drafts[list.id] || {
+                price: configured ? price : '',
+                currency,
+                exchangeRate,
+              };
               const isSaving = savePrice.isPending && savePrice.variables?.list.id === list.id && savePrice.variables?.serviceId === serviceId;
               return (
                 <div key={list.id} className="grid min-w-0 gap-3 rounded-xl border border-border/60 bg-card p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-end">
