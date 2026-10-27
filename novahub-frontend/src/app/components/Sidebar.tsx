@@ -676,7 +676,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     if (parentId === 'restaurante' && subId === 'configuracion') {
       return Boolean(user.isTenantAdmin || user.isPlatformAdmin) && canPerform('RESTAURANT', 'view');
     }
-    if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, subId)) return false;
+    if (!user.isPlatformAdmin && !user.isTenantAdmin && !canAccessModuleView(user.moduleAccessPolicies, subId)) return false;
     const parentMod = PARENT_MODULE_MAP[parentId] || (parentId === 'inventario' ? 'INVENTORY' : null);
     const isForceSalesPlatformUser = parentId === 'fuerza-comercial'
       && (user.isPlatformAdmin || user.platformPermissions.includes('PLATFORM_FORCE_SALES') || user.platformPermissions.includes('PLATFORM_QUOTES'));

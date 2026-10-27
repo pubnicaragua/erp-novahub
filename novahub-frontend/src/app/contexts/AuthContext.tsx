@@ -711,7 +711,12 @@ const createUserObject = (apiPayload: any): User => {
     isPlatformAdmin,
     isPlatformSupportAgent,
     isTenantUser: !isPlatformAdmin && !isPlatformSupportAgent,
-    isTenantAdmin: userType === 'admin' && role === 'admin' && !isPlatformAdmin,
+    isTenantAdmin: Boolean(apiUser.clientTenantId)
+      && !isPlatformAdmin
+      && !isPlatformSupportAgent
+      && userType !== 'manager'
+      && userType !== 'customer_portal'
+      && (userType === 'admin' || role === 'admin'),
     managerMode: Boolean(apiUser.managerMode),
     managerFullBranchAccess: apiUser.managerFullBranchAccess === true,
     managerEnabledModules: Array.isArray(apiUser.managerEnabledModules)
@@ -884,7 +889,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasAccess = useCallback((module: string): boolean => {
     if (!user) return false;
-    if (!user.isPlatformAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
+    if (!user.isPlatformAdmin && !user.isTenantAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
 
     // Audit is a separate tenant surface. The legacy AUDIT_LOGS permission
     // remains available for configuration logs, but it must not implicitly
@@ -894,7 +899,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (module === 'fuerza-comercial') {
       return user.isPlatformAdmin ? user.role === 'superadmin' : tenantAdminHasModuleEnabled(user, 'FORCE_SALES');
     }
-    if (!user.isPlatformAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
+    if (!user.isPlatformAdmin && !user.isTenantAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
 
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
@@ -1122,7 +1127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return false;
     const normalizedModule = String(module || '');
     const upperModule = normalizedModule.toUpperCase();
-    if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, module)) return false;
+    if (!user.isPlatformAdmin && !user.isTenantAdmin && !canAccessModuleView(user.moduleAccessPolicies, module)) return false;
     if (user.managerMode && !tenantAdminHasModuleEnabled(user, module)) return false;
     if (user.managerMode && user.managerFullBranchAccess) {
       if (action !== 'viewCost') return tenantAdminHasModuleEnabled(user, module);
