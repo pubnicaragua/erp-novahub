@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import * as XLSX from 'xlsx';
 import { 
-  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Pencil, Upload, Download, Ban, CircleX, Settings2, Check, CircleHelp, X
+  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Pencil, Upload, Download, Ban, CircleX, Settings2, Check, CircleHelp, X, CalendarDays, ChevronDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { customersService } from '../../services/ventas.service';
@@ -1168,6 +1169,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
 
       {/* Main Content */}
       <div className="flex flex-col gap-4">
+        <Collapsible defaultOpen={false} className="min-w-0 space-y-3">
         <div className="grid min-w-0 gap-3 py-2 lg:grid-cols-[minmax(220px,1fr)_minmax(300px,1.1fr)_auto] lg:items-center lg:gap-4" data-tour="sales-list-actions">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-xl font-black uppercase tracking-tight text-foreground" data-tour="customers-title">Directorio de clientes</h2>
@@ -1204,6 +1206,23 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
             </Select>
           </div>
           <div className="customer-actions erp-list-toolbar flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+            {onDateRangeChange && (
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant={dateFrom || dateTo ? 'secondary' : 'outline'}
+                  data-tour="customers-entry-date-filter"
+                  aria-label="Filtrar por fecha de ingreso"
+                  title={dateFrom || dateTo ? `Rango aplicado: ${dateFrom || 'sin inicio'} – ${dateTo || 'sin fin'}` : 'Filtrar por fecha de ingreso'}
+                  className="group h-10 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"
+                >
+                  <CalendarDays className="mr-2 size-4" />
+                  <span>Fecha</span>
+                  {(dateFrom || dateTo) && <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-[9px]">Activa</Badge>}
+                  <ChevronDown className="ml-1 size-3 transition-transform group-data-[state=open]:rotate-180" />
+                </Button>
+              </CollapsibleTrigger>
+            )}
             <Button
               variant="outline"
               onClick={() => setColumnConfigOpen(true)}
@@ -1236,7 +1255,16 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           </div>
         </div>
 
-        {onDateRangeChange && <div className="min-w-0 space-y-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha de ingreso</p><SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange} /></div>}
+        {onDateRangeChange && (
+          <CollapsibleContent className="min-w-0 rounded-xl border border-border/50 bg-card/40 p-3 sm:p-4">
+            <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha de ingreso</p>
+              {(dateFrom || dateTo) && <p className="text-xs font-semibold text-primary">Rango aplicado</p>}
+            </div>
+            <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange} />
+          </CollapsibleContent>
+        )}
+        </Collapsible>
 
         <Card className="min-w-0 overflow-hidden rounded-2xl border-border/50 bg-card/40 shadow-sm" data-tour="customers-table">
           <CardContent className="min-w-0 p-1.5 sm:p-3">
