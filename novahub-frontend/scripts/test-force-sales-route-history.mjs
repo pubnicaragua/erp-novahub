@@ -41,4 +41,8 @@ assert.match(trackingRuntime, /<MapPin className=\{`size-4 \$\{gpsIconClass\}`\}
 assert.match(trackingRuntime, /<div className="hidden sm:block">[\s\S]*?\{gpsLabel\}[\s\S]*?Pantalla activa/, 'El texto y controles completos se conservan solo desde escritorio');
 assert.doesNotMatch(trackingRuntime, /mobileExpanded|Mostrar detalles del rastreo|Buscando GPS.*sm:hidden/, 'El panel móvil no debe expandir ni mostrar las etiquetas del estado GPS');
 
+assert.match(realtimeMapScript, /let remoteProspectsRefreshRequested=false/, 'El mapa conserva una invalidación recibida mientras carga prospectos');
+assert.match(realtimeMapScript, /if\(remoteProspectsLoading\)\{remoteProspectsRefreshRequested=true;return\}/, 'Un evento SSE durante una consulta activa agenda un refresco posterior');
+assert.match(realtimeMapScript, /if\(remoteProspectsRefreshRequested\)\{remoteProspectsRefreshRequested=false;void loadRemoteProspects\(\);\}/, 'La consulta activa vuelve a cargar los prospectos si recibió una invalidación mientras esperaba');
+
 console.log('force-sales route history: inline syntax and real-point-only gap segmentation passed');

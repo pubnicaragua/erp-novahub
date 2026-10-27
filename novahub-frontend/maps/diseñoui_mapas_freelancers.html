@@ -880,6 +880,7 @@ let presenceSyncInFlight = false;
 let presenceRequestInFlight = false;
 let lastSentPresenceCoords = null;
 let remoteProspectsLoading = false;
+let remoteProspectsRefreshRequested=false;
 let lastRemoteProspectsSignature = '';
 let legacyCatalogSyncInFlight = false;
 let lastRemoteRefreshAt = 0;
@@ -1720,7 +1721,8 @@ function remoteBusiness(prospect){
   return {id,googlePlaceId:prospect.googlePlaceId || undefined,zoneCellId:prospect.zoneCellId || undefined,name:prospect.name || 'Prospecto sin nombre',zone:prospect.zone || nearestZone(hasCoordinates?lat:12.115,hasCoordinates?lng:-86.26),category:prospect.category || 'Comercio / servicios',address:prospect.address || 'Dirección pendiente de validar',source:prospect.googlePlaceId?'Nova':'Fuerza Comercial',sourceUrl:prospect.sourceUrl || '',lat:hasCoordinates?lat:null,lng:hasCoordinates?lng:null,precision:hasCoordinates?'Prospecto persistido en NovaHub':'Pendiente de georreferenciar',score:Number(prospect.novaFitScore)||0,priority:prospect.priority || 'C',owner:'Fuerza Comercial',phone:prospect.phone || '',website:prospect.website || '',rating:prospect.rating || null,reviews:prospect.reviews || 0};
 }
 async function loadRemoteProspects(){
-  if(!localStorage.getItem('nh-auth-token') || remoteProspectsLoading) return;
+  if(!localStorage.getItem('nh-auth-token')) return;
+  if(remoteProspectsLoading){remoteProspectsRefreshRequested=true;return}
   remoteProspectsLoading=true;
   lastRemoteRefreshAt=Date.now();
   try{
@@ -1755,7 +1757,10 @@ async function loadRemoteProspects(){
     localStorage.setItem(GOOGLE_CATALOG_KEY,JSON.stringify(googlePlaces));
     persistCommercial(); mergeBusinesses(); populateFilters(); render();
   }catch(e){/* El modo local sigue operativo si el backend aún no tiene este módulo. */}
-  finally{remoteProspectsLoading=false}
+  finally{
+    remoteProspectsLoading=false;
+    if(remoteProspectsRefreshRequested){remoteProspectsRefreshRequested=false;void loadRemoteProspects();}
+  }
 }
 function updatePipelineKpis(){
   // This KPI is Nova's shared discovered catalog. It is synchronized with the
