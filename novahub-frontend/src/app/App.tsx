@@ -98,14 +98,9 @@ function PageLoader() {
 }
 
 const CLIENT_RECOVERY_QUERY = '__client_recovery';
-const CLIENT_RECOVERY_STORAGE_KEY = 'novahub:client-recovery:attempted';
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error || 'Error desconocido');
-}
-
-function looksLikeStaleClientError(error: unknown) {
-  return /chunk|module|preload|failed to fetch|loading .* failed|not defined|undefined|unexpected token/i.test(errorMessage(error));
 }
 
 async function clearClientCaches() {
@@ -130,23 +125,6 @@ async function clearClientCaches() {
   }
 }
 
-async function recoverStaleClientOnce() {
-  const url = new URL(window.location.href);
-  if (url.searchParams.get(CLIENT_RECOVERY_QUERY) === '1') return false;
-
-  try {
-    if (sessionStorage.getItem(CLIENT_RECOVERY_STORAGE_KEY) === '1') return false;
-    sessionStorage.setItem(CLIENT_RECOVERY_STORAGE_KEY, '1');
-  } catch {
-    // El parámetro de URL evita el ciclo cuando el almacenamiento está bloqueado.
-  }
-
-  await clearClientCaches();
-  url.searchParams.set(CLIENT_RECOVERY_QUERY, '1');
-  window.location.replace(url.toString());
-  return true;
-}
-
 const ErrorBoundaryFallback = ({
   error,
   eventId,
@@ -159,23 +137,19 @@ const ErrorBoundaryFallback = ({
   const message = errorMessage(error);
   const [recovering, setRecovering] = React.useState(false);
 
-  React.useEffect(() => {
-    if (!looksLikeStaleClientError(error)) return;
-    setRecovering(true);
-    void recoverStaleClientOnce();
-  }, [error]);
-
   const handleRecovery = async () => {
     setRecovering(true);
-    const recovered = await recoverStaleClientOnce();
-    if (!recovered) window.location.reload();
+    await clearClientCaches();
+    const url = new URL(window.location.href);
+    url.searchParams.set(CLIENT_RECOVERY_QUERY, '1');
+    window.location.replace(url.toString());
   };
 
   return (
     <div style={{ padding: 32, fontFamily: 'monospace', background: '#0f0f0f', color: '#ff6b6b', minHeight: '100vh' }}>
       <h2 style={{ color: '#ff6b6b', marginBottom: 16 }}>No pudimos cargar esta pantalla</h2>
       <p style={{ color: '#d1d5db', maxWidth: 560, lineHeight: 1.6 }}>
-        El incidente fue registrado automáticamente. Se intentará limpiar la caché del dispositivo y cargar la versión actual.
+        El incidente fue registrado automáticamente. Puedes limpiar la caché del dispositivo y cargar la versión actual una sola vez.
       </p>
       <button
         style={{ marginTop: 16, padding: '8px 20px', background: '#333', color: '#fff', border: 'none', borderRadius: 6, cursor: recovering ? 'wait' : 'pointer' }}
@@ -634,11 +608,6 @@ function AppContent() {
     if (url.searchParams.has(CLIENT_RECOVERY_QUERY)) {
       url.searchParams.delete(CLIENT_RECOVERY_QUERY);
       window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
-    }
-    try {
-      sessionStorage.removeItem(CLIENT_RECOVERY_STORAGE_KEY);
-    } catch {
-      // Storage is optional.
     }
   }, []);
 
