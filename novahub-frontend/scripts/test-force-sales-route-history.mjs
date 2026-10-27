@@ -35,8 +35,10 @@ assert.match(realtimeMapScript, /if\(options\.fitCamera\)\{[\s\S]*?googleMap\.fi
 assert.match(realtimeMapScript, /const selectedUser=CAN_ASSIGN_TEAM&&activeView==='history'\?String\(userSelect\?\.value\|\|''\):''/, 'El mapa principal de administradores siempre carga el equipo completo aunque el historial tenga un filtro');
 
 const trackingRuntime = await readFile(new URL('../src/app/components/ForceSalesTrackingRuntime.tsx', import.meta.url), 'utf8');
-assert.match(trackingRuntime, /const \[mobileExpanded, setMobileExpanded\] = useState\(false\)/, 'El estado GPS debe iniciar compacto en móvil');
-assert.match(trackingRuntime, /aria-expanded=\{mobileExpanded\}[\s\S]*?aria-controls="force-sales-tracking-details"/, 'El control compacto del GPS debe revelar detalles de forma accesible');
-assert.match(trackingRuntime, /id="force-sales-tracking-details"[\s\S]*?sm:block/, 'Los detalles GPS se mantienen visibles en escritorio y desplegables en móvil');
+assert.match(trackingRuntime, /import \{ MapPin \} from 'lucide-react'/, 'El indicador GPS móvil usa un icono pequeño de ubicación');
+assert.match(trackingRuntime, /className="[^"]*sm:hidden[^"]*" role="status" aria-label=\{`Estado GPS:/, 'El estado GPS móvil expone el estado solo de forma accesible, sin texto visible');
+assert.match(trackingRuntime, /<MapPin className=\{`size-4 \$\{gpsIconClass\}`\} aria-hidden="true" \/>/, 'En móvil solo se muestra el icono de ubicación');
+assert.match(trackingRuntime, /<div className="hidden sm:block">[\s\S]*?\{gpsLabel\}[\s\S]*?Pantalla activa/, 'El texto y controles completos se conservan solo desde escritorio');
+assert.doesNotMatch(trackingRuntime, /mobileExpanded|Mostrar detalles del rastreo|Buscando GPS.*sm:hidden/, 'El panel móvil no debe expandir ni mostrar las etiquetas del estado GPS');
 
 console.log('force-sales route history: inline syntax and real-point-only gap segmentation passed');
