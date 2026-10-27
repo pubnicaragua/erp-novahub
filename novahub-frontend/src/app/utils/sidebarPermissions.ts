@@ -20,6 +20,7 @@ export const SIDEBAR_PERMISSION_PARENT_ORDER = [
   'PURCHASES',
   'RESTAURANT',
   'HOTEL',
+  'FORCE_SALES',
   'TRACKING',
   'IMPORT_INTL',
   'INVENTORY',
@@ -510,8 +511,7 @@ export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
   'SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'ACCOUNTING', 'HR',
   'ACTIVITIES', 'ASANA', 'ASANA_TASKS', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
   'FINANCING', 'LEGAL', 'HR_TRAINING', 'SUPPORT_TECH', 'NOVACHAT',
-  // Se conserva el identificador para validar filas históricas; FORCE_SALES
-  // no se publica en el catálogo de vistas ni en la matriz de sucursales.
+  // Identificadores históricos y módulos administrables que no son vistas raíz.
   'PROJECTS', 'FORCE_SALES', 'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT',
   'RESTAURANT_TABLES', 'RESTAURANT_SALON', 'RESTAURANT_ORDERS', 'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS',
   'HOTEL', 'HOTEL_ROOMS', 'HOTEL_RESERVATIONS',

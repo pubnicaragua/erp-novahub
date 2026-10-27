@@ -22,7 +22,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   const tenantLogo = user?.clientTenant?.logo || user?.sessionBranding?.logo || isotipoUrl;
   const view = activeSubModule === 'fuerza-comercial-kanban' ? 'kanban' : activeSubModule === 'fuerza-comercial-historial' ? 'history' : 'map';
   const workflowActions = [
-    'importProspects', 'updateProspect', 'changeStage', 'registerVisit', 'discardProspect', 'assignProspect',
+    'importProspects', 'updateProspect', 'changeStage', 'registerVisit', 'discardProspect', 'delete', 'assignProspect',
     'attachEvidence', 'manageConsent', 'send', 'createRoute', 'editRoute', 'assignRoute', 'changeRouteStatus',
     'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation',
   ] as const;

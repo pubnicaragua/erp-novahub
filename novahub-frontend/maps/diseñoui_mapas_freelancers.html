@@ -234,6 +234,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   <div class="actions">
    <button class="btn primary discovery-only" id="refresh">↻ Actualizar negocios Nova</button>
    <button class="btn secondary" id="routeImportQuick" type="button" hidden>⇧ Importar clientes / rutas</button>
+   <button class="btn secondary" id="clearCatalog" type="button" hidden>⌫ Limpiar base</button>
    <button class="btn secondary" id="routePlannerQuick" type="button" hidden>☷ Rutas y gestores</button>
    <button class="btn secondary" id="mapConfigurationButton" type="button" hidden>⚙ Configurar mapa</button>
    <button class="btn secondary" id="locationSettings" type="button" hidden>Privacidad de ubicación</button>
@@ -589,6 +590,7 @@ const CAN_DELETE_TEST = IS_PLATFORM_ADMIN;
 function applyForceSalesPermissionVisibility(){
   const visibility = {
     refresh: 'importProspects', searchGoogle: 'importProspects', searchViewport: 'importProspects', newPoint: 'importProspects',
+    clearCatalog: 'delete',
     zoneManager: 'assignProspect', bulkKanban: 'changeStage', bulkRoute: 'createRoute', bulkVisit: 'registerVisit', bulkWhatsApp: 'send', bulkDiscard: 'discardProspect',
     routeImport: 'importProspects', routeImportQuick: 'importProspects', routePlannerQuick: ['createRoute', 'editRoute', 'assignRoute'], routeClear: 'editRoute', routeOptimize: 'editRoute', routeCompleteStop: 'completeRouteStop', routeSave: ['createRoute', 'editRoute'],
     routeAssignee: 'assignRoute', zoneAssign: 'assignProspect', quickCaptureTakePhoto: 'attachEvidence', quickCaptureRetake: 'attachEvidence',
@@ -1350,7 +1352,8 @@ async function syncProspects(list, evidenceFile=null){
       if(!state.remoteId){
         const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[prospectPayload(business)]})});
         const prospect=result?.prospects?.[0];
-        if(prospect){state.remoteId=prospect.id;saved.push(prospect)}
+        if(!prospect)throw new Error('El ERP no registró el cliente importado');
+        state.remoteId=prospect.id;saved.push(prospect);
       }else if(canForceSales('updateProspect')){
         const prospect=await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(state.remoteId)}`,{method:'PATCH',body:JSON.stringify(prospectProfilePayload(business))});
         if(prospect)saved.push(prospect);
@@ -1368,6 +1371,7 @@ async function syncProspects(list, evidenceFile=null){
     return {total:saved.length,prospects:saved};
   }catch(e){
     console.warn('Fuerza Comercial local: no se pudo sincronizar con el ERP',e);
+    toast(e?.message || 'No se pudo sincronizar el cliente con el ERP');
     const queued=await Promise.all(syncable.map(item=>{
       const state=stateOf(item);
       const syncProfile=state.remoteId ? canForceSales('updateProspect') : canForceSales('importProspects');
@@ -3049,6 +3053,20 @@ document.getElementById('clearGoogleCache').addEventListener('click', () => {
   Object.keys(localStorage).filter(key=>key.startsWith('novaGooglePlacesCacheV')).forEach(key=>localStorage.removeItem(key));
   setSearchStatus('Datos locales de Nova limpiados. La próxima búsqueda será en vivo.'); toast('Datos limpiados');
 });
+document.getElementById('clearCatalog').addEventListener('click', async () => {
+  if(!requireForceSales('delete'))return;
+  if(!window.confirm('Se eliminarán clientes, rutas y paradas de la empresa activa. ¿Continuar?'))return;
+  try{
+    const result=await forceSalesRequest('/force-sales/prospects',{method:'DELETE'});
+    localPoints=[];googlePlaces=[];remoteProspects=[];remoteRoutes=[];lastRemoteProspectsSignature='';
+    localStorage.removeItem(LOCAL_POINTS_KEY);localStorage.removeItem(GOOGLE_CATALOG_KEY);
+    Object.keys(localStorage).filter(key=>key.startsWith('novaGooglePlacesCacheV')).forEach(key=>localStorage.removeItem(key));
+    mergeBusinesses();populateFilters();render();renderSavedRouteOptions();
+    toast(`${result?.deleted || 0} clientes eliminados`);
+  }catch(error){
+    toast(error?.message || 'No se pudo limpiar la base comercial');
+  }
+});
 function setActiveView(view){
   const changed=activeView!==view;
   activeView=view;
@@ -3107,6 +3125,10 @@ const toggle = document.getElementById('mobileSheetToggle');
 const togglePresence = document.getElementById('togglePresence');
 togglePresence?.addEventListener('click',()=>void setPresenceSharing(!presenceSharingEnabled));
 updatePresenceToggle();
+if(canForceSales('updatePresence')&&presenceSharingEnabled){
+  presenceWatchRequested=true;
+  startPresenceWatch();
+}
 let sheetDrag=null;
 let lastSheetDragMoved=false;
 function updateToggle(){ toggle.textContent = sheet.classList.contains('collapsed') ? 'Abrir panel' : 'Ocultar panel'; }
