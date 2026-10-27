@@ -2988,6 +2988,10 @@ async function saveRouteAssignment(){
     remoteRoutes=[saved,...remoteRoutes.filter(route=>route.id!==saved?.id)].filter(Boolean);
     routeBusinesses.forEach(business=>{stateOf(business).routeId=activeRemoteRouteId});
     persistCommercial();persistRoute();document.getElementById('routeModal').hidden=true;
+    // El editor debe ver la ruta inmediatamente después de guardarla; los
+    // demás dispositivos la reciben en el siguiente refresh compartido.
+    await loadRemoteRoutes();
+    if(routeBusinesses.length>1)await drawRouteOnMap({closeModal:false});
     toast(isExisting?'Ruta actualizada en el ERP':'Ruta guardada en el ERP');
   }catch(error){console.warn('No se pudo persistir la ruta en el ERP',error);toast(`No se pudo guardar la ruta: ${error?.message || 'el ERP rechazó la operación'}`);}
 }
