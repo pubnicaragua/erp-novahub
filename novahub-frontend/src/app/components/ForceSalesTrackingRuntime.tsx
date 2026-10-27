@@ -69,6 +69,7 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
     pending: 0, lastCapturedAt: null, lastSyncedAt: null,
     enabled: false, gps: 'waiting', online: navigator.onLine, message: '', wakeLock: false,
   });
+  const [mobileExpanded, setMobileExpanded] = useState(false);
   const watchId = useRef<number | null>(null);
   const starting = useRef(false);
   const enabledRef = useRef(false);
@@ -336,23 +337,32 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
   const gpsLabel = state.gps === 'ready' ? 'GPS activo' : state.gps === 'denied' ? 'GPS bloqueado' : state.gps === 'error' ? 'Revisar GPS' : state.enabled ? 'Buscando GPS…' : 'Ruta detenida';
 
   return (
-    <aside className="pointer-events-auto absolute right-3 top-[4.25rem] z-[150] w-[min(22rem,calc(100vw-5.5rem))] rounded-2xl border border-border/80 bg-card/95 p-3 text-card-foreground shadow-xl backdrop-blur sm:right-5 sm:top-[4.5rem]" aria-label="Estado del rastreo de ruta">
-      <div className="flex items-start justify-between gap-3">
+    <aside className="pointer-events-auto absolute right-3 top-[4.25rem] z-[150] w-fit max-w-[calc(100vw-5.5rem)] rounded-xl border border-border/80 bg-card/95 p-2 text-card-foreground shadow-xl backdrop-blur sm:right-5 sm:top-[4.5rem] sm:w-[min(22rem,calc(100vw-5.5rem))] sm:rounded-2xl sm:p-3" aria-label="Estado del rastreo de ruta">
+      <div className="flex items-center justify-between gap-2 sm:items-start sm:gap-3">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-            <span className={`size-2 rounded-full ${state.enabled && state.online ? 'bg-emerald-500' : state.enabled ? 'bg-amber-500' : 'bg-muted-foreground'}`} aria-hidden="true" />
-            <span>{gpsLabel}</span>
-            <span className="font-medium text-muted-foreground">{state.online ? 'Con conexión' : 'Sin conexión'}</span>
+          <div className="flex items-center gap-1.5 text-[11px] font-bold sm:flex-wrap sm:gap-2 sm:text-xs">
+            <span className={`size-2 shrink-0 rounded-full ${state.enabled && state.online ? 'bg-emerald-500' : state.enabled ? 'bg-amber-500' : 'bg-muted-foreground'}`} aria-hidden="true" />
+            <span className="whitespace-nowrap">{gpsLabel}</span>
+            <span className="hidden font-medium text-muted-foreground sm:inline">{state.online ? 'Con conexión' : 'Sin conexión'}</span>
+            <span className="whitespace-nowrap font-medium text-muted-foreground sm:hidden">{state.pending} pend.</span>
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">{state.pending} punto{state.pending === 1 ? '' : 's'} pendiente{state.pending === 1 ? '' : 's'} · captura {timeLabel(state.lastCapturedAt)} · envío {timeLabel(state.lastSyncedAt)}</p>
+          <div id="force-sales-tracking-details" className={`${mobileExpanded ? 'block' : 'hidden'} sm:block`}>
+            <p className="mt-1 text-[11px] text-muted-foreground">{state.pending} punto{state.pending === 1 ? '' : 's'} pendiente{state.pending === 1 ? '' : 's'} · <span className="sm:hidden">{state.online ? 'Con conexión' : 'Sin conexión'} · </span>captura {timeLabel(state.lastCapturedAt)} · envío {timeLabel(state.lastSyncedAt)}</p>
+            {state.message && <p className="mt-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300" role="status">{state.message}</p>}
+            {(state.gps === 'denied' || state.gps === 'error') && sharing && <button type="button" onClick={onRetryClick} className="mt-2 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold hover:bg-muted">Reintentar GPS</button>}
+            {!sharing && <p className="mt-2 text-[11px] text-muted-foreground">La ubicación está pausada. Puedes activarla desde Privacidad de ubicación.</p>}
+            <button type="button" onClick={onWakeLockClick} disabled={!('wakeLock' in navigator)} aria-pressed={state.wakeLock} className="mt-2 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:hidden" title="Mantener la pantalla encendida mientras NovaHub está visible">
+              {state.wakeLock ? 'Pantalla activa' : 'Mantener pantalla'}
+            </button>
+          </div>
         </div>
-        <button type="button" onClick={onWakeLockClick} disabled={!('wakeLock' in navigator)} aria-pressed={state.wakeLock} className="shrink-0 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50" title="Mantener la pantalla encendida mientras NovaHub está visible">
+        <button type="button" onClick={() => setMobileExpanded((expanded) => !expanded)} aria-expanded={mobileExpanded} aria-controls="force-sales-tracking-details" className="shrink-0 rounded-lg border border-border px-2 py-1 text-[10px] font-semibold hover:bg-muted sm:hidden" aria-label={mobileExpanded ? 'Ocultar detalles del rastreo' : 'Mostrar detalles del rastreo'}>
+          {mobileExpanded ? 'Menos' : 'Más'}
+        </button>
+        <button type="button" onClick={onWakeLockClick} disabled={!('wakeLock' in navigator)} aria-pressed={state.wakeLock} className="hidden shrink-0 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:inline-flex" title="Mantener la pantalla encendida mientras NovaHub está visible">
           {state.wakeLock ? 'Pantalla activa' : 'Mantener pantalla'}
         </button>
       </div>
-      {state.message && <p className="mt-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300" role="status">{state.message}</p>}
-      {(state.gps === 'denied' || state.gps === 'error') && sharing && <button type="button" onClick={onRetryClick} className="mt-2 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold hover:bg-muted">Reintentar GPS</button>}
-      {!sharing && <p className="mt-2 text-[11px] text-muted-foreground">La ubicación está pausada. Puedes activarla desde Privacidad de ubicación.</p>}
     </aside>
   );
 }

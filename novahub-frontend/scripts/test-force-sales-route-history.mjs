@@ -25,7 +25,18 @@ assert.equal(segments[1][0].lat, 12.05, 'El siguiente tramo empieza en una posic
 const realtimeMapScript = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
   .map(match => match[2])
   .find(script => script.includes('startForceSalesEventStream')) || '';
-assert.ok(/if\(activeView==='history'\)\s*void\s+loadLocationTrail\(\)/.test(realtimeMapScript), 'Un evento de cambios debe refrescar inmediatamente el recorrido GPS abierto');
-assert.ok(/activeView==='history'\s*&&\s*Date\.now\(\)-lastLocationTrailRefreshAt>=5000/.test(realtimeMapScript), 'El historial GPS abierto debe reconciliarse periódicamente aunque no llegue SSE');
+const invalidationHandler = realtimeMapScript.match(/if\(event\.type==='notifications-invalidated'&&event\.reason==='updated'\)\{([\s\S]*?)\n\s*\}\s*catch/)
+  ?.[1] || '';
+assert.match(invalidationHandler, /void\s+loadLocationTrail\(\{fitCamera:false\}\)/, 'Un evento de cambios debe refrescar los puntos GPS también en el mapa activo sin mover la cámara');
+assert.doesNotMatch(invalidationHandler, /activeView==='history'[\s\S]*loadLocationTrail/, 'El refresco GPS por SSE no debe depender de estar en Historial');
+assert.match(realtimeMapScript, /if\(CAN_ASSIGN_TEAM&&Date\.now\(\)-lastLocationTrailRefreshAt>=15000\)void loadLocationTrail\(\{fitCamera:false\}\)/, 'Los administradores deben reconciliar el recorrido del mapa aunque el SSE se interrumpa');
+assert.match(realtimeMapScript, /async function loadLocationTrail\(options=\{\}\)/, 'El cargador de recorridos acepta refrescos que preservan la cámara');
+assert.match(realtimeMapScript, /if\(options\.fitCamera\)\{[\s\S]*?googleMap\.fitBounds\(bounds,64\)[\s\S]*?googleMap\.panTo\(/, 'La cámara solo se ajusta cuando la carga se solicita para enfocar el recorrido');
+assert.match(realtimeMapScript, /const selectedUser=CAN_ASSIGN_TEAM&&activeView==='history'\?String\(userSelect\?\.value\|\|''\):''/, 'El mapa principal de administradores siempre carga el equipo completo aunque el historial tenga un filtro');
+
+const trackingRuntime = await readFile(new URL('../src/app/components/ForceSalesTrackingRuntime.tsx', import.meta.url), 'utf8');
+assert.match(trackingRuntime, /const \[mobileExpanded, setMobileExpanded\] = useState\(false\)/, 'El estado GPS debe iniciar compacto en móvil');
+assert.match(trackingRuntime, /aria-expanded=\{mobileExpanded\}[\s\S]*?aria-controls="force-sales-tracking-details"/, 'El control compacto del GPS debe revelar detalles de forma accesible');
+assert.match(trackingRuntime, /id="force-sales-tracking-details"[\s\S]*?sm:block/, 'Los detalles GPS se mantienen visibles en escritorio y desplegables en móvil');
 
 console.log('force-sales route history: inline syntax and real-point-only gap segmentation passed');
