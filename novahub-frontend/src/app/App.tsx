@@ -97,20 +97,100 @@ function PageLoader() {
   );
 }
 
-const ErrorBoundaryFallback = () => (
-  <div style={{ padding: 32, fontFamily: 'monospace', background: '#0f0f0f', color: '#ff6b6b', minHeight: '100vh' }}>
-    <h2 style={{ color: '#ff6b6b', marginBottom: 16 }}>No pudimos cargar esta pantalla</h2>
-    <p style={{ color: '#d1d5db', maxWidth: 560, lineHeight: 1.6 }}>
-      El incidente fue registrado automáticamente. Intenta recargar la página; si continúa, comparte la hora del incidente con soporte.
-    </p>
-    <button
-      style={{ marginTop: 16, padding: '8px 20px', background: '#333', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-      onClick={() => window.location.reload()}
-    >
-      Recargar
-    </button>
-  </div>
-);
+const CLIENT_RECOVERY_QUERY = '__client_recovery';
+const CLIENT_RECOVERY_STORAGE_KEY = 'novahub:client-recovery:attempted';
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error || 'Error desconocido');
+}
+
+function looksLikeStaleClientError(error: unknown) {
+  return /chunk|module|preload|failed to fetch|loading .* failed|not defined|undefined|unexpected token/i.test(errorMessage(error));
+}
+
+async function clearClientCaches() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+  } catch {
+    // La recuperación no debe fallar por una API de Service Worker limitada.
+  }
+
+  try {
+    if ('caches' in window) {
+      const cacheNames = await window.caches.keys();
+      await Promise.all(cacheNames
+        .filter((name) => name.startsWith('novahub-'))
+        .map((name) => window.caches.delete(name)));
+    }
+  } catch {
+    // La caché es opcional; nunca se toca localStorage ni la sesión.
+  }
+}
+
+async function recoverStaleClientOnce() {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get(CLIENT_RECOVERY_QUERY) === '1') return false;
+
+  try {
+    if (sessionStorage.getItem(CLIENT_RECOVERY_STORAGE_KEY) === '1') return false;
+    sessionStorage.setItem(CLIENT_RECOVERY_STORAGE_KEY, '1');
+  } catch {
+    // El parámetro de URL evita el ciclo cuando el almacenamiento está bloqueado.
+  }
+
+  await clearClientCaches();
+  url.searchParams.set(CLIENT_RECOVERY_QUERY, '1');
+  window.location.replace(url.toString());
+  return true;
+}
+
+const ErrorBoundaryFallback = ({
+  error,
+  eventId,
+}: {
+  error: unknown;
+  componentStack: string;
+  eventId: string;
+  resetError(): void;
+}) => {
+  const message = errorMessage(error);
+  const [recovering, setRecovering] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!looksLikeStaleClientError(error)) return;
+    setRecovering(true);
+    void recoverStaleClientOnce();
+  }, [error]);
+
+  const handleRecovery = async () => {
+    setRecovering(true);
+    const recovered = await recoverStaleClientOnce();
+    if (!recovered) window.location.reload();
+  };
+
+  return (
+    <div style={{ padding: 32, fontFamily: 'monospace', background: '#0f0f0f', color: '#ff6b6b', minHeight: '100vh' }}>
+      <h2 style={{ color: '#ff6b6b', marginBottom: 16 }}>No pudimos cargar esta pantalla</h2>
+      <p style={{ color: '#d1d5db', maxWidth: 560, lineHeight: 1.6 }}>
+        El incidente fue registrado automáticamente. Se intentará limpiar la caché del dispositivo y cargar la versión actual.
+      </p>
+      <button
+        style={{ marginTop: 16, padding: '8px 20px', background: '#333', color: '#fff', border: 'none', borderRadius: 6, cursor: recovering ? 'wait' : 'pointer' }}
+        onClick={handleRecovery}
+        disabled={recovering}
+      >
+        {recovering ? 'Limpiando caché…' : 'Limpiar caché y recargar'}
+      </button>
+      <details style={{ marginTop: 20, color: '#9ca3af', maxWidth: 720 }}>
+        <summary style={{ cursor: 'pointer' }}>Detalles para soporte</summary>
+        <pre style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>{`Evento: ${eventId || 'no disponible'}\n${message}`}</pre>
+      </details>
+    </div>
+  );
+};
 
 
 function DashboardLayout() {
@@ -547,6 +627,22 @@ function AppContent() {
   useResponsiveNativeTables();
 
   useEffect(() => {
+    // La recuperación de caché solo debe durar hasta que la aplicación vuelva
+    // a montar correctamente. No dejamos el marcador en la URL ni bloqueamos
+    // una futura recuperación del mismo dispositivo.
+    const url = new URL(window.location.href);
+    if (url.searchParams.has(CLIENT_RECOVERY_QUERY)) {
+      url.searchParams.delete(CLIENT_RECOVERY_QUERY);
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+    try {
+      sessionStorage.removeItem(CLIENT_RECOVERY_STORAGE_KEY);
+    } catch {
+      // Storage is optional.
+    }
+  }, []);
+
+  useEffect(() => {
     // Native number inputs act as spinners while focused. Keep the wheel for
     // scrolling and make the value change only through an explicit edit. This
     // lives at the application shell so it also covers the manager view and
@@ -740,7 +836,7 @@ export default function App() {
   return (
     <>
       <Toaster position="top-right" />
-      <Sentry.ErrorBoundary fallback={<ErrorBoundaryFallback />}>
+      <Sentry.ErrorBoundary fallback={ErrorBoundaryFallback}>
         <ThemeProvider>
           <CurrencyProvider>
             <ImpersonationProvider>
