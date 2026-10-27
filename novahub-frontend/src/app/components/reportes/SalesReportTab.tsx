@@ -1166,6 +1166,20 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
                 </ResponsiveContainer>
               )}
             </div>
+            {catComposition.data.length > 0 && (
+              <div className="mt-3 max-h-64 space-y-2 overflow-y-auto min-w-0" role="region" aria-label="Desglose de ventas por categoría" tabIndex={0}>
+                {catComposition.data.map((category, index) => (
+                  <div key={category.name} className="min-w-0 rounded-lg border border-border/50 bg-muted/30 p-2 text-xs">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <span className="mt-1 size-2.5 shrink-0 rounded-full" style={{ backgroundColor: SALES_CATEGORY_COLORS[index % SALES_CATEGORY_COLORS.length] }} />
+                      <span className="min-w-0 break-words font-bold">{category.name}</span>
+                    </div>
+                    <p className="mt-1 break-words font-black">{formatConvertedAmount(category.value, 'NIO')} · {catComposition.total > 0 ? ((category.value / catComposition.total) * 100).toFixed(1) : '0.0'}%</p>
+                    <p className="text-muted-foreground">{Math.round(category.unidades).toLocaleString('es-NI')} unidades · {category.productos} productos</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

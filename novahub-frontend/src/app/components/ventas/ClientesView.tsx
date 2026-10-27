@@ -13,6 +13,8 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { SalesKpiCard } from './SalesKpiCard';
+import { SalesDateRangeFilter } from './SalesDateRangeFilter';
+import { formatDateEs } from '../../utils/dateFormat';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { useAuth } from '../../contexts/AuthContext';
@@ -48,6 +50,9 @@ interface ClientesViewProps {
   summaryLoading?: boolean;
   summaryError?: boolean;
   onSearchChange?: (value: string) => void;
+  dateFrom?: string;
+  dateTo?: string;
+  onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
   isSidebarCollapsed?: boolean;
 }
 
@@ -98,7 +103,14 @@ const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO', coun
   country, countryCode, creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE',
 });
 
-const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'status'];
+const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'status', 'createdAt'];
+
+type CustomerColumnPreferences = string[] | { version: 1; keys: string[] };
+
+function migrateCustomerColumnKeys(preferences: CustomerColumnPreferences): string[] {
+  if (!Array.isArray(preferences)) return preferences.keys;
+  return preferences.includes('createdAt') ? preferences : [...preferences, 'createdAt'];
+}
 
 const compareCustomerNames = (left: Customer, right: Customer) =>
   String(left.name || '').trim().localeCompare(String(right.name || '').trim(), 'es', { sensitivity: 'base' }) ||
@@ -149,7 +161,7 @@ const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="sales-list-pagination"]', title: 'Paginación', description: 'Elige 50, 100 o 200 clientes por página. El rango muestra qué registros estás viendo del total y las flechas permiten ir al inicio, anterior, siguiente o final.', placement: 'top' },
 ];
 
-export function ClientesView({ data, loading, error, onRefresh, pagination, onSearchChange, summaryData, summaryLoading, summaryError, isSidebarCollapsed = true }: ClientesViewProps) {
+export function ClientesView({ data, loading, error, onRefresh, pagination, onSearchChange, dateFrom, dateTo, onDateRangeChange, summaryData, summaryLoading, summaryError, isSidebarCollapsed = true }: ClientesViewProps) {
   const { baseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
   const { canPerform, user } = useAuth();
   const { countries, defaultCountryCode } = useCustomerFormOptions();
@@ -195,7 +207,20 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const [portalPassword, setPortalPassword] = useState('');
   const [portalEnabled, setPortalEnabled] = useState(true);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [visibleColumnKeys, setVisibleColumnKeys] = useLocalStorageState<string[]>(`sales-clients-columns-${tenantKey}`, DEFAULT_CUSTOMER_COLUMN_KEYS, 24 * 365);
+  const [columnPreferences, setColumnPreferences] = useLocalStorageState<CustomerColumnPreferences>(`sales-clients-columns-${tenantKey}`, { version: 1, keys: DEFAULT_CUSTOMER_COLUMN_KEYS }, 24 * 365);
+  const visibleColumnKeys = migrateCustomerColumnKeys(columnPreferences);
+  // Store the migration with the selection so later hiding survives reloads.
+  useEffect(() => {
+    if (Array.isArray(columnPreferences)) {
+      setColumnPreferences({ version: 1, keys: migrateCustomerColumnKeys(columnPreferences) });
+    }
+  }, [columnPreferences, setColumnPreferences]);
+  const setVisibleColumnKeys = (next: string[] | ((current: string[]) => string[])) => {
+    setColumnPreferences((current) => {
+      const keys = migrateCustomerColumnKeys(current);
+      return { version: 1, keys: typeof next === 'function' ? next(keys) : next };
+    });
+  };
   const [creating, setCreating] = useState(false);
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-clients-layout', 'table', 24 * 365);
   const [newCustomer, setNewCustomer] = useState<CustomerDraft>(() => emptyCustomerDraft(displayCurrency, defaultCountryCode, countryNameForForm(defaultCountryCode, countries)));
@@ -962,6 +987,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   };
 
   const columns: ColumnDef<Customer>[] = [
+    { key: 'createdAt', header: 'Fecha de ingreso', width: '140px', render: (value) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(value)}</span> },
     { 
       key: 'code', 
       header: 'ID / Código',
@@ -1093,6 +1119,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     }))
     : [{ title: 'Cartera pendiente', value: formatConvertedAmount(totalDue, baseCurrency) }];
   const columnOptions = [
+    { key: 'createdAt', label: 'Fecha de ingreso' },
     { key: 'code', label: 'Código' },
     { key: 'name', label: 'Nombre' },
     { key: 'taxId', label: 'Cédula' },
@@ -1208,6 +1235,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
             )}
           </div>
         </div>
+
+        {onDateRangeChange && <div className="min-w-0 space-y-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha de ingreso</p><SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange} /></div>}
 
         <Card className="min-w-0 overflow-hidden rounded-2xl border-border/50 bg-card/40 shadow-sm" data-tour="customers-table">
           <CardContent className="min-w-0 p-1.5 sm:p-3">

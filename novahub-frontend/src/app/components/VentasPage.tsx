@@ -216,6 +216,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const creditNotesQueryPage = isPaymentDocumentCatalog
     ? { page: 1, pageSize: 200 }
     : creditNotesPage;
+  const customersDates = dateFor('clientes');
   const estimatesDates = dateFor('estimaciones');
   const ordersDates = dateFor('ordenes-venta');
   const invoicesDates = dateFor('facturas');
@@ -228,16 +229,16 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   // Catalogs use the maximum allowed page so existing comboboxes keep all their
   // current options while the transactional tables use the default page of 50.
   const customersListQuery = useQuery({
-    queryKey: ['sales', 'customers', tenantKey, customersPage.page, customersPage.pageSize, searchFor('clientes')],
-    queryFn: ({ signal }) => customersService.getAll({ page: customersPage.page, pageSize: customersPage.pageSize, search: searchFor('clientes') }, signal),
+    queryKey: ['sales', 'customers', tenantKey, customersPage.page, customersPage.pageSize, searchFor('clientes'), customersDates.dateFrom, customersDates.dateTo],
+    queryFn: ({ signal }) => customersService.getAll({ page: customersPage.page, pageSize: customersPage.pageSize, search: searchFor('clientes'), ...customersDates }, signal),
     enabled: canViewSalesSection('clientes') && activeSection === 'clientes',
     placeholderData: keepPreviousData,
   });
   const customersSummaryQuery = useQuery({
-    queryKey: ['sales', 'customers-kpi-summary', tenantKey, searchFor('clientes')],
+    queryKey: ['sales', 'customers-kpi-summary', tenantKey, searchFor('clientes'), customersDates.dateFrom, customersDates.dateTo],
     queryFn: ({ signal }) => fetchAllReportPages<Customer>(
       (filters) => customersService.getAll(filters, signal),
-      { pageSize: 5000, report: true, search: searchFor('clientes') },
+      { pageSize: 5000, report: true, search: searchFor('clientes'), ...customersDates },
       signal,
     ),
     enabled: canViewSalesSection('clientes') && activeSection === 'clientes',
@@ -632,7 +633,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               transition={{ duration: 0.2 }}
             >
               {activeSection === 'clientes' && (
-                <ClientesView data={filteredData.clientes} loading={loading} error={customersListQuery.error} summaryData={customersSummaryQuery.data} summaryLoading={customersSummaryQuery.isPending || customersSummaryQuery.isFetching} summaryError={customersSummaryQuery.isError} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
+                <ClientesView data={filteredData.clientes} loading={loading} error={customersListQuery.error} summaryData={customersSummaryQuery.data} summaryLoading={customersSummaryQuery.isPending || customersSummaryQuery.isFetching} summaryError={customersSummaryQuery.isError} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} dateFrom={customersDates.dateFrom} dateTo={customersDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('clientes', from, to)} isSidebarCollapsed={isSidebarCollapsed} />
               )}
               {activeSection === 'estimaciones' && (
                 <EstimacionesView data={filteredData.estimaciones} summaryData={estimatesSummaryQuery.data} summaryLoading={estimatesSummaryQuery.isPending || estimatesSummaryQuery.isFetching} summaryError={estimatesSummaryQuery.isError} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} dateFrom={estimatesDates.dateFrom} dateTo={estimatesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('estimaciones', from, to)} salesAlert={salesAlert || undefined} />

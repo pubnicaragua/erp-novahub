@@ -1035,6 +1035,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
         reportSection('customers-balance', 'Clientes con Mayor Saldo', ['Cliente', 'Saldo pendiente']),
         reportSection('customers-billing-leaders', 'Líderes de Facturación', ['Cliente', 'Ventas netas', 'Participación']),
         reportSection('customers-products', 'Productos Estrella', ['Producto', 'Valor vendido', 'Unidades']),
+        reportSection('customers-acquisition', 'Altas de clientes', ['Período', 'Clientes nuevos']),
       ],
       'reportes.providers': [
         reportSection('providers-trend', 'Tendencia de Abastecimiento', ['Mes', 'Compras', 'Participación']),

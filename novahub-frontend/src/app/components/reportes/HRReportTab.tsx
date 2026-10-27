@@ -15,6 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, GraduationCap, FileText, Gift, Star, ShieldCheck, UserPlus, UserMinus, RefreshCw, AlertTriangle, Filter, Lightbulb, BadgeCheck, Timer, CalendarX, Trophy, Gauge } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { payrollComposition } from './payroll-composition';
 import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
@@ -472,6 +473,10 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const costoPorColaborador = payrollTotals.empleados > 0 ? payrollTotals.total / payrollTotals.empleados : 0;
 
   const prevPayrollTotals = useMemo(() => prevWin ? sumTotals(fPayrolls.filter(p => isPayrollInWindow(p, prevWin.startMs, prevWin.endMs))) : sumTotals([]), [fPayrolls, prevWin]);
+  const payrollSegments = payrollComposition(payrollTotals, prevPayrollTotals).map(segment => ({
+    ...segment,
+    color: ({ salario: PALETTE.azul, variables: PALETTE.naranja, cargas: PALETTE.verde, deducciones: PALETTE.rojo })[segment.key],
+  }));
   const employerCostOriginal = (p: any) => {
     if (p.costoTotalEmpresa !== null && p.costoTotalEmpresa !== undefined) return Number(p.costoTotalEmpresa ?? p.costoTotalEmpresaBase ?? 0);
     return Number(p.grossPay ?? p.grossPayBase ?? 0) + Number(p.inssPatronal ?? p.inssPatronalBase ?? 0) + Number(p.inatec ?? p.inatecBase ?? 0) + Number(p.trecenoMes ?? p.trecenoMesBase ?? 0) + Number(p.vacacionesProv ?? p.vacacionesProvBase ?? 0) + Number(p.indemnizacion ?? p.indemnizacionBase ?? 0);
@@ -1602,18 +1607,13 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
                   <div className="h-[220px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={[
-                          { name: 'Salario base', value: payrollTotals.salario, color: PALETTE.azul },
-                          { name: 'Variables (extra, comisiones, prestaciones)', value: payrollTotals.horasExtra + payrollTotals.comisiones + payrollTotals.prestaciones, color: PALETTE.naranja },
-                          { name: 'Cargas patronales', value: payrollTotals.cargas, color: PALETTE.verde },
-                          { name: 'Deducciones del trabajador', value: payrollTotals.deducciones, color: PALETTE.rojo },
-                        ].filter(d => d.value > 0)} innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" nameKey="name">
-                          {payrollTotals.total > 0 && [0, 1, 2, 3].map(i => <Cell key={i} fill={[PALETTE.azul, PALETTE.naranja, PALETTE.verde, PALETTE.rojo][i]} />)}
+                        <Pie data={payrollSegments} innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" nameKey="name">
+                          {payrollSegments.map(segment => <Cell key={segment.key} fill={segment.color} />)}
                         </Pie>
                         <Tooltip content={({ active, payload }: any) => {
                           if (!active || !payload?.length) return null;
                           const item = payload[0];
-                          const pct = payrollTotals.total > 0 ? (Number(item.value) / payrollTotals.total) * 100 : 0;
+                          const pct = item.payload.pct;
                           return (
                             <div className="rounded-xl border border-white/10 bg-[#18181b] px-3.5 py-2.5 shadow-2xl">
                               <p className="text-xs font-black uppercase tracking-wider text-white mb-1">{item.name}</p>
@@ -1625,23 +1625,16 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="space-y-2">
-                    {[
-                      { name: 'Salario base', value: payrollTotals.salario, prev: prevPayrollTotals.salario, color: PALETTE.azul },
-                      { name: 'Horas extra', value: payrollTotals.horasExtra, prev: prevPayrollTotals.horasExtra, color: PALETTE.naranjaFuerte },
-                      { name: 'Comisiones y bonos', value: payrollTotals.comisiones, prev: prevPayrollTotals.comisiones, color: PALETTE.naranjaClaro },
-                      { name: 'Cargas patronales', value: payrollTotals.cargas, prev: prevPayrollTotals.cargas, color: PALETTE.verde },
-                      { name: 'Prestaciones (13° + vacaciones)', value: payrollTotals.prestaciones, prev: prevPayrollTotals.prestaciones, color: PALETTE.naranja },
-                      { name: 'Deducciones del trabajador', value: payrollTotals.deducciones, prev: prevPayrollTotals.deducciones, color: PALETTE.rojo },
-                    ].map(c => {
-                      const pct = payrollTotals.total > 0 ? (c.value / payrollTotals.total) * 100 : 0;
+                  <div className="min-w-0 space-y-2">
+                    {payrollSegments.map(c => {
+                      const pct = c.pct;
                       return (
-                        <div key={c.name} className="flex items-center justify-between text-xs gap-2 p-2 rounded-lg border border-border/50">
+                        <div key={c.name} className="flex flex-col xl:flex-row xl:items-center justify-between text-xs gap-2 p-2 rounded-lg border border-border/50">
                           <span className="font-bold flex items-center gap-2 min-w-0">
                             <span className="size-2.5 rounded-full shrink-0" style={{ background: c.color }} />
-                            <span className="truncate">{c.name}</span>
+                            <span className="break-words">{c.name}</span>
                           </span>
-                          <span className="font-black whitespace-nowrap">
+                          <span className="min-w-0 font-black break-words">
                             {fmtMoney(c.value)} <span className="text-muted-foreground font-normal">({pct.toFixed(1)}%)</span> {varBadge(c.value, c.prev, false)}
                           </span>
                         </div>
@@ -1832,7 +1825,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
             ) : distribution.items.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-12 opacity-40 uppercase font-black tracking-widest">Sin colaboradores activos</p>
             ) : (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
                 <div className="h-[230px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -1853,11 +1846,11 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="space-y-2">
-                  {distribution.items.slice(0, 6).map((d, i) => (
+                <div className="min-w-0 max-h-80 overflow-y-auto space-y-2" role="region" aria-label="Desglose de distribución de colaboradores" tabIndex={0}>
+                  {distribution.items.map((d, i) => (
                     <div key={i} className="p-2.5 rounded-lg border border-border/50">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-black truncate">{d.name}</p>
+                      <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                        <p className="text-xs font-black break-words min-w-0">{d.name}</p>
                         <button onClick={() => openSegmentModal(d.name)} className="text-[11px] font-black uppercase text-primary hover:underline shrink-0">
                           Ver colaboradores
                         </button>

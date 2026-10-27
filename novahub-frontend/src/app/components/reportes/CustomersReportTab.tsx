@@ -1,5 +1,8 @@
-import { useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { customersService, invoicesService, paymentsService, salesOrdersService } from '../../services/ventas.service';
 import jsPDF from 'jspdf';
@@ -17,6 +20,7 @@ import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfi
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { buildReportDateFilters } from '../../utils/report-date-filters';
+import { ACQUISITION_GROUPS, acquisitionPeriodLabel, buildCustomerAcquisitionSeries, buildCustomerAcquisitionSection, buildCustomerComposition, type AcquisitionGrouping } from '../../utils/customer-acquisition-report';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -71,6 +75,10 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const { themeConfig } = useTheme();
   const { canPerform } = useAuth();
   const canViewSales = canPerform('REPORTS_CLIENTS', 'view');
+  const [acquisitionFrom, setAcquisitionFrom] = useState('');
+  const [acquisitionTo, setAcquisitionTo] = useState('');
+  const [acquisitionGrouping, setAcquisitionGrouping] = useState<AcquisitionGrouping>('year');
+  const acquisitionRangeInvalid = Boolean(acquisitionFrom && acquisitionTo && acquisitionFrom > acquisitionTo);
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -78,7 +86,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'customers', dateRange], async (signal) => {
     const { start } = getRangeDates(dateRange);
     const filters = { pageSize: 5000, report: true, ...buildReportDateFilters(start, new Date()) };
-    const customerFilters = { ...filters, light: true };
+    const customerFilters = { pageSize: 5000, report: true, light: true };
     const [invRes, payRes, ordRes, cusRes] = await Promise.all([
       fetchAllReportPages((pageFilters) => invoicesService.getAll(pageFilters, signal), filters, signal),
       fetchAllReportPages((pageFilters) => paymentsService.getAll(pageFilters, signal), filters, signal),
@@ -117,8 +125,12 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     const d = toDate(c.createdAt);
     return d && d >= currentStart;
   }), [customers, currentStart]);
-  const activeCustomers = useMemo(() => customers.filter((customer: any) => String(customer.status || '').toUpperCase() === 'ACTIVE').length, [customers]);
-  const inactiveCustomers = Math.max(0, customers.length - activeCustomers);
+  const customerComposition = useMemo(() => buildCustomerComposition(customers), [customers]);
+  const activeCustomers = customerComposition[0].count;
+  const inactiveCustomers = customerComposition[1].count;
+  const acquisitionSeries = useMemo(() => buildCustomerAcquisitionSeries(customers, acquisitionGrouping, acquisitionFrom, acquisitionTo), [customers, acquisitionGrouping, acquisitionFrom, acquisitionTo]);
+  const acquisitionScope = acquisitionPeriodLabel(acquisitionGrouping, acquisitionFrom, acquisitionTo);
+  const acquisitionSection = buildCustomerAcquisitionSection(acquisitionSeries, acquisitionGrouping, acquisitionFrom, acquisitionTo);
 
   const sourceRate = (rate?: number) => valuationMode === 'CURRENT' ? exchangeRate : (rate || exchangeRate);
   const documentTotal = (i: any) => toBaseAmount(Number(i.total ?? i.baseTotal ?? 0), i.currency, sourceRate(i.exchangeRate));
@@ -206,6 +218,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
   useImperativeHandle(ref, () => ({
     exportPDF: async (format) => {
+      if (acquisitionRangeInvalid) { toast.error('Corrige el rango de altas de clientes: Desde debe ser anterior o igual a Hasta.'); return; }
       try {
         toast.info("Generando PDF (Clientes), por favor espere...");
         const pdfSettings = await getPdfDesignSettings('reportes.customers');
@@ -255,8 +268,8 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         checkPage(boxH + 5);
         currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 4, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5, primaryColor: pdfSettings.primaryColor, secondaryColor: pdfSettings.secondaryColor });
 
-        const renderSection = (title: string, headers: string[], rows: (string | number)[][], _colorRGB: number[]) => {
-          reportSections.push({ title, headers, rows, color: rgbPrimary });
+        const renderSection = (title: string, headers: string[], rows: (string | number)[][], _colorRGB: number[], id?: string) => {
+          reportSections.push({ id, title, headers, rows, color: rgbPrimary });
           currentY = drawReportTable({ doc, title, headers, rows, color: rgbPrimary, marginX, contentWidth, currentY });
         };
         const money = (value: unknown) => formatConvertedAmount(Number(value || 0), 'NIO');
@@ -277,6 +290,8 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         renderSection('Clientes con Mayor Saldo', ['Cliente', 'Saldo pendiente'], topByBalance.map(customer => [customer.name, money(customer.value)]), [245, 158, 11]);
         renderSection('Líderes de Facturación', ['Cliente', 'Ventas netas', 'Participación'], topCustomers.map(customer => [customer.name, money(customer.value), percent(totalSold > 0 ? (customer.value / totalSold) * 100 : 0)]), [59, 130, 246]);
         renderSection('Productos Estrella', ['Producto', 'Valor vendido', 'Unidades'], topProducts.map(product => [product.name, money(product.value), product.qty]), [245, 158, 11]);
+        // Append at index 6: existing/custom template preferences for 0–5 retain their meaning.
+        renderSection(acquisitionSection.title, acquisitionSection.headers, acquisitionSection.rows, rgbPrimary, acquisitionSection.id);
 
         const configured = await generateConfiguredReportSectionsPDF({
           format,
@@ -296,6 +311,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar PDF"); }
     },
     exportExcel: async () => {
+      if (acquisitionRangeInvalid) { toast.error('Corrige el rango de altas de clientes: Desde debe ser anterior o igual a Hasta.'); return; }
       try {
         toast.info("Generando Excel (Clientes)...");
         const pdfSettings = await getPdfDesignSettings('reportes.customers', 1200);
@@ -369,7 +385,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           } catch (e: any) { console.warn(e); return null; }
         };
 
-        const exportImageIds = ['customers-chart-trend', 'customers-health-card', 'customers-chart-pie', 'customers-products-card']
+        const exportImageIds = ['customers-chart-trend', 'customers-health-card', 'customers-chart-pie', 'customers-products-card', 'customers-chart-acquisition']
           .filter((elementId) => Boolean(document.getElementById(elementId)));
         const capturedImages = await Promise.all(exportImageIds.map(captureCanvas));
         capturedImages.forEach((image) => {
@@ -390,6 +406,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         renderTopTable('Líderes de Facturación', topCustomers, false);
         renderTopTable('Productos Estrella', topProducts, true);
+        appendDashboardExcelTable(ws, acquisitionSection.title, acquisitionSection.headers, acquisitionSection.rows);
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_clientes'], 'xlsx', dateRange));
         toast.success("Excel generado exitosamente");
@@ -407,7 +424,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <div className="min-w-0 max-w-full space-y-8 animate-in fade-in duration-700">
       {/* ═══ KPI Cards (Dashboard Style) ═══ */}
       <div id="customers-report-kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {renderCustomerMoneyKpi('Cartera de Venta', totalSold, originalSold, 'text-blue-500', (currency) => `${originalCurrencies.includes(currency) ? originalSold(currency) : 0} en ventas del período`)}
@@ -430,6 +447,53 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         {renderCustomerMoneyKpi('Venta promedio por cliente', averageSalePerCustomer, originalAverageSale, 'text-amber-500', () => 'Facturación histórica por cliente')}
       </div>
+
+      <Card className="min-w-0 border-border/50">
+        <CardHeader className="space-y-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider">
+            <Users className="size-4 text-primary" /> Altas de clientes
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">Todos los estados, por fecha de ingreso en America/Managua. Rango independiente del período global; sin fechas incluye todo el historial.</p>
+          <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="customers-acquisition-from">Desde</Label>
+              <Input id="customers-acquisition-from" type="date" className="min-w-0 max-w-full" value={acquisitionFrom} max={acquisitionTo || undefined} onChange={event => setAcquisitionFrom(event.target.value)} aria-invalid={acquisitionRangeInvalid} aria-describedby={acquisitionRangeInvalid ? 'customers-acquisition-error' : undefined} />
+            </div>
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="customers-acquisition-to">Hasta</Label>
+              <Input id="customers-acquisition-to" type="date" className="min-w-0 max-w-full" value={acquisitionTo} min={acquisitionFrom || undefined} onChange={event => setAcquisitionTo(event.target.value)} aria-invalid={acquisitionRangeInvalid} aria-describedby={acquisitionRangeInvalid ? 'customers-acquisition-error' : undefined} />
+            </div>
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="customers-acquisition-grouping">Agrupar por</Label>
+              <Select value={acquisitionGrouping} onValueChange={value => setAcquisitionGrouping(value as AcquisitionGrouping)}>
+                <SelectTrigger id="customers-acquisition-grouping" className="w-full max-w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>{ACQUISITION_GROUPS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+          {acquisitionRangeInvalid && <p id="customers-acquisition-error" role="alert" className="text-sm text-destructive">Desde debe ser anterior o igual a Hasta.</p>}
+        </CardHeader>
+        <CardContent id="customers-chart-acquisition" className="min-w-0 space-y-3">
+          <p className="break-words text-xs text-muted-foreground">{acquisitionScope}</p>
+          <p className="text-sm font-bold">{acquisitionSeries.reduce((total, point) => total + point.count, 0).toLocaleString('es-NI')} clientes nuevos</p>
+          {acquisitionSeries.length > 0 ? <>
+            <div className="h-[280px] min-w-0 w-full" aria-label="Gráfico de altas de clientes por período">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={acquisitionSeries}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis dataKey="period" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--foreground)', fontSize: 12 }} />
+                  <Area type="linear" dataKey="count" name="Clientes nuevos" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.15} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="max-h-60 overflow-auto rounded-lg border border-border">
+              <table className="w-full text-sm"><caption className="sr-only">Altas de clientes por período</caption><thead className="bg-muted"><tr><th scope="col" className="p-2 text-left">Período</th><th scope="col" className="p-2 text-right">Clientes nuevos</th></tr></thead><tbody>{acquisitionSeries.map(point => <tr key={point.period} className="border-t border-border"><th scope="row" className="p-2 text-left font-normal">{point.period}</th><td className="p-2 text-right tabular-nums">{point.count.toLocaleString('es-NI')}</td></tr>)}</tbody></table>
+            </div>
+          </> : <p className="py-8 text-center text-sm text-muted-foreground">{acquisitionRangeInvalid ? 'Corrige las fechas para consultar las altas.' : 'Sin altas de clientes para mostrar.'}</p>}
+        </CardContent>
+      </Card>
 
       {/* ═══ Charts Row ═══ */}
       <div className="grid gap-6 lg:grid-cols-3">
@@ -521,6 +585,9 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                 </PieChart>
               </ResponsiveContainer>
             </div>
+            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {customerComposition.map(slice => <div key={slice.name} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3 text-sm"><dt>{slice.name}</dt><dd className="font-bold tabular-nums">{slice.count.toLocaleString('es-NI')} · {slice.share.toFixed(1)}%</dd></div>)}
+            </dl>
           </CardContent>
         </Card>
 

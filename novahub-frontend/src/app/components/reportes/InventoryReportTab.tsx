@@ -1247,17 +1247,17 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-                  {distribution.slice(0, 8).map((seg, idx) => (
-                    <div key={seg.name} className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-1.5">
+                <div className="min-w-0 space-y-1.5 max-h-[220px] overflow-y-auto pr-1" role="region" aria-label="Desglose de distribución de inventario" tabIndex={0}>
+                  {distribution.map((seg, idx) => (
+                    <div key={seg.name} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-1.5">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span className="size-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[idx % PIE_COLORS.length] }} />
                         <div className="min-w-0">
-                          <p className="text-[11px] font-bold truncate">{seg.name}</p>
+                          <p className="text-[11px] font-bold break-words">{seg.name}</p>
                           <p className="text-[9px] text-muted-foreground">{fmtQty(seg.units)} ud · {seg.products} productos</p>
                         </div>
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="min-w-0 break-words sm:text-right">
                         <p className="text-[11px] font-black">{formatConvertedAmount(seg.value, 'NIO')}</p>
                         <p className="text-[9px] text-muted-foreground">{seg.pct.toFixed(1)}%</p>
                       </div>

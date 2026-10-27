@@ -1782,18 +1782,22 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="mt-2 space-y-1">
-                  {suppliersPerf.list.slice(0, 5).map(s => (
-                    <button key={s.name} onClick={() => supplierRowModal(s.name)} className="w-full flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-all text-left">
+                <div className="mt-2 min-w-0 max-h-64 overflow-y-auto space-y-1" role="region" aria-label="Desglose de compras por proveedor" tabIndex={0}>
+                  {supplierComposition.data.map((s, index) => (
+                    <div key={`${index}-${s.name}`} className="w-full min-w-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded-lg bg-muted/30 text-left">
                       <div className="min-w-0">
-                        <p className="text-xs font-bold truncate">{s.name}</p>
+                        {index === 6 && supplierComposition.validCount > 6 ? (
+                          <p className="text-xs font-bold break-words">{s.name}</p>
+                        ) : (
+                          <button type="button" onClick={() => supplierRowModal(s.name)} className="max-w-full text-left text-xs font-bold break-words hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">{s.name}</button>
+                        )}
                         <p className="text-[9px] text-muted-foreground">{s.facturas} facturas · {s.trendPct === null ? 'sin base previa' : `variación ${s.trendPct >= 0 ? '+' : ''}${s.trendPct.toFixed(1)}%`}</p>
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-black text-orange-500">{s.pct.toFixed(1)}%</p>
+                      <div className="min-w-0 break-words sm:text-right">
+                        <p className="text-xs font-black text-orange-500">{(s.compras / supplierComposition.data.reduce((sum, supplier) => sum + Number(supplier.compras || 0), 0) * 100).toFixed(1)}%</p>
                         <p className="text-[9px] text-muted-foreground">{formatConvertedAmount(s.compras, 'NIO')} · saldo {formatConvertedAmount(s.saldo, 'NIO')}</p>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </>
