@@ -678,6 +678,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
     if (!user.isPlatformAdmin && !canAccessModuleView(user.moduleAccessPolicies, subId)) return false;
     const parentMod = PARENT_MODULE_MAP[parentId] || (parentId === 'inventario' ? 'INVENTORY' : null);
+    const isForceSalesPlatformUser = parentId === 'fuerza-comercial'
+      && (user.isPlatformAdmin || user.platformPermissions.includes('PLATFORM_FORCE_SALES') || user.platformPermissions.includes('PLATFORM_QUOTES'));
     
     // Check if parent or any of its submodules is active
     let isParentOrSubmoduleActive = false;
@@ -697,7 +699,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       }
     }
     
-    if (parentMod && !isAlwaysAvailableSystemMenu && !isParentOrSubmoduleActive) return false;
+    if (parentMod && !isAlwaysAvailableSystemMenu && !isParentOrSubmoduleActive && !isForceSalesPlatformUser) return false;
 
     const requiredModules = SUBMENU_MODULE_REQUIREMENTS[`${parentId}:${subId}`] || SUBMENU_MODULE_REQUIREMENTS[subId];
     if (!requiredModules || requiredModules.length === 0) {
