@@ -7,6 +7,7 @@ export interface HotelRoomType {
   id: string;
   branchId: string;
   rateProductId: string;
+  ratePriceListId?: string | null;
   code: string;
   name: string;
   capacity: number;
@@ -54,9 +55,19 @@ export interface HotelCheckoutContext {
   registers: Array<{ id: string; name: string; branchId: string | null; sessionId: string | null }>;
 }
 
+export interface HotelRatePriceListOption {
+  id: string;
+  code: string;
+  name: string;
+  price: number;
+  currency: string;
+  exchangeRate: number;
+}
+
 export const hotelService = {
   listRoomTypes: (branchId: string, signal?: AbortSignal) => api.get<HotelRoomType[]>('/hotel/room-types', { params: { branchId }, signal }),
-  createRoomType: (body: { branchId: string; rateProductId: string; code: string; name: string; capacity: number }) => api.post<HotelRoomType>('/hotel/room-types', body),
+  listRatePriceLists: (rateProductId: string, signal?: AbortSignal) => api.get<HotelRatePriceListOption[]>(`/hotel/services/${encodeURIComponent(rateProductId)}/rate-price-lists`, { signal }),
+  createRoomType: (body: { branchId: string; rateProductId: string; ratePriceListId?: string; code: string; name: string; capacity: number }) => api.post<HotelRoomType>('/hotel/room-types', body),
   updateRoomType: (id: string, body: Partial<Pick<HotelRoomType, 'rateProductId' | 'code' | 'name' | 'capacity' | 'isActive'>>) => api.patch<HotelRoomType>(`/hotel/room-types/${id}`, body),
   listRooms: (branchId: string, signal?: AbortSignal) => api.get<HotelRoom[]>('/hotel/rooms', { params: { branchId }, signal }),
   createRoom: (body: { branchId: string; roomTypeId: string; code: string; name: string; floor?: string }) => api.post<HotelRoom>('/hotel/rooms', body),
