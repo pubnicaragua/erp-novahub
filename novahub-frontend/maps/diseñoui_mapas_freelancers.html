@@ -92,6 +92,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .marker.selected{--marker-ring:#3287e8}.marker.kanban{--marker-ring:#12aa7b}.marker.visited{--marker-ring:#84d795}.marker.interested{--marker-ring:#0b9d68}.marker.discarded{--marker-ring:#86958f;opacity:.62}
 .cluster-brand{width:42px;height:42px;border-radius:15px;background:#123f35;border:3px solid #b4f4d8;color:white;display:flex;align-items:center;justify-content:center;gap:3px;box-shadow:0 6px 15px rgba(12,53,43,.28);font-size:10px;font-weight:900}.cluster-brand span{font-size:13px;color:#8df1be}.cluster-brand b{font-size:11px}
 .nova-map-marker-content{display:block;pointer-events:auto;transform:translateZ(0)}.nova-map-marker-content img{display:block;user-select:none;-webkit-user-drag:none}.nova-map-marker-badge{position:absolute;right:-7px;top:-7px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/11px Poppins,Arial,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(12,53,43,.24)}.nova-presence-marker{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#2364d2;border:3px solid white;box-shadow:0 5px 14px rgba(19,57,116,.35);overflow:hidden;color:#fff;font:800 10px/1 Poppins,Arial,sans-serif}.nova-presence-marker.stale{background:#71828b;opacity:.86;box-shadow:0 4px 11px rgba(38,58,65,.28)}.nova-presence-marker img{width:100%;height:100%;object-fit:cover}.nova-user-location-marker{width:18px;height:18px;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 0 0 5px rgba(8,120,90,.16),0 3px 10px rgba(8,62,45,.28)}
+.nova-quick-point-marker{width:40px;height:40px;display:grid;place-items:center;border:3px solid #fff;border-radius:50%;background:#e6a624;color:#173b31;box-shadow:0 0 0 5px rgba(230,166,36,.24),0 5px 14px rgba(36,55,47,.32);font:900 22px/1 Arial,sans-serif;cursor:grab}.nova-quick-point-marker:active{cursor:grabbing}.nova-quick-point-marker:focus-visible{outline:3px solid #145ac4;outline-offset:4px}.nova-quick-point-marker.saved{background:#08785a;color:#fff}.quick-capture-hint{margin:3px 0 10px!important;color:#587067!important;font-size:8px!important;line-height:1.4}
+.sync-readout{margin:6px 0;padding:7px 8px;border:1px solid #d8e9e2;border-radius:8px;background:#f2f8f5;color:#315f50;font-size:8px;line-height:1.4}.sync-readout.pending{border-color:#f0d69b;background:#fff8e7;color:#765719}.sync-readout.synced{border-color:#cde9d2;background:#eff9f0;color:#277443}
 .nova-route-marker{width:34px;height:34px;display:grid;place-items:center;position:relative;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 4px 12px rgba(8,62,45,.3);color:#fff;font:800 11px/1 Poppins,Arial,sans-serif}.nova-route-marker img{width:22px;height:22px;border-radius:50%;object-fit:contain;background:#fff;padding:2px}.nova-route-marker span{position:absolute;right:-8px;top:-8px;min-width:16px;height:16px;display:grid;place-items:center;border-radius:50%;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/1 Poppins,Arial,sans-serif}
 .fabbar{position:fixed;z-index:900;left:calc(var(--sheet) + 14px);top:14px;display:flex;gap:7px}
 .float{border:1px solid rgba(25,77,63,.12);background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-radius:12px;padding:8px 10px;font-size:9px;font-weight:600;color:#294c42;box-shadow:0 7px 22px rgba(18,57,47,.13)}
@@ -275,6 +277,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 <div class="quick-capture" id="quickCapture" hidden>
  <h2>Nuevo negocio en este punto</h2>
  <p id="quickCaptureLocation">Coordenada capturada</p>
+ <p class="quick-capture-hint">Arrastra el pin o toca otro punto del mapa para ajustar la ubicación.</p>
  <div class="quick-capture-photo" id="quickCapturePhoto" hidden><img id="quickCapturePhotoImage" alt="Evidencia del nuevo negocio"><span id="quickCapturePhotoName">Foto lista para guardar</span><button id="quickCaptureRetake" type="button">Cambiar</button></div>
  <div class="quick-capture-grid"><input id="quickCaptureName" type="text" maxlength="180" placeholder="Nombre del negocio *" required></div>
   <div class="quick-capture-actions"><button class="cancel" id="quickCaptureCancel" type="button">Cancelar</button><button class="camera" id="quickCaptureTakePhoto" type="button">Tomar foto opcional</button><button class="save" id="quickCaptureSave" type="button" disabled>Guardar negocio</button></div>
@@ -437,6 +440,64 @@ if(!key){window.__novaShowMapError('Falta configurar la clave de mapas de Nova e
  loadMaps();
 });
 </script>
+<script id="nova-force-sales-location-core">
+window.NovaForceSalesLocation = (()=>{
+  function normalizeCoordinates(value){
+    if(!value)return null;
+    const latValue=value.lat ?? value.latitude;
+    const lngValue=value.lng ?? value.longitude;
+    if(latValue == null || latValue === '' || lngValue == null || lngValue === '')return null;
+    const lat=Number(typeof latValue==='function'?latValue.call(value):latValue);
+    const lng=Number(typeof lngValue==='function'?lngValue.call(value):lngValue);
+    return Number.isFinite(lat)&&lat>=-90&&lat<=90&&Number.isFinite(lng)&&lng>=-180&&lng<=180 ? {lat,lng} : null;
+  }
+  function readMarkerCoordinates(marker,event){
+    const candidates=[event?.position,event?.latLng,event?.target?.getLatLng?.(),event?.target?.position,marker?.position];
+    for(const candidate of candidates){
+      const normalized=normalizeCoordinates(candidate);
+      if(normalized)return normalized;
+    }
+    return null;
+  }
+  function createDraftMarker({createMarker,position,onPositionChange}){
+    const coordinates=normalizeCoordinates(position);
+    if(!coordinates||typeof createMarker!=='function')return null;
+    const marker=createMarker({
+      position:coordinates,
+      title:'Punto provisional. Arrastra el pin o toca otro punto del mapa para ajustar la ubicación.',
+      draggable:true,
+      gmpDraggable:true,
+      zIndex:1600,
+    });
+    if(!marker)return null;
+    marker.addEventListener?.('gmp-dragend',event=>{
+      const next=readMarkerCoordinates(marker,event);
+      if(next&&typeof onPositionChange==='function')onPositionChange(next);
+    });
+    return marker;
+  }
+  function selectMapBusinesses({filteredBusinesses=[],allBusinesses=[],currentBounds,limit,focusedId}){
+    const max=Math.max(0,Number(limit)||0);
+    const clusteredBusinesses=filteredBusinesses
+      .filter(business=>String(business?.id)!==String(focusedId||''))
+      .filter(business=>normalizeCoordinates({lat:business?.lat,lng:business?.lng}))
+      .filter(business=>!currentBounds?.contains || currentBounds.contains({lat:Number(business.lat),lng:Number(business.lng)}))
+      .slice(0,max);
+    const focusedBusiness=focusedId ? allBusinesses.find(business=>String(business?.id)===String(focusedId)) || null : null;
+    return focusedBusiness ? [focusedBusiness,...clusteredBusinesses] : clusteredBusinesses;
+  }
+  function formatCaptureLocation({lat,lng,source,accuracy}){
+    const coordinates=normalizeCoordinates({lat,lng});
+    if(!coordinates)return 'Ubicación no válida';
+    const gps=source==='ubicación actual';
+    const label=gps?'Ubicación GPS':'Punto seleccionado';
+    const accuracyMeters=accuracy == null || accuracy === '' ? NaN : Number(accuracy);
+    const accuracyText=gps&&Number.isFinite(accuracyMeters)&&accuracyMeters>=0 ? ` · GPS ±${Math.round(accuracyMeters)} m` : '';
+    return `${label} · ${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}${accuracyText}`;
+  }
+  return Object.freeze({normalizeCoordinates,readMarkerCoordinates,createDraftMarker,selectMapBusinesses,formatCaptureLocation});
+})();
+</script>
 <script>
 function setupNovaLeafletAdapter(){
  if(window.__novaLeafletReady)return;
@@ -446,7 +507,11 @@ function setupNovaLeafletAdapter(){
  const tileUrl=window.__novaMapTileUrl || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
  const attribution=String(window.__novaMapProvider||'')==='CUSTOM' ? 'Mapa personalizado · NovaHub' : '© OpenStreetMap contributors';
  const point=(value)=>({lat:()=>Number(value?.lat ?? value?.[0] ?? 0),lng:()=>Number(value?.lng ?? value?.[1] ?? 0)});
- const latLng=(value)=>({lat:Number(value?.lat ?? value?.[0] ?? 0),lng:Number(value?.lng ?? value?.[1] ?? 0)});
+ const latLng=(value)=>{
+  const lat=value?.lat ?? value?.[0] ?? 0;
+  const lng=value?.lng ?? value?.[1] ?? 0;
+  return {lat:Number(typeof lat==='function'?lat.call(value):lat),lng:Number(typeof lng==='function'?lng.call(value):lng)};
+ };
  class LeafletMapAdapter{
   constructor(element,options={}){
    this._map=Leaflet.map(element,{zoomControl:options.zoomControl!==false,scrollWheelZoom:options.scrollwheel!==false,attributionControl:true}).setView([options.center?.lat||12.115,options.center?.lng||-86.26],options.zoom||11);
@@ -455,13 +520,13 @@ function setupNovaLeafletAdapter(){
   }
   addListener(event,handler){
    if(event==='click'){this._mapClick=handler;return {remove:()=>{this._mapClick=null}};}
-   const mapped=event==='zoom_changed'?'zoomend':event==='tilesloaded'?'load':event;
+   const mapped=event==='zoom_changed'?'zoomend':event==='tilesloaded'?'load':event==='idle'?'moveend':event;
    this._map.on(mapped,handler);
    return {remove:()=>this._map.off(mapped,handler)};
   }
   getZoom(){return this._map.getZoom()}
   getCenter(){return point(this._map.getCenter())}
-  setCenter(value){this._map.setView([Number(value.lat),Number(value.lng)],this._map.getZoom())}
+  setCenter(value){const center=latLng(value);this._map.setView([center.lat,center.lng],this._map.getZoom())}
   panTo(value){this._map.panTo([Number(value.lat),Number(value.lng)])}
   setZoom(value){this._map.setZoom(Number(value))}
   getBounds(){const bounds=this._map.getBounds();return {getNorthEast:()=>point(bounds.getNorthEast()),getSouthWest:()=>point(bounds.getSouthWest()),contains:(value)=>bounds.contains([Number(value.lat),Number(value.lng)])}}
@@ -476,20 +541,39 @@ function setupNovaLeafletAdapter(){
    const content=options.content;
    const html=content?.outerHTML || (options.title ? `<span class="nova-leaflet-marker" title="${String(options.title).replace(/"/g,'&quot;')}">${String(options.title).slice(0,1)}</span>` : '<span class="nova-leaflet-marker">•</span>');
    const icon=Leaflet.divIcon({className:'nova-leaflet-marker-icon',html,iconSize:[44,44],iconAnchor:[22,22]});
-   this._marker=Leaflet.marker([this.position.lat,this.position.lng],{icon,title:options.title||'',zIndexOffset:Number(options.zIndex||0)});
+   this._draggable=Boolean(options.gmpDraggable||options.draggable);
+   this._marker=Leaflet.marker([this.position.lat,this.position.lng],{icon,title:options.title||'',zIndexOffset:Number(options.zIndex||0),draggable:this._draggable,keyboard:this._draggable});
+   this._marker.on('keydown',event=>{
+    const key=event.originalEvent?.key;
+    const offsets={ArrowUp:[0,-8],ArrowDown:[0,8],ArrowLeft:[-8,0],ArrowRight:[8,0]};
+    const offset=offsets[key];
+    if(!this._draggable||!offset||!this._map)return;
+    const original=event.originalEvent;
+    original?.preventDefault?.();original?.stopPropagation?.();
+    const pixel=this._map.latLngToContainerPoint(this._marker.getLatLng());
+    pixel.x+=offset[0];pixel.y+=offset[1];
+    this.setPosition(this._map.containerPointToLatLng(pixel));
+    this._marker.fire('dragend');
+   });
    if(options.map)this.setMap(options.map);
   }
   setMap(map){if(this._map)this._map.removeLayer(this._marker);this._map=map?._map||map||null;if(this._map)this._marker.addTo(this._map);return this}
   get map(){return this._map}
   set map(value){this.setMap(value)}
   setPosition(value){this.position=latLng(value);this._marker.setLatLng([this.position.lat,this.position.lng]);return this}
+  setDraggable(enabled){this._draggable=Boolean(enabled);const dragging=this._marker.dragging;if(dragging){if(enabled)dragging.enable();else dragging.disable()}this._marker.options.keyboard=this._draggable;return this}
   addListener(event,handler){const mapped=event==='gmp-click'?'click':event;this._marker.on(mapped,handler);return {remove:()=>this._marker.off(mapped,handler)}}
-  addEventListener(event,handler){return this.addListener(event,handler)}
+  addEventListener(event,handler){
+   if(event!=='gmp-dragend')return this.addListener(event,handler);
+   const adapted=()=>{this.position=latLng(this._marker.getLatLng());handler({position:this.position})};
+   this._marker.on('dragend',adapted);
+   return {remove:()=>this._marker.off('dragend',adapted)};
+  }
   setLabel(value){if(value?.text)this._marker.bindTooltip(String(value.text),{permanent:true,direction:'top',offset:[0,-18]});else this._marker.unbindTooltip();return this}
  }
  class LeafletInfoWindowAdapter{
   setContent(value){this.content=value}
-  open(_options,marker){const target=marker?._marker||marker;if(target){target.bindPopup(this.content || '').openPopup()}}
+ open(options,marker){const anchor=marker || options?.anchor;const target=anchor?._marker||anchor;if(target){target.bindPopup(this.content || '').openPopup()}}
   close(){document.querySelectorAll('.leaflet-popup-close-button').forEach(button=>button.click())}
  }
  class LeafletShapeAdapter{
@@ -506,7 +590,7 @@ function setupNovaLeafletAdapter(){
  }
  const eventApi={addListener:(target,event,handler)=>target.addListener(event,handler),addListenerOnce:(target,event,handler)=>{const listener=target.addListener(event,()=>{listener.remove?.();handler()});return listener},trigger:()=>{}};
  window.__novaAdvancedMarkerElement=LeafletMarkerAdapter;
- window.google={maps:{Map:LeafletMapAdapter,InfoWindow:LeafletInfoWindowAdapter,places:{},Size:class{constructor(width,height){this.width=width;this.height=height}},Point:class{constructor(x,y){this.x=x;this.y=y}},LatLngBounds:LeafletBoundsAdapter,Polygon:class{constructor(options={}){this.layer=Leaflet.polygon((options.paths||[]).map(path=>[Number(path.lat),Number(path.lng)]),{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight,fillColor:options.fillColor,fillOpacity:options.fillOpacity});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}addListener(event,handler){this.layer.on(event,handler);return {remove:()=>this.layer.off(event,handler)}}},Circle:class{constructor(options={}){this.layer=Leaflet.circle([Number(options.center?.lat||12.115),Number(options.center?.lng||-86.26)],{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight,fillColor:options.fillColor,fillOpacity:options.fillOpacity,radius:Number(options.radius||20)});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}setCenter(value){this.layer.setLatLng([Number(value.lat),Number(value.lng)])}},Polyline:class{constructor(options={}){this.layer=Leaflet.polyline((options.path||[]).map(value=>[Number(value.lat),Number(value.lng)]),{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}},event:eventApi}};
+ window.google={maps:{Map:LeafletMapAdapter,InfoWindow:LeafletInfoWindowAdapter,places:{},Size:class{constructor(width,height){this.width=width;this.height=height}},Point:class{constructor(x,y){this.x=x;this.y=y}},LatLngBounds:LeafletBoundsAdapter,Polygon:class{constructor(options={}){this.layer=Leaflet.polygon((options.paths||[]).map(path=>[Number(path.lat),Number(path.lng)]),{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight,fillColor:options.fillColor,fillOpacity:options.fillOpacity});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}addListener(event,handler){this.layer.on(event,handler);return {remove:()=>this.layer.off(event,handler)}}},Circle:class{constructor(options={}){this.layer=Leaflet.circle([Number(options.center?.lat||12.115),Number(options.center?.lng||-86.26)],{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight,fillColor:options.fillColor,fillOpacity:options.fillOpacity,radius:Number(options.radius||20)});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}setCenter(value){this.layer.setLatLng([Number(value.lat),Number(value.lng)])}setRadius(value){this.layer.setRadius(Number(value))}},Polyline:class{constructor(options={}){this.layer=Leaflet.polyline((options.path||[]).map(value=>[Number(value.lat),Number(value.lng)]),{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}},event:eventApi}};
  window.__novaLeafletReady=true;
 }
 async function novaMapsLibrary(name){
@@ -673,6 +757,13 @@ let lastKnownCoords = null;
 let pendingEvidenceBusinessId = null;
 let pendingQuickPointPhoto = false;
 let pendingQuickPointFile = null;
+let pendingQuickPointPreviewUrl = null;
+let pendingPointSource = 'mapa';
+let pendingPointAccuracy = null;
+let pendingPointMarker = null;
+let quickPointLocationRequestId = 0;
+let focusedQuickPointMarker = null;
+let focusedQuickPointBusinessId = null;
 let presenceMarkers = new Map();
 const storedPresenceSharing = localStorage.getItem(PRESENCE_STORAGE_KEY);
 let presenceSharingEnabled = IS_PLATFORM_ADMIN ? storedPresenceSharing === 'true' : storedPresenceSharing !== 'false';
@@ -771,6 +862,8 @@ window.addEventListener('load',resizeGoogleMap);
 if(window.ResizeObserver){new ResizeObserver(resizeGoogleMap).observe(document.getElementById('map'));}
 requestAnimationFrame(()=>{resizeGoogleMap();setTimeout(resizeGoogleMap,250);});
 const infoWindow = new google.maps.InfoWindow();
+let focusedQuickPointPopupOpen=false;
+infoWindow.addListener?.('close',()=>{focusedQuickPointPopupOpen=false});
 const map = {
   getZoom(){return googleMap.getZoom() || 11},
   flyTo(coords, zoom){googleMap.panTo({lat:coords[0],lng:coords[1]});googleMap.setZoom(zoom)},
@@ -785,6 +878,7 @@ function scheduleMapViewportRender(){
 }
 googleMap.addListener('dragend',scheduleMapViewportRender);
 googleMap.addListener('zoom_changed',scheduleMapViewportRender);
+googleMap.addListener('dragstart',()=>clearFocusedQuickPoint());
 googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
   openQuickPointAt(event.latLng.lat(), event.latLng.lng(), 'mapa');
@@ -841,27 +935,46 @@ function createMapMarker(options={}){
     title:options.title || '',
     content:options.content || markerContentFromIcon(options.icon,options.title,options.label),
     gmpClickable:true,
+    gmpDraggable:Boolean(options.draggable||options.gmpDraggable),
     zIndex:options.zIndex
   });
-  marker.setPosition=(position)=>{marker.position=position};
+  if(typeof marker.setPosition!=='function')marker.setPosition=(position)=>{marker.position=position};
   marker.setLabel=()=>marker;
+  return marker;
+}
+function createQuickPointMarkerContent(saved=false){
+  const content=document.createElement('div');
+  content.className=`nova-quick-point-marker${saved?' saved':''}`;
+  content.textContent='+';
+  content.setAttribute('role',saved?'img':'button');
+  content.setAttribute('aria-label',saved?'Punto comercial guardado':'Punto provisional, arrastra o usa las flechas del teclado para ajustar');
+  if(!saved)content.tabIndex=0;
+  return content;
+}
+function bindMapMarkerPopup(marker,factory){
+  if(factory!==undefined)marker._popupFactory=factory;
+  marker.openPopup=function(){
+    if(!marker._popupFactory)return;
+    infoWindow.setContent(typeof marker._popupFactory==='function'?marker._popupFactory():marker._popupFactory);
+    if(marker===focusedQuickPointMarker)focusedQuickPointPopupOpen=true;
+    try{infoWindow.open({map:googleMap,anchor:marker})}catch(error){infoWindow.open(googleMap,marker)}
+  };
+  marker.bindPopup=function(nextFactory){bindMapMarkerPopup(marker,nextFactory);return marker};
+  if(!marker._popupOpenListener){
+    const open=()=>{
+      if(focusedQuickPointMarker&&marker!==focusedQuickPointMarker)clearFocusedQuickPoint();
+      marker.openPopup();
+    };
+    if(typeof marker.addEventListener==='function')marker.addEventListener('gmp-click',open);
+    else marker.addListener?.('click',open);
+    marker._popupOpenListener=open;
+  }
   return marker;
 }
 function createGoogleMarker(coords, options){
   const marker=createMapMarker({position:{lat:coords[0],lng:coords[1]},title:options.title||'',icon:options.icon||undefined});
   setNovaMarkerMap(marker,null);
-  marker.bindPopup=function(factory){
-    marker._popupFactory=factory;
-    const open=()=>marker.openPopup();
-    if(typeof marker.addEventListener==='function')marker.addEventListener('gmp-click',open);
-    else marker.addListener('click',open);
-    return marker;
-  };
-  marker.openPopup=function(){
-    if(!marker._popupFactory)return;
-    infoWindow.setContent(typeof marker._popupFactory==='function'?marker._popupFactory():marker._popupFactory);
-    try{infoWindow.open({map:googleMap,anchor:marker})}catch(error){infoWindow.open(googleMap,marker)}
-  };
+  bindMapMarkerPopup(marker);
   marker.bindTooltip=function(content,options={}){if(options.permanent){marker.setLabel({text:String(content).replace(/<[^>]+>/g,''),color:'#173b31',fontSize:'10px',fontWeight:'600'})}return marker};
   marker.unbindTooltip=function(){marker.setLabel(null);return marker};
   return marker;
@@ -908,7 +1021,7 @@ function renderZonePolygons(){
   Object.entries(zoneCells).forEach(([zone,cells],zoneIndex)=>cells.forEach((cell,index)=>{
     const color=(zoneIndex+index)%2?'#0b8e69':'#2364d2';
     const polygon=new google.maps.Polygon({map:googleMap,paths:cell.paths,strokeColor:color,strokeOpacity:.58,strokeWeight:1.5,fillColor:color,fillOpacity:.06,clickable:true,zIndex:2});
-    polygon.addListener('click',()=>{selectedZone=zone;document.querySelectorAll('[data-zone]').forEach(button=>button.classList.toggle('active',button.dataset.zone===zone));render();googleMap.panTo({lat:cell.lat,lng:cell.lng});googleMap.setZoom(14)});
+    polygon.addListener('click',()=>{clearFocusedQuickPoint();selectedZone=zone;document.querySelectorAll('[data-zone]').forEach(button=>button.classList.toggle('active',button.dataset.zone===zone));render();googleMap.panTo({lat:cell.lat,lng:cell.lng});googleMap.setZoom(14)});
     zonePolygons.set(cell.id,polygon);
   }));
 }
@@ -1254,6 +1367,27 @@ async function removeOfflineProspect(sourceKey){
 async function readOfflineProspects(){
   try{return (await offlineTransaction('readonly',store=>store.getAll())) || []}catch(error){console.warn('No se pudo leer la cola offline',error);return []}
 }
+async function restoreOfflineEvidencePreviews(){
+  const entries=await readOfflineProspects();
+  let restored=false;
+  for(const entry of entries){
+    if(!entry.evidence?.blob)continue;
+    const business=findBusinessByKey(entry.sourceKey);
+    if(!business)continue;
+    const state=stateOf(business);
+    if(!state.evidencePreviewUrl || state.evidencePreviewUrl.startsWith('blob:')){
+      if(state.evidencePreviewUrl?.startsWith('blob:'))URL.revokeObjectURL(state.evidencePreviewUrl);
+      state.evidencePreviewUrl=URL.createObjectURL(entry.evidence.blob);
+    }
+    state.evidenceName=entry.evidence.name || state.evidenceName;
+    state.evidenceType=entry.evidence.type || state.evidenceType;
+    state.evidencePending=true;
+    state.syncPending=true;
+    state.syncStatus='Pendiente de sincronización';
+    restored=true;
+  }
+  if(restored){persistCommercial();render();refreshFocusedQuickPointPopup()}
+}
 async function uploadEvidence(file){
   if(!canForceSales('attachEvidence')&&!canForceSales('importProspects'))throw new Error('No tienes permiso para adjuntar evidencia');
   const metadata=await forceSalesRequest('/storage/uploads/force-sales-evidence',{method:'POST',body:JSON.stringify({fileName:file.name,mimeType:file.type || 'application/octet-stream',size:file.size})});
@@ -1288,13 +1422,19 @@ async function flushOutbox(){
           if(!canForceSales('attachEvidence')&&!canForceSales('importProspects'))continue;
           const uploaded=await uploadEvidence(entry.evidence.blob);
           await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(remoteId)}`,{method:'PATCH',body:JSON.stringify({evidenceUri:uploaded.uri,evidenceName:entry.evidence.name,evidenceType:entry.evidence.type})});
-          if(business){const state=stateOf(business);state.evidenceUri=uploaded.uri;state.evidencePending=false;persistCommercial()}
+          if(business){const state=stateOf(business);state.evidenceUri=uploaded.uri;state.evidencePreviewUrl=URL.createObjectURL(entry.evidence.blob);state.evidencePending=false;persistCommercial()}
         }
         if((entry.pendingOperations || []).some(operation=>(operation.actions || [operation.action]).some(action=>!canForceSales(action))))continue;
         for(const operation of entry.pendingOperations || []){
           await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(remoteId)}${operation.suffix || ''}`,{method:operation.method || 'PATCH',body:JSON.stringify(operation.body || {})});
         }
-        if(business && remoteId)stateOf(business).remoteId=remoteId;
+        if(business){
+          const state=stateOf(business);
+          if(remoteId)state.remoteId=remoteId;
+          state.syncPending=false;
+          state.syncStatus='Sincronizado';
+          persistCommercial();
+        }
         await removeOfflineProspect(entry.sourceKey);
         syncedAny=true;
       }catch(error){console.warn('La cola offline seguirá pendiente',error)}
@@ -1304,6 +1444,7 @@ async function flushOutbox(){
     if(syncedAny){
       mergeBusinesses();
       render();
+      refreshFocusedQuickPointPopup();
     }
   }
 }
@@ -1347,6 +1488,8 @@ async function syncProspects(list, evidenceFile=null){
   if(!navigator.onLine || !localStorage.getItem('nh-auth-token')){
     const queued=await Promise.all(syncable.map(item=>{
       const state=stateOf(item);
+      state.syncPending=true;
+      state.syncStatus='Pendiente de sincronización';
       const syncProfile=state.remoteId ? canForceSales('updateProspect') : canForceSales('importProspects');
       return saveOfflineProspect(item,evidenceFile,[],syncProfile);
     }));
@@ -1357,6 +1500,8 @@ async function syncProspects(list, evidenceFile=null){
     const saved=[];
     for(const business of syncable){
       const state=stateOf(business);
+      state.syncPending=true;
+      state.syncStatus='Sincronizando';
       if(!state.remoteId){
         const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[prospectPayload(business)]})});
         const prospect=result?.prospects?.[0];
@@ -1368,12 +1513,15 @@ async function syncProspects(list, evidenceFile=null){
       }
       if(pendingEvidence){
         const uploaded=await uploadEvidence(pendingEvidence);
-        state.evidenceUri=uploaded.uri;state.evidencePending=false;
+        state.evidenceUri=uploaded.uri;
         if(state.remoteId){
           const evidence=await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(state.remoteId)}`,{method:'PATCH',body:JSON.stringify({evidenceUri:uploaded.uri,evidenceName:pendingEvidence.name,evidenceType:pendingEvidence.type})});
           if(evidence)saved.push(evidence);
+          state.evidencePending=false;
         }
       }
+      state.syncPending=false;
+      state.syncStatus='Sincronizado';
     }
     persistCommercial();
     return {total:saved.length,prospects:saved};
@@ -1382,6 +1530,8 @@ async function syncProspects(list, evidenceFile=null){
     toast(e?.message || 'No se pudo sincronizar el cliente con el ERP');
     const queued=await Promise.all(syncable.map(item=>{
       const state=stateOf(item);
+      state.syncPending=true;
+      state.syncStatus='Pendiente de sincronización';
       const syncProfile=state.remoteId ? canForceSales('updateProspect') : canForceSales('importProspects');
       return saveOfflineProspect(item,pendingEvidence,[],syncProfile);
     }));
@@ -1711,6 +1861,12 @@ function popupHtml(b){
   const c = stateOf(b);
   const sid = safeId(b.id);
   const gm = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.name + ' ' + b.address + ' Managua Nicaragua')}`;
+  const syncReadout=c.syncPending
+    ? `<div class="sync-readout pending">${esc(c.syncStatus || 'Pendiente de sincronización')} · este punto ya está guardado en el dispositivo.</div>`
+    : c.syncStatus==='Sincronizado' ? '<div class="sync-readout synced">Sincronizado con NovaHub.</div>' : '';
+  const evidenceReadout=c.evidencePreviewUrl
+    ? `<div class="evidence-preview"><img src="${esc(c.evidencePreviewUrl)}" alt="Vista previa de evidencia"><span>${esc(c.evidenceName || 'Foto lista para guardar')}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</span></div>`
+    : c.evidenceName ? `<div class="meta">Evidencia: ${esc(c.evidenceName)}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</div>` : '';
   return `<div class="popup">
     <h3>${esc(b.name)}</h3>
     <div class="sub">${esc(b.category)} · ${esc(b.zone)}</div>
@@ -1720,6 +1876,8 @@ function popupHtml(b){
       <b>Responsable</b><span>${esc(c.ownerName || 'Sin asignar')}</span>
     </div>
     <div class="warn">${esc(b.precision)}. Validar actividad, ubicación y persona decisora antes de la visita.</div>
+    ${syncReadout}
+    ${evidenceReadout}
     <div class="popactions">
       <a href="${gm}" target="_blank">Abrir Maps</a>
       <a href="https://waze.com/ul?ll=${encodeURIComponent(b.lat + ',' + b.lng)}&navigate=yes" target="_blank">Abrir Waze</a>
@@ -1759,8 +1917,6 @@ function popupHtml(b){
       <input id="ev-${sid}" type="file" accept="image/*,.pdf" capture="environment">
       <div class="evidence-preview" id="ev-preview-${sid}" hidden></div>
       ` : ''}
-      ${c.evidencePreviewUrl ? `<div class="evidence-preview"><img src="${esc(c.evidencePreviewUrl)}" alt="Vista previa de evidencia"><span>Imagen cargada${c.evidencePending ? ' · pendiente de sincronizar' : ''}</span></div>` : ''}
-      ${c.evidenceName ? `<div class="meta">Evidencia: ${esc(c.evidenceName)}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</div>` : ''}
       ${c.evidenceUri ? `<button type="button" onclick="openEvidence('${b.id}')">Ver evidencia</button>` : ''}
       ${(canForceSales('updateProspect') || canForceSales('changeStage') || canForceSales('attachEvidence')) ? `<button onclick="saveFollowup('${b.id}')">Guardar seguimiento</button>` : ''}
       ${canForceSales('manageConsent') ? `
@@ -1782,6 +1938,64 @@ function popupHtml(b){
 function findBusiness(id){return businesses.find(x=>x.id===id)}
 function findBusinessByKey(key){return businesses.find(x=>x.id===key || keyOf(x)===key)}
 let pendingPointCoords = null;
+function clearPendingQuickPointMarker(){
+  if(pendingPointMarker)setNovaMarkerMap(pendingPointMarker,null);
+  pendingPointMarker=null;
+}
+function clearFocusedQuickPoint(){
+  if(focusedQuickPointMarker)setNovaMarkerMap(focusedQuickPointMarker,null);
+  if(focusedQuickPointBusinessId && markerById.get(focusedQuickPointBusinessId)===focusedQuickPointMarker)markerById.delete(focusedQuickPointBusinessId);
+  focusedQuickPointMarker=null;
+  focusedQuickPointBusinessId=null;
+  focusedQuickPointPopupOpen=false;
+  infoWindow.close();
+}
+function refreshFocusedQuickPointPopup(){
+  if(!focusedQuickPointMarker || !focusedQuickPointBusinessId)return;
+  const business=findBusiness(focusedQuickPointBusinessId);
+  if(!business)return;
+  focusedQuickPointMarker._b=business;
+  bindMapMarkerPopup(focusedQuickPointMarker,()=>popupHtml(business));
+  if(focusedQuickPointPopupOpen)focusedQuickPointMarker.openPopup();
+}
+function focusQuickPoint(business){
+  clearFocusedQuickPoint();
+  const marker=createMapMarker({
+    position:{lat:Number(business.lat),lng:Number(business.lng)},
+    title:business.name,
+    content:createQuickPointMarkerContent(true),
+    map:googleMap,
+    zIndex:1700,
+  });
+  marker._b=business;
+  marker.bindTooltip=()=>marker;
+  marker.unbindTooltip=()=>marker;
+  bindMapMarkerPopup(marker,()=>popupHtml(business));
+  focusedQuickPointMarker=marker;
+  focusedQuickPointBusinessId=business.id;
+  focusedQuickPointPopupOpen=false;
+  markerById.set(business.id,marker);
+  focusRenderLockUntil=Date.now()+1600;
+  map.flyTo([business.lat,business.lng],17);
+  let popupOpened=false;
+  const openAfterPan=()=>{
+    if(popupOpened)return;
+    if(focusedQuickPointMarker===marker && focusedQuickPointBusinessId===business.id)marker.openPopup();
+    popupOpened=true;
+  };
+  google.maps.event.addListenerOnce(googleMap,'idle',openAfterPan);
+  window.setTimeout(openAfterPan,600);
+}
+function updatePendingQuickPointPosition(position,{source=pendingPointSource,accuracy=pendingPointAccuracy}={}){
+  const coordinates=window.NovaForceSalesLocation.normalizeCoordinates(position);
+  if(!coordinates)return;
+  pendingPointCoords=coordinates;
+  pendingPointSource=source;
+  pendingPointAccuracy=accuracy != null && accuracy !== '' && Number.isFinite(Number(accuracy)) ? Number(accuracy) : null;
+  if(pendingPointMarker?.setPosition)pendingPointMarker.setPosition(coordinates);
+  const location=document.getElementById('quickCaptureLocation');
+  if(location)location.textContent=window.NovaForceSalesLocation.formatCaptureLocation({...coordinates,source:pendingPointSource,accuracy:pendingPointAccuracy});
+}
 function isAppleTouchDevice(){return /iPad|iPhone|iPod/.test(navigator.userAgent)|| (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}
 function showLocationHelp(){
   const text=document.getElementById('locationHelpText');
@@ -1800,7 +2014,7 @@ async function locationPermissionState(){
   if(!navigator.permissions?.query)return 'prompt';
   try{return (await navigator.permissions.query({name:'geolocation'})).state}catch(error){return 'prompt'}
 }
-async function withLocationAccess(onSuccess,onFailure,onFallback){
+async function withLocationAccess(onSuccess,onFailure,onFallback,options={}){
   if(!navigator.geolocation){onFallback?.();return}
   if(await locationPermissionState()==='denied'){
     if(onFallback){onFallback();return}
@@ -1812,11 +2026,12 @@ async function withLocationAccess(onSuccess,onFailure,onFallback){
     if(error?.code===3){if(onFallback){onFallback();return}toast('La ubicación tardó demasiado. Acerca el teléfono al exterior e inténtalo de nuevo');return}
     if(onFallback){onFallback();return}
     toast(onFailure || 'No se pudo obtener la ubicación. Revisa el permiso del navegador.')
-  },{enableHighAccuracy:true,timeout:12000,maximumAge:30000});
+  },{enableHighAccuracy:true,timeout:12000,maximumAge:options.maximumAge ?? 30000});
 }
 function resetQuickCapture(){
   pendingQuickPointPhoto=false;
   pendingQuickPointFile=null;
+  if(pendingQuickPointPreviewUrl){URL.revokeObjectURL(pendingQuickPointPreviewUrl);pendingQuickPointPreviewUrl=null}
   const panel=document.getElementById('quickCapture');
   const photo=document.getElementById('quickCapturePhoto');
   const image=document.getElementById('quickCapturePhotoImage');
@@ -1840,75 +2055,103 @@ function renderQuickPointPhoto(file){
   const filename=document.getElementById('quickCapturePhotoName');
   const save=document.getElementById('quickCaptureSave');
   if(!photo||!image||!filename||!save)return;
-  image.src=URL.createObjectURL(file);
+  if(pendingQuickPointPreviewUrl)URL.revokeObjectURL(pendingQuickPointPreviewUrl);
+  pendingQuickPointPreviewUrl=URL.createObjectURL(file);
+  image.src=pendingQuickPointPreviewUrl;
   filename.textContent=`${file.name} · ${Math.round(file.size/1024)} KB`;
   photo.hidden=false;
   save.disabled=false;
 }
-function openQuickPointAt(lat,lng,source='mapa'){
+function openQuickPointAt(lat,lng,source='mapa',accuracy=null){
   if(!requireForceSales('importProspects'))return;
-  pendingPointCoords={lat:Number(lat),lng:Number(lng)};
+  if(source!=='ubicación actual')quickPointLocationRequestId+=1;
+  const coordinates=window.NovaForceSalesLocation.normalizeCoordinates({lat,lng});
+  if(!coordinates){toast('La ubicación recibida no es válida; marca un punto en el mapa');return}
   const panel=document.getElementById('quickCapture');
   const nameInput=document.getElementById('quickCaptureName');
   const location=document.getElementById('quickCaptureLocation');
   if(!panel || !nameInput || !location)return;
-  location.textContent=`${source === 'ubicación actual' ? 'Ubicación actual' : 'Punto seleccionado'} · ${pendingPointCoords.lat.toFixed(6)}, ${pendingPointCoords.lng.toFixed(6)}`;
-  nameInput.value='';
+  const isRepositioning=!panel.hidden && Boolean(pendingPointCoords);
+  if(!isRepositioning){
+    clearFocusedQuickPoint();
+    clearPendingQuickPointMarker();
+    resetQuickCapture();
+    nameInput.value='';
+  }
   panel.hidden=false;
-  resetQuickCapture();
-  panel.hidden=false;
-  nameInput.focus();
+  updatePendingQuickPointPosition(coordinates,{source,accuracy});
+  if(!pendingPointMarker){
+    pendingPointMarker=window.NovaForceSalesLocation.createDraftMarker({
+      createMarker:options=>createMapMarker({...options,content:createQuickPointMarkerContent(false),map:googleMap}),
+      position:coordinates,
+      onPositionChange:next=>updatePendingQuickPointPosition(next,{source:'mapa',accuracy:null}),
+    });
+  }else if(pendingPointMarker.setPosition){
+    pendingPointMarker.setPosition(coordinates);
+  }
+  if(!isRepositioning)nameInput.focus();
 }
 function openQuickPointFromDevice(){
+  const requestId=++quickPointLocationRequestId;
   toast('Obteniendo tu ubicación…');
   withLocationAccess(position=>{
+    if(requestId!==quickPointLocationRequestId)return;
     showUserLocation(position.coords);
     googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
     googleMap.setZoom(17);
-    openQuickPointAt(position.coords.latitude,position.coords.longitude,'ubicación actual');
-  },'No se pudo capturar la ubicación; puedes marcar el cliente directamente en el mapa',()=>{
-    const center=googleMap.getCenter?.();
-    const lat=typeof center?.lat==='function'?center.lat():Number(center?.lat);
-    const lng=typeof center?.lng==='function'?center.lng():Number(center?.lng);
-    if(Number.isFinite(lat)&&Number.isFinite(lng))openQuickPointAt(lat,lng,'centro del mapa');
-    else toast('Haz clic en el mapa para marcar el cliente');
-  });
+    openQuickPointAt(position.coords.latitude,position.coords.longitude,'ubicación actual',position.coords.accuracy);
+  },'No se pudo capturar la ubicación; marca un punto directamente en el mapa',()=>{
+    if(requestId===quickPointLocationRequestId)toast('No se pudo obtener GPS. Toca cualquier punto del mapa para marcar el negocio.');
+  },{maximumAge:0});
 }
 function saveQuickPoint(){
   if(!requireForceSales('importProspects'))return;
   if(!pendingPointCoords)return;
   const nameInput=document.getElementById('quickCaptureName');
   const coords={...pendingPointCoords};
+  const locationDetails={captureSource:pendingPointSource,accuracy:pendingPointAccuracy};
   const name=(nameInput?.value || '').trim();
   if(!name){nameInput?.focus();toast('Escribe el nombre del negocio para continuar');return}
   if(pendingQuickPointFile && !canForceSales('attachEvidence')&&!canForceSales('importProspects')){toast('Tu rol no tiene permiso para subir imágenes');return}
+  const evidenceFile=pendingQuickPointFile;
+  clearPendingQuickPointMarker();
   pendingPointCoords=null;
-  createQuickPointAt(coords.lat,coords.lng,name,{},pendingQuickPointFile);
+  resetQuickCapture();
+  createQuickPointAt(coords.lat,coords.lng,name,locationDetails,evidenceFile);
 }
 function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',details={},evidenceFile=null){
   if(!requireForceSales('importProspects'))return;
   if(evidenceFile && !canForceSales('attachEvidence')&&!canForceSales('importProspects')){toast('Tu rol no tiene permiso para subir imágenes');return}
   const coords={lat:Number(lat),lng:Number(lng)};
-  if(!Number.isFinite(coords.lat)||!Number.isFinite(coords.lng))return;
+  if(!window.NovaForceSalesLocation.normalizeCoordinates(coords))return;
   const id=`quick-${Date.now()}`;
   const name=customName || 'Negocio capturado en visita';
   const address='Punto capturado · ' + coords.lat.toFixed(6) + ', ' + coords.lng.toFixed(6);
-  const business={id,name,zone:nearestZone(coords.lat,coords.lng),category:'Prospecto por validar',address,source:'Captura móvil NovaHub',sourceUrl:'',lat:coords.lat,lng:coords.lng,precision:'Coordenada exacta capturada por el vendedor',score:0,priority:'C',owner:'Fuerza Comercial',phone:'',website:'',rating:null,reviews:0};
+  const gpsAccuracy=Number(details.accuracy);
+  const precision=details.captureSource==='ubicación actual'
+    ? `Ubicación GPS${Number.isFinite(gpsAccuracy)&&gpsAccuracy>=0 ? ` · precisión informada ±${Math.round(gpsAccuracy)} m` : ''}`
+    : 'Coordenada seleccionada en el mapa';
+  const business={id,name,zone:nearestZone(coords.lat,coords.lng),category:'Prospecto por validar',address,source:'Captura móvil NovaHub',sourceUrl:'',lat:coords.lat,lng:coords.lng,precision,score:0,priority:'C',owner:'Fuerza Comercial',phone:'',website:'',rating:null,reviews:0};
   localPoints.unshift(business);
     localStorage.setItem(LOCAL_POINTS_KEY,JSON.stringify(localPoints.slice(0,2000)));
-  const c=stateOf(business); Object.assign(c,{selected:true,stage:'Nuevo'});
+  const c=stateOf(business); Object.assign(c,{selected:true,stage:'Nuevo',syncPending:true,syncStatus:'Pendiente de sincronización'});
   if(evidenceFile){c.evidenceName=evidenceFile.name;c.evidenceType=evidenceFile.type;c.evidencePreviewUrl=URL.createObjectURL(evidenceFile);c.evidencePending=true}
   persistCommercial();
   mergeBusinesses(); populateFilters();
   document.getElementById('quickCapture').hidden=true;
   pendingPointCoords=null;
   activeView='map';
-  updateView(); render();
-  map.flyTo([business.lat,business.lng],17);
+  updateView();
+  focusQuickPoint(business);
+  render();
   toast(evidenceFile?'Punto y foto guardados':'Punto registrado');
   void (async()=>{
-    await syncProspects([business],evidenceFile);
+    if(evidenceFile)await saveOfflineProspect(business,evidenceFile,[],true);
+    const syncResult=await syncProspects([business],evidenceFile);
     const syncedState=stateOf(business);
+    if(syncResult && syncedState.remoteId && !syncedState.syncPending && !syncedState.evidencePending)await removeOfflineProspect(keyOf(business));
+    render();
+    refreshFocusedQuickPointPopup();
     if(!syncedState.remoteId){toast('Punto marcado en el mapa; se sincronizará al recuperar la conexión');return}
     await loadRemoteProspects();
     setSearchStatus('Negocio sincronizado · visible en todos los dispositivos autorizados.');
@@ -1920,7 +2163,7 @@ function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',det
   })();
 }
 document.getElementById('newPoint').addEventListener('click',openQuickPointFromDevice);
-document.getElementById('quickCaptureCancel').addEventListener('click',()=>{pendingPointCoords=null;resetQuickCapture()});
+document.getElementById('quickCaptureCancel').addEventListener('click',()=>{quickPointLocationRequestId+=1;pendingPointCoords=null;clearPendingQuickPointMarker();resetQuickCapture()});
 document.getElementById('quickCaptureTakePhoto').addEventListener('click',beginQuickPointCapture);
 document.getElementById('quickCaptureRetake').addEventListener('click',beginQuickPointCapture);
 document.getElementById('quickCaptureSave').addEventListener('click',saveQuickPoint);
@@ -2495,7 +2738,14 @@ function render(){
   const currentBounds=googleMap.getBounds?.();
   const zoom=googleMap.getZoom() || 11;
   const mapLimit=innerWidth<=820 ? (zoom<13 ? 60 : 100) : (zoom<13 ? 180 : 320);
-  const mapBusinesses=filtered.filter(b=>!currentBounds || currentBounds.contains({lat:Number(b.lat),lng:Number(b.lng)})).slice(0,mapLimit);
+  const selectedMapBusinesses=window.NovaForceSalesLocation.selectMapBusinesses({
+    filteredBusinesses:filtered,
+    allBusinesses:businesses,
+    currentBounds,
+    limit:mapLimit,
+    focusedId:focusedQuickPointBusinessId,
+  });
+  const mapBusinesses=selectedMapBusinesses.filter(b=>String(b.id)!==String(focusedQuickPointBusinessId || ''));
   mapBusinesses.forEach(b => {
     const m = L.marker([b.lat, b.lng], {icon: icon(b), title:b.name});
     m._b = b;
@@ -2504,6 +2754,14 @@ function render(){
     cluster.addLayer(m);
   });
   cluster.refresh();
+  if(focusedQuickPointMarker && focusedQuickPointBusinessId){
+    const focusedBusiness=findBusiness(focusedQuickPointBusinessId);
+    if(focusedBusiness){
+      focusedQuickPointMarker._b=focusedBusiness;
+      bindMapMarkerPopup(focusedQuickPointMarker,()=>popupHtml(focusedBusiness));
+      markerById.set(focusedBusiness.id,focusedQuickPointMarker);
+    }else clearFocusedQuickPoint();
+  }
   applyLabels();
 
   updatePipelineKpis();
@@ -2536,6 +2794,7 @@ function render(){
   document.querySelectorAll('.item[data-id]').forEach(el => el.addEventListener('click', () => {
     const b = businesses.find(x => x.id === el.dataset.id);
     if(!b) return;
+    clearFocusedQuickPoint();
     focusRenderLockUntil=Date.now()+1400;
     map.flyTo([b.lat, b.lng], 16, {duration:.65});
     if(innerWidth <= 820) document.getElementById('sheet').classList.add('collapsed');
@@ -2554,6 +2813,7 @@ function populateFilters(){
   const zoneSearchButton=document.getElementById('searchViewport');
   if(zoneSearchButton)zoneSearchButton.textContent=selectedZone==='Todos'?'Buscar vista':'Buscar zona';
   document.querySelectorAll('[data-zone]').forEach(btn => btn.addEventListener('click', () => {
+    clearFocusedQuickPoint();
     selectedZone = btn.dataset.zone;
     activeNearbyCenter=null;
     activeNearbyRadius=null;
@@ -3051,7 +3311,7 @@ async function sendSelectedWhatsApp(){
 let renderFrame=0;
 function scheduleRender(){cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(render)}
 ['search','category','source','state'].forEach(id => {
-  document.getElementById(id).addEventListener(id==='search' ? 'input' : 'change', id==='search' ? () => {listLimit=140;scheduleRender()} : () => {listLimit=140;render()});
+  document.getElementById(id).addEventListener(id==='search' ? 'input' : 'change', id==='search' ? () => {clearFocusedQuickPoint();listLimit=140;scheduleRender()} : () => {clearFocusedQuickPoint();listLimit=140;render()});
 });
 document.querySelectorAll('#labels button').forEach(btn => btn.addEventListener('click', () => {
   labelMode = btn.dataset.mode;
@@ -3085,6 +3345,7 @@ document.getElementById('clearCatalog').addEventListener('click', async () => {
 });
 function setActiveView(view){
   const changed=activeView!==view;
+  if(changed)clearFocusedQuickPoint();
   activeView=view;
   if(changed)document.getElementById('sheet')?.querySelector('.scroll')?.scrollTo({top:0,behavior:'auto'});
   if(view==='map'){pipelineFilter='all';render();loadSellerPresence();return}
@@ -3094,8 +3355,8 @@ function setActiveView(view){
 document.getElementById('kanbanToggle').addEventListener('click',()=>setActiveView(activeView==='kanban'?'map':'kanban'));
 document.getElementById('historyToggle').addEventListener('click',()=>setActiveView(activeView==='history'?'map':'history'));
 document.querySelectorAll('#viewTabs [data-view]').forEach(button=>button.addEventListener('click',()=>setActiveView(button.dataset.view)));
-document.querySelectorAll('.kpi[data-pipeline]').forEach(el=>el.addEventListener('click',()=>{pipelineFilter=el.dataset.pipeline;render()}));
-document.getElementById('opportunities').addEventListener('click',()=>{activeView='map';pipelineFilter='opportunities';render();toast('Mostrando oportunidades con afinidad de 70% o más')});
+document.querySelectorAll('.kpi[data-pipeline]').forEach(el=>el.addEventListener('click',()=>{clearFocusedQuickPoint();pipelineFilter=el.dataset.pipeline;render()}));
+document.getElementById('opportunities').addEventListener('click',()=>{clearFocusedQuickPoint();activeView='map';pipelineFilter='opportunities';render();toast('Mostrando oportunidades con afinidad de 70% o más')});
 document.getElementById('selectVisible').addEventListener('click',()=>{filtered.forEach(b=>stateOf(b).selected=true);persistCommercial();render();toast(`${filtered.length} negocios seleccionados`)});
 document.getElementById('clearSelection').addEventListener('click',()=>{businesses.forEach(b=>stateOf(b).selected=false);persistCommercial();render();toast('Selección limpiada')});
 document.getElementById('bulkKanban').addEventListener('click',addSelectedToKanban);
@@ -3203,9 +3464,11 @@ window.addEventListener('resize',()=>{
 if(innerWidth > 820) sheet.classList.remove('collapsed');
 updateToggle();
 
+mergeBusinesses();
 populateFilters();
 render();
 updateOfflineStatus();
+void restoreOfflineEvidencePreviews();
 setTimeout(() => {
   loadForceSalesConfiguration().finally(() => {
     loadAssignees();
