@@ -10,6 +10,11 @@
     "stylers": [{ "visibility": "off" }]
   },
   {
+    "featureType": "administrative.neighborhood",
+    "elementType": "labels.text",
+    "stylers": [{ "visibility": "on" }]
+  },
+  {
     "featureType": "road",
     "elementType": "labels.icon",
     "stylers": [{ "visibility": "off" }]

@@ -45,7 +45,7 @@ button,input,select,textarea{font:inherit}
 .search-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:17px;margin:0 2px 7px;color:#788984;font-size:8px}
 .search-meta button{border:0;background:transparent;color:#08785a;font-size:8px;font-weight:700;cursor:pointer;padding:2px 0}
 .search-tools{display:grid;grid-template-columns:1fr 86px 66px;gap:6px;margin:-1px 0 9px}.search-tools button,.search-tools select{min-height:34px;border:1px solid #cfe6dc;border-radius:10px;background:#edf8f3;color:#0b7155;padding:6px 8px;font-size:8.5px;font-weight:800;cursor:pointer}.search-tools select{background:white;color:#496058;font-weight:700;cursor:pointer}.search-tools button:hover{background:#d9f1e7}.search-tools button.active{background:#123f35;color:white;border-color:#123f35}
-.map-layers-panel{margin:0 0 10px;border:1px solid #cfe6dc;border-radius:12px;background:rgba(247,251,249,.94);color:#294c42}.map-layers-panel>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:38px;padding:7px 10px;font-size:9px;font-weight:900;cursor:pointer;list-style:none}.map-layers-panel>summary::-webkit-details-marker{display:none}.map-layers-panel>summary:after{content:'⌄';font-size:13px}.map-layers-panel[open]>summary{border-bottom:1px solid #dcebe4}.map-layer-options{display:grid;gap:4px;padding:8px}.map-layer-options>label{display:flex;align-items:center;gap:8px;min-height:32px;color:#36564c;font-size:9px;font-weight:700}.map-layer-options input[type=checkbox]{width:16px;height:16px;accent-color:#08785a;flex:none}.map-layer-controls{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}.map-layer-controls label{display:grid;gap:4px;font-size:8px;font-weight:800}.map-layer-controls input,.map-layer-controls select,.map-layer-controls button{width:100%;min-width:0;min-height:34px;border:1px solid #cfe2d9;border-radius:8px;background:white;color:#294c42;padding:6px;font-size:8px}.map-layer-controls button{grid-column:1/-1;background:#123f35;color:white;font-weight:800;cursor:pointer}.map-layer-status,.map-layer-note{margin:5px 1px;color:#60756d;font-size:8px;line-height:1.45}.map-layer-status{min-height:18px}.map-layer-note{border-top:1px solid #e1ece7;padding-top:6px}.map-layer-reset{width:100%;min-height:34px;border:1px solid #cfe2d9;border-radius:8px;background:#edf8f3;color:#0b7155;font-size:8px;font-weight:900;cursor:pointer}.map-layers-panel button:focus-visible,.map-layers-panel input:focus-visible,.map-layers-panel select:focus-visible,.map-layers-panel summary:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+.map-layers-panel{margin:0 0 10px;border:1px solid #cfe6dc;border-radius:12px;background:rgba(247,251,249,.94);color:#294c42}.map-layers-panel>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:38px;padding:7px 10px;font-size:9px;font-weight:900;cursor:pointer;list-style:none}.map-layers-panel>summary::-webkit-details-marker{display:none}.map-layers-panel>summary:after{content:'⌄';font-size:13px}.map-layers-panel[open]>summary{border-bottom:1px solid #dcebe4}.map-layer-options{display:grid;gap:4px;padding:8px}.map-layer-group-title{margin:3px 2px 0;color:#71847d;font-size:8px;font-weight:900;letter-spacing:.45px;text-transform:uppercase}.map-layer-options>label{display:flex;align-items:center;gap:8px;min-height:32px;color:#36564c;font-size:9px;font-weight:700}.map-layer-options input[type=checkbox]{width:16px;height:16px;accent-color:#08785a;flex:none}.map-layer-controls{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}.map-layer-controls label{display:grid;gap:4px;font-size:8px;font-weight:800}.map-layer-controls input,.map-layer-controls select,.map-layer-controls button{width:100%;min-width:0;min-height:34px;border:1px solid #cfe2d9;border-radius:8px;background:white;color:#294c42;padding:6px;font-size:8px}.map-layer-controls button{grid-column:1/-1;background:#123f35;color:white;font-weight:800;cursor:pointer}.map-layer-status,.map-layer-note{margin:5px 1px;color:#60756d;font-size:8px;line-height:1.45}.map-layer-status{min-height:18px}.map-layer-note{border-top:1px solid #e1ece7;padding-top:6px}.map-layer-reset{width:100%;min-height:34px;border:1px solid #cfe2d9;border-radius:8px;background:#edf8f3;color:#0b7155;font-size:8px;font-weight:900;cursor:pointer}.map-layers-panel button:focus-visible,.map-layers-panel input:focus-visible,.map-layers-panel select:focus-visible,.map-layers-panel summary:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
 .map-layer-legend{display:flex;flex-wrap:wrap;gap:5px 10px;margin:2px 1px 7px;color:#486158;font-size:8px}.map-layer-legend:empty{display:none}.map-layer-legend span{display:inline-flex;align-items:center;gap:4px}.map-layer-legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
 .history-originals-toggle{display:flex!important;align-items:center;gap:7px;min-height:34px;margin:7px 0!important;font-size:8px!important}.history-originals-toggle input{width:16px;height:16px;accent-color:#08785a}
 .sect{margin:12px 0}
@@ -148,7 +148,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .kpis{display:flex;gap:5px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}.kpis::-webkit-scrollbar{display:none}.kpi{flex:0 0 84px;padding:7px 6px;border-radius:11px}.kpi b{font-size:15px}.kpi span{font-size:7px}
  .search input{height:40px;font-size:12px}.search button{height:30px;width:30px}.search-zone{padding:0 8px;font-size:8px}
  .search-tools{grid-template-columns:1fr 74px 58px}.search-tools button,.search-tools select{min-height:38px;font-size:8.5px;padding:6px 5px}
- .map-layer-options>label{min-height:44px;font-size:13px}.map-layer-controls label,.map-layer-controls input,.map-layer-controls select,.map-layer-controls button,.map-layer-reset{min-height:44px;font-size:13px}.map-layer-status,.map-layer-note{font-size:12px;line-height:1.45}.map-layers-panel>summary{min-height:44px;font-size:13px}
+  .map-layer-options>label{min-height:44px;font-size:13px}.map-layer-controls label,.map-layer-controls input,.map-layer-controls select,.map-layer-controls button,.map-layer-reset{min-height:44px;font-size:13px}.map-layer-status,.map-layer-note{font-size:12px;line-height:1.45}.map-layer-group-title{font-size:11px}.map-layers-panel>summary{min-height:44px;font-size:13px}
  .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}.chip{flex:0 0 auto;padding:8px 10px;font-size:9.5px}
  .filters{grid-template-columns:1fr 1fr}.filters select{font-size:10px;min-height:38px}
  .segment button{min-height:35px;font-size:9.5px}
@@ -260,6 +260,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   <details class="map-layers-panel" id="mapLayersPanel">
    <summary aria-controls="mapLayerOptions">Capas del mapa</summary>
    <div class="map-layer-options" id="mapLayerOptions">
+    <div class="map-layer-group-title">Elementos de NovaHub</div>
     <label><input type="checkbox" data-map-layer="users" checked> Usuarios</label>
     <label><input type="checkbox" data-map-layer="manualPoints" checked> Puntos marcados</label>
     <label><input type="checkbox" data-map-layer="catalog"> Catálogo comercial</label>
@@ -273,8 +274,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     </div>
     <div class="map-layer-status" id="mapTrailStatus" role="status" aria-live="polite">Activa Recorrido GPS para consultar posiciones guardadas.</div>
     <div class="map-layer-legend" id="mapTrailLegend" aria-label="Leyenda del recorrido GPS"></div>
+    <div class="map-layer-group-title">Lugares del mapa base</div>
+    <p class="map-layer-note" id="mapStyleNotice" role="status" aria-live="polite"></p>
     <button class="map-layer-reset" id="resetMapLayers" type="button">Restablecer vista limpia</button>
-    <p class="map-layer-note" id="mapStyleNotice"></p>
    </div>
   </details>
 
@@ -293,8 +295,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   </div>
 
   <div class="sect">
-   <div class="stitle"><span>Nombres en el mapa</span></div>
-   <div class="segment" id="labels"><button data-mode="off">Ocultar</button><button class="active" data-mode="smart">Inteligente</button><button data-mode="all">Todos</button></div>
+   <div class="stitle"><span>Nombres de puntos NovaHub</span></div>
+   <div class="segment" id="labels"><button type="button" class="active" data-mode="off" aria-pressed="true">Ocultar</button><button type="button" data-mode="smart" aria-pressed="false">Inteligente</button><button type="button" data-mode="all" aria-pressed="false">Todos</button></div>
   </div>
 
   <div class="actions">
@@ -569,12 +571,13 @@ window.NovaForceSalesLocation = (()=>{
     const accuracyText=gps&&Number.isFinite(accuracyMeters)&&accuracyMeters>=0 ? ` · GPS ±${Math.round(accuracyMeters)} m` : '';
     return `${label} · ${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}${accuracyText}`;
   }
-  const DEFAULT_MAP_LAYERS=Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:false,gpsTrail:false});
+  const DEFAULT_MAP_LAYERS=Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:false,gpsTrail:false,labelMode:'off'});
   const TRAIL_LIMITS=Object.freeze({maxAccuracyMeters:100,maxGapSeconds:120,maxDistanceMeters:300,maxSpeedMetersPerSecond:45});
   const TRAIL_COLORS=['#08785a','#2364d2','#cb5a2b','#8557b8','#b18a00','#167d8d','#b63872','#5d6b27'];
   function normalizeMapLayers(value={}){
     const input=value&&typeof value==='object'?value:{};
-    return {users:typeof input.users==='boolean'?input.users:DEFAULT_MAP_LAYERS.users,manualPoints:typeof input.manualPoints==='boolean'?input.manualPoints:DEFAULT_MAP_LAYERS.manualPoints,catalog:typeof input.catalog==='boolean'?input.catalog:DEFAULT_MAP_LAYERS.catalog,plannedRoutes:typeof input.plannedRoutes==='boolean'?input.plannedRoutes:DEFAULT_MAP_LAYERS.plannedRoutes,gpsTrail:false};
+    const labelMode=['off','smart','all'].includes(input.labelMode)?input.labelMode:DEFAULT_MAP_LAYERS.labelMode;
+    return {users:typeof input.users==='boolean'?input.users:DEFAULT_MAP_LAYERS.users,manualPoints:typeof input.manualPoints==='boolean'?input.manualPoints:DEFAULT_MAP_LAYERS.manualPoints,catalog:typeof input.catalog==='boolean'?input.catalog:DEFAULT_MAP_LAYERS.catalog,plannedRoutes:typeof input.plannedRoutes==='boolean'?input.plannedRoutes:DEFAULT_MAP_LAYERS.plannedRoutes,gpsTrail:false,labelMode};
   }
   function mapLayerStorageKey(tenantId,userId){return `novaForceSalesMapLayersV1:${String(tenantId||'no-tenant')}:${String(userId||'no-user')}`}
   function getBusinessLayer(business){return /^quick-/i.test(String(business?.sourceKey||''))||/^quick-/i.test(String(business?.id||''))?'manualPoints':'catalog'}
@@ -979,7 +982,7 @@ let businesses = HAS_AUTHENTICATED_TENANT ? [] : [...seed];
 let filtered = [];
 let listLimit = 140;
 let selectedZone = 'Todos';
-let labelMode = 'smart';
+let labelMode = mapLayers.labelMode;
 let pipelineFilter = 'all';
 const initialView = ['map','kanban','history'].includes(mapQuery.get('view') || '') ? mapQuery.get('view') : 'map';
 let activeView = initialView;
@@ -2958,13 +2961,13 @@ function updateMapStyleNotice(){
   if(!notice)return;
   const provider=String(mapQuery.get('mapProvider')||'GOOGLE').toUpperCase();
   if(provider==='OPENSTREETMAP'||provider==='CUSTOM'){
-    notice.textContent='Este proveedor controla las etiquetas incluidas en sus mosaicos; las capas de NovaHub sí se pueden ocultar aquí.';
+    notice.textContent='Tiendas, farmacias y transporte vienen integrados en los mosaicos de este proveedor; NovaHub no puede ocultarlos desde aquí.';
     return;
   }
   const mapId=String(mapQuery.get('mapId')||'').trim();
   notice.textContent=mapId&&mapId!=='DEMO_MAP_ID'
-    ? 'Map ID configurado. Para ocultar comercios y transporte, publica el estilo limpio en Google Cloud y asócialo a este ID.'
-    : 'Google Maps usa DEMO_MAP_ID. Configure VITE_GOOGLE_MAPS_MAP_ID con el ID de producción y publique el estilo limpio para ocultar comercios y transporte.';
+    ? 'El mapa base usa el estilo fijo asociado a este Map ID. Publica y asocia el estilo limpio en Google Cloud para ocultar comercios, farmacias y transporte; los nombres de barrios se conservan.'
+    : 'Google Maps usa DEMO_MAP_ID. Configura un Map ID de producción y asocia el estilo limpio de Google Cloud para ocultar comercios, farmacias y transporte y conservar los nombres de barrios.';
 }
 function updateMapLayerControls(){
   document.querySelectorAll('[data-map-layer]').forEach(input=>{input.checked=Boolean(mapLayers[input.dataset.mapLayer])});
@@ -2972,6 +2975,7 @@ function updateMapLayerControls(){
   const gpsControls=document.getElementById('gpsTrailControls');
   if(gpsLabel)gpsLabel.hidden=!CAN_ASSIGN_TEAM;
   if(gpsControls)gpsControls.hidden=!CAN_ASSIGN_TEAM||!mapLayers.gpsTrail;
+  syncBusinessLabelControls();
   syncTrailUserSelect(document.getElementById('mapTrailUser'));
   updateMapStyleNotice();
 }
@@ -3006,6 +3010,7 @@ function setMapLayer(name,enabled){
 }
 function resetCleanMap(){
   mapLayers={...window.NovaForceSalesLocation.DEFAULT_MAP_LAYERS};
+  labelMode=mapLayers.labelMode;
   persistMapLayers();
   selectedZone='Todos';pipelineFilter='all';activeNearbyCenter=null;activeNearbyRadius=null;activeView='map';
   const search=document.getElementById('search');if(search)search.value='';
@@ -4018,10 +4023,19 @@ function scheduleRender(){cancelAnimationFrame(renderFrame);renderFrame=requestA
   document.getElementById(id).addEventListener(id==='search' ? 'input' : 'change', id==='search' ? () => {clearFocusedQuickPoint();listLimit=140;scheduleRender()} : () => {clearFocusedQuickPoint();listLimit=140;render()});
 });
 document.querySelectorAll('#labels button').forEach(btn => btn.addEventListener('click', () => {
-  labelMode = btn.dataset.mode;
-  document.querySelectorAll('#labels button').forEach(x => x.classList.toggle('active', x===btn));
+  labelMode = window.NovaForceSalesLocation.normalizeMapLayers({...mapLayers,labelMode:btn.dataset.mode}).labelMode;
+  mapLayers={...mapLayers,labelMode};
+  persistMapLayers();
+  syncBusinessLabelControls();
   applyLabels();
 }));
+function syncBusinessLabelControls(){
+  document.querySelectorAll('#labels button').forEach(button=>{
+    const active=button.dataset.mode===labelMode;
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-pressed',String(active));
+  });
+}
 document.getElementById('refresh').addEventListener('click', () => loadGooglePlaces(true));
 document.getElementById('searchGoogle').addEventListener('click', () => searchGooglePlaces(document.getElementById('search').value,{force:true}));
 document.getElementById('searchViewport').addEventListener('click', () => {

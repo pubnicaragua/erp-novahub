@@ -59,8 +59,10 @@ assert.equal(quiet.segments.length, 0, 'El ruido dentro de la incertidumbre no d
 assert.ok(quiet.isolatedPoints.some((item) => item.reason === 'gps-noise-stop' && item.samples >= 2), 'El ruido se representa como parada resumida');
 
 const layers = core.normalizeMapLayers({ users: false, manualPoints: false, catalog: true, plannedRoutes: true, gpsTrail: true });
-assert.deepEqual({ ...layers }, { users: false, manualPoints: false, catalog: true, plannedRoutes: true, gpsTrail: false }, 'El recorrido GPS siempre inicia apagado aunque las otras preferencias se restauren');
-assert.deepEqual({ ...core.DEFAULT_MAP_LAYERS }, { users: true, manualPoints: true, catalog: false, plannedRoutes: false, gpsTrail: false }, 'La vista inicial solo muestra usuarios y puntos manuales');
+assert.deepEqual({ ...layers }, { users: false, manualPoints: false, catalog: true, plannedRoutes: true, gpsTrail: false, labelMode: 'off' }, 'El recorrido GPS inicia apagado y los nombres de puntos se ocultan por defecto');
+assert.deepEqual({ ...core.DEFAULT_MAP_LAYERS }, { users: true, manualPoints: true, catalog: false, plannedRoutes: false, gpsTrail: false, labelMode: 'off' }, 'La vista limpia muestra usuarios y puntos manuales sin etiquetas');
+assert.equal(core.normalizeMapLayers({ labelMode: 'all' }).labelMode, 'all', 'La preferencia de etiquetas se conserva al restaurar las capas');
+assert.equal(core.normalizeMapLayers({ labelMode: 'unknown' }).labelMode, 'off', 'Un modo de etiquetas inválido vuelve al valor seguro oculto');
 assert.equal(core.mapLayerStorageKey('tenant-1', 'user-2'), 'novaForceSalesMapLayersV1:tenant-1:user-2', 'Las preferencias se aíslan por usuario y tenant');
 assert.equal(core.getBusinessLayer({ sourceKey: 'quick-abc', id: 'record-1' }), 'manualPoints', 'Los puntos quick- se clasifican como marcados manualmente');
 assert.equal(core.getBusinessLayer({ id: 'quick-legacy' }), 'manualPoints', 'Los puntos quick- locales antiguos conservan su clasificación');
@@ -75,16 +77,23 @@ const style = JSON.parse(await readFile(new URL('../maps/force-sales-clean-map-s
 const hiddenFeatures = new Set(style.filter(item => item.stylers?.some(styler => styler.visibility === 'off')).map(item => item.featureType));
 assert.ok(hiddenFeatures.has('poi') && hiddenFeatures.has('transit'), 'El estilo de Google oculta puntos de interés y transporte');
 assert.ok(style.some(item => item.featureType === 'road' && item.elementType === 'geometry' && item.stylers?.some(styler => styler.visibility === 'on')), 'El estilo conserva geometría de calles');
+assert.ok(style.some(item => item.featureType === 'administrative.neighborhood' && item.elementType === 'labels.text' && item.stylers?.some(styler => styler.visibility === 'on')), 'El estilo fijo conserva los nombres de los barrios');
 const mapPage = await readFile(new URL('../src/app/components/FuerzaComercialPage.tsx', import.meta.url), 'utf8');
 assert.match(mapPage, /VITE_GOOGLE_MAPS_MAP_ID/, 'El Map ID de producción se inyecta desde el entorno del frontend');
 
 assert.match(html, /id="mapLayersPanel"/, 'El usuario debe tener un panel de capas accesible');
+assert.match(html, /Elementos de NovaHub/, 'El panel distingue las capas propias de NovaHub del mapa base');
+assert.match(html, /Lugares del mapa base/, 'El panel identifica que los POI pertenecen al mapa base');
+assert.match(html, /id="labels"[\s\S]*?data-mode="off"[^>]*aria-pressed="true"/, 'Ocultar etiquetas de puntos es la opción inicial accesible');
+assert.match(html, /Nombres de puntos NovaHub/, 'El control de etiquetas se refiere a los negocios marcados en NovaHub');
 assert.match(html, /Restablecer vista limpia/, 'El usuario puede volver a la vista limpia');
 assert.match(html, /Ver lecturas originales/, 'El recorrido ofrece una vista diagnóstica de lecturas aisladas');
 assert.match(html, /Precisión desconocida/, 'La UI identifica lecturas sin precisión conocida');
 assert.match(html, /Trayectoria GPS aproximada/, 'La UI aclara que el historial no es una ruta exacta por calles');
 assert.match(html, /VITE_GOOGLE_MAPS_MAP_ID|mapId/, 'La configuración del mapa puede recibir el Map ID de estilo');
 assert.match(html, /mapProvider.*OPENSTREETMAP|etiquetas.*proveedor/i, 'La vista informa que los mosaicos externos controlan sus propias etiquetas');
+assert.match(html, /mapId: mapQuery\.get\('mapId'\) \|\| 'DEMO_MAP_ID'/, 'Google conserva el Map ID para los estilos fijos y marcadores avanzados');
+assert.match(html, /window\.__novaAdvancedMarkerElement/, 'La vista conserva AdvancedMarkerElement y no cambia a OverlayView');
 assert.match(html, /sourceKey:prospect\.sourceKey/, 'La transformación conserva el origen del punto que devuelve el backend');
 assert.match(html, /function updateMapLayerVisibility\(\)[\s\S]*presenceMarkers\.forEach[\s\S]*routeStopMarkers\.forEach/, 'Las capas de usuarios y rutas controlan la visibilidad de sus marcadores');
 assert.match(html, /layerVisibleBusinesses=businesses\.filter[\s\S]*updatePipelineKpis\(layerVisibleBusinesses\)/, 'El listado y los contadores reflejan las capas comerciales activas');
