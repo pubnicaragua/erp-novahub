@@ -52,3 +52,8 @@ Estas reglas complementan el [`AGENTS.md`](../AGENTS.md) del workspace cuando es
 - Si cambia un contrato del backend, actualizar tipos/servicios y revisar todos los consumidores.
 
 Referencias: [`docs/ai/permissions.md`](../docs/ai/permissions.md), [`docs/ai/evidence-levels.md`](../docs/ai/evidence-levels.md), [`docs/ai/feature-plan.md`](../docs/ai/feature-plan.md).
+
+## Integración de cambios
+
+- La rama de integración de Frontend es `master`.
+- Trabajar en el checkout existente; no invocar `superpowers:using-git-worktrees` ni crear ramas auxiliares o worktrees salvo solicitud explícita del usuario.
