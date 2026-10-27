@@ -21,7 +21,7 @@ button,input,select,textarea{font:inherit}
 .brand{padding:18px;background:radial-gradient(circle at 82% 12%,rgba(96,225,178,.28),transparent 34%),linear-gradient(145deg,#0b2f29,#08705a);color:white}
 .topline{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .logo{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800}
-.logoicon{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,#72e5ba,#c0ffe5);display:grid;place-items:center;color:#0b493d;overflow:hidden;box-shadow:0 5px 14px rgba(0,0,0,.16)}.logoicon img{width:100%;height:100%;object-fit:contain;padding:4px}
+.logoicon{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#72e5ba,#c0ffe5);display:grid;place-items:center;color:#0b493d;overflow:hidden;box-shadow:0 5px 14px rgba(0,0,0,.16)}.logoicon img{width:100%;height:100%;object-fit:contain;padding:4px}
 .badge{font-size:9px;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:6px 8px;background:rgba(255,255,255,.10)}
 .brand h1{font-size:21px;line-height:1.15;margin:14px 0 6px;letter-spacing:-.5px}
 .brand p{font-size:10px;line-height:1.5;margin:0;color:rgba(255,255,255,.75)}
@@ -91,7 +91,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .ma{background:var(--green)}.mb{background:var(--amber)}.mc{background:var(--gray)}
 .marker.selected{--marker-ring:#3287e8}.marker.kanban{--marker-ring:#12aa7b}.marker.visited{--marker-ring:#84d795}.marker.interested{--marker-ring:#0b9d68}.marker.discarded{--marker-ring:#86958f;opacity:.62}
 .cluster-brand{width:42px;height:42px;border-radius:15px;background:#123f35;border:3px solid #b4f4d8;color:white;display:flex;align-items:center;justify-content:center;gap:3px;box-shadow:0 6px 15px rgba(12,53,43,.28);font-size:10px;font-weight:900}.cluster-brand span{font-size:13px;color:#8df1be}.cluster-brand b{font-size:11px}
-.nova-map-marker-content{display:block;pointer-events:auto;transform:translateZ(0)}.nova-map-marker-content img{display:block;user-select:none;-webkit-user-drag:none}.nova-map-marker-badge{position:absolute;right:-7px;top:-7px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/11px Poppins,Arial,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(12,53,43,.24)}.nova-presence-marker{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#2364d2;border:3px solid white;box-shadow:0 5px 14px rgba(19,57,116,.35);overflow:hidden;color:#fff;font:800 10px/1 Poppins,Arial,sans-serif}.nova-presence-marker img{width:100%;height:100%;object-fit:cover}.nova-user-location-marker{width:18px;height:18px;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 0 0 5px rgba(8,120,90,.16),0 3px 10px rgba(8,62,45,.28)}
+.nova-map-marker-content{display:block;pointer-events:auto;transform:translateZ(0)}.nova-map-marker-content img{display:block;user-select:none;-webkit-user-drag:none}.nova-map-marker-badge{position:absolute;right:-7px;top:-7px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/11px Poppins,Arial,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(12,53,43,.24)}.nova-presence-marker{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#2364d2;border:3px solid white;box-shadow:0 5px 14px rgba(19,57,116,.35);overflow:hidden;color:#fff;font:800 10px/1 Poppins,Arial,sans-serif}.nova-presence-marker.stale{background:#71828b;opacity:.86;box-shadow:0 4px 11px rgba(38,58,65,.28)}.nova-presence-marker img{width:100%;height:100%;object-fit:cover}.nova-user-location-marker{width:18px;height:18px;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 0 0 5px rgba(8,120,90,.16),0 3px 10px rgba(8,62,45,.28)}
 .nova-route-marker{width:34px;height:34px;display:grid;place-items:center;position:relative;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 4px 12px rgba(8,62,45,.3);color:#fff;font:800 11px/1 Poppins,Arial,sans-serif}.nova-route-marker img{width:22px;height:22px;border-radius:50%;object-fit:contain;background:#fff;padding:2px}.nova-route-marker span{position:absolute;right:-8px;top:-8px;min-width:16px;height:16px;display:grid;place-items:center;border-radius:50%;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/1 Poppins,Arial,sans-serif}
 .fabbar{position:fixed;z-index:900;left:calc(var(--sheet) + 14px);top:14px;display:flex;gap:7px}
 .float{border:1px solid rgba(25,77,63,.12);background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-radius:12px;padding:8px 10px;font-size:9px;font-weight:600;color:#294c42;box-shadow:0 7px 22px rgba(18,57,47,.13)}
@@ -135,7 +135,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .brand{padding:10px 14px 11px;border-radius:22px 22px 0 0}
  .brand h1{font-size:15px;margin:8px 0 2px}
  .brand p{font-size:9px}
- .logo{font-size:10px;gap:7px}.logoicon{width:38px;height:38px;border-radius:10px}
+ .logo{font-size:10px;gap:9px}.logoicon{width:48px;height:48px;border-radius:12px}
  .badge{font-size:7.5px;padding:5px 7px}
  .scroll{padding:10px 11px 18px;overscroll-behavior-y:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}
  .kpis{display:flex;gap:5px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}.kpis::-webkit-scrollbar{display:none}.kpi{flex:0 0 84px;padding:7px 6px;border-radius:11px}.kpi b{font-size:15px}.kpi span{font-size:7px}
@@ -1910,6 +1910,8 @@ function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',det
     await syncProspects([business],evidenceFile);
     const syncedState=stateOf(business);
     if(!syncedState.remoteId){toast('Punto marcado en el mapa; se sincronizará al recuperar la conexión');return}
+    await loadRemoteProspects();
+    setSearchStatus('Negocio sincronizado · visible en todos los dispositivos autorizados.');
     if(canForceSales('registerVisit')){
       const visitedAt=new Date().toISOString();
       const saved=await persistProspectAction(business,'registerVisit','/visit',{visitLat:business.lat,visitLng:business.lng,visitedAt});
@@ -2194,7 +2196,7 @@ function showUserLocation(coords){
 }
 function presenceContent(row){
   const wrapper=document.createElement('div');
-  wrapper.className='nova-presence-marker';
+  wrapper.className=`nova-presence-marker${row.isOnline===false?' stale':''}`;
   wrapper.title=row.name || 'Vendedor';
   if(row.avatar){
     const image=document.createElement('img');
@@ -2210,7 +2212,9 @@ function presenceContent(row){
 function presencePopupContent(row){
   const current=row.currentClient?.name ? `<b>Cliente actual:</b> ${esc(row.currentClient.name)}` : '<b>Cliente actual:</b> Sin cliente activo';
   const last=row.lastClient?.name ? `<b>Último cliente:</b> ${esc(row.lastClient.name)}` : '<b>Último cliente:</b> Sin visita registrada';
-  return `<div style="min-width:220px;padding:4px 2px;font:12px Poppins,Arial,sans-serif;color:#123f35"><div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><div class="nova-presence-marker" style="width:42px;height:42px;flex:0 0 auto">${row.avatar?`<img src="${esc(row.avatar)}" alt="${esc(row.name||'Colaborador')}">`:esc(row.initials||'V')}</div><div><h3 style="margin:0;font-size:14px">${esc(row.name||'Colaborador')}</h3><span style="color:#687a73;font-size:10px">${esc(row.email||'')} · ${esc(row.role||'')}</span></div></div><div style="display:grid;gap:5px;font-size:10px"><div><b>Estado:</b> Disponible / en línea</div><div><b>Actividad:</b> ${esc(row.currentActivity||'Disponible')}</div><div>${current}</div><div>${last}</div><div style="color:#687a73">Actualizado ${new Date(row.lastSeenAt).toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'})}</div></div></div>`;
+  const online=row.isOnline!==false;
+  const stateLabel=online?'En línea · ubicación actualizada':'Sin conexión · última ubicación conocida';
+  return `<div style="min-width:220px;padding:4px 2px;font:12px Poppins,Arial,sans-serif;color:#123f35"><div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><div class="nova-presence-marker${online?'':' stale'}" style="width:42px;height:42px;flex:0 0 auto">${row.avatar?`<img src="${esc(row.avatar)}" alt="${esc(row.name||'Colaborador')}">`:esc(row.initials||'V')}</div><div><h3 style="margin:0;font-size:14px">${esc(row.name||'Colaborador')}</h3><span style="color:#687a73;font-size:10px">${esc(row.email||'')} · ${esc(row.role||'')}</span></div></div><div style="display:grid;gap:5px;font-size:10px"><div><b>Estado:</b> ${stateLabel}</div><div><b>Actividad:</b> ${esc(row.currentActivity||'Disponible')}</div><div>${current}</div><div>${last}</div><div style="color:#687a73">Última actualización ${new Date(row.lastSeenAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}</div></div></div>`;
 }
 function renderPresence(rows){
   const activeIds=new Set();
@@ -2219,7 +2223,7 @@ function renderPresence(rows){
     if(!Number.isFinite(lat)||!Number.isFinite(lng))return;
     const id=String(row.userId);
     activeIds.add(id);
-    const title=(row.name || 'Vendedor') + ' · actualizado ' + new Date(row.lastSeenAt).toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'});
+    const title=(row.name || 'Vendedor') + (row.isOnline===false?' · última ubicación conocida':' · en línea') + ' · ' + new Date(row.lastSeenAt).toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'});
     let marker=presenceMarkers.get(id);
     if(marker){
       marker._presenceRow=row;
@@ -3110,7 +3114,7 @@ map.on('zoomend', applyLabels);
 function updateOfflineStatus(){
   const label=document.getElementById('offlineStatusText');
   if(!label)return;
-  label.textContent=navigator.onLine?'Conectado · los cambios se sincronizan con NovaHub':'Modo offline · cambios, ubicación y evidencias quedan en cola local';
+  label.textContent=navigator.onLine?'Conectado · catálogo y ubicaciones se actualizan automáticamente':'Modo offline · cambios, ubicación y evidencias quedan en cola local';
 }
 window.addEventListener('online',()=>{updateOfflineStatus();flushOutbox().finally(()=>loadRemoteProspects()).finally(()=>loadRemoteRoutes());loadSellerPresence();startPresenceWatch()});
 window.addEventListener('offline',updateOfflineStatus);
@@ -3126,7 +3130,7 @@ window.setInterval(()=>{
       lastOutboxFlushAt=Date.now();
       flushOutbox().finally(()=>loadRemoteProspects()).finally(()=>loadRemoteRoutes());
     }
-    if(Date.now()-lastRemoteRefreshAt>=12000){
+    if(Date.now()-lastRemoteRefreshAt>=3000){
       lastRemoteRefreshAt=Date.now();
       loadRemoteProspects().finally(()=>loadRemoteRoutes());
     }
