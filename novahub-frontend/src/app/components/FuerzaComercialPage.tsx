@@ -117,6 +117,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
       target.postMessage({
         source: 'novahub-force-sales',
         type: 'ui-context',
+        userName: user?.name || '',
         viewport: {
           top: visibleHeight ? Math.round(visibleTop - frameBounds.top) : 0,
           bottom: visibleHeight ? Math.round(frameBounds.bottom - visibleBottom) : 0,
@@ -142,8 +143,13 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     };
     const resizeObserver = new ResizeObserver(scheduleUiContext);
     const themeObserver = new MutationObserver(scheduleUiContext);
+    const onUiContextRequest = (event: MessageEvent) => {
+      if (event.source !== frame.contentWindow || event.origin !== window.location.origin) return;
+      if (event.data?.source === 'novahub-force-sales' && event.data?.type === 'request-ui-context') scheduleUiContext();
+    };
     resizeObserver.observe(section);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
+    window.addEventListener('message', onUiContextRequest);
     window.addEventListener('resize', scheduleUiContext, { passive: true });
     window.addEventListener('scroll', scheduleUiContext, { passive: true, capture: true });
     window.visualViewport?.addEventListener('resize', scheduleUiContext, { passive: true });
@@ -165,9 +171,10 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
       window.removeEventListener('scroll', scheduleUiContext, true);
       window.visualViewport?.removeEventListener('resize', scheduleUiContext);
       window.visualViewport?.removeEventListener('scroll', scheduleUiContext);
+      window.removeEventListener('message', onUiContextRequest);
       frame.removeEventListener('load', onFrameLoad);
     };
-  }, [mapSrc, mapFullscreen]);
+  }, [mapSrc, mapFullscreen, user?.name]);
 
   useEffect(() => {
     const onMapMessage = (event: MessageEvent) => {
