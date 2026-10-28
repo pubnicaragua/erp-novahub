@@ -3179,11 +3179,23 @@ function showUserLocation(position){
   void syncSellerPresence(lastKnownCoords,lastKnownCoords.capturedAt);
   return true;
 }
+function presenceRouteLabel(row){
+  const name=String(row?.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const routeNumber=name.match(/\bruta\b\s*(?:n(?:um(?:ero)?|ro|o)?\s*)?[#.:º°-]*\s*(\d+)\b/i)?.[1];
+  if(routeNumber)return `R${Number(routeNumber)}`;
+  const initials=String(row?.initials||'').trim().toLocaleUpperCase('es-NI');
+  const initialsNumber=initials.match(/^R0*(\d+)$/)?.[1];
+  return initialsNumber?`R${Number(initialsNumber)}`:'';
+}
 function presenceContent(row){
   const wrapper=document.createElement('div');
   wrapper.className=`nova-presence-marker${row.isOnline===false?' stale':''}`;
   wrapper.title=row.name || 'Vendedor';
-  if(row.avatar){
+  const routeLabel=presenceRouteLabel(row);
+  if(routeLabel){
+    wrapper.textContent=routeLabel;
+    wrapper.setAttribute('aria-label',`${row.name||routeLabel} · ${routeLabel}`);
+  }else if(row.avatar){
     const image=document.createElement('img');
     image.src=String(row.avatar);
     image.alt=row.name || 'Vendedor';
