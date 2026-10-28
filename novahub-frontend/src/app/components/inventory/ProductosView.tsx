@@ -3485,6 +3485,8 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
     name: row.name,
     description: row.description,
     brand: row.brand,
+    categoryId: row.categoryId,
+    categoryName: row.categoryName || row.category,
     attributes: row.attributes,
     variants: catalog?.variants
       .filter((variant) => String(variant.productCode || '').trim().toLowerCase() === String(row._sourceCode || row.code).trim().toLowerCase())

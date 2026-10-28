@@ -845,6 +845,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         name: product.name,
         description: product.description,
         brand: product.brand,
+        categoryId: product.categoryId,
+        categoryName: allCategories.find((category: any) => String(category.id) === String(product.categoryId))?.name,
         linkedAttributes: product.linkedAttributes,
         variants: product.isVariable ? buildVariantCombinations(product.linkedAttributes).map((attributes) => ({ attributes })) : undefined,
       })));

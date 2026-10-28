@@ -1531,6 +1531,8 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
       name: row.description,
       description: row.description,
       brand: row.brand,
+      categoryId: row.categoryId,
+      categoryName: row.category,
       attributes: row.attributes,
     })));
     const matches = response?.matches || [];
