@@ -43,8 +43,7 @@ self.addEventListener('install', (event) => {
           await cache.put('/index.html', response);
         }
       })
-      .catch(() => undefined)
-      .then(() => self.skipWaiting()),
+      .catch(() => undefined),
   );
 });
 
@@ -189,29 +188,61 @@ self.addEventListener('sync', (event) => {
 });
 
 async function cacheStatic(request) {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request);
-  if (cached) return cached;
+  let cache;
+  let cached;
+  try {
+    cache = await caches.open(CACHE_NAME);
+    cached = await cache.match(request);
+  } catch {
+    // Storage is an optimization; a cache failure must not block the network.
+  }
 
-  const response = await fetch(request);
-  if (response.ok && response.type === 'basic' && hasExpectedContentType(request, response)) {
-    await cache.put(request, response.clone());
+  let retryWithoutHttpCache = false;
+  if (cached && hasExpectedContentType(request, cached)) return cached;
+  if (cached) {
+    retryWithoutHttpCache = true;
+    try {
+      await cache.delete(request);
+    } catch {
+      // Fetch below still bypasses the HTTP cache even if the stale entry remains.
+    }
+  }
+
+  const response = retryWithoutHttpCache
+    ? await fetch(request, { cache: 'reload' })
+    : await fetch(request);
+  if (cache && response.ok && response.type === 'basic' && hasExpectedContentType(request, response)) {
+    try {
+      await cache.put(request, response.clone());
+    } catch {
+      // Do not turn a valid response into a failed module import when storage is full.
+    }
   }
   return response;
 }
 
 async function networkFirstNavigation(request) {
+  let response;
   try {
-    const response = await fetch(request);
-    if (response.ok && response.type === 'basic' && isHtmlResponse(response)) {
+    response = await fetch(request);
+  } catch {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      return (await cache.match('/index.html')) || Response.error();
+    } catch {
+      return Response.error();
+    }
+  }
+
+  if (response.ok && response.type === 'basic' && isHtmlResponse(response)) {
+    try {
       const cache = await caches.open(CACHE_NAME);
       await cache.put('/index.html', response.clone());
+    } catch {
+      // Keep the fresh network shell even if it cannot be stored offline.
     }
-    return response;
-  } catch {
-    const cache = await caches.open(CACHE_NAME);
-    return cache.match('/index.html');
   }
+  return response;
 }
 
 async function fetchForceSalesMap(request) {

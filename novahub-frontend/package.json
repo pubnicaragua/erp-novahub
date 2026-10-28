@@ -11,6 +11,7 @@
     "test:force-sales-tracking": "node --experimental-strip-types scripts/test-force-sales-tracking-controller.mjs",
     "test:force-sales-tracking-focal": "npm run test:force-sales-tracking && npm run test:force-sales-offline-route && npm run test:force-sales-map-location && npm run test:force-sales-map-offline-identity && npm run test:force-sales-map-layers && npm run test:force-sales-route-history",
     "test:force-sales-notification-navigation": "node --experimental-strip-types scripts/test-force-sales-notification-navigation.mjs",
+    "test:chunk-recovery": "node --test scripts/test-chunk-recovery.mjs",
     "test:force-sales-route-history": "node scripts/test-force-sales-route-history.mjs",
     "test:force-sales-offline-route": "node --experimental-strip-types scripts/test-force-sales-offline-route.mjs",
     "test:support-scope-selection": "node --experimental-strip-types e2e/scripts/test-support-scope-selection.mjs",

@@ -1,12 +1,6 @@
 {
   "headers": [
     {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    },
-    {
       "source": "/index.html",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
@@ -30,7 +24,10 @@
   ],
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/|maps/|pdf-template-packages/|sw\\.js$|manifest\\.webmanifest$|.*\\.(?:js|mjs|css|json|map|png|jpe?g|svg|webp|ico|woff2?|ttf|otf)$).*)",
+      "has": [
+        { "type": "header", "key": "accept", "value": ".*text/html.*" }
+      ],
       "destination": "/index.html"
     }
   ]

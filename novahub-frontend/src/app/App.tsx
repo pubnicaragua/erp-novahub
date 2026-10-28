@@ -32,6 +32,7 @@ import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAle
 import { BrowserNotificationPrompt } from './components/notificaciones/BrowserNotificationPrompt';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
 import { loadModuleWithChunkRecovery } from './utils/chunk-recovery';
+import { reportChunkLoadIncident } from './utils/chunk-telemetry';
 import { readPersistedDarkMode } from './utils/theme-mode';
 import { useResponsiveNativeTables } from './hooks/useResponsiveNativeTables';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from './utils/sidebarPermissions';
@@ -41,7 +42,7 @@ import { ForceSalesOfflineTrackingFallback } from './components/ForceSalesOfflin
 import { getOfflineRouteEligibility } from './services/force-sales-location-queue';
 
 function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(loader: () => Promise<T>, moduleName: string) {
-  return lazy(() => loadModuleWithChunkRecovery(loader, moduleName));
+  return lazy(() => loadModuleWithChunkRecovery(loader, moduleName, reportChunkLoadIncident));
 }
 
 const OverviewDashboard = lazyWithChunkRecovery(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })), 'dashboard');
