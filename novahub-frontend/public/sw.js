@@ -96,7 +96,20 @@ self.addEventListener('notificationclick', (event) => {
 
 function openLocationDatabase() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(LOCATION_DB_NAME, 1);
+    const request = indexedDB.open(LOCATION_DB_NAME);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains('points')) {
+        const points = database.createObjectStore('points', { keyPath: 'key' });
+        points.createIndex('byScope', 'scopeKey', { unique: false });
+      }
+      if (!database.objectStoreNames.contains('sessions')) {
+        database.createObjectStore('sessions', { keyPath: 'scopeKey' });
+      }
+      if (!database.objectStoreNames.contains('trackingLeases')) {
+        database.createObjectStore('trackingLeases', { keyPath: 'scopeKey' });
+      }
+    };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error('Location queue is unavailable'));
   });

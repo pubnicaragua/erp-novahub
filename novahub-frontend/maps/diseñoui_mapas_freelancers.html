@@ -568,6 +568,14 @@ window.NovaForceSalesLocation = (()=>{
     const lng=Number(typeof lngValue==='function'?lngValue.call(value):lngValue);
     return Number.isFinite(lat)&&lat>=-90&&lat<=90&&Number.isFinite(lng)&&lng>=-180&&lng<=180 ? {lat,lng} : null;
   }
+  function isFreshLocationTimestamp(capturedAt,now=Date.now(),maxAgeMs=90000){
+    const timestamp=typeof capturedAt==='number'?capturedAt:Date.parse(String(capturedAt||''));
+    return Number.isFinite(timestamp)&&timestamp<=now&&now-timestamp<=maxAgeMs;
+  }
+  function presenceGpsState({capturedAt,now=Date.now(),historyAvailable=false}={}){
+    if(!historyAvailable)return 'unknown';
+    return isFreshLocationTimestamp(capturedAt,now)?'recent':'stale';
+  }
   function readMarkerCoordinates(marker,event){
     const candidates=[event?.position,event?.latLng,event?.target?.getLatLng?.(),event?.target?.position,marker?.position];
     for(const candidate of candidates){
@@ -742,7 +750,7 @@ window.NovaForceSalesLocation = (()=>{
     const height=Math.max(0,visibleBottom-visibleTop);
     return {top:height?visibleTop-frameTop:Math.min(frameHeight,Math.max(0,viewportTop-frameTop)),bottom:height?frameBottom-visibleBottom:0,height};
   }
-  return Object.freeze({normalizeCoordinates,readMarkerCoordinates,createDraftMarker,selectMapBusinesses,formatCaptureLocation,processLocationTrail,normalizeMapLayers,mapLayerStorageKey,getBusinessLayer,isBusinessVisibleInLayers,trailColorForUser,DEFAULT_MAP_LAYERS,TRAIL_LIMITS,validateEvidenceFile,visibleFrameArea});
+  return Object.freeze({normalizeCoordinates,isFreshLocationTimestamp,presenceGpsState,readMarkerCoordinates,createDraftMarker,selectMapBusinesses,formatCaptureLocation,processLocationTrail,normalizeMapLayers,mapLayerStorageKey,getBusinessLayer,isBusinessVisibleInLayers,trailColorForUser,DEFAULT_MAP_LAYERS,TRAIL_LIMITS,validateEvidenceFile,visibleFrameArea});
 })();
 </script>
 <script>
@@ -1045,6 +1053,9 @@ let markerById = new Map();
 let userLocationMarker = null;
 let userLocationCircle = null;
 let lastKnownCoords = null;
+let recentGpsCapturesByUser = null;
+let recentGpsCapturesRequestedAt = 0;
+let recentGpsCapturesInFlight = null;
 let gpsIndicatorTimer = null;
 let pendingEvidenceBusinessId = null;
 let pendingQuickPointPhoto = false;
@@ -2557,7 +2568,7 @@ function openQuickPointFromDevice(){
   toast('Obteniendo tu ubicación…');
   withLocationAccess(position=>{
     if(requestId!==quickPointLocationRequestId)return;
-    showUserLocation(position.coords);
+    showUserLocation(position);
     googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
     googleMap.setZoom(17);
     openQuickPointAt(position.coords.latitude,position.coords.longitude,'ubicación actual',position.coords.accuracy);
@@ -2780,7 +2791,7 @@ function registerVisit(id){
   const b=findBusiness(id); if(!b) return;
   toast('Solicitando ubicación del dispositivo…');
   withLocationAccess(position=>{
-    showUserLocation(position.coords);
+    showUserLocation(position);
     googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
     googleMap.setZoom(17);
     const visitedAt=new Date().toISOString();
@@ -2972,7 +2983,15 @@ function setGpsIndicator(state,accuracy=null){
   button.title=label;
   gpsIndicatorTimer=window.setTimeout(()=>setGpsIndicator('idle'),state==='pending'?12000:15000);
 }
-function showUserLocation(coords){
+function showUserLocation(position){
+  const coords=position?.coords || position;
+  const capturedAt=Number(position?.timestamp);
+  const coordinates=window.NovaForceSalesLocation.normalizeCoordinates(coords);
+  if(!coordinates||!Number.isFinite(capturedAt)||!window.NovaForceSalesLocation.isFreshLocationTimestamp(capturedAt)){
+    setGpsIndicator('idle');
+    return false;
+  }
+  if(lastKnownCoords&&capturedAt<=Date.parse(lastKnownCoords.capturedAt))return false;
   if(!userLocationMarker){
     const locationContent=document.createElement('div');
     locationContent.className='nova-user-location-marker';
@@ -2980,16 +2999,17 @@ function showUserLocation(coords){
     userLocationMarker=createMapMarker({map:googleMap,title:'Mi ubicación',zIndex:1200,content:locationContent});
     userLocationCircle=new google.maps.Circle({map:googleMap,fillColor:'#08785a',fillOpacity:.12,strokeColor:'#08785a',strokeOpacity:.55,strokeWeight:1.5,clickable:false});
   }
-  lastKnownCoords={latitude:Number(coords.latitude),longitude:Number(coords.longitude),accuracy:coords.accuracy,heading:coords.heading};
+  lastKnownCoords={latitude:coordinates.lat,longitude:coordinates.lng,accuracy:coords.accuracy,heading:coords.heading,capturedAt:new Date(capturedAt).toISOString()};
   const accuracy=Number(coords.accuracy);
   setGpsIndicator(Number.isFinite(accuracy)&&accuracy>=0&&accuracy<=50?'good':'weak',coords.accuracy);
-  const position={lat:coords.latitude,lng:coords.longitude};
-  userLocationMarker.setPosition(position);
-  userLocationCircle?.setCenter(position);
+  const markerPosition={lat:coordinates.lat,lng:coordinates.lng};
+  userLocationMarker.setPosition(markerPosition);
+  userLocationCircle?.setCenter(markerPosition);
   userLocationCircle?.setRadius(Math.max(18,Math.min(Number(coords.accuracy)||40,160)));
   presenceWatchRequested=canForceSales('updatePresence');
   startPresenceWatch();
-  syncSellerPresence(coords);
+  void syncSellerPresence(lastKnownCoords,lastKnownCoords.capturedAt);
+  return true;
 }
 function presenceContent(row){
   const wrapper=document.createElement('div');
@@ -3010,20 +3030,26 @@ function presencePopupContent(row){
   const current=row.currentClient?.name ? `<b>Cliente actual:</b> ${esc(row.currentClient.name)}` : '<b>Cliente actual:</b> Sin cliente activo';
   const last=row.lastClient?.name ? `<b>Último cliente:</b> ${esc(row.lastClient.name)}` : '<b>Último cliente:</b> Sin visita registrada';
   const online=row.isOnline!==false;
-  const stateLabel=online?'En línea · ubicación actualizada':'Sin conexión · última ubicación conocida';
-  return `<div style="min-width:220px;padding:4px 2px;font:12px Poppins,Arial,sans-serif;color:#123f35"><div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><div class="nova-presence-marker${online?'':' stale'}" style="width:42px;height:42px;flex:0 0 auto">${row.avatar?`<img src="${esc(row.avatar)}" alt="${esc(row.name||'Colaborador')}">`:esc(row.initials||'V')}</div><div><h3 style="margin:0;font-size:14px">${esc(row.name||'Colaborador')}</h3><span style="color:#687a73;font-size:10px">${esc(row.email||'')} · ${esc(row.role||'')}</span></div></div><div style="display:grid;gap:5px;font-size:10px"><div><b>Estado:</b> ${stateLabel}</div><div><b>Actividad:</b> ${esc(row.currentActivity||'Disponible')}</div><div>${current}</div><div>${last}</div><div style="color:#687a73">Última actualización ${new Date(row.lastSeenAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}</div></div></div>`;
+  const presenceLabel=online?'En línea':'Sin conexión';
+  const gpsLabel=row.gpsStatus==='recent'?'GPS reciente':row.gpsStatus==='stale'?'Sin lectura GPS reciente':'GPS sin confirmar';
+  const gpsTime=row.gpsCapturedAt?` · captura ${new Date(row.gpsCapturedAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}`:'';
+  return `<div style="min-width:220px;padding:4px 2px;font:12px Poppins,Arial,sans-serif;color:#123f35"><div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><div class="nova-presence-marker${online?'':' stale'}" style="width:42px;height:42px;flex:0 0 auto">${row.avatar?`<img src="${esc(row.avatar)}" alt="${esc(row.name||'Colaborador')}">`:esc(row.initials||'V')}</div><div><h3 style="margin:0;font-size:14px">${esc(row.name||'Colaborador')}</h3><span style="color:#687a73;font-size:10px">${esc(row.email||'')} · ${esc(row.role||'')}</span></div></div><div style="display:grid;gap:5px;font-size:10px"><div><b>Presencia:</b> ${presenceLabel}</div><div><b>GPS:</b> ${gpsLabel}${esc(gpsTime)}</div><div><b>Actividad:</b> ${esc(row.currentActivity||'Disponible')}</div><div>${current}</div><div>${last}</div><div style="color:#687a73">Última actualización del servidor ${new Date(row.lastSeenAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}</div></div></div>`;
 }
-function renderPresence(rows){
+function renderPresence(rows,gpsCaptures=recentGpsCapturesByUser){
+  if(gpsCaptures instanceof Map)recentGpsCapturesByUser=gpsCaptures;
+  const historyAvailable=gpsCaptures instanceof Map;
   const activeIds=new Set();
   (Array.isArray(rows)?rows:[]).forEach(row=>{
     const lat=Number(row.lat); const lng=Number(row.lng);
     if(!Number.isFinite(lat)||!Number.isFinite(lng))return;
     const id=String(row.userId);
+    const gpsCapturedAt=historyAvailable?gpsCaptures.get(id)||null:null;
+    const mapRow={...row,gpsCapturedAt,gpsStatus:window.NovaForceSalesLocation.presenceGpsState({capturedAt:gpsCapturedAt,now:Date.now(),historyAvailable})};
     activeIds.add(id);
-    const title=(row.name || 'Vendedor') + (row.isOnline===false?' · última ubicación conocida':' · en línea') + ' · ' + new Date(row.lastSeenAt).toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'});
+    const title=(row.name || 'Vendedor') + (row.isOnline===false?' · presencia sin conexión':' · presencia en línea') + (mapRow.gpsStatus==='recent'?' · GPS reciente':mapRow.gpsStatus==='stale'?' · sin lectura GPS reciente':' · GPS sin confirmar') + ' · ' + new Date(row.lastSeenAt).toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'});
     let marker=presenceMarkers.get(id);
     if(marker){
-      marker._presenceRow=row;
+      marker._presenceRow=mapRow;
       marker.setPosition({lat,lng});
       marker.title=title;
       const avatarKey=String(row.avatar || '');
@@ -3032,7 +3058,7 @@ function renderPresence(rows){
     }else{
       marker=createMapMarker({map:googleMap,position:{lat,lng},title,content:presenceContent(row),zIndex:1300});
       marker._avatarKey=String(row.avatar || '');
-      marker._presenceRow=row;
+      marker._presenceRow=mapRow;
       const openPresence=()=>{infoWindow.setContent(presencePopupContent(marker._presenceRow||row));try{infoWindow.open({map:googleMap,anchor:marker})}catch(error){infoWindow.open(googleMap,marker)}};
       if(typeof marker.addEventListener==='function')marker.addEventListener('gmp-click',openPresence);else marker.addListener?.('click',openPresence);
       presenceMarkers.set(id,marker);
@@ -3161,7 +3187,7 @@ function stopPresenceWatch(){
 function startPresenceWatch(){
   if(EXTERNAL_DURABLE_TRACKING||!canForceSales('updatePresence')||!presenceWatchRequested||!presenceSharingEnabled||presenceWatchId!==null||!navigator.geolocation)return;
   presenceWatchId=navigator.geolocation.watchPosition(
-    position=>showUserLocation(position.coords),
+    position=>showUserLocation(position),
     error=>console.warn('No se pudo actualizar la ubicación en vivo',error),
     {enableHighAccuracy:false,maximumAge:15000,timeout:20000}
   );
@@ -3170,7 +3196,10 @@ async function loadSellerPresence(){
   if(activeView!=='map'||document.visibilityState!=='visible'||!localStorage.getItem('nh-auth-token')||presenceRequestInFlight)return;
   presenceRequestInFlight=true;
   try{
-    renderPresence(await forceSalesRequest('/force-sales/presence'));
+    const presence=await forceSalesRequest('/force-sales/presence');
+    let gpsCaptures=null;
+    try{gpsCaptures=await loadRecentGpsCaptures()}catch(error){console.warn('No se pudo confirmar la frescura GPS de presencia',error)}
+    renderPresence(presence,gpsCaptures);
     forceSalesSyncErrors.delete('presencia');
     updateOfflineStatus();
   }catch(error){
@@ -3178,6 +3207,35 @@ async function loadSellerPresence(){
     setForceSalesSyncError('presencia',error);
   }
   finally{presenceRequestInFlight=false}
+}
+async function loadRecentGpsCaptures(){
+  if(recentGpsCapturesInFlight)return recentGpsCapturesInFlight;
+  if(Date.now()-recentGpsCapturesRequestedAt<15000)return recentGpsCapturesByUser;
+  recentGpsCapturesRequestedAt=Date.now();
+  recentGpsCapturesInFlight=(async()=>{
+    const now=Date.now();
+    const from=new Date(now-90000).toISOString();
+    const to=new Date(now).toISOString();
+    const captures=new Map();
+    let cursor='';
+    for(let page=0;page<10;page++){
+      const query=new URLSearchParams({from,to,limit:'1000'});
+      if(cursor)query.set('cursor',cursor);
+      const result=await forceSalesRequest(`/force-sales/location-points?${query.toString()}`);
+      for(const point of Array.isArray(result?.points)?result.points:[]){
+        const userId=String(point?.userId||'');
+        const capturedAt=String(point?.capturedAt||'');
+        if(!userId||!window.NovaForceSalesLocation.isFreshLocationTimestamp(capturedAt,now))continue;
+        const existing=captures.get(userId);
+        if(!existing||Date.parse(capturedAt)>Date.parse(existing))captures.set(userId,capturedAt);
+      }
+      cursor=String(result?.nextCursor||'');
+      if(!cursor)break;
+    }
+    recentGpsCapturesByUser=captures;
+    return captures;
+  })().catch(error=>{recentGpsCapturesByUser=null;throw error}).finally(()=>{recentGpsCapturesInFlight=null});
+  return recentGpsCapturesInFlight;
 }
 function distanceBetweenPresencePoints(a,b){
   if(!a||!b)return Number.POSITIVE_INFINITY;
@@ -3190,17 +3248,18 @@ function distanceBetweenPresencePoints(a,b){
   const h=sinLat*sinLat+Math.cos(lat1)*Math.cos(lat2)*sinLng*sinLng;
   return 2*earthRadius*Math.asin(Math.sqrt(h));
 }
-async function syncSellerPresence(coords){
-  if(!canForceSales('updatePresence')||!presenceSharingEnabled || !localStorage.getItem('nh-auth-token'))return;
+async function syncSellerPresence(coords,capturedAt=coords?.capturedAt){
+  if(EXTERNAL_DURABLE_TRACKING||!canForceSales('updatePresence')||!presenceSharingEnabled||!localStorage.getItem('nh-auth-token'))return;
+  if(!window.NovaForceSalesLocation.isFreshLocationTimestamp(capturedAt))return;
   const now=Date.now();
-  const point={lat:Number(coords.latitude),lng:Number(coords.longitude)};
+  const point=window.NovaForceSalesLocation.normalizeCoordinates(coords);
+  if(!point)return;
   const moved=distanceBetweenPresencePoints(lastSentPresenceCoords,point)>=12;
-  // Enviar un heartbeat corto mantiene la presencia viva; un desplazamiento
-  // real se publica inmediatamente aunque aún no haya vencido el intervalo.
-  if(presenceSyncInFlight || (!moved && now-lastPresenceSentAt<4500))return;
+  // La presencia solo se renueva a partir de esta captura GPS nueva y reciente.
+  if(presenceSyncInFlight || (!moved && now-lastPresenceSentAt<30000))return;
   presenceSyncInFlight=true;
   try{
-    await forceSalesRequest('/force-sales/presence',{method:'POST',body:JSON.stringify({lat:coords.latitude,lng:coords.longitude,accuracy:coords.accuracy,heading:coords.heading})});
+    await forceSalesRequest('/force-sales/presence',{method:'POST',body:JSON.stringify({lat:point.lat,lng:point.lng,accuracy:coords.accuracy,heading:coords.heading})});
     lastPresenceSentAt=Date.now();
     lastSentPresenceCoords=point;
   }
@@ -3237,12 +3296,10 @@ async function setPresenceSharing(enabled){
     toast('Tu ubicación quedó oculta');
   }else{
     toast('Tu ubicación volverá a compartirse al usar Mi ubicación o registrar una visita');
-    if(lastKnownCoords){
+    if(lastKnownCoords&&window.NovaForceSalesLocation.isFreshLocationTimestamp(lastKnownCoords.capturedAt)){
       presenceWatchRequested=true;
       setNovaMarkerMap(userLocationMarker,googleMap);
       userLocationCircle?.setMap(googleMap);
-      lastPresenceSentAt=0;
-      syncSellerPresence(lastKnownCoords);
     }
     startPresenceWatch();
   }
@@ -3251,13 +3308,13 @@ async function setPresenceSharing(enabled){
 function locateMe(){
   setGpsIndicator('pending');
   withLocationAccess(position=>{
-    showUserLocation(position.coords);
+    showUserLocation(position);
     googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
     googleMap.setZoom(16);
   },'No se pudo obtener la ubicación para centrar el mapa');
 }
 function capturePresenceLocation(){
-  withLocationAccess(position=>showUserLocation(position.coords),'No se pudo actualizar la ubicación compartida');
+  withLocationAccess(position=>showUserLocation(position),'No se pudo actualizar la ubicación compartida');
 }
 function toggleMap3D(){
   map3DEnabled=!map3DEnabled;
@@ -3828,7 +3885,7 @@ function searchNearbyFromDevice(){
   withLocationAccess(position=>{
     const center=[Number(position.coords.latitude),Number(position.coords.longitude)];
     activeNearbyCenter={lat:center[0],lng:center[1]};
-    showUserLocation(position.coords);
+    showUserLocation(position);
     googleMap.panTo({lat:center[0],lng:center[1]});
     googleMap.setZoom(radius<=2500?16:radius<=5000?15:14);
     void searchGooglePlaces(query,{force:true,visibleOnly:true,center, radius, areaName:`radio de ${Math.round(radius/1000)} km`});
@@ -3999,7 +4056,10 @@ async function completeCurrentRouteStop(){
   const stopId=routeStopIds.get(String(stateOf(business).remoteId||''));
   if(!stopId){toast('No se encontró la parada persistida en el ERP');return}
   try{
-    const saved=await forceSalesRequest(`/force-sales/routes/${encodeURIComponent(activeRemoteRouteId)}/stops/${encodeURIComponent(stopId)}/complete`,{method:'POST',body:JSON.stringify({lat:lastKnownCoords?.latitude,lng:lastKnownCoords?.longitude,notes:'Visita completada desde la ruta'})});
+    const freshRouteLocation=lastKnownCoords&&window.NovaForceSalesLocation.isFreshLocationTimestamp(lastKnownCoords.capturedAt)
+      ? {lat:lastKnownCoords.latitude,lng:lastKnownCoords.longitude}
+      : {};
+    const saved=await forceSalesRequest(`/force-sales/routes/${encodeURIComponent(activeRemoteRouteId)}/stops/${encodeURIComponent(stopId)}/complete`,{method:'POST',body:JSON.stringify({...freshRouteLocation,notes:'Visita completada desde la ruta'})});
     remoteRoutes=[saved,...remoteRoutes.filter(route=>route.id!==saved?.id)].filter(Boolean);
     routeStopIds=new Map((saved?.stops || []).map(stop=>[String(stop.prospectId),String(stop.id)]));
     routeProgress=(saved?.stops || []).filter(stop=>String(stop.status).toUpperCase()==='COMPLETED').length;

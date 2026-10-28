@@ -37,13 +37,23 @@ assert.match(realtimeMapScript, /if\(!shouldLoadLocationTrail\(\)\)\{locationTra
 assert.match(realtimeMapScript, /requestId!==locationTrailRequestId\|\|!shouldLoadLocationTrail\(\)/, 'Una respuesta tardía no puede volver a dibujar una capa apagada');
 assert.match(realtimeMapScript, /if\(current\.fitCamera&&cameraPoints\.length\)[\s\S]*?googleMap\.fitBounds\(bounds,64\)[\s\S]*?googleMap\.panTo\(/, 'Solo una acción explícita de ver el recorrido cambia el encuadre');
 assert.match(realtimeMapScript, /const selectedUser=CAN_ASSIGN_TEAM\?String\(userSelect\?\.value\|\|''\):''/, 'El mapa y el historial consultan el usuario seleccionado, incluido el selector del mapa');
+assert.match(html, /function loadRecentGpsCaptures\(\)[\s\S]*force-sales\/location-points/, 'Los estados GPS del equipo se consultan desde el endpoint de historial existente');
+assert.match(html, /<b>Presencia:<\/b>[\s\S]*<b>GPS:<\/b>/, 'El popup presenta presencia y GPS como estados distintos');
+assert.doesNotMatch(html, /En línea · ubicación actualizada/, 'isOnline no se usa para afirmar que hay un GPS reciente');
+assert.doesNotMatch(html, /syncSellerPresence\(lastKnownCoords\)/, 'El mapa no reenvía coordenadas almacenadas al reactivar compartir');
 
 const trackingRuntime = await readFile(new URL('../src/app/components/ForceSalesTrackingRuntime.tsx', import.meta.url), 'utf8');
 assert.match(trackingRuntime, /import \{ MapPin \} from 'lucide-react'/, 'El indicador GPS móvil usa un icono pequeño de ubicación');
-assert.match(trackingRuntime, /className="[^"]*sm:hidden[^"]*" role="status" aria-label=\{`Estado GPS:/, 'El estado GPS móvil expone el estado solo de forma accesible, sin texto visible');
-assert.match(trackingRuntime, /<MapPin className=\{`size-4 \$\{gpsIconClass\}`\} aria-hidden="true" \/>/, 'En móvil solo se muestra el icono de ubicación');
-assert.match(trackingRuntime, /<div className="hidden sm:block">[\s\S]*?\{gpsLabel\}[\s\S]*?Pantalla activa/, 'El texto y controles completos se conservan solo desde escritorio');
-assert.doesNotMatch(trackingRuntime, /mobileExpanded|Mostrar detalles del rastreo|Buscando GPS.*sm:hidden/, 'El panel móvil no debe expandir ni mostrar las etiquetas del estado GPS');
+assert.match(trackingRuntime, /aria-expanded=\{panelOpen\}[\s\S]*?aria-controls="force-sales-tracking-panel"/, 'El icono GPS móvil es un control accesible que abre el panel');
+assert.match(trackingRuntime, /id="force-sales-tracking-panel"[^>]*aria-label="Estado del rastreo de ruta"/, 'El panel GPS tiene nombre y semántica accesibles');
+assert.match(trackingRuntime, /GPS reciente|Sin lectura reciente|Permiso bloqueado|Ruta pausada/, 'El panel expone estados GPS separados de la conexión');
+assert.match(trackingRuntime, /Puntos pendientes|pending\} punto/, 'El panel muestra el total de puntos pendientes');
+assert.match(trackingRuntime, /NovaHub permanece visible/, 'La opción de pantalla activa explica el límite de visibilidad');
+assert.doesNotMatch(trackingRuntime, /lastLocation\.current&&Date\.now\(\)-lastPresenceAt\.current/, 'Un temporizador no reenvía una coordenada retenida para renovar presencia');
+assert.match(trackingRuntime, /onFreshLocation[\s\S]*?isFreshLocationTimestamp/, 'La presencia parte de un callback GPS nuevo y validado por timestamp');
+assert.match(trackingRuntime, /WAKE_LOCK_KEY|novaForceSalesWakeLockV1/, 'La elección de mantener pantalla se conserva por identidad');
+assert.match(trackingRuntime, /const handleResume = \(\) => \{\s*if \(eligibleNow\(\)\) void startTracking\(false, false\);/, 'Al volver a Fuerza Comercial o a una ruta elegible, el runtime inicia el coordinador sin duplicar watches');
+assert.match(trackingRuntime, /if \(eligibleNow\(\)\) await startTracking\(false, false\);/, 'La primera carga inicia captura solo con sesión, identidad, compartir y módulo/ruta elegibles');
 
 assert.match(realtimeMapScript, /let remoteProspectsRefreshRequested=false/, 'El mapa conserva una invalidación recibida mientras carga prospectos');
 assert.match(realtimeMapScript, /if\(remoteProspectsLoading\)\{remoteProspectsRefreshRequested=true;return\}/, 'Un evento SSE durante una consulta activa agenda un refresco posterior');
