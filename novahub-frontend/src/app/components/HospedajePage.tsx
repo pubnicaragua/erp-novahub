@@ -94,7 +94,7 @@ export function HospedajePage({ activeSubModule, onSubModuleChange }: HospedajeP
     queryFn: async () => {
       const response = await inventoryService.getAllProductLookupPages({ pageSize: 200, type: 'SERVICE' });
       const records = Array.isArray(response?.data) ? response.data : [];
-      return records.filter((product: any) => product.type === 'SERVICE' || product.itemType === 'SERVICE').map((product: any) => ({ id: product.id, code: product.code, name: product.name, salePrice: Number(product.salePrice ?? product.price ?? 0), priceCurrency: product.priceCurrency || product.currency || 'NIO', type: product.type || product.itemType, isActive: product.isActive !== false }));
+      return records.filter((product: any) => product.type === 'SERVICE' || product.itemType === 'SERVICE').map((product: any) => ({ id: product.id, code: product.code, name: product.name, salePrice: Number(product.salePrice ?? product.price ?? 0), salePriceOriginal: Number(product.salePriceOriginal ?? 0), priceCurrency: product.priceCurrency || product.currency || 'NIO', priceExchangeRate: Number(product.priceExchangeRate ?? 1), type: product.type || product.itemType, isActive: product.isActive !== false }));
     }, enabled: canViewRooms,
   });
   const availabilityQuery = useQuery({

@@ -104,6 +104,7 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
         ? { ...current, values: Object.fromEntries(Object.entries(current.values).filter(([listId]) => listId !== variables.list.id)) }
         : current);
       await queryClient.invalidateQueries({ queryKey: ['sales', 'price-lists', 'services', tenantKey] });
+      await queryClient.invalidateQueries({ queryKey: ['hotel', 'rate-price-lists', tenantKey] });
       onSaved?.();
       toast.success('Precio del servicio actualizado.');
     },

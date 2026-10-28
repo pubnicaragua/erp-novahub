@@ -12,7 +12,7 @@ export interface HotelRoomType {
   name: string;
   capacity: number;
   isActive: boolean;
-  rateProduct?: { id: string; code?: string; name: string; salePrice: number; priceCurrency: string; type: 'SERVICE'; isActive?: boolean };
+  rateProduct?: { id: string; code?: string; name: string; salePrice: number; salePriceOriginal?: number; priceCurrency: string; priceExchangeRate?: number; type: 'SERVICE'; isActive?: boolean };
   _count?: { rooms: number };
 }
 
@@ -62,6 +62,7 @@ export interface HotelRatePriceListOption {
   price: number;
   currency: string;
   exchangeRate: number;
+  source: 'CATALOG' | 'CONFIGURED';
 }
 
 export const hotelService = {
