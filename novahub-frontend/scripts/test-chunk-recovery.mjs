@@ -200,6 +200,8 @@ test('a missing deployment asset never falls through to the SPA HTML response', 
   const routes = vercelConfig.routes || [];
   const appRewrite = routes.find((route) => route.dest === '/index.html');
   const filesystemIndex = routes.findIndex((route) => route.handle === 'filesystem');
+  const assetCacheIndex = routes.findIndex((route) => route.src === '/assets/(.*)');
+  const assetCache = routes[assetCacheIndex];
   const missingAssetIndex = routes.findIndex((route) =>
     route.status === 404 && route.headers?.['Cache-Control'] === 'no-store',
   );
@@ -210,6 +212,9 @@ test('a missing deployment asset never falls through to the SPA HTML response', 
   assert.match(indexHeaders?.headers?.['Cache-Control'] || '', /no-store/);
   assert.ok(serviceWorkerHeaders?.continue);
   assert.match(serviceWorkerHeaders?.headers?.['Cache-Control'] || '', /no-store/);
+  assert.ok(assetCache?.continue);
+  assert.equal(assetCache?.headers?.['Cache-Control'], 'public, max-age=31536000, immutable');
+  assert.ok(assetCacheIndex < filesystemIndex);
   assert.ok(filesystemIndex >= 0);
   assert.ok(missingAssetIndex > filesystemIndex);
   assert.ok(routes.indexOf(appRewrite) > missingAssetIndex);
