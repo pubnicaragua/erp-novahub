@@ -39,11 +39,36 @@
       "handle": "filesystem"
     },
     {
-      "src": "/(?:assets/.*|maps/.*|pdf-template-packages/.*|.*\\.[^/]+$)",
+      "src": "/assets/(.*)",
       "status": 404,
       "headers": {
         "Cache-Control": "no-store"
-      }
+      },
+      "continue": false
+    },
+    {
+      "src": "/maps/(.*)",
+      "status": 404,
+      "headers": {
+        "Cache-Control": "no-store"
+      },
+      "continue": false
+    },
+    {
+      "src": "/pdf-template-packages/(.*)",
+      "status": 404,
+      "headers": {
+        "Cache-Control": "no-store"
+      },
+      "continue": false
+    },
+    {
+      "src": "/.*\\.[^/]+$",
+      "status": 404,
+      "headers": {
+        "Cache-Control": "no-store"
+      },
+      "continue": false
     },
     {
       "src": "/((?!assets/|maps/|pdf-template-packages/|.*\\.[^/]+$).*)",

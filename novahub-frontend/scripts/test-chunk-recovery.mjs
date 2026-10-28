@@ -202,9 +202,9 @@ test('a missing deployment asset never falls through to the SPA HTML response', 
   const filesystemIndex = routes.findIndex((route) => route.handle === 'filesystem');
   const assetCacheIndex = routes.findIndex((route) => route.src === '/assets/(.*)');
   const assetCache = routes[assetCacheIndex];
-  const missingAssetIndex = routes.findIndex((route) =>
-    route.status === 404 && route.headers?.['Cache-Control'] === 'no-store',
-  );
+  const missingAssetRoutes = routes
+    .map((route, index) => ({ route, index }))
+    .filter(({ route }) => route.status === 404 && route.headers?.['Cache-Control'] === 'no-store');
   const indexHeaders = routes.find((route) => route.src?.startsWith('/index\\.html'));
   const serviceWorkerHeaders = routes.find((route) => route.src?.startsWith('/sw\\.js'));
 
@@ -216,14 +216,18 @@ test('a missing deployment asset never falls through to the SPA HTML response', 
   assert.equal(assetCache?.headers?.['Cache-Control'], 'public, max-age=31536000, immutable');
   assert.ok(assetCacheIndex < filesystemIndex);
   assert.ok(filesystemIndex >= 0);
-  assert.ok(missingAssetIndex > filesystemIndex);
-  assert.ok(routes.indexOf(appRewrite) > missingAssetIndex);
+  assert.ok(missingAssetRoutes.length >= 4);
+  assert.ok(missingAssetRoutes.every(({ route }) => route.continue === false));
+  assert.ok(missingAssetRoutes.every(({ index }) => index > filesystemIndex));
+  assert.ok(routes.indexOf(appRewrite) > Math.max(...missingAssetRoutes.map(({ index }) => index)));
   assert.ok(appRewrite?.has?.some((rule) => rule.key === 'accept' && rule.value.includes('text/html')));
-  const shouldReturnMissingAsset404 = new RegExp(`^${routes[missingAssetIndex].src}$`);
-  assert.equal(shouldReturnMissingAsset404.test('/assets/VentasPage-missing.js'), true);
-  assert.equal(shouldReturnMissingAsset404.test('/maps/missing-map.html'), true);
-  assert.equal(shouldReturnMissingAsset404.test('/downloads/missing.pdf'), true);
-  assert.equal(shouldReturnMissingAsset404.test('/ventas'), false);
+  const shouldReturnMissingAsset404 = (path) => missingAssetRoutes.some(({ route }) =>
+    new RegExp(`^${route.src}$`).test(path),
+  );
+  assert.equal(shouldReturnMissingAsset404('/assets/VentasPage-missing.js'), true);
+  assert.equal(shouldReturnMissingAsset404('/maps/missing-map.html'), true);
+  assert.equal(shouldReturnMissingAsset404('/downloads/missing.pdf'), true);
+  assert.equal(shouldReturnMissingAsset404('/ventas'), false);
   const shouldUseSpaFallback = new RegExp(`^${appRewrite.src}$`);
   assert.equal(shouldUseSpaFallback.test('/assets/VentasPage-missing.js'), false);
   assert.equal(shouldUseSpaFallback.test('/maps/missing-map.html'), false);
