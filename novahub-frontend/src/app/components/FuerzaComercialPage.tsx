@@ -36,6 +36,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   const apiBase = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://backenderpnh.onrender.com/api' : 'http://localhost:3000/api');
   const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const googleMapsMapId = String(import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || '').trim() || 'DEMO_MAP_ID';
+  const googleMapsCleanMapId = String(import.meta.env.VITE_GOOGLE_MAPS_CLEAN_MAP_ID || '').trim();
   const tenantLogo = user?.clientTenant?.logo || user?.sessionBranding?.logo || isotipoUrl;
   const view = activeSubModule === 'fuerza-comercial-kanban' ? 'kanban' : activeSubModule === 'fuerza-comercial-historial' ? 'history' : 'map';
   const workflowActions = [
@@ -88,7 +89,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
 
   const mapProvider = String(mapConfig?.mapProvider || 'GOOGLE').toUpperCase();
   const mapSearchMode = String(mapConfig?.mapSearchMode || 'EXTERNAL').toUpperCase();
-  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(tenantLogo)}&companyLogo=${encodeURIComponent(tenantLogo)}&view=${view}&userId=${encodeURIComponent(user?.id || '')}&tenantId=${encodeURIComponent(user?.clientTenantId || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&canAssignTeam=${canAssignTeam ? 'true' : 'false'}&durableTracking=true&permissions=${encodeURIComponent(JSON.stringify(workflowPermissions))}&mapId=${encodeURIComponent(googleMapsMapId)}&mapProvider=${encodeURIComponent(mapProvider)}&mapSearchMode=${encodeURIComponent(mapSearchMode)}${mapConfig?.mapTileUrl ? `&mapTileUrl=${encodeURIComponent(mapConfig.mapTileUrl)}` : ''}${mapConfig?.mapGeocoderUrl ? `&mapGeocoderUrl=${encodeURIComponent(mapConfig.mapGeocoderUrl)}` : ''}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
+  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(tenantLogo)}&companyLogo=${encodeURIComponent(tenantLogo)}&view=${view}&userId=${encodeURIComponent(user?.id || '')}&tenantId=${encodeURIComponent(user?.clientTenantId || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&canAssignTeam=${canAssignTeam ? 'true' : 'false'}&durableTracking=true&permissions=${encodeURIComponent(JSON.stringify(workflowPermissions))}&mapId=${encodeURIComponent(googleMapsMapId)}&cleanMapId=${encodeURIComponent(googleMapsCleanMapId)}&mapProvider=${encodeURIComponent(mapProvider)}&mapSearchMode=${encodeURIComponent(mapSearchMode)}${mapConfig?.mapTileUrl ? `&mapTileUrl=${encodeURIComponent(mapConfig.mapTileUrl)}` : ''}${mapConfig?.mapGeocoderUrl ? `&mapGeocoderUrl=${encodeURIComponent(mapConfig.mapGeocoderUrl)}` : ''}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
 
   useEffect(() => {
     const frame = iframeRef.current;

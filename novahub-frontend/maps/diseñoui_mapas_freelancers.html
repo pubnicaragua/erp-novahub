@@ -315,6 +315,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <div class="map-layer-status" id="mapTrailStatus" role="status" aria-live="polite">Activa Recorrido GPS para consultar posiciones guardadas.</div>
     <div class="map-layer-legend" id="mapTrailLegend" aria-label="Leyenda del recorrido GPS"></div>
     <div class="map-layer-group-title">Lugares del mapa base</div>
+    <label id="basePlacesLayerLabel"><input type="checkbox" data-map-layer="basePlaces"> Mostrar negocios, parques y otros lugares</label>
     <p class="map-layer-note" id="mapStyleNotice" role="status" aria-live="polite"></p>
     <button class="map-layer-reset" id="resetMapLayers" type="button">Restablecer vista limpia</button>
    </div>
@@ -611,13 +612,13 @@ window.NovaForceSalesLocation = (()=>{
     const accuracyText=gps&&Number.isFinite(accuracyMeters)&&accuracyMeters>=0 ? ` · GPS ±${Math.round(accuracyMeters)} m` : '';
     return `${label} · ${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}${accuracyText}`;
   }
-  const DEFAULT_MAP_LAYERS=Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:false,gpsTrail:false,labelMode:'off'});
+  const DEFAULT_MAP_LAYERS=Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:false,gpsTrail:false,basePlaces:false,labelMode:'off'});
   const TRAIL_LIMITS=Object.freeze({maxAccuracyMeters:100,maxGapSeconds:120,maxDistanceMeters:300,maxSpeedMetersPerSecond:45});
   const TRAIL_COLORS=['#08785a','#2364d2','#cb5a2b','#8557b8','#b18a00','#167d8d','#b63872','#5d6b27'];
   function normalizeMapLayers(value={}){
     const input=value&&typeof value==='object'?value:{};
     const labelMode=['off','smart','all'].includes(input.labelMode)?input.labelMode:DEFAULT_MAP_LAYERS.labelMode;
-    return {users:typeof input.users==='boolean'?input.users:DEFAULT_MAP_LAYERS.users,manualPoints:typeof input.manualPoints==='boolean'?input.manualPoints:DEFAULT_MAP_LAYERS.manualPoints,catalog:typeof input.catalog==='boolean'?input.catalog:DEFAULT_MAP_LAYERS.catalog,plannedRoutes:typeof input.plannedRoutes==='boolean'?input.plannedRoutes:DEFAULT_MAP_LAYERS.plannedRoutes,gpsTrail:false,labelMode};
+    return {users:typeof input.users==='boolean'?input.users:DEFAULT_MAP_LAYERS.users,manualPoints:typeof input.manualPoints==='boolean'?input.manualPoints:DEFAULT_MAP_LAYERS.manualPoints,catalog:typeof input.catalog==='boolean'?input.catalog:DEFAULT_MAP_LAYERS.catalog,plannedRoutes:typeof input.plannedRoutes==='boolean'?input.plannedRoutes:DEFAULT_MAP_LAYERS.plannedRoutes,gpsTrail:false,basePlaces:typeof input.basePlaces==='boolean'?input.basePlaces:DEFAULT_MAP_LAYERS.basePlaces,labelMode};
   }
   function mapLayerStorageKey(tenantId,userId){return `novaForceSalesMapLayersV1:${String(tenantId||'no-tenant')}:${String(userId||'no-user')}`}
   function getBusinessLayer(business){return /^quick-/i.test(String(business?.sourceKey||''))||/^quick-/i.test(String(business?.id||''))?'manualPoints':'catalog'}
@@ -944,7 +945,16 @@ const CURRENT_USER_ID = mapQuery.get('userId') || '';
 const CURRENT_TENANT_ID = mapQuery.get('tenantId') || '';
 const HAS_AUTHENTICATED_TENANT = Boolean(localStorage.getItem('nh-auth-token'));
 const MAP_LAYERS_STORAGE_KEY=window.NovaForceSalesLocation.mapLayerStorageKey(CURRENT_TENANT_ID,CURRENT_USER_ID);
-let mapLayers=window.NovaForceSalesLocation.normalizeMapLayers(readStore(MAP_LAYERS_STORAGE_KEY,{}));
+const GOOGLE_MAP_ID=String(mapQuery.get('mapId')||'DEMO_MAP_ID').trim()||'DEMO_MAP_ID';
+const GOOGLE_CLEAN_MAP_ID=String(mapQuery.get('cleanMapId')||'').trim();
+const MAP_PROVIDER=String(mapQuery.get('mapProvider')||'GOOGLE').toUpperCase();
+const CAN_TOGGLE_BASE_PLACES=MAP_PROVIDER==='GOOGLE'&&Boolean(GOOGLE_CLEAN_MAP_ID)&&GOOGLE_CLEAN_MAP_ID!==GOOGLE_MAP_ID;
+const savedMapLayers=readStore(MAP_LAYERS_STORAGE_KEY,{});
+let mapLayers=window.NovaForceSalesLocation.normalizeMapLayers(savedMapLayers);
+const MAP_RELOAD_CAMERA_KEY=`novaForceSalesMapCamera:${CURRENT_TENANT_ID||'no-tenant'}:${CURRENT_USER_ID||'no-user'}`;
+let mapReloadCamera=null;
+try{mapReloadCamera=JSON.parse(sessionStorage.getItem(MAP_RELOAD_CAMERA_KEY)||'null')}catch{mapReloadCamera=null}
+if(mapReloadCamera)sessionStorage.removeItem(MAP_RELOAD_CAMERA_KEY);
 const SESSION_SCOPE_KEY = CURRENT_TENANT_ID || CURRENT_USER_ID || 'authenticated';
 const LOCAL_POINTS_KEY = HAS_AUTHENTICATED_TENANT ? `novaFuerzaLocalPointsV1:${SESSION_SCOPE_KEY}` : 'novaFuerzaLocalPointsV1';
 localPoints = readStore(LOCAL_POINTS_KEY, []);
@@ -1121,9 +1131,12 @@ if(!window.google?.maps?.Map){
   window.__novaShowMapError('Nova Maps no está disponible. Verifica la clave y el origen actual del ERP.');
 }
 
+const restoredCameraCenter={lat:Number(mapReloadCamera?.center?.lat),lng:Number(mapReloadCamera?.center?.lng)};
+const hasRestoredCamera=Number.isFinite(restoredCameraCenter.lat)&&restoredCameraCenter.lat>=-90&&restoredCameraCenter.lat<=90&&Number.isFinite(restoredCameraCenter.lng)&&restoredCameraCenter.lng>=-180&&restoredCameraCenter.lng<=180;
+const restoredCameraZoom=Number(mapReloadCamera?.zoom);
 const googleMap = new google.maps.Map(document.getElementById('map'), {
-  center: {lat:12.115,lng:-86.26}, zoom:11,
-  mapId: mapQuery.get('mapId') || 'DEMO_MAP_ID',
+  center: hasRestoredCamera?restoredCameraCenter:{lat:12.115,lng:-86.26}, zoom:Number.isFinite(restoredCameraZoom)?Math.max(2,Math.min(21,restoredCameraZoom)):11,
+  mapId: CAN_TOGGLE_BASE_PLACES&&!mapLayers.basePlaces?GOOGLE_CLEAN_MAP_ID:GOOGLE_MAP_ID,
   tilt: map3DEnabled ? 45 : 0,
   heading: 0,
   mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
@@ -3049,18 +3062,25 @@ function syncTrailUserSelect(select){
 function updateMapStyleNotice(){
   const notice=document.getElementById('mapStyleNotice');
   if(!notice)return;
-  const provider=String(mapQuery.get('mapProvider')||'GOOGLE').toUpperCase();
-  if(provider==='OPENSTREETMAP'||provider==='CUSTOM'){
-    notice.textContent='Tiendas, farmacias y transporte vienen integrados en los mosaicos de este proveedor; NovaHub no puede ocultarlos desde aquí.';
+  if(MAP_PROVIDER==='OPENSTREETMAP'||MAP_PROVIDER==='CUSTOM'){
+    notice.textContent='Los nombres e iconos vienen dentro de los mosaicos de este proveedor y no se pueden apagar individualmente desde NovaHub.';
     return;
   }
-  const mapId=String(mapQuery.get('mapId')||'').trim();
-  notice.textContent=mapId&&mapId!=='DEMO_MAP_ID'
-    ? 'El mapa base usa el estilo fijo asociado a este Map ID. Publica y asocia el estilo limpio en Google Cloud para ocultar comercios, farmacias y transporte; los nombres de barrios se conservan.'
-    : 'Google Maps usa DEMO_MAP_ID. Configura un Map ID de producción y asocia el estilo limpio de Google Cloud para ocultar comercios, farmacias y transporte y conservar los nombres de barrios.';
+  if(!CAN_TOGGLE_BASE_PLACES){
+    notice.textContent='Para activar este interruptor, configura VITE_GOOGLE_MAPS_CLEAN_MAP_ID con un segundo Map ID y publica en Google Cloud un estilo que oculte Puntos de interés.';
+    return;
+  }
+  notice.textContent=mapLayers.basePlaces
+    ? 'Lugares de Google visibles. Desactívalos para dejar solo los elementos de NovaHub que estén activos.'
+    : 'Lugares de Google ocultos. El mapa conserva calles y barrios junto con las capas de NovaHub activas.';
 }
 function updateMapLayerControls(){
-  document.querySelectorAll('[data-map-layer]').forEach(input=>{input.checked=Boolean(mapLayers[input.dataset.mapLayer])});
+  const basePlacesLabel=document.getElementById('basePlacesLayerLabel');
+  if(basePlacesLabel)basePlacesLabel.hidden=MAP_PROVIDER!=='GOOGLE';
+  document.querySelectorAll('[data-map-layer]').forEach(input=>{
+    input.checked=input.dataset.mapLayer==='basePlaces'&&!CAN_TOGGLE_BASE_PLACES?true:Boolean(mapLayers[input.dataset.mapLayer]);
+    if(input.dataset.mapLayer==='basePlaces')input.disabled=!CAN_TOGGLE_BASE_PLACES;
+  });
   const gpsLabel=document.getElementById('gpsTrailLayerLabel');
   const gpsControls=document.getElementById('gpsTrailControls');
   if(gpsLabel)gpsLabel.hidden=!CAN_ASSIGN_TEAM;
@@ -3074,8 +3094,23 @@ function updateMapLayerVisibility(){
   routePolyline?.setMap(mapLayers.plannedRoutes?googleMap:null);
   routeStopMarkers.forEach(marker=>setNovaMarkerMap(marker,mapLayers.plannedRoutes?googleMap:null));
 }
+function saveMapCameraForReload(){
+  const center=googleMap.getCenter?.();
+  const coordinates=typeof center?.toJSON==='function'?center.toJSON():{lat:Number(typeof center?.lat==='function'?center.lat():center?.lat),lng:Number(typeof center?.lng==='function'?center.lng():center?.lng)};
+  const zoom=Number(googleMap.getZoom?.());
+  if(!Number.isFinite(coordinates.lat)||!Number.isFinite(coordinates.lng)||!Number.isFinite(zoom))return;
+  try{sessionStorage.setItem(MAP_RELOAD_CAMERA_KEY,JSON.stringify({center:coordinates,zoom}))}catch{}
+}
 function setMapLayer(name,enabled){
-  if(!['users','manualPoints','catalog','plannedRoutes','gpsTrail'].includes(name))return;
+  if(!['users','manualPoints','catalog','plannedRoutes','gpsTrail','basePlaces'].includes(name))return;
+  if(name==='basePlaces'){
+    if(!CAN_TOGGLE_BASE_PLACES){updateMapLayerControls();return}
+    mapLayers={...mapLayers,basePlaces:Boolean(enabled)};
+    persistMapLayers();
+    saveMapCameraForReload();
+    location.reload();
+    return;
+  }
   if(name==='gpsTrail'&&!CAN_ASSIGN_TEAM){updateMapLayerControls();return}
   const next={...mapLayers,[name]:Boolean(enabled)};
   mapLayers=next;
@@ -3099,6 +3134,7 @@ function setMapLayer(name,enabled){
   render();
 }
 function resetCleanMap(){
+  const previousBasePlaces=mapLayers.basePlaces;
   mapLayers={...window.NovaForceSalesLocation.DEFAULT_MAP_LAYERS};
   labelMode=mapLayers.labelMode;
   persistMapLayers();
@@ -3108,6 +3144,7 @@ function resetCleanMap(){
   locationTrailRequestId++;locationTrailRefreshRequested=false;currentLocationTrailData=null;clearLocationTrail();
   const status=document.getElementById('mapTrailStatus');if(status)status.textContent='Activa Recorrido GPS para consultar posiciones guardadas.';
   updateMapLayerControls();updateMapLayerVisibility();populateFilters();render();
+  if(CAN_TOGGLE_BASE_PLACES&&previousBasePlaces!==mapLayers.basePlaces){saveMapCameraForReload();location.reload()}
 }
 function openMapLayers(){
   const panel=document.getElementById('mapLayersPanel');
