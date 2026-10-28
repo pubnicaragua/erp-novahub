@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  ArrowRight, Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck, Warehouse, Search
+  ArrowRight, Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck, Warehouse, Search, Pencil
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -17,13 +17,13 @@ import { TeamAccessPanel } from './TeamAccessPanel';
 import { DepartmentsView } from './DepartmentsView';
 import { DominiosView } from './DominiosView';
 import { TrialCountdownBanner } from '../auth/TrialCountdownBanner';
-import { tenantsService } from '../../services/tenants.service';
+import { tenantsService, type TenantUser } from '../../services/tenants.service';
 import { hrService } from '../../services/hr.service';
 import { usersService } from '../../services/users.service';
 import { customersService } from '../../services/ventas.service';
 import { brandingService } from '../../services/branding.service';
 import { authService } from '../../services/auth.service';
-import { api } from '../../services/api';
+import { api, getApiErrorMessage } from '../../services/api';
 import { toast } from '@/app/services/toast';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -133,6 +133,9 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
   const [isWarehouseAccessDialogOpen, setIsWarehouseAccessDialogOpen] = useState(false);
   const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
+  const [editingNameUser, setEditingNameUser] = useState<TenantUser | null>(null);
+  const [editedUserName, setEditedUserName] = useState('');
+  const [savingUserName, setSavingUserName] = useState(false);
   const [isPortalAccessDialogOpen, setIsPortalAccessDialogOpen] = useState(false);
   const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -434,6 +437,39 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
     setSelectedUser(user);
     setNewPasswordForUser('');
     setIsChangePasswordDialogOpen(true);
+  };
+
+  const handleOpenEditUserName = (user: TenantUser) => {
+    if (!canEditUsers || !user?.id) return;
+    setEditingNameUser(user);
+    setEditedUserName(String(user.name || ''));
+  };
+
+  const handleSaveUserName = async () => {
+    const target = editingNameUser;
+    const name = editedUserName.trim();
+    if (!canEditUsers || !target?.id || !name || savingUserName) return;
+
+    try {
+      setSavingUserName(true);
+      const updatedUser = await tenantsService.updateUser(tenant.id, target.id, { name });
+      setUsers((current) => current.map((user) => user.id === target.id ? { ...user, ...updatedUser, name } : user));
+      setEditingNameUser(null);
+      setEditedUserName('');
+      toast.success('Nombre del usuario actualizado');
+      await fetchUsers();
+      if (currentUser?.id === target.id) {
+        try {
+          await refreshProfile();
+        } catch (error) {
+          console.warn('No se pudo refrescar el perfil después de cambiar el nombre', error);
+        }
+      }
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'No se pudo actualizar el nombre del usuario'));
+    } finally {
+      setSavingUserName(false);
+    }
   };
 
   const handleAdminChangePassword = async () => {
@@ -954,6 +990,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                     </Select>
                   </div>}
 
+                   {canEditUsers && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEditUserName(u)} title={`Editar nombre de ${u.name}`}><Pencil className="size-3" /> Editar nombre</Button>}
                    {canChangeThisPassword && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
                    {canViewEmployees && (u.employee ? <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleUnlinkEmployee(u)} title={canEditEmployees ? 'Desvincular empleado' : 'Vínculo gestionado por Recursos Humanos'}><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title={canEditEmployees ? 'Vincular empleado' : 'Sin permiso para vincular'}><Link2 className="size-3" /> Vincular empleado</Button>)}
                   {canEditUsers && isCollaborator && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleOpenWarehouseAccess(u)} title="Administrar bodegas permitidas"><Warehouse className="size-3" /> Bodegas</Button>}
@@ -1323,6 +1360,46 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
               Solicitar cotización
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editingNameUser)} onOpenChange={(open) => {
+        if (!open && !savingUserName) {
+          setEditingNameUser(null);
+          setEditedUserName('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="size-5 text-primary" /> Editar nombre del usuario
+            </DialogTitle>
+            <DialogDescription>
+              Cambia el nombre visible de {editingNameUser?.name || 'este usuario'}. Aparecerá en NovaHub y en el mapa de Fuerza Comercial.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(event) => { event.preventDefault(); void handleSaveUserName(); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tenant-user-name-edit">Nombre completo</Label>
+              <Input
+                id="tenant-user-name-edit"
+                autoFocus
+                autoComplete="name"
+                value={editedUserName}
+                onChange={(event) => setEditedUserName(event.target.value)}
+                placeholder="Ej: Ruta 5"
+                required
+                aria-invalid={!editedUserName.trim()}
+                className="h-11 bg-muted/10"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingNameUser(null)} disabled={savingUserName}>Cancelar</Button>
+              <Button type="submit" disabled={savingUserName || !editedUserName.trim() || editedUserName.trim() === String(editingNameUser?.name || '').trim()}>
+                {savingUserName ? 'Guardando...' : 'Guardar nombre'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
