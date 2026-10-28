@@ -6,9 +6,10 @@
   "scripts": {
     "build": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
     "test:force-sales-map-location": "node scripts/test-force-sales-map-location.mjs",
+    "test:force-sales-map-offline-identity": "node scripts/test-force-sales-map-offline-identity.mjs",
     "test:force-sales-map-layers": "node scripts/test-force-sales-map-layers.mjs",
     "test:force-sales-tracking": "node --experimental-strip-types scripts/test-force-sales-tracking-controller.mjs",
-    "test:force-sales-tracking-focal": "npm run test:force-sales-tracking && npm run test:force-sales-offline-route && npm run test:force-sales-map-location && npm run test:force-sales-map-layers && npm run test:force-sales-route-history",
+    "test:force-sales-tracking-focal": "npm run test:force-sales-tracking && npm run test:force-sales-offline-route && npm run test:force-sales-map-location && npm run test:force-sales-map-offline-identity && npm run test:force-sales-map-layers && npm run test:force-sales-route-history",
     "test:force-sales-notification-navigation": "node --experimental-strip-types scripts/test-force-sales-notification-navigation.mjs",
     "test:force-sales-route-history": "node scripts/test-force-sales-route-history.mjs",
     "test:force-sales-offline-route": "node --experimental-strip-types scripts/test-force-sales-offline-route.mjs",

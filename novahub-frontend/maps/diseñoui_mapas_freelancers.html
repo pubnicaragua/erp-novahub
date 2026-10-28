@@ -557,6 +557,70 @@ if(!key){window.__novaShowMapError('Falta configurar la clave de mapas de Nova e
  loadMaps();
 });
 </script>
+<script id="nova-force-sales-offline-identity-core">
+window.NovaForceSalesOfflineIdentity = (()=>{
+  function normalizedIdentity(identity={}){
+    return {tenantId:String(identity?.tenantId||'').trim(),userId:String(identity?.userId||'').trim()};
+  }
+  function scopeKey(identity){
+    const normalized=normalizedIdentity(identity);
+    if(!normalized.tenantId||!normalized.userId)return '';
+    return `${encodeURIComponent(normalized.tenantId)}:${encodeURIComponent(normalized.userId)}`;
+  }
+  function localPointsStorageKey(identity,authenticated=true){
+    if(!authenticated)return 'novaFuerzaLocalPointsV1';
+    return `novaFuerzaLocalPointsV1:${scopeKey(identity)||'unresolved-identity'}`;
+  }
+  function queueKey(identity,sourceKey){
+    const ownerScope=scopeKey(identity);
+    const normalizedSource=String(sourceKey||'').trim();
+    return ownerScope&&normalizedSource?`${ownerScope}:${encodeURIComponent(normalizedSource)}`:'';
+  }
+  function entryMatchesIdentity(entry,identity){
+    const normalized=normalizedIdentity(identity);
+    return Boolean(normalized.tenantId&&normalized.userId
+      &&String(entry?.tenantId||'')===normalized.tenantId
+      &&String(entry?.userId||'')===normalized.userId);
+  }
+  function tokenMatchesIdentity(token,identity){
+    const normalized=normalizedIdentity(identity);
+    if(!token||!normalized.tenantId||!normalized.userId)return false;
+    try{
+      const encoded=String(token).split('.')[1];
+      if(!encoded)return false;
+      const base64=encoded.replace(/-/g,'+').replace(/_/g,'/');
+      const payload=JSON.parse(atob(base64.padEnd(Math.ceil(base64.length/4)*4,'=')));
+      return String(payload?.sub||'')===normalized.userId
+        &&String(payload?.clientTenantId||'')===normalized.tenantId;
+    }catch{return false}
+  }
+  function selectOwnedPoints(points,identity){
+    const normalized=normalizedIdentity(identity);
+    if(!normalized.userId)return [];
+    return (Array.isArray(points)?points:[]).filter(point=>String(point?.createdBy?.id||point?.createdById||'')===normalized.userId);
+  }
+  function countPointsWithoutOwner(points){
+    return (Array.isArray(points)?points:[]).filter(point=>!String(point?.createdBy?.id||point?.createdById||'').trim()).length;
+  }
+  function findLegacyOwner(entry,caches){
+    if(entry?.remoteId)return null;
+    const sourceKey=String(entry?.sourceKey||entry?.payload?.sourceKey||'').trim();
+    const tenantId=String(entry?.payload?.clientTenantId||'').trim();
+    if(!sourceKey||!tenantId)return null;
+    const candidates=new Map();
+    for(const cache of Array.isArray(caches)?caches:[]){
+      if(String(cache?.tenantId||'')!==tenantId)continue;
+      for(const point of Array.isArray(cache?.points)?cache.points:[]){
+        const pointKey=String(point?.sourceKey||point?.id||'').trim();
+        const userId=String(point?.createdBy?.id||point?.createdById||'').trim();
+        if(pointKey===sourceKey&&userId)candidates.set(userId,{tenantId,userId});
+      }
+    }
+    return candidates.size===1?[...candidates.values()][0]:null;
+  }
+  return {normalizedIdentity,scopeKey,localPointsStorageKey,queueKey,entryMatchesIdentity,tokenMatchesIdentity,selectOwnedPoints,countPointsWithoutOwner,findLegacyOwner};
+})();
+</script>
 <script id="nova-force-sales-location-core">
 window.NovaForceSalesLocation = (()=>{
   function normalizeCoordinates(value){
@@ -929,9 +993,13 @@ function readStore(key, fallback){
 const followups = readStore('novaManaguaFollowupsV4', {});
 const commercialState = readStore('novaFuerzaComercialV1', {});
 let localPoints = [];
+let legacyLocalPointsWithoutOwner = 0;
 const OFFLINE_DB_NAME = 'nova-force-sales-offline-v1';
-const OFFLINE_STORE = 'outbox';
+const OFFLINE_STORE_LEGACY = 'outbox';
+const OFFLINE_STORE_V2 = 'outboxV2';
+const OFFLINE_DB_VERSION = 2;
 let offlineDbPromise = null;
+let legacyOfflineMigrationPromise = null;
 let flushingOutbox = false;
 const mapQuery = new URLSearchParams(location.search);
 let forceSalesPermissions = {};
@@ -952,6 +1020,8 @@ let ROUTE_LOGO_URI = mapQuery.get('companyLogo') || NOVAHUB_ISOTIPO_URL;
 const CURRENT_USER_ID = mapQuery.get('userId') || '';
 const CURRENT_TENANT_ID = mapQuery.get('tenantId') || '';
 const HAS_AUTHENTICATED_TENANT = Boolean(localStorage.getItem('nh-auth-token'));
+const CURRENT_IDENTITY = window.NovaForceSalesOfflineIdentity.normalizedIdentity({tenantId:CURRENT_TENANT_ID,userId:CURRENT_USER_ID});
+const TENANT_SCOPE_KEY = CURRENT_TENANT_ID || CURRENT_USER_ID || 'authenticated';
 const MAP_LAYERS_STORAGE_KEY=window.NovaForceSalesLocation.mapLayerStorageKey(CURRENT_TENANT_ID,CURRENT_USER_ID);
 const GOOGLE_MAP_ID=String(mapQuery.get('mapId')||'DEMO_MAP_ID').trim()||'DEMO_MAP_ID';
 const GOOGLE_CLEAN_MAP_ID=String(mapQuery.get('cleanMapId')||'').trim();
@@ -963,9 +1033,16 @@ const MAP_RELOAD_CAMERA_KEY=`novaForceSalesMapCamera:${CURRENT_TENANT_ID||'no-te
 let mapReloadCamera=null;
 try{mapReloadCamera=JSON.parse(sessionStorage.getItem(MAP_RELOAD_CAMERA_KEY)||'null')}catch{mapReloadCamera=null}
 if(mapReloadCamera)sessionStorage.removeItem(MAP_RELOAD_CAMERA_KEY);
-const SESSION_SCOPE_KEY = CURRENT_TENANT_ID || CURRENT_USER_ID || 'authenticated';
-const LOCAL_POINTS_KEY = HAS_AUTHENTICATED_TENANT ? `novaFuerzaLocalPointsV1:${SESSION_SCOPE_KEY}` : 'novaFuerzaLocalPointsV1';
-localPoints = readStore(LOCAL_POINTS_KEY, []);
+const LEGACY_LOCAL_POINTS_KEY = HAS_AUTHENTICATED_TENANT ? `novaFuerzaLocalPointsV1:${TENANT_SCOPE_KEY}` : 'novaFuerzaLocalPointsV1';
+const LOCAL_POINTS_KEY = window.NovaForceSalesOfflineIdentity.localPointsStorageKey(CURRENT_IDENTITY,HAS_AUTHENTICATED_TENANT);
+const storedLocalPoints = readStore(LOCAL_POINTS_KEY, null);
+if(Array.isArray(storedLocalPoints))localPoints=storedLocalPoints;
+else if(HAS_AUTHENTICATED_TENANT){
+  const legacyLocalPoints=readStore(LEGACY_LOCAL_POINTS_KEY,[]);
+  legacyLocalPointsWithoutOwner=window.NovaForceSalesOfflineIdentity.countPointsWithoutOwner(legacyLocalPoints);
+  localPoints=window.NovaForceSalesOfflineIdentity.selectOwnedPoints(legacyLocalPoints,CURRENT_IDENTITY);
+  if(localPoints.length)localStorage.setItem(LOCAL_POINTS_KEY,JSON.stringify(localPoints));
+}else localPoints=readStore(LOCAL_POINTS_KEY,[]);
 const IS_PLATFORM_ADMIN = mapQuery.get('platformAdmin') === 'true';
 const CAN_ASSIGN_TEAM = mapQuery.get('canAssignTeam') === 'true';
 const CAN_DELETE_TEST = IS_PLATFORM_ADMIN;
@@ -1009,7 +1086,7 @@ let routeStopIds = new Map();
 const PRESENCE_STORAGE_KEY = `novaFuerzaPresenceSharingV1:${CURRENT_USER_ID || 'anonymous'}`;
 const GOOGLE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const GOOGLE_SEARCH_MAX_RESULTS = 100;
-const GOOGLE_CATALOG_KEY = HAS_AUTHENTICATED_TENANT ? `novaGooglePlacesCatalogV1:${SESSION_SCOPE_KEY}` : 'novaGooglePlacesCatalogV1';
+const GOOGLE_CATALOG_KEY = HAS_AUTHENTICATED_TENANT ? `novaGooglePlacesCatalogV1:${TENANT_SCOPE_KEY}` : 'novaGooglePlacesCatalogV1';
 const DELETED_BUSINESSES_KEY = 'novaFuerzaDeletedBusinessesV1';
 const NOVA_SEARCH_CURSOR_KEY = 'novaDiscoveryCursorV1';
 const NOVA_DISCOVERY_AREAS = [
@@ -1445,12 +1522,15 @@ const apiStageByUi = {Nuevo:'NEW',Contactado:'CONTACTED',Visitado:'VISITED',Inte
 const uiStageByApi = Object.fromEntries(Object.entries(apiStageByUi).map(([ui,api]) => [api,ui]));
 function stageToApi(stage){return apiStageByUi[stage] || 'NEW'}
 function stageToUi(stage){return uiStageByApi[String(stage || '').toUpperCase()] || 'Nuevo'}
-function apiHeaders(){
-  const token=localStorage.getItem('nh-auth-token');
+function apiHeaders(token=localStorage.getItem('nh-auth-token')){
   return token ? {'Content-Type':'application/json',Authorization:`Bearer ${token}`} : {'Content-Type':'application/json'};
 }
 async function forceSalesRequest(path, options={}){
-  const response=await fetch(`${API_BASE}${path}`,{...options,headers:{...apiHeaders(),...(options.headers||{})},cache:'no-store'});
+  const token=localStorage.getItem('nh-auth-token') || '';
+  if(token&&!window.NovaForceSalesOfflineIdentity.tokenMatchesIdentity(token,CURRENT_IDENTITY)){
+    throw new Error('La sesión activa cambió. Actualiza Fuerza Comercial antes de sincronizar.');
+  }
+  const response=await fetch(`${API_BASE}${path}`,{...options,headers:{...apiHeaders(token),...(options.headers||{})},cache:'no-store'});
   const text=await response.text();
   let body=null;
   try{body=text ? JSON.parse(text) : null}catch(error){body=text || null}
@@ -1720,17 +1800,24 @@ function openOfflineDb(){
   if(!('indexedDB' in window)) return Promise.resolve(null);
   if(offlineDbPromise) return offlineDbPromise;
   offlineDbPromise=new Promise((resolve,reject)=>{
-    const request=indexedDB.open(OFFLINE_DB_NAME,1);
-    request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains(OFFLINE_STORE))request.result.createObjectStore(OFFLINE_STORE,{keyPath:'sourceKey'})};
+    const request=indexedDB.open(OFFLINE_DB_NAME,OFFLINE_DB_VERSION);
+    request.onupgradeneeded=()=>{
+      const database=request.result;
+      if(!database.objectStoreNames.contains(OFFLINE_STORE_LEGACY))database.createObjectStore(OFFLINE_STORE_LEGACY,{keyPath:'sourceKey'});
+      if(!database.objectStoreNames.contains(OFFLINE_STORE_V2)){
+        const store=database.createObjectStore(OFFLINE_STORE_V2,{keyPath:'queueKey'});
+        store.createIndex('byIdentity','identityKey',{unique:false});
+      }
+    };
     request.onsuccess=()=>resolve(request.result);
     request.onerror=()=>{offlineDbPromise=null;reject(request.error || new Error('IndexedDB no disponible'))};
   });
   return offlineDbPromise;
 }
-function offlineTransaction(mode, operation){
+function offlineTransaction(mode, operation, storeName=OFFLINE_STORE_V2){
   return openOfflineDb().then(db=>new Promise((resolve,reject)=>{
     if(!db){resolve(null);return}
-    const tx=db.transaction(OFFLINE_STORE,mode); const store=tx.objectStore(OFFLINE_STORE);
+    const tx=db.transaction(storeName,mode); const store=tx.objectStore(storeName);
     let result;
     try{result=operation(store)}catch(error){reject(error);return}
     if(result?.onsuccess!==undefined){result.onsuccess=()=>resolve(result.result);result.onerror=()=>reject(result.error)}
@@ -1738,13 +1825,77 @@ function offlineTransaction(mode, operation){
     tx.onerror=()=>reject(tx.error);
   }));
 }
+function readLegacyLocalPointCaches(){
+  const caches=[];
+  const prefix='novaFuerzaLocalPointsV1:';
+  try{
+    for(let index=0;index<localStorage.length;index++){
+      const key=localStorage.key(index);
+      if(!key?.startsWith(prefix))continue;
+      const tenantId=key.slice(prefix.length);
+      const points=readStore(key,[]);
+      if(tenantId&&Array.isArray(points))caches.push({tenantId,points});
+    }
+  }catch(error){console.warn('No se pudo revisar el propietario de la cola local anterior',error)}
+  return caches;
+}
+function migrateLegacyOfflineProspects(){
+  if(legacyOfflineMigrationPromise)return legacyOfflineMigrationPromise;
+  legacyOfflineMigrationPromise=(async()=>{
+    try{
+      const database=await openOfflineDb();
+      if(!database)return {migrated:0,quarantined:0};
+      const caches=readLegacyLocalPointCaches();
+      const result=await new Promise((resolve,reject)=>{
+        const transaction=database.transaction([OFFLINE_STORE_LEGACY,OFFLINE_STORE_V2],'readwrite');
+        const legacyStore=transaction.objectStore(OFFLINE_STORE_LEGACY);
+        const scopedStore=transaction.objectStore(OFFLINE_STORE_V2);
+        const cursorRequest=legacyStore.openCursor();
+        let migrated=0,quarantined=0;
+        cursorRequest.onerror=()=>reject(cursorRequest.error || new Error('No se pudo leer la cola offline anterior'));
+        cursorRequest.onsuccess=()=>{
+          const cursor=cursorRequest.result;
+          if(!cursor)return;
+          const entry=cursor.value;
+          const owner=window.NovaForceSalesOfflineIdentity.findLegacyOwner(entry,caches);
+          const identityKey=owner&&window.NovaForceSalesOfflineIdentity.scopeKey(owner);
+          if(!owner||!identityKey){quarantined++;cursor.continue();return}
+          const queueKey=window.NovaForceSalesOfflineIdentity.queueKey(owner,entry.sourceKey);
+          scopedStore.put({...entry,...owner,identityKey,queueKey});
+          cursor.delete();
+          migrated++;
+          cursor.continue();
+        };
+        transaction.oncomplete=()=>resolve({migrated,quarantined});
+        transaction.onerror=()=>reject(transaction.error || new Error('No se pudo migrar la cola offline anterior'));
+        transaction.onabort=()=>reject(transaction.error || new Error('Se canceló la migración de la cola offline anterior'));
+      });
+      setForceSalesSyncError('cola offline anterior',result.quarantined
+        ? `${result.quarantined} elemento(s) antiguo(s) siguen guardados sin propietario verificable; no se enviarán con esta cuenta.`
+        : null);
+      return result;
+    }catch(error){
+      legacyOfflineMigrationPromise=null;
+      console.warn('No se pudo migrar la cola offline anterior',error);
+      return {migrated:0,quarantined:0,error};
+    }
+  })();
+  return legacyOfflineMigrationPromise;
+}
 async function saveOfflineProspect(b, evidenceFile, operations=[], syncProfile=true){
   const sourceKey=keyOf(b);
+  const identity=CURRENT_IDENTITY;
+  const identityKey=window.NovaForceSalesOfflineIdentity.scopeKey(identity);
+  const queueKey=window.NovaForceSalesOfflineIdentity.queueKey(identity,sourceKey);
+  if(!identityKey||!queueKey){
+    setForceSalesSyncError('cola offline','No se guardó el cambio: vuelve a iniciar sesión para validar usuario y empresa.');
+    return false;
+  }
   try{
     if(!await openOfflineDb()) return false;
-    const previous=await offlineTransaction('readonly',store=>store.get(sourceKey));
+    const previous=await offlineTransaction('readonly',store=>store.get(queueKey));
     const entry={
-      ...(previous || {}), sourceKey, remoteId:stateOf(b).remoteId || previous?.remoteId || null,
+      ...(previous || {}), queueKey,identityKey,tenantId:identity.tenantId,userId:identity.userId,sourceKey,remoteId:stateOf(b).remoteId || previous?.remoteId || null,
       payload:prospectPayload(b), syncProfile:syncProfile || previous?.syncProfile===true,
       pendingOperations:[...(previous?.pendingOperations || []),...operations],
       evidence:evidenceFile?{name:evidenceFile.name,type:evidenceFile.type,size:evidenceFile.size,blob:evidenceFile}:previous?.evidence || null,
@@ -1757,14 +1908,22 @@ async function saveOfflineProspect(b, evidenceFile, operations=[], syncProfile=t
     return false;
   }
 }
-async function removeOfflineProspect(sourceKey){
-  try{await offlineTransaction('readwrite',store=>store.delete(sourceKey))}catch(error){console.warn('No se pudo limpiar la cola offline',error)}
+async function removeOfflineProspect(sourceKey,identity=CURRENT_IDENTITY){
+  const queueKey=window.NovaForceSalesOfflineIdentity.queueKey(identity,sourceKey);
+  if(!queueKey)return;
+  try{await offlineTransaction('readwrite',store=>store.delete(queueKey))}catch(error){console.warn('No se pudo limpiar la cola offline',error)}
 }
-async function readOfflineProspects(){
-  try{return (await offlineTransaction('readonly',store=>store.getAll())) || []}catch(error){console.warn('No se pudo leer la cola offline',error);return []}
+async function readOfflineProspects(identity=CURRENT_IDENTITY){
+  const identityKey=window.NovaForceSalesOfflineIdentity.scopeKey(identity);
+  if(!identityKey)return [];
+  try{
+    const entries=(await offlineTransaction('readonly',store=>store.index('byIdentity').getAll(identityKey),OFFLINE_STORE_V2)) || [];
+    return entries.filter(entry=>window.NovaForceSalesOfflineIdentity.entryMatchesIdentity(entry,identity));
+  }catch(error){console.warn('No se pudo leer la cola offline',error);return []}
 }
 async function restoreOfflineEvidencePreviews(){
-  const entries=await readOfflineProspects();
+  await migrateLegacyOfflineProspects();
+  const entries=await readOfflineProspects(CURRENT_IDENTITY);
   let restored=false;
   for(const entry of entries){
     if(!entry.evidence?.blob)continue;
@@ -1793,12 +1952,16 @@ async function uploadEvidence(file){
   return metadata;
 }
 async function flushOutbox(){
-  if(flushingOutbox || !navigator.onLine || !localStorage.getItem('nh-auth-token')) return;
+  const token=localStorage.getItem('nh-auth-token') || '';
+  if(flushingOutbox || !navigator.onLine || !token||!window.NovaForceSalesOfflineIdentity.tokenMatchesIdentity(token,CURRENT_IDENTITY)) return;
   flushingOutbox=true;
   let syncedAny=false;
   try{
-    const entries=await readOfflineProspects();
+    await migrateLegacyOfflineProspects();
+    if(localStorage.getItem('nh-auth-token')!==token)return;
+    const entries=await readOfflineProspects(CURRENT_IDENTITY);
     for(const entry of entries){
+      if(!window.NovaForceSalesOfflineIdentity.entryMatchesIdentity(entry,CURRENT_IDENTITY))continue;
       const payload={...(entry.payload || {})};
       try{
         const business=businesses.find(item=>keyOf(item)===entry.sourceKey);
@@ -4396,6 +4559,7 @@ mergeBusinesses();
 populateFilters();
 render();
 updateOfflineStatus();
+if(legacyLocalPointsWithoutOwner)setForceSalesSyncError('puntos locales anteriores',`${legacyLocalPointsWithoutOwner} punto(s) local(es) anterior(es) no tienen un creador verificable; siguen guardados y no se cargaron en esta cuenta.`);
 void restoreOfflineEvidencePreviews();
 setTimeout(() => {
   loadForceSalesConfiguration().finally(() => {
