@@ -1715,7 +1715,15 @@ async function flushOutbox(){
         if(entry.syncProfile!==false){
           if(remoteId){
             if(!canForceSales('updateProspect'))continue;
-            await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(remoteId)}`,{method:'PATCH',body:JSON.stringify(profilePayloadFromPayload(payload))});
+            try{
+              await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(remoteId)}`,{method:'PATCH',body:JSON.stringify(profilePayloadFromPayload(payload))});
+            }catch(error){
+              if(error?.status!==404||!canForceSales('importProspects'))throw error;
+              remoteId=null;
+              const recreated=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[payload]})});
+              remoteId=recreated?.prospects?.[0]?.id || null;
+              if(!remoteId)throw new Error('El ERP no pudo recrear el cliente pendiente');
+            }
           }else{
             if(!canForceSales('importProspects'))continue;
             const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[payload]})});
@@ -1813,8 +1821,17 @@ async function syncProspects(list, evidenceFile=null){
         if(!prospect)throw new Error('El ERP no registró el cliente importado');
         state.remoteId=prospect.id;saved.push(prospect);
       }else if(canForceSales('updateProspect')){
-        const prospect=await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(state.remoteId)}`,{method:'PATCH',body:JSON.stringify(prospectProfilePayload(business))});
-        if(prospect)saved.push(prospect);
+        try{
+          const prospect=await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(state.remoteId)}`,{method:'PATCH',body:JSON.stringify(prospectProfilePayload(business))});
+          if(prospect)saved.push(prospect);
+        }catch(error){
+          if(error?.status!==404||!canForceSales('importProspects'))throw error;
+          state.remoteId=null;
+          const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[prospectPayload(business)]})});
+          const prospect=result?.prospects?.[0];
+          if(!prospect)throw new Error('El ERP no pudo recrear el cliente importado');
+          state.remoteId=prospect.id;saved.push(prospect);
+        }
       }
       if(pendingEvidence){
         const uploaded=await uploadEvidence(pendingEvidence);
