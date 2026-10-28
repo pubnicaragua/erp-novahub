@@ -672,7 +672,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         setSimilarPendingProducts(pendingProducts);
         setProductsList((current) => current.slice(successCount));
         setSimilarResolutions({});
-        toast.warning('La API volvió a detectar una posible coincidencia. Tus datos siguen guardados; revisa la coincidencia y confirma si deseas crear el producto.');
       } else {
         toast.error(error?.message || `Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
       }
@@ -746,7 +745,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         setSimilarGroups(groups);
         setSimilarPendingProducts(listToSave);
         setSimilarResolutions({});
-        toast.warning('Se encontraron posibles productos existentes. Elige uno existente o confirma la creación de cada fila.');
         return;
       }
     } catch (error: any) {
@@ -789,6 +787,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     <ProductSimilarityAlert
       open={similarGroups.length > 0}
       groups={similarGroups}
+      layer="above"
       title={`Posible coincidencia de ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
       description={`Este ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'} se parece a uno que ya existe. Compara los datos: puedes editar el existente o, si el código es distinto, confirmar la creación de uno nuevo. Al crear, conservaremos los datos ingresados.`}
       existingProductActionLabel={catalogItemType === 'SERVICE' ? 'Editar servicio existente' : 'Editar producto existente'}

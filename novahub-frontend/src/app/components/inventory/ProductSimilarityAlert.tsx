@@ -31,6 +31,7 @@ interface ProductSimilarityAlertProps {
   existingProductActionMode?: 'link' | 'edit';
   canEditExistingProduct?: boolean;
   selectionHint?: string;
+  layer?: 'default' | 'above';
   onOpenChange: (open: boolean) => void;
   onContinue?: () => void;
   onSelectExisting?: (group: SimilarProductGroup, match: SimilarProductMatch, variant?: SimilarProductVariant) => void;
@@ -53,6 +54,7 @@ export function ProductSimilarityAlert({
   existingProductActionMode = 'link',
   canEditExistingProduct = true,
   selectionHint,
+  layer = 'default',
   onOpenChange,
   onContinue,
   onSelectExisting,
@@ -67,7 +69,10 @@ export function ProductSimilarityAlert({
   const [newSkuDrafts, setNewSkuDrafts] = useState<Record<string, string>>({});
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-3xl max-h-[min(88vh,calc(100dvh-3rem))] overflow-hidden flex flex-col">
+      <DialogContent
+        overlayClassName={layer === 'above' ? '!z-[70]' : undefined}
+        className={`w-[calc(100vw-2rem)] max-w-3xl max-h-[min(88vh,calc(100dvh-3rem))] overflow-hidden flex flex-col ${layer === 'above' ? '!z-[80]' : ''}`}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-warning">
             <AlertTriangle className="size-5 shrink-0" /> {title}
