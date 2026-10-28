@@ -353,17 +353,7 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
   const pendingLabel = `${state.pending} punto${state.pending === 1 ? '' : 's'} pendiente${state.pending === 1 ? '' : 's'}`;
   const wakeSupported = 'wakeLock' in navigator;
 
-  if (!identity || !canTrack) return null;
-  if (activeModule !== 'fuerza-comercial') {
-    if (!state.enabled) return null;
-    return (
-      <aside className="pointer-events-auto absolute right-3 top-[4.25rem] z-[150] flex max-w-[min(22rem,calc(100vw-5.5rem))] items-center gap-2 rounded-xl border border-border/80 bg-card/95 px-3 py-2 text-card-foreground shadow-lg backdrop-blur sm:right-5 sm:top-[4.5rem]" aria-label="Rastreo de Fuerza Comercial activo" role="status">
-        <span className="size-2 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
-        <span className="min-w-0 text-[11px] font-semibold">{label} · {pendingLabel}</span>
-        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'fuerza-comercial' } }))} className="shrink-0 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold hover:bg-muted">Ver</button>
-      </aside>
-    );
-  }
+  if (!identity || !canTrack || activeModule !== 'fuerza-comercial') return null;
 
   return (
     <aside className="pointer-events-auto absolute right-3 top-[4.25rem] z-[150] text-card-foreground sm:right-5 sm:top-[4.5rem]" aria-label="Estado del rastreo de ruta">

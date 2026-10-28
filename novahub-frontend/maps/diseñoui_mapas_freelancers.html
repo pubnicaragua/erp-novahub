@@ -178,6 +178,11 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
    visible viewport, its theme tokens, and the space obscured by the keyboard. */
 :root{--nova-visible-top:0px;--nova-visible-bottom:0px;--nova-visible-height:100vh;--nova-ui-background:#e8f0ed;--nova-ui-foreground:#11241f;--nova-ui-card:#fbfdfc;--nova-ui-muted:#edf5f1;--nova-ui-muted-foreground:#6c7c77;--nova-ui-border:#dce8e3;--nova-ui-primary:#08785a;--ink:var(--nova-ui-foreground);--muted:var(--nova-ui-muted-foreground);--line:var(--nova-ui-border);--panel:var(--nova-ui-card)}
 html,body{background:var(--nova-ui-background);color:var(--nova-ui-foreground)}
+body.embedded-view .sidebar{box-shadow:none;border-right:1px solid var(--nova-ui-border)}
+body.embedded-view .brand{padding:14px 16px 12px;background:var(--nova-ui-card);border-bottom:1px solid var(--nova-ui-border);color:var(--nova-ui-foreground)}
+body.embedded-view .brand .topline,body.embedded-view .brand p{display:none}
+body.embedded-view .brand h1{margin:0;font-size:16px;letter-spacing:-.2px;color:var(--nova-ui-foreground)}
+body.embedded-view .brand .live{margin-top:7px;padding:7px 9px;background:var(--nova-ui-muted);color:var(--nova-ui-foreground)}
 body.theme-dark{color-scheme:dark}
 body.theme-dark .sidebar,body.theme-dark .item,body.theme-dark .history-card,body.theme-dark .kanban-card,body.theme-dark .route-stop,body.theme-dark .route-stat,body.theme-dark .confirm-modal,body.theme-dark .quick-capture,body.theme-dark .search input,body.theme-dark select,body.theme-dark .quick-capture input{background:var(--nova-ui-card);color:var(--nova-ui-foreground);border-color:var(--nova-ui-border)}
 body.theme-dark .scroll,body.theme-dark .kanban-column,body.theme-dark .route-stops,body.theme-dark .evidence-preview,body.theme-dark .quick-capture-photo{background:var(--nova-ui-background);color:var(--nova-ui-foreground)}
@@ -3750,6 +3755,7 @@ function renderHistory(){
 function updateView(){
   const list=document.getElementById('list'); const board=document.getElementById('kanbanBoard'); const history=document.getElementById('historyView'); const toggle=document.getElementById('kanbanToggle');
   const mapView=activeView==='map'; const kanban=activeView==='kanban';
+  document.body.classList.toggle('embedded-view',mapQuery.get('embedded')==='1');
   document.body.classList.toggle('standalone-view',!mapView);
   document.body.classList.toggle('workspace-kanban',kanban);
   document.body.classList.toggle('workspace-history',!mapView&&!kanban);
