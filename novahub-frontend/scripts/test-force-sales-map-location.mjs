@@ -56,21 +56,31 @@ assert.equal(acceptedPresenceReads.length, 1, 'La presencia parte de la lectura 
 assert.equal(locationSandbox.lastKnownCoords.capturedAt, new Date(mapNow).toISOString(), 'El timestamp original queda junto a las coordenadas retenidas');
 const presenceContentSource = html.match(/function presenceContent\(row\)\{[\s\S]*?\n\}/)?.[0];
 const presenceRouteLabelSource = html.match(/function presenceRouteLabel\(row\)\{[\s\S]*?\n\}/)?.[0];
+const presencePopupSource = html.match(/function presencePopupContent\(row\)\{[\s\S]*?\n\}/)?.[0];
 assert.ok(presenceContentSource, 'El mapa conserva un generador verificable para marcadores de presencia');
 assert.ok(presenceRouteLabelSource, 'El mapa normaliza nombres de ruta para el marcador de presencia');
+assert.ok(presencePopupSource, 'El popup conserva un generador verificable para los datos de presencia');
 class MarkerElementStub {
   constructor(tagName) { this.tagName = tagName; this.children = []; this.attributes = {}; this.textContent = ''; }
   appendChild(child) { this.children.push(child); }
   addEventListener() {}
   setAttribute(name, value) { this.attributes[name] = value; }
 }
-const presenceSandbox = { document: { createElement: tagName => new MarkerElementStub(tagName) } };
+const presenceSandbox = {
+  document: { createElement: tagName => new MarkerElementStub(tagName) },
+  esc: value => String(value ?? ''),
+};
 vm.createContext(presenceSandbox);
-vm.runInContext(`${presenceRouteLabelSource}; ${presenceContentSource}; globalThis.testPresenceContent = presenceContent;`, presenceSandbox);
+vm.runInContext(`${presenceRouteLabelSource}; ${presenceContentSource}; ${presencePopupSource}; globalThis.testPresenceContent = presenceContent; globalThis.testPresencePopup = presencePopupContent;`, presenceSandbox);
 const routeFourMarker = presenceSandbox.testPresenceContent({ name: 'Ruta 4', initials: 'R4', avatar: 'https://example.test/ruta-4.png' });
 assert.equal(routeFourMarker.textContent, 'R4', 'El marcador conserva la etiqueta de Ruta 4 aunque tenga avatar');
 const routeFiveMarker = presenceSandbox.testPresenceContent({ name: 'Ruta N.º 5', initials: 'RN', avatar: 'https://example.test/ruta-5.png' });
 assert.equal(routeFiveMarker.textContent, 'R5', 'Los nombres con número de ruta normalizan su etiqueta a R5 aunque tengan avatar');
+for (const routeNumber of [4, 5]) {
+  const row = { name: `RUTA${routeNumber}`, initials: 'R', lastSeenAt: '2026-10-28T12:00:00.000Z' };
+  assert.equal(presenceSandbox.testPresenceContent(row).textContent, `R${routeNumber}`, `La cuenta RUTA${routeNumber} conserva su número en el marcador`);
+  assert.match(presenceSandbox.testPresencePopup(row), new RegExp(`flex:0 0 auto\\">R${routeNumber}<\\/div>`), `El popup de RUTA${routeNumber} conserva su número en el avatar`);
+}
 const sellerWithAvatarMarker = presenceSandbox.testPresenceContent({ name: 'Carlos Vendedor', initials: 'CV', avatar: 'https://example.test/carlos.png' });
 assert.equal(sellerWithAvatarMarker.children[0]?.tagName, 'img', 'Los vendedores normales conservan su avatar');
 assert.ok(locationCore.validateEvidenceFile, 'Fuerza Comercial debe validar fotos antes de reemplazar evidencia');

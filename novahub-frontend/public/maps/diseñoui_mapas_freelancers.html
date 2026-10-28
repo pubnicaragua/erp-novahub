@@ -3181,7 +3181,7 @@ function showUserLocation(position){
 }
 function presenceRouteLabel(row){
   const name=String(row?.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const routeNumber=name.match(/\bruta\b\s*(?:n(?:um(?:ero)?|ro|o)?\s*)?[#.:º°-]*\s*(\d+)\b/i)?.[1];
+  const routeNumber=name.match(/\bruta\s*(?:n(?:um(?:ero)?|ro|o)?\s*)?[#.:º°-]*\s*(\d+)\b/i)?.[1];
   if(routeNumber)return `R${Number(routeNumber)}`;
   const initials=String(row?.initials||'').trim().toLocaleUpperCase('es-NI');
   const initialsNumber=initials.match(/^R0*(\d+)$/)?.[1];
@@ -3213,7 +3213,9 @@ function presencePopupContent(row){
   const presenceLabel=online?'En línea':'Sin conexión';
   const gpsLabel=row.gpsStatus==='recent'?'GPS reciente':row.gpsStatus==='stale'?'Sin lectura GPS reciente':'GPS sin confirmar';
   const gpsTime=row.gpsCapturedAt?` · captura ${new Date(row.gpsCapturedAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}`:'';
-  return `<div style="min-width:220px;padding:4px 2px;font:12px Poppins,Arial,sans-serif;color:#123f35"><div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><div class="nova-presence-marker${online?'':' stale'}" style="width:42px;height:42px;flex:0 0 auto">${row.avatar?`<img src="${esc(row.avatar)}" alt="${esc(row.name||'Colaborador')}">`:esc(row.initials||'V')}</div><div><h3 style="margin:0;font-size:14px">${esc(row.name||'Colaborador')}</h3><span style="color:#687a73;font-size:10px">${esc(row.email||'')} · ${esc(row.role||'')}</span></div></div><div style="display:grid;gap:5px;font-size:10px"><div><b>Presencia:</b> ${presenceLabel}</div><div><b>GPS:</b> ${gpsLabel}${esc(gpsTime)}</div><div><b>Actividad:</b> ${esc(row.currentActivity||'Disponible')}</div><div>${current}</div><div>${last}</div><div style="color:#687a73">Última actualización del servidor ${new Date(row.lastSeenAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}</div></div></div>`;
+  const routeLabel=presenceRouteLabel(row);
+  const markerContent=routeLabel?esc(routeLabel):row.avatar?`<img src="${esc(row.avatar)}" alt="${esc(row.name||'Colaborador')}">`:esc(row.initials||'V');
+  return `<div style="min-width:220px;padding:4px 2px;font:12px Poppins,Arial,sans-serif;color:#123f35"><div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><div class="nova-presence-marker${online?'':' stale'}" style="width:42px;height:42px;flex:0 0 auto">${markerContent}</div><div><h3 style="margin:0;font-size:14px">${esc(row.name||'Colaborador')}</h3><span style="color:#687a73;font-size:10px">${esc(row.email||'')} · ${esc(row.role||'')}</span></div></div><div style="display:grid;gap:5px;font-size:10px"><div><b>Presencia:</b> ${presenceLabel}</div><div><b>GPS:</b> ${gpsLabel}${esc(gpsTime)}</div><div><b>Actividad:</b> ${esc(row.currentActivity||'Disponible')}</div><div>${current}</div><div>${last}</div><div style="color:#687a73">Última actualización del servidor ${new Date(row.lastSeenAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}</div></div></div>`;
 }
 function renderPresence(rows,gpsCaptures=recentGpsCapturesByUser){
   if(gpsCaptures instanceof Map)recentGpsCapturesByUser=gpsCaptures;
