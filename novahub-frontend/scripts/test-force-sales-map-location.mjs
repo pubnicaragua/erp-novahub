@@ -46,6 +46,30 @@ assert.match(html, /addEventListener\('cancel'/, 'Cancelar un selector de archiv
 assert.match(html, /data-kanban-toggle=.*aria-expanded=.*aria-controls=/, 'El Kanban móvil expone etapas plegables y su estado accesible');
 assert.match(html, /@media\(max-width:820px\)[\s\S]*?min-height:44px/, 'Los controles táctiles móviles conservan al menos 44 px');
 assert.match(html, /@media\(prefers-reduced-motion:reduce\)/, 'La vista respeta movimiento reducido');
+const businessMarkerFactory = html.match(/function markerSvg\(b\)\{[\s\S]*?\n\}/)?.[0];
+assert.ok(businessMarkerFactory, 'Los puntos comerciales deben tener un creador de iconos verificable');
+const markerSandbox = {
+  google: { maps: {
+    Size: class Size { constructor(width, height) { this.width = width; this.height = height; } },
+    Point: class Point { constructor(x, y) { this.x = x; this.y = y; } },
+  } },
+  NOVAHUB_ISOTIPO_URL: 'https://example.test/isotipo.svg',
+  stateClass: () => 'new',
+  svgDataUrl: svg => svg,
+};
+vm.createContext(markerSandbox);
+vm.runInContext(`${businessMarkerFactory}; globalThis.createBusinessMarkerIcon = markerSvg;`, markerSandbox);
+const businessMarkerIcon = markerSandbox.createBusinessMarkerIcon({ priority: 'A' });
+assert.equal(businessMarkerIcon.scaledSize.width, 20, 'El isotipo conserva 20 px como tamaño base');
+assert.equal(businessMarkerIcon.responsiveBusinessPoint, true, 'Solo los puntos individuales identifican su icono como responsive');
+assert.match(html, /if\(icon\.responsiveBusinessPoint\)wrapper\.classList\.add\('nova-business-point-marker'\)/, 'El tamaño responsive solo se aplica a puntos individuales');
+assert.match(html, /@media\(min-width:1024px\)\{\.nova-map-marker-content\.nova-business-point-marker img\{[^}]*width:32px!important;[^}]*height:32px!important;?\}\}/, 'El isotipo de puntos sube a 32 px desde escritorio compacto y el CSS queda limitado a esos puntos');
+const clusterMarkerFactory = html.match(/function clusterSvg\(count\)\{[\s\S]*?\n\}/)?.[0];
+assert.ok(clusterMarkerFactory, 'Los iconos de grupos deben conservar su creador independiente');
+vm.runInContext(`${clusterMarkerFactory}; globalThis.createClusterMarkerIcon = clusterSvg;`, markerSandbox);
+assert.equal(markerSandbox.createClusterMarkerIcon(3).scaledSize.width, 24, 'Los grupos de puntos conservan su tamaño actual');
+markerSandbox.NOVAHUB_ISOTIPO_URL = '';
+assert.equal(markerSandbox.createBusinessMarkerIcon({ priority: 'A' }).scaledSize.width, 42, 'El arte alternativo conserva 42 px');
 assert.ok(html.indexOf("type==='ui-context'") < html.indexOf('window.__novaMapsReady.then'), 'El iframe procesa teclado y tema antes de esperar la carga del mapa');
 assert.match(html, /quick-capture-hint\{font-size:14px!important/, 'La ayuda de captura conserva legibilidad en móvil');
 assert.match(html, /Punto guardado en el dispositivo · sincronizando/, 'El primer feedback identifica el guardado local mientras sincroniza');
