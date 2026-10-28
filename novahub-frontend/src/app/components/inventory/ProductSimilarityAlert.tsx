@@ -26,6 +26,10 @@ interface ProductSimilarityAlertProps {
   title?: string;
   description?: string;
   continueLabel?: string;
+  existingProductActionLabel?: string;
+  createNewActionLabel?: string;
+  existingProductActionMode?: 'link' | 'edit';
+  canEditExistingProduct?: boolean;
   selectionHint?: string;
   onOpenChange: (open: boolean) => void;
   onContinue?: () => void;
@@ -44,6 +48,10 @@ export function ProductSimilarityAlert({
   title = 'Producto similar encontrado',
   description = 'La alerta se genera por SKU exacto o por nombre igual/similar. Marca, descripción y atributos solo aportan contexto y no generan alertas por sí solos.',
   continueLabel,
+  existingProductActionLabel,
+  createNewActionLabel,
+  existingProductActionMode = 'link',
+  canEditExistingProduct = true,
   selectionHint,
   onOpenChange,
   onContinue,
@@ -92,7 +100,9 @@ export function ProductSimilarityAlert({
                 const hasMultipleVariants = (match.variants?.length || 0) > 1;
                 const hasExactVariant = (match.variants || []).some((variant) => normalizeSku(variant.sku) === normalizeSku(group.inputKey));
                 const canCreateVariantUnderParent = canSelectParentForGroup?.(group) === true;
-                const canUseParent = !hasMultipleVariants || (canCreateVariantUnderParent && !hasExactVariant && !groupHasExactSkuMatch);
+                const canUseParent = !hasMultipleVariants
+                  || (existingProductActionMode === 'edit' && canEditExistingProduct)
+                  || (canCreateVariantUnderParent && !hasExactVariant && !groupHasExactSkuMatch);
                 return (
                   <article key={matchKey} className="rounded-xl border border-warning/40 bg-background p-4 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -134,12 +144,12 @@ export function ProductSimilarityAlert({
                     {hasDynamicResolution && (
                       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
                         {canUseParent && (
-                          <Button type="button" size="sm" className="gap-2" disabled={isResolving} onClick={() => onSelectExisting?.(group, match)}>
+                          <Button type="button" size="sm" className="gap-2" disabled={isResolving || (existingProductActionMode === 'edit' && !canEditExistingProduct)} onClick={() => onSelectExisting?.(group, match)}>
                             {isResolving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-                            {hasMultipleVariants ? 'Vincular producto padre' : 'Vincular producto existente'}
+                            {existingProductActionLabel || (hasMultipleVariants ? 'Vincular producto padre' : 'Vincular producto existente')}
                           </Button>
                         )}
-                        {match.variants?.map((variant) => (
+                        {existingProductActionMode === 'link' && match.variants?.map((variant) => (
                           <Button key={variant.id} type="button" size="sm" variant="outline" className="gap-2" disabled={isResolving} onClick={() => onSelectExisting?.(group, match, variant)}>
                             <Check className="size-4" /> Vincular variante {variant.sku}
                           </Button>
@@ -174,7 +184,7 @@ export function ProductSimilarityAlert({
                   {groupHasExactSkuMatch && !allowExactSkuCreate && <span className="text-right text-[11px] font-semibold text-warning dark:text-warning">SKU exacto: usa el existente o cambia el SKU para crear uno nuevo</span>}
                   <Button type="button" size="sm" variant="outline" className="gap-2 border-warning/50 text-warning hover:bg-warning hover:text-warning-foreground dark:text-warning" disabled={resolvingKey === `${group.inputKey}:CREATE_NEW` || (groupHasExactSkuMatch && (!allowExactSkuCreate && !allowExactSkuCreateInput || allowExactSkuCreateInput && !newSkuIsValid))} onClick={() => onCreateNew?.(group, groupHasExactSkuMatch && allowExactSkuCreateInput ? newSku.trim() : undefined)}>
                     {resolvingKey === `${group.inputKey}:CREATE_NEW` ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                    {groupHasExactSkuMatch && !allowExactSkuCreate && !allowExactSkuCreateInput ? 'No se puede duplicar el SKU' : 'Crear como nuevo'}
+                    {groupHasExactSkuMatch && !allowExactSkuCreate && !allowExactSkuCreateInput ? 'No se puede duplicar el SKU' : (createNewActionLabel || 'Crear como nuevo')}
                   </Button>
                   </div>
               )}

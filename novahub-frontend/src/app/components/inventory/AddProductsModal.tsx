@@ -105,7 +105,9 @@ const normalizeSimilarityInputKey = (value: unknown) => String(value ?? '')
 export function AddProductsModal({ open, onOpenChange, categories, warehouses, brands = [], priceLists, onRefresh, onSelectExistingProduct, itemType = 'PRODUCT', presentation = 'dialog' }: AddProductsModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
-  const canViewInventoryCost = canPerform(itemType === 'SERVICE' ? 'INVENTORY_SERVICES' : 'INVENTORY_PRODUCTS', 'viewCost');
+  const catalogPermissionModule = itemType === 'SERVICE' ? 'INVENTORY_SERVICES' : 'INVENTORY_PRODUCTS';
+  const canEditExistingProduct = canPerform(catalogPermissionModule, 'edit');
+  const canViewInventoryCost = canPerform(catalogPermissionModule, 'viewCost');
   const [internalCategories, setInternalCategories] = useState<any[]>([]);
   const [internalWarehouses, setInternalWarehouses] = useState<any[]>([]);
 
@@ -657,14 +659,20 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       completeNotificationAction(actionToken);
       setProductsList([]);
       setDraftProduct({ ...defaultDraft, id: `draft-${Date.now()}`, categoryId: effectiveCategories[0]?.id || '' });
+      setSimilarPendingProducts([]);
+      setSimilarResolutions({});
       setSkuError('');
       onOpenChange(false);
       onRefresh();
     } catch (error: any) {
       const similarMatches = (error?.data as any)?.matches;
       if (error?.code === 'PRODUCT_SIMILAR_MATCH' && Array.isArray(similarMatches) && similarMatches.length > 0) {
+        const pendingProducts = listToSave.slice(successCount);
         setSimilarGroups(similarMatches);
-        toast.warning('Observación: se encontró un producto igual o muy similar. Revisa sus datos antes de continuar.');
+        setSimilarPendingProducts(pendingProducts);
+        setProductsList((current) => current.slice(successCount));
+        setSimilarResolutions({});
+        toast.warning('La API volvió a detectar una posible coincidencia. Tus datos siguen guardados; revisa la coincidencia y confirma si deseas crear el producto.');
       } else {
         toast.error(error?.message || `Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
       }
@@ -781,9 +789,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     <ProductSimilarityAlert
       open={similarGroups.length > 0}
       groups={similarGroups}
-      title="Observación: posible producto existente"
-      description="No se creó el producto. Revisa el registro encontrado y sus nombres, SKU, marca, descripción y atributos antes de continuar para evitar duplicados."
-      selectionHint="Esta selección solo reutiliza el registro existente para continuar; desde este formulario no se modifica su costo ni su stock."
+      title={`Posible coincidencia de ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
+      description={`Este ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'} se parece a uno que ya existe. Compara los datos: puedes editar el existente o, si el código es distinto, confirmar la creación de uno nuevo. Al crear, conservaremos los datos ingresados.`}
+      existingProductActionLabel={catalogItemType === 'SERVICE' ? 'Editar servicio existente' : 'Editar producto existente'}
+      createNewActionLabel={catalogItemType === 'SERVICE' ? 'Crear servicio nuevo' : 'Crear producto nuevo'}
+      existingProductActionMode="edit"
+      canEditExistingProduct={canEditExistingProduct}
+      selectionHint={canEditExistingProduct
+        ? `«Editar ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'} existente» abrirá el registro encontrado para modificarlo.`
+        : `No tienes permiso para editar ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}. Solicita acceso de edición o cambia el código para crear uno nuevo.`}
       onOpenChange={(value) => { if (!value) setSimilarGroups([]); }}
       onSelectExisting={(group, match) => { void resolveSimilarGroup(group, { action: 'USE_EXISTING', match }); }}
       onCreateNew={(group) => { void resolveSimilarGroup(group, { action: 'CREATE_NEW' }); }}
@@ -1161,7 +1175,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
               )}
               
               <div className={`sm:col-span-2 ${isPagePresentation ? 'md:col-span-12 md:row-start-6' : 'md:col-span-8'} flex justify-end`}>
-                <Button data-testid="inventory-product-add-to-list" onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary" disabled={!!skuError || isCheckingAccounting || isSaving}>
+                <Button data-testid="inventory-product-add-to-list" onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary" disabled={isCheckingAccounting || isSaving}>
                   <Plus className="size-3 mr-2" />
                   {isCheckingAccounting ? 'Validando contabilidad...' : 'Agregar a la lista'}
                 </Button>
@@ -1471,7 +1485,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           <Button
             data-testid="inventory-product-save"
             onClick={handleSave} 
-            disabled={isSaving || isCheckingAccounting || (productsList.length === 0 && (!!skuError || !draftProduct.code.trim() || !draftProduct.name.trim()))}
+            disabled={isSaving || isCheckingAccounting || (productsList.length === 0 && (!draftProduct.code.trim() || !draftProduct.name.trim()))}
             className="font-bold bg-primary text-primary-foreground"
           >
             {isSaving ? 'Guardando...' : (productsList.length > 0 ? `Guardar ${productsList.length} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'}` : `Guardar ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`)}
