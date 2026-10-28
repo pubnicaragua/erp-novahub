@@ -214,15 +214,39 @@ async function networkFirstNavigation(request) {
   }
 }
 
+async function fetchForceSalesMap(request) {
+  try {
+    const response = await fetch(request, { cache: 'no-store' });
+    if (!response.ok || !isHtmlResponse(response)) return response;
+
+    const mapDocument = await response.clone().text();
+    if (mapDocument.includes('id="sheet"') && mapDocument.includes('id="map"')) return response;
+
+    return new Response('El documento del mapa comercial no está disponible.', {
+      status: 404,
+      statusText: 'Force Sales map document not found',
+      headers: {
+        'Cache-Control': 'no-store',
+        'Content-Type': 'text/plain; charset=utf-8',
+      },
+    });
+  } catch {
+    return Response.error();
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
-  // The map iframe carries runtime query parameters and Google tiles/scripts
-  // must remain online; never cache that URL or its credential-bearing query.
-  if (url.pathname.includes('dise') && url.pathname.endsWith('.html')) return;
+  // Do not cache the map URL or its credential-bearing query. Reject the SPA
+  // fallback when an old hashed map asset no longer exists after deployment.
+  if (url.pathname.toLowerCase().includes('dise') && url.pathname.toLowerCase().endsWith('.html')) {
+    event.respondWith(fetchForceSalesMap(request));
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(networkFirstNavigation(request));

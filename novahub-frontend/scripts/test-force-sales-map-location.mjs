@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const htmlPath = new URL('../maps/diseñoui_mapas_freelancers.html', import.meta.url);
+const htmlPath = new URL('../public/maps/diseñoui_mapas_freelancers.html', import.meta.url);
 const html = await readFile(htmlPath, 'utf8');
 for (const [index, match] of [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].entries()) {
   const attributes = match[1] || '';

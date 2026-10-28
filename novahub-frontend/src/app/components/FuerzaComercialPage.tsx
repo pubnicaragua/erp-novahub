@@ -5,7 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { subscribeToNotificationEvents } from '../services/notifications.service';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
-import mapUrl from '../../../maps/diseñoui_mapas_freelancers.html?url';
+
+const mapUrl = `${import.meta.env.BASE_URL}maps/diseñoui_mapas_freelancers.html`;
 
 interface ForceSalesMapConfig {
   mapProvider?: string;
@@ -23,6 +24,8 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   const streamStatusRef = useRef<'connected' | 'reconnecting'>('reconnecting');
   const [previousSubModule, setPreviousSubModule] = useState(activeSubModule);
   const [mapFullscreen, setMapFullscreen] = useState(false);
+  const [mapFrameError, setMapFrameError] = useState(false);
+  const [mapFrameLoadVersion, setMapFrameLoadVersion] = useState(0);
   if (previousSubModule !== activeSubModule) {
     setPreviousSubModule(activeSubModule);
     setMapFullscreen(false);
@@ -156,6 +159,14 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     window.visualViewport?.addEventListener('resize', scheduleUiContext, { passive: true });
     window.visualViewport?.addEventListener('scroll', scheduleUiContext, { passive: true });
     const onFrameLoad = () => {
+      if (frame.src === 'about:blank') return;
+      const mapDocument = frame.contentDocument;
+      if (!mapDocument?.getElementById('sheet') || !mapDocument.getElementById('map')) {
+        setMapFrameError(true);
+        frame.src = 'about:blank';
+        return;
+      }
+      setMapFrameError(false);
       scheduleUiContext();
       frame.contentWindow?.postMessage({ source: 'novahub-force-sales', type: 'force-sales-stream-status', status: streamStatusRef.current }, window.location.origin);
       const targetId = pendingProspectTargetRef.current;
@@ -175,7 +186,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
       window.removeEventListener('message', onUiContextRequest);
       frame.removeEventListener('load', onFrameLoad);
     };
-  }, [mapSrc, mapFullscreen, user?.name]);
+  }, [mapSrc, mapFullscreen, mapFrameLoadVersion, user?.name]);
 
   useEffect(() => {
     const onMapMessage = (event: MessageEvent) => {
@@ -208,13 +219,25 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     <section ref={mapSectionRef} className={mapFullscreen ? 'fixed inset-0 z-[100] h-[100dvh] min-h-0 overflow-hidden bg-background' : 'relative h-[calc(100dvh-4rem)] min-h-0 overflow-hidden bg-background'}>
       {mapConfig && <iframe
         ref={iframeRef}
-        key={`${mapProvider}:${mapSearchMode}:${mapConfig?.mapTileUrl || ''}:${mapConfig?.mapGeocoderUrl || ''}`}
+        key={`${mapFrameLoadVersion}:${mapProvider}:${mapSearchMode}:${mapConfig?.mapTileUrl || ''}:${mapConfig?.mapGeocoderUrl || ''}`}
         title="Fuerza Comercial NovaHub"
         src={mapSrc}
         allow="geolocation; fullscreen"
         referrerPolicy="strict-origin-when-cross-origin"
         className="block h-full min-h-0 w-full border-0"
       />}
+      {mapFrameError && <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/95 p-6">
+        <div role="alert" className="max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-xl">
+          <h2 className="text-base font-bold text-foreground">No se pudo cargar el mapa comercial</h2>
+          <p className="mt-2 text-sm text-muted-foreground">El servidor respondió con una página distinta al mapa. Reintenta para volver a cargarlo.</p>
+          <button type="button" onClick={() => {
+            setMapFrameError(false);
+            setMapFrameLoadVersion((version) => version + 1);
+          }} className="mt-4 min-h-10 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            Reintentar mapa
+          </button>
+        </div>
+      </div>}
       <input
         ref={routeImportInputRef}
         type="file"

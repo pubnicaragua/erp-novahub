@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const html = await readFile(new URL('../maps/diseñoui_mapas_freelancers.html', import.meta.url), 'utf8');
+const html = await readFile(new URL('../public/maps/diseñoui_mapas_freelancers.html', import.meta.url), 'utf8');
 const helperSource = html.match(/<script\s+id="nova-force-sales-offline-identity-core">([\s\S]*?)<\/script>/i)?.[1];
 
 assert.ok(helperSource, 'El mapa debe exponer helpers verificables para aislar la cola offline por identidad');
