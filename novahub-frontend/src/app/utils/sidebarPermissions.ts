@@ -68,6 +68,12 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'HOTEL_ROOMS', label: 'Habitaciones', parent: 'HOTEL' },
   { id: 'HOTEL_RESERVATIONS', label: 'Reservas y estadías', parent: 'HOTEL' },
 
+  // Fuerza Comercial
+  { id: 'FORCE_SALES_MAP', label: 'Mapa comercial', parent: 'FORCE_SALES' },
+  { id: 'FORCE_SALES_KANBAN', label: 'Kanban comercial', parent: 'FORCE_SALES' },
+  { id: 'FORCE_SALES_HISTORY', label: 'Historial de visitas', parent: 'FORCE_SALES' },
+  { id: 'FORCE_SALES_REPORTS', label: 'Reportes de gestores', parent: 'FORCE_SALES' },
+
   // Compras
   { id: 'PURCHASES_REQUESTS', label: 'Solicitudes', parent: 'PURCHASES' },
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', parent: 'PURCHASES' },
@@ -245,6 +251,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'fuerza-comercial': ['FORCE_SALES'],
   'fuerza-comercial-kanban': ['FORCE_SALES'],
   'fuerza-comercial-historial': ['FORCE_SALES'],
+  'fuerza-comercial-reportes': ['FORCE_SALES'],
   'facturacion-caja': ['SALES', 'RETAIL_POS', 'SALES_POS', 'CAJA'],
   'control-caja': ['SALES', 'RETAIL_CASH_CONTROL', 'RETAIL_POS', 'SALES_POS', 'CAJA'],
   'listas-precios': ['SALES_PRICE_LISTS'],
@@ -384,6 +391,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'reportes-clientes': ['REPORTS_CLIENTS'],
   'reportes-proveedores': ['REPORTS_PROVIDERS'],
   'reportes-rrhh': ['REPORTS_HR'],
+  'reportes-gestores-cobro': ['FORCE_SALES'],
 
   'solicitudes-financiamiento': ['FINANCING_APPLICATIONS'],
   'calculadora-financiamiento': ['FINANCING_CALCULATOR'],
@@ -460,6 +468,7 @@ export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
   'fuerza-comercial': ['FORCE_SALES'],
   'fuerza-comercial-kanban': ['FORCE_SALES'],
   'fuerza-comercial-historial': ['FORCE_SALES'],
+  'fuerza-comercial-reportes': ['FORCE_SALES'],
   'cuentas-cobrar': ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES'],
   'cuentas-pagar': ['FINANCIAL_PAYABLES', 'FINANCIAL_EXPENSES'],
   'caja-bancos': ['FINANCIAL_BANK', 'FINANCIAL_ACCOUNTS'],

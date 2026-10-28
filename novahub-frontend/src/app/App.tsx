@@ -66,6 +66,7 @@ const ActividadesPage = lazyWithChunkRecovery(() => import('./components/Activid
 const AsanaPage = lazyWithChunkRecovery(() => import('./components/AsanaPage').then(m => ({ default: m.AsanaPage })), 'asana');
 const ProyectosPage = lazyWithChunkRecovery(() => import('./components/ProyectosPage').then(m => ({ default: m.ProyectosPage })), 'proyectos');
 const FuerzaComercialPage = lazyWithChunkRecovery(() => import('./components/FuerzaComercialPage').then(m => ({ default: m.FuerzaComercialPage })), 'fuerza-comercial');
+const ForceSalesReportsView = lazyWithChunkRecovery(() => import('./components/force-sales/ForceSalesReportsView').then(m => ({ default: m.ForceSalesReportsView })), 'force-sales-reports');
 const TicketsPage = lazyWithChunkRecovery(() => import('./components/TicketsPage').then(m => ({ default: m.TicketsPage })), 'tickets');
 const DocumentosPage = lazyWithChunkRecovery(() => import('./components/DocumentosPage').then(m => ({ default: m.DocumentosPage })), 'documentos');
 const NotificacionesPage = lazyWithChunkRecovery(() => import('./components/NotificacionesPage').then(m => ({ default: m.NotificacionesPage })), 'notificaciones');
@@ -526,12 +527,16 @@ function DashboardLayout() {
       case 'actividades': return <ActividadesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'asana': return <ModuleErrorBoundary moduleName="Asana"><AsanaPage /></ModuleErrorBoundary>;
       case 'proyectos': return <ModuleErrorBoundary moduleName="Proyectos"><ProyectosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
-      case 'fuerza-comercial': return <FuerzaComercialPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
+      case 'fuerza-comercial': return activeSubModule === 'fuerza-comercial-reportes'
+        ? <ModuleErrorBoundary moduleName="Reportes de gestores"><ForceSalesReportsView /></ModuleErrorBoundary>
+        : <FuerzaComercialPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'tickets': return <TicketsPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'documentos': return <DocumentosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'transferencias': return <InventarioPage activeSubModule="transferencias" isSidebarCollapsed={isCollapsed} />;
-      case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
+      case 'reportes': return activeSubModule === 'reportes-gestores-cobro'
+        ? <ModuleErrorBoundary moduleName="Reportes de gestores"><ForceSalesReportsView /></ModuleErrorBoundary>
+        : <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} onTabChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'auditoria': return <ModuleErrorBoundary moduleName="NovaHub Audit"><AuditWorkspacePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView initialTab={activeSubModule === 'plan-sucursal' ? 'module-requests' : activeSubModule} onTabChange={setActiveSubModule} /> : <SuscripcionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;

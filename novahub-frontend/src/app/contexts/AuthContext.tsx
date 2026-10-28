@@ -1327,6 +1327,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return approvalActionValue(permission, action, upperModule);
     }
     const forceSalesActions = [
+      'export',
       'importProspects', 'updateProspect', 'changeStage', 'registerVisit', 'discardProspect', 'assignProspect',
       'attachEvidence', 'manageConsent', 'createRoute', 'editRoute', 'assignRoute', 'changeRouteStatus',
       'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation',

@@ -194,6 +194,7 @@ const menuItems: MenuItem[] = [
       { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
       { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
       { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: <History className="size-4" /> },
+      { id: 'fuerza-comercial-reportes', label: 'Reportes de gestores', icon: <BarChart3 className="size-4" /> },
     ],
   },
   {
@@ -302,6 +303,7 @@ const menuItems: MenuItem[] = [
       { id: 'reportes-clientes', label: 'Clientes', icon: <Users className="size-4" /> },
       { id: 'reportes-proveedores', label: 'Proveedores', icon: <Truck className="size-4" /> },
       { id: 'reportes-rrhh', label: 'Recursos Humanos', icon: <Users className="size-4" /> },
+      { id: 'reportes-gestores-cobro', label: 'Gestores de cobro', icon: <MapPinned className="size-4" /> },
     ]
   },
   {
@@ -492,6 +494,7 @@ const platformMenuItems: MenuItem[] = [
       { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
       { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
       { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: <History className="size-4" /> },
+      { id: 'fuerza-comercial-reportes', label: 'Reportes de gestores', icon: <BarChart3 className="size-4" /> },
     ],
   },
   {

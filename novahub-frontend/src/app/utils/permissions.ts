@@ -308,7 +308,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   ASANA_TASKS: ['read', 'create', 'edit', 'archive', 'export'],
   PROJECTS: ['read', 'create', 'edit', 'export'],
   FORCE_SALES: [
-    'read', 'create', 'edit', 'delete', 'importProspects', 'updateProspect', 'changeStage', 'registerVisit',
+    'read', 'create', 'edit', 'delete', 'export', 'importProspects', 'updateProspect', 'changeStage', 'registerVisit',
     'discardProspect', 'assignProspect', 'attachEvidence', 'manageConsent', 'send', 'createRoute',
     'editRoute', 'assignRoute', 'changeRouteStatus', 'completeRouteStop', 'updatePresence', 'hidePresence',
     'configureLocation',
