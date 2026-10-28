@@ -8,7 +8,7 @@ import { Combobox } from '@/app/components/ui/Combobox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { Badge } from '@/app/components/ui/badge';
 import { ProductImagePicker } from '../ui/ProductImage';
-import { ArrowLeft, Trash2, Plus, Package, X, Tag, Check, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Trash2, Plus, Package, X, Tag, Check, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { inventoryService } from '@/app/services/inventario.service';
@@ -16,7 +16,6 @@ import { storageService } from '@/app/services/storage.service';
 import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
-import { ProductSimilarityAlert } from './ProductSimilarityAlert';
 import type { SimilarProductGroup, SimilarProductMatch } from '@/app/services/inventario.service';
 import { priceListsService, type PriceList } from '@/app/services/price-lists.service';
 import { resolveStandardProductPriceLists } from '@/app/utils/product-price-lists';
@@ -102,6 +101,100 @@ const normalizeSimilarityInputKey = (value: unknown) => String(value ?? '')
   .replace(/\s+/g, ' ')
   .toLowerCase();
 
+interface ProductSimilarityDecisionPanelProps {
+  groups: SimilarProductGroup[];
+  itemType: 'PRODUCT' | 'SERVICE';
+  canEditExistingProduct: boolean;
+  onSelectExisting: (group: SimilarProductGroup, match: SimilarProductMatch) => void;
+  onCreateNew: (group: SimilarProductGroup) => void;
+}
+
+function ProductSimilarityDecisionPanel({ groups, itemType, canEditExistingProduct, onSelectExisting, onCreateNew }: ProductSimilarityDecisionPanelProps) {
+  const itemLabel = itemType === 'SERVICE' ? 'servicio' : 'producto';
+
+  return (
+    <section
+      role="alert"
+      aria-live="polite"
+      aria-label={`Revisión de posible ${itemLabel} duplicado`}
+      data-testid="inventory-product-similarity-decision"
+      className="space-y-3 rounded-xl border border-warning/40 bg-warning/[0.04] p-3 sm:p-4"
+    >
+      <header className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden="true" />
+        <div className="min-w-0">
+          <h3 className="font-bold text-foreground">Este {itemLabel} podría estar duplicado</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Compara las coincidencias y elige editar el registro existente o confirmar la creación. Los datos escritos siguen en este formulario.
+          </p>
+        </div>
+      </header>
+
+      {groups.map((group) => {
+        const hasExactSkuMatch = group.matches.some((match) => (match.reasons || []).includes('SKU'));
+        return (
+          <article key={group.inputKey} className="space-y-3 rounded-lg border border-warning/30 bg-background p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Código que estás registrando</p>
+                <p className="mt-1 break-all font-mono text-sm font-bold text-foreground">{group.inputKey || 'Sin código'}</p>
+              </div>
+              <Badge variant="outline" className="border-warning/50 text-warning">
+                {group.matches.length} coincidencia{group.matches.length === 1 ? '' : 's'} posible{group.matches.length === 1 ? '' : 's'}
+              </Badge>
+            </div>
+
+            {group.matches.map((match) => (
+              <div key={`${group.inputKey}:${match.id}`} className="flex flex-col gap-3 rounded-lg border border-border/60 p-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <p className="break-words font-semibold text-foreground">{match.name || 'Producto sin nombre'}</p>
+                  <p className="break-all font-mono text-xs text-muted-foreground">Código/SKU: {match.sku || match.code || 'Sin código'}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Coincidencia por: {(match.reasons || []).join(', ') || 'datos del producto'}
+                  </p>
+                  {(match.brand || match.category) && (
+                    <p className="text-xs text-muted-foreground">
+                      {match.brand ? `Marca: ${match.brand}` : ''}{match.brand && match.category ? ' · ' : ''}{match.category ? `Categoría: ${match.category}` : ''}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 gap-2"
+                  disabled={!canEditExistingProduct}
+                  title={!canEditExistingProduct ? `No tienes permiso para editar ${itemLabel === 'servicio' ? 'servicios' : 'productos'}.` : undefined}
+                  onClick={() => onSelectExisting(group, match)}
+                >
+                  <Check className="size-4" /> Editar {itemLabel} existente
+                </Button>
+              </div>
+            ))}
+
+            {hasExactSkuMatch ? (
+              <p className="rounded-md border border-warning/30 bg-warning/[0.05] px-3 py-2 text-sm font-medium text-warning">
+                Ese código ya está registrado y debe ser único. Cámbialo para crear un {itemLabel} nuevo o edita el existente.
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+                <p className="text-xs text-muted-foreground">Si son registros distintos, puedes confirmar la creación con el código actual.</p>
+                <Button type="button" size="sm" className="gap-2" onClick={() => onCreateNew(group)}>
+                  <Plus className="size-4" /> Crear {itemLabel} nuevo
+                </Button>
+              </div>
+            )}
+
+            {!canEditExistingProduct && (
+              <p className="text-xs text-muted-foreground">Tu usuario no tiene permiso para editar este registro.</p>
+            )}
+          </article>
+        );
+      })}
+    </section>
+  );
+}
+
 export function AddProductsModal({ open, onOpenChange, categories, warehouses, brands = [], priceLists, onRefresh, onSelectExistingProduct, itemType = 'PRODUCT', presentation = 'dialog' }: AddProductsModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
@@ -173,13 +266,22 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const [similarGroups, setSimilarGroups] = useState<SimilarProductGroup[]>([]);
   const [similarPendingProducts, setSimilarPendingProducts] = useState<any[]>([]);
   const [similarResolutions, setSimilarResolutions] = useState<Record<string, { action: 'USE_EXISTING' | 'CREATE_NEW'; match?: SimilarProductMatch }>>({});
+  const similarityDecisionPanelRef = useRef<HTMLDivElement>(null);
   const [attributesStepExpanded, setAttributesStepExpanded] = useState(true);
   const [valuesStepExpanded, setValuesStepExpanded] = useState(true);
   const [expandedAttributeId, setExpandedAttributeId] = useState<string | null>(null);
   const [variantsExpanded, setVariantsExpanded] = useState(true);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const skuValidationRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    if (similarGroups.length > 0) {
+      similarityDecisionPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [similarGroups.length]);
 
   const validateSkuDebounced = (code: string) => {
+    const requestId = ++skuValidationRequestIdRef.current;
     if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
     if (!code.trim()) {
       setSkuError('');
@@ -188,6 +290,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     debounceTimeoutRef.current = setTimeout(async () => {
       try {
         const response = await inventoryService.checkProductCode(code);
+        if (requestId !== skuValidationRequestIdRef.current) return;
         const exists = response?.exists;
         setSkuError(exists ? 'Observación: este SKU ya está utilizado' : '');
       } catch (e: any) {
@@ -435,7 +538,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const handleUpdateDraft = (field: string, value: any) => {
     setDraftProduct((prev: any) => ({ ...prev, [field]: value }));
     if (field === 'code') {
+      setSkuError('');
       validateSkuDebounced(value as string);
+      // Al corregir el código, vuelve a validar con los datos actuales al guardar.
+      // El panel anterior corresponde al SKU previo y ya no debe bloquear la decisión.
+      if (productsList.length === 0 && similarGroups.length > 0) {
+        setSimilarGroups([]);
+        setSimilarPendingProducts([]);
+        setSimilarResolutions({});
+      }
     }
   };
 
@@ -696,9 +807,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         toast.error('Ingresa al menos un precio de venta válido');
         return;
       }
-      if (skuError) {
-        toast.info('El SKU ya está utilizado; se abrirá una decisión para seleccionar el producto existente o revisar el código.');
-      }
       if (draftProduct.isVariable) {
         if (draftProduct.linkedAttributes.length === 0) {
           toast.error('Selecciona al menos un atributo del catálogo');
@@ -784,23 +892,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
 
   return (
     <>
-    <ProductSimilarityAlert
-      open={similarGroups.length > 0}
-      groups={similarGroups}
-      layer="above"
-      title={`Posible coincidencia de ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
-      description={`Este ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'} se parece a uno que ya existe. Compara los datos: puedes editar el existente o, si el código es distinto, confirmar la creación de uno nuevo. Al crear, conservaremos los datos ingresados.`}
-      existingProductActionLabel={catalogItemType === 'SERVICE' ? 'Editar servicio existente' : 'Editar producto existente'}
-      createNewActionLabel={catalogItemType === 'SERVICE' ? 'Crear servicio nuevo' : 'Crear producto nuevo'}
-      existingProductActionMode="edit"
-      canEditExistingProduct={canEditExistingProduct}
-      selectionHint={canEditExistingProduct
-        ? `«Editar ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'} existente» abrirá el registro encontrado para modificarlo.`
-        : `No tienes permiso para editar ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}. Solicita acceso de edición o cambia el código para crear uno nuevo.`}
-      onOpenChange={(value) => { if (!value) setSimilarGroups([]); }}
-      onSelectExisting={(group, match) => { void resolveSimilarGroup(group, { action: 'USE_EXISTING', match }); }}
-      onCreateNew={(group) => { void resolveSimilarGroup(group, { action: 'CREATE_NEW' }); }}
-    />
     <Dialog modal={false} open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
       <DialogContent className={presentation === 'page'
         ? '!fixed !inset-0 !top-0 !left-0 !z-[60] !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !gap-0 !overflow-hidden !rounded-none !border-0 !bg-background !p-4 !shadow-none !backdrop-blur-none sm:!p-6 lg:!p-10'
@@ -833,6 +924,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         </DialogHeader>
 
         <div className={isPagePresentation ? 'min-h-0 flex-1 overflow-auto flex flex-col gap-3 p-0 xl:mx-auto xl:w-full xl:max-w-[1800px]' : 'flex-1 overflow-auto flex flex-col gap-6 p-1'} data-tour="inventory-product-add-data">
+          {similarGroups.length > 0 && (
+            <div ref={similarityDecisionPanelRef}>
+              <ProductSimilarityDecisionPanel
+                groups={similarGroups}
+                itemType={catalogItemType}
+                canEditExistingProduct={canEditExistingProduct}
+                onSelectExisting={(group, match) => { void resolveSimilarGroup(group, { action: 'USE_EXISTING', match }); }}
+                onCreateNew={(group) => { void resolveSimilarGroup(group, { action: 'CREATE_NEW' }); }}
+              />
+            </div>
+          )}
           
           {/* FORMULARIO SUPERIOR */}
           <div className={isPagePresentation
@@ -859,7 +961,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     className={`h-8 text-xs font-mono w-full ${skuError ? 'border-warning focus-visible:ring-warning' : ''}`}
                     placeholder="SKU-001" 
                   />
-                  {skuError && <span className="text-[9px] text-warning dark:text-warning font-bold uppercase tracking-wider leading-tight">{skuError}</span>}
+                  {skuError && <span className="text-[9px] text-warning dark:text-warning font-bold uppercase tracking-wider leading-tight">Este código ya está registrado y debe ser único. Cámbialo para crear un registro nuevo.</span>}
                 </div>
               </div>
               <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-4 md:row-start-1 md:col-span-9' : 'sm:col-span-2 md:col-start-3 md:row-start-1 md:col-span-3'}>
