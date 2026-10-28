@@ -197,13 +197,32 @@ test('an incident remains queued if reporting throws during bootstrap', () => {
 });
 
 test('a missing deployment asset never falls through to the SPA HTML response', () => {
-  const appRewrite = vercelConfig.rewrites?.find((route) => route.destination === '/index.html');
-  const oldCatchAllAssetCache = vercelConfig.headers.some((rule) => rule.source === '/assets/(.*)');
+  const routes = vercelConfig.routes || [];
+  const appRewrite = routes.find((route) => route.dest === '/index.html');
+  const filesystemIndex = routes.findIndex((route) => route.handle === 'filesystem');
+  const missingAssetIndex = routes.findIndex((route) =>
+    route.status === 404 && route.headers?.['Cache-Control'] === 'no-store',
+  );
+  const indexHeaders = routes.find((route) => route.src?.startsWith('/index\\.html'));
+  const serviceWorkerHeaders = routes.find((route) => route.src?.startsWith('/sw\\.js'));
 
-  assert.equal(oldCatchAllAssetCache, false);
+  assert.ok(indexHeaders?.continue);
+  assert.match(indexHeaders?.headers?.['Cache-Control'] || '', /no-store/);
+  assert.ok(serviceWorkerHeaders?.continue);
+  assert.match(serviceWorkerHeaders?.headers?.['Cache-Control'] || '', /no-store/);
+  assert.ok(filesystemIndex >= 0);
+  assert.ok(missingAssetIndex > filesystemIndex);
+  assert.ok(routes.indexOf(appRewrite) > missingAssetIndex);
   assert.ok(appRewrite?.has?.some((rule) => rule.key === 'accept' && rule.value.includes('text/html')));
-  const shouldUseSpaFallback = new RegExp(`^${appRewrite.source}$`);
+  const shouldReturnMissingAsset404 = new RegExp(`^${routes[missingAssetIndex].src}$`);
+  assert.equal(shouldReturnMissingAsset404.test('/assets/VentasPage-missing.js'), true);
+  assert.equal(shouldReturnMissingAsset404.test('/maps/missing-map.html'), true);
+  assert.equal(shouldReturnMissingAsset404.test('/downloads/missing.pdf'), true);
+  assert.equal(shouldReturnMissingAsset404.test('/ventas'), false);
+  const shouldUseSpaFallback = new RegExp(`^${appRewrite.src}$`);
   assert.equal(shouldUseSpaFallback.test('/assets/VentasPage-missing.js'), false);
+  assert.equal(shouldUseSpaFallback.test('/maps/missing-map.html'), false);
+  assert.equal(shouldUseSpaFallback.test('/downloads/missing.pdf'), false);
   assert.equal(shouldUseSpaFallback.test('/ventas'), true);
 });
 

@@ -1,34 +1,53 @@
 {
-  "headers": [
+  "routes": [
     {
-      "source": "/index.html",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
-      ]
+      "src": "/index\\.html$",
+      "headers": {
+        "Cache-Control": "no-store, no-cache, must-revalidate"
+      },
+      "continue": true
     },
     {
-      "source": "/sw.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
-      ]
+      "src": "/sw\\.js$",
+      "headers": {
+        "Cache-Control": "no-cache, no-store, must-revalidate"
+      },
+      "continue": true
     },
     {
-      "source": "/(.*)",
+      "src": "/((?!assets/|maps/|pdf-template-packages/|.*\\.[^/]+$).*)",
       "has": [
-        { "type": "header", "key": "accept", "value": ".*text/html.*" }
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/html.*"
+        }
       ],
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
-      ]
-    }
-  ],
-  "rewrites": [
+      "headers": {
+        "Cache-Control": "no-store, no-cache, must-revalidate"
+      },
+      "continue": true
+    },
     {
-      "source": "/((?!assets/|maps/|pdf-template-packages/|sw\\.js$|manifest\\.webmanifest$|.*\\.(?:js|mjs|css|json|map|png|jpe?g|svg|webp|ico|woff2?|ttf|otf)$).*)",
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(?:assets/.*|maps/.*|pdf-template-packages/.*|.*\\.[^/]+$)",
+      "status": 404,
+      "headers": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "src": "/((?!assets/|maps/|pdf-template-packages/|.*\\.[^/]+$).*)",
       "has": [
-        { "type": "header", "key": "accept", "value": ".*text/html.*" }
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/html.*"
+        }
       ],
-      "destination": "/index.html"
+      "dest": "/index.html"
     }
   ]
 }

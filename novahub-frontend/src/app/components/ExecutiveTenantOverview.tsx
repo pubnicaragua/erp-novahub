@@ -58,6 +58,7 @@ import { ExportMenu } from './ui/ExportMenu';
 import { capturePdfChartSnapshot, yieldToBrowser } from '../utils/pdf-template-renderer';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { getBase64Image } from '../utils/reportExportUtils';
+import { reportChunkLoadIncident } from '../utils/chunk-telemetry';
 import salesKpiAsset from '../../assets/dashboard/VentasPagadas.png';
 import expensesKpiAsset from '../../assets/dashboard/GastosRegistrados.png';
 import invoicesKpiAsset from '../../assets/dashboard/FacturasPagadas.png';
@@ -72,6 +73,7 @@ const ProductDetailDrawer = lazy(() =>
   loadModuleWithChunkRecovery(
     () => import('./inventory/ProductDetailDrawer').then((module) => ({ default: module.ProductDetailDrawer })),
     'executive-product-detail-drawer',
+    reportChunkLoadIncident,
   ),
 );
 
