@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, Clock3, Download, FileSpreadsheet, FileText, MapPinned, RefreshCw, Route, Search, Users, XCircle } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Clock3, FileText, MapPinned, RefreshCw, Route, Search, Users, XCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { api, getApiErrorMessage } from '../../services/api';
@@ -12,6 +12,7 @@ import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { ExportMenu } from '../ui/ExportMenu';
 import { Input } from '../ui/input';
 
 type ReportUser = { id: string | null; name?: string | null; email?: string | null; avatar?: string | null; role?: string | null } | null;
@@ -80,6 +81,10 @@ function reportRows(report: ForceSalesReport) {
   ]);
 }
 
+function workbookRows(headers: string[], rows: Array<Array<string | number>>) {
+  return rows.map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
+}
+
 export function ForceSalesReportsView() {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -119,6 +124,19 @@ export function ForceSalesReportsView() {
 
   const managerOptions = useMemo(() => report.managers.map((item) => item.manager).filter((manager): manager is NonNullable<ReportUser> => Boolean(manager?.id)), [report.managers]);
   const headers = ['Fecha y hora', 'Actividad', 'Gestor', 'Ruta', 'Cliente', 'Teléfono', 'Dirección', 'Ubicación', 'Coordenadas', 'Abrir mapa', 'Estado', 'Evidencia', 'Archivo', 'Notas'];
+  const summaryHeaders = ['Indicador', 'Valor'];
+  const summaryRows: Array<Array<string | number>> = [
+    ['Actividades', report.summary.activities],
+    ['Clientes registrados', report.summary.registeredProspects],
+    ['Visitas completadas', report.summary.completedVisits],
+    ['Rutas', report.summary.routes],
+    ['Evidencias', report.summary.evidence],
+  ];
+  const managerHeaders = ['Gestor', 'Actividades', 'Visitas completadas', 'Clientes registrados', 'Rutas', 'Evidencias'];
+  const managerRows: Array<Array<string | number>> = report.managers.map((item) => [personName(item.manager), item.activities, item.visits, item.registered, item.routes, item.evidence]);
+  const routeHeaders = ['Ruta', 'Gestor', 'Fecha', 'Estado', 'Paradas', 'Completadas', 'Completadas en período'];
+  const routeRows: Array<Array<string | number>> = report.routes.map((route) => [route.name, personName(route.gestor), route.scheduledForLocal || displayDate(route.scheduledFor), statusLabel(route.status), route.totalStops, route.completedStops, route.completedInPeriod]);
+  const detailRows = reportRows(report);
   const filtersLabel = `Del ${from} al ${to} · ${hourFrom || hourTo ? `${hourFrom || '00:00'}–${hourTo || '23:59'}` : 'todo el día (00:00–23:59)'}`;
 
   const exportExcel = () => {
@@ -127,10 +145,10 @@ export function ForceSalesReportsView() {
       fileName: buildDateFilteredDownloadFileName(['reporte_gestores_cobro'], 'xlsx', from, to),
       filters: { Periodo: filtersLabel, 'Zona horaria': TIME_ZONE, Gestor: assignedToId ? personName(managerOptions.find((manager) => manager.id === assignedToId) || null) : 'Todos', Ruta: routeId ? report.routes.find((route) => route.id === routeId)?.name || routeId : 'Todas' },
       sheets: [
-        { name: 'Resumen', rows: [{ Indicador: 'Actividades', Valor: report.summary.activities }, { Indicador: 'Clientes registrados', Valor: report.summary.registeredProspects }, { Indicador: 'Visitas completadas', Valor: report.summary.completedVisits }, { Indicador: 'Rutas', Valor: report.summary.routes }, { Indicador: 'Evidencias', Valor: report.summary.evidence }] },
-        { name: 'Por gestor', rows: report.managers.map((item) => ({ Gestor: personName(item.manager), Actividades: item.activities, 'Visitas completadas': item.visits, 'Clientes registrados': item.registered, Rutas: item.routes, Evidencias: item.evidence })) },
-        { name: 'Rutas', rows: report.routes.map((route) => ({ Ruta: route.name, Gestor: personName(route.gestor), Fecha: route.scheduledForLocal || displayDate(route.scheduledFor), Estado: statusLabel(route.status), Paradas: route.totalStops, Completadas: route.completedStops, 'Completadas en período': route.completedInPeriod })) },
-        { name: 'Detalle', rows: [headers, ...reportRows(report)] },
+        { name: 'Resumen', rows: workbookRows(summaryHeaders, summaryRows) },
+        { name: 'Por gestor', rows: workbookRows(managerHeaders, managerRows) },
+        { name: 'Rutas', rows: workbookRows(routeHeaders, routeRows) },
+        { name: 'Detalle', rows: [headers, ...detailRows] },
       ],
     });
     toast.success('Reporte Excel descargado.');
@@ -148,10 +166,12 @@ export function ForceSalesReportsView() {
         format,
         fileName: buildDateFilteredPdfFileName(['reporte_gestores_cobro'], format, from, to),
         sections: [
-          { id: 'summary', title: 'Resumen operativo', headers: ['Indicador', 'Valor'], rows: [['Actividades', report.summary.activities], ['Clientes registrados', report.summary.registeredProspects], ['Visitas completadas', report.summary.completedVisits], ['Rutas', report.summary.routes], ['Evidencias', report.summary.evidence]] },
-          { id: 'managers', title: 'Actividad por gestor', headers: ['Gestor', 'Actividades', 'Visitas', 'Clientes registrados', 'Rutas', 'Evidencias'], rows: report.managers.map((item) => [personName(item.manager), item.activities, item.visits, item.registered, item.routes, item.evidence]) },
-          { id: 'routes', title: 'Rutas del período', headers: ['Ruta', 'Gestor', 'Fecha', 'Estado', 'Paradas', 'Completadas', 'Completadas en período'], rows: report.routes.map((route) => [route.name, personName(route.gestor), route.scheduledForLocal || displayDate(route.scheduledFor), statusLabel(route.status), route.totalStops, route.completedStops, route.completedInPeriod]) },
-          { id: 'detail', title: 'Detalle de actividades', headers: headers.slice(0, 12), rows: reportRows(report).map((row) => row.slice(0, 12)) },
+          { id: 'summary', title: 'Resumen operativo', headers: summaryHeaders, rows: summaryRows },
+          { id: 'managers', title: 'Actividad por gestor', headers: managerHeaders, rows: managerRows },
+          { id: 'routes', title: 'Rutas del período', headers: routeHeaders, rows: routeRows },
+          { id: 'detail-activity', title: 'Detalle de actividades', headers: [headers[0], headers[1], headers[2], headers[3], headers[4], headers[5], headers[10]], rows: detailRows.map((row) => [row[0], row[1], row[2], row[3], row[4], row[5], row[10]]) },
+          { id: 'detail-location', title: 'Dirección y ubicación', headers: [headers[0], headers[4], headers[6], headers[7], headers[8]], rows: detailRows.map((row) => [row[0], row[4], row[6], row[7], row[8]]) },
+          { id: 'detail-evidence', title: 'Mapas, evidencias y notas', headers: [headers[0], headers[4], headers[9], headers[11], headers[12], headers[13]], rows: detailRows.map((row) => [row[0], row[4], row[9], row[11], row[12], row[13]]) },
         ],
       });
       toast.success('PDF descargado.');
@@ -171,7 +191,7 @@ export function ForceSalesReportsView() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-xl" onClick={() => void loadReport()} disabled={loading}><RefreshCw className={loading ? 'size-4 animate-spin' : 'size-4'} /> Actualizar reporte</Button>
-            {canExport && <Button className="rounded-xl" onClick={exportExcel} disabled={loading || !report.rows.length}><FileSpreadsheet className="size-4" /> Excel</Button>}
+            {canExport && <ExportMenu onPdf={(format) => void exportPdf(format)} onExcel={exportExcel} disabled={loading || !report.rows.length} excelDescription="Resumen, gestores, rutas y detalle" />}
           </div>
         </div>
 
@@ -194,7 +214,7 @@ export function ForceSalesReportsView() {
           ].map(([label, value, Icon]) => <Card key={String(label)} className="rounded-2xl border-border/60"><CardContent className="flex items-center gap-3 p-4"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><Icon className="size-5" /></div><div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className="text-2xl font-black tabular-nums">{loading ? '…' : value}</p></div></CardContent></Card>)}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-sm"><span><span className="font-black">Período:</span> {filtersLabel} · hora local de Nicaragua</span><div className="flex items-center gap-2">{canExport ? <><Button variant="outline" size="sm" className="rounded-xl" onClick={() => void exportPdf('A4')} disabled={loading || !report.rows.length}><Download className="size-3.5" /> PDF</Button><Button variant="outline" size="sm" className="rounded-xl" onClick={exportExcel} disabled={loading || !report.rows.length}><FileSpreadsheet className="size-3.5" /> Excel</Button></> : <Badge variant="outline">Exportación no habilitada para este rol</Badge>}</div></div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-sm"><span><span className="font-black">Período:</span> {filtersLabel} · hora local de Nicaragua</span>{!canExport && <Badge variant="outline">Exportación no habilitada para este rol</Badge>}</div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <Card className="min-w-0 rounded-3xl border-border/60 shadow-sm"><CardHeader className="border-b border-border/50 pb-4"><CardTitle className="flex items-center gap-2 text-base font-black"><FileText className="size-5 text-primary" /> Detalle de actividades <Badge variant="secondary" className="ml-auto">{report.rows.length} registros</Badge></CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-left text-xs"><thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground"><tr>{['Fecha y hora', 'Actividad', 'Gestor', 'Ruta', 'Cliente', 'Ubicación', 'Estado', 'Evidencia'].map((header) => <th key={header} className="px-4 py-3 font-black">{header}</th>)}</tr></thead><tbody className="divide-y divide-border/60">{loading ? <tr><td colSpan={8} className="p-10 text-center text-muted-foreground">Generando reporte…</td></tr> : report.rows.length ? report.rows.map((row) => <tr key={row.id} className="align-top hover:bg-muted/20"><td className="whitespace-nowrap px-4 py-3 font-semibold">{row.occurredAtLocal || displayDate(row.occurredAt)}</td><td className="px-4 py-3"><Badge variant={row.activityType === 'Visita completada' ? 'default' : 'secondary'}>{row.activityType}</Badge></td><td className="px-4 py-3 font-semibold">{personName(row.gestor)}</td><td className="px-4 py-3">{row.route?.name || 'Sin ruta'}</td><td className="px-4 py-3"><p className="font-bold">{row.prospect.name}</p><p className="text-muted-foreground">{row.prospect.phone || row.prospect.category || '—'}</p></td><td className="max-w-[260px] px-4 py-3">{row.location.googleMapsUrl ? <a href={row.location.googleMapsUrl} target="_blank" rel="noreferrer" className="font-semibold text-primary underline-offset-2 hover:underline">{row.location.address || 'Abrir en Google Maps'}</a> : row.location.address || 'Sin ubicación'}</td><td className="px-4 py-3">{statusLabel(row.status)}</td><td className="px-4 py-3">{row.evidence?.url ? <a href={row.evidence.url} target="_blank" rel="noreferrer" className="font-semibold text-primary underline-offset-2 hover:underline">{row.evidence.name || 'Abrir evidencia'}</a> : <span className="text-muted-foreground">Sin evidencia</span>}</td></tr>) : <tr><td colSpan={8} className="p-12 text-center"><XCircle className="mx-auto mb-2 size-6 text-muted-foreground" /><p className="font-semibold">No hay actividad para los filtros seleccionados.</p><p className="mt-1 text-muted-foreground">Amplía el rango o revisa el gestor y la ruta.</p></td></tr>}</tbody></table></div></CardContent></Card>
