@@ -322,6 +322,148 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
 .route-vicinity-marker{cursor:pointer}
 .route-vicinity-marker-excluded{border-color:var(--nova-ui-border,#dce8e3)!important;background:var(--nova-ui-muted,#edf5f1)!important;color:var(--nova-ui-muted-foreground,#6c7c77)!important;box-shadow:0 0 0 4px color-mix(in srgb,var(--nova-ui-muted-foreground,#6c7c77) 18%,transparent),0 5px 14px rgba(36,55,47,.2)!important;opacity:.76}
 </style>
+<style>
+@media(min-width:821px) and (max-width:1439px){:root{--sheet:360px}}
+@media(min-width:1440px){:root{--sheet:420px}}
+body.embedded-view .sidebar{background:var(--nova-ui-card);border-right:1px solid var(--nova-ui-border);box-shadow:0 8px 24px rgba(19,45,37,.08)}
+body.embedded-view .brand{display:grid;gap:0;padding:10px 14px 9px;background:var(--nova-ui-card);border-bottom:1px solid var(--nova-ui-border);color:var(--nova-ui-foreground)}
+body.embedded-view .brand .topline,body.embedded-view .brand p{display:none}
+body.embedded-view .brand h1{margin:0;color:var(--nova-ui-foreground);font-size:16px;line-height:1.2;letter-spacing:-.25px}
+body.embedded-view .panel-location{display:inline-flex;align-items:center;gap:8px;width:max-content;min-width:128px;min-height:30px;margin-top:6px;padding:4px 9px;border:0;border-radius:10px;background:var(--nova-ui-muted);color:var(--nova-ui-foreground);font-size:11px;font-weight:600;text-align:left;cursor:pointer}
+body.embedded-view .panel-location svg{width:15px;height:15px;flex:none;color:var(--nova-ui-primary)}
+body.embedded-view .panel-location-chevron{margin-left:auto;color:var(--nova-ui-muted-foreground);font-size:15px;line-height:1}
+body.embedded-view .panel-status{display:flex;align-items:center;gap:6px;min-width:0;min-height:25px;margin-top:6px;padding:5px 8px;border:1px solid color-mix(in srgb,var(--nova-ui-primary) 10%,var(--nova-ui-border));border-radius:9px;background:var(--nova-ui-muted);color:var(--nova-ui-muted-foreground);font-size:8px;line-height:1.25;overflow:hidden;white-space:nowrap}
+body.embedded-view .panel-status .dot{width:6px;height:6px;margin:0;background:#5bd596;box-shadow:0 0 0 3px rgba(91,213,150,.12)}
+body.embedded-view .panel-status #liveStatus,body.embedded-view .panel-status #offlineStatusText{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.embedded-view .panel-status #liveStatus{flex:1 1 52%}
+body.embedded-view .panel-status #offlineStatusText{flex:0 1 43%}
+body.embedded-view .panel-status-separator{flex:none;color:var(--nova-ui-muted-foreground)}
+body.embedded-view .scroll{padding:10px 13px 16px;background:var(--nova-ui-card)}
+body.embedded-view .panel-refresh{display:flex;width:100%;min-height:44px;align-items:center;justify-content:center;gap:8px;margin:0 0 11px;padding:9px 12px;border-radius:11px;background:linear-gradient(120deg,#267b60,#45a881);box-shadow:none;font-size:12px;font-weight:800}
+body.embedded-view .panel-refresh:hover{filter:brightness(1.03)}
+body.embedded-view .zone-section{margin:10px 0 11px}
+body.embedded-view .zone-heading{min-height:24px;margin:0 1px 6px;color:var(--nova-ui-foreground);font-size:11px;font-weight:800;letter-spacing:0;text-transform:none}
+body.embedded-view .zone-heading button{display:inline-flex;align-items:center;gap:4px;min-height:28px;padding:3px 2px;border:0;background:transparent;color:var(--nova-ui-primary);font-size:9px;font-weight:800;cursor:pointer}
+body.embedded-view .zone-heading button:focus-visible{outline:2px solid var(--nova-ui-primary);outline-offset:2px;border-radius:5px}
+body.embedded-view #zoneChips{flex-wrap:nowrap;overflow-x:auto;padding:0 0 3px;scrollbar-width:none;overscroll-behavior-inline:contain}
+body.embedded-view #zoneChips::-webkit-scrollbar{display:none}
+body.embedded-view #zoneChips.expanded{flex-wrap:wrap;overflow:visible}
+body.embedded-view .chip{flex:0 0 auto;min-height:34px;padding:7px 9px;border-radius:10px;background:var(--nova-ui-card);color:var(--nova-ui-foreground);font-size:9px;white-space:nowrap}
+body.embedded-view .chip.active{background:#154d3d;border-color:#154d3d;color:#fff}
+body.embedded-view .filter-panel{margin:9px 0 11px;border:0;border-top:1px solid var(--nova-ui-border);border-bottom:1px solid var(--nova-ui-border);border-radius:0;background:transparent;color:var(--nova-ui-foreground)}
+body.embedded-view .filter-panel>summary{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 16px;grid-template-rows:auto auto;align-items:center;gap:4px 8px;min-height:66px;padding:8px 1px;list-style:none;cursor:pointer}
+body.embedded-view .filter-panel>summary::-webkit-details-marker{display:none}
+body.embedded-view .filter-panel-title{grid-column:1;font-size:11px;font-weight:800}
+body.embedded-view .filter-panel-values{grid-column:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 10px;border:1px solid var(--nova-ui-border);border-radius:9px;background:var(--nova-ui-muted);color:var(--nova-ui-muted-foreground);font-size:9px;font-weight:500}
+body.embedded-view .filter-panel-chevron{grid-column:2;grid-row:1/3;justify-self:center;color:var(--nova-ui-muted-foreground);font-size:15px;transition:transform .16s ease}
+body.embedded-view .filter-panel[open] .filter-panel-chevron{transform:rotate(180deg)}
+body.embedded-view .filter-panel[open]>summary{border-bottom:1px solid var(--nova-ui-border)}
+body.embedded-view .filter-panel .filters{grid-template-columns:1fr 1fr;gap:6px;padding:8px 0 10px}
+body.embedded-view .filter-panel .filters select{min-width:0;min-height:38px;padding:8px;border-radius:9px;background:var(--nova-ui-card);color:var(--nova-ui-foreground);font-size:9px}
+body.embedded-view #state{grid-column:1/-1}
+body.embedded-view .scroll>.sect:not(.zone-section):not(.filter-panel){margin:9px 0 11px;padding-bottom:10px;border-bottom:1px solid var(--nova-ui-border)}
+body.embedded-view .scroll>.sect:not(.zone-section):not(.filter-panel) .stitle{min-height:22px;margin:0 1px 6px;color:var(--nova-ui-foreground);font-size:11px;font-weight:800;letter-spacing:0;text-transform:none}
+body.embedded-view .segment{gap:2px;padding:3px;border-radius:10px;background:var(--nova-ui-muted)}
+body.embedded-view .segment button{min-height:34px;padding:6px 4px;color:var(--nova-ui-muted-foreground);font-size:9px}
+body.embedded-view .segment button.active{background:var(--nova-ui-card);color:var(--nova-ui-primary);box-shadow:0 2px 7px rgba(18,73,59,.10)}
+body.embedded-view .action-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:7px;margin:10px 0}
+body.embedded-view .action-card{display:flex;align-items:center;gap:10px;width:100%;min-width:0;min-height:54px;padding:8px 10px;border:1px solid var(--nova-ui-border);border-radius:10px;background:var(--nova-ui-muted);color:var(--nova-ui-primary);text-align:left;cursor:pointer;transition:border-color .16s ease,background-color .16s ease}
+body.embedded-view .action-card:hover{border-color:color-mix(in srgb,var(--nova-ui-primary) 38%,var(--nova-ui-border));background:color-mix(in srgb,var(--nova-ui-muted) 78%,var(--nova-ui-primary) 5%)}
+body.embedded-view .action-card:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+body.embedded-view .action-card[hidden]{display:none!important}
+body.embedded-view .action-card>svg{width:21px;height:21px;flex:none}
+body.embedded-view .action-card-copy{display:grid;min-width:0;flex:1;gap:2px}
+body.embedded-view .action-card-copy b{overflow-wrap:anywhere;font-size:10px;font-weight:800;line-height:1.25}
+body.embedded-view .action-card-copy small{overflow-wrap:anywhere;color:var(--nova-ui-muted-foreground);font-size:8px;line-height:1.3}
+body.embedded-view .action-card-chevron{flex:none;color:var(--nova-ui-muted-foreground);font-size:19px;line-height:1}
+body.embedded-view .more-tools{margin:8px 0 10px;border:1px solid var(--nova-ui-border);border-radius:10px;background:var(--nova-ui-card);color:var(--nova-ui-foreground)}
+body.embedded-view .more-tools>summary{display:flex;min-height:40px;align-items:center;gap:9px;padding:7px 10px;list-style:none;color:var(--nova-ui-foreground);font-size:10px;font-weight:800;cursor:pointer}
+body.embedded-view .more-tools>summary::-webkit-details-marker{display:none}
+body.embedded-view .more-tools>summary:after{content:'⌄';margin-left:auto;color:var(--nova-ui-muted-foreground);font-size:14px;transition:transform .16s ease}
+body.embedded-view .more-tools[open]>summary:after{transform:rotate(180deg)}
+body.embedded-view .more-tools-icon{display:grid;width:22px;height:22px;place-items:center;border-radius:7px;background:var(--nova-ui-muted);color:var(--nova-ui-primary);font-size:16px;line-height:1}
+body.embedded-view .more-tools-content{display:grid;gap:8px;padding:0 9px 9px}
+body.embedded-view .more-actions-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+body.embedded-view .more-actions-grid button{min-width:0;min-height:36px;padding:7px;border-radius:8px;font-size:8px;overflow-wrap:anywhere}
+body.embedded-view .more-actions-grid button[hidden]{display:none!important}
+body.embedded-view .more-tools-content .kpis{grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:5px;margin:0}
+body.embedded-view .more-tools-content .kpi{padding:7px;border-radius:9px;background:var(--nova-ui-muted);color:var(--nova-ui-foreground)}
+body.embedded-view .more-tools-content .kpi b{font-size:14px}
+body.embedded-view .more-tools-content .kpi span{font-size:7px}
+body.embedded-view .more-tools-content .search-row{gap:6px}
+body.embedded-view .more-tools-content .search input{background:var(--nova-ui-card);color:var(--nova-ui-foreground)}
+body.embedded-view .more-tools-content .search-tools{grid-template-columns:minmax(0,1fr) auto auto;margin:0}
+body.embedded-view .more-tools-content .view-tabs{margin:0}
+body.embedded-view .more-tools-content .map-layers-panel{margin:0}
+body.embedded-view .more-tools-content .resultsHead{margin:4px 1px 0}
+body.embedded-view .bulkbar{display:grid;gap:6px;margin:10px 0 6px;padding:8px;border:1px solid color-mix(in srgb,var(--nova-ui-primary) 16%,var(--nova-ui-border));border-radius:11px;background:var(--nova-ui-muted);color:var(--nova-ui-foreground)}
+body.embedded-view .bulkbar-heading{display:flex;min-width:0;align-items:center;gap:8px}
+body.embedded-view .bulkbar-heading>b{min-width:0;flex:1;font-size:9px;font-weight:800}
+body.embedded-view .bulkbar-more{position:relative;flex:none}
+body.embedded-view .bulkbar-more>summary{display:grid;width:25px;height:25px;place-items:center;border:1px solid var(--nova-ui-border);border-radius:7px;background:var(--nova-ui-card);color:var(--nova-ui-primary);list-style:none;cursor:pointer}
+body.embedded-view .bulkbar-more>summary::-webkit-details-marker{display:none}
+body.embedded-view .bulkbar-secondary{position:absolute;z-index:1100;right:0;top:calc(100% + 5px);display:grid;min-width:155px;gap:5px;padding:7px;border:1px solid var(--nova-ui-border);border-radius:9px;background:var(--nova-ui-card);box-shadow:0 9px 22px rgba(12,53,43,.15)}
+body.embedded-view .bulkbar-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+body.embedded-view .bulkbar-actions button,body.embedded-view .bulkbar-secondary button{min-width:0;min-height:31px;padding:6px 5px;border:1px solid var(--nova-ui-border);border-radius:7px;background:var(--nova-ui-card);color:var(--nova-ui-primary);font-size:8px;font-weight:800;line-height:1.2;cursor:pointer;overflow-wrap:anywhere}
+body.embedded-view .bulkbar-actions button:last-child{background:var(--nova-ui-primary);border-color:var(--nova-ui-primary);color:#fff}
+body.embedded-view .resultsHead{margin:10px 2px 6px;font-size:9px}
+body.embedded-view .resultsHead b{font-size:10px;color:var(--nova-ui-foreground)}
+body.embedded-view .more-tools-content .search-meta{min-height:24px;font-size:8px}
+body.embedded-view .more-tools-content .search-meta button{font-size:8px}
+body.embedded-view .more-tools-content .map-layer-options>label{font-size:9px}
+body.embedded-view .more-tools-content .map-layer-controls label{font-size:8px}
+body.embedded-view .more-tools-content .map-layer-controls input,body.embedded-view .more-tools-content .map-layer-controls select,body.embedded-view .more-tools-content .map-layer-controls button{font-size:8px}
+body.embedded-view .more-tools-content .map-layer-status,body.embedded-view .more-tools-content .map-layer-note{font-size:8px}
+body.theme-dark.embedded-view .panel-status{background:var(--nova-ui-muted);border-color:var(--nova-ui-border)}
+body.theme-dark.embedded-view .panel-location,body.theme-dark.embedded-view .filter-panel-values,body.theme-dark.embedded-view .more-tools-icon,body.theme-dark.embedded-view .more-tools-content .kpi{background:var(--nova-ui-muted);color:var(--nova-ui-foreground)}
+body.theme-dark.embedded-view .chip,body.theme-dark.embedded-view .segment button.active,body.theme-dark.embedded-view .action-card,body.theme-dark.embedded-view .more-tools,body.theme-dark.embedded-view .bulkbar,body.theme-dark.embedded-view .bulkbar-more>summary,body.theme-dark.embedded-view .bulkbar-secondary{background:var(--nova-ui-card);border-color:var(--nova-ui-border);color:var(--nova-ui-foreground)}
+body.theme-dark.embedded-view .action-card-copy small{color:var(--nova-ui-muted-foreground)}
+body.theme-dark.embedded-view .bulkbar-actions button,body.theme-dark.embedded-view .bulkbar-secondary button{background:var(--nova-ui-card);border-color:var(--nova-ui-border);color:var(--nova-ui-primary)}
+body.theme-dark.embedded-view .bulkbar-actions button:last-child{background:var(--nova-ui-primary);border-color:var(--nova-ui-primary);color:#fff}
+body.theme-dark.embedded-view .more-actions-grid .secondary{background:var(--nova-ui-muted);border-color:var(--nova-ui-border);color:var(--nova-ui-primary)}
+@media(max-width:820px){
+ body.embedded-view .brand{padding:9px 14px 9px;border-radius:22px 22px 0 0}
+ body.embedded-view .brand h1{font-size:16px}
+ body.embedded-view .panel-location{min-height:28px;font-size:11px}
+ body.embedded-view .panel-status{min-height:24px;font-size:8px}
+ body.embedded-view .scroll{padding:9px 12px calc(18px + env(safe-area-inset-bottom))}
+ body.embedded-view .panel-refresh{min-height:46px;font-size:12px}
+ body.embedded-view .zone-heading{min-height:30px;font-size:11px}
+ body.embedded-view .zone-heading button{min-height:36px;font-size:10px}
+ body.embedded-view .chip{min-height:40px;padding:8px 10px;font-size:10px}
+ body.embedded-view .filter-panel>summary{min-height:72px}
+ body.embedded-view .filter-panel-title{font-size:12px}
+ body.embedded-view .filter-panel-values{min-height:38px;padding:9px 10px;font-size:10px}
+ body.embedded-view .filter-panel .filters{grid-template-columns:1fr;padding:9px 0 11px}
+ body.embedded-view #state{grid-column:auto}
+ body.embedded-view .scroll>.sect:not(.zone-section):not(.filter-panel) .stitle{min-height:28px;font-size:12px}
+ body.embedded-view .segment button{min-height:42px;font-size:11px}
+ body.embedded-view .action-card{min-height:58px;padding:9px 11px}
+ body.embedded-view .action-card>svg{width:23px;height:23px}
+ body.embedded-view .action-card-copy b{font-size:11px}
+ body.embedded-view .action-card-copy small{font-size:9px}
+ body.embedded-view .more-tools>summary{min-height:44px;font-size:11px}
+ body.embedded-view .more-actions-grid{grid-template-columns:1fr 1fr}
+ body.embedded-view .more-actions-grid button{min-height:42px;font-size:10px}
+ body.embedded-view .bulkbar{padding:9px}
+ body.embedded-view .bulkbar-heading>b{font-size:10px}
+ body.embedded-view .bulkbar-actions button,body.embedded-view .bulkbar-secondary button{min-height:40px;padding:7px 5px;font-size:9px}
+ body.embedded-view .resultsHead,body.embedded-view .resultsHead b{font-size:11px}
+ body.embedded-view.workspace-kanban:not(.standalone-view) .more-tools>summary,body.embedded-view.workspace-history:not(.standalone-view) .more-tools>summary{display:none}
+ body.embedded-view.workspace-kanban:not(.standalone-view) .more-tools,body.embedded-view.workspace-history:not(.standalone-view) .more-tools{border:0;background:transparent}
+ body.embedded-view.workspace-kanban:not(.standalone-view) .more-tools-content,body.embedded-view.workspace-history:not(.standalone-view) .more-tools-content{padding:0}
+}
+@media(min-width:821px){body.embedded-view.workspace-kanban .view-tabs,body.embedded-view.workspace-history .view-tabs{display:grid}}
+@media(max-width:390px){body.embedded-view .panel-status{gap:5px;font-size:8px}body.embedded-view .bulkbar-actions button{font-size:8px}}
+body.embedded-view.workspace-kanban .more-tools>summary,body.embedded-view.workspace-history .more-tools>summary{display:none}
+body.embedded-view.workspace-kanban .more-tools,body.embedded-view.workspace-history .more-tools{border:0;background:transparent}
+body.embedded-view.workspace-kanban .more-tools-content,body.embedded-view.workspace-history .more-tools-content{padding:0}
+body.embedded-view.workspace-kanban .more-actions-grid,body.embedded-view.workspace-history .more-actions-grid,body.embedded-view.workspace-kanban .more-tools-content>.kpis,body.embedded-view.workspace-history .more-tools-content>.kpis,body.embedded-view.workspace-kanban .more-tools-content .search-tools,body.embedded-view.workspace-history .more-tools-content .search-tools,body.embedded-view.workspace-kanban .more-tools-content .map-layers-panel,body.embedded-view.workspace-history .more-tools-content .map-layers-panel{display:none}
+body.embedded-view.workspace-kanban .more-tools-content .view-tabs,body.embedded-view.workspace-history .more-tools-content .view-tabs{display:grid}
+body.embedded-view details>summary::marker{content:""}
+body.embedded-view details>summary::-webkit-details-marker{display:none!important}
+@media(max-width:820px){body.embedded-view .sidebar:not(.collapsed):not(.workspace-view){height:var(--nova-visible-height);max-height:var(--nova-visible-height);border-top:0;border-radius:0;box-shadow:none}}
+</style>
 </head>
 <body>
 <div id="map"></div>
@@ -333,106 +475,136 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
 <aside class="sidebar collapsed" id="sheet">
  <div class="brand" id="sheetHeader">
   <div class="sheetHandle"></div>
-  <div class="topline">
-   <div class="logo"><div class="logoicon">N</div><span>NOVA HUB</span></div>
-   <div class="badge">Fuerza Comercial</div>
+  <h1>Mapa comercial</h1>
+  <button class="panel-location" id="currentZoneButton" type="button" aria-label="Seleccionar Managua como zona actual">
+   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 10.1c0 5.25-8 11.4-8 11.4S4 15.35 4 10.1a8 8 0 1 1 16 0Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="2.5" fill="currentColor"/></svg>
+   <span>Managua</span><span class="panel-location-chevron" aria-hidden="true">⌄</span>
+  </button>
+  <div class="live panel-status" id="panelStatus" role="status" aria-live="polite">
+   <span class="dot" aria-hidden="true"></span>
+   <span id="liveStatus">Base inicial cargada. Lista para consultar negocios de Nova…</span>
+   <span class="panel-status-separator" aria-hidden="true">·</span>
+   <span id="offlineStatusText">Preparando sincronización offline…</span>
   </div>
-  <h1>Mapa comercial ERP · Managua</h1>
-  <p>Managua, Ciudad Sandino y Veracruz con enfoque comercial, filtros rápidos y uso cómodo en celular.</p>
- <div class="live"><span class="dot"></span><span id="liveStatus">Base inicial cargada. Lista para consultar negocios de Nova…</span></div>
-  <div class="live" id="offlineStatus"><span class="dot"></span><span id="offlineStatusText">Preparando sincronización offline…</span></div>
  </div>
  <div class="scroll">
- <div class="kpis">
-   <div class="kpi discovery-only" data-pipeline="found"><b id="foundCount">0</b><span>Encontrados</span></div>
-   <div class="kpi discovery-only" data-pipeline="selected"><b id="selectedCount">0</b><span>Seleccionados</span></div>
-   <div class="kpi discovery-only" data-pipeline="kanban"><b id="kanbanCount">0</b><span>En Kanban</span></div>
-   <div class="kpi" data-pipeline="visited"><b id="visitedCount">0</b><span>Visitados</span></div>
-  <div class="kpi discovery-only" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
- </div>
-  <div class="view-tabs" id="viewTabs" aria-label="Vistas comerciales">
-   <button class="active" data-view="map" type="button">Mapa</button>
-   <button class="discovery-only" data-view="kanban" type="button">Kanban</button>
-   <button data-view="history" type="button">Historial</button>
-  </div>
-  <div class="workspace-heading" id="workspaceHeading" hidden><b id="workspaceHeadingTitle"></b><span id="workspaceHeadingMeta"></span></div>
+  <button class="btn primary panel-refresh discovery-only" id="refresh" type="button">↻ <span>Actualizar negocios</span></button>
 
-  <div class="search-row discovery-only">
-   <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off"><button id="searchGoogle" type="button" title="Buscar negocios de Nova">⌕</button></div>
-   <button class="search-zone" id="searchViewport" type="button">Buscar vista</button>
-  </div>
-  <div class="search-meta discovery-only"><span id="searchStatus">Escribe un rubro o usa el mapa para buscar nuevos negocios.</span><button id="clearGoogleCache" type="button">Actualizar datos</button></div>
-  <div class="search-tools">
-   <button id="searchNearby" class="discovery-only" type="button">◎ Cerca de mí</button>
-   <select id="nearbyRadius" class="discovery-only" aria-label="Radio de búsqueda cercana"><option value="2000">2 km</option><option value="5000" selected>5 km</option><option value="10000">10 km</option></select>
-   <button id="toggle3d" type="button" title="Activar vista inclinada">3D</button>
-  </div>
-
-  <details class="map-layers-panel" id="mapLayersPanel">
-   <summary aria-controls="mapLayerOptions">Capas del mapa</summary>
-   <div class="map-layer-options" id="mapLayerOptions">
-    <div class="map-layer-group-title">Elementos de NovaHub</div>
-    <label><input type="checkbox" data-map-layer="users" checked> Usuarios</label>
-    <label><input type="checkbox" data-map-layer="manualPoints" checked> Puntos marcados</label>
-    <label><input type="checkbox" data-map-layer="catalog"> Catálogo comercial</label>
-    <label><input type="checkbox" data-map-layer="plannedRoutes"> Rutas planificadas</label>
-    <label id="gpsTrailLayerLabel"><input type="checkbox" data-map-layer="gpsTrail"> Recorrido GPS aproximado</label>
-    <div class="map-layer-controls" id="gpsTrailControls" hidden>
-     <label for="mapTrailDate">Día<input id="mapTrailDate" type="date"></label>
-     <label for="mapTrailUser">Usuario<select id="mapTrailUser"><option value="">Todos los usuarios</option></select></label>
-     <label class="map-layer-originals"><span>Diagnóstico</span><span><input id="mapTrailOriginals" type="checkbox"> Ver lecturas originales, aisladas</span></label>
-     <button id="loadMapTrail" type="button">Actualizar recorrido</button>
-    </div>
-    <div class="map-layer-status" id="mapTrailStatus" role="status" aria-live="polite">Activa Recorrido GPS para consultar posiciones guardadas.</div>
-    <div class="map-layer-legend" id="mapTrailLegend" aria-label="Leyenda del recorrido GPS"></div>
-    <div class="map-layer-group-title">Lugares del mapa base</div>
-    <label id="basePlacesLayerLabel"><input type="checkbox" data-map-layer="basePlaces"> Mostrar negocios, parques y otros lugares</label>
-    <p class="map-layer-note" id="mapStyleNotice" role="status" aria-live="polite"></p>
-    <button class="map-layer-reset" id="resetMapLayers" type="button">Restablecer vista limpia</button>
-   </div>
-  </details>
-
-  <div class="sect discovery-only">
-   <div class="stitle"><span>Zonas rápidas</span><span>Deslice →</span></div>
+  <div class="sect discovery-only zone-section">
+   <div class="stitle zone-heading"><span>Zonas rápidas</span><button id="toggleAllZones" type="button" aria-expanded="false">Ver todas <span aria-hidden="true">→</span></button></div>
    <div class="chips" id="zoneChips"></div>
   </div>
 
-  <div class="sect discovery-only">
-   <div class="stitle"><span>Filtros comerciales</span></div>
-   <div class="filters">
-    <select id="category"><option value="all">Todos los rubros</option></select>
-    <select id="source"><option value="all">Todas las fuentes</option><option value="Nova">Nova</option><option value="Base inicial">Base inicial</option></select>
-    <select id="state"><option value="all">Todo seguimiento</option><option>Nuevo</option><option>Contactado</option><option>Visitado</option><option>Interesado</option><option>Demo</option><option>Cliente</option><option>Descartado</option></select>
+  <details class="sect filter-panel discovery-only" id="filtersPanel">
+   <summary aria-controls="filterControls">
+    <span class="filter-panel-title">Filtros comerciales</span>
+    <span class="filter-panel-values" id="filterSummaryText">Todos los rubros · Todas las fuentes · Todo seguimiento</span>
+    <span class="filter-panel-chevron" aria-hidden="true">⌄</span>
+   </summary>
+   <div class="filters" id="filterControls">
+    <select id="category" aria-label="Rubro"><option value="all">Todos los rubros</option></select>
+    <select id="source" aria-label="Fuente"><option value="all">Todas las fuentes</option><option value="Nova">Nova</option><option value="Base inicial">Base inicial</option></select>
+    <select id="state" aria-label="Seguimiento"><option value="all">Todo seguimiento</option><option>Nuevo</option><option>Contactado</option><option>Visitado</option><option>Interesado</option><option>Demo</option><option>Cliente</option><option>Descartado</option></select>
    </div>
-  </div>
+  </details>
 
   <div class="sect">
-   <div class="stitle"><span>Nombres de puntos NovaHub</span></div>
+   <div class="stitle"><span>Nombres de puntos</span></div>
    <div class="segment" id="labels"><button type="button" class="active" data-mode="off" aria-pressed="true">Ocultar</button><button type="button" data-mode="smart" aria-pressed="false">Inteligente</button><button type="button" data-mode="all" aria-pressed="false">Todos</button></div>
   </div>
 
-  <div class="actions">
-   <button class="btn primary discovery-only" id="refresh">↻ Actualizar negocios Nova</button>
-   <button class="btn secondary" id="routeImportQuick" type="button" hidden>⇧ Importar clientes / rutas</button>
-   <button class="btn secondary" id="clearCatalog" type="button" hidden>⌫ Limpiar base</button>
-   <button class="btn secondary" id="routePlannerQuick" type="button" hidden>☷ Rutas y gestores</button>
-   <button class="btn secondary" id="mapConfigurationButton" type="button" hidden>⚙ Configurar mapa</button>
-   <button class="btn secondary" id="locationSettings" type="button" hidden>Privacidad de ubicación</button>
-   <button class="btn secondary discovery-only" id="zoneManager">▦ Zonas y vendedores</button>
-   <button class="btn secondary discovery-only" id="opportunities">✦ Ver oportunidades</button>
-   <button class="btn secondary discovery-only" id="kanbanToggle">▦ Ver Kanban</button>
-   <button class="btn secondary" id="historyToggle">◷ Ver historial</button>
+  <div class="actions action-cards">
+   <button class="action-card" id="routeImportQuick" type="button" hidden>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19v-1.2A4.8 4.8 0 0 1 8.3 13h1.4a4.8 4.8 0 0 1 4.8 4.8V19M16 5.5a3 3 0 0 1 0 5.8M17 13.5a4.2 4.2 0 0 1 3.5 4.2V19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span class="action-card-copy"><b>Importar clientes</b><small>Carga clientes y rutas desde archivo</small></span><span class="action-card-chevron" aria-hidden="true">›</span>
+   </button>
+   <button class="action-card" id="routePlannerQuick" type="button" hidden>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="3.5" cy="6" r="1.5" fill="currentColor"/><circle cx="3.5" cy="12" r="1.5" fill="currentColor"/><circle cx="3.5" cy="18" r="1.5" fill="currentColor"/></svg>
+    <span class="action-card-copy"><b>Rutas y gestores</b><small>Gestiona rutas y vendedores</small></span><span class="action-card-chevron" aria-hidden="true">›</span>
+   </button>
+   <button class="action-card" id="mapConfigurationButton" type="button" hidden>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" stroke="currentColor" stroke-width="1.8"/><path d="m19.4 13.5 1.1.9-1.6 2.8-1.4-.5a7.8 7.8 0 0 1-1.5.9l-.2 1.5h-3.3l-.2-1.5a7.8 7.8 0 0 1-1.5-.9l-1.4.5-1.6-2.8 1.1-.9a8 8 0 0 1 0-1.8l-1.1-.9 1.6-2.8 1.4.5a7.8 7.8 0 0 1 1.5-.9l.2-1.5h3.3l.2 1.5a7.8 7.8 0 0 1 1.5.9l1.4-.5 1.6 2.8-1.1.9a8 8 0 0 1 0 1.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+    <span class="action-card-copy"><b>Configuración</b><small>Personaliza el mapa y su visualización</small></span><span class="action-card-chevron" aria-hidden="true">›</span>
+   </button>
   </div>
 
+  <details class="more-tools" id="moreToolsPanel">
+   <summary><span class="more-tools-icon" aria-hidden="true">⋯</span><span>Más herramientas</span></summary>
+   <div class="more-tools-content">
+    <div class="kpis">
+     <div class="kpi discovery-only" data-pipeline="found"><b id="foundCount">0</b><span>Encontrados</span></div>
+     <div class="kpi discovery-only" data-pipeline="selected"><b id="selectedCount">0</b><span>Seleccionados</span></div>
+     <div class="kpi discovery-only" data-pipeline="kanban"><b id="kanbanCount">0</b><span>En Kanban</span></div>
+     <div class="kpi" data-pipeline="visited"><b id="visitedCount">0</b><span>Visitados</span></div>
+     <div class="kpi discovery-only" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
+    </div>
+    <div class="view-tabs" id="viewTabs" aria-label="Vistas comerciales">
+     <button class="active" data-view="map" type="button">Mapa</button>
+     <button class="discovery-only" data-view="kanban" type="button">Kanban</button>
+     <button data-view="history" type="button">Historial</button>
+    </div>
+    <div class="workspace-heading" id="workspaceHeading" hidden><b id="workspaceHeadingTitle"></b><span id="workspaceHeadingMeta"></span></div>
+
+    <div class="search-row discovery-only">
+     <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off"><button id="searchGoogle" type="button" title="Buscar negocios de Nova">⌕</button></div>
+     <button class="search-zone" id="searchViewport" type="button">Buscar vista</button>
+    </div>
+    <div class="search-meta discovery-only"><span id="searchStatus">Escribe un rubro o usa el mapa para buscar nuevos negocios.</span><button id="clearGoogleCache" type="button">Actualizar datos</button></div>
+    <div class="search-tools">
+     <button id="searchNearby" class="discovery-only" type="button">◎ Cerca de mí</button>
+     <select id="nearbyRadius" class="discovery-only" aria-label="Radio de búsqueda cercana"><option value="2000">2 km</option><option value="5000" selected>5 km</option><option value="10000">10 km</option></select>
+     <button id="toggle3d" type="button" title="Activar vista inclinada">3D</button>
+    </div>
+
+    <details class="map-layers-panel" id="mapLayersPanel">
+     <summary aria-controls="mapLayerOptions">Capas del mapa</summary>
+     <div class="map-layer-options" id="mapLayerOptions">
+      <div class="map-layer-group-title">Elementos de NovaHub</div>
+      <label><input type="checkbox" data-map-layer="users" checked> Usuarios</label>
+      <label><input type="checkbox" data-map-layer="manualPoints" checked> Puntos marcados</label>
+      <label><input type="checkbox" data-map-layer="catalog"> Catálogo comercial</label>
+      <label><input type="checkbox" data-map-layer="plannedRoutes"> Rutas planificadas</label>
+      <label id="gpsTrailLayerLabel"><input type="checkbox" data-map-layer="gpsTrail"> Recorrido GPS aproximado</label>
+      <div class="map-layer-controls" id="gpsTrailControls" hidden>
+       <label for="mapTrailDate">Día<input id="mapTrailDate" type="date"></label>
+       <label for="mapTrailUser">Usuario<select id="mapTrailUser"><option value="">Todos los usuarios</option></select></label>
+       <label class="map-layer-originals"><span>Diagnóstico</span><span><input id="mapTrailOriginals" type="checkbox"> Ver lecturas originales, aisladas</span></label>
+       <button id="loadMapTrail" type="button">Actualizar recorrido</button>
+      </div>
+      <div class="map-layer-status" id="mapTrailStatus" role="status" aria-live="polite">Activa Recorrido GPS para consultar posiciones guardadas.</div>
+      <div class="map-layer-legend" id="mapTrailLegend" aria-label="Leyenda del recorrido GPS"></div>
+      <div class="map-layer-group-title">Lugares del mapa base</div>
+      <label id="basePlacesLayerLabel"><input type="checkbox" data-map-layer="basePlaces"> Mostrar negocios, parques y otros lugares</label>
+      <p class="map-layer-note" id="mapStyleNotice" role="status" aria-live="polite"></p>
+      <button class="map-layer-reset" id="resetMapLayers" type="button">Restablecer vista limpia</button>
+     </div>
+    </details>
+
+    <div class="more-actions-grid">
+     <button class="btn secondary" id="clearCatalog" type="button" hidden>⌫ Limpiar base</button>
+     <button class="btn secondary" id="locationSettings" type="button" hidden>Privacidad de ubicación</button>
+     <button class="btn secondary discovery-only" id="zoneManager" type="button">▦ Zonas y vendedores</button>
+     <button class="btn secondary discovery-only" id="opportunities" type="button">✦ Ver oportunidades</button>
+     <button class="btn secondary discovery-only" id="kanbanToggle" type="button">▦ Ver Kanban</button>
+     <button class="btn secondary" id="historyToggle" type="button">◷ Ver historial</button>
+    </div>
+   </div>
+  </details>
+
   <div class="bulkbar discovery-only" id="bulkbar">
-   <b id="selectionSummary">0 seleccionados</b>
-   <button id="selectVisible">Seleccionar visibles</button>
-   <button id="clearSelection">Limpiar selección</button>
-   <button id="bulkKanban">Añadir a Kanban</button>
-   <button id="bulkRoute">Armar ruta</button>
-   <button id="bulkVisit">Registrar visitas</button>
-   <button id="bulkWhatsApp">WhatsApp oficial</button>
-   <button id="bulkDiscard">Descartar</button>
+   <div class="bulkbar-heading"><b id="selectionSummary">0 seleccionados</b>
+    <details class="bulkbar-more"><summary aria-label="Más acciones de selección">⌄</summary><div class="bulkbar-secondary">
+     <button id="bulkKanban" type="button">Añadir a Kanban</button>
+     <button id="bulkVisit" type="button">Registrar visitas</button>
+     <button id="bulkWhatsApp" type="button">WhatsApp oficial</button>
+     <button id="bulkDiscard" type="button">Descartar</button>
+    </div></details>
+   </div>
+   <div class="bulkbar-actions">
+    <button id="selectVisible" type="button">Seleccionar visibles</button>
+    <button id="clearSelection" type="button">Limpiar selección</button>
+    <button id="bulkRoute" type="button">Armar ruta</button>
+   </div>
   </div>
 
   <div class="resultsHead"><b id="resultsTitle">Fuerza Comercial</b><span id="resultText"></span></div>
@@ -3928,6 +4100,8 @@ function resetCleanMap(){
 function openMapLayers(){
   const panel=document.getElementById('mapLayersPanel');
   if(!panel)return;
+  const moreTools=document.getElementById('moreToolsPanel');
+  if(moreTools)moreTools.open=true;
   panel.open=true;
   if(innerWidth<=820){document.getElementById('sheet')?.classList.remove('collapsed');window.setTimeout(()=>panel.scrollIntoView({block:'nearest',behavior:'smooth'}),80)}
   document.getElementById('openMapLayers')?.closest('details')?.removeAttribute('open');
@@ -4357,6 +4531,8 @@ function updateView(){
   document.body.classList.toggle('standalone-view',!mapView);
   document.body.classList.toggle('workspace-kanban',kanban);
   document.body.classList.toggle('workspace-history',!mapView&&!kanban);
+  const moreTools=document.getElementById('moreToolsPanel');
+  if(moreTools&&!mapView)moreTools.open=true;
   if(list)list.hidden=!mapView;
   if(board)board.hidden=!kanban;
   if(history)history.hidden=mapView||kanban;
@@ -4465,7 +4641,9 @@ function render(){
   updateView();
 }
 function populateFilters(){
-  const zonesList = ['Todos',...Object.keys(centers)];
+  const preferredZones=['Carretera Norte','Masaya','Ticuantepe','Managua','Ciudad Sandino','Veracruz'];
+  const orderedZones=[...preferredZones.filter(zone=>centers[zone]),...Object.keys(centers).filter(zone=>!preferredZones.includes(zone))];
+  const zonesList = ['Todos',...orderedZones];
   document.getElementById('zoneChips').innerHTML = zonesList.map(z => `<button class="chip ${z===selectedZone?'active':''}" data-zone="${z}">${z}</button>`).join('');
   const zoneSearchButton=document.getElementById('searchViewport');
   if(zoneSearchButton)zoneSearchButton.textContent=selectedZone==='Todos'?'Buscar vista':'Buscar zona';
@@ -4486,6 +4664,17 @@ function populateFilters(){
   const cur = sel.value;
   sel.innerHTML = '<option value="all">Todos los rubros</option>' + cats.map(c => `<option>${esc(c)}</option>`).join('');
   if(cats.includes(cur)) sel.value = cur;
+  syncFilterSummary();
+}
+function syncFilterSummary(){
+  const summary=document.getElementById('filterSummaryText');
+  if(!summary)return;
+  const values=['category','source','state'].map(id=>{
+    const control=document.getElementById(id);
+    return control?.selectedOptions?.[0]?.textContent?.trim()||'';
+  }).filter(Boolean);
+  summary.textContent=values.join(' · ');
+  summary.title=values.join(' · ');
 }
 function placesCategory(types=[],name=''){
   const x=norm([...types,name].join(' '));
@@ -5243,6 +5432,19 @@ function syncBusinessLabelControls(){
   });
 }
 document.getElementById('refresh').addEventListener('click', () => loadGooglePlaces(true));
+document.getElementById('currentZoneButton')?.addEventListener('click',event=>{
+  event.stopPropagation();
+  document.querySelector('#zoneChips [data-zone="Managua"]')?.click();
+});
+document.getElementById('toggleAllZones')?.addEventListener('click',event=>{
+  const button=event.currentTarget;
+  const chips=document.getElementById('zoneChips');
+  if(!chips)return;
+  const expanded=chips.classList.toggle('expanded');
+  button.setAttribute('aria-expanded',String(expanded));
+  button.innerHTML=expanded?'Ver menos <span aria-hidden="true">↑</span>':'Ver todas <span aria-hidden="true">→</span>';
+});
+document.getElementById('filterControls')?.addEventListener('change',syncFilterSummary);
 document.getElementById('searchGoogle').addEventListener('click', () => searchGooglePlaces(document.getElementById('search').value,{force:true}));
 document.getElementById('searchViewport').addEventListener('click', () => {
   const inSelectedZone=selectedZone && selectedZone!=='Todos';
@@ -5273,6 +5475,8 @@ function setActiveView(view){
   if(changed)clearFocusedQuickPoint();
   if(changed&&view!=='map'&&view!=='history'){locationTrailRequestId++;locationTrailRefreshRequested=false;currentLocationTrailData=null;clearLocationTrail()}
   activeView=view;
+  const moreTools=document.getElementById('moreToolsPanel');
+  if(moreTools&&changed)moreTools.open=view!=='map';
   if(changed)document.getElementById('sheet')?.querySelector('.scroll')?.scrollTo({top:0,behavior:'auto'});
   if(view==='map'){pipelineFilter='all';if(!mapLayers.gpsTrail){locationTrailRequestId++;locationTrailRefreshRequested=false;currentLocationTrailData=null;clearLocationTrail()}render();loadSellerPresence();if(mapLayers.gpsTrail)void loadLocationTrail({fitCamera:false});return}
   if(view==='kanban')pipelineFilter='kanban';
