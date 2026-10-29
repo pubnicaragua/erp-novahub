@@ -169,10 +169,11 @@ export function ForceSalesReportsView() {
           { id: 'summary', title: 'Resumen operativo', headers: summaryHeaders, rows: summaryRows },
           { id: 'managers', title: 'Actividad por gestor', headers: managerHeaders, rows: managerRows },
           { id: 'routes', title: 'Rutas del período', headers: routeHeaders, rows: routeRows },
-          { id: 'detail-activity', title: 'Detalle de actividades', headers: [headers[0], headers[1], headers[2], headers[3], headers[4], headers[5], headers[10]], rows: detailRows.map((row) => [row[0], row[1], row[2], row[3], row[4], row[5], row[10]]) },
-          { id: 'detail-location', title: 'Dirección y ubicación', headers: [headers[0], headers[4], headers[6], headers[7], headers[8]], rows: detailRows.map((row) => [row[0], row[4], row[6], row[7], row[8]]) },
-          { id: 'detail-evidence', title: 'Mapas, evidencias y notas', headers: [headers[0], headers[4], headers[9], headers[11], headers[12], headers[13]], rows: detailRows.map((row) => [row[0], row[4], row[9], row[11], row[12], row[13]]) },
+          { id: 'detail-activity', title: 'Detalle de actividades', headers: [headers[0], headers[1], headers[2], headers[3], headers[4], headers[5], headers[10]], widths: [16, 15, 16, 12, 19, 10, 12], rows: detailRows.map((row) => [row[0], row[1], row[2], row[3], row[4], row[5], row[10]]) },
+          { id: 'detail-location', title: 'Dirección y ubicación', headers: [headers[0], headers[4], headers[6], headers[7], headers[8]], widths: [14, 17, 22, 25, 22], rows: detailRows.map((row) => [row[0], row[4], row[6], row[7], row[8]]) },
+          { id: 'detail-evidence', title: 'Mapas, evidencias y notas', headers: [headers[0], headers[4], headers[9], headers[11], headers[12], headers[13]], widths: [12, 14, 24, 24, 14, 12], rows: detailRows.map((row) => [row[0], row[4], row[9], row[11], row[12], row[13]]) },
         ],
+        useVectorTables: true,
       });
       toast.success('PDF descargado.');
     } catch (error) {
