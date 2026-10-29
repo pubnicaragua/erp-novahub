@@ -85,7 +85,33 @@ const routeAssigneePickerHandlers = html.match(/const routeAssigneeSearchInput=[
 assert.match(routeAssigneePickerHandlers, /routeAssigneeOptionFromEventTarget\(event\.target\)/, 'Los eventos de puntero y clic usan el resolver validado para seleccionar el responsable');
 assert.match(routeAssigneePickerHandlers, /routeAssigneeOptions\.addEventListener\('pointerdown'/, 'El clic táctil o de ratón selecciona antes de perder el foco del combo');
 assert.match(html, /id="routeCatalog"/, 'El panel ofrece un catálogo persistente de rutas para reabrir y reasignar');
+assert.ok(/class="route-stop-nearby"[^>]*>\s*＋\s*Seleccionar puntos cercanos/.test(html), 'Cada parada muestra una acción visible para abrir la selección cercana');
 assert.match(html, /id="routeVicinityMode"/, 'El constructor ofrece selección de puntos cercanos por cantidad o radio');
+assert.match(html, /id="routeVicinityRadius" type="number"/, 'El radio se puede escribir como una distancia personalizada');
+assert.match(html, /id="routeVicinityRadiusUnit"/, 'El radio permite elegir metros o kilómetros');
+assert.ok(/route-stop-actions \.route-stop-nearby\{display:inline-flex;order:10;flex:1 0 100%/.test(html), 'La acción de cercanos tiene una fila visible en cada tarjeta de parada');
+assert.match(html, /input\.max=next==='km'\?'50':'50000';input\.step=next==='km'\?'0\.1':'50'/, 'Cambiar la unidad del radio convierte el valor y actualiza el rango');
+assert.match(html, /googleMap\.panTo\(\{lat:Number\(center\.lat\),lng:Number\(center\.lng\)\}\)/, 'Abrir selección de cercanos enfoca el punto central en el mapa');
+assert.match(html, /window\.beginRouteVicinity=beginRouteVicinity/, 'El botón generado puede invocar la acción del módulo embebido');
+assert.match(html, /addButton\.textContent=matches\.length\?`Agregar/, 'El botón confirma cuántos puntos se agregarán');
+const routeVicinityHelperSources = [
+  html.match(/function routePointCoordinates\(business\)\{[\s\S]*?\n\}/)?.[0],
+  html.match(/function routeDistanceMeters\(a,b\)\{[\s\S]*?\n\}/)?.[0],
+  html.match(/function selectRouteVicinityMatches\(center,candidates,selectedKeys,mode,count,radiusMeters\)\{[\s\S]*?\n\}/)?.[0],
+];
+assert.ok(routeVicinityHelperSources.every(Boolean), 'La selección de cercanos conserva un algoritmo de distancia comprobable');
+const selectRouteVicinityMatches = vm.runInNewContext(`${routeVicinityHelperSources.join('\n')};selectRouteVicinityMatches`, { keyOf: business => business.id, isDiscarded: business => business.discarded === true });
+const center = { id: 'center', lat: 12, lng: -86 };
+const nearA = { id: 'near-a', name: 'Cercano A', lat: 12, lng: -86.001 };
+const nearB = { id: 'near-b', name: 'Cercano B', lat: 12, lng: -86.002 };
+const far = { id: 'far', name: 'Lejano', lat: 12, lng: -86.006 };
+const alreadySelected = { id: 'selected', name: 'Ya incluido', lat: 12, lng: -86.0005 };
+const discarded = { id: 'discarded', name: 'Descartado', lat: 12, lng: -86.0002, discarded: true };
+const invalid = { id: 'invalid', name: 'Coordenada inválida', lat: 95, lng: -86 };
+const nearbyCandidates = [far, nearB, center, alreadySelected, discarded, invalid, nearA];
+assert.deepEqual(Array.from(selectRouteVicinityMatches(center, nearbyCandidates, ['center', 'selected'], 'count', 2, 250), item => item.business.name), ['Cercano A', 'Cercano B'], 'La cantidad agrega los N puntos válidos más cercanos sin repetir el centro ni las paradas existentes');
+assert.deepEqual(Array.from(selectRouteVicinityMatches(center, nearbyCandidates, ['center', 'selected'], 'count', 0, 250)), [], 'Una cantidad fuera de rango no sustituye el valor por diez ni agrega puntos inesperados');
+assert.deepEqual(Array.from(selectRouteVicinityMatches(center, nearbyCandidates, ['center', 'selected'], 'radius', 10, 250), item => item.business.name), ['Cercano A', 'Cercano B'], 'El radio incluye únicamente los puntos dentro de la distancia geográfica elegida');
 assert.match(html, /activeSavedRouteAssigneeId[\s\S]*?String\(assigneeId\|\|''\)!==String\(activeSavedRouteAssigneeId\|\|''\)/, 'La reasignación compara con el responsable persistido de la ruta');
 assert.match(html, /class="route-transfer-destination">A: <b id="routeTransferAssigneeName"/, 'La transferencia identifica dinámicamente al responsable elegido');
 assert.match(html, /class="route-transfer-checkbox"/, 'La transferencia usa una casilla personalizada');
@@ -98,4 +124,4 @@ assert.match(html, /<b>Responsable del punto<\/b>[\s\S]*?<b>Responsable de la ru
 assert.doesNotMatch(html, /id="owner-[^"]+"|<label>Dueño o decisor<\/label>/, 'La ficha ya no expone el dueño o decisor como asignación');
 assert.match(html, /c\.contactName=contactName;c\.contactPhone=contactPhone;[\s\S]*?body\.notes=note/, 'Guardar el seguimiento no borra el dueño histórico y conserva contacto/notas');
 
-console.log('force-sales route history: inline syntax and real-point-only gap segmentation passed');
+console.log('force-sales route history: inline syntax, GPS gap segmentation, and nearby-point selection passed');

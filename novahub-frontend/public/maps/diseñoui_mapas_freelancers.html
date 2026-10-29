@@ -288,6 +288,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .route-plan-pane>.confirm-modal-actions:last-child{position:sticky;bottom:-16px;z-index:8;margin:10px -17px -16px;padding:10px 17px max(10px,env(safe-area-inset-bottom));border-top:1px solid var(--nova-ui-border,#dce8e3);background:var(--nova-ui-card,#fbfdfc);box-shadow:0 -8px 18px rgba(18,53,43,.1)}
 .route-planner-tabs,.route-catalog-filters{display:flex;gap:6px;margin:8px 0;padding:4px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:12px;background:var(--nova-ui-muted,#edf5f1)}.route-planner-tabs button,.route-catalog-filters button{flex:1;min-height:36px;border:0;border-radius:9px;background:transparent;color:var(--nova-ui-muted-foreground,#6c7c77);font:700 10px Poppins,Arial,sans-serif;cursor:pointer}.route-planner-tabs button[aria-selected="true"],.route-catalog-filters button[aria-pressed="true"]{background:var(--nova-ui-card,#fff);color:var(--nova-ui-primary,#08785a);box-shadow:0 2px 8px rgba(18,57,47,.1)}.route-planner-tabs button:focus-visible,.route-catalog-filters button:focus-visible{outline:3px solid #3287e8;outline-offset:2px}.route-field{display:grid;gap:6px;margin:10px 0;color:var(--nova-ui-foreground,#123f35);font-size:10px;font-weight:800}.route-field input{width:100%;min-height:42px;max-width:100%;padding:8px 11px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);font:500 12px Poppins,Arial,sans-serif;accent-color:var(--nova-ui-primary,#08785a);color-scheme:light}.theme-dark .route-field input{color-scheme:dark}.route-field input:focus-visible{outline:3px solid #3287e8;outline-offset:2px}.route-vicinity-tools{margin:8px 0;padding:11px;border:1px solid var(--nova-ui-border,#cfe6dc);border-radius:12px;background:var(--nova-ui-muted,#f2f8f5);color:var(--nova-ui-foreground,#123f35)}.route-vicinity-tools[hidden]{display:none}.route-vicinity-head{display:flex;align-items:center;justify-content:space-between}.route-vicinity-head button{width:32px;height:32px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:inherit;font-size:18px}.route-vicinity-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.route-vicinity-controls label{display:grid;gap:4px;font-size:9px;font-weight:700}.route-vicinity-controls input,.route-vicinity-controls select{width:100%;min-width:0;min-height:36px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);padding:6px 8px}.route-vicinity-actions{display:flex;justify-content:flex-end;gap:7px}.route-vicinity-actions button{min-height:36px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);padding:7px 11px;font-weight:700}.route-vicinity-actions #routeVicinityAdd{background:var(--nova-ui-primary,#08785a);border-color:var(--nova-ui-primary,#08785a);color:#fff}
 .route-point-memberships{display:grid;gap:4px;margin:7px 0;padding:8px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-muted,#f4faf7);font-size:9px}.route-point-memberships b{color:var(--nova-ui-foreground,#123f35)}.route-point-memberships span{color:var(--nova-ui-muted-foreground,#61756d);line-height:1.4}
+.route-vicinity-hint,.route-vicinity-intro{margin:7px 0;color:var(--nova-ui-muted-foreground,#6c7c77);font-size:9px;line-height:1.45}.route-stop-nearby{display:inline-flex;flex:1 0 calc(100% - 30px);align-items:center;justify-content:center;gap:6px;min-width:0;min-height:34px;margin:5px 0 0 30px;padding:7px 10px;border:1px solid color-mix(in srgb,var(--nova-ui-primary,#08785a) 32%,var(--nova-ui-border,#dce8e3));border-radius:9px;background:var(--nova-ui-muted,#edf6f1);color:var(--nova-ui-primary,#08785a);font-size:9px;font-weight:800;cursor:pointer}.route-stop-nearby:hover{background:color-mix(in srgb,var(--nova-ui-primary,#08785a) 10%,var(--nova-ui-card,#fff))}.route-stop-nearby:focus-visible{outline:3px solid #3287e8;outline-offset:2px}.route-vicinity-distance-input{display:grid;grid-template-columns:minmax(0,1fr) 74px;gap:6px;min-width:0}.route-vicinity-distance-input input,.route-vicinity-distance-input select{min-width:0}.route-vicinity-summary{margin:8px 0;padding:8px 10px;border-radius:9px;background:var(--nova-ui-card,#fff);font-size:10px;line-height:1.45}.route-vicinity-summary:empty{display:none}
 .route-vicinity-marker{border-color:#fff!important;background:#edaa16!important;color:#173b31!important;box-shadow:0 0 0 5px rgba(237,170,22,.22),0 5px 14px rgba(36,55,47,.32)!important}
 body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){background:var(--nova-ui-muted);box-shadow:0 0 0 1px color-mix(in srgb,var(--nova-ui-primary,#08785a) 24%,transparent)}
 @media(max-width:820px){.route-plan-pane>.confirm-modal-actions:last-child{margin-right:-12px;margin-left:-12px;padding:9px 12px max(9px,env(safe-area-inset-bottom))}}
@@ -296,6 +297,18 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
 <style>
 @media(max-width:820px){.fabbar{grid-template-columns:44px 44px 68px 58px}.fabbar #newPoint{display:grid;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border-radius:50%;place-items:center;font-size:22px;line-height:1}.new-point-label{display:none}}
 @media(max-width:390px){.fabbar{grid-template-columns:44px 44px 62px 54px}}
+</style>
+<style>
+.route-stop{flex-wrap:wrap}
+.route-stop-actions{flex:1 0 100%;flex-wrap:wrap;justify-content:flex-end}
+.route-stop-actions .route-stop-nearby{display:inline-flex;order:10;flex:1 0 100%;align-items:center;justify-content:center;gap:6px;min-width:0;min-height:38px;margin:4px 0 0;padding:8px 11px;border:1px solid color-mix(in srgb,var(--nova-ui-primary,#08785a) 32%,var(--nova-ui-border,#dce8e3));border-radius:9px;background:var(--nova-ui-muted,#edf6f1);color:var(--nova-ui-primary,#08785a);font-size:10px;font-weight:800;cursor:pointer}
+.route-stop-nearby:hover{background:color-mix(in srgb,var(--nova-ui-primary,#08785a) 10%,var(--nova-ui-card,#fff))}
+.route-stop-nearby:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+.route-vicinity-distance-input{display:grid;grid-template-columns:minmax(0,1fr) 74px;gap:6px;min-width:0}
+.route-vicinity-distance-input input,.route-vicinity-distance-input select{min-width:0}
+.route-vicinity-summary{margin:8px 0;padding:8px 10px;border-radius:9px;background:var(--nova-ui-card,#fff);font-size:10px;line-height:1.45}
+.route-vicinity-summary:empty{display:none}
+@media(max-width:820px){.route-stop-actions .route-stop-nearby{min-height:44px;font-size:13px}}
 </style>
 </head>
 <body>
@@ -505,7 +518,20 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
   <div class="route-offline-status" id="routeOfflineStatus" hidden>El borrador se conserva en este dispositivo. Conéctate a internet para guardar y asignar.</div>
   <div class="meta" id="routeImportStatus">El orden inicial será el de selección. “Ordenar por cercanía” usa una aproximación desde la primera parada.</div>
   <p class="route-order-note">“Ver recorrido” dibuja el trayecto por carretera cuando el servicio está disponible.</p>
-  <section id="routeVicinityTools" class="route-vicinity-tools" hidden aria-label="Selección de puntos cercanos"><div class="route-vicinity-head"><b id="routeVicinityTitle">Puntos cercanos</b><button id="routeVicinityClose" type="button" aria-label="Cerrar selección cercana">×</button></div><div class="route-vicinity-controls"><label>Buscar por<select id="routeVicinityMode"><option value="count">Cantidad</option><option value="radius">Radio</option></select></label><label id="routeVicinityCountWrap">Cantidad<input id="routeVicinityCount" type="number" min="1" max="500" value="10"></label><label id="routeVicinityRadiusWrap" hidden>Radio<select id="routeVicinityRadius"><option value="250">250 m</option><option value="500" selected>500 m</option><option value="1000">1 km</option><option value="2000">2 km</option><option value="5000">5 km</option></select></label></div><p id="routeVicinitySummary" class="meta" role="status" aria-live="polite"></p><div class="route-vicinity-actions"><button id="routeVicinityCancel" type="button">Cancelar</button><button id="routeVicinityAdd" type="button">Agregar puntos</button></div></section>
+  <p class="route-vicinity-hint" id="routeVicinityHint" hidden>En cada parada puedes elegir sus puntos cercanos por cantidad o por radio.</p>
+  <section id="routeVicinityTools" class="route-vicinity-tools" hidden aria-label="Selección de puntos cercanos">
+   <div class="route-vicinity-head"><b id="routeVicinityTitle">Seleccionar puntos cercanos</b><button id="routeVicinityClose" type="button" aria-label="Cerrar selección cercana">×</button></div>
+   <p class="route-vicinity-intro">La parada elegida será el centro. Los resultados respetan los filtros y capas activos, se resaltan en el mapa y se agregan al final de la ruta.</p>
+   <div class="route-vicinity-controls">
+    <label>Criterio<select id="routeVicinityMode"><option value="count">Cantidad de puntos</option><option value="radius">Radio de distancia</option></select></label>
+    <label id="routeVicinityCountWrap">Puntos<input id="routeVicinityCount" type="number" min="1" max="500" step="1" value="10" aria-label="Cantidad de puntos cercanos"></label>
+    <label id="routeVicinityRadiusWrap" hidden>Radio
+     <span class="route-vicinity-distance-input"><input id="routeVicinityRadius" type="number" min="1" max="50000" step="50" value="500" data-unit="m" aria-label="Distancia del radio"><select id="routeVicinityRadiusUnit" aria-label="Unidad del radio"><option value="m" selected>m</option><option value="km">km</option></select></span>
+    </label>
+   </div>
+   <p id="routeVicinitySummary" class="route-vicinity-summary" role="status" aria-live="polite"></p>
+   <div class="route-vicinity-actions"><button id="routeVicinityCancel" type="button">Cancelar</button><button id="routeVicinityAdd" type="button">Agregar puntos</button></div>
+  </section>
   <div class="route-stops" id="routeStops"></div>
   <div class="confirm-modal-actions">
    <button class="cancel" id="routeClose" type="button">Cerrar panel</button>
@@ -3224,7 +3250,12 @@ document.getElementById('routeListRetry').addEventListener('click',()=>{void loa
 document.getElementById('routeNew').addEventListener('click',startNewRoute);
 document.getElementById('routeVicinityMode').addEventListener('change',renderRouteVicinityPreview);
 document.getElementById('routeVicinityCount').addEventListener('input',renderRouteVicinityPreview);
-document.getElementById('routeVicinityRadius').addEventListener('change',renderRouteVicinityPreview);
+document.getElementById('routeVicinityRadius').addEventListener('input',renderRouteVicinityPreview);
+document.getElementById('routeVicinityRadiusUnit').addEventListener('change',()=>{
+  const input=document.getElementById('routeVicinityRadius'),unit=document.getElementById('routeVicinityRadiusUnit'),previous=input.dataset.unit||'m',next=unit.value,value=Number(input.value);
+  if(Number.isFinite(value)&&value>0){const meters=value*(previous==='km'?1000:1);input.value=String(Number((meters/(next==='km'?1000:1)).toFixed(4)))}
+  input.dataset.unit=next;input.max=next==='km'?'50':'50000';input.step=next==='km'?'0.1':'50';renderRouteVicinityPreview();
+});
 document.getElementById('routeVicinityClose').addEventListener('click',clearRouteVicinityPreview);
 document.getElementById('routeVicinityCancel').addEventListener('click',clearRouteVicinityPreview);
 document.getElementById('routeVicinityAdd').addEventListener('click',addRouteVicinityPoints);
@@ -4754,7 +4785,7 @@ function renderRoutePlanner(){
       const responsible=assignees.find(item=>String(item.id)===String(stateOf(b).assignedToId||''));
       const reorder=canManage?`<button type="button" title="Subir parada" onclick="moveRouteStop(${index},-1)">↑</button><button type="button" title="Bajar parada" onclick="moveRouteStop(${index},1)">↓</button>`:'';
       const remove=canRemoveStops?`<button class="danger" type="button" title="Quitar parada" onclick="removeRouteStop(${index})">×</button>`:'';
-      const nearby=canManage?`<button type="button" title="Seleccionar puntos cercanos" aria-label="Seleccionar puntos cercanos a ${esc(b.name)}" onclick="event.stopPropagation();beginRouteVicinity(${index})">＋</button>`:'';
+      const nearby=canManage?`<button class="route-stop-nearby" type="button" aria-label="Seleccionar puntos cercanos a ${esc(b.name)}" onclick="event.stopPropagation();beginRouteVicinity(${index})">＋ Seleccionar puntos cercanos</button>`:'';
       const membership=remoteRoutes.filter(route=>(route.stops||[]).some(stop=>String(stop.prospectId||stop.prospect?.id)===String(stateOf(b).remoteId||''))).map(route=>esc(route.name||'Ruta sin nombre')).join(', ')||'Aún no está en rutas guardadas';
       return `<div class="route-stop ${isCurrent?'current ':''}${isCompleted?'completed':''}" role="button" tabindex="0" aria-label="Centrar mapa en parada ${index+1}: ${esc(b.name)}" onclick="if(!event.target.closest('button'))focusRouteStop(${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();focusRouteStop(${index})}"><span class="route-number">${index+1}</span><div class="route-stop-copy"><b>${esc(b.name)}</b><span>${esc(b.address || b.zone || 'Dirección pendiente')}</span><span class="route-stop-tag">${tag}</span><span class="route-stop-assignment">Responsable del punto: ${esc(responsible?.name||stateOf(b).assignedToName||'Sin asignar')} · Responsable de la ruta: ${esc(routeAssigneeName||'Sin asignar')}</span><span class="route-stop-assignment">Rutas guardadas: ${membership}</span></div><div class="route-stop-actions">${reorder}${nearby}<button type="button" title="Abrir esta parada en Waze" onclick="event.stopPropagation();openRouteStop(${index})">W</button>${remove}</div></div>`;
     }).join('') : '<div class="history-empty">Empieza a marcar puntos comerciales en el mapa para agregarlos a la ruta.</div>';
@@ -4762,6 +4793,7 @@ function renderRoutePlanner(){
   const description=document.getElementById('routeDescription');
   if(description)description.textContent=routeBusinesses.length ? `${routeBusinesses.length} parada${routeBusinesses.length===1?'':'s'} · ${routeDateLabel(scheduledFor?.value || localRouteDate())} · el recorrido comienza en la primera parada.` : routePlanningMode ? 'Empieza a marcar los puntos comerciales pulsando sus marcadores en el mapa. Cada punto agregado aparecerá aquí.' : 'Activa “Armar ruta” y empieza a marcar los puntos comerciales en el mapa.';
   const completeButton=document.getElementById('routeCompleteStop');
+  const vicinityHint=document.getElementById('routeVicinityHint');if(vicinityHint)vicinityHint.hidden=!canManage||!routeBusinesses.length;
   const nextBusiness=routeBusinesses[routeProgress];
   const nextStopId=nextBusiness?routeStopIds.get(String(stateOf(nextBusiness).remoteId||'')):null;
   if(completeButton)completeButton.disabled=routeProgress>=routeBusinesses.length||!activeRemoteRouteId||!nextStopId;
@@ -4801,6 +4833,11 @@ function routeDistanceMeters(a,b){
   const h=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
   return 6371000*2*Math.atan2(Math.sqrt(h),Math.sqrt(Math.max(0,1-h)));
 }
+function selectRouteVicinityMatches(center,candidates,selectedKeys,mode,count,radiusMeters){
+  const selected=new Set((selectedKeys||[]).map(value=>String(value))),centerKey=String(keyOf(center));
+  const nearest=(Array.isArray(candidates)?candidates:[]).filter(b=>routePointCoordinates(b)&&!isDiscarded(b)&&!selected.has(String(keyOf(b)))&&String(keyOf(b))!==centerKey).map(b=>({business:b,distance:routeDistanceMeters(center,b)})).sort((a,b)=>a.distance-b.distance||String(keyOf(a.business)).localeCompare(String(keyOf(b.business))));
+  const limit=Number(count);return mode==='radius'?nearest.filter(item=>item.distance<=radiusMeters):Number.isInteger(limit)&&limit>=1?nearest.slice(0,Math.min(500,limit)):[];
+}
 function clearRouteVicinityPreview(){
   routeVicinityMarkers.forEach(marker=>setNovaMarkerMap(marker,null));routeVicinityMarkers=[];
   routeVicinityCircle?.setMap(null);routeVicinityCircle=null;routeVicinityPreview=null;
@@ -4810,20 +4847,22 @@ function renderRouteVicinityPreview(){
   if(!routeVicinityPreview)return;
   routeVicinityMarkers.forEach(marker=>setNovaMarkerMap(marker,null));routeVicinityMarkers=[];
   routeVicinityCircle?.setMap(null);routeVicinityCircle=null;
-  const center=routeVicinityPreview.center,chosen=new Set(routeBusinesses.map(keyOf));
-  const candidates=(Array.isArray(filtered)?filtered:[]).filter(b=>routePointCoordinates(b)&&!isDiscarded(b)&&!chosen.has(keyOf(b))&&keyOf(b)!==keyOf(center)).map(b=>({business:b,distance:routeDistanceMeters(center,b)})).sort((a,b)=>a.distance-b.distance||String(keyOf(a.business)).localeCompare(String(keyOf(b.business))));
-  const mode=document.getElementById('routeVicinityMode').value,radius=Number(document.getElementById('routeVicinityRadius').value)||500,count=Math.max(1,Math.min(500,Number(document.getElementById('routeVicinityCount').value)||10));
-  const matches=mode==='radius'?candidates.filter(item=>item.distance<=radius):candidates.slice(0,count);
+  const center=routeVicinityPreview.center;
+  const mode=document.getElementById('routeVicinityMode').value,radiusInput=document.getElementById('routeVicinityRadius'),rawRadius=Number(radiusInput.value),radiusUnit=document.getElementById('routeVicinityRadiusUnit').value,radiusFactor=radiusUnit==='km'?1000:1,validRadius=Number.isFinite(rawRadius)&&rawRadius>0&&rawRadius*radiusFactor<=50000,radiusMeters=validRadius?rawRadius*radiusFactor:0,rawCount=Number(document.getElementById('routeVicinityCount').value),validCount=Number.isInteger(rawCount)&&rawCount>=1&&rawCount<=500,count=validCount?rawCount:0;
+  const matches=mode==='count'&&!validCount?[]:selectRouteVicinityMatches(center,Array.isArray(filtered)?filtered:[],routeBusinesses.map(keyOf),mode,count,radiusMeters);
   routeVicinityPreview.items=matches.map(item=>item.business);
   document.getElementById('routeVicinityCountWrap').hidden=mode!=='count';document.getElementById('routeVicinityRadiusWrap').hidden=mode!=='radius';
-  document.getElementById('routeVicinitySummary').textContent=mode==='count'?`${matches.length} punto(s) más cercano(s) a ${center.name}. Se agregan después de las paradas actuales.`:`${matches.length} punto(s) dentro de ${radius<1000?`${radius} m`:`${radius/1000} km`} de ${center.name}.`;
-  document.getElementById('routeVicinityAdd').disabled=!matches.length;
-  if(mode==='radius'&&window.google?.maps?.Circle&&googleMap)routeVicinityCircle=new google.maps.Circle({map:googleMap,center:{lat:Number(center.lat),lng:Number(center.lng)},radius,fillColor:'#08785a',fillOpacity:.09,strokeColor:'#08785a',strokeOpacity:.75,strokeWeight:2,clickable:false,zIndex:1090});
+  const summary=document.getElementById('routeVicinitySummary'),addButton=document.getElementById('routeVicinityAdd'),radiusLabel=radiusMeters<1000?`${radiusMeters} m`:`${Number((radiusMeters/1000).toFixed(2))} km`;
+  summary.textContent=mode==='count'?(!validCount?'Ingresa una cantidad de 1 a 500 puntos.':matches.length?`Se agregarán los ${matches.length} puntos elegibles más cercanos a ${center.name}.`:'No hay más puntos disponibles con los filtros y capas actuales.'):!validRadius?'Ingresa un radio mayor que 0 y de hasta 50 km.':matches.length?`${matches.length} punto(s) dentro de ${radiusLabel} de ${center.name}.`:`No hay puntos dentro de ${radiusLabel}. Prueba con un radio mayor.`;
+  addButton.disabled=!matches.length;addButton.textContent=matches.length?`Agregar ${matches.length} punto${matches.length===1?'':'s'}`:'Agregar puntos';
+  if(mode==='radius'&&validRadius&&window.google?.maps?.Circle&&googleMap)routeVicinityCircle=new google.maps.Circle({map:googleMap,center:{lat:Number(center.lat),lng:Number(center.lng)},radius:radiusMeters,fillColor:'#08785a',fillOpacity:.09,strokeColor:'#08785a',strokeOpacity:.75,strokeWeight:2,clickable:false,zIndex:1090});
   matches.forEach(({business})=>{const el=document.createElement('div');el.className='nova-route-marker route-vicinity-marker';el.textContent='+';routeVicinityMarkers.push(createMapMarker({map:googleMap,position:{lat:Number(business.lat),lng:Number(business.lng)},title:`Punto cercano: ${business.name}`,zIndex:1120,content:el}))});
 }
 function beginRouteVicinity(index){
   const center=routeBusinesses[index];if(!center||!routePointCoordinates(center))return;
-  routeVicinityPreview={center,items:[]};document.getElementById('routeVicinityTitle').textContent=`Cercanos a ${center.name||'esta parada'}`;document.getElementById('routeVicinityTools').hidden=false;renderRouteVicinityPreview();
+  routeVicinityPreview={center,items:[]};document.getElementById('routeVicinityTitle').textContent=`Seleccionar puntos cercanos a ${center.name||'esta parada'}`;const tools=document.getElementById('routeVicinityTools');tools.hidden=false;renderRouteVicinityPreview();
+  if(googleMap){googleMap.panTo({lat:Number(center.lat),lng:Number(center.lng)});if((googleMap.getZoom()||0)<14)googleMap.setZoom(14)}
+  tools.scrollIntoView?.({behavior:'smooth',block:'nearest'});document.getElementById('routeVicinityMode').focus({preventScroll:true});
 }
 function addRouteVicinityPoints(){
   if(!routeVicinityPreview||!routeVicinityPreview.items.length||!requireForceSales(routeManageAction()))return;
@@ -5006,6 +5045,7 @@ window.openRouteStop=openRouteStop;
 window.moveRouteStop=moveRouteStop;
 window.removeRouteStop=removeRouteStop;
 window.focusRouteStop=focusRouteStop;
+window.beginRouteVicinity=beginRouteVicinity;
 async function saveRouteAssignment(){
   if(routeSaving)return;
   const isExisting=Boolean(activeRemoteRouteId);
