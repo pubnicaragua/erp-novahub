@@ -15,11 +15,12 @@ export interface ExportMenuProps {
   excelLabel?: string;
   pdfDescription?: string;
   excelDescription?: string;
+  showRollFormats?: boolean;
 }
 
 /** Menú común para salidas lógicas de una vista. Los botones especializados
  * de tickets/rollos siguen usando su renderer físico separado. */
-export function ExportMenu({ onPdf, onExcel, disabled = false, className, label = 'Exportar', size = 'sm', pdfLabel = 'Exportar PDF', excelLabel = 'Exportar Excel', excelDescription = 'Todos los registros filtrados' }: ExportMenuProps) {
+export function ExportMenu({ onPdf, onExcel, disabled = false, className, label = 'Exportar', size = 'sm', pdfLabel = 'Exportar PDF', excelLabel = 'Exportar Excel', excelDescription = 'Todos los registros filtrados', showRollFormats = true }: ExportMenuProps) {
   const hasPdf = Boolean(onPdf);
   const hasExcel = Boolean(onExcel);
   if (!hasPdf && !hasExcel) return null;
@@ -43,15 +44,17 @@ export function ExportMenu({ onPdf, onExcel, disabled = false, className, label 
               <span className="shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground">{option.dimensions}</span>
             </DropdownMenuItem>
           ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="flex items-center gap-1.5 px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] text-popover-foreground/75"><ReceiptText className="size-3.5" />Rollos / Voucher</DropdownMenuLabel>
-          {PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'roll').map((option) => (
-            <DropdownMenuItem key={option.value} onClick={() => onPdf?.(option.value)} className="gap-2.5 rounded-xl py-2">
-              <ReceiptText className="size-3.5 text-primary" />
-              <span className="min-w-0 flex-1 truncate font-medium">{option.name}</span>
-              <span className="shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground">{option.dimensions}</span>
-            </DropdownMenuItem>
-          ))}
+          {showRollFormats && <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="flex items-center gap-1.5 px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] text-popover-foreground/75"><ReceiptText className="size-3.5" />Rollos / Voucher</DropdownMenuLabel>
+            {PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'roll').map((option) => (
+              <DropdownMenuItem key={option.value} onClick={() => onPdf?.(option.value)} className="gap-2.5 rounded-xl py-2">
+                <ReceiptText className="size-3.5 text-primary" />
+                <span className="min-w-0 flex-1 truncate font-medium">{option.name}</span>
+                <span className="shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground">{option.dimensions}</span>
+              </DropdownMenuItem>
+            ))}
+          </>}
         </>}
         {hasPdf && hasExcel && <DropdownMenuSeparator />}
         {hasExcel && <DropdownMenuItem onClick={onExcel} className="gap-2 rounded-xl py-2.5">

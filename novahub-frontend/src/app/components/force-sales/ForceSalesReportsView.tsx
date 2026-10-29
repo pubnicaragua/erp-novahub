@@ -191,7 +191,7 @@ export function ForceSalesReportsView() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-xl" onClick={() => void loadReport()} disabled={loading}><RefreshCw className={loading ? 'size-4 animate-spin' : 'size-4'} /> Actualizar reporte</Button>
-            {canExport && <ExportMenu onPdf={(format) => void exportPdf(format)} onExcel={exportExcel} disabled={loading || !report.rows.length} excelDescription="Resumen, gestores, rutas y detalle" />}
+            {canExport && <ExportMenu onPdf={(format) => void exportPdf(format)} onExcel={exportExcel} disabled={loading || !report.rows.length} showRollFormats={false} excelDescription="Resumen, gestores, rutas y detalle" />}
           </div>
         </div>
 
