@@ -3151,9 +3151,6 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
     ? sanitizeTemplateDefinition(design.layoutZones.definition, targetKey, settings)
     : null;
   const reportNode = configuredDefinition?.nodes.find(node => node.type === 'report-sections' && node.enabled !== false);
-  // Los destinos con una plantilla realmente personalizada deben conservarla.
-  // Solo se omite el render rasterizado para el diseño estándar de este reporte.
-  const useNativeVectorTables = useVectorTables && !configuredDefinition && !baseSettings.curatedTemplateSelection;
   const reportSections: PdfTemplateReportSection[] = sections.filter(section => section && section.title && section.headers.length > 0).map((section, sectionIndex) => {
     const columns = section.headers.map((header, columnIndex) => ({
       id: `report-${sectionIndex}-column-${columnIndex}`,
@@ -3176,6 +3173,17 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
       rows: [{ 'empty-message': 'Sin registros para el alcance seleccionado' }],
     });
   }
+
+  // Este reporte repite el detalle en tres tablas. Al superar 500 filas
+  // combinadas, rasterizar cada página conserva los datos pero bloquea la descarga.
+  const reportRowCount = reportSections.reduce((total, section) => total + section.rows.length, 0);
+  const useNativeVectorTables = useVectorTables && (
+    reportRowCount > 500
+    || (!configuredDefinition && !baseSettings.curatedTemplateSelection)
+  );
+  const vectorReportSections = reportSections
+    .map((section, templateIndex) => ({ section, templateIndex }))
+    .filter(({ templateIndex }) => !reportNode || reportNode.reportSectionVisibility?.[String(templateIndex)] !== false);
 
   const generatedAt = new Date().toLocaleString('es-NI');
   void branchName;
@@ -3255,7 +3263,7 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   if (kpis?.length) {
     currentY = drawReportKpiCards({ doc, kpis: kpis.map(kpi => ({ ...kpi, color: primary })), marginX: margin, contentWidth, currentY, columns: Math.min(4, Math.max(1, kpis.length)), boxHeight: 22 });
   }
-  for (const [sectionIndex, section] of reportSections.entries()) {
+  for (const { section, templateIndex: sectionIndex } of vectorReportSections) {
     if (currentY > pageHeight - 35) { doc.addPage(); currentY = 53; }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
