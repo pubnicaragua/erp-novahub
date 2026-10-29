@@ -4,6 +4,7 @@ export interface NotificationNavigation {
   section?: 'dashboard' | 'session' | 'history';
   filter?: string;
   targetId?: string;
+  routeId?: string;
   number?: string;
   invoiceId?: string;
   orderId?: string;
@@ -288,6 +289,7 @@ const normalizeNavigation = (value: unknown): NotificationNavigation | null => {
       'subscriptionRequestId',
       'domainId',
     ]),
+    routeId: firstValue(navigation, ['routeId']),
     number: firstValue(navigation, [
       'number',
       'entityNumber',
@@ -382,6 +384,7 @@ const firstValue = (metadata: Record<string, unknown>, keys: string[]) => {
 const extractTarget = (metadata: Record<string, unknown>): Partial<NotificationNavigation> => {
   const targetId = firstValue(metadata, [
     'targetId',
+    'routeId',
     'entityId',
     'invoiceId',
     'orderId',
@@ -470,6 +473,7 @@ const extractTarget = (metadata: Record<string, unknown>): Partial<NotificationN
 
   return {
     targetId,
+    routeId: firstValue(metadata, ['routeId']),
     number,
     invoiceId: firstValue(metadata, ['invoiceId']),
     orderId: firstValue(metadata, ['orderId']),

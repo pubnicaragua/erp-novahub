@@ -21,6 +21,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   const mapSectionRef = useRef<HTMLElement>(null);
   const routeImportInputRef = useRef<HTMLInputElement>(null);
   const pendingProspectTargetRef = useRef<string | null>(null);
+  const pendingRouteTargetRef = useRef<string | null>(null);
   const streamStatusRef = useRef<'connected' | 'reconnecting'>('reconnecting');
   const [previousSubModule, setPreviousSubModule] = useState(activeSubModule);
   const [mapFullscreen, setMapFullscreen] = useState(false);
@@ -78,6 +79,12 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     const onNavigate = (event: Event) => {
       const detail = (event as CustomEvent<Record<string, unknown>>).detail || {};
       if (!['fuerza-comercial', 'force-sales'].includes(String(detail.module || '').toLowerCase())) return;
+      const routeId = String(detail.routeId || '').trim();
+      if (routeId) {
+        pendingRouteTargetRef.current = routeId;
+        send('force-sales-focus-route', { routeId });
+        return;
+      }
       const targetId = String(detail.targetId || detail.entityId || '').trim();
       if (!targetId) return;
       pendingProspectTargetRef.current = targetId;
@@ -171,6 +178,8 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
       frame.contentWindow?.postMessage({ source: 'novahub-force-sales', type: 'force-sales-stream-status', status: streamStatusRef.current }, window.location.origin);
       const targetId = pendingProspectTargetRef.current;
       if (targetId) frame.contentWindow?.postMessage({ source: 'novahub-force-sales', type: 'force-sales-focus-prospect', targetId }, window.location.origin);
+      const routeId = pendingRouteTargetRef.current;
+      if (routeId) frame.contentWindow?.postMessage({ source: 'novahub-force-sales', type: 'force-sales-focus-route', routeId }, window.location.origin);
     };
     frame.addEventListener('load', onFrameLoad);
     scheduleUiContext();
@@ -196,6 +205,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
       if (event.data?.type === 'configuration-updated') setMapConfig(event.data.configuration || {});
       if (event.data?.type === 'request-import-file') routeImportInputRef.current?.click();
       if (event.data?.type === 'force-sales-focus-complete') pendingProspectTargetRef.current = null;
+      if (event.data?.type === 'force-sales-focus-route-complete') pendingRouteTargetRef.current = null;
     };
     window.addEventListener('message', onMapMessage);
     return () => window.removeEventListener('message', onMapMessage);
