@@ -284,7 +284,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .route-transfer-count{display:inline-flex;flex:none;align-items:baseline;gap:3px;padding:4px 7px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:999px;background:var(--nova-ui-muted,#edf5f1);color:var(--nova-ui-foreground,#123f35);font-size:9px;line-height:1;font-weight:700;white-space:nowrap}
 .route-transfer-count b{font-size:11px;font-weight:900}
 .route-transfer-help{display:block;color:var(--nova-ui-muted-foreground,#6c7c77);font-size:9px;line-height:1.4}
+.route-assignee-status.route-assignee-pending{margin:7px 0;padding:8px 10px;border:1px solid var(--nova-ui-border,#dce8e3);border-left:3px solid var(--nova-ui-primary,#08785a);border-radius:8px;background:var(--nova-ui-muted,#edf5f1);color:var(--nova-ui-foreground,#123f35);font-size:9px;font-weight:700;line-height:1.45}
+.route-planner-body>.confirm-modal-actions:last-child{position:sticky;bottom:-16px;z-index:8;margin:10px -17px -16px;padding:10px 17px max(10px,env(safe-area-inset-bottom));border-top:1px solid var(--nova-ui-border,#dce8e3);background:var(--nova-ui-card,#fbfdfc);box-shadow:0 -8px 18px rgba(18,53,43,.1)}
 body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){background:var(--nova-ui-muted);box-shadow:0 0 0 1px color-mix(in srgb,var(--nova-ui-primary,#08785a) 24%,transparent)}
+@media(max-width:820px){.route-planner-body>.confirm-modal-actions:last-child{margin-right:-12px;margin-left:-12px;padding:9px 12px max(9px,env(safe-area-inset-bottom))}}
 @media(max-width:390px){.route-transfer-option{gap:9px;padding:11px}.route-transfer-header{gap:5px}.route-transfer-count{padding:4px 6px}}
 </style>
 <style>
@@ -484,7 +487,7 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
    <div class="route-assignee-options" id="routeAssigneeOptions" role="listbox" aria-labelledby="routeAssigneeLabel" hidden></div>
   </div>
   <div class="route-assignee-readonly" id="routeAssigneeReadOnly" hidden></div>
-  <div class="meta" id="routeAssigneeStatus" role="status" aria-live="polite"></div>
+  <div class="meta route-assignee-status" id="routeAssigneeStatus" role="status" aria-live="polite"></div>
   <button class="cancel" id="routeAssigneeRetry" type="button" hidden>Reintentar carga de usuarios</button>
   <div class="meta" id="routeListStatus" role="status" aria-live="polite"></div>
   <button class="cancel" id="routeListRetry" type="button" hidden>Reintentar carga de rutas</button>
@@ -4594,7 +4597,12 @@ function renderRouteAssigneeOptions(){
     picker.value=selected?(assignees.find(item=>String(item.id)===selected)?.name||'Usuario seleccionado'):CURRENT_USER_NAME||'Yo mismo/a';
   }
   const status=document.getElementById('routeAssigneeStatus');
-  if(status)status.textContent=assigneeStatusMessage(query);
+  const catalogStatus=assigneeStatusMessage(query);
+  const effectiveAssigneeId=selected||CURRENT_USER_ID||'';
+  const selectedAssigneeName=assignees.find(item=>String(item.id)===String(effectiveAssigneeId))?.name||(String(effectiveAssigneeId)===String(CURRENT_USER_ID)?CURRENT_USER_NAME:'Responsable seleccionado');
+  const assignmentNeedsSave=!activeRemoteRouteId||String(effectiveAssigneeId)!==String(activeSavedRouteAssigneeId||'');
+  const assignmentHint=assignmentNeedsSave?`Se asignará a ${selectedAssigneeName} al pulsar “Guardar y asignar”.`:`Responsable actual: ${selectedAssigneeName}. Los cambios se aplican al pulsar “Guardar y asignar”.`;
+  if(status){status.textContent=catalogStatus||assignmentHint;status.classList.toggle('route-assignee-pending',!catalogStatus&&assignmentNeedsSave)}
   const retry=document.getElementById('routeAssigneeRetry');
   if(retry)retry.hidden=assigneesLoadState!=='error'||!canForceSales('assignRoute');
   const readOnly=document.getElementById('routeAssigneeReadOnly');
