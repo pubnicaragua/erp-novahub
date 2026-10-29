@@ -43,9 +43,9 @@ assert.doesNotMatch(html, /En línea · ubicación actualizada/, 'isOnline no se
 assert.doesNotMatch(html, /syncSellerPresence\(lastKnownCoords\)/, 'El mapa no reenvía coordenadas almacenadas al reactivar compartir');
 
 const trackingRuntime = await readFile(new URL('../src/app/components/ForceSalesTrackingRuntime.tsx', import.meta.url), 'utf8');
-assert.match(trackingRuntime, /import \{ MapPin \} from 'lucide-react'/, 'El indicador GPS móvil usa un icono pequeño de ubicación');
+assert.match(trackingRuntime, /import \{ ChevronDown, ChevronUp, MapPin \} from 'lucide-react'/, 'El indicador GPS móvil usa un icono pequeño de ubicación');
 assert.match(trackingRuntime, /aria-expanded=\{panelOpen\}[\s\S]*?aria-controls="force-sales-tracking-panel"/, 'El icono GPS móvil es un control accesible que abre el panel');
-assert.match(trackingRuntime, /id="force-sales-tracking-panel"[^>]*aria-label="Estado del rastreo de ruta"/, 'El panel GPS tiene nombre y semántica accesibles');
+assert.match(trackingRuntime, /id="force-sales-tracking-panel"[\s\S]*?aria-label="Estado del rastreo GPS"/, 'El panel GPS tiene nombre y semántica accesibles');
 assert.match(trackingRuntime, /GPS reciente|Sin lectura reciente|Permiso bloqueado|Ruta pausada/, 'El panel expone estados GPS separados de la conexión');
 assert.match(trackingRuntime, /Puntos pendientes|pending\} punto/, 'El panel muestra el total de puntos pendientes');
 assert.match(trackingRuntime, /NovaHub permanece visible/, 'La opción de pantalla activa explica el límite de visibilidad');
@@ -62,6 +62,12 @@ assert.match(realtimeMapScript, /if\(routePlanningMode&&marker\._b\)\{toggleRout
 assert.match(realtimeMapScript, /const removeStop=\(\)=>\{if\(routePlanningMode\)toggleRouteBusiness\(business\)\}/, 'El marcador numerado permite quitar una parada desde el mapa');
 assert.match(realtimeMapScript, /idempotencyKey:routeSaveAttemptKey/, 'La clave de idempotencia del guardado permanece junto al borrador local');
 assert.match(realtimeMapScript, /routeSaveAttemptKey=draft\.idempotencyKey\|\|null/, 'Un reintento tras recargar conserva la clave de idempotencia');
-assert.match(realtimeMapScript, /if\(active&&!routeDraftDirty&&!hasStoredRouteDraft\(\)\)hydrateRemoteRoute\(active\)/, 'La hidratación de rutas remotas no reemplaza un borrador pendiente recuperable');
+assert.doesNotMatch(realtimeMapScript, /if\(active&&!routeDraftDirty&&!hasStoredRouteDraft\(\)\)hydrateRemoteRoute\(active\)/, 'La carga de rutas no abre automáticamente una ruta arbitraria sobre el borrador');
+assert.match(realtimeMapScript, /route-stop-selected/, 'Las paradas del borrador tienen una marca visual de alto contraste');
+assert.match(realtimeMapScript, /routePlanningMode\|\|mapLayers\.plannedRoutes\?googleMap:null/, 'Las paradas del borrador permanecen visibles aunque la capa de rutas esté apagada');
+assert.match(realtimeMapScript, /routeStopKeys=new Set\(routeBusinesses\.map\(keyOf\)\)/, 'Las paradas seleccionadas se excluyen del agrupamiento de puntos comerciales');
+assert.match(realtimeMapScript, /activeRouteCount=userId=>remoteRoutes\.filter/, 'El selector muestra el número de rutas activas de cada usuario');
+assert.match(html, /id="routeAssigneeHistory" hidden/, 'El historial de rutas queda plegado inicialmente');
+assert.doesNotMatch(html, /id="routeFilterAssignee"|id="routeSavedRoute"|id="routeHistoryDate"/, 'El constructor ya no muestra filtros o selectores separados de rutas guardadas');
 
 console.log('force-sales route history: inline syntax and real-point-only gap segmentation passed');
