@@ -114,7 +114,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .popactions{display:flex;gap:6px;margin:7px 0}.popactions a{flex:1;text-decoration:none;text-align:center;padding:7px;border-radius:8px;background:#e8f4ef;color:#0b7155;font-size:8.5px;font-weight:700}
 .popquick{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:8px 0}.popquick button,.item-actions button{border:1px solid #d8e9e2;border-radius:8px;background:#f2f8f5;color:#0b7155;padding:7px 5px;font-size:8px;font-weight:800;cursor:pointer}.popquick button.primary-action,.item-actions button.primary-action{background:#123f35;color:white;border-color:#123f35}.popquick button.visit-action{background:#ecf9ee;color:#277443;border-color:#ccebd2}
 .crm{border-top:1px solid #e4ece9;padding-top:7px;margin-top:7px}.crm label{display:block;font-size:7.5px;text-transform:uppercase;font-weight:700;color:#62746e}
-.crm select,.crm input,.crm textarea{width:100%;border:1px solid #dfe8e4;border-radius:8px;padding:6px;margin:3px 0 5px;font-size:8.5px}.crm textarea{height:42px;resize:vertical}.crm button{width:100%;border:0;border-radius:8px;background:#123e35;color:white;padding:7px;font-size:8.5px;font-weight:700}.crm input[type=file]{padding:5px;background:#f7fbf9}.visit-readout{font-size:8px;color:#277443;background:#ecf9ee;border-radius:7px;padding:6px;margin:4px 0}
+.crm select,.crm input:not([type="checkbox"]):not([type="radio"]),.crm textarea{display:block;width:calc(100% - 6px);max-width:calc(100% - 6px);min-width:0;border:1px solid #dfe8e4;border-radius:8px;padding:6px;margin:3px 3px 5px;font-size:8.5px}.crm textarea{height:42px;resize:vertical}.crm button{width:100%;border:0;border-radius:8px;background:#123e35;color:white;padding:7px;font-size:8.5px;font-weight:700}.crm input[type=file]{padding:5px;background:#f7fbf9}.crm .consent input[type="checkbox"]{display:inline-block;width:auto;max-width:none;min-width:0;min-height:0;margin:0 6px 0 0;padding:0;vertical-align:middle}.visit-readout{font-size:8px;color:#277443;background:#ecf9ee;border-radius:7px;padding:6px;margin:4px 0}
+.crm .assignee-retry{margin-top:5px;border:1px solid #dce8e3;background:#edf5f1;color:#35685a}
 .quick-heading{font-size:9px;font-weight:800;color:#123f35;margin-bottom:4px}.evidence-preview{display:flex;align-items:center;gap:7px;margin:3px 0 6px;padding:5px;border:1px solid #dce8e3;border-radius:8px;background:#f7fbf9}.evidence-preview[hidden]{display:none}.evidence-preview img{width:42px;height:42px;object-fit:cover;border-radius:6px}.evidence-preview span{font-size:8px;color:#526a60;line-height:1.35}.advanced-crm{margin-top:7px;border-top:1px solid #e4ece9;padding-top:7px}.advanced-crm summary{cursor:pointer;color:#0b7155;font-size:8px;font-weight:800}.advanced-crm .advanced-content{padding-top:6px}
 .bulkbar{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:10px 0 3px;padding:8px;border-radius:12px;background:#edf7f2;border:1px solid #d5e9e1}.bulkbar b{font-size:9px;margin-right:auto}.bulkbar button{border:0;border-radius:8px;padding:6px 7px;background:white;color:#0b7155;font-size:8px;font-weight:800;cursor:pointer}.bulkbar button:hover{background:#d7f0e6}.item-actions{display:flex;gap:5px;margin-top:7px}.item-actions button{flex:1;padding:6px 4px}.item.selected-item{border-color:#4a9be4;background:#f5faff}.item.kanban-item{border-color:#77caa7}.item .check{accent-color:#08785a;width:15px;height:15px;margin-top:4px}.show-more-results{width:100%;border:1px solid #bfe2d4;border-radius:10px;background:#f2faf6;color:#08785a;padding:9px;font-size:9px;font-weight:800;cursor:pointer}
 .bulkbar.is-empty{display:none}
@@ -168,7 +169,7 @@ body.theme-dark .route-transfer-option{background:var(--nova-ui-muted);color:var
  .float{font-size:8px;padding:6px 7px;border-radius:10px}.fabbar{gap:4px}.fabbar #routeTop{max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .legend{display:none}
  .toast{bottom:145px}
- .popup{min-width:0;max-width:calc(100vw - 42px)}.popup h3{font-size:15px}.grid{font-size:9px}.crm label{font-size:8px}.crm select,.crm input,.crm textarea{font-size:10px;padding:8px}.crm textarea{height:52px}.crm button{font-size:9.5px;padding:9px}.advanced-crm summary{font-size:9px}
+ .popup{min-width:0;max-width:calc(100vw - 42px)}.popup h3{font-size:15px}.grid{font-size:9px}.crm label{font-size:8px}.crm select,.crm input:not([type="checkbox"]):not([type="radio"]),.crm textarea{font-size:10px;padding:8px}.crm textarea{height:52px}.crm button{font-size:9.5px;padding:9px}.advanced-crm summary{font-size:9px}
  .quick-capture{left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom) + 12px);width:auto}.fullscreen-float{font-size:12px}.workspace-heading b{font-size:15px}
 }
 @supports (-webkit-touch-callout:none){
@@ -215,7 +216,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
  .kanban-board{grid-template-columns:minmax(0,1fr);gap:10px}.kanban-column{min-width:0;padding:0;overflow:hidden}.kanban-column-head{min-height:50px;margin:0;padding:8px 12px;font-size:14px;touch-action:manipulation}.kanban-column-head button{display:flex;width:100%;min-width:0;min-height:44px;align-items:center;justify-content:space-between;gap:10px;border:0;background:transparent;color:var(--nova-ui-foreground);font-size:14px;font-weight:800;text-align:left;overflow-wrap:anywhere}.kanban-column-head button span{flex:none;min-width:28px;height:28px;font-size:13px}.kanban-cards{gap:9px;padding:0 10px 10px}.kanban-card{min-width:0;padding:12px;border-radius:12px}.kanban-card b{font-size:15px;line-height:1.4;overflow-wrap:anywhere}.kanban-card .meta{font-size:13px;line-height:1.45;overflow-wrap:anywhere}.kanban-card select,.kanban-card button{min-height:44px;font-size:14px}.kanban-card button{margin-top:8px}.kanban-cards[hidden]{display:none}
  .item{min-width:0;padding:14px}.itemname{font-size:15px;line-height:1.4;overflow-wrap:anywhere}.meta{font-size:13px;line-height:1.45;overflow-wrap:anywhere;white-space:normal}.search input{font-size:16px}.search-zone,.search-tools button,.search-tools select,.chips .chip,.filters select,.segment button,.view-tabs button,.actions .btn{min-height:44px;font-size:14px}.filters{grid-template-columns:1fr}.search-tools{grid-template-columns:minmax(0,1fr) auto auto}.search-tools button,.search-tools select{min-width:0}.search-meta{font-size:12px;line-height:1.4}.search-meta button{min-height:40px;font-size:13px}.stitle{min-height:36px;font-size:12px}.workspace-heading b{font-size:18px}.resultsHead,.resultsHead b{font-size:14px}
  .history-card{min-width:0;padding:14px}.history-card-top{min-width:0;flex-wrap:wrap}.history-card h3{font-size:15px;line-height:1.4;overflow-wrap:anywhere}.history-status{font-size:12px!important}.history-card-actions{flex-wrap:wrap}.history-card-actions button{min-width:0;min-height:44px;font-size:14px;overflow-wrap:anywhere}.route-toolbar{align-items:flex-start;flex-wrap:wrap;font-size:13px}.route-toolbar button,.route-day-actions button,.route-stop-actions button{min-height:44px;font-size:13px;padding:9px}.route-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.route-stat b{font-size:16px}.route-stat span{font-size:11px}.route-stop{min-width:0;align-items:flex-start;flex-wrap:wrap}.route-stop-copy{overflow-wrap:anywhere}.route-stop-copy b,.route-stop-copy span{white-space:normal;overflow-wrap:anywhere}.route-stop-actions{flex-wrap:wrap}.route-schedule-grid,.location-trail-fields{grid-template-columns:1fr}.confirm-modal label,.location-privacy b{font-size:14px}.confirm-modal select,.confirm-modal textarea,.confirm-modal input[type="text"]{min-height:44px;font-size:16px}.confirm-modal-actions{display:grid;grid-template-columns:1fr 1fr}.confirm-modal-actions button{min-height:44px;font-size:14px}
- .toast{top:calc(var(--nova-visible-top) + env(safe-area-inset-top) + 62px);bottom:auto;max-width:calc(100vw - 32px);padding:8px 11px;font-size:13px;line-height:1.35;text-align:center}.popup{font-size:14px}.popup h3{font-size:18px}.crm label{font-size:13px}.crm select,.crm input,.crm textarea,.crm button{min-height:44px;font-size:15px}.crm input[type=file]{font-size:13px}.history-empty,.kanban-empty{font-size:14px;line-height:1.5}
+ .toast{top:calc(var(--nova-visible-top) + env(safe-area-inset-top) + 62px);bottom:auto;max-width:calc(100vw - 32px);padding:8px 11px;font-size:13px;line-height:1.35;text-align:center}.popup{font-size:14px}.popup h3{font-size:18px}.crm label{font-size:13px}.crm select,.crm input:not([type="checkbox"]):not([type="radio"]),.crm textarea,.crm button{min-height:44px;font-size:15px}.crm input[type=file]{font-size:13px}.history-empty,.kanban-empty{font-size:14px;line-height:1.5}
 }
 @media(max-width:390px){.fabbar{grid-template-columns:minmax(0,1fr) 44px 62px 54px;gap:5px}.fabbar>button,.mobile-more-actions>summary{min-height:44px;padding:6px;font-size:13px}.fabbar .location-float{width:44px;min-width:44px;height:44px;min-height:44px;padding:0}.quick-capture{padding:14px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}.location-float .gps-live-dot{animation:none!important}}
@@ -234,7 +235,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .popup .crm{margin-top:10px;padding-top:10px}
 .popup .crm .quick-heading{margin-bottom:7px;font-size:13px}
 .popup .crm label{margin-top:7px;font-size:11px}
-.popup .crm select,.popup .crm input,.popup .crm textarea{min-height:42px;margin:5px 0 7px;padding:9px;font-size:12px}
+.popup .crm select,.popup .crm input:not([type="checkbox"]):not([type="radio"]),.popup .crm textarea{min-height:42px;margin:5px 3px 7px;padding:9px;font-size:12px}
 .popup .crm select option{font-size:14px}
 .popup .crm textarea{height:58px;min-height:58px}
 .popup .crm input[type=file]{min-height:42px;padding:7px;font-size:11px}
@@ -249,7 +250,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
  .popup .sync-readout,.popup .visit-readout,.popup .meta,.popup .evidence-preview span{font-size:11px}
  .popup .popactions a,.popup .popquick button{min-height:46px;font-size:13px}
  .popup .crm label{font-size:12px}
- .popup .crm select,.popup .crm input,.popup .crm textarea{min-height:48px;padding:10px;font-size:16px}
+ .popup .crm select,.popup .crm input:not([type="checkbox"]):not([type="radio"]),.popup .crm textarea{min-height:48px;padding:10px;font-size:16px}
  .popup .crm select option{font-size:16px}
  .popup .crm textarea{height:68px;min-height:68px}
  .popup .crm input[type=file]{font-size:13px}
@@ -2325,6 +2326,7 @@ async function loadSellerSummary(){
 }
 async function loadAssignees(){
   assigneesLoadState='loading';
+  refreshAssigneeViews();
   if(!localStorage.getItem('nh-auth-token')){
     assigneesLoadState='error';
     refreshAssigneeViews();
@@ -2562,6 +2564,7 @@ function popupHtml(b){
   const c = stateOf(b);
   const sid = safeId(b.id);
   const assignedUser=assignees.find(item=>String(item.id)===String(c.assignedToId||''));
+  const assigneeLoading=assigneesLoadState==='loading'&&!assignees.length;
   const assigneeNotice=assigneeStatusMessage();
   const selectedRouteName=document.getElementById('routeName')?.value.trim()||activeRemoteRoute()?.name||'Borrador actual';
   const gm = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.name + ' ' + b.address + ' Managua Nicaragua')}`;
@@ -2581,7 +2584,7 @@ function popupHtml(b){
       <b>Responsable comercial</b><span>${esc(assignedUser?.name || c.assignedToName || 'Sin asignar')}</span>
     </div>
     ${routePlanningMode&&routeBusinesses.some(item=>keyOf(item)===keyOf(b))?`<div class="meta">Ruta seleccionada: ${esc(selectedRouteName)}</div>`:''}
-    ${canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Usuario responsable</label><select id="point-assignee-${sid}"><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status">${esc(assigneeNotice)}</div>`:''}<button type="button" onclick="saveProspectAssignee('${b.id}')">Guardar responsable</button></div>` : ''}
+    ${canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Usuario responsable</label><select id="point-assignee-${sid}" ${assigneeLoading?'disabled':''}><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status" aria-live="polite">${esc(assigneeNotice)}</div>`:''}${assigneesLoadState==='error'?'<button class="assignee-retry" type="button" onclick="loadAssignees()">Reintentar carga de usuarios</button>':''}<button type="button" onclick="saveProspectAssignee('${b.id}')" ${assigneeLoading?'disabled':''}>Guardar responsable</button></div>` : ''}
     <div class="warn">${esc(b.precision)}. Validar actividad, ubicación y persona decisora antes de la visita.</div>
     ${syncReadout}
     ${evidenceReadout}
@@ -4263,7 +4266,7 @@ function renderRouteAssigneeOptions(){
 function assigneeStatusMessage(search=''){
   if(assigneesLoadState==='loading'&&!assignees.length)return 'Cargando usuarios responsables…';
   if(!assignees.length&&assigneesLoadState==='error')return 'No se pudo cargar la lista de responsables.';
-  if(!assignees.length)return 'No hay usuarios activos con permiso de lectura a Fuerza Comercial en esta empresa.';
+  if(!assignees.length)return 'No hay usuarios activos asignables en esta sucursal con acceso a Fuerza Comercial.';
   if(search&&!assignees.some(item=>String(item.name||'').toLocaleLowerCase('es-NI').includes(String(search).toLocaleLowerCase('es-NI'))))return `No hay responsables que coincidan con “${String(search).trim()}”.`;
   if(assigneesLoadState==='error')return 'No se pudo actualizar la lista. Se muestran los usuarios cargados anteriormente.';
   return '';
