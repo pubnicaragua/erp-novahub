@@ -483,7 +483,7 @@ export function createForceSalesLocationTracker(options: TrackerOptions): Tracke
       if (event.newValue === 'true') {
         paused = true;
         wantsTracking = false;
-        await stopCapture({ message: 'La ruta está pausada en otra pestaña.' });
+        await stopCapture({ message: 'El rastreo GPS está pausado en otra pestaña.' });
         publish({ gps: 'paused', enabled: false });
         return;
       }
@@ -525,8 +525,8 @@ export function createForceSalesLocationTracker(options: TrackerOptions): Tracke
       if (paused || readPaused(identity)) {
         paused = true;
         wantsTracking = false;
-        publish({ gps: 'paused', enabled: false, online: browser.isOnline(), message: 'La ruta está pausada. Reanúdala para volver a capturar.' });
-        await stopCapture({ message: 'La ruta está pausada. Reanúdala para volver a capturar.' });
+        publish({ gps: 'paused', enabled: false, online: browser.isOnline(), message: 'El rastreo GPS está pausado. No se capturan ubicaciones nuevas; tu ruta comercial y sus paradas siguen activas.' });
+        await stopCapture({ message: 'El rastreo GPS está pausado. No se capturan ubicaciones nuevas; tu ruta comercial y sus paradas siguen activas.' });
         publish({ gps: 'paused', enabled: false });
         return;
       }
@@ -547,7 +547,7 @@ export function createForceSalesLocationTracker(options: TrackerOptions): Tracke
     paused = true;
     wantsTracking = false;
     writePaused(identity, true);
-    await stopCapture({ message: 'La ruta está pausada. No se reanudará hasta que la actives.' });
+    await stopCapture({ message: 'El rastreo GPS está pausado. No se capturan ubicaciones nuevas hasta que lo reanudes.' });
     publish({ gps: 'paused', enabled: false });
   };
 
@@ -589,7 +589,7 @@ export function createForceSalesLocationTracker(options: TrackerOptions): Tracke
     await releaseLease();
   };
 
-  if (paused) publish({ gps: 'paused', message: 'La ruta está pausada. Reanúdala para volver a capturar.' });
+  if (paused) publish({ gps: 'paused', message: 'El rastreo GPS está pausado. No se capturan ubicaciones nuevas; tu ruta comercial y sus paradas siguen activas.' });
 
   return { start: () => start(), retry, pause, resume, refresh, destroy, getState: () => ({ ...state }) };
 }

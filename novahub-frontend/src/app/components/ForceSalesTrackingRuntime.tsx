@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MapPin } from 'lucide-react';
+import { ChevronDown, ChevronUp, MapPin } from 'lucide-react';
 import { api } from '../services/api';
 import {
   activateLocationQueueSession,
@@ -57,9 +57,9 @@ function gpsLabel(state: ForceSalesLocationTrackerState) {
     case 'stale': return 'Sin lectura reciente';
     case 'denied': return 'Permiso bloqueado';
     case 'error': return 'Error GPS';
-    case 'paused': return 'Ruta pausada';
+    case 'paused': return 'Rastreo GPS pausado';
     case 'other-tab': return 'Captura en otra pestaña';
-    default: return 'Ruta detenida';
+    default: return 'Captura GPS detenida';
   }
 }
 
@@ -113,7 +113,7 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
     setWakePreferenceState((current) => current.scope === identityKey
       ? current
       : { scope: identityKey, enabled: readWakeLockPreference(identity) });
-  }, [identity, identityKey]);
+  }, [identity, identityKey, activeModule]);
 
   useEffect(() => {
     if (!identity || !canTrack) {
@@ -274,6 +274,9 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
     const handleResume = () => {
       if (eligibleNow()) void startTracking(false, false);
     };
+    const handleExplicitResume = () => {
+      if (eligibleNow()) void startTracking(true, false);
+    };
     const handleRetry = () => {
       if (!eligibleNow()) return;
       void prepareQueue().then(() => tracker.retry()).catch((error) => {
@@ -295,6 +298,7 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
     window.addEventListener('online', handleOnline);
     window.addEventListener('message', handleMessage);
     window.addEventListener('force-sales-tracking-resume', handleResume);
+    window.addEventListener('force-sales-tracking-explicit-resume', handleExplicitResume);
     window.addEventListener('force-sales-tracking-retry', handleRetry);
     window.addEventListener('auth-session-reset', handleAuthReset);
     window.addEventListener('force-sales-screen-lock', handleWakePreference);
@@ -322,6 +326,7 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('message', handleMessage);
       window.removeEventListener('force-sales-tracking-resume', handleResume);
+      window.removeEventListener('force-sales-tracking-explicit-resume', handleExplicitResume);
       window.removeEventListener('force-sales-tracking-retry', handleRetry);
       window.removeEventListener('auth-session-reset', handleAuthReset);
       window.removeEventListener('force-sales-screen-lock', handleWakePreference);
@@ -342,35 +347,45 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
 
   const onWakeLockClick = () => window.dispatchEvent(new Event('force-sales-screen-lock'));
   const onRetryClick = () => window.dispatchEvent(new Event('force-sales-tracking-retry'));
+  const onResumeClick = () => window.dispatchEvent(new Event('force-sales-tracking-explicit-resume'));
   const label = gpsLabel(state);
   const gpsIconClass = state.gps === 'denied' || state.gps === 'error'
     ? 'text-destructive'
     : state.gps === 'recent'
       ? 'text-emerald-600 dark:text-emerald-400'
-      : state.enabled
+      : state.enabled || state.gps === 'paused' || state.gps === 'stale'
         ? 'text-amber-600 dark:text-amber-400'
         : 'text-muted-foreground';
+  const gpsDotClass = state.gps === 'denied' || state.gps === 'error'
+    ? 'bg-destructive'
+    : state.gps === 'recent'
+      ? 'bg-emerald-500'
+      : 'bg-amber-500';
   const pendingLabel = `${state.pending} punto${state.pending === 1 ? '' : 's'} pendiente${state.pending === 1 ? '' : 's'}`;
   const wakeSupported = 'wakeLock' in navigator;
 
   if (!identity || !canTrack || activeModule !== 'fuerza-comercial') return null;
 
   return (
-    <aside className="pointer-events-auto absolute right-3 top-[4.25rem] z-[150] text-card-foreground sm:right-5 sm:top-[4.5rem]" aria-label="Estado del rastreo de ruta">
+    <aside className="pointer-events-auto absolute right-3 top-[4.25rem] z-[150] text-card-foreground sm:right-5 sm:top-[4.5rem]" aria-label="Estado del rastreo GPS">
       <button
         type="button"
         onClick={() => setPanelOpen((open) => !open)}
         aria-expanded={panelOpen}
         aria-controls="force-sales-tracking-panel"
-        aria-label={`${panelOpen ? 'Cerrar' : 'Abrir'} estado GPS: ${label}`}
-        className="flex size-10 items-center justify-center rounded-full border border-border/80 bg-card/95 p-1 shadow-xl backdrop-blur transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+        aria-label={`${panelOpen ? 'Ocultar' : 'Mostrar'} estado del rastreo GPS. ${label}`}
+        title={`${panelOpen ? 'Ocultar' : 'Mostrar'} estado del rastreo GPS`}
+        className="flex min-h-10 items-center justify-center gap-2 rounded-full border border-border/80 bg-card/95 px-3 shadow-xl backdrop-blur transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
+        <span className={`size-2 shrink-0 rounded-full ${gpsDotClass}`} aria-hidden="true" />
         <MapPin className={`size-4 ${gpsIconClass}`} aria-hidden="true" />
+        <span className="text-xs font-semibold">GPS</span>
+        {panelOpen ? <ChevronUp className="size-3 text-muted-foreground" aria-hidden="true" /> : <ChevronDown className="size-3 text-muted-foreground" aria-hidden="true" />}
       </button>
       <section
         id="force-sales-tracking-panel"
-        aria-label="Estado del rastreo de ruta"
-        className={`${panelOpen ? 'block' : 'hidden'} absolute right-0 top-12 w-[min(22rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-2xl border border-border/80 bg-card/95 p-4 shadow-xl backdrop-blur sm:static sm:block sm:max-h-none sm:w-[min(23rem,calc(100vw-3rem))] sm:overflow-visible sm:p-3`}
+        aria-label="Estado del rastreo GPS"
+        className={`${panelOpen ? 'block' : 'hidden'} absolute right-0 top-12 w-[min(23rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-2xl border border-border/80 bg-card/95 p-4 shadow-xl backdrop-blur sm:p-3`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -391,7 +406,8 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
         {(state.gps === 'denied' || state.gps === 'error' || state.gps === 'stale' || state.gps === 'other-tab') && sharing && (
           <button type="button" onClick={onRetryClick} className="mt-3 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Reintentar GPS</button>
         )}
-        {!sharing && <p className="mt-2 text-[11px] text-muted-foreground">La ubicación está pausada. Puedes activarla desde Privacidad de ubicación.</p>}
+        {state.gps === 'paused' && sharing && <button type="button" onClick={onResumeClick} className="mt-3 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Reanudar rastreo GPS</button>}
+        {!sharing && <p className="mt-2 text-[11px] text-muted-foreground">El rastreo GPS está desactivado. Puedes activarlo desde Privacidad de ubicación; esto no cancela tu ruta comercial.</p>}
       </section>
     </aside>
   );

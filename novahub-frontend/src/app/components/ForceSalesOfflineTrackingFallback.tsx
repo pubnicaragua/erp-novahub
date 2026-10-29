@@ -29,7 +29,7 @@ function gpsLabel(gps: ForceSalesLocationTrackerState['gps']) {
     case 'stale': return 'Sin lectura reciente';
     case 'denied': return 'Permiso bloqueado';
     case 'error': return 'Error GPS';
-    case 'paused': return 'Ruta pausada';
+    case 'paused': return 'Rastreo GPS pausado';
     case 'other-tab': return 'Captura en otra pestaña';
     default: return 'Captura detenida';
   }
@@ -187,7 +187,7 @@ export function ForceSalesOfflineTrackingFallback({ identity }: Props) {
           <span className={`size-2 rounded-full ${state.online ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />
           {state.online ? 'Sesión sin validar' : 'Modo de ruta sin conexión'}
         </div>
-        <h1 id="offline-route-title" className="text-xl font-black tracking-tight sm:text-2xl">Reanudar ruta de Fuerza Comercial</h1>
+        <h1 id="offline-route-title" className="text-xl font-black tracking-tight sm:text-2xl">Reanudar captura GPS de Fuerza Comercial</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Se guardará únicamente la ubicación GPS de la jornada que ya habías iniciado. Esta pantalla no abre el ERP ni los datos de la empresa.</p>
 
         <section className="mt-5 rounded-2xl border border-border/80 bg-muted/40 p-4" aria-label="Estado de la captura offline">
@@ -200,14 +200,14 @@ export function ForceSalesOfflineTrackingFallback({ identity }: Props) {
         <p className="mt-4 text-sm text-amber-800 dark:text-amber-200" role="status" aria-live="polite">{message}</p>
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <button type="button" onClick={() => { void start(); }} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            {state.gps === 'paused' ? 'Reanudar ruta' : state.enabled ? 'Captura GPS activa' : 'Reanudar captura GPS'}
+            {state.gps === 'paused' ? 'Reanudar rastreo GPS' : state.enabled ? 'Captura GPS activa' : 'Reanudar captura GPS'}
           </button>
           {(state.gps === 'denied' || state.gps === 'error' || state.gps === 'stale' || state.gps === 'other-tab') && (
             <button type="button" onClick={retry} className="rounded-xl border border-border px-4 py-3 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Reintentar GPS</button>
           )}
-          {state.enabled && <button type="button" onClick={pause} className="rounded-xl border border-border px-4 py-3 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Pausar ruta</button>}
+          {state.enabled && <button type="button" onClick={pause} className="rounded-xl border border-border px-4 py-3 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Pausar rastreo GPS</button>}
           {state.online && <button type="button" onClick={returnToLogin} className="rounded-xl border border-border px-4 py-3 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Volver al inicio de sesión</button>}
-          {(state.enabled || state.gps === 'paused') && <button type="button" onClick={finishOfflineRoute} className="rounded-xl border border-border px-4 py-3 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Finalizar ruta</button>}
+          {(state.enabled || state.gps === 'paused') && <button type="button" onClick={finishOfflineRoute} className="rounded-xl border border-border px-4 py-3 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Finalizar jornada</button>}
         </div>
         {!state.enabled && state.gps !== 'paused' && !state.online && <button type="button" onClick={finishOfflineRoute} className="mt-3 text-xs font-semibold text-muted-foreground underline underline-offset-4">Finalizar esta jornada</button>}
 
