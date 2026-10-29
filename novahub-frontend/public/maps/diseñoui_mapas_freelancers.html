@@ -95,8 +95,9 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .ma{background:var(--green)}.mb{background:var(--amber)}.mc{background:var(--gray)}
 .marker.selected{--marker-ring:#3287e8}.marker.kanban{--marker-ring:#12aa7b}.marker.visited{--marker-ring:#84d795}.marker.interested{--marker-ring:#0b9d68}.marker.discarded{--marker-ring:#86958f;opacity:.62}
 .cluster-brand{width:42px;height:42px;border-radius:15px;background:#123f35;border:3px solid #b4f4d8;color:white;display:flex;align-items:center;justify-content:center;gap:3px;box-shadow:0 6px 15px rgba(12,53,43,.28);font-size:10px;font-weight:900}.cluster-brand span{font-size:13px;color:#8df1be}.cluster-brand b{font-size:11px}
-.nova-map-marker-content{display:block;pointer-events:auto;transform:translateZ(0)}.nova-map-marker-content img{display:block;user-select:none;-webkit-user-drag:none}.nova-map-marker-badge{position:absolute;right:-7px;top:-7px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/11px Poppins,Arial,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(12,53,43,.24)}.nova-presence-marker{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#2364d2;border:3px solid white;box-shadow:0 5px 14px rgba(19,57,116,.35);overflow:hidden;color:#fff;font:800 10px/1 Poppins,Arial,sans-serif}.nova-presence-marker.stale{background:#71828b;opacity:.86;box-shadow:0 4px 11px rgba(38,58,65,.28)}.nova-presence-marker img{width:100%;height:100%;object-fit:cover}.nova-user-location-marker{width:18px;height:18px;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 0 0 5px rgba(8,120,90,.16),0 3px 10px rgba(8,62,45,.28)}
+.nova-map-marker-content{display:block;pointer-events:auto;transform:translateZ(0)}.nova-map-marker-content img{display:block;user-select:none;-webkit-user-drag:none}.nova-map-marker-badge{position:absolute;right:-7px;top:-7px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/11px Poppins,Arial,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(12,53,43,.24)}.nova-presence-marker{width:44px;height:44px;display:grid;place-items:center;border-radius:50%;background:#2364d2;border:3px solid white;box-shadow:0 5px 14px rgba(19,57,116,.35);overflow:hidden;color:#fff;font:800 10px/1 Poppins,Arial,sans-serif}.nova-presence-marker.stale{background:#71828b;opacity:.86;box-shadow:0 4px 11px rgba(38,58,65,.28)}.nova-presence-marker img{width:100%;height:100%;object-fit:cover}.nova-user-location-marker{width:18px;height:18px;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 0 0 5px rgba(8,120,90,.16),0 3px 10px rgba(8,62,45,.28)}
 .nova-quick-point-marker{width:40px;height:40px;display:grid;place-items:center;border:3px solid #fff;border-radius:50%;background:#e6a624;color:#173b31;box-shadow:0 0 0 5px rgba(230,166,36,.24),0 5px 14px rgba(36,55,47,.32);font:900 22px/1 Arial,sans-serif;cursor:grab}.nova-quick-point-marker:active{cursor:grabbing}.nova-quick-point-marker:focus-visible{outline:3px solid #145ac4;outline-offset:4px}.nova-quick-point-marker.saved{background:#08785a;color:#fff}.quick-capture-hint{margin:3px 0 10px!important;color:#587067!important;font-size:8px!important;line-height:1.4}
+.leaflet-marker-icon:focus-visible .nova-presence-cluster-marker,gmp-advanced-marker:focus-visible .nova-presence-cluster-marker{outline:3px solid #3287e8;outline-offset:3px}
 .sync-readout{margin:6px 0;padding:7px 8px;border:1px solid #d8e9e2;border-radius:8px;background:#f2f8f5;color:#315f50;font-size:8px;line-height:1.4}.sync-readout.pending{border-color:#f0d69b;background:#fff8e7;color:#765719}.sync-readout.synced{border-color:#cde9d2;background:#eff9f0;color:#277443}
 .nova-route-marker{width:34px;height:34px;display:grid;place-items:center;position:relative;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 4px 12px rgba(8,62,45,.3);color:#fff;font:800 11px/1 Poppins,Arial,sans-serif}.nova-route-marker img{width:22px;height:22px;border-radius:50%;object-fit:contain;background:#fff;padding:2px}.nova-route-marker span{position:absolute;right:-8px;top:-8px;min-width:16px;height:16px;display:grid;place-items:center;border-radius:50%;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/1 Poppins,Arial,sans-serif}
 .fabbar{position:fixed;z-index:900;left:calc(var(--sheet) + 14px);top:14px;display:flex;gap:7px}
@@ -665,6 +666,63 @@ window.NovaForceSalesLocation = (()=>{
     if(!historyAvailable)return 'unknown';
     return isFreshLocationTimestamp(capturedAt,now)?'recent':'stale';
   }
+  function clusterPresenceRows(rows,projectPoint,minDistance=44){
+    const prepared=[];
+    for(const row of Array.isArray(rows)?rows:[]){
+      const point=typeof projectPoint==='function'?projectPoint(row):null;
+      if(!point||!Number.isFinite(Number(point.x))||!Number.isFinite(Number(point.y)))continue;
+      prepared.push({row,x:Number(point.x),y:Number(point.y)});
+    }
+    const parents=prepared.map((_,index)=>index);
+    const find=index=>{while(parents[index]!==index){parents[index]=parents[parents[index]];index=parents[index]}return index};
+    const join=(first,second)=>{const a=find(first),b=find(second);if(a!==b)parents[b]=a};
+    const distance=Math.max(1,Number(minDistance)||44);
+    const cells=new Map();
+    prepared.forEach((point,index)=>{
+      const column=Math.floor(point.x/distance),row=Math.floor(point.y/distance);
+      for(let x=column-1;x<=column+1;x++)for(let y=row-1;y<=row+1;y++){
+        for(const otherIndex of cells.get(`${x}:${y}`)||[]){
+          const other=prepared[otherIndex];
+          if(Math.hypot(point.x-other.x,point.y-other.y)<=distance)join(index,otherIndex);
+        }
+      }
+      const key=`${column}:${row}`;
+      if(!cells.has(key))cells.set(key,[]);
+      cells.get(key).push(index);
+    });
+    const components=new Map();
+    prepared.forEach((point,index)=>{
+      const root=find(index);
+      if(!components.has(root))components.set(root,[]);
+      components.get(root).push(point);
+    });
+    return [...components.values()].filter(component=>component.length>1).map(component=>{
+      const ids=component.map(point=>String(point.row?.userId||'')).sort();
+      return {
+        rows:component.map(point=>point.row),
+        center:{x:component.reduce((sum,point)=>sum+point.x,0)/component.length,y:component.reduce((sum,point)=>sum+point.y,0)/component.length},
+        key:ids.join('|'),
+      };
+    }).sort((first,second)=>first.key.localeCompare(second.key));
+  }
+  function spreadPresenceRows(group,{width=0,height=0,minDistance=44,margin=22}={}){
+    const rows=Array.isArray(group?.rows)?group.rows:[];
+    const count=rows.length;
+    if(count<2)return {fits:false,center:null,positions:[]};
+    const radius=Math.max(minDistance,Math.ceil(minDistance/(2*Math.sin(Math.PI/count)))+5);
+    const mapWidth=Math.max(0,Number(width)||0),mapHeight=Math.max(0,Number(height)||0);
+    const fits=mapWidth>=radius*2+margin*2&&mapHeight>=radius*2+margin*2;
+    if(!fits)return {fits:false,center:null,positions:[]};
+    const center={
+      x:Math.min(Math.max(Number(group.center?.x)||0,radius+margin),mapWidth-radius-margin),
+      y:Math.min(Math.max(Number(group.center?.y)||0,radius+margin),mapHeight-radius-margin),
+    };
+    const positions=rows.map((_,index)=>{
+      const angle=-Math.PI/2+2*Math.PI*index/count;
+      return {x:center.x+Math.cos(angle)*radius,y:center.y+Math.sin(angle)*radius};
+    });
+    return {fits:true,center,positions};
+  }
   function readMarkerCoordinates(marker,event){
     const candidates=[event?.position,event?.latLng,event?.target?.getLatLng?.(),event?.target?.position,marker?.position];
     for(const candidate of candidates){
@@ -839,7 +897,7 @@ window.NovaForceSalesLocation = (()=>{
     const height=Math.max(0,visibleBottom-visibleTop);
     return {top:height?visibleTop-frameTop:Math.min(frameHeight,Math.max(0,viewportTop-frameTop)),bottom:height?frameBottom-visibleBottom:0,height};
   }
-  return Object.freeze({normalizeCoordinates,isFreshLocationTimestamp,presenceGpsState,readMarkerCoordinates,createDraftMarker,selectMapBusinesses,formatCaptureLocation,processLocationTrail,normalizeMapLayers,mapLayerStorageKey,getBusinessLayer,isBusinessVisibleInLayers,trailColorForUser,DEFAULT_MAP_LAYERS,TRAIL_LIMITS,validateEvidenceFile,visibleFrameArea});
+  return Object.freeze({normalizeCoordinates,isFreshLocationTimestamp,presenceGpsState,clusterPresenceRows,spreadPresenceRows,readMarkerCoordinates,createDraftMarker,selectMapBusinesses,formatCaptureLocation,processLocationTrail,normalizeMapLayers,mapLayerStorageKey,getBusinessLayer,isBusinessVisibleInLayers,trailColorForUser,DEFAULT_MAP_LAYERS,TRAIL_LIMITS,validateEvidenceFile,visibleFrameArea});
 })();
 </script>
 <script>
@@ -869,6 +927,8 @@ function setupNovaLeafletAdapter(){
    return {remove:()=>this._map.off(mapped,handler)};
   }
   getZoom(){return this._map.getZoom()}
+  projectToContainer(value){const point=this._map.latLngToContainerPoint([Number(value.lat),Number(value.lng)]);return {x:Number(point.x),y:Number(point.y)}}
+  containerToCoordinates(x,y){const point=this._map.containerPointToLatLng([Number(x),Number(y)]);return {lat:Number(point.lat),lng:Number(point.lng)}}
   getCenter(){return point(this._map.getCenter())}
   setCenter(value){const center=latLng(value);this._map.setView([center.lat,center.lng],this._map.getZoom())}
   panTo(value){this._map.panTo([Number(value.lat),Number(value.lng)])}
@@ -886,9 +946,11 @@ function setupNovaLeafletAdapter(){
    const html=content?.outerHTML || (options.title ? `<span class="nova-leaflet-marker" title="${String(options.title).replace(/"/g,'&quot;')}">${String(options.title).slice(0,1)}</span>` : '<span class="nova-leaflet-marker">•</span>');
    const icon=Leaflet.divIcon({className:'nova-leaflet-marker-icon',html,iconSize:[44,44],iconAnchor:[22,22]});
    this._draggable=Boolean(options.gmpDraggable||options.draggable);
-   this._marker=Leaflet.marker([this.position.lat,this.position.lng],{icon,title:options.title||'',zIndexOffset:Number(options.zIndex||0),draggable:this._draggable,keyboard:this._draggable});
+   this._clickable=Boolean(options.gmpClickable);
+   this._marker=Leaflet.marker([this.position.lat,this.position.lng],{icon,title:options.title||'',zIndexOffset:Number(options.zIndex||0),draggable:this._draggable,keyboard:Boolean(options.gmpClickable||this._draggable)});
    this._marker.on('keydown',event=>{
     const key=event.originalEvent?.key;
+    if(this._clickable&&(key==='Enter'||key===' '||key==='Spacebar')){event.originalEvent?.preventDefault?.();event.originalEvent?.stopPropagation?.();this._marker.fire('click');return;}
     const offsets={ArrowUp:[0,-8],ArrowDown:[0,8],ArrowLeft:[-8,0],ArrowRight:[8,0]};
     const offset=offsets[key];
     if(!this._draggable||!offset||!this._map)return;
@@ -905,7 +967,7 @@ function setupNovaLeafletAdapter(){
   get map(){return this._map}
   set map(value){this.setMap(value)}
   setPosition(value){this.position=latLng(value);this._marker.setLatLng([this.position.lat,this.position.lng]);return this}
-  setDraggable(enabled){this._draggable=Boolean(enabled);const dragging=this._marker.dragging;if(dragging){if(enabled)dragging.enable();else dragging.disable()}this._marker.options.keyboard=this._draggable;return this}
+  setDraggable(enabled){this._draggable=Boolean(enabled);const dragging=this._marker.dragging;if(dragging){if(enabled)dragging.enable();else dragging.disable()}this._marker.options.keyboard=Boolean(this._clickable||this._draggable);return this}
   addListener(event,handler){const mapped=event==='gmp-click'?'click':event;this._marker.on(mapped,handler);return {remove:()=>this._marker.off(mapped,handler)}}
   addEventListener(event,handler){
    if(event!=='gmp-dragend')return this.addListener(event,handler);
@@ -1174,6 +1236,12 @@ let quickPointLocationRequestId = 0;
 let focusedQuickPointMarker = null;
 let focusedQuickPointBusinessId = null;
 let presenceMarkers = new Map();
+let presenceClusterMarkers = new Map();
+let presenceClusterLines = new Map();
+let expandedPresenceClusterKey = null;
+let presenceClusterListOpen = false;
+let presenceClusterListGroupKey = null;
+let pendingPresenceClosePointer = null;
 const storedPresenceSharing = localStorage.getItem(PRESENCE_STORAGE_KEY);
 let presenceSharingEnabled = IS_PLATFORM_ADMIN ? storedPresenceSharing === 'true' : storedPresenceSharing !== 'false';
 let presenceWatchId = null;
@@ -1329,16 +1397,42 @@ function resizeGoogleMap(){
   const center=googleMap.getCenter();
   google.maps.event.trigger(googleMap,'resize');
   if(center) googleMap.setCenter(center);
+  if(typeof renderPresenceClusters==='function')renderPresenceClusters();
 }
 window.addEventListener('resize',resizeGoogleMap);
 window.addEventListener('load',resizeGoogleMap);
 if(window.ResizeObserver){new ResizeObserver(resizeGoogleMap).observe(document.getElementById('map'));}
 requestAnimationFrame(()=>{resizeGoogleMap();setTimeout(resizeGoogleMap,250);});
 const infoWindow = new google.maps.InfoWindow();
+let presenceProjectionOverlay=null;
+if(typeof googleMap.projectToContainer!=='function'&&google.maps.OverlayView){
+  presenceProjectionOverlay=new google.maps.OverlayView();
+  presenceProjectionOverlay.onAdd=()=>{};
+  presenceProjectionOverlay.draw=()=>{};
+  presenceProjectionOverlay.onRemove=()=>{};
+  presenceProjectionOverlay.setMap(googleMap);
+}
+function projectPresencePosition(position){
+  const coordinates=window.NovaForceSalesLocation.normalizeCoordinates(position);
+  if(!coordinates)return null;
+  if(typeof googleMap.projectToContainer==='function')return googleMap.projectToContainer(coordinates);
+  const projection=presenceProjectionOverlay?.getProjection?.();
+  if(!projection)return null;
+  const point=projection.fromLatLngToContainerPixel(new google.maps.LatLng(coordinates.lat,coordinates.lng));
+  return point?{x:Number(point.x),y:Number(point.y)}:null;
+}
+function unprojectPresencePosition(x,y){
+  if(typeof googleMap.containerToCoordinates==='function')return googleMap.containerToCoordinates(x,y);
+  const projection=presenceProjectionOverlay?.getProjection?.();
+  if(!projection)return null;
+  const point=projection.fromContainerPixelToLatLng(new google.maps.Point(Number(x),Number(y)));
+  return point?window.NovaForceSalesLocation.normalizeCoordinates(point):null;
+}
 let focusedQuickPointPopupOpen=false;
 let closingInfoWindowForRefresh=false;
 infoWindow.addListener?.('close',()=>{
   focusedQuickPointPopupOpen=false;currentPopupBusinessId=null;
+  if(presenceClusterListOpen){presenceClusterListOpen=false;if(activeView==='map')requestAnimationFrame(()=>renderPresenceClusters())}
   if(!closingInfoWindowForRefresh&&focusedQuickPointBusinessId){
     clearFocusedQuickPoint({closeWindow:false});
     if(activeView==='map')requestAnimationFrame(()=>render());
@@ -1346,6 +1440,8 @@ infoWindow.addListener?.('close',()=>{
 });
 const map = {
   getZoom(){return googleMap.getZoom() || 11},
+  projectToContainer(position){return projectPresencePosition(position)},
+  containerToCoordinates(x,y){return unprojectPresencePosition(x,y)},
   flyTo(coords, zoom){googleMap.panTo({lat:coords[0],lng:coords[1]});googleMap.setZoom(zoom)},
   on(event, handler){return google.maps.event.addListener(googleMap,event==='zoomend'?'zoom_changed':event,handler)}
 };
@@ -1354,10 +1450,11 @@ let focusRenderLockUntil = 0;
 function scheduleMapViewportRender(){
   window.clearTimeout(mapViewportRenderTimer);
   if(Date.now()<focusRenderLockUntil)return;
-  mapViewportRenderTimer=window.setTimeout(()=>{if(activeView==='map' && Date.now()>=focusRenderLockUntil)render()},180);
+  mapViewportRenderTimer=window.setTimeout(()=>{if(activeView==='map' && Date.now()>=focusRenderLockUntil){renderPresenceClusters();render()}},180);
 }
 googleMap.addListener('dragend',scheduleMapViewportRender);
 googleMap.addListener('zoom_changed',scheduleMapViewportRender);
+googleMap.addListener('idle',scheduleMapViewportRender);
 googleMap.addListener('dragstart',()=>clearFocusedQuickPoint());
 googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
@@ -3331,6 +3428,7 @@ function presenceRouteLabel(row){
 function presenceContent(row){
   const wrapper=document.createElement('div');
   wrapper.className=`nova-presence-marker${row.isOnline===false?' stale':''}`;
+  wrapper.style.width='44px';wrapper.style.height='44px';
   wrapper.title=row.name || 'Vendedor';
   const routeLabel=presenceRouteLabel(row);
   if(routeLabel){
@@ -3358,6 +3456,162 @@ function presencePopupContent(row){
   const markerContent=routeLabel?esc(routeLabel):row.avatar?`<img src="${esc(row.avatar)}" alt="${esc(row.name||'Colaborador')}">`:esc(row.initials||'V');
   return `<div style="min-width:220px;padding:4px 2px;font:12px Poppins,Arial,sans-serif;color:#123f35"><div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><div class="nova-presence-marker${online?'':' stale'}" style="width:42px;height:42px;flex:0 0 auto">${markerContent}</div><div><h3 style="margin:0;font-size:14px">${esc(row.name||'Colaborador')}</h3><span style="color:#687a73;font-size:10px">${esc(row.email||'')} · ${esc(row.role||'')}</span></div></div><div style="display:grid;gap:5px;font-size:10px"><div><b>Presencia:</b> ${presenceLabel}</div><div><b>GPS:</b> ${gpsLabel}${esc(gpsTime)}</div><div><b>Actividad:</b> ${esc(row.currentActivity||'Disponible')}</div><div>${current}</div><div>${last}</div><div style="color:#687a73">Última actualización del servidor ${new Date(row.lastSeenAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}</div></div></div>`;
 }
+function openPresenceDetails(row,anchor){
+  presenceClusterListOpen=false;
+  presenceClusterListGroupKey=null;
+  infoWindow.setContent(presencePopupContent(row));
+  try{infoWindow.open({map:googleMap,anchor})}catch(error){infoWindow.open(googleMap,anchor)}
+}
+function createPresenceClusterContent(count){
+  const badge=document.createElement('div');
+  badge.className='nova-presence-cluster-marker';
+  badge.setAttribute('role','img');
+  badge.setAttribute('aria-label',`${count} usuarios; abrir grupo`);
+  badge.textContent=String(count);
+  Object.assign(badge.style,{width:'44px',height:'44px',display:'grid',placeItems:'center',border:'3px solid #fff',borderRadius:'50%',background:'#123f35',color:'#fff',boxShadow:'0 4px 14px rgba(12,53,43,.35)',font:'900 14px/1 Poppins,Arial,sans-serif',pointerEvents:'none'});
+  return badge;
+}
+function clearPresenceClusterLines(){
+  presenceClusterLines.forEach(line=>line.setMap(null));
+  presenceClusterLines.clear();
+}
+function setPresenceMarkerPosition(marker,position){
+  if(marker&&position)marker.setPosition({lat:Number(position.lat),lng:Number(position.lng)});
+}
+function presenceClusterListContent(groupMarker){
+  const container=document.createElement('div');
+  container.className='nova-presence-cluster-list';
+  Object.assign(container.style,{width:'min(300px,70vw)',maxHeight:'min(360px,60vh)',overflowY:'auto',padding:'4px',fontFamily:'Poppins,Arial,sans-serif',color:'#123f35'});
+  const heading=document.createElement('strong');
+  heading.textContent=`${groupMarker._presenceGroup.rows.length} usuarios en esta ubicación`;
+  Object.assign(heading.style,{display:'block',padding:'6px 8px',fontSize:'12px'});
+  container.appendChild(heading);
+  groupMarker._presenceGroup.rows.forEach(entry=>{
+    const row=entry._presenceRow;
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='nova-presence-list-item';
+    button.setAttribute('aria-label',`Abrir ${row.name||'Colaborador'}, ${row.isOnline===false?'sin conexión':'en línea'}, ${row.gpsStatus==='recent'?'GPS reciente':row.gpsStatus==='stale'?'sin lectura GPS reciente':'GPS sin confirmar'}`);
+    Object.assign(button.style,{display:'flex',width:'100%',minHeight:'52px',alignItems:'center',gap:'10px',padding:'6px 8px',border:'0',borderRadius:'8px',background:'transparent',textAlign:'left',cursor:'pointer',font:'inherit'});
+    const avatar=presenceContent(row);
+    avatar.style.width='38px';avatar.style.height='38px';avatar.style.flex='0 0 38px';
+    button.appendChild(avatar);
+    const details=document.createElement('span');
+    details.style.cssText='display:grid;min-width:0;gap:3px';
+    const name=document.createElement('b');name.textContent=String(row.name||'Colaborador');name.style.cssText='overflow-wrap:anywhere;font-size:11px';
+    const status=document.createElement('span');status.textContent=`${row.isOnline===false?'Sin conexión':'En línea'} · ${row.gpsStatus==='recent'?'GPS reciente':row.gpsStatus==='stale'?'sin lectura GPS reciente':'GPS sin confirmar'}`;status.style.cssText='color:#687a73;font-size:9px';
+    details.append(name,status);button.appendChild(details);
+    button.addEventListener('focus',()=>button.style.background='#eaf4ef');
+    button.addEventListener('blur',()=>button.style.background='transparent');
+    button.addEventListener('click',()=>openPresenceDetails(row,groupMarker));
+    container.appendChild(button);
+  });
+  return container;
+}
+function openPresenceClusterList(groupMarker){
+  presenceClusterListOpen=true;
+  presenceClusterListGroupKey=groupMarker?._presenceGroup?.key||null;
+  infoWindow.setContent(presenceClusterListContent(groupMarker));
+  try{infoWindow.open({map:googleMap,anchor:groupMarker})}catch(error){infoWindow.open(googleMap,groupMarker)}
+}
+function showPresenceCluster(groupMarker){
+  const group=groupMarker?._presenceGroup;
+  if(!group)return;
+  if(group.rows.length>8){expandedPresenceClusterKey=null;renderPresenceClusters();openPresenceClusterList(groupMarker);return}
+  if(expandedPresenceClusterKey===group.key){expandedPresenceClusterKey=null;renderPresenceClusters();return}
+  expandedPresenceClusterKey=group.key;
+  presenceClusterListOpen=false;
+  renderPresenceClusters();
+}
+function renderPresenceClusters(){
+  presenceMarkers.forEach(marker=>setPresenceMarkerPosition(marker,marker._gpsPosition));
+  clearPresenceClusterLines();
+  if(activeView!=='map'||!mapLayers.users){
+    presenceClusterMarkers.forEach(marker=>setNovaMarkerMap(marker,null));
+    expandedPresenceClusterKey=null;
+    if(presenceClusterListOpen){presenceClusterListOpen=false;presenceClusterListGroupKey=null;infoWindow.close()}
+    return;
+  }
+  const entries=[...presenceMarkers.values()].filter(marker=>marker._presenceRow&&marker._gpsPosition).map(marker=>({
+    ...marker._presenceRow,
+    _presenceRow:marker._presenceRow,
+    _presencePosition:marker._gpsPosition,
+    _presenceMarker:marker,
+  }));
+  const groups=window.NovaForceSalesLocation.clusterPresenceRows(entries,row=>projectPresencePosition(row._presencePosition),44);
+  const activeGroupKeys=new Set(groups.map(group=>group.key));
+  if(expandedPresenceClusterKey&&!activeGroupKeys.has(expandedPresenceClusterKey))expandedPresenceClusterKey=null;
+  if(presenceClusterListOpen&&presenceClusterListGroupKey&&!activeGroupKeys.has(presenceClusterListGroupKey)){
+    presenceClusterListOpen=false;
+    presenceClusterListGroupKey=null;
+    infoWindow.close();
+  }
+  presenceClusterMarkers.forEach((marker,key)=>{if(!activeGroupKeys.has(key)){setNovaMarkerMap(marker,null);presenceClusterMarkers.delete(key)}});
+  const clusteredIds=new Set(groups.flatMap(group=>group.rows.map(row=>String(row.userId))));
+  presenceMarkers.forEach((marker,id)=>setNovaMarkerMap(marker,clusteredIds.has(String(id))?null:googleMap));
+  groups.forEach(group=>{
+    const groupPosition=unprojectPresencePosition(group.center.x,group.center.y);
+    if(!groupPosition){group.rows.forEach(row=>setNovaMarkerMap(row._presenceMarker,googleMap));return}
+    let groupMarker=presenceClusterMarkers.get(group.key);
+    if(!groupMarker){
+      const clusterContent=createPresenceClusterContent(group.rows.length);
+      groupMarker=createMapMarker({position:groupPosition,title:`${group.rows.length} usuarios superpuestos; abrir grupo`,content:clusterContent,zIndex:1450});
+      groupMarker._clusterContent=clusterContent;
+      groupMarker._presenceGroup=group;
+      const open=()=>showPresenceCluster(groupMarker);
+      if(typeof groupMarker.addEventListener==='function')groupMarker.addEventListener('gmp-click',open);else groupMarker.addListener?.('click',open);
+      presenceClusterMarkers.set(group.key,groupMarker);
+    }
+    groupMarker._presenceGroup=group;
+    groupMarker.title=`${group.rows.length} usuarios superpuestos; abrir grupo`;
+    groupMarker._clusterContent.textContent=String(group.rows.length);
+    groupMarker._clusterContent.setAttribute('aria-label',`${group.rows.length} usuarios; abrir grupo`);
+    groupMarker.setPosition(groupPosition);
+    if(expandedPresenceClusterKey!==group.key){setNovaMarkerMap(groupMarker,googleMap);return}
+    setNovaMarkerMap(groupMarker,null);
+    if(group.rows.length>8){setNovaMarkerMap(groupMarker,googleMap);return}
+    const mapElement=document.getElementById('map');
+    const spread=window.NovaForceSalesLocation.spreadPresenceRows(group,{width:Number(mapElement?.clientWidth)||0,height:Number(mapElement?.clientHeight)||0});
+    const displayPoints=spread.fits?group.rows.map((row,index)=>{
+      const point=unprojectPresencePosition(spread.positions[index].x,spread.positions[index].y);
+      return point?{row,point}:null;
+    }):[];
+    if(!spread.fits||displayPoints.some(item=>!item)){
+      setNovaMarkerMap(groupMarker,googleMap);
+      if(!presenceClusterListOpen)openPresenceClusterList(groupMarker);
+      return;
+    }
+    displayPoints.forEach(({row,point})=>{
+      setPresenceMarkerPosition(row._presenceMarker,point);
+      setNovaMarkerMap(row._presenceMarker,googleMap);
+      const line=new google.maps.Polyline({map:googleMap,path:[row._presencePosition,point],strokeColor:'#2364d2',strokeOpacity:.72,strokeWeight:2,clickable:false,zIndex:1200});
+      presenceClusterLines.set(String(row.userId),line);
+    });
+  });
+}
+function closeExpandedPresenceCluster(){
+  if(!expandedPresenceClusterKey&&!presenceClusterListOpen)return;
+  const closeList=presenceClusterListOpen;
+  pendingPresenceClosePointer=null;
+  expandedPresenceClusterKey=null;
+  presenceClusterListOpen=false;
+  presenceClusterListGroupKey=null;
+  if(closeList)infoWindow.close();
+  renderPresenceClusters();
+}
+document.addEventListener('keydown',event=>{if(event.key==='Escape')closeExpandedPresenceCluster()});
+document.addEventListener('pointerdown',event=>{
+  if(!expandedPresenceClusterKey&&!presenceClusterListOpen)return;
+  if(event.target?.closest?.('.nova-presence-cluster-marker,.nova-presence-marker,.nova-presence-cluster-list,.gm-style-iw,.leaflet-popup-content')){pendingPresenceClosePointer=null;return}
+  pendingPresenceClosePointer={pointerId:event.pointerId,x:event.clientX,y:event.clientY};
+});
+document.addEventListener('pointerup',event=>{
+  const pending=pendingPresenceClosePointer;
+  if(!pending||pending.pointerId!==event.pointerId)return;
+  pendingPresenceClosePointer=null;
+  if(Math.hypot(event.clientX-pending.x,event.clientY-pending.y)<=8)closeExpandedPresenceCluster();
+});
+document.addEventListener('pointercancel',()=>{pendingPresenceClosePointer=null});
 function renderPresence(rows,gpsCaptures=recentGpsCapturesByUser){
   if(gpsCaptures instanceof Map)recentGpsCapturesByUser=gpsCaptures;
   const historyAvailable=gpsCaptures instanceof Map;
@@ -3373,6 +3627,7 @@ function renderPresence(rows,gpsCaptures=recentGpsCapturesByUser){
     let marker=presenceMarkers.get(id);
     if(marker){
       marker._presenceRow=mapRow;
+      marker._gpsPosition={lat,lng};
       marker.setPosition({lat,lng});
       marker.title=title;
       const avatarKey=String(row.avatar || '');
@@ -3382,7 +3637,9 @@ function renderPresence(rows,gpsCaptures=recentGpsCapturesByUser){
       marker=createMapMarker({map:googleMap,position:{lat,lng},title,content:presenceContent(row),zIndex:1300});
       marker._avatarKey=String(row.avatar || '');
       marker._presenceRow=mapRow;
-      const openPresence=()=>{infoWindow.setContent(presencePopupContent(marker._presenceRow||row));try{infoWindow.open({map:googleMap,anchor:marker})}catch(error){infoWindow.open(googleMap,marker)}};
+      marker._gpsPosition={lat,lng};
+      const openPresence=()=>openPresenceDetails(marker._presenceRow||row,marker);
+      marker._openPresence=openPresence;
       if(typeof marker.addEventListener==='function')marker.addEventListener('gmp-click',openPresence);else marker.addListener?.('click',openPresence);
       presenceMarkers.set(id,marker);
     }
@@ -3440,6 +3697,7 @@ function updateMapLayerControls(){
 }
 function updateMapLayerVisibility(){
   presenceMarkers.forEach(marker=>setNovaMarkerMap(marker,mapLayers.users?googleMap:null));
+  renderPresenceClusters();
   routePolyline?.setMap(mapLayers.plannedRoutes?googleMap:null);
   routeStopMarkers.forEach(marker=>setNovaMarkerMap(marker,mapLayers.plannedRoutes?googleMap:null));
 }

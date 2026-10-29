@@ -4,6 +4,11 @@ import vm from 'node:vm';
 
 const htmlPath = new URL('../public/maps/diseñoui_mapas_freelancers.html', import.meta.url);
 const html = await readFile(htmlPath, 'utf8');
+assert.match(html, /keyboard:Boolean\(options\.gmpClickable\|\|this\._draggable\)/, 'Los marcadores interactivos de Leaflet deben poder enfocarse y activarse por teclado');
+assert.match(html, /this\._clickable&&\(key==='Enter'\|\|key===' '\|\|key==='Spacebar'\)/, 'Los marcadores personalizados de Leaflet activan su acción con Enter o Espacio');
+assert.match(html, /_presenceRow:marker\._presenceRow/, 'Los grupos conservan los datos del usuario para construir su lista de selección');
+assert.match(html, /presenceClusterListOpen&&presenceClusterListGroupKey&&!activeGroupKeys\.has\(presenceClusterListGroupKey\)/, 'La lista se cierra si cambia la composición del grupo');
+assert.match(html, /Math\.hypot\(event\.clientX-pending\.x,event\.clientY-pending\.y\)<=8/, 'Un arrastre del mapa conserva el grupo desplegado y un toque afuera lo cierra');
 for (const [index, match] of [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].entries()) {
   const attributes = match[1] || '';
   if (/\bsrc\s*=/.test(attributes) || /type=["'](?:application\/json|application\/ld\+json)/i.test(attributes)) continue;
@@ -17,6 +22,39 @@ const sandbox = { window: {} };
 vm.runInNewContext(helperScript, sandbox, { filename: 'force-sales-location-core.js' });
 const locationCore = sandbox.window.NovaForceSalesLocation;
 assert.ok(locationCore, 'El helper de ubicación debe estar disponible para el mapa');
+assert.equal(typeof locationCore.clusterPresenceRows, 'function', 'El mapa expone agrupación de presencia por distancia en píxeles');
+const presenceRows = [
+  { userId: 'a', lat: 12, lng: -86, x: 0, y: 0 },
+  { userId: 'b', lat: 12, lng: -86, x: 44, y: 0 },
+  { userId: 'c', lat: 12, lng: -86, x: 100, y: 0 },
+];
+const presenceGroups = locationCore.clusterPresenceRows(presenceRows, row => ({ x: row.x, y: row.y }));
+assert.equal(presenceGroups.length, 1, 'Usuarios a 44 px se agrupan y un usuario separado permanece individual');
+assert.deepEqual(Array.from(presenceGroups[0].rows, row => row.userId), ['a', 'b'], 'El grupo conserva a sus integrantes originales');
+assert.equal(presenceGroups[0].center.x, 22, 'El centro visual del grupo usa la media de píxeles');
+const exactOverlap = locationCore.clusterPresenceRows([
+  { userId: 'same-a', lat: 12, lng: -86, x: 5, y: 5 },
+  { userId: 'same-b', lat: 12, lng: -86, x: 5, y: 5 },
+], row => ({ x: row.x, y: row.y }));
+assert.equal(exactOverlap[0].rows.length, 2, 'Usuarios con coordenadas idénticas no quedan ocultos');
+assert.equal(typeof locationCore.spreadPresenceRows, 'function', 'El mapa expone posiciones visuales separadas para desplegar grupos');
+const spreadRows = locationCore.spreadPresenceRows(exactOverlap[0], { width: 375, height: 600 });
+assert.equal(spreadRows.positions.length, 2, 'El despliegue crea una posición visual por usuario');
+assert.equal(spreadRows.fits, true, 'El despliegue cabe dentro del mapa móvil');
+assert.equal(exactOverlap[0].rows[0].lat, 12, 'El despliegue no modifica las coordenadas GPS originales');
+const eightUserGroup = locationCore.clusterPresenceRows(
+  Array.from({ length: 8 }, (_, index) => ({ userId: `eight-${index}`, lat: 12, lng: -86, x: 100 + index, y: 100 })),
+  row => ({ x: row.x, y: row.y }),
+)[0];
+const spreadEight = locationCore.spreadPresenceRows(eightUserGroup, { width: 375, height: 600 });
+assert.equal(spreadEight.positions.length, 8, 'El despliegue admite ocho usuarios individuales');
+assert.ok(spreadEight.positions.every(point => point.x >= 22 && point.x <= 353 && point.y >= 22 && point.y <= 578), 'Los iconos desplegados permanecen dentro del mapa');
+assert.equal(locationCore.spreadPresenceRows(eightUserGroup, { width: 120, height: 120 }).fits, false, 'Un espacio demasiado pequeño requiere la lista de selección');
+const largePresenceGroup = locationCore.clusterPresenceRows(
+  Array.from({ length: 9 }, (_, index) => ({ userId: `large-${index}`, lat: 12, lng: -86, x: index * 4, y: 0 })),
+  row => ({ x: row.x, y: row.y }),
+);
+assert.equal(largePresenceGroup[0].rows.length, 9, 'La agrupación conserva todos los usuarios de grupos grandes');
 assert.equal(locationCore.normalizeCoordinates({ lat: 91, lng: -86 }), null, 'Las coordenadas fuera de rango no deben aceptarse');
 assert.equal(locationCore.normalizeCoordinates({ lat: null, lng: -86 }), null, 'Las coordenadas faltantes no deben convertirse en cero');
 assert.equal(locationCore.isFreshLocationTimestamp(new Date(1_798_300_000_000 - 90_000).toISOString(), 1_798_300_000_000), true, 'El umbral GPS del mapa incluye exactamente 90 segundos');
@@ -31,7 +69,7 @@ const acceptedPresenceReads = [];
 const markerStub = { setPosition() {}, title: '', content: null };
 const locationSandbox = {
   window: { NovaForceSalesLocation: locationCore },
-  document: { createElement: () => ({ className: '', setAttribute() {} }) },
+  document: { createElement: () => ({ className: '', style: {}, setAttribute() {} }) },
   google: { maps: { Circle: class { setCenter() {} setRadius() {} } } },
   googleMap: {},
   createMapMarker: () => markerStub,
@@ -55,13 +93,15 @@ assert.equal(locationSandbox.window.testShowUserLocation({ timestamp: mapNow, co
 assert.equal(acceptedPresenceReads.length, 1, 'La presencia parte de la lectura GPS nueva');
 assert.equal(locationSandbox.lastKnownCoords.capturedAt, new Date(mapNow).toISOString(), 'El timestamp original queda junto a las coordenadas retenidas');
 const presenceContentSource = html.match(/function presenceContent\(row\)\{[\s\S]*?\n\}/)?.[0];
+const presenceClusterContentSource = html.match(/function createPresenceClusterContent\(count\)\{[\s\S]*?\n\}/)?.[0];
 const presenceRouteLabelSource = html.match(/function presenceRouteLabel\(row\)\{[\s\S]*?\n\}/)?.[0];
 const presencePopupSource = html.match(/function presencePopupContent\(row\)\{[\s\S]*?\n\}/)?.[0];
 assert.ok(presenceContentSource, 'El mapa conserva un generador verificable para marcadores de presencia');
+assert.ok(presenceClusterContentSource, 'El mapa conserva un generador verificable para contadores accesibles de usuarios');
 assert.ok(presenceRouteLabelSource, 'El mapa normaliza nombres de ruta para el marcador de presencia');
 assert.ok(presencePopupSource, 'El popup conserva un generador verificable para los datos de presencia');
 class MarkerElementStub {
-  constructor(tagName) { this.tagName = tagName; this.children = []; this.attributes = {}; this.textContent = ''; }
+  constructor(tagName) { this.tagName = tagName; this.children = []; this.attributes = {}; this.style = {}; this.textContent = ''; }
   appendChild(child) { this.children.push(child); }
   addEventListener() {}
   setAttribute(name, value) { this.attributes[name] = value; }
@@ -71,7 +111,10 @@ const presenceSandbox = {
   esc: value => String(value ?? ''),
 };
 vm.createContext(presenceSandbox);
-vm.runInContext(`${presenceRouteLabelSource}; ${presenceContentSource}; ${presencePopupSource}; globalThis.testPresenceContent = presenceContent; globalThis.testPresencePopup = presencePopupContent;`, presenceSandbox);
+vm.runInContext(`${presenceRouteLabelSource}; ${presenceContentSource}; ${presenceClusterContentSource}; ${presencePopupSource}; globalThis.testPresenceContent = presenceContent; globalThis.testPresenceClusterContent = createPresenceClusterContent; globalThis.testPresencePopup = presencePopupContent;`, presenceSandbox);
+const presenceClusterBadge = presenceSandbox.testPresenceClusterContent(3);
+assert.equal(presenceClusterBadge.attributes['aria-label'], '3 usuarios; abrir grupo', 'El contador anuncia su acción y cantidad a lectores de pantalla');
+assert.equal(presenceClusterBadge.style.width, '44px', 'El contador mantiene un área táctil accesible');
 const routeFourMarker = presenceSandbox.testPresenceContent({ name: 'Ruta 4', initials: 'R4', avatar: 'https://example.test/ruta-4.png' });
 assert.equal(routeFourMarker.textContent, 'R4', 'El marcador conserva la etiqueta de Ruta 4 aunque tenga avatar');
 const routeFiveMarker = presenceSandbox.testPresenceContent({ name: 'Ruta N.º 5', initials: 'RN', avatar: 'https://example.test/ruta-5.png' });
