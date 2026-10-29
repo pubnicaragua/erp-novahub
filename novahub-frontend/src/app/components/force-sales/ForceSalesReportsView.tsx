@@ -97,7 +97,7 @@ export function ForceSalesReportsView() {
     if (!from || !to) return;
     setLoading(true);
     try {
-      const data = await api.get<ForceSalesReport>('/force-sales/reports', { params: { from, to, hourFrom: hourFrom || undefined, hourTo: hourTo || undefined, assignedToId: assignedToId || undefined, routeId: routeId || undefined } });
+      const data = await api.get<ForceSalesReport>('/force-sales/reports', { params: { from, to, hourFrom: hourFrom || '00:00', hourTo: hourTo || '23:59', assignedToId: assignedToId || undefined, routeId: routeId || undefined } });
       const rows = await Promise.all((data.rows || []).map(async (row) => {
         if (!row.evidence?.uri) return row;
         try {
@@ -119,7 +119,7 @@ export function ForceSalesReportsView() {
 
   const managerOptions = useMemo(() => report.managers.map((item) => item.manager).filter((manager): manager is NonNullable<ReportUser> => Boolean(manager?.id)), [report.managers]);
   const headers = ['Fecha y hora', 'Actividad', 'Gestor', 'Ruta', 'Cliente', 'Teléfono', 'Dirección', 'Ubicación', 'Coordenadas', 'Abrir mapa', 'Estado', 'Evidencia', 'Archivo', 'Notas'];
-  const filtersLabel = `Del ${from} al ${to}${hourFrom || hourTo ? ` · ${hourFrom || '00:00'}–${hourTo || '23:59'}` : ''}`;
+  const filtersLabel = `Del ${from} al ${to} · ${hourFrom || hourTo ? `${hourFrom || '00:00'}–${hourTo || '23:59'}` : 'todo el día (00:00–23:59)'}`;
 
   const exportExcel = () => {
     if (!canExport || !report) return;
