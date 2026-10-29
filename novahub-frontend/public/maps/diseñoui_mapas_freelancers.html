@@ -102,7 +102,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .fabbar{position:fixed;z-index:900;left:calc(var(--sheet) + 14px);top:14px;display:flex;gap:7px}
 .float{border:1px solid rgba(25,77,63,.12);background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-radius:12px;padding:8px 10px;font-size:9px;font-weight:600;color:#294c42;box-shadow:0 7px 22px rgba(18,57,47,.13)}
 .location-float{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:6px}.location-float svg{width:18px;height:18px;flex:none}.location-float .gps-live-dot{display:none;position:absolute;top:3px;right:3px;width:8px;height:8px;border:2px solid white;border-radius:50%;background:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.16)}.location-float.gps-pending svg,.location-float.gps-good svg{color:#2563eb}.location-float.gps-pending .gps-live-dot,.location-float.gps-good .gps-live-dot{display:block;animation:gps-blue-pulse 1.25s ease-in-out infinite}.location-float.gps-weak svg{color:#c98213}@keyframes gps-blue-pulse{0%,100%{opacity:.55;box-shadow:0 0 0 2px rgba(37,99,235,.16)}50%{opacity:1;box-shadow:0 0 0 6px rgba(37,99,235,.28)}}
-.legend{position:fixed;z-index:900;right:15px;bottom:18px;background:rgba(255,255,255,.96);border:1px solid rgba(28,87,69,.12);border-radius:13px;padding:10px 11px;font-size:8px;box-shadow:0 10px 26px rgba(16,56,45,.15)}
+.legend{position:fixed;z-index:900;right:15px;bottom:18px;background:rgba(255,255,255,.96);border:1px solid rgba(28,87,69,.12);border-radius:13px;padding:10px 11px;font-size:8px;box-shadow:0 10px 26px rgba(16,56,45,.15)}.legend[hidden]{display:none!important}
 .legend b{font-size:9px}.lr{display:flex;gap:6px;align-items:center;margin-top:5px}.ld{width:8px;height:8px;border-radius:50%}
 .business-label{background:rgba(255,255,255,.96)!important;border:1px solid rgba(18,74,59,.15)!important;border-radius:7px!important;box-shadow:0 4px 10px rgba(17,55,46,.12)!important;font-family:Poppins!important;font-size:9px!important;font-weight:600!important;padding:4px 6px!important;color:#173b31!important}
 .business-label:before{display:none!important}
@@ -390,7 +390,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
  <button class="float" id="mobileSheetToggle" type="button" aria-label="Abrir panel">Panel</button>
  <details class="mobile-more-actions"><summary aria-label="Más acciones">Más</summary><div class="mobile-more-menu"><button class="float" id="openMapLayers" type="button">Capas del mapa</button><button class="float" id="routeTop" type="button">Armar ruta</button><button class="float fullscreen-float" id="fullscreenMap" type="button" title="Ver mapa en pantalla completa" aria-label="Ver mapa en pantalla completa">⛶ Pantalla completa</button></div></details>
 </div>
-<div class="legend"><b>Potencial Nova Hub</b><div class="lr"><i class="ld" style="background:#08785a"></i>A · visita prioritaria</div><div class="lr"><i class="ld" style="background:#eea13d"></i>B · prospecto viable</div><div class="lr"><i class="ld" style="background:#83928d"></i>C · validar operación</div><div class="lr"><i class="ld" style="background:#2364d2"></i>Vendedor activo · últimos 10 min</div></div>
+<div class="legend" id="potentialLegend" hidden><b>Potencial Nova Hub</b><div class="lr"><i class="ld" style="background:#08785a"></i>A · visita prioritaria</div><div class="lr"><i class="ld" style="background:#eea13d"></i>B · prospecto viable</div><div class="lr"><i class="ld" style="background:#83928d"></i>C · validar operación</div><div class="lr"><i class="ld" style="background:#2364d2"></i>Vendedor activo · últimos 10 min</div></div>
 <div class="toast" id="toast"></div>
 <input id="quickPointCameraInput" type="file" accept="image/*" capture="environment" hidden>
 <input id="quickPointGalleryInput" type="file" accept="image/*" hidden>
@@ -443,7 +443,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 </div>
 <div class="modal-backdrop" id="routeModal" hidden>
  <section class="confirm-modal route-planner-card" role="region" aria-labelledby="routeTitle">
-  <header class="route-planner-head"><div><h2 id="routeTitle">Planificar ruta comercial</h2><p id="routeDescription">Selecciona puntos directamente en el mapa; luego revisa y ordena las paradas aquí.</p></div><button id="routePanelToggle" type="button" aria-expanded="true" aria-controls="routePanelBody" aria-label="Plegar panel de ruta">⌄</button></header>
+  <header class="route-planner-head"><div><h2 id="routeTitle">Planificar ruta comercial</h2><p id="routeDescription">Empieza a marcar los puntos comerciales en el mapa. Cada punto agregado aparecerá aquí para ordenarlo.</p></div><button id="routePanelToggle" type="button" aria-expanded="true" aria-controls="routePanelBody" aria-label="Plegar panel de ruta">⌄</button></header>
   <div class="route-planner-body" id="routePanelBody">
   <div class="route-summary"><div class="route-stat"><b id="routeStopCount">0</b><span>Paradas</span></div><div class="route-stat"><b id="routeCompletedCount">0</b><span>Completadas</span></div><div class="route-stat"><b id="routeNextStop">—</b><span>Siguiente</span></div></div>
   <p class="route-order-note" id="routeMetrics" aria-live="polite" hidden></p>
@@ -454,16 +454,20 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
    <label for="routeScheduledFor">Fecha de operación<input id="routeScheduledFor" type="date"></label>
   </div>
   <div class="route-day-actions"><button id="routeDayPrevious" type="button">Ayer</button><button id="routeDayToday" type="button" class="active">Hoy</button><button id="routeDayNext" type="button">Mañana</button><button id="routeDayAll" type="button">Todas</button></div>
-  <label for="routeFilterAssignee">Filtrar rutas por gestor</label>
+  <label for="routeFilterAssignee">Filtrar rutas por responsable</label>
   <select id="routeFilterAssignee"><option value="">Todas las rutas</option></select>
-  <label for="routeSavedRoute">Mis rutas</label>
+  <div class="meta">Este filtro muestra todas las rutas o solo las asignadas a una persona.</div>
+  <label for="routeSavedRoute">Rutas guardadas</label>
   <select id="routeSavedRoute"><option value="">Selecciona una ruta existente</option></select>
+  <div class="meta">Elige una ruta para abrirla y revisar o actualizar sus paradas.</div>
   <label for="routeName">Nombre de la ruta</label>
   <input id="routeName" type="text" maxlength="180" placeholder="Ej. Ruta cobro zona norte - lunes">
-  <label for="routeAssigneeSearch" id="routeAssigneeSearchLabel">Buscar responsable</label>
-  <input class="route-assignee-search" id="routeAssigneeSearch" type="search" placeholder="Escribe un nombre" autocomplete="off">
+  <label for="routeAssigneeSearch" id="routeAssigneeSearchLabel">Buscar responsable por nombre</label>
+  <input class="route-assignee-search" id="routeAssigneeSearch" type="search" placeholder="Escribe el nombre del usuario" autocomplete="off">
   <label for="routeAssignee" id="routeAssigneeLabel">Responsable de la ruta</label>
   <select id="routeAssignee"><option value="">Mi ruta</option></select>
+  <div class="meta" id="routeAssigneeStatus" role="status" aria-live="polite"></div>
+  <button class="cancel" id="routeAssigneeRetry" type="button" hidden>Reintentar carga de usuarios</button>
   <label class="route-transfer-option" id="routeTransferWrap"><input id="routeTransferOwnership" type="checkbox"><span>Transferir los puntos seleccionados al responsable de la ruta (<b id="routeTransferCount">0</b>). La opción desactivada conserva los responsables comerciales.</span></label>
   <div class="route-offline-status" id="routeOfflineStatus" hidden>El borrador se conserva en este dispositivo. Conéctate a internet para guardar y asignar.</div>
   <div class="meta" id="routeImportStatus">El orden inicial será el de selección. “Ordenar por cercanía” usa una aproximación desde la primera parada.</div>
@@ -1064,6 +1068,8 @@ else if(HAS_AUTHENTICATED_TENANT){
   if(localPoints.length)localStorage.setItem(LOCAL_POINTS_KEY,JSON.stringify(localPoints));
 }else localPoints=readStore(LOCAL_POINTS_KEY,[]);
 const IS_PLATFORM_ADMIN = mapQuery.get('platformAdmin') === 'true';
+const potentialLegend = document.getElementById('potentialLegend');
+if(potentialLegend)potentialLegend.hidden=!IS_PLATFORM_ADMIN;
 const CAN_ASSIGN_TEAM = mapQuery.get('canAssignTeam') === 'true';
 const CAN_DELETE_TEST = IS_PLATFORM_ADMIN;
 function applyForceSalesPermissionVisibility(){
@@ -1189,6 +1195,7 @@ let forceSalesRefreshNeedsTrail = false;
 const forceSalesSyncErrors = new Map();
 let currentPopupBusinessId = null;
 let assignees = [];
+let assigneesLoadState = 'loading';
 let routeBusinesses = [];
 const ROUTE_MAX_STOPS = Number.POSITIVE_INFINITY;
 const ROUTE_STORAGE_KEY = 'novaFuerzaRouteV2';
@@ -1352,7 +1359,7 @@ googleMap.addListener('zoom_changed',scheduleMapViewportRender);
 googleMap.addListener('dragstart',()=>clearFocusedQuickPoint());
 googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
-  if(routePlanningMode){toast('Selecciona puntos comerciales del mapa para agregarlos a la ruta');return}
+  if(routePlanningMode){toast('Pulsa un marcador comercial existente para agregar ese punto a la ruta');return}
   openQuickPointAt(event.latLng.lat(), event.latLng.lng(), 'mapa');
 });
 function svgDataUrl(svg){return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg)}
@@ -2317,17 +2324,32 @@ async function loadSellerSummary(){
   }catch(error){console.warn('No se pudo cargar el resumen comercial',error)}
 }
 async function loadAssignees(){
-  if(!localStorage.getItem('nh-auth-token'))return;
+  assigneesLoadState='loading';
+  if(!localStorage.getItem('nh-auth-token')){
+    assigneesLoadState='error';
+    refreshAssigneeViews();
+    return;
+  }
   try{
     const rows=await forceSalesRequest('/force-sales/assignees');
     const unique=new Map();
     (Array.isArray(rows) ? rows : []).filter(item=>item?.id).forEach(item=>unique.set(String(item.id),item));
     assignees=[...unique.values()];
-    syncTrailUserSelect(document.getElementById('mapTrailUser'));
-    renderSavedRouteOptions();
-    renderRoutePlanner();
-    if(activeView==='history')renderHistory();
-  }catch(error){console.warn('No se pudo cargar la lista de vendedores',error)}
+    assigneesLoadState='ready';
+    refreshAssigneeViews();
+  }catch(error){
+    assigneesLoadState='error';
+    console.warn('No se pudo cargar la lista de vendedores',error);
+    refreshAssigneeViews();
+  }
+}
+function refreshAssigneeViews(){
+  syncTrailUserSelect(document.getElementById('mapTrailUser'));
+  renderSavedRouteOptions();
+  renderRoutePlanner();
+  if(activeView==='history')renderHistory();
+  const openBusiness=findBusiness(currentPopupBusinessId);
+  if(openBusiness)rerenderKeepingPopup(openBusiness);
 }
 function normalizeImportHeader(value){
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
@@ -2540,6 +2562,7 @@ function popupHtml(b){
   const c = stateOf(b);
   const sid = safeId(b.id);
   const assignedUser=assignees.find(item=>String(item.id)===String(c.assignedToId||''));
+  const assigneeNotice=assigneeStatusMessage();
   const selectedRouteName=document.getElementById('routeName')?.value.trim()||activeRemoteRoute()?.name||'Borrador actual';
   const gm = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.name + ' ' + b.address + ' Managua Nicaragua')}`;
   const syncReadout=c.syncPending
@@ -2558,7 +2581,7 @@ function popupHtml(b){
       <b>Responsable comercial</b><span>${esc(assignedUser?.name || c.assignedToName || 'Sin asignar')}</span>
     </div>
     ${routePlanningMode&&routeBusinesses.some(item=>keyOf(item)===keyOf(b))?`<div class="meta">Ruta seleccionada: ${esc(selectedRouteName)}</div>`:''}
-    ${canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Usuario responsable</label><select id="point-assignee-${sid}"><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select><button type="button" onclick="saveProspectAssignee('${b.id}')">Guardar responsable</button></div>` : ''}
+    ${canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Usuario responsable</label><select id="point-assignee-${sid}"><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status">${esc(assigneeNotice)}</div>`:''}<button type="button" onclick="saveProspectAssignee('${b.id}')">Guardar responsable</button></div>` : ''}
     <div class="warn">${esc(b.precision)}. Validar actividad, ubicación y persona decisora antes de la visita.</div>
     ${syncReadout}
     ${evidenceReadout}
@@ -2967,6 +2990,7 @@ document.getElementById('routeClose').addEventListener('click',closeRoutePanel);
 document.getElementById('routePanelToggle').addEventListener('click',()=>setRoutePanelCollapsed(!routePanelCollapsed));
 document.getElementById('routeClear').addEventListener('click',clearRoute);
 document.getElementById('routeAssigneeSearch').addEventListener('input',renderRouteAssigneeOptions);
+document.getElementById('routeAssigneeRetry').addEventListener('click',()=>{void loadAssignees()});
 document.getElementById('routeAssignee').addEventListener('change',()=>{activeRouteAssigneeId=document.getElementById('routeAssignee').value||null;markRouteDraftChanged();renderRoutePlanner()});
 document.getElementById('routeName').addEventListener('input',markRouteDraftChanged);
 document.getElementById('routeScheduledFor').addEventListener('change',markRouteDraftChanged);
@@ -4231,6 +4255,18 @@ function renderRouteAssigneeOptions(){
   const selected=activeRouteAssigneeId||current||'';
   if(selected&&[...select.options].some(option=>option.value===String(selected)))select.value=String(selected);
   else select.value='';
+  const status=document.getElementById('routeAssigneeStatus');
+  if(status)status.textContent=assigneeStatusMessage(search);
+  const retry=document.getElementById('routeAssigneeRetry');
+  if(retry)retry.hidden=assigneesLoadState!=='error'||!canForceSales('assignRoute');
+}
+function assigneeStatusMessage(search=''){
+  if(assigneesLoadState==='loading'&&!assignees.length)return 'Cargando usuarios responsables…';
+  if(!assignees.length&&assigneesLoadState==='error')return 'No se pudo cargar la lista de responsables.';
+  if(!assignees.length)return 'No hay usuarios activos con permiso de lectura a Fuerza Comercial en esta empresa.';
+  if(search&&!assignees.some(item=>String(item.name||'').toLocaleLowerCase('es-NI').includes(String(search).toLocaleLowerCase('es-NI'))))return `No hay responsables que coincidan con “${String(search).trim()}”.`;
+  if(assigneesLoadState==='error')return 'No se pudo actualizar la lista. Se muestran los usuarios cargados anteriormente.';
+  return '';
 }
 function refreshRoutePermissionVisibility(){
   const canManage=canManageCurrentRoute();
@@ -4242,6 +4278,8 @@ function refreshRoutePermissionVisibility(){
   const assigneeSearch=document.getElementById('routeAssigneeSearch');
   const assigneeLabel=document.getElementById('routeAssigneeLabel');
   const assigneeSearchLabel=document.getElementById('routeAssigneeSearchLabel');
+  const assigneeStatus=document.getElementById('routeAssigneeStatus');
+  const assigneeRetry=document.getElementById('routeAssigneeRetry');
   const transfer=document.getElementById('routeTransferWrap');
   const complete=document.getElementById('routeCompleteStop');
   const save=document.getElementById('routeSave');
@@ -4255,6 +4293,8 @@ function refreshRoutePermissionVisibility(){
   if(assigneeSearch)assigneeSearch.hidden=!canAssign;
   if(assigneeLabel)assigneeLabel.hidden=!canAssign;
   if(assigneeSearchLabel)assigneeSearchLabel.hidden=!canAssign;
+  if(assigneeStatus)assigneeStatus.hidden=!canAssign;
+  if(assigneeRetry)assigneeRetry.hidden=!canAssign||assigneesLoadState!=='error';
   if(transfer)transfer.hidden=!canTransfer||Boolean(activeRemoteRouteId&&String(activeRemoteRoute()?.status||'').toUpperCase()!=='PLANNED');
   if(complete)complete.hidden=!canForceSales('completeRouteStop');
   if(save){
@@ -4293,10 +4333,10 @@ function renderRoutePlanner(){
       const reorder=canManage?`<button type="button" title="Subir parada" onclick="moveRouteStop(${index},-1)">↑</button><button type="button" title="Bajar parada" onclick="moveRouteStop(${index},1)">↓</button>`:'';
       const remove=canRemoveStops?`<button class="danger" type="button" title="Quitar parada" onclick="removeRouteStop(${index})">×</button>`:'';
       return `<div class="route-stop ${isCurrent?'current ':''}${isCompleted?'completed':''}" role="button" tabindex="0" aria-label="Centrar mapa en parada ${index+1}: ${esc(b.name)}" onclick="if(!event.target.closest('button'))focusRouteStop(${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();focusRouteStop(${index})}"><span class="route-number">${index+1}</span><div class="route-stop-copy"><b>${esc(b.name)}</b><span>${esc(b.address || b.zone || 'Dirección pendiente')}</span><span class="route-stop-tag">${tag} · ${esc(responsible?.name||stateOf(b).assignedToName||'Sin responsable comercial')}</span></div><div class="route-stop-actions">${reorder}<button type="button" title="Abrir esta parada en Waze" onclick="event.stopPropagation();openRouteStop(${index})">W</button>${remove}</div></div>`;
-    }).join('') : '<div class="history-empty">Selecciona prospectos para comenzar una ruta.</div>';
+    }).join('') : '<div class="history-empty">Empieza a marcar puntos comerciales en el mapa para agregarlos a la ruta.</div>';
   }
   const description=document.getElementById('routeDescription');
-  if(description)description.textContent=routeBusinesses.length ? `${routeBusinesses.length} parada${routeBusinesses.length===1?'':'s'} · ${routeDateLabel(scheduledFor?.value || localRouteDate())} · el recorrido comienza en la primera parada.` : 'Selecciona puntos directamente en el mapa para comenzar.';
+  if(description)description.textContent=routeBusinesses.length ? `${routeBusinesses.length} parada${routeBusinesses.length===1?'':'s'} · ${routeDateLabel(scheduledFor?.value || localRouteDate())} · el recorrido comienza en la primera parada.` : routePlanningMode ? 'Empieza a marcar los puntos comerciales pulsando sus marcadores en el mapa. Cada punto agregado aparecerá aquí.' : 'Activa “Armar ruta” y empieza a marcar los puntos comerciales en el mapa.';
   const completeButton=document.getElementById('routeCompleteStop');
   const nextBusiness=routeBusinesses[routeProgress];
   const nextStopId=nextBusiness?routeStopIds.get(String(stateOf(nextBusiness).remoteId||'')):null;
@@ -4324,7 +4364,7 @@ function toggleRouteBusiness(business){
   if(!routePointCoordinates(business)){toast('Este punto no tiene coordenadas válidas. Corrige su ubicación antes de agregarlo.');return}
   const key=keyOf(business),index=routeBusinesses.findIndex(item=>keyOf(item)===key);
   if(index>=0){routeBusinesses.splice(index,1);if(index<routeProgress)routeProgress=Math.max(0,routeProgress-1);toast('Punto retirado del borrador')}
-  else{routeBusinesses.push(business);toast(`Parada ${routeBusinesses.length} agregada`)}
+  else{routeBusinesses.push(business);toast(`Punto marcado · parada ${routeBusinesses.length} agregada a la ruta`)}
   markRouteDraftChanged();renderRoutePlanner();
 }
 function openRoutePlanner(ids){
@@ -4354,6 +4394,7 @@ function openRoutePlanner(ids){
   setRoutePanelCollapsed(window.matchMedia('(max-width: 820px)').matches);
   renderRoutePlanner();
   document.getElementById('routeModal').hidden=false;
+  if(!routeBusinesses.length)toast('Empieza a marcar los puntos comerciales pulsando sus marcadores en el mapa.');
 }
 function focusRouteStop(index){
   const business=routeBusinesses[index];if(!business||!routePointCoordinates(business))return;
@@ -4557,7 +4598,7 @@ async function saveRouteAssignment(){
     toast(isExisting?'Ruta actualizada y asignada':'Ruta guardada y asignada');
   }catch(error){
     console.warn('No se pudo persistir la ruta en el ERP',error);
-    if(error?.status===409)toast('La ruta cambió en otra sesión. El borrador se conservó; revisa Mis rutas y vuelve a guardar.');
+    if(error?.status===409)toast('La ruta cambió en otra sesión. El borrador se conservó; revisa Rutas guardadas y vuelve a guardar.');
     else toast(`No se pudo guardar la ruta: ${error?.message || 'el ERP rechazó la operación'}`);
   }finally{routeSaving=false;renderRoutePlanner()}
 }
