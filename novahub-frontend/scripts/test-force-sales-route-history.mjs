@@ -72,7 +72,18 @@ assert.doesNotMatch(html, /id="routeFilterAssignee"|id="routeSavedRoute"|id="rou
 assert.match(html, /id="routeAssigneeSearch" type="text" role="combobox"[\s\S]*?id="routeAssigneeOptions"[^>]*role="listbox"/, 'El responsable de ruta se elige en un único buscador accesible');
 assert.doesNotMatch(html, /Se asignará a \$\{selectedAssigneeName\} al pulsar “Guardar y asignar”/, 'El selector no muestra mensajes de asignación pendientes intrusivos');
 assert.match(html, /<button class="save" id="routeSave" type="button">Guardar ruta<\/button>/, 'El constructor deja claro el único guardado de la ruta');
-assert.match(html, /routeAssigneeOptions\.addEventListener\('pointerdown'/, 'El clic táctil o de ratón selecciona antes de perder el foco del combo');
+const routeAssigneeTargetHelper = html.match(/function routeAssigneeOptionFromEventTarget\(target\)\{[\s\S]*?\n\}/)?.[0];
+assert.ok(routeAssigneeTargetHelper, 'El selector normaliza el destino del evento sin asumir que pertenece al mismo realm DOM');
+const findRouteAssigneeOption = vm.runInNewContext(`${routeAssigneeTargetHelper};routeAssigneeOptionFromEventTarget`, { Element: class Element {} });
+const expectedRouteOption = { id: 'selected-option' };
+const crossRealmRouteTarget = vm.runInNewContext(
+  '({nodeType: 1, closest(selector) { return selector === \'#routeAssigneeOptions [role="option"]\' ? option : null; }})',
+  { option: expectedRouteOption },
+);
+assert.equal(findRouteAssigneeOption(crossRealmRouteTarget), expectedRouteOption, 'Un clic cuyo target viene de otro realm DOM encuentra su opción de responsable');
+const routeAssigneePickerHandlers = html.match(/const routeAssigneeSearchInput=[\s\S]*?routeAssigneeSearchInput\.addEventListener\('blur'/)?.[0] || '';
+assert.match(routeAssigneePickerHandlers, /routeAssigneeOptionFromEventTarget\(event\.target\)/, 'Los eventos de puntero y clic usan el resolver validado para seleccionar el responsable');
+assert.match(routeAssigneePickerHandlers, /routeAssigneeOptions\.addEventListener\('pointerdown'/, 'El clic táctil o de ratón selecciona antes de perder el foco del combo');
 assert.match(html, /id="routeCatalog"/, 'El panel ofrece un catálogo persistente de rutas para reabrir y reasignar');
 assert.match(html, /id="routeVicinityMode"/, 'El constructor ofrece selección de puntos cercanos por cantidad o radio');
 assert.match(html, /activeSavedRouteAssigneeId[\s\S]*?String\(assigneeId\|\|''\)!==String\(activeSavedRouteAssigneeId\|\|''\)/, 'La reasignación compara con el responsable persistido de la ruta');

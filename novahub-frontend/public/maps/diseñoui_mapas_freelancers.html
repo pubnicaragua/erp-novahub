@@ -3191,6 +3191,10 @@ document.getElementById('routePanelToggle').addEventListener('click',()=>setRout
 document.getElementById('routeClear').addEventListener('click',clearRoute);
 const routeAssigneeSearchInput=document.getElementById('routeAssigneeSearch');
 const routeAssigneeOptions=document.getElementById('routeAssigneeOptions');
+function routeAssigneeOptionFromEventTarget(target){
+  const element=target?.nodeType===1?target:target?.parentElement;
+  return element?.closest?.('#routeAssigneeOptions [role="option"]')||null;
+}
 routeAssigneeSearchInput.addEventListener('focus',()=>{routeAssigneePickerOpen=true;routeAssigneeActiveOptionIndex=0;routeAssigneeSearchInput.value='';renderSavedRouteOptions()});
 routeAssigneeSearchInput.addEventListener('input',()=>{routeAssigneePickerOpen=true;routeAssigneeActiveOptionIndex=-1;renderSavedRouteOptions()});
 routeAssigneeSearchInput.addEventListener('keydown',event=>{
@@ -3206,11 +3210,12 @@ routeAssigneeSearchInput.addEventListener('keydown',event=>{
   }
 });
 routeAssigneeOptions.addEventListener('pointerdown',event=>{
-  const option=event.target instanceof Element?event.target.closest('[role="option"]'):null;if(!option)return;
+  const option=routeAssigneeOptionFromEventTarget(event.target);if(!option)return;
   event.preventDefault();chooseRouteAssignee(option.dataset.assigneeId||'');
 });
 routeAssigneeOptions.addEventListener('click',event=>{
-  const option=event.target instanceof Element?event.target.closest('[role="option"]'):null;if(!option)return;
+  if(event.detail!==0)return;
+  const option=routeAssigneeOptionFromEventTarget(event.target);if(!option)return;
   chooseRouteAssignee(option.dataset.assigneeId||'');
 });
 routeAssigneeSearchInput.addEventListener('blur',()=>window.setTimeout(()=>{if(document.activeElement?.closest?.('#routeAssigneePicker'))return;routeAssigneePickerOpen=false;routeAssigneeActiveOptionIndex=-1;renderSavedRouteOptions()},120));
