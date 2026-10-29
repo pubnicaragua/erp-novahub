@@ -285,9 +285,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .route-transfer-count b{font-size:11px;font-weight:900}
 .route-transfer-help{display:block;color:var(--nova-ui-muted-foreground,#6c7c77);font-size:9px;line-height:1.4}
 .route-assignee-status.route-assignee-pending{margin:7px 0;padding:8px 10px;border:1px solid var(--nova-ui-border,#dce8e3);border-left:3px solid var(--nova-ui-primary,#08785a);border-radius:8px;background:var(--nova-ui-muted,#edf5f1);color:var(--nova-ui-foreground,#123f35);font-size:9px;font-weight:700;line-height:1.45}
-.route-planner-body>.confirm-modal-actions:last-child{position:sticky;bottom:-16px;z-index:8;margin:10px -17px -16px;padding:10px 17px max(10px,env(safe-area-inset-bottom));border-top:1px solid var(--nova-ui-border,#dce8e3);background:var(--nova-ui-card,#fbfdfc);box-shadow:0 -8px 18px rgba(18,53,43,.1)}
+.route-plan-pane>.confirm-modal-actions:last-child{position:sticky;bottom:-16px;z-index:8;margin:10px -17px -16px;padding:10px 17px max(10px,env(safe-area-inset-bottom));border-top:1px solid var(--nova-ui-border,#dce8e3);background:var(--nova-ui-card,#fbfdfc);box-shadow:0 -8px 18px rgba(18,53,43,.1)}
+.route-planner-tabs,.route-catalog-filters{display:flex;gap:6px;margin:8px 0;padding:4px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:12px;background:var(--nova-ui-muted,#edf5f1)}.route-planner-tabs button,.route-catalog-filters button{flex:1;min-height:36px;border:0;border-radius:9px;background:transparent;color:var(--nova-ui-muted-foreground,#6c7c77);font:700 10px Poppins,Arial,sans-serif;cursor:pointer}.route-planner-tabs button[aria-selected="true"],.route-catalog-filters button[aria-pressed="true"]{background:var(--nova-ui-card,#fff);color:var(--nova-ui-primary,#08785a);box-shadow:0 2px 8px rgba(18,57,47,.1)}.route-planner-tabs button:focus-visible,.route-catalog-filters button:focus-visible{outline:3px solid #3287e8;outline-offset:2px}.route-field{display:grid;gap:6px;margin:10px 0;color:var(--nova-ui-foreground,#123f35);font-size:10px;font-weight:800}.route-field input{width:100%;min-height:42px;max-width:100%;padding:8px 11px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);font:500 12px Poppins,Arial,sans-serif;accent-color:var(--nova-ui-primary,#08785a);color-scheme:light}.theme-dark .route-field input{color-scheme:dark}.route-field input:focus-visible{outline:3px solid #3287e8;outline-offset:2px}.route-vicinity-tools{margin:8px 0;padding:11px;border:1px solid var(--nova-ui-border,#cfe6dc);border-radius:12px;background:var(--nova-ui-muted,#f2f8f5);color:var(--nova-ui-foreground,#123f35)}.route-vicinity-tools[hidden]{display:none}.route-vicinity-head{display:flex;align-items:center;justify-content:space-between}.route-vicinity-head button{width:32px;height:32px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:inherit;font-size:18px}.route-vicinity-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.route-vicinity-controls label{display:grid;gap:4px;font-size:9px;font-weight:700}.route-vicinity-controls input,.route-vicinity-controls select{width:100%;min-width:0;min-height:36px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);padding:6px 8px}.route-vicinity-actions{display:flex;justify-content:flex-end;gap:7px}.route-vicinity-actions button{min-height:36px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);padding:7px 11px;font-weight:700}.route-vicinity-actions #routeVicinityAdd{background:var(--nova-ui-primary,#08785a);border-color:var(--nova-ui-primary,#08785a);color:#fff}
+.route-point-memberships{display:grid;gap:4px;margin:7px 0;padding:8px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-muted,#f4faf7);font-size:9px}.route-point-memberships b{color:var(--nova-ui-foreground,#123f35)}.route-point-memberships span{color:var(--nova-ui-muted-foreground,#61756d);line-height:1.4}
+.route-vicinity-marker{border-color:#fff!important;background:#edaa16!important;color:#173b31!important;box-shadow:0 0 0 5px rgba(237,170,22,.22),0 5px 14px rgba(36,55,47,.32)!important}
 body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){background:var(--nova-ui-muted);box-shadow:0 0 0 1px color-mix(in srgb,var(--nova-ui-primary,#08785a) 24%,transparent)}
-@media(max-width:820px){.route-planner-body>.confirm-modal-actions:last-child{margin-right:-12px;margin-left:-12px;padding:9px 12px max(9px,env(safe-area-inset-bottom))}}
+@media(max-width:820px){.route-plan-pane>.confirm-modal-actions:last-child{margin-right:-12px;margin-left:-12px;padding:9px 12px max(9px,env(safe-area-inset-bottom))}}
 @media(max-width:390px){.route-transfer-option{gap:9px;padding:11px}.route-transfer-header{gap:5px}.route-transfer-count{padding:4px 6px}}
 </style>
 <style>
@@ -478,8 +481,10 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
   <div class="route-summary"><div class="route-stat"><b id="routeStopCount">0</b><span>Paradas</span></div><div class="route-stat"><b id="routeCompletedCount">0</b><span>Completadas</span></div><div class="route-stat"><b id="routeNextStop">—</b><span>Siguiente</span></div></div>
   <p class="route-order-note" id="routeMetrics" aria-live="polite" hidden></p>
   <div class="route-progress"><span id="routeProgressBar" style="width:0%"></span></div>
+  <nav class="route-planner-tabs" role="tablist" aria-label="Gestión de rutas"><button type="button" role="tab" id="routePlanTab" aria-selected="true" aria-controls="routePlanPane">Planificar</button><button type="button" role="tab" id="routeListTab" aria-selected="false" aria-controls="routeListPane">Rutas</button></nav>
+  <section id="routePlanPane" class="route-plan-pane" role="tabpanel" aria-labelledby="routePlanTab">
   <div class="route-toolbar"><span>Orden de visita · selección desde el mapa</span><button id="routeImport" type="button">Importar clientes / rutas</button><button id="routeClear" type="button">Descartar borrador</button></div>
-  <label for="routeScheduledFor">Fecha de operación<input id="routeScheduledFor" type="date"></label>
+  <label class="route-field" for="routeScheduledFor">Fecha de operación<input id="routeScheduledFor" type="date"></label>
   <label for="routeAssigneeSearch" id="routeAssigneeLabel">Responsable de la ruta</label>
   <div class="route-assignee-picker" id="routeAssigneePicker">
    <input class="route-assignee-search" id="routeAssigneeSearch" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="routeAssigneeOptions" aria-activedescendant="" placeholder="Busca y elige un usuario" autocomplete="off">
@@ -493,13 +498,14 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
   <button class="cancel" id="routeListRetry" type="button" hidden>Reintentar carga de rutas</button>
   <section class="route-assignee-routes" id="routeAssigneeRoutes" aria-live="polite"></section>
   <details class="route-assignee-history" id="routeAssigneeHistory" hidden><summary>Historial</summary><div id="routeAssigneeHistoryList"></div></details>
-  <button class="cancel route-new-button" id="routeNew" type="button">Crear nueva ruta</button>
+  <button class="cancel route-new-button" id="routeNew" type="button">Empezar otra ruta</button>
   <label for="routeName">Nombre de la ruta</label>
   <input id="routeName" type="text" maxlength="180" placeholder="Ej. Ruta cobro zona norte - lunes">
-  <label class="route-transfer-option" id="routeTransferWrap"><input class="route-transfer-checkbox" id="routeTransferOwnership" type="checkbox" aria-describedby="routeTransferHelp"><span class="route-transfer-copy"><span class="route-transfer-header"><span class="route-transfer-title">Transferir responsable de los puntos</span><span class="route-transfer-count"><b id="routeTransferCount">0</b><span id="routeTransferUnit">puntos</span></span></span><span class="route-transfer-destination">A: <b id="routeTransferAssigneeName">Yo mismo/a</b></span><small class="route-transfer-help" id="routeTransferHelp">Si no activas esta opción, cada punto conserva su responsable actual.</small></span></label>
+  <label class="route-transfer-option" id="routeTransferWrap"><input class="route-transfer-checkbox" id="routeTransferOwnership" type="checkbox" aria-describedby="routeTransferHelp"><span class="route-transfer-copy"><span class="route-transfer-header"><span class="route-transfer-title">Transferir responsable de los puntos</span><span class="route-transfer-count"><b id="routeTransferCount">0</b><span id="routeTransferUnit">puntos</span></span></span><span class="route-transfer-destination">A: <b id="routeTransferAssigneeName">Sin responsable</b></span><small class="route-transfer-help" id="routeTransferHelp">Si no activas esta opción, cada punto conserva su responsable actual.</small></span></label>
   <div class="route-offline-status" id="routeOfflineStatus" hidden>El borrador se conserva en este dispositivo. Conéctate a internet para guardar y asignar.</div>
   <div class="meta" id="routeImportStatus">El orden inicial será el de selección. “Ordenar por cercanía” usa una aproximación desde la primera parada.</div>
   <p class="route-order-note">“Ver recorrido” dibuja el trayecto por carretera cuando el servicio está disponible.</p>
+  <section id="routeVicinityTools" class="route-vicinity-tools" hidden aria-label="Selección de puntos cercanos"><div class="route-vicinity-head"><b id="routeVicinityTitle">Puntos cercanos</b><button id="routeVicinityClose" type="button" aria-label="Cerrar selección cercana">×</button></div><div class="route-vicinity-controls"><label>Buscar por<select id="routeVicinityMode"><option value="count">Cantidad</option><option value="radius">Radio</option></select></label><label id="routeVicinityCountWrap">Cantidad<input id="routeVicinityCount" type="number" min="1" max="500" value="10"></label><label id="routeVicinityRadiusWrap" hidden>Radio<select id="routeVicinityRadius"><option value="250">250 m</option><option value="500" selected>500 m</option><option value="1000">1 km</option><option value="2000">2 km</option><option value="5000">5 km</option></select></label></div><p id="routeVicinitySummary" class="meta" role="status" aria-live="polite"></p><div class="route-vicinity-actions"><button id="routeVicinityCancel" type="button">Cancelar</button><button id="routeVicinityAdd" type="button">Agregar puntos</button></div></section>
   <div class="route-stops" id="routeStops"></div>
   <div class="confirm-modal-actions">
    <button class="cancel" id="routeClose" type="button">Cerrar panel</button>
@@ -507,7 +513,9 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
    <button class="save" id="routeDraw" type="button">Ver recorrido</button>
    <button class="cancel" id="routeOpenMaps" type="button">Abrir siguiente en Waze</button>
   </div>
-  <div class="confirm-modal-actions"><button class="cancel" id="routeCompleteStop" type="button">Marcar siguiente completada</button><button class="save" id="routeSave" type="button">Guardar y asignar</button></div>
+  <div class="confirm-modal-actions"><button class="cancel" id="routeCompleteStop" type="button">Marcar siguiente completada</button><button class="save" id="routeSave" type="button">Guardar ruta</button></div>
+  </section>
+  <section id="routeListPane" role="tabpanel" aria-labelledby="routeListTab" hidden><label class="route-field" for="routeCatalogSearch">Buscar rutas<input id="routeCatalogSearch" type="search" placeholder="Nombre, responsable o estado"></label><div class="route-catalog-filters" role="group" aria-label="Filtrar rutas"><button type="button" data-route-filter="all" aria-pressed="true">Todas</button><button type="button" data-route-filter="unassigned" aria-pressed="false">Sin asignar</button><button type="button" data-route-filter="assigned" aria-pressed="false">Asignadas</button></div><p id="routeCatalogStatus" class="meta" role="status" aria-live="polite"></p><button id="routeCatalogRetry" class="cancel" type="button" hidden>Reintentar carga</button><div id="routeCatalog" class="route-assignee-routes"></div></section>
   </div>
  </section>
 </div>
@@ -1302,6 +1310,13 @@ let routeDirectionsRequestId = 0;
 let routeStopMarkers = new Map();
 let activeRouteAssigneeId = null;
 let activeSavedRouteAssigneeId = null;
+const ROUTE_UNASSIGNED = '__unassigned__';
+let routeCatalogFilter = 'all';
+let routeVicinityPreview = null;
+let routeVicinityMarkers = [];
+let routeVicinityCircle = null;
+function routeAssigneeDraftValue(){return activeRouteAssigneeId===ROUTE_UNASSIGNED?ROUTE_UNASSIGNED:(activeRouteAssigneeId??document.getElementById('routeAssignee')?.value??'')}
+function defaultRouteAssigneeValue(){return canForceSales('assignRoute')?ROUTE_UNASSIGNED:null}
 let routeAssigneePickerOpen = false;
 let routeAssigneeActiveOptionIndex = -1;
 let activeRemoteUpdatedAt = null;
@@ -1327,7 +1342,7 @@ function persistRouteDraft(){
       prospectIds:routeBusinesses.map(b=>String(stateOf(b).remoteId||keyOf(b))),
       name:document.getElementById('routeName')?.value || '',
       scheduledFor:document.getElementById('routeScheduledFor')?.value || localRouteDate(),
-      assignedToId:document.getElementById('routeAssignee')?.value || activeRouteAssigneeId || '',
+      assignedToId:activeRouteAssigneeId===ROUTE_UNASSIGNED?null:(document.getElementById('routeAssignee')?.value || activeRouteAssigneeId || ''),
       originalAssignedToId:activeSavedRouteAssigneeId,
       transferProspectOwnership:document.getElementById('routeTransferOwnership')?.checked===true,
       expectedUpdatedAt:activeRemoteUpdatedAt,
@@ -1345,7 +1360,7 @@ function restoreRouteDraft(){
   const byRemoteId=new Map(businesses.map(b=>[String(stateOf(b).remoteId||''),b]).filter(([id])=>id));
   routeBusinesses=draft.prospectIds.map(id=>byRemoteId.get(String(id))||findBusinessByKey(id)).filter(Boolean);
   activeRemoteRouteId=draft.routeId||null;
-  activeRouteAssigneeId=draft.assignedToId||null;
+  activeRouteAssigneeId=draft.assignedToId===null?ROUTE_UNASSIGNED:(draft.assignedToId||null);
   activeSavedRouteAssigneeId=Object.prototype.hasOwnProperty.call(draft,'originalAssignedToId')?draft.originalAssignedToId:(activeRemoteRoute()?.assignedToId??null);
   const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value=draft.assignedToId||'';
   activeRemoteUpdatedAt=draft.expectedUpdatedAt||null;
@@ -1930,7 +1945,7 @@ function routeAssigneeName(route){
 }
 function renderSavedRouteOptions(){
   renderRouteAssigneeOptions();
-  const selectedId=document.getElementById('routeAssignee')?.value || CURRENT_USER_ID || '';
+  const selectedId=routeAssigneeDraftValue() ?? CURRENT_USER_ID ?? '';
   const assigned=route=>String(route.assignedToId||'')===String(selectedId);
   const active=remoteRoutes.filter(route=>assigned(route)&&['PLANNED','IN_PROGRESS'].includes(String(route.status||'').toUpperCase()));
   const history=remoteRoutes.filter(route=>assigned(route)&&['COMPLETED','CANCELLED'].includes(String(route.status||'').toUpperCase()));
@@ -1955,6 +1970,38 @@ function renderSavedRouteOptions(){
     return `<article class="route-assignee-history-card"><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${status} · ${completed}/${stops.length} visitas</span><button type="button" data-open-route="${esc(route.id)}">Consultar</button></article>`;
   }).join('');
   historyList?.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>openSavedRoute(button.dataset.openRoute)));
+  renderRouteCatalog();
+}
+function setRoutePlannerTab(tab){
+  const plans=tab==='plan';
+  document.getElementById('routePlanPane').hidden=!plans;
+  document.getElementById('routeListPane').hidden=plans;
+  document.getElementById('routePlanTab').setAttribute('aria-selected',String(plans));
+  document.getElementById('routeListTab').setAttribute('aria-selected',String(!plans));
+  if(!plans)renderRouteCatalog();
+}
+function renderRouteCatalog(){
+  const list=document.getElementById('routeCatalog'),status=document.getElementById('routeCatalogStatus'),retry=document.getElementById('routeCatalogRetry');if(!list||!status)return;
+  const query=String(document.getElementById('routeCatalogSearch')?.value||'').trim().toLocaleLowerCase('es-NI');
+  const error=forceSalesSyncErrors.has('rutas');
+  if(error){status.textContent='No se pudieron cargar las rutas. Reintenta la carga.';if(retry)retry.hidden=false;list.innerHTML='';return}
+  if(retry)retry.hidden=true;
+  if(remoteRoutesLoading&&!remoteRoutes.length){status.textContent='Cargando rutas…';list.innerHTML='';return}
+  const rows=remoteRoutes.filter(route=>{
+    const unassigned=!route.assignedToId;
+    if(routeCatalogFilter==='unassigned'&&!unassigned)return false;
+    if(routeCatalogFilter==='assigned'&&unassigned)return false;
+    const text=[route.name,route.assignedTo?.name,route.status,routeDateLabel(routeDateValue(route))].join(' ').toLocaleLowerCase('es-NI');
+    return !query||text.includes(query);
+  });
+  status.textContent=`${rows.length} ${rows.length===1?'ruta':'rutas'} · ${remoteRoutes.length} disponibles en tu alcance`;
+  list.innerHTML=rows.length?rows.map(route=>{
+    const stops=route.stops||[],done=stops.filter(stop=>String(stop.status).toUpperCase()==='COMPLETED').length;
+    const state=({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado';
+    const assigned=route.assignedTo?.name||assignees.find(user=>String(user.id)===String(route.assignedToId))?.name||'Sin asignar';
+    return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${state} · ${done}/${stops.length} visitas</span><span>Responsable: ${esc(assigned)}</span></div><button type="button" data-open-route="${esc(route.id)}">Abrir</button></article>`;
+  }).join(''):'<p class="meta route-empty">No hay rutas que coincidan con este filtro.</p>';
+  list.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>{if(openSavedRoute(button.dataset.openRoute))setRoutePlannerTab('plan')}));
 }
 function hydrateRemoteRoute(route){
   if(!route?.id)return;
@@ -1973,7 +2020,7 @@ function hydrateRemoteRoute(route){
   if(hydrated.length){mergeBusinesses();populateFilters();render();}
   activeRemoteRouteId=route.id;
   activeRemoteUpdatedAt=route.updatedAt || null;
-  activeRouteAssigneeId=route.assignedToId || CURRENT_USER_ID || null;
+  activeRouteAssigneeId=route.assignedToId ?? ROUTE_UNASSIGNED;
   activeSavedRouteAssigneeId=route.assignedToId ?? null;
   const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value=route.assignedToId||'';
   routeBusinesses=hydrated;
@@ -2000,10 +2047,10 @@ function openSavedRoute(routeId){
 }
 function startNewRoute(){
   if(routeDraftDirty&&!confirm('Tienes cambios pendientes. ¿Descartarlos y comenzar otra ruta?'))return;
-  const selectedAssignee=document.getElementById('routeAssignee')?.value||'';
+  const selectedAssignee=routeAssigneeDraftValue();
   clearRouteDraftStorage();routeDraftDirty=false;routeSaveAttemptKey=null;
   routePolyline?.setMap(null);routePolyline=null;routeDirectionsRequestId+=1;
-  routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=selectedAssignee||null;activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
+  routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=selectedAssignee||ROUTE_UNASSIGNED;activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
   document.getElementById('routeName').value='';
   document.getElementById('routeScheduledFor').value=localRouteDate();
   document.getElementById('routeTransferOwnership').checked=false;
@@ -2711,9 +2758,10 @@ function popupHtml(b){
   const sid = safeId(b.id);
   const assignedUser=assignees.find(item=>String(item.id)===String(c.assignedToId||''));
   const isCurrentRouteStop=routeBusinesses.some(item=>keyOf(item)===keyOf(b));
-  const routeAssigneeId=document.getElementById('routeAssignee')?.value||CURRENT_USER_ID||activeRouteAssigneeId||activeRemoteRoute()?.assignedToId||'';
+  const routeAssigneeId=routeAssigneeDraftValue()||'';
   const routeAssignee=assignees.find(item=>String(item.id)===String(routeAssigneeId));
   const routeAssigneeDisplay=routeAssignee?.name||((routeAssigneeId&&String(routeAssigneeId)===String(CURRENT_USER_ID))?CURRENT_USER_NAME:'')||'Sin responsable de ruta';
+  const prospectRoutes=remoteRoutes.filter(route=>(route.stops||[]).some(stop=>String(stop.prospectId||stop.prospect?.id)===String(c.remoteId||'')));
   const assigneeLoading=assigneesLoadState==='loading'&&!assignees.length;
   const assigneeNotice=assigneeStatusMessage();
   const selectedRouteName=document.getElementById('routeName')?.value.trim()||activeRemoteRoute()?.name||'Borrador actual';
@@ -2733,6 +2781,7 @@ function popupHtml(b){
       <b>Responsable del punto</b><span>${esc(assignedUser?.name || c.assignedToName || 'Sin asignar')}</span>
       <b>Responsable de la ruta actual</b><span>${isCurrentRouteStop?esc(routeAssigneeDisplay):'No forma parte de la ruta actual'}</span>
     </div>
+    <div class="route-point-memberships"><b>Rutas que incluyen este punto</b>${prospectRoutes.length?prospectRoutes.map(route=>`<span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</div>
     ${routePlanningMode&&isCurrentRouteStop?`<div class="meta">Parada de la ruta: ${esc(selectedRouteName)}</div>`:''}
     ${CAN_ASSIGN_PROSPECT_OWNER&&canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Responsable del punto</label><select id="point-assignee-${sid}" ${assigneeLoading?'disabled':''}><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status" aria-live="polite">${esc(assigneeNotice)}</div>`:''}${assigneesLoadState==='error'?'<button class="assignee-retry" type="button">Reintentar carga de usuarios</button>':''}<button type="button" onclick="saveProspectAssignee('${b.id}')" ${assigneeLoading?'disabled':''}>Guardar responsable</button></div>` : ''}
     <div class="warn">${esc(b.precision)}. Validar actividad, ubicación y persona de contacto antes de la visita.</div>
@@ -3156,7 +3205,10 @@ routeAssigneeSearchInput.addEventListener('keydown',event=>{
     event.preventDefault();routeAssigneePickerOpen=false;routeAssigneeActiveOptionIndex=-1;renderSavedRouteOptions();
   }
 });
-routeAssigneeOptions.addEventListener('mousedown',event=>event.preventDefault());
+routeAssigneeOptions.addEventListener('pointerdown',event=>{
+  const option=event.target instanceof Element?event.target.closest('[role="option"]'):null;if(!option)return;
+  event.preventDefault();chooseRouteAssignee(option.dataset.assigneeId||'');
+});
 routeAssigneeOptions.addEventListener('click',event=>{
   const option=event.target instanceof Element?event.target.closest('[role="option"]'):null;if(!option)return;
   chooseRouteAssignee(option.dataset.assigneeId||'');
@@ -3165,6 +3217,17 @@ routeAssigneeSearchInput.addEventListener('blur',()=>window.setTimeout(()=>{if(d
 document.getElementById('routeAssigneeRetry').addEventListener('click',()=>{void loadAssignees()});
 document.getElementById('routeListRetry').addEventListener('click',()=>{void loadRemoteRoutes()});
 document.getElementById('routeNew').addEventListener('click',startNewRoute);
+document.getElementById('routeVicinityMode').addEventListener('change',renderRouteVicinityPreview);
+document.getElementById('routeVicinityCount').addEventListener('input',renderRouteVicinityPreview);
+document.getElementById('routeVicinityRadius').addEventListener('change',renderRouteVicinityPreview);
+document.getElementById('routeVicinityClose').addEventListener('click',clearRouteVicinityPreview);
+document.getElementById('routeVicinityCancel').addEventListener('click',clearRouteVicinityPreview);
+document.getElementById('routeVicinityAdd').addEventListener('click',addRouteVicinityPoints);
+document.getElementById('routePlanTab').addEventListener('click',()=>setRoutePlannerTab('plan'));
+document.getElementById('routeListTab').addEventListener('click',()=>{setRoutePlannerTab('routes');void loadRemoteRoutes()});
+document.getElementById('routeCatalogSearch').addEventListener('input',renderRouteCatalog);
+document.getElementById('routeCatalogRetry').addEventListener('click',()=>{void loadRemoteRoutes()});
+document.querySelectorAll('[data-route-filter]').forEach(button=>button.addEventListener('click',()=>{routeCatalogFilter=button.dataset.routeFilter;document.querySelectorAll('[data-route-filter]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));renderRouteCatalog()}));
 document.addEventListener('click',event=>{
   const retryButton=event.target instanceof Element?event.target.closest('.assignee-retry'):null;
   if(retryButton){event.preventDefault();void loadAssignees()}
@@ -4268,6 +4331,7 @@ function render(){
   if(activeNearbyCenter){
     filtered.sort((a,b)=>distanceMetersFromActive(a)-distanceMetersFromActive(b)||a.name.localeCompare(b.name));
   }else filtered.sort((a,b)=>a.priority.localeCompare(b.priority)||b.score-a.score||a.name.localeCompare(b.name));
+  if(routeVicinityPreview)renderRouteVicinityPreview();
   cluster.clearLayers();
   markerById.clear();
   const currentBounds=googleMap.getBounds?.();
@@ -4576,8 +4640,8 @@ function renderRouteAssigneeOptions(){
   const hidden=document.getElementById('routeAssignee');
   const options=document.getElementById('routeAssigneeOptions');
   if(!picker||!hidden||!options)return;
-  const selected=String(activeRouteAssigneeId||hidden.value||'');
-  hidden.value=selected;
+  const selected=String(activeRouteAssigneeId??hidden.value??'');
+  hidden.value=selected===ROUTE_UNASSIGNED?'':selected;
   const query=routeAssigneePickerOpen?String(picker.value||'').trim().toLocaleLowerCase('es-NI'):'';
   const rows=assignees.filter(item=>!query||String(item.name||'').toLocaleLowerCase('es-NI').includes(query));
   const selectedItem=selected?assignees.find(item=>String(item.id)===selected):null;
@@ -4585,8 +4649,9 @@ function renderRouteAssigneeOptions(){
   const routesUnavailable=remoteRoutesLoading||forceSalesSyncErrors.has('rutas');
   const activeRouteCount=userId=>routesUnavailable?null:remoteRoutes.filter(route=>String(route.assignedToId||'')===String(userId||'')&&['PLANNED','IN_PROGRESS'].includes(String(route.status||'').toUpperCase())).length;
   const routeCountLabel=count=>count===null?(forceSalesSyncErrors.has('rutas')?'conteo no disponible':'cargando rutas…'):`${count} ${count===1?'ruta activa':'rutas activas'}`;
-  const selfChoice={id:'',name:'Yo mismo/a',count:activeRouteCount(CURRENT_USER_ID)};
-  const choices=[...(!query||selfChoice.name.toLocaleLowerCase('es-NI').includes(query)?[selfChoice]:[]),...rows.map(item=>({id:String(item.id),name:String(item.name||'Usuario'),count:activeRouteCount(item.id)})),...selectedFallback.map(item=>({id:String(item.id),name:String(item.name||'Usuario'),count:activeRouteCount(item.id)}))];
+  const selfChoice={id:String(CURRENT_USER_ID||''),name:'Yo mismo/a',count:activeRouteCount(CURRENT_USER_ID)};
+  const noneChoice={id:ROUTE_UNASSIGNED,name:'Sin asignar',count:null};
+  const choices=[...(!query||noneChoice.name.toLocaleLowerCase('es-NI').includes(query)?[{...noneChoice,count:0}]:[]),...(!query||selfChoice.name.toLocaleLowerCase('es-NI').includes(query)?[selfChoice]:[]),...rows.filter(item=>String(item.id)!==String(CURRENT_USER_ID)).map(item=>({id:String(item.id),name:String(item.name||'Usuario'),count:activeRouteCount(item.id)})),...selectedFallback.filter(item=>String(item.id)!==String(CURRENT_USER_ID)).map(item=>({id:String(item.id),name:String(item.name||'Usuario'),count:activeRouteCount(item.id)}))];
   if(routeAssigneePickerOpen){
     options.innerHTML=choices.length?choices.map((item,index)=>`<div class="route-assignee-option" id="route-assignee-option-${index}" role="option" aria-selected="${String(item.id)===selected}" data-active="${index===routeAssigneeActiveOptionIndex}" data-assignee-id="${esc(item.id)}" data-index="${index}"><span>${esc(item.name)}</span><small>${routeCountLabel(item.count)}</small></div>`).join(''):'<div class="route-assignee-no-results">No hay usuarios que coincidan con la búsqueda.</div>';
     options.hidden=false;picker.setAttribute('aria-expanded','true');
@@ -4594,23 +4659,19 @@ function renderRouteAssigneeOptions(){
     picker.setAttribute('aria-activedescendant',active?.id||'');
   }else{
     options.hidden=true;picker.setAttribute('aria-expanded','false');picker.setAttribute('aria-activedescendant','');
-    picker.value=selected?(assignees.find(item=>String(item.id)===selected)?.name||'Usuario seleccionado'):CURRENT_USER_NAME||'Yo mismo/a';
+    picker.value=selected===ROUTE_UNASSIGNED?'Sin asignar':selected?(assignees.find(item=>String(item.id)===selected)?.name||'Usuario seleccionado'):CURRENT_USER_NAME||'Yo mismo/a';
   }
   const status=document.getElementById('routeAssigneeStatus');
   const catalogStatus=assigneeStatusMessage(query);
-  const effectiveAssigneeId=selected||CURRENT_USER_ID||'';
-  const selectedAssigneeName=assignees.find(item=>String(item.id)===String(effectiveAssigneeId))?.name||(String(effectiveAssigneeId)===String(CURRENT_USER_ID)?CURRENT_USER_NAME:'Responsable seleccionado');
-  const assignmentNeedsSave=!activeRemoteRouteId||String(effectiveAssigneeId)!==String(activeSavedRouteAssigneeId||'');
-  const assignmentHint=assignmentNeedsSave?`Se asignará a ${selectedAssigneeName} al pulsar “Guardar y asignar”.`:`Responsable actual: ${selectedAssigneeName}. Los cambios se aplican al pulsar “Guardar y asignar”.`;
-  if(status){status.textContent=catalogStatus||assignmentHint;status.classList.toggle('route-assignee-pending',!catalogStatus&&assignmentNeedsSave)}
+  if(status){status.textContent=catalogStatus;status.classList.remove('route-assignee-pending')}
   const retry=document.getElementById('routeAssigneeRetry');
   if(retry)retry.hidden=assigneesLoadState!=='error'||!canForceSales('assignRoute');
   const readOnly=document.getElementById('routeAssigneeReadOnly');
   if(readOnly){const identityId=selected||activeRemoteRoute()?.assignedToId||CURRENT_USER_ID||'';const selectedUser=assignees.find(item=>String(item.id)===String(identityId));readOnly.textContent=selectedUser?.name||(String(identityId)===String(CURRENT_USER_ID)?CURRENT_USER_NAME:'Responsable de la ruta');}
 }
 function chooseRouteAssignee(id){
-  activeRouteAssigneeId=id||null;
-  const hidden=document.getElementById('routeAssignee');if(hidden)hidden.value=id||'';
+  activeRouteAssigneeId=id===ROUTE_UNASSIGNED?ROUTE_UNASSIGNED:(id||null);
+  const hidden=document.getElementById('routeAssignee');if(hidden)hidden.value=id===ROUTE_UNASSIGNED?'':(id||'');
   routeAssigneePickerOpen=false;routeAssigneeActiveOptionIndex=-1;
   markRouteDraftChanged();renderRoutePlanner();
 }
@@ -4655,7 +4716,7 @@ function refreshRoutePermissionVisibility(){
   if(complete)complete.hidden=!canForceSales('completeRouteStop');
   if(save){
     save.hidden=!(canEditRouteComposition() || (Boolean(activeRemoteRouteId)&&canAssign));
-    save.textContent='Guardar y asignar';
+    save.textContent='Guardar ruta';
   }
   const top=document.getElementById('routeTop');
   if(top)top.hidden=!(canForceSales('createRoute')||(Boolean(activeRemoteRouteId)&&(canForceSales('editRoute')||canForceSales('assignRoute')||canForceSales('completeRouteStop'))));
@@ -4669,7 +4730,7 @@ function renderRoutePlanner(){
   const canManage=canEditRouteComposition();
   const canRemoveStops=canManage;
   const select=document.getElementById('routeAssignee');
-  const routeAssigneeId=select?.value||CURRENT_USER_ID||activeRouteAssigneeId||activeRemoteRoute()?.assignedToId||'';
+  const routeAssigneeId=routeAssigneeDraftValue()??CURRENT_USER_ID??'';
   const routeAssigneeName=assignees.find(item=>String(item.id)===String(routeAssigneeId))?.name||(String(routeAssigneeId)===String(CURRENT_USER_ID)?CURRENT_USER_NAME:'Sin asignar');
   const completed=document.getElementById('routeCompletedCount');
   const count=document.getElementById('routeStopCount');
@@ -4688,7 +4749,9 @@ function renderRoutePlanner(){
       const responsible=assignees.find(item=>String(item.id)===String(stateOf(b).assignedToId||''));
       const reorder=canManage?`<button type="button" title="Subir parada" onclick="moveRouteStop(${index},-1)">↑</button><button type="button" title="Bajar parada" onclick="moveRouteStop(${index},1)">↓</button>`:'';
       const remove=canRemoveStops?`<button class="danger" type="button" title="Quitar parada" onclick="removeRouteStop(${index})">×</button>`:'';
-      return `<div class="route-stop ${isCurrent?'current ':''}${isCompleted?'completed':''}" role="button" tabindex="0" aria-label="Centrar mapa en parada ${index+1}: ${esc(b.name)}" onclick="if(!event.target.closest('button'))focusRouteStop(${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();focusRouteStop(${index})}"><span class="route-number">${index+1}</span><div class="route-stop-copy"><b>${esc(b.name)}</b><span>${esc(b.address || b.zone || 'Dirección pendiente')}</span><span class="route-stop-tag">${tag}</span><span class="route-stop-assignment">Responsable del punto: ${esc(responsible?.name||stateOf(b).assignedToName||'Sin asignar')} · Responsable de la ruta: ${esc(routeAssigneeName||'Sin asignar')}</span></div><div class="route-stop-actions">${reorder}<button type="button" title="Abrir esta parada en Waze" onclick="event.stopPropagation();openRouteStop(${index})">W</button>${remove}</div></div>`;
+      const nearby=canManage?`<button type="button" title="Seleccionar puntos cercanos" aria-label="Seleccionar puntos cercanos a ${esc(b.name)}" onclick="event.stopPropagation();beginRouteVicinity(${index})">＋</button>`:'';
+      const membership=remoteRoutes.filter(route=>(route.stops||[]).some(stop=>String(stop.prospectId||stop.prospect?.id)===String(stateOf(b).remoteId||''))).map(route=>esc(route.name||'Ruta sin nombre')).join(', ')||'Aún no está en rutas guardadas';
+      return `<div class="route-stop ${isCurrent?'current ':''}${isCompleted?'completed':''}" role="button" tabindex="0" aria-label="Centrar mapa en parada ${index+1}: ${esc(b.name)}" onclick="if(!event.target.closest('button'))focusRouteStop(${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();focusRouteStop(${index})}"><span class="route-number">${index+1}</span><div class="route-stop-copy"><b>${esc(b.name)}</b><span>${esc(b.address || b.zone || 'Dirección pendiente')}</span><span class="route-stop-tag">${tag}</span><span class="route-stop-assignment">Responsable del punto: ${esc(responsible?.name||stateOf(b).assignedToName||'Sin asignar')} · Responsable de la ruta: ${esc(routeAssigneeName||'Sin asignar')}</span><span class="route-stop-assignment">Rutas guardadas: ${membership}</span></div><div class="route-stop-actions">${reorder}${nearby}<button type="button" title="Abrir esta parada en Waze" onclick="event.stopPropagation();openRouteStop(${index})">W</button>${remove}</div></div>`;
     }).join('') : '<div class="history-empty">Empieza a marcar puntos comerciales en el mapa para agregarlos a la ruta.</div>';
   }
   const description=document.getElementById('routeDescription');
@@ -4701,13 +4764,16 @@ function renderRoutePlanner(){
   if(wazeButton)wazeButton.disabled=routeProgress>=routeBusinesses.length;
   const transferCount=document.getElementById('routeTransferCount');
   const transferUnit=document.getElementById('routeTransferUnit');
-  const transferAssignee=document.getElementById('routeAssignee')?.value||CURRENT_USER_ID||'';
+  const transferAssignee=routeAssigneeDraftValue()??CURRENT_USER_ID??'';
   const transferAssigneeName=document.getElementById('routeTransferAssigneeName');
   const transferHelp=document.getElementById('routeTransferHelp');
   const transferEnabled=document.getElementById('routeTransferOwnership')?.checked===true;
   const selectedAssignee=assignees.find(item=>String(item.id)===String(transferAssignee));
-  const transferRecipientName=selectedAssignee?.name||(String(transferAssignee)===String(CURRENT_USER_ID)?CURRENT_USER_NAME:'Responsable seleccionado');
+  const hasRouteAssignee=transferAssignee!==''&&transferAssignee!==ROUTE_UNASSIGNED;
+  const transferRecipientName=selectedAssignee?.name||(String(transferAssignee)===String(CURRENT_USER_ID)?CURRENT_USER_NAME:'Sin responsable');
   if(transferAssigneeName)transferAssigneeName.textContent=transferRecipientName;
+  const transferCheckbox=document.getElementById('routeTransferOwnership');
+  if(transferCheckbox){transferCheckbox.disabled=!hasRouteAssignee;if(!hasRouteAssignee)transferCheckbox.checked=false}
   const pendingTransferCount=routeBusinesses.filter(b=>String(stateOf(b).assignedToId||'')!==String(transferAssignee)).length;
   if(transferCount)transferCount.textContent=String(pendingTransferCount);
   if(transferUnit)transferUnit.textContent=pendingTransferCount===1?'punto':'puntos';
@@ -4715,14 +4781,49 @@ function renderRoutePlanner(){
   const offlineStatus=document.getElementById('routeOfflineStatus');
   if(offlineStatus)offlineStatus.hidden=navigator.onLine;
   const saveButton=document.getElementById('routeSave');
-  if(saveButton)saveButton.disabled=routeSaving||!navigator.onLine||!routeBusinesses.length;
+  if(saveButton){saveButton.disabled=routeSaving||!navigator.onLine||!routeBusinesses.length;saveButton.textContent=routeSaving?'Guardando ruta…':'Guardar ruta'}
   renderRouteMarkers();
   persistRoute();
   persistRouteDraft();
 }
 function routePointCoordinates(business){
-  const lat=Number(business?.lat),lng=Number(business?.lng);
+  if(business?.lat===null||business?.lat===undefined||business?.lat===''||business?.lng===null||business?.lng===undefined||business?.lng==='')return false;
+  const lat=Number(business.lat),lng=Number(business.lng);
   return Number.isFinite(lat)&&lat>=-90&&lat<=90&&Number.isFinite(lng)&&lng>=-180&&lng<=180;
+}
+function routeDistanceMeters(a,b){
+  const rad=value=>Number(value)*Math.PI/180,lat1=rad(a.lat),lat2=rad(b.lat),dLat=lat2-lat1,dLng=rad(b.lng)-rad(a.lng);
+  const h=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+  return 6371000*2*Math.atan2(Math.sqrt(h),Math.sqrt(Math.max(0,1-h)));
+}
+function clearRouteVicinityPreview(){
+  routeVicinityMarkers.forEach(marker=>setNovaMarkerMap(marker,null));routeVicinityMarkers=[];
+  routeVicinityCircle?.setMap(null);routeVicinityCircle=null;routeVicinityPreview=null;
+  document.getElementById('routeVicinityTools').hidden=true;
+}
+function renderRouteVicinityPreview(){
+  if(!routeVicinityPreview)return;
+  routeVicinityMarkers.forEach(marker=>setNovaMarkerMap(marker,null));routeVicinityMarkers=[];
+  routeVicinityCircle?.setMap(null);routeVicinityCircle=null;
+  const center=routeVicinityPreview.center,chosen=new Set(routeBusinesses.map(keyOf));
+  const candidates=(Array.isArray(filtered)?filtered:[]).filter(b=>routePointCoordinates(b)&&!isDiscarded(b)&&!chosen.has(keyOf(b))&&keyOf(b)!==keyOf(center)).map(b=>({business:b,distance:routeDistanceMeters(center,b)})).sort((a,b)=>a.distance-b.distance||String(keyOf(a.business)).localeCompare(String(keyOf(b.business))));
+  const mode=document.getElementById('routeVicinityMode').value,radius=Number(document.getElementById('routeVicinityRadius').value)||500,count=Math.max(1,Math.min(500,Number(document.getElementById('routeVicinityCount').value)||10));
+  const matches=mode==='radius'?candidates.filter(item=>item.distance<=radius):candidates.slice(0,count);
+  routeVicinityPreview.items=matches.map(item=>item.business);
+  document.getElementById('routeVicinityCountWrap').hidden=mode!=='count';document.getElementById('routeVicinityRadiusWrap').hidden=mode!=='radius';
+  document.getElementById('routeVicinitySummary').textContent=mode==='count'?`${matches.length} punto(s) más cercano(s) a ${center.name}. Se agregan después de las paradas actuales.`:`${matches.length} punto(s) dentro de ${radius<1000?`${radius} m`:`${radius/1000} km`} de ${center.name}.`;
+  document.getElementById('routeVicinityAdd').disabled=!matches.length;
+  if(mode==='radius'&&window.google?.maps?.Circle&&googleMap)routeVicinityCircle=new google.maps.Circle({map:googleMap,center:{lat:Number(center.lat),lng:Number(center.lng)},radius,fillColor:'#08785a',fillOpacity:.09,strokeColor:'#08785a',strokeOpacity:.75,strokeWeight:2,clickable:false,zIndex:1090});
+  matches.forEach(({business})=>{const el=document.createElement('div');el.className='nova-route-marker route-vicinity-marker';el.textContent='+';routeVicinityMarkers.push(createMapMarker({map:googleMap,position:{lat:Number(business.lat),lng:Number(business.lng)},title:`Punto cercano: ${business.name}`,zIndex:1120,content:el}))});
+}
+function beginRouteVicinity(index){
+  const center=routeBusinesses[index];if(!center||!routePointCoordinates(center))return;
+  routeVicinityPreview={center,items:[]};document.getElementById('routeVicinityTitle').textContent=`Cercanos a ${center.name||'esta parada'}`;document.getElementById('routeVicinityTools').hidden=false;renderRouteVicinityPreview();
+}
+function addRouteVicinityPoints(){
+  if(!routeVicinityPreview||!routeVicinityPreview.items.length||!requireForceSales(routeManageAction()))return;
+  const present=new Set(routeBusinesses.map(keyOf)),added=routeVicinityPreview.items.filter(b=>!present.has(keyOf(b))&&routePointCoordinates(b));
+  routeBusinesses.push(...added);clearRouteVicinityPreview();markRouteDraftChanged();renderRoutePlanner();toast(`${added.length} punto(s) cercano(s) agregado(s)`);
 }
 function toggleRouteBusiness(business){
   if(!routePlanningMode)return;
@@ -4744,7 +4845,7 @@ function openRoutePlanner(ids){
   setRoutePlanningMode(true);
   const restored=requested.length===0&&restoreRouteDraft();
   if(requested.length){
-    routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=null;activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
+    routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
     const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value='';
     requested.forEach(business=>{if(routePointCoordinates(business)&&!routeBusinesses.some(item=>keyOf(item)===keyOf(business)))routeBusinesses.push(business)});
     const scheduledFor=document.getElementById('routeScheduledFor');if(scheduledFor)scheduledFor.value=localRouteDate();
@@ -4752,7 +4853,7 @@ function openRoutePlanner(ids){
     const transfer=document.getElementById('routeTransferOwnership');if(transfer)transfer.checked=false;
     markRouteDraftChanged();
   }else if(!restored){
-    routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=null;activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
+    routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
     const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value='';
     const scheduledFor=document.getElementById('routeScheduledFor');if(scheduledFor)scheduledFor.value=localRouteDate();
     const routeName=document.getElementById('routeName');if(routeName)routeName.value='';
@@ -4892,7 +4993,7 @@ function clearRoute(){
     const saved=activeRemoteRoute();
     if(saved){hydrateRemoteRoute(saved);setRoutePlanningMode(true);document.getElementById('routeModal').hidden=false;toast('Cambios descartados; se restauró la ruta guardada');return}
   }
-  routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=null;activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
+  routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
   const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value='';
   setRoutePlanningMode(false);persistRoute();clearRouteMarkers();document.getElementById('routeModal').hidden=true;render();toast('Borrador descartado');
 }
@@ -4914,7 +5015,7 @@ async function saveRouteAssignment(){
   if(routeBusinesses.some(b=>!routePointCoordinates(b))){toast('Cada parada necesita coordenadas válidas antes de guardar');return}
   if(!navigator.onLine){document.getElementById('routeOfflineStatus').hidden=false;toast('Conéctate para guardar y asignar. El borrador quedó guardado.');return}
   if(isExisting&&String(activeRemoteRoute()?.status||'').toUpperCase()!=='PLANNED'&&canManage){toast('Solo puedes modificar paradas de una ruta planificada');return}
-  const assigneeId=document.getElementById('routeAssignee')?.value || CURRENT_USER_ID || null;
+  const assigneeId=canAssign?(routeAssigneeDraftValue()===ROUTE_UNASSIGNED?null:(routeAssigneeDraftValue()||null)):(CURRENT_USER_ID||null);
   const scheduledFor=document.getElementById('routeScheduledFor')?.value || localRouteDate();
   const routeName=document.getElementById('routeName')?.value.trim() || `Ruta ${routeDateLabel(scheduledFor)}`;
   const transferOwnership=document.getElementById('routeTransferOwnership')?.checked===true;
@@ -4954,9 +5055,9 @@ async function saveRouteAssignment(){
     persistRouteDraft();
     const saved=await forceSalesRequest(isExisting?`/force-sales/routes/${encodeURIComponent(activeRemoteRouteId)}`:'/force-sales/routes',{method:isExisting?'PATCH':'POST',headers:{'Idempotency-Key':routeSaveAttemptKey},body:JSON.stringify(payload)});
     activeRemoteRouteId=saved?.id || activeRemoteRouteId;
-    activeRouteAssigneeId=saved?.assignedToId ?? assigneeId;
+    activeRouteAssigneeId=saved?.assignedToId===null?ROUTE_UNASSIGNED:(saved?.assignedToId ?? assigneeId ?? null);
     activeSavedRouteAssigneeId=saved?.assignedToId ?? assigneeId;
-    const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value=saved?.assignedToId ?? assigneeId ?? '';
+    const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value=(saved?.assignedToId ?? assigneeId)===null?'':(saved?.assignedToId ?? assigneeId ?? '');
     activeRemoteUpdatedAt=saved?.updatedAt || activeRemoteUpdatedAt;
     routeStopIds=new Map((saved?.stops || []).map(stop=>[String(stop.prospectId),String(stop.id)]));
     remoteRoutes=[saved,...remoteRoutes.filter(route=>route.id!==saved?.id)].filter(Boolean);
@@ -4966,7 +5067,7 @@ async function saveRouteAssignment(){
     // demás dispositivos la reciben en el siguiente refresh compartido.
     await loadRemoteRoutes();
     if(routeBusinesses.length)await drawRouteOnMap({closeModal:false});
-    toast(isExisting?'Ruta actualizada y asignada':'Ruta guardada y asignada');
+    toast(isExisting?(assigneeId?'Ruta actualizada':'Ruta actualizada sin responsable'):(assigneeId?'Ruta guardada y asignada':'Ruta guardada sin responsable'));
   }catch(error){
     console.warn('No se pudo persistir la ruta en el ERP',error);
     if(error?.status===409)toast('La ruta cambió en otra sesión. El borrador se conservó; revisa Rutas guardadas y vuelve a guardar.');
@@ -4977,7 +5078,7 @@ function addSelectedToRoute(){
   if(!requireForceSales('createRoute'))return;
   const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona negocios para armar una ruta');return}
   const startsNewRoute=Boolean(activeRemoteRouteId);
-  if(startsNewRoute){routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=null;activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value=''}
+  if(startsNewRoute){routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value=''}
   const current=startsNewRoute?[]:routeBusinesses; const keys=new Set(current.map(keyOf));
   chosen.forEach(b=>{if(!keys.has(keyOf(b))){current.push(b)}});
   routeBusinesses=current.slice(0,ROUTE_MAX_STOPS);setRoutePlanningMode(true);markRouteDraftChanged();setRoutePanelCollapsed(window.matchMedia('(max-width: 820px)').matches);renderRoutePlanner();document.getElementById('routeModal').hidden=false;

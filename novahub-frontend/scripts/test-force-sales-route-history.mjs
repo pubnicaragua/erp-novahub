@@ -70,8 +70,11 @@ assert.match(realtimeMapScript, /activeRouteCount=userId=>routesUnavailable\?nul
 assert.match(html, /id="routeAssigneeHistory" hidden/, 'El historial de rutas queda plegado inicialmente');
 assert.doesNotMatch(html, /id="routeFilterAssignee"|id="routeSavedRoute"|id="routeHistoryDate"/, 'El constructor ya no muestra filtros o selectores separados de rutas guardadas');
 assert.match(html, /id="routeAssigneeSearch" type="text" role="combobox"[\s\S]*?id="routeAssigneeOptions"[^>]*role="listbox"/, 'El responsable de ruta se elige en un único buscador accesible');
-assert.match(html, /Se asignará a \$\{selectedAssigneeName\} al pulsar “Guardar y asignar”/, 'Elegir un responsable confirma que la asignación queda pendiente del guardado');
-assert.match(html, /route-planner-body>\.confirm-modal-actions:last-child\{position:sticky/, 'El botón Guardar y asignar permanece visible al desplazarse por el panel');
+assert.doesNotMatch(html, /Se asignará a \$\{selectedAssigneeName\} al pulsar “Guardar y asignar”/, 'El selector no muestra mensajes de asignación pendientes intrusivos');
+assert.match(html, /<button class="save" id="routeSave" type="button">Guardar ruta<\/button>/, 'El constructor deja claro el único guardado de la ruta');
+assert.match(html, /routeAssigneeOptions\.addEventListener\('pointerdown'/, 'El clic táctil o de ratón selecciona antes de perder el foco del combo');
+assert.match(html, /id="routeCatalog"/, 'El panel ofrece un catálogo persistente de rutas para reabrir y reasignar');
+assert.match(html, /id="routeVicinityMode"/, 'El constructor ofrece selección de puntos cercanos por cantidad o radio');
 assert.match(html, /activeSavedRouteAssigneeId[\s\S]*?String\(assigneeId\|\|''\)!==String\(activeSavedRouteAssigneeId\|\|''\)/, 'La reasignación compara con el responsable persistido de la ruta');
 assert.match(html, /class="route-transfer-destination">A: <b id="routeTransferAssigneeName"/, 'La transferencia identifica dinámicamente al responsable elegido');
 assert.match(html, /class="route-transfer-checkbox"/, 'La transferencia usa una casilla personalizada');
