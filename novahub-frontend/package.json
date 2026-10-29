@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
+    "test:api-error-normalization": "node --experimental-strip-types --test scripts/test-api-error-normalization.mjs",
     "test:force-sales-map-location": "node scripts/test-force-sales-map-location.mjs",
     "test:force-sales-map-offline-identity": "node scripts/test-force-sales-map-offline-identity.mjs",
     "test:force-sales-map-layers": "node scripts/test-force-sales-map-layers.mjs",

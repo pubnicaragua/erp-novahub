@@ -258,6 +258,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const [draftProduct, setDraftProduct] = useState<any>({ ...defaultDraft });
   
   const [skuError, setSkuError] = useState('');
+  const [skuConflictNeedsList, setSkuConflictNeedsList] = useState(false);
   const [newCategoryOpen, setNewCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
@@ -267,6 +268,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const [similarPendingProducts, setSimilarPendingProducts] = useState<any[]>([]);
   const [similarResolutions, setSimilarResolutions] = useState<Record<string, { action: 'USE_EXISTING' | 'CREATE_NEW'; match?: SimilarProductMatch }>>({});
   const similarityDecisionPanelRef = useRef<HTMLDivElement>(null);
+  const skuInputRef = useRef<HTMLInputElement>(null);
   const [attributesStepExpanded, setAttributesStepExpanded] = useState(true);
   const [valuesStepExpanded, setValuesStepExpanded] = useState(true);
   const [expandedAttributeId, setExpandedAttributeId] = useState<string | null>(null);
@@ -277,8 +279,59 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   useEffect(() => {
     if (similarGroups.length > 0) {
       similarityDecisionPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      similarityDecisionPanelRef.current?.focus({ preventScroll: true });
     }
-  }, [similarGroups.length]);
+  }, [similarGroups]);
+
+  const focusSkuInput = () => {
+    window.requestAnimationFrame(() => {
+      skuInputRef.current?.focus();
+      skuInputRef.current?.select();
+    });
+  };
+
+  const invalidatePendingSkuCheck = () => {
+    skuValidationRequestIdRef.current += 1;
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+      debounceTimeoutRef.current = null;
+    }
+  };
+
+  const handleExactSkuConflict = (
+    groups: SimilarProductGroup[],
+    pendingProducts: any[],
+    remainingProducts = pendingProducts,
+  ) => {
+    const skuConflictGroup = groups.find((group) => {
+      const groupKey = normalizeSimilarityInputKey(group.inputKey);
+      return group.matches.some((match) => (
+        (match.reasons || []).some((reason) => reason.toLowerCase() === 'sku')
+        || [match.code, match.sku, ...(match.variants || []).map((variant) => variant.sku)]
+          .some((value) => normalizeSimilarityInputKey(value) === groupKey)
+      ));
+    });
+    if (!skuConflictGroup) return false;
+
+    invalidatePendingSkuCheck();
+    const inputKey = normalizeSimilarityInputKey(skuConflictGroup.inputKey);
+    const conflictingProduct = pendingProducts.find((product) =>
+      [product.code, product.sku, product.name]
+        .some((value) => normalizeSimilarityInputKey(value) === inputKey),
+    );
+    const conflictWasListed = Boolean(conflictingProduct && remainingProducts.some((product) => product.id === conflictingProduct.id));
+    if (conflictingProduct) setDraftProduct({ ...conflictingProduct });
+    setProductsList(remainingProducts.filter((product) => product.id !== conflictingProduct?.id));
+    setSkuConflictNeedsList(conflictWasListed);
+    setSimilarGroups([]);
+    setSimilarPendingProducts([]);
+    setSimilarResolutions({});
+    const sku = String(conflictingProduct?.code || skuConflictGroup.inputKey || '').trim();
+    const itemLabel = catalogItemType === 'SERVICE' ? 'servicio' : 'producto';
+    setSkuError(`El SKU “${sku}” ya existe. Ingresa otro SKU antes de guardar este ${itemLabel}.`);
+    focusSkuInput();
+    return true;
+  };
 
   const validateSkuDebounced = (code: string) => {
     const requestId = ++skuValidationRequestIdRef.current;
@@ -292,7 +345,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         const response = await inventoryService.checkProductCode(code);
         if (requestId !== skuValidationRequestIdRef.current) return;
         const exists = response?.exists;
-        setSkuError(exists ? 'Observación: este SKU ya está utilizado' : '');
+        setSkuError(exists
+          ? `El SKU “${code.trim()}” ya existe. Ingresa otro SKU antes de guardar este ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}.`
+          : '');
+        if (exists && productsList.length > 0) setSkuConflictNeedsList(true);
       } catch (e: any) {
         console.error('Error validating SKU', e);
       }
@@ -540,13 +596,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     if (field === 'code') {
       setSkuError('');
       validateSkuDebounced(value as string);
-      // Al corregir el código, vuelve a validar con los datos actuales al guardar.
-      // El panel anterior corresponde al SKU previo y ya no debe bloquear la decisión.
-      if (productsList.length === 0 && similarGroups.length > 0) {
-        setSimilarGroups([]);
-        setSimilarPendingProducts([]);
-        setSimilarResolutions({});
-      }
+    }
+    if ((field === 'code' || field === 'name') && similarGroups.length > 0) {
+      // El aviso corresponde a los valores ya comprobados y se valida otra vez al guardar.
+      setSimilarGroups([]);
+      setSimilarPendingProducts([]);
+      setSimilarResolutions({});
     }
   };
 
@@ -635,6 +690,11 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       toast.error('Código, Nombre y Categoría son obligatorios');
       return;
     }
+    if (skuError) {
+      if (productsList.length > 0) setSkuConflictNeedsList(true);
+      focusSkuInput();
+      return;
+    }
     if (!hasValidSellingPrice(draftProduct)) {
       toast.error('Ingresa al menos un precio de venta válido');
       return;
@@ -674,7 +734,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       id: `draft-${Date.now()}`,
       categoryId: effectiveCategories[0]?.id || '',
     });
+    invalidatePendingSkuCheck();
     setSkuError('');
+    setSkuConflictNeedsList(false);
   };
 
   const handleRemoveFromList = (id: string) => {
@@ -772,17 +834,22 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       setDraftProduct({ ...defaultDraft, id: `draft-${Date.now()}`, categoryId: effectiveCategories[0]?.id || '' });
       setSimilarPendingProducts([]);
       setSimilarResolutions({});
+      invalidatePendingSkuCheck();
       setSkuError('');
+      setSkuConflictNeedsList(false);
       onOpenChange(false);
       onRefresh();
     } catch (error: any) {
       const similarMatches = (error?.data as any)?.matches;
       if (error?.code === 'PRODUCT_SIMILAR_MATCH' && Array.isArray(similarMatches) && similarMatches.length > 0) {
         const pendingProducts = listToSave.slice(successCount);
-        setSimilarGroups(similarMatches);
-        setSimilarPendingProducts(pendingProducts);
-        setProductsList((current) => current.slice(successCount));
-        setSimilarResolutions({});
+        const pendingListedProducts = productsList.slice(successCount);
+        if (!handleExactSkuConflict(similarMatches, pendingProducts, pendingListedProducts)) {
+          setSimilarGroups(similarMatches);
+          setSimilarPendingProducts(pendingProducts);
+          setProductsList(pendingProducts);
+          setSimilarResolutions({});
+        }
       } else {
         toast.error(error?.message || `Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
       }
@@ -793,6 +860,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   };
 
   const handleSave = async () => {
+    if (skuError || skuConflictNeedsList) {
+      if (skuError && productsList.length > 0) setSkuConflictNeedsList(true);
+      focusSkuInput();
+      return;
+    }
+
     const listToSave = productsList.map((product) => ({
       ...product,
       initialStock: product.isVariable ? getVariantStockTotal(product) : product.initialStock,
@@ -852,6 +925,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       })));
       const groups = response?.matches || [];
       if (groups.length > 0) {
+        if (handleExactSkuConflict(groups, listToSave, productsList)) return;
         setSimilarGroups(groups);
         setSimilarPendingProducts(listToSave);
         setSimilarResolutions({});
@@ -867,9 +941,13 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const resolveSimilarGroup = async (group: SimilarProductGroup, resolution: { action: 'USE_EXISTING' | 'CREATE_NEW'; match?: SimilarProductMatch }) => {
     if (resolution.action === 'CREATE_NEW') {
       const inputKey = normalizeSimilarityInputKey(group.inputKey);
-      const exactSku = group.matches.some((match) => [match.code, match.sku].some((value) => normalizeSimilarityInputKey(value) === inputKey));
+      const exactSku = group.matches.some((match) => [
+        match.code,
+        match.sku,
+        ...(match.variants || []).map((variant) => variant.sku),
+      ].some((value) => normalizeSimilarityInputKey(value) === inputKey));
       if (exactSku) {
-        toast.error('Ese SKU ya existe. Cambia el SKU o selecciona el producto existente.');
+        handleExactSkuConflict([group], similarPendingProducts, productsList);
         return;
       }
     }
@@ -927,7 +1005,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
 
         <div className={isPagePresentation ? 'min-h-0 flex-1 overflow-auto flex flex-col gap-3 p-0 xl:mx-auto xl:w-full xl:max-w-[1800px]' : 'flex-1 overflow-auto flex flex-col gap-6 p-1'} data-tour="inventory-product-add-data">
           {similarGroups.length > 0 && (
-            <div ref={similarityDecisionPanelRef}>
+            <div
+              ref={similarityDecisionPanelRef}
+              tabIndex={-1}
+              aria-label="Decisión sobre coincidencias de productos"
+              className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-warning focus-visible:ring-offset-2"
+            >
               <ProductSimilarityDecisionPanel
                 groups={similarGroups}
                 itemType={catalogItemType}
@@ -958,12 +1041,19 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                 <div className="flex flex-col gap-1 mt-1 w-full">
                   <Input
                     data-testid="inventory-product-code"
+                    ref={skuInputRef}
+                    aria-invalid={Boolean(skuError)}
+                    aria-describedby={[
+                      ...(skuError ? ['inventory-product-sku-error'] : []),
+                      ...(skuConflictNeedsList ? ['inventory-product-sku-recovery-hint'] : []),
+                    ].join(' ') || undefined}
                     value={draftProduct.code} 
                     onChange={e => handleUpdateDraft('code', e.target.value)} 
                     className={`h-8 text-xs font-mono w-full ${skuError ? 'border-warning focus-visible:ring-warning' : ''}`}
                     placeholder="SKU-001" 
                   />
-                  {skuError && <span className="text-[9px] text-warning dark:text-warning font-bold uppercase tracking-wider leading-tight">Este código ya está registrado y debe ser único. Cámbialo para crear un registro nuevo.</span>}
+                  {skuError && <p id="inventory-product-sku-error" role="alert" className="text-xs text-warning leading-snug">{skuError}</p>}
+                  {skuConflictNeedsList && <p id="inventory-product-sku-recovery-hint" role="status" className="text-xs text-muted-foreground leading-snug">Después de cambiar el SKU, agrega este producto a la lista para conservarlo en el lote.</p>}
                 </div>
               </div>
               <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-4 md:row-start-1 md:col-span-9' : 'sm:col-span-2 md:col-start-3 md:row-start-1 md:col-span-3'}>
@@ -1588,7 +1678,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           <Button
             data-testid="inventory-product-save"
             onClick={handleSave} 
-            disabled={isSaving || isCheckingAccounting || (productsList.length === 0 && (!draftProduct.code.trim() || !draftProduct.name.trim()))}
+            disabled={isSaving || isCheckingAccounting || skuConflictNeedsList || (productsList.length === 0 && (!draftProduct.code.trim() || !draftProduct.name.trim()))}
             className="font-bold bg-primary text-primary-foreground"
           >
             {isSaving ? 'Guardando...' : (productsList.length > 0 ? `Guardar ${productsList.length} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'}` : `Guardar ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`)}

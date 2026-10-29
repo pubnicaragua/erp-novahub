@@ -4,6 +4,7 @@
 // ============================================================
 
 import { isSafeAuthToken } from './auth-token';
+import { normalizeApiErrorBody, type ApiErrorBody } from './api-error';
 import { notifyErpMutation } from '../utils/action-lock';
 import { beginNotificationAction, completeNotificationAction } from './notification-action-coordinator';
 
@@ -44,14 +45,6 @@ function stableRequestKey(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableRequestKey).join(',')}]`;
   return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stableRequestKey((value as any)[key])}`).join(',')}}`;
-}
-
-interface ApiErrorBody {
-  message?: string | string[] | Record<string, any>;
-  error?: string;
-  details?: string | string[];
-  code?: string;
-  matches?: unknown[];
 }
 
 export class ApiRequestError extends Error {
@@ -293,7 +286,7 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
   if (!response.ok) {
     let errorBody: ApiErrorBody | null = null;
     try {
-      errorBody = await response.json();
+      errorBody = normalizeApiErrorBody(await response.json());
     } catch { /* keep the initialized null body */ }
 
     if (errorBody?.code === 'TRIAL_EXPIRED' || (errorBody?.message && typeof errorBody.message === 'object' && (errorBody.message as any)?.code === 'TRIAL_EXPIRED')) {

@@ -15,9 +15,7 @@ type SimilarProductLineDetails = {
 };
 
 const normalizeSku = (value: unknown) => String(value ?? '')
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .replace(/[^a-zA-Z0-9]+/g, '')
+  .trim()
   .toLowerCase();
 
 interface ProductSimilarityAlertProps {
@@ -47,7 +45,7 @@ export function ProductSimilarityAlert({
   open,
   groups,
   title = 'Producto similar encontrado',
-  description = 'La alerta se genera por SKU exacto o por nombre igual/similar. Marca, descripción y atributos solo aportan contexto y no generan alertas por sí solos.',
+  description = 'La alerta se genera por SKU exacto o nombre igual, ignorando mayúsculas, tildes y espacios sobrantes. Marca, categoría, descripción y atributos no generan coincidencias.',
   continueLabel,
   existingProductActionLabel,
   createNewActionLabel,
