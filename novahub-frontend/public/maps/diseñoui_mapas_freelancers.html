@@ -1468,7 +1468,7 @@ function bindMapMarkerPopup(marker,factory){
   marker.bindPopup=function(nextFactory){bindMapMarkerPopup(marker,nextFactory);return marker};
   if(!marker._popupOpenListener){
     const open=()=>{
-      if(routePlanningMode&&marker._b){toggleRouteBusiness(marker._b);marker.openPopup();return;}
+      if(routePlanningMode&&marker._b){toggleRouteBusiness(marker._b);return;}
       if(focusedQuickPointMarker&&marker!==focusedQuickPointMarker)clearFocusedQuickPoint();
       marker.openPopup();
     };
@@ -1883,7 +1883,10 @@ function renderRouteMarkers(){
     content.className='nova-route-marker';
     if(ROUTE_LOGO_URI){const image=document.createElement('img');image.src=ROUTE_LOGO_URI;image.alt='Logo de la empresa';content.appendChild(image)}else content.textContent='R';
     const badge=document.createElement('span');badge.textContent=String(index+1);content.appendChild(badge);
+    content.setAttribute('role','button');content.setAttribute('aria-label',`Quitar parada ${index+1}: ${business.name || 'punto comercial'}`);
     const marker=createMapMarker({map:routePlanningMode||mapLayers.plannedRoutes?googleMap:null,position:{lat,lng},title:`Parada ${index+1}: ${business.name || ''}`,content,zIndex:1150+routeBusinesses.length-index});
+    const removeStop=()=>{if(routePlanningMode)toggleRouteBusiness(business)};
+    if(typeof marker.addEventListener==='function')marker.addEventListener('gmp-click',removeStop);else marker.addListener?.('click',removeStop);
     routeStopMarkers.set(keyOf(business),marker);
   });
 }

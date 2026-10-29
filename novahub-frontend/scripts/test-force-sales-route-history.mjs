@@ -58,7 +58,8 @@ assert.match(trackingRuntime, /if \(eligibleNow\(\)\) await startTracking\(false
 assert.match(realtimeMapScript, /let remoteProspectsRefreshRequested=false/, 'El mapa conserva una invalidación recibida mientras carga prospectos');
 assert.match(realtimeMapScript, /if\(remoteProspectsLoading\)\{remoteProspectsRefreshRequested=true;return\}/, 'Un evento SSE durante una consulta activa agenda un refresco posterior');
 assert.match(realtimeMapScript, /if\(remoteProspectsRefreshRequested\)\{remoteProspectsRefreshRequested=false;void loadRemoteProspects\(\);\}/, 'La consulta activa vuelve a cargar los prospectos si recibió una invalidación mientras esperaba');
-assert.match(realtimeMapScript, /if\(routePlanningMode&&marker\._b\)\{toggleRouteBusiness\(marker\._b\);marker\.openPopup\(\);return;\}/, 'El mapa agrega o quita la parada al pulsar directamente su punto');
+assert.match(realtimeMapScript, /if\(routePlanningMode&&marker\._b\)\{toggleRouteBusiness\(marker\._b\);return;\}/, 'El mapa agrega o quita la parada al pulsar directamente su punto sin abrir su ficha');
+assert.match(realtimeMapScript, /const removeStop=\(\)=>\{if\(routePlanningMode\)toggleRouteBusiness\(business\)\}/, 'El marcador numerado permite quitar una parada desde el mapa');
 assert.match(realtimeMapScript, /idempotencyKey:routeSaveAttemptKey/, 'La clave de idempotencia del guardado permanece junto al borrador local');
 assert.match(realtimeMapScript, /routeSaveAttemptKey=draft\.idempotencyKey\|\|null/, 'Un reintento tras recargar conserva la clave de idempotencia');
 assert.match(realtimeMapScript, /if\(active&&!routeDraftDirty&&!hasStoredRouteDraft\(\)\)hydrateRemoteRoute\(active\)/, 'La hidratación de rutas remotas no reemplaza un borrador pendiente recuperable');
