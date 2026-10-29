@@ -93,7 +93,7 @@ assert.ok(/route-stop-actions \.route-stop-nearby\{display:inline-flex;order:10;
 assert.match(html, /input\.max=next==='km'\?'50':'50000';input\.step=next==='km'\?'0\.1':'50'/, 'Cambiar la unidad del radio convierte el valor y actualiza el rango');
 assert.match(html, /googleMap\.panTo\(\{lat:Number\(center\.lat\),lng:Number\(center\.lng\)\}\)/, 'Abrir selección de cercanos enfoca el punto central en el mapa');
 assert.match(html, /window\.beginRouteVicinity=beginRouteVicinity/, 'El botón generado puede invocar la acción del módulo embebido');
-assert.match(html, /addButton\.textContent=matches\.length\?`Agregar/, 'El botón confirma cuántos puntos se agregarán');
+assert.match(html, /addButton\.textContent=includedMatches\.length\?'Agregar/, 'El botón confirma cuántos candidatos marcados se agregarán');
 const routeVicinityHelperSources = [
   html.match(/function routePointCoordinates\(business\)\{[\s\S]*?\n\}/)?.[0],
   html.match(/function routeDistanceMeters\(a,b\)\{[\s\S]*?\n\}/)?.[0],
@@ -112,6 +112,21 @@ const nearbyCandidates = [far, nearB, center, alreadySelected, discarded, invali
 assert.deepEqual(Array.from(selectRouteVicinityMatches(center, nearbyCandidates, ['center', 'selected'], 'count', 2, 250), item => item.business.name), ['Cercano A', 'Cercano B'], 'La cantidad agrega los N puntos válidos más cercanos sin repetir el centro ni las paradas existentes');
 assert.deepEqual(Array.from(selectRouteVicinityMatches(center, nearbyCandidates, ['center', 'selected'], 'count', 0, 250)), [], 'Una cantidad fuera de rango no sustituye el valor por diez ni agrega puntos inesperados');
 assert.deepEqual(Array.from(selectRouteVicinityMatches(center, nearbyCandidates, ['center', 'selected'], 'radius', 10, 250), item => item.business.name), ['Cercano A', 'Cercano B'], 'El radio incluye únicamente los puntos dentro de la distancia geográfica elegida');
+const vicinityAdjustmentSources = [
+  html.match(/function toggleRouteVicinityKey\(keys,key\)\{[\s\S]*?\n\}/)?.[0],
+  html.match(/function routeVicinityIncludedMatches\(candidates,excludedKeys\)\{[\s\S]*?\n\}/)?.[0],
+];
+assert.ok(vicinityAdjustmentSources.every(Boolean), 'El borrador expone funciones comprobables para desmarcar y volver a marcar candidatos');
+const vicinityAdjustment = vm.runInNewContext(vicinityAdjustmentSources.join('\n') + ';({toggleRouteVicinityKey,routeVicinityIncludedMatches})', { keyOf: business => business.id });
+const candidateRows = [{ business: nearA, distance: 100 }, { business: nearB, distance: 200 }];
+const excludedCandidate = vicinityAdjustment.toggleRouteVicinityKey([], 'near-a');
+assert.deepEqual(Array.from(vicinityAdjustment.routeVicinityIncludedMatches(candidateRows, excludedCandidate), item => item.business.id), ['near-b'], 'Desmarcar un candidato lo excluye sin descartar los demás');
+const reselectedCandidate = vicinityAdjustment.toggleRouteVicinityKey(excludedCandidate, 'near-a');
+assert.deepEqual(Array.from(vicinityAdjustment.routeVicinityIncludedMatches(candidateRows, reselectedCandidate), item => item.business.id), ['near-a', 'near-b'], 'El mismo candidato puede volverse a marcar antes de agregarlo');
+assert.ok(/id="routeVicinityCandidates"/.test(html), 'La vista previa ofrece una lista para ajustar candidatos individualmente');
+assert.ok(/toggleRouteVicinityCandidate\(checkbox\.dataset\.vicinityKey,true\)/.test(html), 'Cambiar una casilla recalcula la vista previa conservando el foco');
+assert.ok(/marker\.addEventListener\('gmp-click',toggle\)/.test(html), 'Los marcadores del mapa también permiten incluir o excluir candidatos');
+assert.ok(/addButton\.disabled=!includedMatches\.length/.test(html), 'Guardar puntos cercanos exige al menos un candidato marcado');
 assert.match(html, /activeSavedRouteAssigneeId[\s\S]*?String\(assigneeId\|\|''\)!==String\(activeSavedRouteAssigneeId\|\|''\)/, 'La reasignación compara con el responsable persistido de la ruta');
 assert.match(html, /class="route-transfer-destination">A: <b id="routeTransferAssigneeName"/, 'La transferencia identifica dinámicamente al responsable elegido');
 assert.match(html, /class="route-transfer-checkbox"/, 'La transferencia usa una casilla personalizada');

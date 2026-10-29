@@ -309,6 +309,18 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
 .route-vicinity-summary{margin:8px 0;padding:8px 10px;border-radius:9px;background:var(--nova-ui-card,#fff);font-size:10px;line-height:1.45}
 .route-vicinity-summary:empty{display:none}
 @media(max-width:820px){.route-stop-actions .route-stop-nearby{min-height:44px;font-size:13px}}
+.route-vicinity-adjust-hint{margin:4px 0 7px;color:var(--nova-ui-muted-foreground,#6c7c77);font-size:9px;line-height:1.45}
+.route-vicinity-candidates{display:grid;gap:5px;max-height:min(28vh,220px);overflow:auto;margin:6px 0;padding:2px 3px 2px 0;overscroll-behavior:contain}
+.route-vicinity-candidates[hidden]{display:none}
+.route-vicinity-candidate{display:flex;align-items:center;gap:9px;min-width:0;padding:8px 9px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);cursor:pointer}
+.route-vicinity-candidate:has(input:checked){border-color:color-mix(in srgb,var(--nova-ui-primary,#08785a) 45%,var(--nova-ui-border,#dce8e3));background:color-mix(in srgb,var(--nova-ui-primary,#08785a) 5%,var(--nova-ui-card,#fff))}
+.route-vicinity-candidate:focus-within{outline:3px solid var(--nova-ui-primary,#08785a);outline-offset:1px}
+.route-vicinity-candidate input{width:18px;height:18px;flex:0 0 auto;accent-color:var(--nova-ui-primary,#08785a)}
+.route-vicinity-candidate-copy{display:grid;gap:2px;min-width:0;flex:1}
+.route-vicinity-candidate-copy b{overflow-wrap:anywhere;font-size:10px}
+.route-vicinity-candidate-copy small{color:var(--nova-ui-muted-foreground,#6c7c77);font-size:9px}
+.route-vicinity-marker{cursor:pointer}
+.route-vicinity-marker-excluded{border-color:var(--nova-ui-border,#dce8e3)!important;background:var(--nova-ui-muted,#edf5f1)!important;color:var(--nova-ui-muted-foreground,#6c7c77)!important;box-shadow:0 0 0 4px color-mix(in srgb,var(--nova-ui-muted-foreground,#6c7c77) 18%,transparent),0 5px 14px rgba(36,55,47,.2)!important;opacity:.76}
 </style>
 </head>
 <body>
@@ -530,6 +542,8 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
     </label>
    </div>
    <p id="routeVicinitySummary" class="route-vicinity-summary" role="status" aria-live="polite"></p>
+  <p id="routeVicinityAdjustHint" class="route-vicinity-adjust-hint" hidden>Desmarca candidatos en la lista o pulsa su marcador en el mapa. Cambia cantidad o radio para recalcular los candidatos.</p>
+  <div id="routeVicinityCandidates" class="route-vicinity-candidates" role="group" aria-label="Puntos candidatos para la ruta" hidden></div>
    <div class="route-vicinity-actions"><button id="routeVicinityCancel" type="button">Cancelar</button><button id="routeVicinityAdd" type="button">Agregar puntos</button></div>
   </section>
   <div class="route-stops" id="routeStops"></div>
@@ -3258,6 +3272,9 @@ document.getElementById('routeVicinityRadiusUnit').addEventListener('change',()=
 });
 document.getElementById('routeVicinityClose').addEventListener('click',clearRouteVicinityPreview);
 document.getElementById('routeVicinityCancel').addEventListener('click',clearRouteVicinityPreview);
+document.getElementById('routeVicinityCandidates').addEventListener('change',event=>{
+  const checkbox=event.target.closest('input[data-vicinity-key]');if(checkbox)toggleRouteVicinityCandidate(checkbox.dataset.vicinityKey,true);
+});
 document.getElementById('routeVicinityAdd').addEventListener('click',addRouteVicinityPoints);
 document.getElementById('routePlanTab').addEventListener('click',()=>setRoutePlannerTab('plan'));
 document.getElementById('routeListTab').addEventListener('click',()=>{setRoutePlannerTab('routes');void loadRemoteRoutes()});
@@ -4838,10 +4855,26 @@ function selectRouteVicinityMatches(center,candidates,selectedKeys,mode,count,ra
   const nearest=(Array.isArray(candidates)?candidates:[]).filter(b=>routePointCoordinates(b)&&!isDiscarded(b)&&!selected.has(String(keyOf(b)))&&String(keyOf(b))!==centerKey).map(b=>({business:b,distance:routeDistanceMeters(center,b)})).sort((a,b)=>a.distance-b.distance||String(keyOf(a.business)).localeCompare(String(keyOf(b.business))));
   const limit=Number(count);return mode==='radius'?nearest.filter(item=>item.distance<=radiusMeters):Number.isInteger(limit)&&limit>=1?nearest.slice(0,Math.min(500,limit)):[];
 }
+function toggleRouteVicinityKey(keys,key){
+  const next=new Set(Array.from(keys||[],value=>String(value))),normalized=String(key);
+  if(next.has(normalized))next.delete(normalized);else next.add(normalized);
+  return next;
+}
+function routeVicinityIncludedMatches(candidates,excludedKeys){
+  const excluded=new Set(Array.from(excludedKeys||[],value=>String(value)));
+  return (Array.isArray(candidates)?candidates:[]).filter(item=>!excluded.has(String(keyOf(item?.business))));
+}
+function toggleRouteVicinityCandidate(key,restoreFocus=false){
+  if(!routeVicinityPreview)return;
+  const list=document.getElementById('routeVicinityCandidates'),scrollTop=list.scrollTop;
+  routeVicinityPreview.excludedKeys=toggleRouteVicinityKey(routeVicinityPreview.excludedKeys,key);
+  renderRouteVicinityPreview();list.scrollTop=scrollTop;
+  if(restoreFocus){const checkbox=Array.from(list.querySelectorAll('input[data-vicinity-key]')).find(input=>input.dataset.vicinityKey===String(key));checkbox?.focus({preventScroll:true})}
+}
 function clearRouteVicinityPreview(){
   routeVicinityMarkers.forEach(marker=>setNovaMarkerMap(marker,null));routeVicinityMarkers=[];
   routeVicinityCircle?.setMap(null);routeVicinityCircle=null;routeVicinityPreview=null;
-  document.getElementById('routeVicinityTools').hidden=true;
+  document.getElementById('routeVicinityTools').hidden=true;document.getElementById('routeVicinityCandidates').innerHTML='';document.getElementById('routeVicinityCandidates').hidden=true;document.getElementById('routeVicinityAdjustHint').hidden=true;
 }
 function renderRouteVicinityPreview(){
   if(!routeVicinityPreview)return;
@@ -4850,13 +4883,27 @@ function renderRouteVicinityPreview(){
   const center=routeVicinityPreview.center;
   const mode=document.getElementById('routeVicinityMode').value,radiusInput=document.getElementById('routeVicinityRadius'),rawRadius=Number(radiusInput.value),radiusUnit=document.getElementById('routeVicinityRadiusUnit').value,radiusFactor=radiusUnit==='km'?1000:1,validRadius=Number.isFinite(rawRadius)&&rawRadius>0&&rawRadius*radiusFactor<=50000,radiusMeters=validRadius?rawRadius*radiusFactor:0,rawCount=Number(document.getElementById('routeVicinityCount').value),validCount=Number.isInteger(rawCount)&&rawCount>=1&&rawCount<=500,count=validCount?rawCount:0;
   const matches=mode==='count'&&!validCount?[]:selectRouteVicinityMatches(center,Array.isArray(filtered)?filtered:[],routeBusinesses.map(keyOf),mode,count,radiusMeters);
-  routeVicinityPreview.items=matches.map(item=>item.business);
+  const excludedKeys=routeVicinityPreview.excludedKeys||new Set(),includedMatches=routeVicinityIncludedMatches(matches,excludedKeys),includedKeys=new Set(includedMatches.map(item=>String(keyOf(item.business))));
+  routeVicinityPreview.candidates=matches;routeVicinityPreview.items=includedMatches.map(item=>item.business);
   document.getElementById('routeVicinityCountWrap').hidden=mode!=='count';document.getElementById('routeVicinityRadiusWrap').hidden=mode!=='radius';
+  const candidateList=document.getElementById('routeVicinityCandidates'),adjustHint=document.getElementById('routeVicinityAdjustHint');
+  candidateList.hidden=!matches.length;adjustHint.hidden=!matches.length;
+  candidateList.innerHTML=matches.map(({business,distance})=>{
+    const key=String(keyOf(business)),included=includedKeys.has(key),distanceLabel=distance<1000?String(Math.round(distance))+' m':String(Number((distance/1000).toFixed(2)))+' km';
+    const checkAttributes=included?'checked':'',statusLabel=included?'Se agregará':'No se agregará';
+    return '<label class="route-vicinity-candidate"><input type="checkbox" data-vicinity-key="'+esc(key)+'" aria-label="'+(included?'Quitar':'Incluir')+' '+esc(business.name||'punto')+' '+(included?'de':'en')+' la selección" '+checkAttributes+'><span class="route-vicinity-candidate-copy"><b>'+esc(business.name||'Punto sin nombre')+'</b><small>'+distanceLabel+' del centro · '+statusLabel+'</small></span></label>';
+  }).join('');
   const summary=document.getElementById('routeVicinitySummary'),addButton=document.getElementById('routeVicinityAdd'),radiusLabel=radiusMeters<1000?`${radiusMeters} m`:`${Number((radiusMeters/1000).toFixed(2))} km`;
-  summary.textContent=mode==='count'?(!validCount?'Ingresa una cantidad de 1 a 500 puntos.':matches.length?`Se agregarán los ${matches.length} puntos elegibles más cercanos a ${center.name}.`:'No hay más puntos disponibles con los filtros y capas actuales.'):!validRadius?'Ingresa un radio mayor que 0 y de hasta 50 km.':matches.length?`${matches.length} punto(s) dentro de ${radiusLabel} de ${center.name}.`:`No hay puntos dentro de ${radiusLabel}. Prueba con un radio mayor.`;
-  addButton.disabled=!matches.length;addButton.textContent=matches.length?`Agregar ${matches.length} punto${matches.length===1?'':'s'}`:'Agregar puntos';
+  summary.textContent=mode==='count'?(!validCount?'Ingresa una cantidad de 1 a 500 puntos.':!matches.length?'No hay más puntos disponibles con los filtros y capas actuales.':includedMatches.length?'Se agregarán '+includedMatches.length+' de '+matches.length+' puntos elegibles más cercanos a '+center.name+'.':'Hay '+matches.length+' candidatos, pero ninguno está marcado para agregar.'):!validRadius?'Ingresa un radio mayor que 0 y de hasta 50 km.':!matches.length?'No hay puntos elegibles dentro de '+radiusLabel+'. Prueba con un radio mayor.':includedMatches.length?'Se agregarán '+includedMatches.length+' de '+matches.length+' puntos dentro de '+radiusLabel+' de '+center.name+'.':'Hay '+matches.length+' candidatos dentro de '+radiusLabel+', pero ninguno está marcado para agregar.';
   if(mode==='radius'&&validRadius&&window.google?.maps?.Circle&&googleMap)routeVicinityCircle=new google.maps.Circle({map:googleMap,center:{lat:Number(center.lat),lng:Number(center.lng)},radius:radiusMeters,fillColor:'#08785a',fillOpacity:.09,strokeColor:'#08785a',strokeOpacity:.75,strokeWeight:2,clickable:false,zIndex:1090});
-  matches.forEach(({business})=>{const el=document.createElement('div');el.className='nova-route-marker route-vicinity-marker';el.textContent='+';routeVicinityMarkers.push(createMapMarker({map:googleMap,position:{lat:Number(business.lat),lng:Number(business.lng)},title:`Punto cercano: ${business.name}`,zIndex:1120,content:el}))});
+  addButton.disabled=!includedMatches.length;addButton.textContent=includedMatches.length?'Agregar '+includedMatches.length+' punto'+(includedMatches.length===1?'':'s'):'Selecciona puntos';
+  matches.forEach(({business})=>{
+    const key=String(keyOf(business)),included=includedKeys.has(key),el=document.createElement('div');el.className='nova-route-marker route-vicinity-marker'+(included?'':' route-vicinity-marker-excluded');el.textContent=included?'✓':'×';
+    const marker=createMapMarker({map:googleMap,position:{lat:Number(business.lat),lng:Number(business.lng)},title:(included?'Incluido: ':'Excluido: ')+business.name+(included?'. Pulsa para quitarlo.':'. Pulsa para incluirlo.'),zIndex:1120,content:el});
+    const toggle=event=>{event?.stopPropagation?.();event?.domEvent?.stopPropagation?.();toggleRouteVicinityCandidate(key)};
+    if(typeof marker.addEventListener==='function')marker.addEventListener('gmp-click',toggle);else marker.addListener?.('click',toggle);
+    routeVicinityMarkers.push(marker);
+  });
 }
 function beginRouteVicinity(index){
   const center=routeBusinesses[index];if(!center||!routePointCoordinates(center))return;
