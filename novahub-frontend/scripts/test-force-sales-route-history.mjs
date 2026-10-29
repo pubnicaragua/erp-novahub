@@ -66,8 +66,14 @@ assert.doesNotMatch(realtimeMapScript, /if\(active&&!routeDraftDirty&&!hasStored
 assert.match(realtimeMapScript, /route-stop-selected/, 'Las paradas del borrador tienen una marca visual de alto contraste');
 assert.match(realtimeMapScript, /routePlanningMode\|\|mapLayers\.plannedRoutes\?googleMap:null/, 'Las paradas del borrador permanecen visibles aunque la capa de rutas esté apagada');
 assert.match(realtimeMapScript, /routeStopKeys=new Set\(routeBusinesses\.map\(keyOf\)\)/, 'Las paradas seleccionadas se excluyen del agrupamiento de puntos comerciales');
-assert.match(realtimeMapScript, /activeRouteCount=userId=>remoteRoutes\.filter/, 'El selector muestra el número de rutas activas de cada usuario');
+assert.match(realtimeMapScript, /activeRouteCount=userId=>routesUnavailable\?null:remoteRoutes\.filter/, 'El selector muestra el número de rutas activas sin interpretar una consulta fallida como cero');
 assert.match(html, /id="routeAssigneeHistory" hidden/, 'El historial de rutas queda plegado inicialmente');
 assert.doesNotMatch(html, /id="routeFilterAssignee"|id="routeSavedRoute"|id="routeHistoryDate"/, 'El constructor ya no muestra filtros o selectores separados de rutas guardadas');
+assert.match(html, /id="routeAssigneeSearch" type="text" role="combobox"[\s\S]*?id="routeAssigneeOptions"[^>]*role="listbox"/, 'El responsable de ruta se elige en un único buscador accesible');
+assert.match(html, /activeSavedRouteAssigneeId[\s\S]*?String\(assigneeId\|\|''\)!==String\(activeSavedRouteAssigneeId\|\|''\)/, 'La reasignación compara con el responsable persistido de la ruta');
+assert.match(html, /Transferir responsable de los puntos a: <b id="routeTransferAssigneeName"/, 'La transferencia identifica dinámicamente al responsable elegido');
+assert.match(html, /<b>Responsable del punto<\/b>[\s\S]*?<b>Responsable de la ruta actual<\/b>/, 'La ficha separa al responsable comercial del responsable de la ruta');
+assert.doesNotMatch(html, /id="owner-[^"]+"|<label>Dueño o decisor<\/label>/, 'La ficha ya no expone el dueño o decisor como asignación');
+assert.match(html, /c\.contactName=contactName;c\.contactPhone=contactPhone;[\s\S]*?body\.notes=note/, 'Guardar el seguimiento no borra el dueño histórico y conserva contacto/notas');
 
 console.log('force-sales route history: inline syntax and real-point-only gap segmentation passed');
