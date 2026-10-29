@@ -46,8 +46,21 @@ const SYNC_TAG = 'novahub-force-sales-location-points';
 const OFFLINE_ROUTE_KEY = 'novaForceSalesOfflineRouteV1';
 const OFFLINE_ROUTE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BATCH_SIZE = 200;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const flushes = new Map<string, Promise<boolean>>();
 const retryAttempts = new Map<string, number>();
+
+export function createLocationEventId() {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (cryptoApi?.getRandomValues) cryptoApi.getRandomValues(bytes);
+  else bytes.forEach((_value, index) => { bytes[index] = Math.floor(Math.random() * 256); });
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export function locationScopeKey(identity: LocationQueueIdentity) {
   return `${identity.tenantId}:${identity.userId}`;
@@ -322,7 +335,7 @@ export async function saveLocationPoint(
     try {
       await transactionDone(transaction);
     } catch (error) {
-      if (rejectedLease) throw new Error('La captura perdió vigencia o la lease del seguimiento; no se guardó el punto.');
+      if (rejectedLease) throw new Error('La captura perdió vigencia o la lease del seguimiento; no se guardó el punto.', { cause: error });
       throw error;
     }
   } finally {
@@ -362,13 +375,14 @@ function registerBackgroundSync() {
 
 async function sendBatch(session: SessionRecord, points: QueueRecord[]) {
   if (!session.accessToken || !session.active) return false;
+  const normalizedPoints = await normalizeLegacyEventIds(points);
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(`${session.apiBase}/force-sales/location-points/batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.accessToken}` },
-      body: JSON.stringify({ points: points.map(({ key: _key, scopeKey: _scope, storedAt: _stored, ...point }) => point) }),
+      body: JSON.stringify({ points: normalizedPoints.map(({ key: _key, scopeKey: _scope, storedAt: _stored, ...point }) => point) }),
       signal: controller.signal,
       cache: 'no-store',
     });
@@ -376,7 +390,12 @@ async function sendBatch(session: SessionRecord, points: QueueRecord[]) {
       await deactivateLocationQueueSession({ userId: session.userId, tenantId: session.tenantId });
       return false;
     }
-    if (!response.ok) throw new Error(`El servidor rechazó la sincronización (${response.status}).`);
+    if (!response.ok) {
+      const detail = await response.clone().json().catch(() => null) as { message?: unknown } | null;
+      const serverMessage = Array.isArray(detail?.message) ? detail.message.join('; ') : detail?.message;
+      const safeMessage = typeof serverMessage === 'string' ? serverMessage.slice(0, 240) : '';
+      throw new Error(`El servidor rechazó la sincronización (${response.status})${safeMessage ? `: ${safeMessage}` : '.'}`);
+    }
     const result = await response.json() as { acceptedIds?: string[] };
     const accepted = new Set(Array.isArray(result.acceptedIds) ? result.acceptedIds : []);
     if (!accepted.size) throw new Error('El servidor no confirmó los puntos guardados.');
@@ -385,7 +404,7 @@ async function sendBatch(session: SessionRecord, points: QueueRecord[]) {
     try {
       const transaction = database.transaction([POINTS_STORE, SESSIONS_STORE], 'readwrite');
       const pointStore = transaction.objectStore(POINTS_STORE);
-      for (const point of points) if (accepted.has(point.eventId)) pointStore.delete(point.key);
+      for (const point of normalizedPoints) if (accepted.has(point.eventId)) pointStore.delete(point.key);
       const sessionStore = transaction.objectStore(SESSIONS_STORE);
       const sessionRequest = sessionStore.get(session.scopeKey);
       sessionRequest.onsuccess = () => {
@@ -399,6 +418,29 @@ async function sendBatch(session: SessionRecord, points: QueueRecord[]) {
     return true;
   } finally {
     window.clearTimeout(timeout);
+  }
+}
+
+async function normalizeLegacyEventIds(points: QueueRecord[]) {
+  const normalized = points.map((point) => ({ ...point }));
+  const changed = normalized.some((point) => !UUID_PATTERN.test(String(point.eventId || '')));
+  if (!changed) return normalized;
+  const database = await openDatabase();
+  try {
+    const transaction = database.transaction(POINTS_STORE, 'readwrite');
+    const store = transaction.objectStore(POINTS_STORE);
+    normalized.forEach((point, index) => {
+      if (UUID_PATTERN.test(String(point.eventId || ''))) return;
+      const original = points[index];
+      const eventId = createLocationEventId();
+      store.delete(original.key);
+      normalized[index] = { ...point, eventId, key: `${point.scopeKey}:${eventId}` };
+      store.put(normalized[index]);
+    });
+    await transactionDone(transaction);
+    return normalized;
+  } finally {
+    database.close();
   }
 }
 

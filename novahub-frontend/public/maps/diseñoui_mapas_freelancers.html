@@ -114,7 +114,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .popactions{display:flex;gap:6px;margin:7px 0}.popactions a{flex:1;text-decoration:none;text-align:center;padding:7px;border-radius:8px;background:#e8f4ef;color:#0b7155;font-size:8.5px;font-weight:700}
 .popquick{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:8px 0}.popquick button,.item-actions button{border:1px solid #d8e9e2;border-radius:8px;background:#f2f8f5;color:#0b7155;padding:7px 5px;font-size:8px;font-weight:800;cursor:pointer}.popquick button.primary-action,.item-actions button.primary-action{background:#123f35;color:white;border-color:#123f35}.popquick button.visit-action{background:#ecf9ee;color:#277443;border-color:#ccebd2}
 .crm{border-top:1px solid #e4ece9;padding-top:7px;margin-top:7px}.crm label{display:block;font-size:7.5px;text-transform:uppercase;font-weight:700;color:#62746e}
-.crm select,.crm input:not([type="checkbox"]):not([type="radio"]),.crm textarea{display:block;width:calc(100% - 6px);max-width:calc(100% - 6px);min-width:0;border:1px solid #dfe8e4;border-radius:8px;padding:6px;margin:3px 3px 5px;font-size:8.5px}.crm textarea{height:42px;resize:vertical}.crm button{width:100%;border:0;border-radius:8px;background:#123e35;color:white;padding:7px;font-size:8.5px;font-weight:700}.crm input[type=file]{padding:5px;background:#f7fbf9}.crm .consent input[type="checkbox"]{display:inline-block;width:auto;max-width:none;min-width:0;min-height:0;margin:0 6px 0 0;padding:0;vertical-align:middle}.visit-readout{font-size:8px;color:#277443;background:#ecf9ee;border-radius:7px;padding:6px;margin:4px 0}
+.crm select,.crm input:not([type="checkbox"]):not([type="radio"]),.crm textarea{display:block;width:100%;max-width:100%;box-sizing:border-box;min-width:0;border:1px solid #dfe8e4;border-radius:8px;padding:6px;margin:3px 0 5px;font-size:8.5px}.crm textarea{height:42px;resize:vertical}.crm button{width:100%;border:0;border-radius:8px;background:#123e35;color:white;padding:7px;font-size:8.5px;font-weight:700}.crm input[type=file]{padding:5px;background:#f7fbf9}.crm .consent input[type="checkbox"]{display:inline-block;width:auto;max-width:none;min-width:0;min-height:0;margin:0 6px 0 0;padding:0;vertical-align:middle}.visit-readout{font-size:8px;color:#277443;background:#ecf9ee;border-radius:7px;padding:6px;margin:4px 0}
 .crm .assignee-retry{margin-top:5px;border:1px solid #dce8e3;background:#edf5f1;color:#35685a}
 .quick-heading{font-size:9px;font-weight:800;color:#123f35;margin-bottom:4px}.evidence-preview{display:flex;align-items:center;gap:7px;margin:3px 0 6px;padding:5px;border:1px solid #dce8e3;border-radius:8px;background:#f7fbf9}.evidence-preview[hidden]{display:none}.evidence-preview img{width:42px;height:42px;object-fit:cover;border-radius:6px}.evidence-preview span{font-size:8px;color:#526a60;line-height:1.35}.advanced-crm{margin-top:7px;border-top:1px solid #e4ece9;padding-top:7px}.advanced-crm summary{cursor:pointer;color:#0b7155;font-size:8px;font-weight:800}.advanced-crm .advanced-content{padding-top:6px}
 .bulkbar{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:10px 0 3px;padding:8px;border-radius:12px;background:#edf7f2;border:1px solid #d5e9e1}.bulkbar b{font-size:9px;margin-right:auto}.bulkbar button{border:0;border-radius:8px;padding:6px 7px;background:white;color:#0b7155;font-size:8px;font-weight:800;cursor:pointer}.bulkbar button:hover{background:#d7f0e6}.item-actions{display:flex;gap:5px;margin-top:7px}.item-actions button{flex:1;padding:6px 4px}.item.selected-item{border-color:#4a9be4;background:#f5faff}.item.kanban-item{border-color:#77caa7}.item .check{accent-color:#08785a;width:15px;height:15px;margin-top:4px}.show-more-results{width:100%;border:1px solid #bfe2d4;border-radius:10px;background:#f2faf6;color:#08785a;padding:9px;font-size:9px;font-weight:800;cursor:pointer}
@@ -235,7 +235,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .popup .crm{margin-top:10px;padding-top:10px}
 .popup .crm .quick-heading{margin-bottom:7px;font-size:13px}
 .popup .crm label{margin-top:7px;font-size:11px}
-.popup .crm select,.popup .crm input:not([type="checkbox"]):not([type="radio"]),.popup .crm textarea{min-height:42px;margin:5px 3px 7px;padding:9px;font-size:12px}
+.popup .crm select,.popup .crm input:not([type="checkbox"]):not([type="radio"]),.popup .crm textarea{min-height:42px;margin:5px 0 7px;padding:9px;font-size:12px}
 .popup .crm select option{font-size:14px}
 .popup .crm textarea{height:58px;min-height:58px}
 .popup .crm input[type=file]{min-height:42px;padding:7px;font-size:11px}
@@ -1072,6 +1072,7 @@ const IS_PLATFORM_ADMIN = mapQuery.get('platformAdmin') === 'true';
 const potentialLegend = document.getElementById('potentialLegend');
 if(potentialLegend)potentialLegend.hidden=!IS_PLATFORM_ADMIN;
 const CAN_ASSIGN_TEAM = mapQuery.get('canAssignTeam') === 'true';
+const CAN_ASSIGN_PROSPECT_OWNER = mapQuery.get('canAssignProspectOwner') === 'true';
 const CAN_DELETE_TEST = IS_PLATFORM_ADMIN;
 function applyForceSalesPermissionVisibility(){
   const visibility = {
@@ -2584,7 +2585,7 @@ function popupHtml(b){
       <b>Responsable comercial</b><span>${esc(assignedUser?.name || c.assignedToName || 'Sin asignar')}</span>
     </div>
     ${routePlanningMode&&routeBusinesses.some(item=>keyOf(item)===keyOf(b))?`<div class="meta">Ruta seleccionada: ${esc(selectedRouteName)}</div>`:''}
-    ${canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Usuario responsable</label><select id="point-assignee-${sid}" ${assigneeLoading?'disabled':''}><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status" aria-live="polite">${esc(assigneeNotice)}</div>`:''}${assigneesLoadState==='error'?'<button class="assignee-retry" type="button" onclick="loadAssignees()">Reintentar carga de usuarios</button>':''}<button type="button" onclick="saveProspectAssignee('${b.id}')" ${assigneeLoading?'disabled':''}>Guardar responsable</button></div>` : ''}
+    ${CAN_ASSIGN_PROSPECT_OWNER&&canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Usuario responsable</label><select id="point-assignee-${sid}" ${assigneeLoading?'disabled':''}><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status" aria-live="polite">${esc(assigneeNotice)}</div>`:''}${assigneesLoadState==='error'?'<button class="assignee-retry" type="button">Reintentar carga de usuarios</button>':''}<button type="button" onclick="saveProspectAssignee('${b.id}')" ${assigneeLoading?'disabled':''}>Guardar responsable</button></div>` : ''}
     <div class="warn">${esc(b.precision)}. Validar actividad, ubicación y persona decisora antes de la visita.</div>
     ${syncReadout}
     ${evidenceReadout}
@@ -2994,6 +2995,10 @@ document.getElementById('routePanelToggle').addEventListener('click',()=>setRout
 document.getElementById('routeClear').addEventListener('click',clearRoute);
 document.getElementById('routeAssigneeSearch').addEventListener('input',renderRouteAssigneeOptions);
 document.getElementById('routeAssigneeRetry').addEventListener('click',()=>{void loadAssignees()});
+document.addEventListener('click',event=>{
+  const retryButton=event.target instanceof Element?event.target.closest('.assignee-retry'):null;
+  if(retryButton){event.preventDefault();void loadAssignees()}
+});
 document.getElementById('routeAssignee').addEventListener('change',()=>{activeRouteAssigneeId=document.getElementById('routeAssignee').value||null;markRouteDraftChanged();renderRoutePlanner()});
 document.getElementById('routeName').addEventListener('input',markRouteDraftChanged);
 document.getElementById('routeScheduledFor').addEventListener('change',markRouteDraftChanged);
@@ -3640,7 +3645,7 @@ function toggleMap3D(){
   toast(map3DEnabled?'Vista 3D activada · gira y acerca el mapa':'Vista 2D activada');
 }
 window.saveProspectAssignee=async function(id){
-  if(!requireForceSales('assignProspect'))return;
+  if(!CAN_ASSIGN_PROSPECT_OWNER||!requireForceSales('assignProspect'))return;
   const business=findBusiness(id);if(!business)return;
   const selector=document.getElementById(`point-assignee-${safeId(id)}`);
   if(!selector)return;
@@ -4274,7 +4279,7 @@ function assigneeStatusMessage(search=''){
 function refreshRoutePermissionVisibility(){
   const canManage=canManageCurrentRoute();
   const canAssign=canForceSales('assignRoute');
-  const canTransfer=canAssign&&canForceSales('assignProspect');
+  const canTransfer=CAN_ASSIGN_PROSPECT_OWNER&&canForceSales('assignProspect');
   const clear=document.getElementById('routeClear');
   const optimize=document.getElementById('routeOptimize');
   const assignee=document.getElementById('routeAssignee');

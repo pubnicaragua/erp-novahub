@@ -4,6 +4,7 @@ const CACHE_NAME = `${CACHE_PREFIX}${BUILD_ID}`;
 const STATIC_DESTINATIONS = new Set(['script', 'style', 'image', 'font', 'manifest']);
 const LOCATION_DB_NAME = 'novahub-force-sales-location-v1';
 const LOCATION_SYNC_TAG = 'novahub-force-sales-location-points';
+const LOCATION_EVENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function contentType(response) {
   return (response.headers.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
@@ -129,6 +130,33 @@ function idbTransactionDone(transaction) {
   });
 }
 
+function createLocationEventId() {
+  const bytes = new Uint8Array(16);
+  if (self.crypto?.getRandomValues) self.crypto.getRandomValues(bytes);
+  else bytes.forEach((_value, index) => { bytes[index] = Math.floor(Math.random() * 256); });
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+async function normalizeLegacyEventIds(database, points) {
+  const normalized = points.map((point) => ({ ...point }));
+  if (!normalized.some((point) => !LOCATION_EVENT_UUID.test(String(point.eventId || '')))) return normalized;
+  const transaction = database.transaction('points', 'readwrite');
+  const store = transaction.objectStore('points');
+  normalized.forEach((point, index) => {
+    if (LOCATION_EVENT_UUID.test(String(point.eventId || ''))) return;
+    const original = points[index];
+    const eventId = createLocationEventId();
+    store.delete(original.key);
+    normalized[index] = { ...point, eventId, key: `${point.scopeKey}:${eventId}` };
+    store.put(normalized[index]);
+  });
+  await idbTransactionDone(transaction);
+  return normalized;
+}
+
 async function replayLocationPoints() {
   const database = await openLocationDatabase();
   try {
@@ -144,7 +172,7 @@ async function replayLocationPoints() {
       if (!scopedPoints.length) continue;
       let remaining = scopedPoints.length;
       for (let offset = 0; offset < scopedPoints.length && offset < 1000; offset += 200) {
-        const batch = scopedPoints.slice(offset, offset + 200);
+        const batch = await normalizeLegacyEventIds(database, scopedPoints.slice(offset, offset + 200));
         const response = await fetch(`${session.apiBase}/force-sales/location-points/batch`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.accessToken}` },
@@ -157,7 +185,12 @@ async function replayLocationPoints() {
           await idbTransactionDone(write);
           break;
         }
-        if (!response.ok) throw new Error(`Location sync failed with HTTP ${response.status}`);
+        if (!response.ok) {
+          const detail = await response.clone().json().catch(() => null);
+          const serverMessage = Array.isArray(detail?.message) ? detail.message.join('; ') : detail?.message;
+          const safeMessage = typeof serverMessage === 'string' ? serverMessage.slice(0, 240) : '';
+          throw new Error(`Location sync failed with HTTP ${response.status}${safeMessage ? `: ${safeMessage}` : ''}`);
+        }
         const payload = await response.json();
         const accepted = new Set(Array.isArray(payload.acceptedIds) ? payload.acceptedIds : []);
         if (!accepted.size) throw new Error('Location server did not confirm the batch');

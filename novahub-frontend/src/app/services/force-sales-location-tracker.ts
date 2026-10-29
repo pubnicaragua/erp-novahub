@@ -1,5 +1,6 @@
 import {
   acquireLocationTrackingLease,
+  createLocationEventId,
   getLocationQueueStatus,
   locationScopeKey,
   releaseLocationTrackingLease,
@@ -162,18 +163,6 @@ function makeOwnerId() {
   return `tracking-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function newEventId() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
-  if (typeof crypto !== 'undefined' && 'getRandomValues' in crypto) {
-    const bytes = crypto.getRandomValues(new Uint8Array(16));
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-  }
-  return `location-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
 function pauseKey(identity: LocationQueueIdentity) {
   return `${PAUSED_KEY_PREFIX}${locationScopeKey(identity)}`;
 }
@@ -328,7 +317,7 @@ export function createForceSalesLocationTracker(options: TrackerOptions): Tracke
     publish({ lastCapturedAt: capturedAt, gps: 'recent', enabled: true, online: browser.isOnline(), message: '' });
     if (!shouldPersist) return;
     const point: LocationQueuePoint = {
-      eventId: newEventId(),
+      eventId: createLocationEventId(),
       capturedAt,
       lat,
       lng,
