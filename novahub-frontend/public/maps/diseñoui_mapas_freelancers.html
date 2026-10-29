@@ -408,6 +408,11 @@ body.embedded-view .bulkbar-actions button,body.embedded-view .bulkbar-secondary
 body.embedded-view .bulkbar-actions button:last-child{background:var(--nova-ui-primary);border-color:var(--nova-ui-primary);color:#fff}
 body.embedded-view .resultsHead{margin:10px 2px 6px;font-size:9px}
 body.embedded-view .resultsHead b{font-size:10px;color:var(--nova-ui-foreground)}
+body.embedded-view .results-head-actions{display:flex;align-items:center;gap:7px;margin-left:auto}
+body.embedded-view .show-all-results{min-height:27px;padding:5px 8px;border:1px solid var(--nova-ui-border);border-radius:7px;background:var(--nova-ui-muted);color:var(--nova-ui-primary);font-size:8px;font-weight:800;cursor:pointer}
+body.embedded-view .show-all-results:hover{background:color-mix(in srgb,var(--nova-ui-primary) 9%,var(--nova-ui-card))}
+body.embedded-view .show-all-results:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+body.embedded-view .show-all-results[hidden]{display:none!important}
 body.embedded-view .more-tools-content .search-meta{min-height:24px;font-size:8px}
 body.embedded-view .more-tools-content .search-meta button{font-size:8px}
 body.embedded-view .more-tools-content .map-layer-options>label{font-size:9px}
@@ -607,7 +612,7 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
    </div>
   </div>
 
-  <div class="resultsHead"><b id="resultsTitle">Fuerza Comercial</b><span id="resultText"></span></div>
+  <div class="resultsHead"><b id="resultsTitle">Fuerza Comercial</b><div class="results-head-actions"><span id="resultText"></span><button class="show-all-results" id="showAllBusinesses" type="button" title="Quita filtros activos y muestra todos los negocios" aria-label="Quitar filtros activos y mostrar todos los negocios" hidden>Ver todos</button></div></div>
   <div class="list" id="list"></div>
   <div class="kanban-board" id="kanbanBoard" hidden></div>
   <div class="history-list" id="historyView" hidden></div>
@@ -4600,6 +4605,13 @@ function render(){
 
   updatePipelineKpis(layerVisibleBusinesses);
   document.getElementById('resultText').textContent = `${filtered.length} de ${layerVisibleBusinesses.length}`;
+  const showAllBusinesses=document.getElementById('showAllBusinesses');
+  const categoryFilter=document.getElementById('category');
+  const sourceFilter=document.getElementById('source');
+  const stateFilter=document.getElementById('state');
+  const searchFilter=document.getElementById('search');
+  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
+  showAllBusinesses.hidden=!hasActiveFilters;
   const selectedCount=selectedBusinesses().length;
   const routeTop=document.getElementById('routeTop');
   if(routeTop)routeTop.textContent=routeDraftDirty ? `Retomar ruta (${routeBusinesses.length})` : 'Armar ruta';
@@ -5497,6 +5509,21 @@ document.querySelectorAll('.kpi[data-pipeline]').forEach(el=>el.addEventListener
 document.getElementById('opportunities').addEventListener('click',()=>{clearFocusedQuickPoint();activeView='map';pipelineFilter='opportunities';render();toast('Mostrando oportunidades con afinidad de 70% o más')});
 document.getElementById('selectVisible').addEventListener('click',()=>{filtered.forEach(b=>stateOf(b).selected=true);persistCommercial();render();toast(`${filtered.length} negocios seleccionados`)});
 document.getElementById('clearSelection').addEventListener('click',()=>{businesses.forEach(b=>stateOf(b).selected=false);persistCommercial();render();toast('Selección limpiada')});
+document.getElementById('showAllBusinesses').addEventListener('click',()=>{
+  selectedZone='Todos';
+  document.getElementById('category').value='all';
+  document.getElementById('source').value='all';
+  document.getElementById('state').value='all';
+  document.getElementById('search').value='';
+  activeNearbyCenter=null;
+  activeNearbyRadius=null;
+  pipelineFilter='all';
+  listLimit=140;
+  clearFocusedQuickPoint();
+  populateFilters();
+  map.flyTo([12.115,-86.26],11,{duration:.6});
+  render();
+});
 document.getElementById('bulkKanban').addEventListener('click',addSelectedToKanban);
 document.getElementById('bulkRoute').addEventListener('click',addSelectedToRoute);
 document.getElementById('routeImportQuick').addEventListener('click',()=>{openRoutePlanner([]);window.parent?.postMessage({source:'novahub-force-sales',type:'request-import-file'},'*')});
