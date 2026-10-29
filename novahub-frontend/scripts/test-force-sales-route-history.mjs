@@ -71,7 +71,13 @@ assert.match(html, /id="routeAssigneeHistory" hidden/, 'El historial de rutas qu
 assert.doesNotMatch(html, /id="routeFilterAssignee"|id="routeSavedRoute"|id="routeHistoryDate"/, 'El constructor ya no muestra filtros o selectores separados de rutas guardadas');
 assert.match(html, /id="routeAssigneeSearch" type="text" role="combobox"[\s\S]*?id="routeAssigneeOptions"[^>]*role="listbox"/, 'El responsable de ruta se elige en un único buscador accesible');
 assert.match(html, /activeSavedRouteAssigneeId[\s\S]*?String\(assigneeId\|\|''\)!==String\(activeSavedRouteAssigneeId\|\|''\)/, 'La reasignación compara con el responsable persistido de la ruta');
-assert.match(html, /Transferir responsable de los puntos a: <b id="routeTransferAssigneeName"/, 'La transferencia identifica dinámicamente al responsable elegido');
+assert.match(html, /class="route-transfer-destination">A: <b id="routeTransferAssigneeName"/, 'La transferencia identifica dinámicamente al responsable elegido');
+assert.match(html, /class="route-transfer-checkbox"/, 'La transferencia usa una casilla personalizada');
+assert.match(html, /class="route-transfer-title"[\s\S]*class="route-transfer-count"[\s\S]*class="route-transfer-destination"/, 'La opción de transferencia separa título, usuario destino y cantidad');
+assert.match(html, /id="routeTransferUnit"/, 'El conteo muestra punto o puntos en singular/plural');
+assert.match(html, /id="routeTransferHelp"[\s\S]*transferHelp\.textContent=transferEnabled\?/, 'La ayuda explica el efecto real de activar o dejar desactivada la transferencia');
+assert.match(html, /route-transfer-checkbox:checked::after[\s\S]*route-transfer-checkbox:focus-visible/, 'La casilla personalizada muestra confirmación y foco accesible');
+assert.match(html, /route-transfer-option:has\(\.route-transfer-checkbox:checked\)/, 'La tarjeta cambia de estado visual al activar la transferencia');
 assert.match(html, /<b>Responsable del punto<\/b>[\s\S]*?<b>Responsable de la ruta actual<\/b>/, 'La ficha separa al responsable comercial del responsable de la ruta');
 assert.doesNotMatch(html, /id="owner-[^"]+"|<label>Dueño o decisor<\/label>/, 'La ficha ya no expone el dueño o decisor como asignación');
 assert.match(html, /c\.contactName=contactName;c\.contactPhone=contactPhone;[\s\S]*?body\.notes=note/, 'Guardar el seguimiento no borra el dueño histórico y conserva contacto/notas');
