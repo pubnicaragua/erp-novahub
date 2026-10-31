@@ -301,7 +301,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
       return stringValue.split(',').map((field) => translateKey(field.trim())).join(', ');
     }
     if (isDateDetail(contextKey) && !Number.isNaN(new Date(stringValue).getTime())) {
-      return format(new Date(stringValue), "dd MMM yyyy, HH:mm", { locale: es });
+      return new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'America/Managua' }).format(new Date(stringValue));
     }
     return detailValueLabels[stringValue] || detailKeyLabels[stringValue] || stringValue;
   };
@@ -327,7 +327,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                   </Badge>
                   <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
                     <Calendar className="size-3" />
-                    {format(new Date(log.createdAt), "dd MMM yyyy, HH:mm", { locale: es })}
+                    {new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'America/Managua' }).format(new Date(log.createdAt))} (Managua)
                   </div>
                 </div>
                 <div>
