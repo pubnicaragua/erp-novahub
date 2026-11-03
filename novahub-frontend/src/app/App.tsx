@@ -682,12 +682,16 @@ function AppContent() {
   useEffect(() => {
     const handler = (event: Event) => {
       if (location.pathname === '/register' || location.pathname.startsWith('/public/')) return;
+      // Al iniciar, /auth/profile valida cualquier token guardado. Un 401 en
+      // esa comprobación es normal y debe dejar el login disponible, sin iniciar
+      // el flujo de cierre de una sesión que todavía no está autenticada.
+      if (!isAuthenticated) return;
       const code = (event as CustomEvent).detail?.code;
       setSessionClosed(code === 'SESSION_CLOSED' ? 'closed' : code === 'SESSION_EXPIRED' ? 'expired' : 'invalid');
     };
     window.addEventListener('session-closed', handler);
     return () => window.removeEventListener('session-closed', handler);
-  }, [location.pathname]);
+  }, [isAuthenticated, location.pathname]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -702,14 +706,14 @@ function AppContent() {
 
   // Al cerrarse la sesión (contador llega a 0), redirigir solo al login.
   useEffect(() => {
-    if (!sessionClosed) return;
+    if (!sessionClosed || !isAuthenticated) return;
     const timer = setTimeout(() => {
       safeRemoveItem('nh-auth-token');
       logout?.();
-      window.location.reload();
+      setSessionClosed(null);
     }, 4000);
     return () => clearTimeout(timer);
-  }, [sessionClosed, logout]);
+  }, [isAuthenticated, sessionClosed, logout]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', readPersistedDarkMode());
@@ -756,7 +760,7 @@ function AppContent() {
   const handleGuardLogout = () => {
     safeRemoveItem('nh-auth-token');
     logout?.();
-    window.location.reload();
+    setSessionClosed(null);
   };
 
   // La pantalla de trial/sesión es una barrera de presentación. El backend
