@@ -2650,7 +2650,7 @@ async function persistProspectAction(b,action,suffix,body,evidenceFile=null){
   try{
     await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(state.remoteId)}${suffix}`,{method,body:JSON.stringify(requestBody)});
     return true;
-  }catch(error){console.warn('No se pudo sincronizar la acción comercial',error);toast('El ERP rechazó la acción comercial');return false}
+  }catch(error){console.warn('No se pudo sincronizar la acción comercial',error);toast(error?.message || 'El ERP rechazó la acción comercial');return false}
 }
 function remoteBusiness(prospect){
   const id=prospect.googlePlaceId ? `google-${prospect.googlePlaceId}` : prospect.sourceKey || `remote-${prospect.id}`;
