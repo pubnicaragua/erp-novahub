@@ -8,6 +8,7 @@
     "test:api-error-normalization": "node --experimental-strip-types --test scripts/test-api-error-normalization.mjs",
     "test:force-sales-map-location": "node scripts/test-force-sales-map-location.mjs",
     "test:force-sales-customer-link": "node scripts/test-force-sales-customer-link.mjs",
+    "test:superadmin-loan-settings-navigation": "node scripts/test-superadmin-loan-settings-navigation.mjs",
     "test:force-sales-map-offline-identity": "node scripts/test-force-sales-map-offline-identity.mjs",
     "test:force-sales-map-layers": "node scripts/test-force-sales-map-layers.mjs",
     "test:force-sales-tracking": "node --experimental-strip-types scripts/test-force-sales-tracking-controller.mjs",

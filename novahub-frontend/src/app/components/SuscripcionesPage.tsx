@@ -116,9 +116,10 @@ const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'EMPLOYEE' | 'VIEWER'> = {
 interface SuscripcionesPageProps {
   activeSubModule?: string;
   onSubModuleChange?: (subModule?: string) => void;
+  embedded?: boolean;
 }
 
-export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: SuscripcionesPageProps = {}) {
+export function SuscripcionesPage({ activeSubModule, onSubModuleChange, embedded = false }: SuscripcionesPageProps = {}) {
   const { user, refreshEnabledModules, canPerform } = useAuth();
   const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
   const canViewUsers = canPerform('CONFIG_USERS', 'view');
@@ -736,7 +737,7 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
     || tenantDetails?.users?.[0];
 
   return (
-    <div className="subscriptions-module p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4 space-y-6 max-w-7xl mx-auto min-h-screen">
+    <div className={embedded ? 'subscriptions-module min-w-0 max-w-full space-y-6' : 'subscriptions-module min-w-0 max-w-full p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4 space-y-6 max-w-7xl mx-auto min-h-screen'}>
       <div className="flex justify-end">
         <div className="flex items-center gap-3">
           <Dialog open={isTenantDialogOpen} onOpenChange={setIsTenantDialogOpen}>
