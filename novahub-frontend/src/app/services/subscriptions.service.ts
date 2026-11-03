@@ -38,7 +38,6 @@ export interface ToggleModuleStatusDto {
   isActive: boolean;
   notes?: string;
   price?: number;
-  customerLoansEnabled?: boolean;
 }
 
 export type ModuleQuoteRequestTargetType = 'MODULE' | 'VIEW';

@@ -18,7 +18,8 @@ import { BrandLogo } from '../BrandLogo';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscriptionsService } from '../../services/subscriptions.service';
 import { PlatformSupportAgentsPanel } from './PlatformSupportAgentsPanel';
-import { BranchModuleSettingsView } from './BranchModuleSettingsView';
+import { SpecificFeaturesSettingsView } from './SpecificFeaturesSettingsView';
+import { canManageTenantFeatures } from '../../services/tenant-features.service';
 
 const normalizeSearchValue = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase();
 
@@ -39,6 +40,7 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
   const { user } = useAuth();
   const quoteOnly = user?.role === 'platform_quote_user';
   const isSuperAdmin = ['SUPER_ADMIN', 'SUPERADMIN'].includes(String(user?.role || '').toUpperCase().replace(/[-\s]/g, '_'));
+  const canManageFeatures = canManageTenantFeatures(user?.role);
   const [workspace, setWorkspace] = useState<{ mode: 'create' | 'edit'; groupId?: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -47,7 +49,7 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
     ? 'quotes'
     : (ENTERPRISE_GROUP_TABS.find((tab) => tab === initialTab
       && (tab !== 'support-agents' || isSuperAdmin)
-      && (tab !== 'branch-modules' || Boolean(user?.isPlatformAdmin))) || 'groups');
+      && (tab !== 'branch-modules' || canManageFeatures)) || 'groups');
   const activeTab = resolvedInitialTab;
   const handleTabChange = (tab: EnterpriseGroupTab) => {
     onTabChange?.(tab);
@@ -109,13 +111,13 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
       <div className="flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-muted/20 p-1" role="tablist" aria-label="Administración de grupos empresariales">
         {([
           ['groups', 'Grupos actuales', Building2],
-          ['branch-modules', 'Módulos y plan', Settings2],
+          ['branch-modules', 'Funciones específicas', Settings2],
           ['legacy', 'Usuarios heredados', UserRound],
           ['requests', 'Solicitudes de trial', Clock3],
           ['module-requests', 'Cotizar módulos', FileText],
           ['quotes', 'Cotizaciones', FileText],
           ['support-agents', 'Agentes de soporte', LifeBuoy],
-        ] as const).filter(([tab]) => !quoteOnly && (tab !== 'module-requests' || isSuperAdmin) && (tab !== 'support-agents' || isSuperAdmin) && (tab !== 'branch-modules' || Boolean(user?.isPlatformAdmin)) || quoteOnly && tab === 'quotes').map(([tab, label, Icon]) => (
+        ] as const).filter(([tab]) => !quoteOnly && (tab !== 'module-requests' || isSuperAdmin) && (tab !== 'support-agents' || isSuperAdmin) && (tab !== 'branch-modules' || canManageFeatures) || quoteOnly && tab === 'quotes').map(([tab, label, Icon]) => (
           <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => handleTabChange(tab)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wide transition ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>
             <Icon className="size-4" /> {label}{tab === 'module-requests' && moduleQuotePendingCount > 0 && <Badge className="ml-1 bg-background/20 px-1.5 py-0 text-[9px]">{moduleQuotePendingCount}</Badge>}
           </button>
@@ -205,7 +207,7 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
         </Card>
       )}
       </> : activeTab === 'branch-modules' ? (
-        <BranchModuleSettingsView />
+        <SpecificFeaturesSettingsView />
       ) : activeTab === 'legacy' ? (
         <LegacyUsersPanel data={legacyQuery.data} loading={legacyQuery.isLoading} onExtend={extendLegacyTrial} />
       ) : activeTab === 'requests' ? (
