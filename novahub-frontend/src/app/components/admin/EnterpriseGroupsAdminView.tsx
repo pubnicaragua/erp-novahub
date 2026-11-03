@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 import { Building2, CalendarClock, ChevronLeft, ChevronRight, Clock3, FileText, GitBranch, HardDrive, LifeBuoy, Link2, Loader2, Plus, Search, Settings2, UserRound, Users, Warehouse } from 'lucide-react';
 import { toast } from '@/app/services/toast';
@@ -18,8 +18,7 @@ import { BrandLogo } from '../BrandLogo';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscriptionsService } from '../../services/subscriptions.service';
 import { PlatformSupportAgentsPanel } from './PlatformSupportAgentsPanel';
-
-const BranchModuleSettingsView = lazy(() => import('../SuscripcionesPage').then((module) => ({ default: module.SuscripcionesPage })));
+import { BranchModuleSettingsView } from './BranchModuleSettingsView';
 
 const normalizeSearchValue = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase();
 
@@ -46,7 +45,9 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
   const [groupsPage, setGroupsPage] = useState(1);
   const resolvedInitialTab: EnterpriseGroupTab = quoteOnly
     ? 'quotes'
-    : (ENTERPRISE_GROUP_TABS.find((tab) => tab === initialTab && (tab !== 'support-agents' || isSuperAdmin)) || 'groups');
+    : (ENTERPRISE_GROUP_TABS.find((tab) => tab === initialTab
+      && (tab !== 'support-agents' || isSuperAdmin)
+      && (tab !== 'branch-modules' || Boolean(user?.isPlatformAdmin))) || 'groups');
   const activeTab = resolvedInitialTab;
   const handleTabChange = (tab: EnterpriseGroupTab) => {
     onTabChange?.(tab);
@@ -204,9 +205,7 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
         </Card>
       )}
       </> : activeTab === 'branch-modules' ? (
-        <Suspense fallback={<div role="status" className="flex min-h-40 items-center justify-center rounded-2xl border border-border/60 bg-card/60 text-sm text-muted-foreground"><Loader2 className="mr-2 size-4 animate-spin text-primary" />Cargando módulos de sucursal…</div>}>
-          <BranchModuleSettingsView embedded />
-        </Suspense>
+        <BranchModuleSettingsView />
       ) : activeTab === 'legacy' ? (
         <LegacyUsersPanel data={legacyQuery.data} loading={legacyQuery.isLoading} onExtend={extendLegacyTrial} />
       ) : activeTab === 'requests' ? (

@@ -54,6 +54,7 @@ import {
   LifeBuoy,
   Ship,
   Loader2,
+  type LucideIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
@@ -86,11 +87,34 @@ const QUOTEABLE_PARENT_LABELS: Record<string, string> = {
   FINANCING: 'Financiamiento PYME', NOVACHAT: 'Nova Suite', DOCUMENTS: 'Nova Cloud', NOTIFICATIONS: 'Notificaciones',
 };
 const EXCLUDED_QUOTEABLE_PARENTS = new Set(['DASHBOARD', 'MY_COMPANY', 'CONFIGURATION']);
+const QUOTEABLE_PARENT_ICONS: Record<string, LucideIcon> = {
+  SALES: Building2,
+  PURCHASES: Package,
+  RESTAURANT: LayoutGrid,
+  TRACKING: Ship,
+  INVENTORY: Package,
+  FINANCIAL: DollarSign,
+  ACCOUNTING: Landmark,
+  REPORTS: BarChart3,
+  HR: Users,
+  ACTIVITIES: Activity,
+  ASANA: CheckCircle2,
+  PROJECTS: Briefcase,
+  TICKETS: LifeBuoy,
+  HR_TRAINING: GraduationCap,
+  SUPPORT_TECH: Headphones,
+  LEGAL: Scale,
+  FINANCING: HandCoins,
+  NOVACHAT: MessageSquare,
+  DOCUMENTS: FileText,
+  NOTIFICATIONS: BellRing,
+};
 const AVAILABLE_MODULES = SIDEBAR_PERMISSION_PARENT_ORDER
   .filter((parent) => !EXCLUDED_QUOTEABLE_PARENTS.has(parent) && Boolean(QUOTEABLE_PARENT_LABELS[parent]))
   .map((parent) => ({
     id: parent,
     label: QUOTEABLE_PARENT_LABELS[parent],
+    icon: QUOTEABLE_PARENT_ICONS[parent] || Building2,
     description: `Módulo y vistas contratables de ${QUOTEABLE_PARENT_LABELS[parent]}`,
     submodules: submodulesFor(parent),
   }));
