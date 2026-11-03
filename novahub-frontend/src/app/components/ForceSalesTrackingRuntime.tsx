@@ -95,6 +95,7 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
   const activeModuleRef = useRef(activeModule);
   const trackerRef = useRef<ReturnType<typeof createForceSalesLocationTracker> | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [mapOverlayOpen, setMapOverlayOpen] = useState(false);
   const [wakePreferenceState, setWakePreferenceState] = useState(() => ({ scope: identityKey, enabled: readWakeLockPreference(identity) }));
   const wakeRequested = wakePreferenceState.scope === identityKey ? wakePreferenceState.enabled : readWakeLockPreference(identity);
   const wakeRequestedRef = useRef(wakeRequested);
@@ -106,6 +107,29 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
   useEffect(() => { sharingRef.current = sharing; }, [sharing]);
   useEffect(() => { activeModuleRef.current = activeModule; }, [activeModule]);
   useEffect(() => { wakeRequestedRef.current = wakeRequested; }, [wakeRequested]);
+
+  useEffect(() => {
+    const onMapOverlayState = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin
+        || event.data?.source !== 'novahub-force-sales'
+        || event.data?.type !== 'force-sales-map-overlay-state') return;
+      const mapFrame = [...document.querySelectorAll<HTMLIFrameElement>('iframe[title="Fuerza Comercial NovaHub"]')]
+        .some(frame => frame.contentWindow === event.source);
+      if (!mapFrame) return;
+      const open = Boolean(event.data.open);
+      setMapOverlayOpen(open);
+      if (open) setPanelOpen(false);
+    };
+    window.addEventListener('message', onMapOverlayState);
+    return () => window.removeEventListener('message', onMapOverlayState);
+  }, []);
+
+  useEffect(() => {
+    if (activeModule !== 'fuerza-comercial') {
+      setMapOverlayOpen(false);
+      setPanelOpen(false);
+    }
+  }, [activeModule]);
 
   useEffect(() => {
     setPanelOpen(false);
@@ -364,7 +388,7 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
   const pendingLabel = `${state.pending} punto${state.pending === 1 ? '' : 's'} pendiente${state.pending === 1 ? '' : 's'}`;
   const wakeSupported = 'wakeLock' in navigator;
 
-  if (!identity || !canTrack || activeModule !== 'fuerza-comercial') return null;
+  if (!identity || !canTrack || activeModule !== 'fuerza-comercial' || mapOverlayOpen) return null;
 
   return (
     <aside className="pointer-events-auto absolute right-3 top-[4.25rem] z-[150] text-card-foreground sm:right-5 sm:top-[4.5rem]" aria-label="Estado del rastreo GPS">

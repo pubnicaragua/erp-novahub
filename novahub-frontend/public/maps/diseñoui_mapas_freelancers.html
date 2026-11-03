@@ -1539,6 +1539,30 @@ const forceSalesSyncErrors = new Map();
 let currentPopupBusinessId = null;
 let businessDetailPositionFrame = 0;
 let nativeInfoWindowOpen = false;
+let parentMapOverlayState = null;
+let parentMapOverlayFrame = 0;
+function scheduleParentMapOverlayState(){
+  if(window.parent===window||parentMapOverlayFrame)return;
+  parentMapOverlayFrame=window.requestAnimationFrame(()=>{
+    parentMapOverlayFrame=0;
+    const selectors='#routeModal,#businessDetailOverlay,.modal-backdrop,.quick-capture';
+    const open=[...document.querySelectorAll(selectors)].some(panel=>{
+      if(panel.hidden)return false;
+      const style=window.getComputedStyle(panel);
+      return style.display!=='none'&&style.visibility!=='hidden';
+    });
+    if(parentMapOverlayState===open)return;
+    parentMapOverlayState=open;
+    window.parent.postMessage({source:'novahub-force-sales',type:'force-sales-map-overlay-state',open},window.location.origin);
+  });
+}
+if(window.parent!==window){
+  const mapOverlayObserver=new MutationObserver(scheduleParentMapOverlayState);
+  document.querySelectorAll('#routeModal,#businessDetailOverlay,.modal-backdrop,.quick-capture').forEach(panel=>{
+    mapOverlayObserver.observe(panel,{attributes:true,attributeFilter:['hidden','class','style']});
+  });
+  scheduleParentMapOverlayState();
+}
 let assignees = [];
 let assigneesLoadState = 'loading';
 let routeBusinesses = [];
