@@ -121,6 +121,7 @@ export interface CustomerHistoricalSummary {
   clientTenantId: string;
   activityType: string;
   recordCount: number;
+  recordCountLabel?: string;
   measureLabel?: string | null;
   measureValue?: number | string | null;
   measureUnit?: string | null;

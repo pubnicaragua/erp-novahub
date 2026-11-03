@@ -4,6 +4,7 @@ import type {
   RecurringInvoice, PaymentReceived, SalesReturn,
   CreditNote, PaginatedResponse, ApiFilters,
 } from '../types';
+import type { CustomerHistoryProfile } from '../utils/customer-history-profile';
 
 export interface CustomerPortalAdminAccess {
   customerId: string;
@@ -23,6 +24,9 @@ export const customersService = {
   getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Pick<Customer, 'id' | 'code' | 'name' | 'companyName' | 'status' | 'phone' | 'contactPhone' | 'openingBalanceDue' | 'openingBalanceFavor'>>>('/sales/customers/lookup', { params: filters as any, signal }),
   getLookupById: (id: string, signal?: AbortSignal, purpose?: string) => api.get<Pick<Customer, 'id' | 'code' | 'name' | 'companyName' | 'status' | 'phone' | 'contactPhone'>>(`/sales/customers/lookup/${id}`, { params: purpose ? { purpose } : undefined, signal }),
   getById: (id: string) => api.get<Customer>(`/sales/customers/${id}`),
+  getCustomerHistoryProfile: () => api.get<CustomerHistoryProfile>('/sales/customers/history-profile'),
+  saveCustomerHistoryProfile: (profile: Pick<CustomerHistoryProfile, 'activityType' | 'recordCountLabel' | 'measureLabel' | 'measureUnit'>) =>
+    api.put<CustomerHistoryProfile>('/sales/customers/history-profile', profile),
   getCustomerLoansConfig: () => api.get<{ enabled: boolean }>('/sales/customer-loans/config'),
   getCustomerLoans: (customerId: string) => api.get<any[]>(`/sales/customers/${customerId}/loans`),
   getLoanMoraTypes: () => api.get<any[]>('/sales/customer-loans/mora-types'),
@@ -39,6 +43,7 @@ export const customersService = {
       identifier: string;
       activityType: string;
       recordCount: number;
+      recordCountLabel?: string;
       measureLabel?: string | null;
       measureValue?: number | null;
       measureUnit?: string | null;

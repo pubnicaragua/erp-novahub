@@ -796,7 +796,7 @@ export function CustomerDetailDrawer({
                             <div className="min-w-0">
                               <p className="break-words text-xs font-black text-foreground">{summary.activityType}</p>
                               <p className="mt-1 break-words text-[10px] leading-relaxed text-muted-foreground">
-                                {Number(summary.recordCount || 0).toLocaleString('es-NI')} registros
+                                {summary.recordCountLabel || 'Registros'}: {Number(summary.recordCount || 0).toLocaleString('es-NI')}
                                 {summary.measureValue !== null && summary.measureValue !== undefined ? ` · ${summary.measureLabel || 'Medida'}: ${Number(summary.measureValue).toLocaleString('es-NI')}${summary.measureUnit ? ` ${summary.measureUnit}` : ''}` : ''}
                               </p>
                             </div>
@@ -852,7 +852,7 @@ export function CustomerDetailDrawer({
                           </div>
                           <div className={`grid gap-2 ${summary.measureValue === null || summary.measureValue === undefined ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
                             <div className="min-w-0 rounded-lg border border-border/40 bg-background/70 p-2.5">
-                              <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Registros</p>
+                              <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">{summary.recordCountLabel || 'Registros'}</p>
                               <p className="mt-1 break-words text-base font-black tabular-nums text-foreground">{Number(summary.recordCount || 0).toLocaleString('es-NI')}</p>
                             </div>
                             {summary.measureValue !== null && summary.measureValue !== undefined && <div className="min-w-0 rounded-lg border border-border/40 bg-background/70 p-2.5">
