@@ -162,6 +162,8 @@ const markerSandbox = {
   } },
   NOVAHUB_ISOTIPO_URL: 'https://example.test/isotipo.svg',
   stateClass: () => 'new',
+  stateOf: () => ({}),
+  assignees: [],
   userInitials: name => String(name || '').slice(0, 2).toUpperCase(),
   svgDataUrl: svg => svg,
 };

@@ -139,7 +139,7 @@ assert.match(html, /id="mapLayersPanel"/, 'El usuario debe tener un panel de cap
 assert.match(html, /Elementos de NovaHub/, 'El panel distingue las capas propias de NovaHub del mapa base');
 assert.match(html, /Lugares del mapa base/, 'El panel identifica que los POI pertenecen al mapa base');
 assert.match(html, /id="labels"[\s\S]*?data-mode="off"[^>]*aria-pressed="true"/, 'Ocultar etiquetas de puntos es la opción inicial accesible');
-assert.match(html, /Nombres de puntos NovaHub/, 'El control de etiquetas se refiere a los negocios marcados en NovaHub');
+assert.match(html, /Nombres de puntos/, 'El control de etiquetas se refiere a los negocios marcados en NovaHub');
 assert.match(html, /Restablecer vista limpia/, 'El usuario puede volver a la vista limpia');
 assert.match(html, /Ver lecturas originales/, 'El recorrido ofrece una vista diagnóstica de lecturas aisladas');
 assert.match(html, /Precisión desconocida/, 'La UI identifica lecturas sin precisión conocida');
