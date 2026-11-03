@@ -39,6 +39,7 @@ import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreview
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { formatDateOnly, formatInstant } from '../../utils/dateFormat';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -50,13 +51,7 @@ const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'o
 };
 
 function formatAccountingDate(value?: string | Date | null): string {
-  if (!value) return '—';
-  const raw = String(value);
-  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
-  if (match) {
-    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString('es-NI');
-  }
-  return new Date(raw).toLocaleDateString('es-NI');
+  return formatDateOnly(value) || '—';
 }
 
 function referenceDisplay(journal: JournalEntry): string {
@@ -1063,7 +1058,9 @@ export function DiarioView() {
                   </section>
 
                   <div className="flex items-center justify-end gap-2 border-t border-border/40 pt-3 text-[10px] text-muted-foreground">
-                    <span>Creado: {new Date(viewJournal.createdAt).toLocaleString('es-NI')}</span>
+                    <span>Creado: {formatInstant(viewJournal.createdAt, user?.clientTenant?.timeZone)}</span>
+                    {viewJournal.postedAt && <span>| Contabilizado: {formatInstant(viewJournal.postedAt, user?.clientTenant?.timeZone)}</span>}
+                    {viewJournal.voidedAt && <span>| Anulado: {formatInstant(viewJournal.voidedAt, user?.clientTenant?.timeZone)}</span>}
                     <span>| Creado por: {viewJournal.createdBy?.name || 'Sistema'}</span>
                   </div>
                 </>

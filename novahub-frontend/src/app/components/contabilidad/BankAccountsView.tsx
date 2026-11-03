@@ -16,7 +16,7 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../ui/utils';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatDateOnly, formatInstant } from '../../utils/dateFormat';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const ACCOUNT_TYPES = [
@@ -404,8 +404,8 @@ export function BankAccountsView() {
                 {movementQuery.isLoading ? <TableRow><TableCell colSpan={7} className="py-8 text-center"><Loader2 className="mx-auto size-5 animate-spin" /></TableCell></TableRow>
                   : movements.length === 0 ? <TableRow><TableCell colSpan={7} className="py-8 text-center text-xs text-muted-foreground">Aún no hay pagos vinculados a esta cuenta bancaria.</TableCell></TableRow>
                     : movements.map((movement: any) => <TableRow key={movement.id}>
-                      <TableCell className="whitespace-nowrap text-xs">{movement.date ? new Date(movement.date).toLocaleDateString('es-NI') : '—'}</TableCell>
-                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{movement.createdAt ? formatDateEs(movement.createdAt, true) : '—'}</TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">{formatDateOnly(movement.date) || '—'}</TableCell>
+                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{movement.createdAt ? formatInstant(movement.createdAt, user?.clientTenant?.timeZone) : '—'}</TableCell>
                       <TableCell className="text-xs font-medium">{movement.sourceNumber || movement.paymentReceived?.number || movement.paymentMade?.number || movement.sourceType || '—'}</TableCell>
                       <TableCell className="text-xs">{paymentMethodLabel(movement.method)}</TableCell>
                       <TableCell className="max-w-40 truncate text-xs text-muted-foreground">{movement.reference || '—'}</TableCell>

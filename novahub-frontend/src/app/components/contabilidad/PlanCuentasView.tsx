@@ -30,6 +30,7 @@ import type { Currency } from '../../types';
 import type { AccountDetailType, AccountSubtype, AccountType, ChartAccountCsvRow } from '../../types/accounting';
 import { downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv';
 import { useAuth } from '../../contexts/AuthContext';
+import { formatDateOnly } from '../../utils/dateFormat';
 import { AccountImportPreview } from './AccountImportPreview';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -1078,7 +1079,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                               <div className="min-w-0">
                                 <p className="truncate text-xs font-semibold" title={readableDescription}>{readableDescription}</p>
                                 <p className="mt-1 truncate text-[10px] text-muted-foreground">
-                                  {new Date(transaction.date).toLocaleDateString('es-NI')} · {transaction.reference || 'Sin referencia'}
+                                  {formatDateOnly(transaction.date)} · {transaction.reference || 'Sin referencia'}
                                 </p>
                               </div>
                               <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">

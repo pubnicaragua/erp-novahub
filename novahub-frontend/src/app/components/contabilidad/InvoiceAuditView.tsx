@@ -19,6 +19,7 @@ import { invoicesService } from '../../services/ventas.service';
 import { DateField } from '../ui/DateField';
 import { useAuth } from '../../contexts/AuthContext';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { formatDateOnly, formatInstantDate } from '../../utils/dateFormat';
 
 type AuditKind = 'SALE' | 'PURCHASE';
 type AuditStatus = 'ALL' | 'PENDING' | 'APPROVED' | 'ISSUES';
@@ -52,7 +53,7 @@ const HISTORY_ACTIONS = [
 ];
 
 export function InvoiceAuditView() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canViewInvoiceAudit = canPerform('ACCOUNTING_INVOICE_AUDIT', 'view');
   const canAuditInvoices = canPerform('ACCOUNTING_INVOICE_AUDIT', 'audit');
   const canSendToCorrect = canPerform('ACCOUNTING_INVOICE_AUDIT', 'sendToCorrect');
@@ -309,7 +310,7 @@ export function InvoiceAuditView() {
       : item.audit.action === 'REISSUED' ? 'REISSUED'
       : 'AUDIT';
     const meta = ACTION_META[action];
-    const when = item.audit.auditedAt ? ` · ${new Date(item.audit.auditedAt).toLocaleDateString('es-NI', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : '';
+    const when = item.audit.auditedAt ? ` · ${formatInstantDate(item.audit.auditedAt, user?.clientTenant?.timeZone)}` : '';
     const who = item.audit.auditedByName ? ` por ${item.audit.auditedByName}` : '';
     return (
       <div className="flex flex-col items-start gap-1">
@@ -486,7 +487,7 @@ export function InvoiceAuditView() {
                       </TableCell>
                       <TableCell><span className="font-mono text-xs font-bold">{item.number}</span></TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {item.date ? new Date(item.date).toLocaleDateString('es-NI', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}
+                        {formatDateOnly(item.date) || 'N/A'}
                       </TableCell>
                       <TableCell className="text-xs">{item.partyName}</TableCell>
                       <TableCell className="text-right text-xs tabular-nums font-bold">{fmtMoney(item.total)} {item.currency || ''}</TableCell>

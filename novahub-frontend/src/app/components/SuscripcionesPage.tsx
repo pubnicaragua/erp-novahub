@@ -52,7 +52,8 @@ import {
   Scale,
   GraduationCap,
   LifeBuoy,
-  Ship
+  Ship,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
@@ -143,6 +144,7 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [tenantDetails, setTenantDetails] = useState<any>(null);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
+  const [savingCustomerLoanOption, setSavingCustomerLoanOption] = useState<Record<string, boolean>>({});
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
   const [uploading, setUploading] = useState(false);
@@ -479,6 +481,33 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
       setIsRequestDialogOpen(true);
     } else if (user?.isPlatformAdmin) {
       handleDirectEnable(tenantId, moduleName);
+    }
+  };
+
+  const handleToggleCustomerLoanOption = async (tenant: any, enabled: boolean) => {
+    if (!user?.isPlatformAdmin || !tenant?.id) return;
+    const salesActive = tenant.subscriptions?.some((subscription: any) => subscription.module === 'SALES' && subscription.isActive);
+    if (!salesActive) {
+      toast.info('Activa Ventas antes de habilitar préstamos a clientes.');
+      return;
+    }
+    setSavingCustomerLoanOption((current) => ({ ...current, [tenant.id]: true }));
+    try {
+      await subscriptionsService.toggleModuleStatus({
+        clientTenantId: tenant.id,
+        module: 'SALES',
+        isActive: true,
+        customerLoansEnabled: enabled,
+        notes: enabled ? 'Habilitación de préstamos a clientes' : 'Desactivación de préstamos a clientes',
+      });
+      toast.success(enabled ? 'Préstamos a clientes habilitados.' : 'Creación de préstamos deshabilitada; se conserva el historial.');
+      await fetchData();
+      await refreshEnabledModules();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo actualizar la opción de préstamos.');
+      await fetchData();
+    } finally {
+      setSavingCustomerLoanOption((current) => ({ ...current, [tenant.id]: false }));
     }
   };
 
@@ -1120,6 +1149,25 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
                                         </div>
                                       </button>
                                     </div>
+
+                                    {mod.id === 'SALES' && user?.isPlatformAdmin && (
+                                      <label className={cn(
+                                        "flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2 text-[10px] transition-colors",
+                                        tenant.customerLoansEnabled ? "border-primary/30 bg-primary/5 text-foreground" : "border-border/40 bg-muted/20 text-muted-foreground",
+                                        !isActive && "opacity-60",
+                                      )}>
+                                        <input
+                                          type="checkbox"
+                                          className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                                          checked={Boolean(tenant.customerLoansEnabled)}
+                                          disabled={!isActive || Boolean(savingCustomerLoanOption[tenant.id])}
+                                          aria-label={`Habilitar préstamos a clientes para ${tenant.name}`}
+                                          onChange={(event) => void handleToggleCustomerLoanOption(tenant, event.target.checked)}
+                                        />
+                                        <span className="min-w-0"><span className="block font-black uppercase tracking-wide">Préstamos a clientes</span><span className="mt-0.5 block leading-relaxed text-muted-foreground">Campos y desembolsos opcionales en Clientes. Al desactivar, se conserva el historial y los cobros.</span></span>
+                                        {savingCustomerLoanOption[tenant.id] && <Loader2 className="ml-auto size-3.5 shrink-0 animate-spin" />}
+                                      </label>
+                                    )}
 
                                     {hasSubmodules && isExpanded && (
                                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="pl-6 space-y-1">

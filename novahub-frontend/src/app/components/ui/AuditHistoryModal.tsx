@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog';
 import { ScrollArea } from './scroll-area';
 import { api } from '../../services/api';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { History, User as UserIcon, Calendar, Info } from 'lucide-react';
 import { Badge } from './badge';
 import { cn } from './utils';
+import { formatDateOnly, formatInstant } from '../../utils/dateFormat';
 
 interface AuditHistoryModalProps {
   isOpen: boolean;
@@ -287,13 +286,13 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
 
   const isDateDetail = (key?: string) => Boolean(key && /(?:date|at)$/i.test(key));
 
-  const translateValue = (value: unknown, contextKey?: string): string => {
+  const translateValue = (value: unknown, contextKey?: string, timeZone = 'UTC'): string => {
     if (value === null || value === undefined || value === '') return '—';
-    if (Array.isArray(value)) return value.map((item) => translateValue(item, contextKey)).join(', ');
+    if (Array.isArray(value)) return value.map((item) => translateValue(item, contextKey, timeZone)).join(', ');
     if (typeof value === 'object') {
       return Object.entries(value as Record<string, unknown>)
         .filter(([key, nestedValue]) => !isInternalDetail(key, nestedValue))
-        .map(([key, nestedValue]) => `${translateKey(key)}: ${translateValue(nestedValue, key)}`)
+        .map(([key, nestedValue]) => `${translateKey(key)}: ${translateValue(nestedValue, key, timeZone)}`)
         .join(' · ');
     }
     const stringValue = String(value);
@@ -301,7 +300,9 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
       return stringValue.split(',').map((field) => translateKey(field.trim())).join(', ');
     }
     if (isDateDetail(contextKey) && !Number.isNaN(new Date(stringValue).getTime())) {
-      return new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'America/Managua' }).format(new Date(stringValue));
+      return /At$/i.test(String(contextKey || ''))
+        ? formatInstant(stringValue, timeZone)
+        : formatDateOnly(stringValue);
     }
     return detailValueLabels[stringValue] || detailKeyLabels[stringValue] || stringValue;
   };
@@ -309,6 +310,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
   const historyEntries = (
     <div className="space-y-4">
       {(providedLogs ?? logs).map((log) => {
+        const timeZone = log.timeZone || 'UTC';
         const detailsObj = parseDetails(log.details);
         const visibleDetailEntries = detailsObj && typeof detailsObj === 'object' && !Array.isArray(detailsObj)
           ? Object.entries(detailsObj).filter(([key, value]) => !isInternalDetail(key, value))
@@ -327,7 +329,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                   </Badge>
                   <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
                     <Calendar className="size-3" />
-                    {new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'America/Managua' }).format(new Date(log.createdAt))} (Managua)
+                    {formatInstant(log.createdAt, timeZone)} ({timeZone})
                   </div>
                 </div>
                 <div>
@@ -347,7 +349,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                         <ul className="list-disc list-inside space-y-1">
                           {visibleDetailEntries.map(([key, value]) => (
                             <li key={key}>
-                              <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value, key)}
+                              <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value, key, timeZone)}
                             </li>
                           ))}
                         </ul>

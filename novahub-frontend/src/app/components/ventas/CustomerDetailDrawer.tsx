@@ -90,6 +90,7 @@ import { runWithReportRequestLimit } from '../../utils/report-request-limiter';
 import { toast } from '@/app/services/toast';
 import type { Customer, Estimate, Invoice } from '../../types';
 import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
+import { CustomerLoansPanel } from './CustomerLoansPanel';
 import { countryCodeFromLegacy, formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 
 interface CustomerDetailDrawerProps {
@@ -98,9 +99,13 @@ interface CustomerDetailDrawerProps {
   customerSnapshot?: Customer | null;
   canExport?: boolean;
   extraActions?: ReactNode;
+  customerLoansEnabled?: boolean;
+  canCreateLoan?: boolean;
+  canManageMora?: boolean;
+  onLoansUpdated?: () => void;
 }
 
-type TabKey = 'general' | 'movimientos' | 'resumen-historico' | 'historial';
+type TabKey = 'general' | 'movimientos' | 'resumen-historico' | 'historial' | 'prestamos';
 type MovementFilter = 'ALL' | 'Factura' | 'Orden de venta' | 'Cotización' | 'Nota de crédito' | 'Crédito' | 'Pago recibido' | 'Factura recurrente';
 type HistoryExportScope = 'ALL' | 'FILTERED';
 type HistoryExportCurrency = 'NIO' | 'USD';
@@ -206,6 +211,10 @@ export function CustomerDetailDrawer({
   customerSnapshot,
   canExport = true,
   extraActions,
+  customerLoansEnabled = false,
+  canCreateLoan = false,
+  canManageMora = false,
+  onLoansUpdated,
 }: CustomerDetailDrawerProps) {
   const { baseCurrency, formatConvertedAmount, formatExplicitAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
   const { user } = useAuth();
@@ -355,6 +364,9 @@ export function CustomerDetailDrawer({
   }, [customerId]);
 
   const customer = detail ?? customerSnapshot ?? null;
+  const showCustomerLoans = customerLoansEnabled
+    || Number(customer?.customerLoansSummary?.totalCount || 0) > 0
+    || Number(customer?.customerLoans?.length || 0) > 0;
   const customerCountryCode = String(customer?.countryCode || countryCodeFromLegacy(customer?.country) || 'NI');
   const customerTaxLabel = customerCountryCode === 'NI' ? 'Cédula' : customerCountryCode === 'CL' ? 'RUT' : 'Identificación fiscal';
   const customerRucLabel = customerCountryCode === 'CL' ? 'RUT / identificación' : customerCountryCode === 'PE' ? 'RUC' : 'RUC';
@@ -589,6 +601,9 @@ export function CustomerDetailDrawer({
               <TabsTrigger value="historial" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
                 <History className="size-3.5" /> Historial
               </TabsTrigger>
+              {showCustomerLoans && <TabsTrigger value="prestamos" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
+                <Banknote className="size-3.5" /> Préstamos
+              </TabsTrigger>}
             </TabsList>
           </SheetHeader>
 
@@ -859,6 +874,17 @@ export function CustomerDetailDrawer({
                   ) : <p className="rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Este cliente no tiene resúmenes históricos importados.</p>}
                 </Card>
               </TabsContent>
+
+              {showCustomerLoans && customer && <TabsContent value="prestamos" className="mt-0 min-w-0 space-y-4 outline-none">
+                <CustomerLoansPanel
+                  customerId={customer.id}
+                  customerName={customer.name}
+                  enabled={customerLoansEnabled}
+                  canCreateLoan={canCreateLoan}
+                  canManageMora={canManageMora}
+                  onUpdated={onLoansUpdated}
+                />
+              </TabsContent>}
 
               {/* Tab Historial */}
               <TabsContent value="historial" className="mt-0 space-y-4 outline-none">

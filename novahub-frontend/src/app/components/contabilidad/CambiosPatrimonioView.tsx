@@ -9,6 +9,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { DateField } from '../ui/DateField';
+import { formatDateOnly } from '../../utils/dateFormat';
 
 interface EquityRow {
   accountId: string;
@@ -225,7 +226,7 @@ export function CambiosPatrimonioView() {
           <CardTitle className="text-lg font-bold">Estado de Cambios en el Patrimonio</CardTitle>
           {dateFrom && dateTo && (
             <p className="text-xs text-muted-foreground">
-              Período: {new Date(dateFrom).toLocaleDateString('es')} - {new Date(dateTo).toLocaleDateString('es')}
+              Período: {formatDateOnly(dateFrom, 'es')} - {formatDateOnly(dateTo, 'es')}
             </p>
           )}
         </CardHeader>

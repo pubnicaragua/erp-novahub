@@ -17,6 +17,8 @@ export interface FixedAssetExportOptions {
 
 function formatExportDate(value: any): string {
   if (!value) return '';
+  const civilDate = String(value).match(/^(\d{4}-\d{2}-\d{2})(?:$|T)/);
+  if (civilDate) return civilDate[1];
   const d = new Date(value);
   return isNaN(d.getTime()) ? String(value) : d.toISOString().slice(0, 10);
 }

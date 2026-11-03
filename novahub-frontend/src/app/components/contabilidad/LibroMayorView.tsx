@@ -23,6 +23,7 @@ import { generateLedgerPDF } from '../../utils/pdfGenerator';
 import { PdfDownloadButton, type PdfExportScope } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { formatDateOnly } from '../../utils/dateFormat';
 // import { motion } from 'motion/react';
 
 interface LedgerEntry {
@@ -65,13 +66,7 @@ function formatCurrency(n: number): string {
 }
 
 function formatAccountingDate(value?: string | Date | null): string {
-  if (!value) return '—';
-  const raw = String(value);
-  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
-  if (match) {
-    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString('es-NI');
-  }
-  return new Date(raw).toLocaleDateString('es-NI');
+  return formatDateOnly(value) || '—';
 }
 
 function journalStatusLabel(value?: string): string {

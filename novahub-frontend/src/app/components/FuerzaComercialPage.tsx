@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { customersService } from '../services/ventas.service';
 import { subscribeToNotificationEvents } from '../services/notifications.service';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
 
@@ -37,6 +38,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   const normalizedUserType = String(user?.userType || '').toUpperCase();
   const canAssignTeam = isSuperAdmin || ['SUPER_ADMIN', 'SUPERADMIN', 'PLATFORM_ADMIN', 'PARTNER', 'ADMIN', 'MANAGER'].includes(normalizedRole) || normalizedUserType === 'ADMIN' || Boolean(user?.isTenantAdmin) || Boolean(user?.managerCanEdit);
   const canAssignProspectOwner = canPerform('FORCE_SALES', 'assignProspect');
+  const canLinkCustomer = canPerform('FORCE_SALES', 'updateProspect') && canPerform('SALES_CLIENTS', 'read');
   const isAuthorizedUser = Boolean(user) && hasAccess('fuerza-comercial');
   const apiBase = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://backenderpnh.onrender.com/api' : 'http://localhost:3000/api');
   const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -100,7 +102,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
 
   const mapProvider = String(mapConfig?.mapProvider || 'GOOGLE').toUpperCase();
   const mapSearchMode = String(mapConfig?.mapSearchMode || 'EXTERNAL').toUpperCase();
-  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(tenantLogo)}&companyLogo=${encodeURIComponent(tenantLogo)}&view=${view}&embedded=1&userId=${encodeURIComponent(user?.id || '')}&tenantId=${encodeURIComponent(user?.clientTenantId || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&canAssignTeam=${canAssignTeam ? 'true' : 'false'}&canAssignProspectOwner=${canAssignProspectOwner ? 'true' : 'false'}&durableTracking=true&permissions=${encodeURIComponent(JSON.stringify(workflowPermissions))}&mapId=${encodeURIComponent(googleMapsMapId)}&cleanMapId=${encodeURIComponent(googleMapsCleanMapId)}&mapProvider=${encodeURIComponent(mapProvider)}&mapSearchMode=${encodeURIComponent(mapSearchMode)}${mapConfig?.mapTileUrl ? `&mapTileUrl=${encodeURIComponent(mapConfig.mapTileUrl)}` : ''}${mapConfig?.mapGeocoderUrl ? `&mapGeocoderUrl=${encodeURIComponent(mapConfig.mapGeocoderUrl)}` : ''}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
+  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(tenantLogo)}&companyLogo=${encodeURIComponent(tenantLogo)}&view=${view}&embedded=1&userId=${encodeURIComponent(user?.id || '')}&tenantId=${encodeURIComponent(user?.clientTenantId || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&canAssignTeam=${canAssignTeam ? 'true' : 'false'}&canAssignProspectOwner=${canAssignProspectOwner ? 'true' : 'false'}&canLinkCustomer=${canLinkCustomer ? 'true' : 'false'}&durableTracking=true&permissions=${encodeURIComponent(JSON.stringify(workflowPermissions))}&mapId=${encodeURIComponent(googleMapsMapId)}&cleanMapId=${encodeURIComponent(googleMapsCleanMapId)}&mapProvider=${encodeURIComponent(mapProvider)}&mapSearchMode=${encodeURIComponent(mapSearchMode)}${mapConfig?.mapTileUrl ? `&mapTileUrl=${encodeURIComponent(mapConfig.mapTileUrl)}` : ''}${mapConfig?.mapGeocoderUrl ? `&mapGeocoderUrl=${encodeURIComponent(mapConfig.mapGeocoderUrl)}` : ''}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
 
   useEffect(() => {
     const frame = iframeRef.current;
@@ -202,6 +204,23 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     const onMapMessage = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow || event.origin !== window.location.origin) return;
       if (event.data?.source !== 'novahub-force-sales') return;
+      if (event.data?.type === 'force-sales-customer-search') {
+        const requestId = String(event.data.requestId || '').trim();
+        const pointId = String(event.data.pointId || '').trim();
+        const search = String(event.data.search || '').trim();
+        if (!canLinkCustomer || !requestId || !pointId) return;
+        void customersService.getLookup({ search, status: 'ACTIVE', page: 1, pageSize: 25 }).then((result) => {
+          iframeRef.current?.contentWindow?.postMessage({
+            source: 'novahub-force-sales', type: 'force-sales-customer-search-result', requestId, pointId,
+            customers: (result?.data || []).map(({ id, code, name, companyName }) => ({ id, code, name, companyName })),
+          }, window.location.origin);
+        }).catch(() => {
+          iframeRef.current?.contentWindow?.postMessage({
+            source: 'novahub-force-sales', type: 'force-sales-customer-search-result', requestId, pointId,
+            customers: [], error: 'No se pudieron buscar clientes. Intenta de nuevo.',
+          }, window.location.origin);
+        });
+      }
       if (event.data?.type === 'fullscreen') setMapFullscreen(Boolean(event.data.active));
       if (event.data?.type === 'configuration-updated') setMapConfig(event.data.configuration || {});
       if (event.data?.type === 'request-import-file') routeImportInputRef.current?.click();
@@ -210,7 +229,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     };
     window.addEventListener('message', onMapMessage);
     return () => window.removeEventListener('message', onMapMessage);
-  }, []);
+  }, [canLinkCustomer]);
 
   if (!isAuthorizedUser) {
     return (

@@ -104,9 +104,9 @@ const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO', coun
   country, countryCode, creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE',
 });
 
-const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'createdAt', 'status'];
+const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'customerLoans', 'createdAt', 'status'];
 
-type CustomerColumnPreferences = string[] | { version: 1; keys: string[] };
+type CustomerColumnPreferences = string[] | { version: number; keys: string[] };
 
 function migrateCustomerColumnKeys(preferences: CustomerColumnPreferences): string[] {
   if (!Array.isArray(preferences)) return preferences.keys;
@@ -169,10 +169,17 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const tenantKey = user?.tenantId || 'anonymous';
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
+  const [customerLoansEnabled, setCustomerLoansEnabled] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'ALL' | 'INDIVIDUAL' | 'COMPANY'>('ALL');
   const [pendingStatusChange, setPendingStatusChange] = useState<Customer | null>(null);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [pendingForceSalesDelete, setPendingForceSalesDelete] = useState<{
+    customerId: string;
+    customerName: string;
+    prospect: { id: string; name: string; address?: string | null };
+  } | null>(null);
+  const [forceSalesDeleteLoading, setForceSalesDeleteLoading] = useState(false);
   const [pendingBulkDeactivateIds, setPendingBulkDeactivateIds] = useState<(string | number)[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [importMode, setImportMode] = useState<CustomerImportMode>('CUSTOMERS');
@@ -208,18 +215,20 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const [portalPassword, setPortalPassword] = useState('');
   const [portalEnabled, setPortalEnabled] = useState(true);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [columnPreferences, setColumnPreferences] = useLocalStorageState<CustomerColumnPreferences>(`sales-clients-columns-${tenantKey}`, { version: 1, keys: DEFAULT_CUSTOMER_COLUMN_KEYS }, 24 * 365);
+  const [columnPreferences, setColumnPreferences] = useLocalStorageState<CustomerColumnPreferences>(`sales-clients-columns-${tenantKey}`, { version: 2, keys: DEFAULT_CUSTOMER_COLUMN_KEYS }, 24 * 365);
   const visibleColumnKeys = migrateCustomerColumnKeys(columnPreferences);
   // Store the migration with the selection so later hiding survives reloads.
   useEffect(() => {
     if (Array.isArray(columnPreferences)) {
-      setColumnPreferences({ version: 1, keys: migrateCustomerColumnKeys(columnPreferences) });
+      setColumnPreferences({ version: 2, keys: migrateCustomerColumnKeys(columnPreferences) });
+    } else if (customerLoansEnabled && columnPreferences.version < 2) {
+      setColumnPreferences({ version: 2, keys: [...new Set([...migrateCustomerColumnKeys(columnPreferences), 'customerLoans'])] });
     }
-  }, [columnPreferences, setColumnPreferences]);
+  }, [columnPreferences, customerLoansEnabled, setColumnPreferences]);
   const setVisibleColumnKeys = (next: string[] | ((current: string[]) => string[])) => {
     setColumnPreferences((current) => {
       const keys = migrateCustomerColumnKeys(current);
-      return { version: 1, keys: typeof next === 'function' ? next(keys) : next };
+      return { version: 2, keys: typeof next === 'function' ? next(keys) : next };
     });
   };
   const [creating, setCreating] = useState(false);
@@ -235,6 +244,14 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   useEffect(() => {
     priceListsService.getAll().then((response: any) => setPriceLists(Array.isArray(response) ? response : (response?.data || []))).catch(() => setPriceLists([]));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    customersService.getCustomerLoansConfig()
+      .then((response: any) => { if (!cancelled) setCustomerLoansEnabled(Boolean((response?.data?.data ?? response?.data ?? response)?.enabled)); })
+      .catch(() => { if (!cancelled) setCustomerLoansEnabled(false); });
+    return () => { cancelled = true; };
+  }, [tenantKey]);
 
   const normalizeHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_/-]+/g, '');
   const getCell = (row: Record<string, any>, aliases: string[]) => {
@@ -1081,6 +1098,16 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         );
       },
     },
+    ...(customerLoansEnabled || data.some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) || (summaryData || []).some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) ? [{
+      key: 'customerLoans',
+      header: 'Préstamos vigentes',
+      width: '185px',
+      render: (_value: any, row: Customer) => {
+        const loans = row.customerLoansSummary;
+        if (!loans?.totalCount) return <span className="text-xs text-muted-foreground">Sin préstamos</span>;
+        return <div className="min-w-0 space-y-1"><p className="text-[11px] font-bold text-foreground">{loans.activeCount} vigente{loans.activeCount === 1 ? '' : 's'}</p><p className="break-words text-xs font-black tabular-nums text-rose-600 dark:text-rose-400">{formatConvertedAmount(Number(loans.outstandingBalance || 0), normalizeCurrency(loans.currency, baseCurrency))}</p></div>;
+      },
+    } as ColumnDef<Customer>] : []),
     { key: 'createdAt', header: 'Fecha de ingreso', width: '140px', render: (value) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(value)}</span> },
     { 
       key: 'status', 
@@ -1133,6 +1160,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     { key: 'creditLimit', label: 'Límite de crédito' },
     { key: 'creditDays', label: 'Plazo crédito' },
     { key: 'balance', label: 'Saldos del cliente' },
+    ...(customerLoansEnabled || data.some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) || (summaryData || []).some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) ? [{ key: 'customerLoans', label: 'Préstamos vigentes' }] : []),
     { key: 'createdAt', label: 'Fecha de ingreso' },
     { key: 'status', label: 'Estado' },
   ];
@@ -1280,6 +1308,15 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
                   if (String(selectedCustomerDetail?.id) === String(id)) setSelectedCustomerDetail(null);
                   onRefresh();
                 } catch (error: any) {
+                  if (error?.code === 'CUSTOMER_HAS_FORCE_SALES_POINT' && error?.data?.prospect?.id) {
+                    const customer = data.find((item) => String(item.id) === String(id));
+                    setPendingForceSalesDelete({
+                      customerId: String(id),
+                      customerName: customer?.name || 'este cliente',
+                      prospect: error.data.prospect,
+                    });
+                    return;
+                  }
                   toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar el cliente');
                   throw error;
                 }
@@ -1321,6 +1358,35 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={pendingForceSalesDelete !== null}
+        onOpenChange={(open) => { if (!open && !forceSalesDeleteLoading) setPendingForceSalesDelete(null); }}
+        title="¿Eliminar cliente vinculado?"
+        description={pendingForceSalesDelete
+          ? `“${pendingForceSalesDelete.customerName}” está vinculado al punto “${pendingForceSalesDelete.prospect.name}”${pendingForceSalesDelete.prospect.address ? ` (${pendingForceSalesDelete.prospect.address})` : ''}. Si confirmas, se eliminará el cliente y el punto comercial y su historial se conservarán sin vínculo.`
+          : ''}
+        confirmLabel="Eliminar y desvincular"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={forceSalesDeleteLoading}
+        onConfirm={async () => {
+          if (!pendingForceSalesDelete) return;
+          setForceSalesDeleteLoading(true);
+          try {
+            const confirmUnlinkForceSalesPoint = true;
+            await customersService.delete(pendingForceSalesDelete.customerId, confirmUnlinkForceSalesPoint);
+            toast.success('Cliente eliminado y punto comercial desvinculado');
+            if (String(selectedCustomerDetail?.id) === pendingForceSalesDelete.customerId) setSelectedCustomerDetail(null);
+            await onRefresh();
+            setPendingForceSalesDelete(null);
+          } catch (error: any) {
+            toast.error(error?.message || 'No se pudo eliminar el cliente vinculado');
+          } finally {
+            setForceSalesDeleteLoading(false);
+          }
+        }}
+      />
 
       <ConfirmDialog
         open={pendingStatusChange !== null}
@@ -1371,6 +1437,10 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         customerId={selectedCustomerDetail?.id ?? null}
         onOpenChange={(open) => !open && setSelectedCustomerDetail(null)}
         customerSnapshot={selectedCustomerDetail}
+        customerLoansEnabled={customerLoansEnabled}
+        canCreateLoan={canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'submit')}
+        canManageMora={canPerform('SALES_CLIENTS', 'edit')}
+        onLoansUpdated={() => { void onRefresh(); }}
         canExport={canPerform('SALES_CLIENTS', 'export')}
         extraActions={selectedCustomerDetail ? <>
           {canPerform('SALES_CLIENTS', 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedCustomerDetail(null); openEditCustomer(selectedCustomerDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}

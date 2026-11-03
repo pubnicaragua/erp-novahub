@@ -23,6 +23,7 @@ import { ActivoFormDialog } from './ActivoFormDialog';
 import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { PDF_DOWNLOAD_OPTIONS, type PdfPaperFormat } from '../../utils/pdfDownloadFormats';
+import { formatDateOnly } from '../../utils/dateFormat';
 
 interface FixedAsset {
   id: string;
@@ -436,8 +437,8 @@ export function ActivosFijosView() {
                       <div className="grid grid-cols-2 gap-2 text-xs rounded-xl border border-border/30 bg-muted/10 p-3">
                         <div><span className="block text-[10px] text-muted-foreground font-semibold">No. Factura</span><span className="font-medium">{detail.invoiceNumber || '—'}</span></div>
                         <div><span className="block text-[10px] text-muted-foreground font-semibold">Moneda</span><span className="font-medium">{detail.currency} (TC: {detail.exchangeRate})</span></div>
-                        <div><span className="block text-[10px] text-muted-foreground font-semibold">Adquisición</span><span className="font-medium">{detail.acquisitionDate ? new Date(detail.acquisitionDate).toLocaleDateString('es-NI') : '—'}</span></div>
-                        <div><span className="block text-[10px] text-muted-foreground font-semibold">Puesta en uso</span><span className="font-medium">{detail.inUseDate ? new Date(detail.inUseDate).toLocaleDateString('es-NI') : '—'}</span></div>
+                        <div><span className="block text-[10px] text-muted-foreground font-semibold">Adquisición</span><span className="font-medium">{formatDateOnly(detail.acquisitionDate) || '—'}</span></div>
+                        <div><span className="block text-[10px] text-muted-foreground font-semibold">Puesta en uso</span><span className="font-medium">{formatDateOnly(detail.inUseDate) || '—'}</span></div>
                       </div>
                     </div>
 

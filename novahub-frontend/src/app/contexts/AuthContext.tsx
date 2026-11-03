@@ -244,6 +244,7 @@ export interface User {
   clientTenant?: {
     name?: string;
     businessType?: string;
+    timeZone?: string;
     expiresAt?: string | null;
     isActive?: boolean;
     plan?: string;
@@ -742,6 +743,7 @@ const createUserObject = (apiPayload: any): User => {
       ? {
           name: apiUser.clientTenant.name,
           businessType: apiUser.clientTenant.businessType,
+          timeZone: apiUser.clientTenant.timeZone,
           expiresAt: apiUser.clientTenant.expiresAt ?? null,
           isActive: apiUser.clientTenant.isActive,
           plan: apiUser.clientTenant.plan,

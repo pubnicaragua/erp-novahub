@@ -3,6 +3,7 @@ import { api } from './api';
 export interface AuditLog {
   id: string;
   createdAt: string;
+  timeZone?: string;
   clientTenantId: string | null;
   branchId?: string;
   branchName?: string | null;
@@ -77,7 +78,7 @@ export interface AuditFilterOptions {
   entities: string[];
   results: string[];
   users: Array<{ id: string; name?: string | null; email?: string | null; role?: string | null }>;
-  branches?: Array<{ id: string; name: string; companyId?: string | null; companyName?: string | null; businessUnitId?: string | null; businessUnitName?: string | null }>;
+  branches?: Array<{ id: string; name: string; companyId?: string | null; companyName?: string | null; businessUnitId?: string | null; businessUnitName?: string | null; timeZone?: string }>;
   businessUnits?: Array<{ id: string; name: string; enterpriseGroupId?: string | null }>;
   companies?: Array<{ id: string; name: string }>;
 }

@@ -19,6 +19,7 @@ import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { ExportMenu } from '../ui/ExportMenu';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { formatDateOnly } from '../../utils/dateFormat';
 
 interface PnLAccount {
   accountId: string;
@@ -387,7 +388,7 @@ export function EstadoResultadosView() {
           </div>
           {dateFrom && dateTo && (
             <p className="mt-3 text-xs text-muted-foreground">
-              Período: {new Date(dateFrom).toLocaleDateString('es')} - {new Date(dateTo).toLocaleDateString('es')}
+              Período: {formatDateOnly(dateFrom, 'es')} - {formatDateOnly(dateTo, 'es')}
             </p>
           )}
         </CardHeader>
