@@ -293,6 +293,22 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){background:var(--nova-ui-muted);box-shadow:0 0 0 1px color-mix(in srgb,var(--nova-ui-primary,#08785a) 24%,transparent)}
 @media(max-width:820px){.route-plan-pane>.confirm-modal-actions:last-child{margin-right:-12px;margin-left:-12px;padding:9px 12px max(9px,env(safe-area-inset-bottom))}}
 @media(max-width:390px){.route-transfer-option{gap:9px;padding:11px}.route-transfer-header{gap:5px}.route-transfer-count{padding:4px 6px}}
+#routeModal{z-index:4200}
+.modal-backdrop:not(#routeModal){z-index:5000}
+.business-detail-overlay{position:fixed;inset:0;z-index:4600;pointer-events:none}
+.business-detail-overlay[hidden]{display:none}
+.business-detail-card{position:fixed;left:8px;top:8px;display:flex;flex-direction:column;width:min(640px,calc(100vw - var(--sheet) - 24px));max-height:min(82dvh,calc(var(--nova-visible-height) - 24px));overflow:hidden;border:1px solid var(--nova-ui-border,#d6e7df);border-radius:18px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);box-shadow:0 22px 60px rgba(8,42,32,.3);pointer-events:auto}
+.business-detail-head{display:flex;justify-content:flex-end;flex:none;padding:7px 8px 0}
+.business-detail-head button{width:36px;height:36px;border:0;border-radius:9px;background:transparent;color:var(--nova-ui-muted-foreground,#60736d);font-size:25px;line-height:1;cursor:pointer}
+.business-detail-head button:hover{background:var(--nova-ui-muted,#edf5f1);color:var(--nova-ui-foreground,#123f35)}
+.business-detail-head button:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+.business-detail-content{min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 12px 12px;-webkit-overflow-scrolling:touch}
+.business-detail-content .popup{min-width:0;max-width:none}
+.nova-map-marker-responsible{position:absolute;right:-7px;bottom:-6px;z-index:2;width:22px;height:22px;display:grid;place-items:center;border:2px solid #fff;border-radius:50%;background:#2364d2;color:#fff;box-shadow:0 3px 8px rgba(19,57,116,.35);font:800 8px/1 Poppins,Arial,sans-serif;letter-spacing:-.2px;pointer-events:none;user-select:none}
+@media(min-width:1024px){.nova-map-marker-responsible{width:24px;height:24px;font-size:9px}}
+.route-planner-head .route-panel-close{background:transparent;border-color:transparent;color:#60736d;font-size:24px;line-height:1}
+.route-planner-head .route-panel-close:hover{background:var(--nova-ui-muted,#edf5f1);color:var(--nova-ui-foreground,#123f35)}
+@media(max-width:820px){.business-detail-card{width:calc(100vw - 16px);max-height:calc(var(--nova-visible-height) - 24px);border-radius:15px}}
 </style>
 <style>
 @media(max-width:820px){.fabbar{grid-template-columns:44px 44px 68px 58px}.fabbar #newPoint{display:grid;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border-radius:50%;place-items:center;font-size:22px;line-height:1}.new-point-label{display:none}}
@@ -678,7 +694,7 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
 </div>
 <div class="modal-backdrop" id="routeModal" hidden>
  <section class="confirm-modal route-planner-card" role="region" aria-labelledby="routeTitle">
-  <header class="route-planner-head"><div><h2 id="routeTitle">Planificar ruta comercial</h2><p id="routeDescription">Empieza a marcar los puntos comerciales en el mapa. Cada punto agregado aparecerá aquí para ordenarlo.</p></div><button id="routePanelToggle" type="button" aria-expanded="true" aria-controls="routePanelBody" aria-label="Plegar panel de ruta">⌄</button></header>
+  <header class="route-planner-head"><div><h2 id="routeTitle">Planificar ruta comercial</h2><p id="routeDescription">Empieza a marcar los puntos comerciales en el mapa. Cada punto agregado aparecerá aquí para ordenarlo.</p></div><button id="routePanelToggle" type="button" aria-expanded="true" aria-controls="routePanelBody" aria-label="Plegar panel de ruta">⌄</button><button class="route-panel-close" id="routePanelClose" type="button" aria-label="Cerrar panel de rutas" title="Cerrar panel de rutas">×</button></header>
   <div class="route-planner-body" id="routePanelBody">
   <div class="route-summary"><div class="route-stat"><b id="routeStopCount">0</b><span>Paradas</span></div><div class="route-stat"><b id="routeCompletedCount">0</b><span>Completadas</span></div><div class="route-stat"><b id="routeNextStop">—</b><span>Siguiente</span></div></div>
   <p class="route-order-note" id="routeMetrics" aria-live="polite" hidden></p>
@@ -734,6 +750,12 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
   </section>
   <section id="routeListPane" role="tabpanel" aria-labelledby="routeListTab" hidden><label class="route-field" for="routeCatalogSearch">Buscar rutas<input id="routeCatalogSearch" type="search" placeholder="Nombre, responsable o estado"></label><div class="route-catalog-filters" role="group" aria-label="Filtrar rutas"><button type="button" data-route-filter="all" aria-pressed="true">Todas</button><button type="button" data-route-filter="unassigned" aria-pressed="false">Sin asignar</button><button type="button" data-route-filter="assigned" aria-pressed="false">Asignadas</button></div><p id="routeCatalogStatus" class="meta" role="status" aria-live="polite"></p><button id="routeCatalogRetry" class="cancel" type="button" hidden>Reintentar carga</button><div id="routeCatalog" class="route-assignee-routes"></div></section>
   </div>
+ </section>
+</div>
+<div class="business-detail-overlay" id="businessDetailOverlay" hidden>
+ <section class="business-detail-card" id="businessDetailCard" role="dialog" aria-modal="false" aria-label="Detalle del punto comercial">
+  <div class="business-detail-head"><button id="businessDetailClose" type="button" aria-label="Cerrar detalle del punto" title="Cerrar detalle">×</button></div>
+  <div class="business-detail-content" id="businessDetailContent"></div>
  </section>
 </div>
 <div class="modal-backdrop" id="zoneModal" hidden>
@@ -1515,6 +1537,8 @@ let forceSalesRefreshRequested = false;
 let forceSalesRefreshNeedsTrail = false;
 const forceSalesSyncErrors = new Map();
 let currentPopupBusinessId = null;
+let businessDetailPositionFrame = 0;
+let nativeInfoWindowOpen = false;
 let assignees = [];
 let assigneesLoadState = 'loading';
 let routeBusinesses = [];
@@ -1662,6 +1686,7 @@ function resizeGoogleMap(){
   google.maps.event.trigger(googleMap,'resize');
   if(center) googleMap.setCenter(center);
   if(typeof renderPresenceClusters==='function')renderPresenceClusters();
+  scheduleBusinessDetailPosition();
 }
 window.addEventListener('resize',resizeGoogleMap);
 window.addEventListener('load',resizeGoogleMap);
@@ -1692,10 +1717,88 @@ function unprojectPresencePosition(x,y){
   const point=projection.fromContainerPixelToLatLng(new google.maps.Point(Number(x),Number(y)));
   return point?window.NovaForceSalesLocation.normalizeCoordinates(point):null;
 }
+function activeBusinessDetail(){
+  return findBusiness(currentPopupBusinessId)||businesses.find(item=>String(item.id)===String(currentPopupBusinessId||''));
+}
+function positionBusinessDetailOverlay(){
+  if(!currentPopupBusinessId)return;
+  const business=activeBusinessDetail();
+  const overlay=document.getElementById('businessDetailOverlay');
+  const card=document.getElementById('businessDetailCard');
+  const mapElement=document.getElementById('map');
+  if(!business||!overlay||overlay.hidden||!card||!mapElement){if(!business&&currentPopupBusinessId)closeBusinessDetailPopup();return}
+  const mapRect=mapElement.getBoundingClientRect();
+  const projected=projectPresencePosition({lat:Number(business.lat),lng:Number(business.lng)});
+  const viewportTop=Math.max(0,Number(window.visualViewport?.offsetTop)||0)+8;
+  const viewportBottom=Math.min(window.innerHeight,(Number(window.visualViewport?.offsetTop)||0)+(Number(window.visualViewport?.height)||window.innerHeight))-8;
+  const cardWidth=card.offsetWidth,cardHeight=card.offsetHeight;
+  const minLeft=mapRect.left+8;
+  const maxLeft=Math.max(minLeft,mapRect.right-cardWidth-8);
+  const anchorX=projected?mapRect.left+projected.x:mapRect.left+mapRect.width/2;
+  const anchorY=projected?mapRect.top+projected.y:mapRect.top+24;
+  const left=Math.max(minLeft,Math.min(maxLeft,anchorX-cardWidth/2));
+  let top=anchorY-cardHeight-14;
+  if(top<viewportTop)top=anchorY+14;
+  top=Math.max(viewportTop,Math.min(Math.max(viewportTop,viewportBottom-cardHeight),top));
+  card.style.left=`${Math.round(left)}px`;
+  card.style.top=`${Math.round(top)}px`;
+}
+function scheduleBusinessDetailPosition(){
+  if(!currentPopupBusinessId||businessDetailPositionFrame)return;
+  businessDetailPositionFrame=window.requestAnimationFrame(()=>{
+    businessDetailPositionFrame=0;
+    positionBusinessDetailOverlay();
+  });
+}
+function refreshBusinessDetailOverlay(){
+  if(!currentPopupBusinessId)return;
+  const business=activeBusinessDetail();
+  const overlay=document.getElementById('businessDetailOverlay');
+  const content=document.getElementById('businessDetailContent');
+  if(!business||!overlay||!content){closeBusinessDetailPopup();return}
+  overlay.hidden=false;
+  const html=popupHtml(business);
+  const active=document.activeElement;
+  const editing=content.contains(active)&&/^(INPUT|SELECT|TEXTAREA)$/.test(active?.tagName||'');
+  if(!editing&&content.innerHTML!==html){
+    const scrollTop=content.scrollTop;
+    content.innerHTML=html;
+    content.scrollTop=scrollTop;
+  }
+  scheduleBusinessDetailPosition();
+}
+function openBusinessDetailPopup(marker){
+  const markerBusiness=marker?._b;
+  const id=String(markerBusiness?.id??'');
+  const business=findBusiness(id)||businesses.find(item=>String(item.id)===id)||markerBusiness;
+  if(!id||!business)return;
+  const overlay=document.getElementById('businessDetailOverlay');
+  const wasAlreadyOpen=!overlay?.hidden&&String(currentPopupBusinessId||'')===id;
+  if(nativeInfoWindowOpen){
+    closingInfoWindowForRefresh=true;
+    infoWindow.close();
+    closingInfoWindowForRefresh=false;
+    nativeInfoWindowOpen=false;
+  }
+  presenceClusterListOpen=false;
+  presenceClusterListGroupKey=null;
+  currentPopupBusinessId=id;
+  focusedQuickPointPopupOpen=marker===focusedQuickPointMarker;
+  refreshBusinessDetailOverlay();
+  if(!wasAlreadyOpen)document.getElementById('businessDetailClose')?.focus({preventScroll:true});
+}
+function closeBusinessDetailPopup({clearFocusedMarker=true}={}){
+  const closedId=currentPopupBusinessId;
+  currentPopupBusinessId=null;
+  focusedQuickPointPopupOpen=false;
+  const overlay=document.getElementById('businessDetailOverlay');
+  if(overlay)overlay.hidden=true;
+  if(clearFocusedMarker&&closedId&&String(focusedQuickPointBusinessId||'')===String(closedId))clearFocusedQuickPoint({closeWindow:false});
+}
 let focusedQuickPointPopupOpen=false;
 let closingInfoWindowForRefresh=false;
 infoWindow.addListener?.('close',()=>{
-  focusedQuickPointPopupOpen=false;currentPopupBusinessId=null;
+  nativeInfoWindowOpen=false;
   if(presenceClusterListOpen){presenceClusterListOpen=false;if(activeView==='map')requestAnimationFrame(()=>renderPresenceClusters())}
   if(!closingInfoWindowForRefresh&&focusedQuickPointBusinessId){
     clearFocusedQuickPoint({closeWindow:false});
@@ -1719,6 +1822,7 @@ function scheduleMapViewportRender(){
 googleMap.addListener('dragend',scheduleMapViewportRender);
 googleMap.addListener('zoom_changed',scheduleMapViewportRender);
 googleMap.addListener('idle',scheduleMapViewportRender);
+googleMap.addListener('bounds_changed',scheduleBusinessDetailPosition);
 googleMap.addListener('dragstart',()=>clearFocusedQuickPoint());
 googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
@@ -1741,8 +1845,11 @@ function markerSvg(b){
   const state=stateClass(b);
   const ring=state==='interested'?'#0b9d68':state==='visited'?'#84d795':state==='kanban'?'#12aa7b':state==='selected'?'#3287e8':state==='discarded'?'#86958f':'#9cacaa';
   const fill=b.priority==='A'?'#08785a':b.priority==='B'?'#eea13d':'#83928d';
-  const creator=b.createdBy?.name||b.createdByName||'';
-  const attribution={creatorName:String(creator).trim(),creatorInitials:userInitials(creator)};
+  const commercial=stateOf(b);
+  const hasExplicitUnassigned=Object.prototype.hasOwnProperty.call(commercial,'assignedToId')&&commercial.assignedToId===null;
+  const assignedToId=commercial.assignedToId||b.assignedToId||b.assignedTo?.id||null;
+  const assignedName=hasExplicitUnassigned?'':commercial.assignedToName||assignees.find(item=>String(item.id)===String(assignedToId||''))?.name||b.assignedTo?.name||b.assignedToName||'';
+  const attribution={responsibleName:String(assignedName).trim(),responsibleInitials:userInitials(assignedName)};
   if(NOVAHUB_ISOTIPO_URL){
     return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(26,26),anchor:new google.maps.Point(13,13),responsiveBusinessPoint:true,...attribution};
   }
@@ -1768,15 +1875,15 @@ function markerContentFromIcon(icon,title,label){
   image.style.width=image.width+'px';
   image.style.height=image.height+'px';
   wrapper.appendChild(image);
-  if(icon.creatorInitials){
-    const creatorBadge=document.createElement('span');
-    creatorBadge.className='nova-map-marker-creator';
-    creatorBadge.textContent=icon.creatorInitials;
-    creatorBadge.title=`Marcado por ${icon.creatorName}`;
-    creatorBadge.setAttribute('aria-hidden','true');
-    wrapper.title=`${title||'Punto comercial'} · Marcado por ${icon.creatorName}`;
+  if(icon.responsibleInitials){
+    const responsibleBadge=document.createElement('span');
+    responsibleBadge.className='nova-map-marker-responsible';
+    responsibleBadge.textContent=icon.responsibleInitials;
+    responsibleBadge.title=`Responsable: ${icon.responsibleName}`;
+    responsibleBadge.setAttribute('aria-hidden','true');
+    wrapper.title=`${title||'Punto comercial'} · Responsable: ${icon.responsibleName}`;
     wrapper.setAttribute('aria-label',wrapper.title);
-    wrapper.appendChild(creatorBadge);
+    wrapper.appendChild(responsibleBadge);
   }
   if(label){
     const badge=document.createElement('span');
@@ -1821,10 +1928,7 @@ function bindMapMarkerPopup(marker,factory){
   if(factory!==undefined)marker._popupFactory=factory;
   marker.openPopup=function(){
     if(!marker._popupFactory)return;
-    infoWindow.setContent(typeof marker._popupFactory==='function'?marker._popupFactory():marker._popupFactory);
-    currentPopupBusinessId=String(marker._b?.id || '') || null;
-    if(marker===focusedQuickPointMarker)focusedQuickPointPopupOpen=true;
-    try{infoWindow.open({map:googleMap,anchor:marker})}catch(error){infoWindow.open(googleMap,marker)}
+    openBusinessDetailPopup(marker);
   };
   marker.bindPopup=function(nextFactory){bindMapMarkerPopup(marker,nextFactory);return marker};
   if(!marker._popupOpenListener){
@@ -3067,6 +3171,7 @@ function clearPendingQuickPointMarker(){
   pendingPointMarker=null;
 }
 function clearFocusedQuickPoint({closeWindow=true}={}){
+  if(currentPopupBusinessId&&String(currentPopupBusinessId)===String(focusedQuickPointBusinessId||''))closeBusinessDetailPopup({clearFocusedMarker:false});
   if(focusedQuickPointMarker)setNovaMarkerMap(focusedQuickPointMarker,null);
   if(focusedQuickPointBusinessId && markerById.get(focusedQuickPointBusinessId)===focusedQuickPointMarker)markerById.delete(focusedQuickPointBusinessId);
   focusedQuickPointMarker=null;
@@ -3404,6 +3509,8 @@ document.getElementById('locationClose').addEventListener('click',closeLocationH
 document.getElementById('locationRetry').addEventListener('click',()=>{closeLocationHelp();locateMe()});
 document.getElementById('locationModal').addEventListener('click',event=>{if(event.target===event.currentTarget)closeLocationHelp()});
 document.getElementById('routeClose').addEventListener('click',closeRoutePanel);
+document.getElementById('routePanelClose').addEventListener('click',closeRoutePanel);
+document.getElementById('businessDetailClose').addEventListener('click',()=>closeBusinessDetailPopup());
 document.getElementById('routePanelToggle').addEventListener('click',()=>setRoutePanelCollapsed(!routePanelCollapsed));
 document.getElementById('routeClear').addEventListener('click',clearRoute);
 const routeAssigneeSearchInput=document.getElementById('routeAssigneeSearch');
@@ -3514,10 +3621,9 @@ document.addEventListener('fullscreenchange',()=>{
   setMapFullscreenVisual(active);
 });
 function rerenderKeepingPopup(b){
-  const shouldReopen=Boolean(b)&&activeView==='map'&&markerById.has(b.id);
-  if(shouldReopen)focusRenderLockUntil=Date.now()+900;
+  const shouldKeepOpen=Boolean(b)&&String(currentPopupBusinessId||'')===String(b.id)&&activeView==='map';
+  if(shouldKeepOpen)focusRenderLockUntil=Date.now()+900;
   render();
-  if(shouldReopen)window.requestAnimationFrame(()=>markerById.get(b.id)?.openPopup());
 }
 function toggleSelected(id, value){
   const b=findBusiness(id); if(!b) return;
@@ -3808,8 +3914,10 @@ function presencePopupContent(row){
 function openPresenceDetails(row,anchor){
   presenceClusterListOpen=false;
   presenceClusterListGroupKey=null;
+  closeBusinessDetailPopup();
   infoWindow.setContent(presencePopupContent(row));
   try{infoWindow.open({map:googleMap,anchor})}catch(error){infoWindow.open(googleMap,anchor)}
+  nativeInfoWindowOpen=true;
 }
 function createPresenceClusterContent(count){
   const badge=document.createElement('div');
@@ -3860,8 +3968,10 @@ function presenceClusterListContent(groupMarker){
 function openPresenceClusterList(groupMarker){
   presenceClusterListOpen=true;
   presenceClusterListGroupKey=groupMarker?._presenceGroup?.key||null;
+  closeBusinessDetailPopup();
   infoWindow.setContent(presenceClusterListContent(groupMarker));
   try{infoWindow.open({map:googleMap,anchor:groupMarker})}catch(error){infoWindow.open(googleMap,groupMarker)}
+  nativeInfoWindowOpen=true;
 }
 function showPresenceCluster(groupMarker){
   const group=groupMarker?._presenceGroup;
@@ -4545,7 +4655,7 @@ function updateView(){
   const headingTitle=document.getElementById('workspaceHeadingTitle');
   const headingMeta=document.getElementById('workspaceHeadingMeta');
   if(heading){heading.hidden=mapView;if(headingTitle)headingTitle.textContent=kanban?'Kanban comercial':'Historial de visitas';if(headingMeta)headingMeta.textContent=kanban?'Prospectos asignados y etapas':'Visitas, notas y evidencias'}
-  if(!mapView)infoWindow.close();
+  if(!mapView){closeBusinessDetailPopup();infoWindow.close()}
   if(toggle)toggle.textContent=kanban?'▦ Volver al mapa':'▦ Ver Kanban';
   document.querySelectorAll('#viewTabs [data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===activeView));
   const sheet=document.getElementById('sheet');
@@ -4558,8 +4668,6 @@ function updateView(){
   if(!mapView&&!kanban)renderHistory();
 }
 function render(){
-  const popupToRestore=currentPopupBusinessId;
-  if(popupToRestore){currentPopupBusinessId=null;closingInfoWindowForRefresh=true;infoWindow.close();closingInfoWindowForRefresh=false}
   const layerVisibleBusinesses=businesses.filter(business=>window.NovaForceSalesLocation.isBusinessVisibleInLayers(business,mapLayers,focusedQuickPointBusinessId));
   filtered = layerVisibleBusinesses.filter(pass);
   if(activeNearbyCenter){
@@ -4597,10 +4705,7 @@ function render(){
       markerById.set(focusedBusiness.id,focusedQuickPointMarker);
     }else clearFocusedQuickPoint();
   }
-  if(popupToRestore&&!routePlanningMode)requestAnimationFrame(()=>{
-    const marker=markerById.get(popupToRestore);
-    if(marker)marker.openPopup();
-  });
+  if(currentPopupBusinessId)refreshBusinessDetailOverlay();
   applyLabels();
 
   updatePipelineKpis(layerVisibleBusinesses);
