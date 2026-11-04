@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Building2, Loader2, Plus, Search, Sparkles, X } from 'lucide-react';
+import { AlertCircle, Building2, ChevronDown, ChevronUp, Loader2, Plus, Search, Sparkles, X } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { canManageTenantFeatures, tenantFeaturesService, type TenantFeatureCandidate, type TenantFeatureDefinition } from '../../services/tenant-features.service';
@@ -22,6 +22,7 @@ function FeatureSection({ feature, onChanged }: { feature: TenantFeatureDefiniti
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [savingBranchId, setSavingBranchId] = useState<string | null>(null);
   const [assignedFilter, setAssignedFilter] = useState('');
+  const [actionsCollapsed, setActionsCollapsed] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 250);
@@ -75,7 +76,21 @@ function FeatureSection({ feature, onChanged }: { feature: TenantFeatureDefiniti
               <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">{feature.description}</p>
             </div>
           </div>
-          <Badge variant="outline" className="shrink-0 px-3 py-1">{feature.enabledCount} sucursales</Badge>
+          <div className="flex shrink-0 items-center gap-2 self-start">
+            <Badge variant="outline" className="px-3 py-1">{feature.enabledCount} sucursales</Badge>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-expanded={!actionsCollapsed}
+              aria-controls={`${feature.key}-actions`}
+              aria-label={`${actionsCollapsed ? 'Expandir' : 'Contraer'} acciones de ${feature.label}`}
+              onClick={() => setActionsCollapsed((current) => !current)}
+            >
+              {actionsCollapsed ? <ChevronDown className="mr-1.5 size-4" /> : <ChevronUp className="mr-1.5 size-4" />}
+              {actionsCollapsed ? 'Expandir' : 'Contraer'}
+            </Button>
+          </div>
         </div>
         {feature.requiredModule && (
           <p className="text-xs text-muted-foreground">Requiere el módulo {getRequiredModuleLabel(feature.requiredModule)} activo.</p>
@@ -83,6 +98,7 @@ function FeatureSection({ feature, onChanged }: { feature: TenantFeatureDefiniti
         {feature.disabledDescription && <p className="text-xs text-muted-foreground">{feature.disabledDescription}</p>}
       </CardHeader>
 
+      <div id={`${feature.key}-actions`} hidden={actionsCollapsed} className={actionsCollapsed ? 'hidden' : undefined}>
       <CardContent className="grid min-w-0 gap-5 border-t border-border/50 p-5 sm:p-6 xl:grid-cols-2">
         <section className="min-w-0 space-y-3" aria-labelledby={`${feature.key}-assigned-title`}>
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -188,6 +204,7 @@ function FeatureSection({ feature, onChanged }: { feature: TenantFeatureDefiniti
           </div>
         </section>
       </CardContent>
+      </div>
     </Card>
   );
 }
