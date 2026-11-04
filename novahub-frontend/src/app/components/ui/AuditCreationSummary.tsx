@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Clock3, UserRound } from 'lucide-react';
+import { CalendarDays, ClipboardList, Clock3, UserRound } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { api } from '../../services/api';
 import { Card } from './card';
 import { Skeleton } from './skeleton';
+import { getAuditOperationMethodLabel } from './audit-operation-method';
 
 interface AuditCreationSummaryProps {
   entity: string;
@@ -68,7 +69,7 @@ export function AuditCreationSummary({ entity, entityId, createdAt, logs: provid
   return (
     <Card className="rounded-2xl border-border/50 bg-card/70 p-4">
       <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Auditoría de creación</p>
-      <div className="grid gap-3 text-sm sm:grid-cols-3">
+      <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex min-w-0 items-start gap-2">
           <UserRound className="mt-0.5 size-4 shrink-0 text-primary" />
           <div className="min-w-0"><p className="text-[10px] text-muted-foreground">Creado por</p><p className="mt-1 break-words font-semibold">{actor}</p></div>
@@ -80,6 +81,10 @@ export function AuditCreationSummary({ entity, entityId, createdAt, logs: provid
         <div className="flex min-w-0 items-start gap-2">
           <Clock3 className="mt-0.5 size-4 shrink-0 text-primary" />
           <div className="min-w-0"><p className="text-[10px] text-muted-foreground">Hora de creación</p><p className="mt-1 font-semibold">{date ? format(date, 'HH:mm:ss') : 'No disponible'}</p></div>
+        </div>
+        <div className="flex min-w-0 items-start gap-2">
+          <ClipboardList className="mt-0.5 size-4 shrink-0 text-primary" />
+          <div className="min-w-0"><p className="text-[10px] text-muted-foreground">Vía de registro</p><p className="mt-1 break-words font-semibold">{creation ? getAuditOperationMethodLabel(creation) : 'Método no registrado'}</p></div>
         </div>
       </div>
       {!creation && <p className="mt-3 text-xs text-muted-foreground">No existe un evento CREATE histórico para este registro; se muestra la fecha del registro cuando está disponible.</p>}

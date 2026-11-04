@@ -6,6 +6,7 @@ import { History, User as UserIcon, Calendar, Info } from 'lucide-react';
 import { Badge } from './badge';
 import { cn } from './utils';
 import { formatDateOnly, formatInstant } from '../../utils/dateFormat';
+import { getAuditOperationMethodLabel } from './audit-operation-method';
 
 interface AuditHistoryModalProps {
   isOpen: boolean;
@@ -278,6 +279,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
 
   const isInternalDetail = (key: string, value?: unknown) => {
     const normalizedKey = String(key || '');
+    if (normalizedKey === 'operationMethod') return true;
     // Los identificadores internos sirven para trazabilidad técnica, pero no
     // deben llenar la auditoría visible con UUID largos.
     if (normalizedKey === 'id' || normalizedKey === 'clientTenantId' || /(?:Id|ID)$/.test(normalizedKey)) return true;
@@ -338,6 +340,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                     {log.user?.name || (log.userId ? 'Usuario no disponible' : 'Sistema automático')}
                   </div>
                   {log.user?.email && <p className="text-[10px] text-muted-foreground pl-5">{log.user.email}</p>}
+                  <p className="mt-1 pl-5 text-[10px] font-semibold text-muted-foreground">Vía: {getAuditOperationMethodLabel(log)}</p>
                 </div>
                 {detailsObj && (typeof detailsObj !== 'object' || visibleDetailEntries.length > 0) && (
                   <div className="bg-muted/20 p-3 rounded-xl border border-border/30 mt-1">

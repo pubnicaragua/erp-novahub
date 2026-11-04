@@ -21,6 +21,7 @@ export interface AuditLog {
   view?: string | null;
   action: string;
   actionType?: string | null;
+  operationMethod?: 'MANUAL' | 'IMPORT' | 'SYSTEM' | null;
   entity: string;
   entityId: string;
   entityLabel?: string | null;

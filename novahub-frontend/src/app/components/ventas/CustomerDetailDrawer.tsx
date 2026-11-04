@@ -92,6 +92,7 @@ import type { Customer, Estimate, Invoice } from '../../types';
 import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
 import { CustomerLoansPanel } from './CustomerLoansPanel';
 import { countryCodeFromLegacy, formatCustomerPhoneForDisplay } from '../../utils/customer-data';
+import { getAuditOperationMethodLabel } from '../ui/audit-operation-method';
 
 interface CustomerDetailDrawerProps {
   customerId: string | null;
@@ -897,11 +898,13 @@ export function CustomerDetailDrawer({
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Agregado por</p>
                       <p className="mt-1 break-words text-sm font-bold text-foreground">{historyLoading ? 'Cargando…' : createdAuditEvent ? auditActor(createdAuditEvent) : 'No disponible'}</p>
                       <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="size-3" /> {historyLoading ? 'Consultando auditoría…' : createdAuditEvent ? auditDate(createdAuditEvent) : 'Sin registro de auditoría'}</p>
+                      <p className="mt-1 text-[10px] font-semibold text-muted-foreground">Vía: {createdAuditEvent ? getAuditOperationMethodLabel(createdAuditEvent) : 'Método no registrado'}</p>
                     </div>
                     <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Última modificación por</p>
                       <p className="mt-1 break-words text-sm font-bold text-foreground">{historyLoading ? 'Cargando…' : updatedAuditEvent ? auditActor(updatedAuditEvent) : 'Sin modificaciones registradas'}</p>
                       <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="size-3" /> {historyLoading ? 'Consultando auditoría…' : updatedAuditEvent ? auditDate(updatedAuditEvent) : '—'}</p>
+                      {updatedAuditEvent && <p className="mt-1 text-[10px] font-semibold text-muted-foreground">Vía: {getAuditOperationMethodLabel(updatedAuditEvent)}</p>}
                     </div>
                   </div>
                   <div className="space-y-4 pl-2 border-l-2 border-border/40 ml-2 pt-1">
@@ -912,7 +915,7 @@ export function CustomerDetailDrawer({
                       const action = String(event.action || '').toUpperCase();
                       const title = action === 'CREATE' ? 'Cliente registrado' : action === 'UPDATE' ? 'Datos del cliente modificados' : action === 'DELETE' ? 'Cliente eliminado' : 'Cambio del registro';
                       const actorLabel = action === 'CREATE' ? 'Agregado por' : 'Modificado por';
-                      return <div key={event.id} className="relative space-y-1 pl-4"><div className="absolute -left-[21px] top-1 size-3 rounded-full border-2 border-background bg-primary" /><p className="text-xs font-bold text-foreground">{title}</p><p className="text-[11px] text-muted-foreground">{changes || details.fields_updated || 'Actualización registrada'}</p><p className="flex items-center gap-1 text-[11px] text-muted-foreground"><User className="size-3" />{actorLabel}: <span className="font-bold text-foreground">{auditActor(event)}</span></p><p className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground"><Clock className="size-3" />{event.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : '—'}</p></div>;
+                      return <div key={event.id} className="relative space-y-1 pl-4"><div className="absolute -left-[21px] top-1 size-3 rounded-full border-2 border-background bg-primary" /><p className="text-xs font-bold text-foreground">{title}</p><p className="text-[11px] text-muted-foreground">{changes || details.fields_updated || 'Actualización registrada'}</p><p className="flex items-center gap-1 text-[11px] text-muted-foreground"><User className="size-3" />{actorLabel}: <span className="font-bold text-foreground">{auditActor(event)}</span></p><p className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground"><Clock className="size-3" />{event.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : '—'}</p><p className="text-[10px] font-semibold text-muted-foreground">Vía: {getAuditOperationMethodLabel(event)}</p></div>;
                     }) : <>
                     {customer?.createdAt && (
                       <div className="relative pl-4 space-y-1">
