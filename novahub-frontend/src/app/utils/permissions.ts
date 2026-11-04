@@ -420,6 +420,19 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   ACTIVITIES_CALENDAR: ['read', 'export'],
   ACTIVITIES_MEETINGS: ['read', 'create', 'edit', 'delete', 'complete', 'cancel', 'manageGuests', 'sendInvitations', 'scheduleMeeting', 'export'],
 
+  ORGANIZATION_CALENDAR: ['read'],
+  ORGANIZATION_SHARED: ['read', 'edit'],
+  ORGANIZATION_SETTINGS: ['read', 'edit'],
+
+  MARKETING_OVERVIEW: ['read'],
+  MARKETING_CLIENTS: ['read', 'create', 'edit', 'delete', 'submit'],
+  MARKETING_CAMPAIGNS: ['read', 'create', 'edit', 'delete', 'submit'],
+  MARKETING_CONTENT: ['read', 'create', 'edit', 'delete', 'submit', 'authorize'],
+  MARKETING_APPROVALS: ['read', 'approve'],
+  MARKETING_ASSETS: ['read', 'create', 'edit', 'delete'],
+  MARKETING_ANALYTICS: ['read', 'create', 'edit', 'delete'],
+  MARKETING_SETTINGS: ['read', 'edit'],
+
   PROJECTS_LIST: ['read', 'create', 'edit', 'delete', 'complete', 'cancel', 'changeStatus', 'manageMembers', 'comment', 'export'],
   PROJECTS_TASKS: ['read', 'create', 'edit', 'delete', 'complete', 'cancel', 'changeStatus', 'reorder', 'comment', 'react', 'linkErp', 'autoPlan', 'export'],
   PROJECTS_MILESTONES: ['read', 'create', 'edit', 'delete', 'complete', 'cancel', 'changeStatus', 'updateProgress', 'export'],

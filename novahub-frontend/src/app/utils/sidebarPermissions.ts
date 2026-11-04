@@ -29,6 +29,8 @@ export const SIDEBAR_PERMISSION_PARENT_ORDER = [
   'REPORTS',
   'HR',
   'ACTIVITIES',
+  'ORGANIZATION',
+  'MARKETING',
   'ASANA',
   'PROJECTS',
   'TICKETS',
@@ -152,6 +154,21 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'ACTIVITIES_LOGS', label: 'Bitácora', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_CALENDAR', label: 'Calendario', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_MEETINGS', label: 'Reuniones', parent: 'ACTIVITIES' },
+
+  // Organización personal
+  { id: 'ORGANIZATION_CALENDAR', label: 'Mi agenda', parent: 'ORGANIZATION' },
+  { id: 'ORGANIZATION_SHARED', label: 'Compartido', parent: 'ORGANIZATION' },
+  { id: 'ORGANIZATION_SETTINGS', label: 'Configuración', parent: 'ORGANIZATION' },
+
+  // Marketing
+  { id: 'MARKETING_OVERVIEW', label: 'Resumen', parent: 'MARKETING' },
+  { id: 'MARKETING_CLIENTS', label: 'Clientes y briefs', parent: 'MARKETING' },
+  { id: 'MARKETING_CAMPAIGNS', label: 'Campañas', parent: 'MARKETING' },
+  { id: 'MARKETING_CONTENT', label: 'Contenidos', parent: 'MARKETING' },
+  { id: 'MARKETING_APPROVALS', label: 'Aprobaciones', parent: 'MARKETING' },
+  { id: 'MARKETING_ASSETS', label: 'Biblioteca de activos', parent: 'MARKETING' },
+  { id: 'MARKETING_ANALYTICS', label: 'Analítica', parent: 'MARKETING' },
+  { id: 'MARKETING_SETTINGS', label: 'Configuración', parent: 'MARKETING' },
 
   // Asana
   { id: 'ASANA_TASKS', label: 'Tareas de Asana', parent: 'ASANA' },
@@ -356,6 +373,18 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   calendario: ['ACTIVITIES_CALENDAR'],
   reuniones: ['ACTIVITIES_MEETINGS'],
 
+  'organizacion:mi-agenda': ['ORGANIZATION_CALENDAR'],
+  'organizacion:compartido': ['ORGANIZATION_SHARED'],
+  'organizacion:configuracion': ['ORGANIZATION_SETTINGS'],
+  'marketing:resumen': ['MARKETING_OVERVIEW'],
+  'marketing:clientes': ['MARKETING_CLIENTS'],
+  'marketing:campanas': ['MARKETING_CAMPAIGNS'],
+  'marketing:contenidos': ['MARKETING_CONTENT'],
+  'marketing:aprobaciones': ['MARKETING_APPROVALS'],
+  'marketing:activos': ['MARKETING_ASSETS'],
+  'marketing:analitica': ['MARKETING_ANALYTICS'],
+  'marketing:configuracion': ['MARKETING_SETTINGS'],
+
   asana: ['ASANA'],
 
   proyectos: ['PROJECTS_LIST', 'PROJECTS'],
@@ -524,7 +553,7 @@ export const PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
 
 export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
   'SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'ACCOUNTING', 'HR',
-  'ACTIVITIES', 'ASANA', 'ASANA_TASKS', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
+  'ACTIVITIES', 'ORGANIZATION', 'MARKETING', 'ASANA', 'ASANA_TASKS', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
   'FINANCING', 'LEGAL', 'HR_TRAINING', 'SUPPORT_TECH', 'NOVACHAT',
   // Identificadores históricos y módulos administrables que no son vistas raíz.
   'PROJECTS', 'FORCE_SALES', 'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT',

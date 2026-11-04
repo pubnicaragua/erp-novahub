@@ -74,7 +74,7 @@ import {
   Ship,
   Globe,
   Boxes,
-  Eye,
+  Eye, Megaphone,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -336,6 +336,33 @@ const menuItems: MenuItem[] = [
       { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> },
       { id: 'calendario', label: 'Calendario', icon: <CalendarDays className="size-4" /> },
       { id: 'reuniones', label: 'Reuniones', icon: <Users className="size-4" /> },
+    ]
+  },
+  {
+    id: 'organizacion',
+    label: 'Organización personal',
+    icon: <CalendarDays className="size-5" />,
+    section: 'Herramientas',
+    submenu: [
+      { id: 'mi-agenda', label: 'Mi agenda', icon: <CalendarDays className="size-4" /> },
+      { id: 'compartido', label: 'Compartido', icon: <Users className="size-4" /> },
+      { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-4" /> },
+    ]
+  },
+  {
+    id: 'marketing',
+    label: 'Marketing',
+    icon: <Megaphone className="size-5" />,
+    section: 'Herramientas',
+    submenu: [
+      { id: 'resumen', label: 'Resumen', icon: <LayoutDashboard className="size-4" /> },
+      { id: 'clientes', label: 'Clientes y briefs', icon: <Users className="size-4" /> },
+      { id: 'campanas', label: 'Campañas', icon: <Megaphone className="size-4" /> },
+      { id: 'contenidos', label: 'Contenidos', icon: <CalendarDays className="size-4" /> },
+      { id: 'aprobaciones', label: 'Aprobaciones', icon: <FileCheck className="size-4" /> },
+      { id: 'activos', label: 'Biblioteca de activos', icon: <FolderOpen className="size-4" /> },
+      { id: 'analitica', label: 'Analítica', icon: <Activity className="size-4" /> },
+      { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-4" /> },
     ]
   },
   {
@@ -650,6 +677,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     reportes: 'REPORTS',
     documentos: 'DOCUMENTS',
     actividades: 'ACTIVITIES',
+    organizacion: 'ORGANIZATION',
+    marketing: 'MARKETING',
     asana: 'ASANA',
     tickets: 'TICKETS',
     notificaciones: 'NOTIFICATIONS',

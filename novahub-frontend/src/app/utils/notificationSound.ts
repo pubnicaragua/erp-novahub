@@ -28,7 +28,20 @@ function installUnlockListeners() {
 
 installUnlockListeners();
 
-/** Reproduce un aviso sonoro sin requerir un archivo de audio. */
+/**
+ * Volumen maestro del aviso (1 = máximo sin saturar). La señal pasa por un compresor y un limitador
+ * suave: sube el volumen percibido sin distorsionar ni cortar los picos.
+ */
+const MASTER_GAIN = 1.0;
+/** Notas del acorde ascendente (Do6 – Mi6 – Sol6 – Do7): más audible que un tono único. */
+const CHIME: Array<{ frequency: number; offset: number; duration: number }> = [
+  { frequency: 1046.5, offset: 0, duration: 0.2 },
+  { frequency: 1318.5, offset: 0.12, duration: 0.2 },
+  { frequency: 1568, offset: 0.24, duration: 0.24 },
+  { frequency: 2093, offset: 0.38, duration: 0.42 },
+];
+
+/** Reproduce un aviso sonoro fuerte sin requerir un archivo de audio. */
 export function playNotificationSound() {
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -39,31 +52,36 @@ export function playNotificationSound() {
     try {
       const now = ctx.currentTime;
 
-      // Primer tono: 880 Hz (La5) — 80ms
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.value = 880;
-      gain1.gain.setValueAtTime(0.001, now);
-      gain1.gain.exponentialRampToValueAtTime(0.68, now + 0.012);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.10);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(now);
-      osc1.stop(now + 0.10);
+      // Cadena: tonos → ganancia maestra → compresor → salida.
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -14;
+      compressor.knee.value = 12;
+      compressor.ratio.value = 6;
+      compressor.attack.value = 0.002;
+      compressor.release.value = 0.15;
+      const master = ctx.createGain();
+      master.gain.value = MASTER_GAIN;
+      master.connect(compressor);
+      compressor.connect(ctx.destination);
 
-      // Segundo tono: 1175 Hz (Fa#5) — 160ms, empieza a los 80ms
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.value = 1175;
-      gain2.gain.setValueAtTime(0.001, now + 0.08);
-      gain2.gain.exponentialRampToValueAtTime(0.78, now + 0.092);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(now + 0.08);
-      osc2.stop(now + 0.26);
+      for (const note of CHIME) {
+        const start = now + note.offset;
+        const end = start + note.duration;
+        // Onda triangular + octava superior sinusoidal: más armónicos = más presencia a igual amplitud.
+        for (const [type, ratio, peak] of [['triangle', 1, 1.0], ['sine', 2, 0.35]] as const) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = type;
+          osc.frequency.value = note.frequency * ratio;
+          gain.gain.setValueAtTime(0.0001, start);
+          gain.gain.exponentialRampToValueAtTime(peak, start + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.0001, end);
+          osc.connect(gain);
+          gain.connect(master);
+          osc.start(start);
+          osc.stop(end + 0.02);
+        }
+      }
     } catch {
       // El navegador puede bloquear audio automático; la notificación visual
       // debe continuar funcionando en ese caso.

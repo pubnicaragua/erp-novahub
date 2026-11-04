@@ -1,0 +1,54 @@
+import { Skeleton } from '../ui/skeleton';
+import { useAuth } from '../../contexts/AuthContext';
+import { useTenantQuery } from '../../hooks/useTenantQuery';
+import { organizacionService } from '../../services/organizacion.service';
+import { MiAgendaView } from './MiAgendaView';
+import { CompartidoView } from './CompartidoView';
+import { ConfiguracionView } from './ConfiguracionView';
+import { ErrorState } from './OrgBits';
+import { errorMessage } from './organizacion.utils';
+
+interface Props {
+  activeSubModule?: string;
+  onSubModuleChange?: (sub: string) => void;
+}
+
+type View = 'mi-agenda' | 'compartido' | 'configuracion';
+const PERMISSION: Record<View, string> = { 'mi-agenda': 'ORGANIZATION_CALENDAR', compartido: 'ORGANIZATION_SHARED', configuracion: 'ORGANIZATION_SETTINGS' };
+
+/** Organización personal: tres vistas (Mi agenda, Compartido, Configuración) sobre el módulo Actividades. */
+export function OrganizacionPage({ activeSubModule, onSubModuleChange }: Props) {
+  const { canPerform } = useAuth();
+  const allowed = (Object.keys(PERMISSION) as View[]).filter((v) => canPerform(PERMISSION[v], 'view'));
+  const requested = (activeSubModule as View) in PERMISSION ? (activeSubModule as View) : 'mi-agenda';
+  const view: View | null = allowed.includes(requested) ? requested : (allowed[0] ?? null);
+
+  const preferences = useTenantQuery(['organizacion', 'preferences'], (signal) => organizacionService.getPreferences(signal), { enabled: view !== null, staleTime: 30_000 });
+  const users = useTenantQuery(['organizacion', 'users'], (signal) => organizacionService.getUsers(signal), { enabled: view !== null, staleTime: 5 * 60_000 });
+
+  if (!view) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center p-6">
+        <div className="text-center"><h1 className="text-2xl font-semibold">Acceso denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para ver Organización personal.</p></div>
+      </div>
+    );
+  }
+
+  if (preferences.isLoading) {
+    return <div className="space-y-3 p-1" aria-busy="true" aria-label="Cargando Organización personal"><Skeleton className="h-12 w-64" /><Skeleton className="h-[480px] w-full" /></div>;
+  }
+  if (preferences.isError || !preferences.data) {
+    return <ErrorState message={errorMessage(preferences.error, 'No se pudieron cargar tus preferencias de agenda')} onRetry={() => void preferences.refetch()} />;
+  }
+
+  const go = (sub: View) => onSubModuleChange?.(sub);
+  const userList = users.data ?? [];
+
+  // La clave incluye zona horaria y primer día para reiniciar la vista cuando cambian las preferencias.
+  const key = `${preferences.data.timezone}-${preferences.data.weekStartsOn}-${preferences.data.showWeekends}`;
+  if (view === 'compartido') {
+    return <CompartidoView key={key} preferences={preferences.data} users={userList} onOpenAgenda={() => go('mi-agenda')} onOpenSettings={() => go('configuracion')} />;
+  }
+  if (view === 'configuracion') return <ConfiguracionView preferences={preferences.data} users={userList} />;
+  return <MiAgendaView key={key} preferences={preferences.data} users={userList} onOpenSettings={() => go('configuracion')} />;
+}

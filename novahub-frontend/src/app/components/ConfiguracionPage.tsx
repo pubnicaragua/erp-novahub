@@ -10,7 +10,7 @@ import {
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings, ChevronDown,
   BookOpen, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe, MessageCircle, CreditCard,
-  FolderKanban, ClipboardPen, BedDouble, MapPinned
+  FolderKanban, ClipboardPen, BedDouble, MapPinned, Megaphone
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -82,6 +82,8 @@ const AVAILABLE_MODULES = [
   { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Contabilidad General' },
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
+  { id: 'ORGANIZATION', label: 'Organización personal', icon: CalendarDays, description: 'Mi agenda y eventos compartidos' },
+  { id: 'MARKETING', label: 'Marketing', icon: Megaphone, description: 'Campañas, contenidos y resultados' },
   { id: 'ASANA', label: 'Asana', icon: ClipboardPen, description: 'Tableros y tareas colaborativas' },
   { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'HR_TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
@@ -181,6 +183,17 @@ export const LEGACY_SUBMODULES_FOR_PERMS = [
   { id: 'ACTIVITIES_LOGS', label: 'Bitácora', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_CALENDAR', label: 'Calendario', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_MEETINGS', label: 'Reuniones', parent: 'ACTIVITIES' },
+  { id: 'ORGANIZATION_CALENDAR', label: 'Mi agenda', parent: 'ORGANIZATION' },
+  { id: 'ORGANIZATION_SHARED', label: 'Compartido', parent: 'ORGANIZATION' },
+  { id: 'ORGANIZATION_SETTINGS', label: 'Configuración', parent: 'ORGANIZATION' },
+  { id: 'MARKETING_OVERVIEW', label: 'Resumen', parent: 'MARKETING' },
+  { id: 'MARKETING_CLIENTS', label: 'Clientes y briefs', parent: 'MARKETING' },
+  { id: 'MARKETING_CAMPAIGNS', label: 'Campañas', parent: 'MARKETING' },
+  { id: 'MARKETING_CONTENT', label: 'Contenidos', parent: 'MARKETING' },
+  { id: 'MARKETING_APPROVALS', label: 'Aprobaciones', parent: 'MARKETING' },
+  { id: 'MARKETING_ASSETS', label: 'Biblioteca de activos', parent: 'MARKETING' },
+  { id: 'MARKETING_ANALYTICS', label: 'Analítica', parent: 'MARKETING' },
+  { id: 'MARKETING_SETTINGS', label: 'Configuración', parent: 'MARKETING' },
 
   // Asana
   { id: 'ASANA_TASKS', label: 'Tareas de Asana', parent: 'ASANA' },

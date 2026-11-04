@@ -63,6 +63,8 @@ const RecursosHumanosPage = lazyWithChunkRecovery(() => import('./components/Rec
 const ClientesPage = lazyWithChunkRecovery(() => import('./components/ClientesPage').then(m => ({ default: m.ClientesPage })), 'clientes');
 const ProveedoresPage = lazyWithChunkRecovery(() => import('./components/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })), 'proveedores');
 const ActividadesPage = lazyWithChunkRecovery(() => import('./components/ActividadesPage').then(m => ({ default: m.ActividadesPage })), 'actividades');
+const OrganizacionPage = lazyWithChunkRecovery(() => import('./components/organizacion/OrganizacionPage').then(m => ({ default: m.OrganizacionPage })), 'organizacion');
+const MarketingPage = lazyWithChunkRecovery(() => import('./components/marketing/MarketingPage').then(m => ({ default: m.MarketingPage })), 'marketing');
 const AsanaPage = lazyWithChunkRecovery(() => import('./components/AsanaPage').then(m => ({ default: m.AsanaPage })), 'asana');
 const ProyectosPage = lazyWithChunkRecovery(() => import('./components/ProyectosPage').then(m => ({ default: m.ProyectosPage })), 'proyectos');
 const FuerzaComercialPage = lazyWithChunkRecovery(() => import('./components/FuerzaComercialPage').then(m => ({ default: m.FuerzaComercialPage })), 'fuerza-comercial');
@@ -525,6 +527,8 @@ function DashboardLayout() {
       case 'clientes': return <ClientesPage />;
       case 'proveedores': return <ProveedoresPage />;
       case 'actividades': return <ActividadesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
+      case 'organizacion': return <ModuleErrorBoundary moduleName="Organización personal"><OrganizacionPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
+      case 'marketing': return <ModuleErrorBoundary moduleName="Marketing"><MarketingPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'asana': return <ModuleErrorBoundary moduleName="Asana"><AsanaPage /></ModuleErrorBoundary>;
       case 'proyectos': return <ModuleErrorBoundary moduleName="Proyectos"><ProyectosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'fuerza-comercial': return activeSubModule === 'fuerza-comercial-reportes'
