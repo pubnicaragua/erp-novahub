@@ -22,9 +22,9 @@ export function Kpi({ label, value, hint, icon }: { label: string; value: ReactN
     <div className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
         {icon && <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/20 text-primary dark:text-accent">{icon}</span>}
-        <span className="min-w-0 truncate" style={serifStyle}>{label}</span>
+        <span className="min-w-0 break-words leading-tight" style={serifStyle}>{label}</span>
       </div>
-      <p className="mt-2 truncate text-2xl font-bold text-primary dark:text-foreground">{value}</p>
+      <p className="mt-2 break-words text-2xl font-bold leading-tight text-primary dark:text-foreground">{value}</p>
       {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   );

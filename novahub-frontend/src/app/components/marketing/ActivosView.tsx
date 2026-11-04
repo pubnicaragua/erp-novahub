@@ -14,6 +14,14 @@ import { ResourceTable, type Column } from './MktBits';
 import { options, useMktRefresh } from './mkt.helpers';
 
 const kindIcon = (mime?: string | null) => (mime?.startsWith('image/') ? ImageIcon : mime?.startsWith('video/') ? Video : FileText);
+/** Debe coincidir con el bucket privado `documents` de Supabase (validado también en el backend). */
+const ACCEPT = '.jpg,.jpeg,.png,.webp,.gif,.avif,.pdf,.txt,.csv,.html,.doc,.docx,.xls,.xlsx,.zip,.rar';
+const ALLOWED_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'application/pdf', 'text/plain', 'text/csv', 'text/html',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/x-rar-compressed',
+]);
+const MAX_BYTES = 25 * 1024 * 1024;
 const size = (bytes: number) => (bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
 export function ActivosView() {
@@ -32,6 +40,8 @@ export function ActivosView() {
     setUploading(true);
     let ok = 0;
     for (const file of Array.from(files)) {
+      if (file.type && !ALLOWED_MIME.has(file.type)) { toast.error(`${file.name}: tipo de archivo no permitido (${file.type})`); continue; }
+      if (file.size > MAX_BYTES) { toast.error(`${file.name}: supera el máximo de 25 MB`); continue; }
       try {
         const uploaded = await storageService.uploadFile('marketing-assets', file, { folder: 'marketing' });
         await mktResources.assets.create({ name: file.name, fileUri: uploaded.uri, mimeType: file.type || null, sizeBytes: file.size, folder: 'General' });
@@ -70,10 +80,11 @@ export function ActivosView() {
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
       <PageTitle guide={MARKETING_GUIDES.activos} eyebrow="Marketing" title="Biblioteca de activos" subtitle="Archivos creativos y evidencias en almacenamiento privado, vinculados a campañas y piezas." />
-      <input ref={input} type="file" multiple className="sr-only" aria-label="Seleccionar archivos" onChange={(e) => void upload(e.target.files)} />
+      <input ref={input} type="file" multiple accept={ACCEPT} className="sr-only" aria-label="Seleccionar archivos" onChange={(e) => void upload(e.target.files)} />
+      <p className="text-[12px] text-muted-foreground">Formatos permitidos: imágenes (JPG, PNG, WebP, GIF, AVIF), PDF, Word, Excel, CSV, TXT, HTML, ZIP y RAR · máximo 25 MB por archivo.</p>
       <ResourceTable<MktAsset> id="assets" fetcher={mktResources.assets.list} columns={columns} searchPlaceholder="Buscar por nombre o descripción…" onRowClick={setSelected}
         filters={[{ key: 'rights', label: 'Derechos', options: options(RIGHTS_LABEL) }]}
-        emptyTitle="Aún no hay activos" emptyDescription="Sube imágenes, videos o documentos. Los archivos son privados y respetan los permisos del módulo."
+        emptyTitle="Aún no hay activos" emptyDescription="Sube imágenes, PDF u otros documentos. Los archivos son privados y respetan los permisos del módulo."
         toolbar={canCreate ? <Button type="button" onClick={() => input.current?.click()} disabled={uploading}>{uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" aria-hidden="true" />}Subir activos</Button> : undefined} />
 
       <Sheet open={Boolean(selected)} onOpenChange={(o) => { if (!o) setSelected(null); }}>

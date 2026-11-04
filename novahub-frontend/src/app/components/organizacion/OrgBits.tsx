@@ -1,4 +1,4 @@
-import type { ReactNode, SelectHTMLAttributes } from 'react';
+import type { HTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
@@ -65,14 +65,23 @@ export function EmptyState({ title, description, action }: { title: string; desc
   );
 }
 
+/**
+ * Encabezado de sección con tamaño propio. El CSS global del ERP fuerza `h2`/`h3` a 22px
+ * (`main[class*="module-"] h2 { !important }`), por eso estos módulos usan `role="heading"`
+ * sobre un `div`: misma semántica para lectores de pantalla, sin heredar ese tamaño.
+ */
+export function Heading({ level = 2, className, children, ...rest }: { level?: 2 | 3 | 4; className?: string; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, 'className' | 'children'>) {
+  return <div role="heading" aria-level={level} className={className} {...rest}>{children}</div>;
+}
+
 export function Panel({ title, icon, children, className, action }: { title: string; icon?: ReactNode; children: ReactNode; className?: string; action?: ReactNode }) {
   return (
     <section className={cn('min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm', className)}>
-      <header className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="flex min-w-0 items-center gap-2 text-[14px] font-semibold text-foreground">
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <Heading className="flex min-w-0 items-center gap-2 text-[14px] font-semibold leading-snug text-foreground">
           {icon && <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/20 text-primary dark:text-accent">{icon}</span>}
-          <span className="truncate">{title}</span>
-        </h2>
+          <span className="min-w-0 break-words">{title}</span>
+        </Heading>
         {action}
       </header>
       {children}

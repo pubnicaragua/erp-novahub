@@ -3,7 +3,7 @@ import { ORGANIZACION_GUIDES } from './guides';
 import { useQueryClient } from '@tanstack/react-query';
 import { format, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Activity, Bell, CalendarDays, ChevronLeft, ChevronRight, Filter, ListChecks, ListTodo, Plus, Settings2 } from 'lucide-react';
+import { Activity, Bell, CalendarDays, ChevronLeft, ChevronRight, Filter, ListChecks, ListTodo, Plus, Settings2, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
 import { cn } from '../ui/utils';
@@ -14,7 +14,7 @@ import { organizacionService, type OrgPreferences, type OrgUser, type OrgViewMod
 import { toast } from '../../services/toast';
 import { NuevaActividadSheet, type ActivityKind } from './NuevaActividadSheet';
 import { ItemDetailSheet } from './ItemDetailSheet';
-import { EmptyState, ErrorState, NativeSelect, PageTitle, Panel } from './OrgBits';
+import { EmptyState, ErrorState, Heading, NativeSelect, PageTitle, Panel } from './OrgBits';
 import {
   KIND_CLASS, KIND_LABEL, dayKeyFromDate, errorMessage, timeZoneLabel, toCalendarItems, type CalendarItem,
 } from './organizacion.utils';
@@ -31,7 +31,9 @@ interface Props {
 
 const HOUR_START = 6;
 const HOUR_END = 21;
-const ROW_H = 52;
+/** Alturas disponibles por hora; el usuario ajusta el zoom del calendario con los botones −/+. */
+const ROW_HEIGHTS = [44, 60, 80, 104] as const;
+const DEFAULT_ZOOM = 1;
 const VIEW_LABEL: Record<OrgViewMode, string> = { WEEK: 'Semana', DAY: 'Día', MONTH: 'Mes', AGENDA: 'Agenda' };
 const TYPE_FILTERS: Array<{ id: CalendarItem['kind']; label: string }> = [
   { id: 'TASK', label: 'Tareas' }, { id: 'EVENT', label: 'Eventos' }, { id: 'MEETING', label: 'Reuniones' }, { id: 'REMINDER', label: 'Recordatorios' },
@@ -71,6 +73,8 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
   const [anchor, setAnchor] = useState<Date>(() => todayCivil(tz));
   const [ownerUserId, setOwnerUserId] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [zoom, setZoom] = useState<number>(DEFAULT_ZOOM);
+  const ROW_H = ROW_HEIGHTS[zoom];
   const [types, setTypes] = useState<Set<CalendarItem['kind']>>(new Set(['TASK', 'EVENT', 'MEETING', 'REMINDER']));
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'DONE'>('ALL');
   const [sheet, setSheet] = useState<{ open: boolean; kind?: ActivityKind; date?: Date }>({ open: false });
@@ -168,17 +172,19 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
   const tzLabel = timeZoneLabel(tz);
   const hours = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
 
+  // En la cuadrícula horaria el bloque ocupa todo su alto y deja ver el título completo (2 líneas) y la hora.
   const itemButton = (item: CalendarItem, compact = false) => (
     <button
-      key={item.key} type="button" onClick={() => setSelected(item)}
+      key={item.key} type="button" onClick={() => setSelected(item)} title={item.title}
       className={cn(
         'flex w-full min-w-0 flex-col rounded-md border-l-4 px-1.5 py-1 text-left text-[11px] leading-tight shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
+        !compact && 'h-full overflow-hidden',
         KIND_CLASS[item.kind], item.completed && 'opacity-60', item.busy && 'border-l-slate-400 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
       )}
       aria-label={`${KIND_LABEL[item.kind]}: ${item.title}, ${formatTime(item.start, tz)}`}
     >
-      <span className={cn('truncate font-semibold', item.completed && 'line-through')}>{item.title}</span>
-      {!compact && <span className="truncate text-[10px] opacity-80">{formatTime(item.start, tz)}</span>}
+      <span className={cn('font-semibold', compact ? 'truncate' : 'line-clamp-2 break-words', item.completed && 'line-through')}>{item.title}</span>
+      {!compact && <span className="shrink-0 text-[10px] opacity-80">{formatTime(item.start, tz)}</span>}
     </button>
   );
 
@@ -221,13 +227,13 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
               {laid.map(({ item, lane, lanes }) => {
                 const startMin = Math.max(minutesOfDay(item.start, tz), HOUR_START * 60);
                 const rawEnd = instantKey(item.end, tz) === key ? minutesOfDay(item.end, tz) : HOUR_END * 60;
-                const endMin = Math.min(Math.max(rawEnd, startMin + 25), HOUR_END * 60);
+                const endMin = Math.min(Math.max(rawEnd, startMin + 30), HOUR_END * 60);
                 const top = ((startMin - HOUR_START * 60) / 60) * ROW_H;
-                const height = Math.max(24, ((endMin - startMin) / 60) * ROW_H - 2);
+                const height = Math.max(40, ((endMin - startMin) / 60) * ROW_H - 2);
                 if (minutesOfDay(item.start, tz) >= HOUR_END * 60) return null;
                 return (
                   <div key={item.key} className="absolute px-0.5" style={{ top, height, left: `${(lane / lanes) * 100}%`, width: `${100 / lanes}%` }}>
-                    <div className="h-full overflow-hidden">{itemButton(item)}</div>
+                    {itemButton(item)}
                   </div>
                 );
               })}
@@ -269,7 +275,7 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
       <ol className="space-y-4">
         {grouped.map(({ day, list }) => (
           <li key={civilKey(day)}>
-            <h3 className="mb-1.5 text-[12px] font-semibold capitalize text-muted-foreground">{format(day, "EEEE d 'de' MMMM", { locale: es })}</h3>
+            <Heading level={3} className="mb-1.5 text-[12px] font-semibold capitalize text-muted-foreground">{format(day, "EEEE d 'de' MMMM", { locale: es })}</Heading>
             <ul className="space-y-1.5">
               {list.map((i) => (
                 <li key={i.key}>
@@ -372,8 +378,14 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
 
         <section className="order-1 min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm xl:order-2" aria-live="polite">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex min-w-0 items-center gap-2 text-[15px] font-semibold capitalize"><CalendarDays className="size-4 shrink-0" aria-hidden="true" /><span className="truncate">{title}</span></h2>
+            <Heading className="flex min-w-0 items-center gap-2 text-[15px] font-semibold capitalize leading-snug"><CalendarDays className="size-4 shrink-0" aria-hidden="true" /><span className="min-w-0 break-words">{title}</span></Heading>
             <div className="flex flex-wrap items-center gap-2">
+              {(view === 'WEEK' || view === 'DAY') && (
+                <div className="flex items-center gap-1" role="group" aria-label="Zoom del calendario">
+                  <Button type="button" size="icon" variant="outline" disabled={zoom <= 0} onClick={() => setZoom((z) => Math.max(0, z - 1))} aria-label="Reducir altura del calendario"><ZoomOut className="size-4" /></Button>
+                  <Button type="button" size="icon" variant="outline" disabled={zoom >= ROW_HEIGHTS.length - 1} onClick={() => setZoom((z) => Math.min(ROW_HEIGHTS.length - 1, z + 1))} aria-label="Aumentar altura del calendario"><ZoomIn className="size-4" /></Button>
+                </div>
+              )}
               <Button type="button" size="sm" variant="outline" onClick={() => setAnchor(todayCivil(tz))}>Hoy</Button>
               <Button type="button" size="icon" variant="outline" onClick={() => setAnchor((a) => shiftCivil(view, a, -1))} aria-label="Periodo anterior"><ChevronLeft className="size-4" /></Button>
               <Button type="button" size="icon" variant="outline" onClick={() => setAnchor((a) => shiftCivil(view, a, 1))} aria-label="Periodo siguiente"><ChevronRight className="size-4" /></Button>

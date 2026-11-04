@@ -412,9 +412,19 @@ export function dedupeNotificationRecords<T extends NotificationRecordLike>(item
   );
 }
 
+/** Los avisos de sistema guardan "TAREA:<id>:<título>"; al usuario solo le interesa el título. */
+const SYSTEM_PREFIX_PATTERN = /^(TAREA|RECORDATORIO):[^:\s]+:/;
+export const humanizeNotificationText = (value: unknown): string => {
+  const text = String(value ?? '').trim();
+  const match = SYSTEM_PREFIX_PATTERN.exec(text);
+  if (!match) return text;
+  const body = text.slice(match[0].length).trim();
+  return `${match[1] === 'TAREA' ? 'Tarea' : 'Recordatorio'}: ${body}`;
+};
+
 const notificationDetail = (item: InboxNotificationDto): string => {
   const explicit = [item.content, item.message, item.description, item.detail]
-    .map((value) => String(value ?? '').trim())
+    .map(humanizeNotificationText)
     .find(Boolean);
   if (explicit) return explicit;
 

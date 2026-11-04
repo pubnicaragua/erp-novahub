@@ -10,7 +10,7 @@ import { marketingApi, mktResources, type MktCompetitor, type MktKpi, type MktSt
 import { toast } from '../../services/toast';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
-import { EmptyState, ErrorState, PageTitle, Panel } from '../organizacion/OrgBits';
+import { EmptyState, ErrorState, Heading, PageTitle, Panel } from '../organizacion/OrgBits';
 import { errorMessage } from '../organizacion/organizacion.utils';
 import { CAMPAIGN_STATUS_LABEL, METRIC_LABEL, SOURCE_LABEL, compact, fmtDate, money } from './marketing.constants';
 import { FormSheet, Kpi, ResourceTable, StatusBadge, type Column } from './MktBits';
@@ -129,13 +129,13 @@ function CompetitionTab() {
   return (
     <div className="space-y-6">
       <section aria-label="Competidores" className="space-y-2">
-        <h2 className="text-[15px] font-semibold">Competidores monitoreados</h2>
+        <Heading className="text-[15px] font-semibold">Competidores monitoreados</Heading>
         <ResourceTable<MktCompetitor> id="competitors" fetcher={mktResources.competitors.list} columns={compColumns} searchPlaceholder="Buscar competidor…" emptyTitle="Sin competidores" emptyDescription="Registra a tus competidores para compararte con el mercado."
           onRowClick={canEdit ? (row) => setForm({ kind: 'competitors', row }) : undefined}
           toolbar={canCreate ? <Button type="button" onClick={() => setForm({ kind: 'competitors' })}><Plus className="size-4" aria-hidden="true" />Registrar competidor</Button> : undefined} />
       </section>
       <section aria-label="Estudios" className="space-y-2">
-        <h2 className="text-[15px] font-semibold">Estudios de mercado</h2>
+        <Heading className="text-[15px] font-semibold">Estudios de mercado</Heading>
         <ResourceTable<MktStudy> id="studies" fetcher={mktResources.studies.list} columns={studyColumns} searchPlaceholder="Buscar estudio…" emptyTitle="Sin estudios" emptyDescription="Documenta investigaciones y hallazgos relevantes."
           onRowClick={canEdit ? (row) => setForm({ kind: 'studies', row }) : undefined}
           toolbar={canCreate ? <Button type="button" onClick={() => setForm({ kind: 'studies' })}><Plus className="size-4" aria-hidden="true" />Nuevo estudio</Button> : undefined} />

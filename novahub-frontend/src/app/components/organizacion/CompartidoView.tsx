@@ -15,7 +15,7 @@ import { toast } from '../../services/toast';
 import { NuevaActividadSheet } from './NuevaActividadSheet';
 import { ItemDetailSheet } from './ItemDetailSheet';
 import { InvitadosSheet } from './InvitadosSheet';
-import { EmptyState, ErrorState, Panel, PageTitle } from './OrgBits';
+import { EmptyState, ErrorState, Heading, Panel, PageTitle } from './OrgBits';
 import { errorMessage, timeZoneLabel, type CalendarItem } from './organizacion.utils';
 import { civilDate, formatTime, partsInTz, rangeToInstants, todayCivil } from './organizacion.time';
 import { endOfMonth, startOfMonth } from 'date-fns';
@@ -239,7 +239,7 @@ export function CompartidoView({ preferences, users, onOpenAgenda, onOpenSetting
               <div className="space-y-4">
                 <div>
                   <span className="rounded-full bg-accent/20 px-2.5 py-0.5 text-[11px] font-semibold text-primary dark:text-accent">{selected.kind === 'MEETING' ? 'Reunión compartida' : 'Evento compartido'}</span>
-                  <h3 className="mt-2 text-2xl font-semibold text-primary dark:text-foreground" style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic' }}>{selected.title}</h3>
+                  <Heading level={3} className="mt-2 break-words text-2xl font-semibold text-primary dark:text-foreground" style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic' }}>{selected.title}</Heading>
                   <p className="text-[12px] capitalize text-muted-foreground">{when(selected)}</p>
                   <p className="text-[11px] text-muted-foreground">Zona horaria: {timeZoneLabel(tz)}</p>
                 </div>
@@ -251,7 +251,7 @@ export function CompartidoView({ preferences, users, onOpenAgenda, onOpenSetting
 
                 <div>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-[13px] font-semibold">Invitados y confirmaciones</h4>
+                    <Heading level={4} className="text-[13px] font-semibold">Invitados y confirmaciones</Heading>
                     <Button type="button" size="sm" variant="outline" onClick={() => setGuestsOpen(true)}><UserPlus className="size-3.5" aria-hidden="true" />{canManageGuests ? 'Agregar invitado' : 'Ver invitados'}</Button>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">

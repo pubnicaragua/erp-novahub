@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Skeleton } from '../ui/skeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
@@ -35,10 +36,10 @@ export function OrganizacionPage({ activeSubModule, onSubModuleChange }: Props) 
   }
 
   if (preferences.isLoading) {
-    return <div className="space-y-3 p-1" aria-busy="true" aria-label="Cargando Organización personal"><Skeleton className="h-12 w-64" /><Skeleton className="h-[480px] w-full" /></div>;
+    return <Frame><div className="space-y-3" aria-busy="true" aria-label="Cargando Organización personal"><Skeleton className="h-12 w-64" /><Skeleton className="h-[480px] w-full" /></div></Frame>;
   }
   if (preferences.isError || !preferences.data) {
-    return <ErrorState message={errorMessage(preferences.error, 'No se pudieron cargar tus preferencias de agenda')} onRetry={() => void preferences.refetch()} />;
+    return <Frame><ErrorState message={errorMessage(preferences.error, 'No se pudieron cargar tus preferencias de agenda')} onRetry={() => void preferences.refetch()} /></Frame>;
   }
 
   const go = (sub: View) => onSubModuleChange?.(sub);
@@ -46,9 +47,16 @@ export function OrganizacionPage({ activeSubModule, onSubModuleChange }: Props) 
 
   // La clave incluye zona horaria y primer día para reiniciar la vista cuando cambian las preferencias.
   const key = `${preferences.data.timezone}-${preferences.data.weekStartsOn}-${preferences.data.showWeekends}`;
-  if (view === 'compartido') {
-    return <CompartidoView key={key} preferences={preferences.data} users={userList} onOpenAgenda={() => go('mi-agenda')} onOpenSettings={() => go('configuracion')} />;
-  }
-  if (view === 'configuracion') return <ConfiguracionView preferences={preferences.data} users={userList} />;
-  return <MiAgendaView key={key} preferences={preferences.data} users={userList} onOpenSettings={() => go('configuracion')} />;
+  return (
+    <Frame>
+      {view === 'compartido' && <CompartidoView key={key} preferences={preferences.data} users={userList} onOpenAgenda={() => go('mi-agenda')} onOpenSettings={() => go('configuracion')} />}
+      {view === 'configuracion' && <ConfiguracionView preferences={preferences.data} users={userList} />}
+      {view === 'mi-agenda' && <MiAgendaView key={key} preferences={preferences.data} users={userList} onOpenSettings={() => go('configuracion')} />}
+    </Frame>
+  );
+}
+
+/** Mismo contenedor y márgenes que usan los demás módulos operativos (Actividades, Ventas…). */
+function Frame({ children }: { children: ReactNode }) {
+  return <div className="organization-module mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">{children}</div>;
 }

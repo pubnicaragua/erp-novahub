@@ -17,15 +17,15 @@ import {
 import { FormSheet, ResourceTable, StatusBadge, type Column } from './MktBits';
 import { options, toInitial, useMktConfig, useMktRefresh, useMktUsers, userName, userOptions, type FieldDef } from './mkt.helpers';
 
-export function CampanasView() {
+export function CampanasView({ openCreate = false }: { openCreate?: boolean }) {
   const { canPerform } = useAuth();
   const refresh = useMktRefresh();
   const users = useMktUsers();
   const config = useMktConfig();
   const currency = config.data?.currency ?? 'NIO';
-  const [form, setForm] = useState<{ row?: MktCampaign } | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
   const canCreate = canPerform('MARKETING_CAMPAIGNS', 'create');
+  const [form, setForm] = useState<{ row?: MktCampaign } | null>(openCreate && canCreate ? {} : null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const canEdit = canPerform('MARKETING_CAMPAIGNS', 'edit');
 
   const accounts = useTenantQuery(['marketing', 'accounts-all'], (s) => mktResources.accounts.list({ pageSize: 100 }, s), { staleTime: 60_000 });

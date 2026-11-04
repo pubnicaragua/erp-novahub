@@ -19,14 +19,15 @@ const STRATEGY_FIELDS: Array<[string, string]> = [
   ['pillars', 'Pilares de mensaje'], ['channels', 'Canales de difusión'], ['deliverables', 'Entregables clave'],
 ];
 
-export function ClientesView() {
+export function ClientesView({ openCreate = false }: { openCreate?: boolean }) {
   const { canPerform } = useAuth();
   const refresh = useMktRefresh();
   const users = useMktUsers();
-  const [tab, setTab] = useState<'accounts' | 'briefs'>('accounts');
-  const [form, setForm] = useState<{ kind: 'accounts' | 'briefs'; row?: MktAccount | MktBrief } | null>(null);
-  const [busy, setBusy] = useState(false);
   const canCreate = canPerform('MARKETING_CLIENTS', 'create');
+  // Desde el acceso rápido "Nuevo brief" se abre directo la pestaña de briefs con el formulario listo.
+  const [tab, setTab] = useState<'accounts' | 'briefs'>(openCreate && canCreate ? 'briefs' : 'accounts');
+  const [form, setForm] = useState<{ kind: 'accounts' | 'briefs'; row?: MktAccount | MktBrief } | null>(openCreate && canCreate ? { kind: 'briefs' } : null);
+  const [busy, setBusy] = useState(false);
   const canEdit = canPerform('MARKETING_CLIENTS', 'edit');
   const canSubmit = canPerform('MARKETING_CLIENTS', 'submit');
 

@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Skeleton } from '../ui/skeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { ResumenView } from './ResumenView';
@@ -27,21 +27,30 @@ export function MarketingPage({ activeSubModule, onSubModuleChange }: Props) {
   const allowed = VIEWS.filter((v) => canPerform(PERMISSION[v], 'view'));
   const requested = (VIEWS as readonly string[]).includes(activeSubModule ?? '') ? (activeSubModule as View) : 'resumen';
   const view = allowed.includes(requested) ? requested : (allowed[0] ?? null);
-  const go = (sub: string) => { if ((VIEWS as readonly string[]).includes(sub) && allowed.includes(sub as View)) onSubModuleChange?.(sub); };
+  // Los accesos rápidos del Resumen ("Nuevo brief", "Nueva campaña"…) abren el formulario de la vista destino.
+  const [createIntent, setCreateIntent] = useState<View | null>(null);
+  if (createIntent && createIntent !== view) setCreateIntent(null);
+  const go = (sub: string, create = false) => {
+    if (!(VIEWS as readonly string[]).includes(sub) || !allowed.includes(sub as View)) return;
+    setCreateIntent(create ? (sub as View) : null);
+    onSubModuleChange?.(sub);
+  };
 
   if (!view) {
     return <div className="flex min-h-[50vh] items-center justify-center p-6 text-center"><div><h1 className="text-2xl font-semibold">Acceso denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para ver Marketing.</p></div></div>;
   }
   return (
-    <Suspense fallback={<Skeleton className="h-[480px] w-full" aria-busy="true" />}>
-      {view === 'resumen' && <ResumenView go={go} />}
-      {view === 'clientes' && <ClientesView />}
-      {view === 'campanas' && <CampanasView />}
-      {view === 'contenidos' && <ContenidosView />}
-      {view === 'aprobaciones' && <AprobacionesView />}
-      {view === 'activos' && <ActivosView />}
-      {view === 'analitica' && <AnaliticaView />}
-      {view === 'configuracion' && <ConfiguracionMktView />}
-    </Suspense>
+    <div className="marketing-module mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+      <Suspense fallback={<Skeleton className="h-[480px] w-full" aria-busy="true" />}>
+        {view === 'resumen' && <ResumenView go={go} />}
+        {view === 'clientes' && <ClientesView openCreate={createIntent === 'clientes'} />}
+        {view === 'campanas' && <CampanasView openCreate={createIntent === 'campanas'} />}
+        {view === 'contenidos' && <ContenidosView openCreate={createIntent === 'contenidos'} />}
+        {view === 'aprobaciones' && <AprobacionesView />}
+        {view === 'activos' && <ActivosView />}
+        {view === 'analitica' && <AnaliticaView />}
+        {view === 'configuracion' && <ConfiguracionMktView />}
+      </Suspense>
+    </div>
   );
 }

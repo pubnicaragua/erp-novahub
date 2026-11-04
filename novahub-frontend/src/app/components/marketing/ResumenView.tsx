@@ -14,7 +14,7 @@ import { useMktConfig } from './mkt.helpers';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-export function ResumenView({ go }: { go: (sub: string) => void }) {
+export function ResumenView({ go }: { go: (sub: string, create?: boolean) => void }) {
   const { canPerform } = useAuth();
   const [to, setTo] = useState(() => iso(new Date()));
   const [from, setFrom] = useState(() => iso(new Date(Date.now() - 30 * 86_400_000)));
@@ -39,7 +39,7 @@ export function ResumenView({ go }: { go: (sub: string) => void }) {
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
       <PageTitle guide={MARKETING_GUIDES.resumen} eyebrow="Marketing" title="Marketing" subtitle="Gestiona tus campañas, contenidos y presupuesto desde un solo lugar."
         actions={quick.filter((a) => canPerform(a.module, 'create')).map((a) => (
-          <Button key={a.label} type="button" variant={a.primary ? 'default' : 'outline'} onClick={() => go(a.sub)}><a.icon className="size-4" aria-hidden="true" />{a.label}</Button>
+          <Button key={a.label} type="button" variant={a.primary ? 'default' : 'outline'} onClick={() => go(a.sub, a.sub !== 'activos')}><a.icon className="size-4" aria-hidden="true" />{a.label}</Button>
         ))} />
 
       <div className="flex flex-wrap items-center gap-3 text-[12px]">

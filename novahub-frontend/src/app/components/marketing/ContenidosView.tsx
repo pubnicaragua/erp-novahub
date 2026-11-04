@@ -13,7 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { marketingApi, mktResources, type MktContent } from '../../services/marketing.service';
 import { toast } from '../../services/toast';
-import { EmptyState, ErrorState, Field, NativeSelect, PageTitle, Panel, controlClass } from '../organizacion/OrgBits';
+import { EmptyState, ErrorState, Field, Heading, NativeSelect, PageTitle, Panel, controlClass } from '../organizacion/OrgBits';
 import { errorMessage, serifStyle } from '../organizacion/organizacion.utils';
 import { APPROVAL_STATUS_LABEL, CONTENT_STATUS_LABEL, FORMAT_LABEL, fmtDate, toInputDateTime } from './marketing.constants';
 import { FormSheet, ResourceTable, StatusBadge, type Column } from './MktBits';
@@ -22,16 +22,16 @@ import { options, useMktConfig, useMktRefresh, useMktUsers, userName, userOption
 type Mode = 'calendar' | 'list' | 'kanban';
 const KANBAN: string[] = ['IDEA', 'DRAFT', 'IN_REVIEW', 'CHANGES_REQUESTED', 'APPROVED', 'SCHEDULED', 'PUBLISHED'];
 
-export function ContenidosView() {
+export function ContenidosView({ openCreate = false }: { openCreate?: boolean }) {
   const { canPerform } = useAuth();
   const refresh = useMktRefresh();
   const users = useMktUsers();
   const config = useMktConfig();
+  const canCreate = canPerform('MARKETING_CONTENT', 'create');
   const [mode, setMode] = useState<Mode>('calendar');
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(openCreate && canCreate);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const canCreate = canPerform('MARKETING_CONTENT', 'create');
   const channels = useMemo(() => config.data?.channels ?? [], [config.data]);
   const campaigns = useTenantQuery(['marketing', 'campaigns-all'], (s) => mktResources.campaigns.list({ pageSize: 100 }, s), { staleTime: 60_000 });
 
@@ -88,7 +88,7 @@ export function ContenidosView() {
             <Button type="button" size="icon" variant="outline" aria-label="Semana anterior" onClick={() => setWeekStart((d) => addDays(d, -7))}><ChevronLeft className="size-4" /></Button>
             <Button type="button" size="icon" variant="outline" aria-label="Semana siguiente" onClick={() => setWeekStart((d) => addDays(d, 7))}><ChevronRight className="size-4" /></Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))}>Hoy</Button>
-            <h2 className="text-[14px] font-semibold capitalize">Semana del {format(weekStart, 'd', { locale: es })} – {format(addDays(weekStart, 6), "d 'de' MMMM yyyy", { locale: es })}</h2>
+            <Heading className="text-[14px] font-semibold capitalize">Semana del {format(weekStart, 'd', { locale: es })} – {format(addDays(weekStart, 6), "d 'de' MMMM yyyy", { locale: es })}</Heading>
           </div>
           {week.isLoading ? <Skeleton className="h-64 w-full" /> : week.isError ? <ErrorState message={errorMessage(week.error)} onRetry={() => void week.refetch()} /> : rows.length === 0 ? (
             <EmptyState title="Sin canales configurados" description="Define los canales en Configuración para ver la parrilla." />
@@ -125,7 +125,7 @@ export function ContenidosView() {
               const items = (all.data?.data ?? []).filter((i) => i.status === s);
               return (
                 <section key={s} aria-label={CONTENT_STATUS_LABEL[s]} className="min-w-[170px] rounded-xl border border-border bg-muted/20 p-2">
-                  <h3 className="mb-2 flex items-center justify-between text-[12px] font-semibold">{CONTENT_STATUS_LABEL[s]}<span className="rounded-full bg-muted px-2 text-[11px]">{items.length}</span></h3>
+                  <Heading level={3} className="mb-2 flex items-center justify-between text-[12px] font-semibold">{CONTENT_STATUS_LABEL[s]}<span className="rounded-full bg-muted px-2 text-[11px]">{items.length}</span></Heading>
                   <div className="space-y-1.5">{items.map(chip)}</div>
                 </section>
               );
