@@ -9,12 +9,13 @@ import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { creditNotesService } from '../../services/ventas.service';
+import { creditNotesService, customerLoansService } from '../../services/ventas.service';
+import { createIdempotencyKey } from '../../services/api';
 import { useSalesIntegrationPolicy } from '../../hooks/useSalesIntegrationPolicy';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { CreditNote, Customer, PaymentReceived, Product, SalesPaginationControls } from '../../types';
+import type { CreditDocument, CreditNote, Customer, PaymentReceived, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -54,8 +55,8 @@ import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtr
 import { SalesPaymentReceiptDialog } from './SalesPaymentReceiptDialog';
 
 interface NotasCreditoViewProps {
-  data: CreditNote[];
-  summaryData?: CreditNote[];
+  data: CreditDocument[];
+  summaryData?: CreditDocument[];
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading: boolean;
@@ -78,6 +79,7 @@ const statusOptions = [
   { label: 'Activo', value: 'ISSUED', color: SALES_STATUS_COLORS.ISSUED },
   { label: 'Pago parcial', value: 'PARTIAL', color: SALES_STATUS_COLORS.PARTIAL },
   { label: 'Aplicado', value: 'APPLIED', color: SALES_STATUS_COLORS.APPLIED },
+  { label: 'Vencido', value: 'OVERDUE', color: SALES_STATUS_COLORS.OVERDUE || SALES_STATUS_COLORS.PARTIAL },
   { label: 'Pagado', value: 'PAID', color: SALES_STATUS_COLORS.PAID },
   { label: 'Cancelado', value: 'VOIDED', color: SALES_WORKFLOW_STATUS_COLORS.CANCELLED },
 ];
@@ -136,9 +138,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
-  const [detailCredit, setDetailCredit] = useState<CreditNote | null>(null);
+  const [detailCredit, setDetailCredit] = useState<CreditDocument | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [paymentCredit, setPaymentCredit] = useState<CreditNote | null>(null);
+  const [paymentCredit, setPaymentCredit] = useState<CreditDocument | null>(null);
   const [paymentLines, setPaymentLines] = useState<CreditPaymentLine[]>([]);
   const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceived | null>(null);
   const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
@@ -319,6 +321,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const creditDebt = (row: CreditNote) => Number(row.balance ?? row.total ?? 0);
   const normalizeStatus = (status?: string) => String(status || '').toUpperCase();
   const statusFor = (status?: string) => statusOptions.find((option) => option.value === normalizeStatus(status));
+  const isPayableStatus = (status?: string) => ['ISSUED', 'PARTIAL', 'APPLIED', 'OVERDUE'].includes(normalizeStatus(status));
   const getCreditAdditionalChargesAmount = (doc: any = localDoc) => (
     getSalesExtraChargesAmount(doc) + Math.max(0, Number(doc?.deliveryAmount || 0))
   );
@@ -410,7 +413,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
 
   const startEdit = (id: string) => {
     const record = data.find((credit) => credit.id === id);
-    if (!record) return;
+    if (!record || record.kind === 'CUSTOMER_LOAN') return;
     clearSalesEditorDraft(salesDraftStorageKey);
     setEditingId(id);
     setIsCreating(false);
@@ -510,7 +513,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     }
   };
 
-  const openPayment = (credit: CreditNote) => {
+  const openPayment = (credit: CreditDocument) => {
     setPaymentCredit(credit);
     const nextCurrency = displayCurrency === 'USD' ? 'USD' : 'NIO';
     const nextRate = paymentLineRate(nextCurrency);
@@ -529,6 +532,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       .map((line) => ({ ...line, amount: String(line.amount || '').replace(/,/g, ''), reference: String(line.reference || '').trim() }))
       .filter((line) => Number(line.amount) > 0);
     if (!effectiveLines.length) return void toast.error('Agrega al menos un medio de pago con monto mayor que cero');
+    if (paymentCredit.kind === 'CUSTOMER_LOAN' && effectiveLines.some((line) => line.method === 'CUSTOMER_BALANCE')) {
+      return void toast.error('Los abonos de préstamos deben registrarse con un medio de pago recibido.');
+    }
     if (salesAccountingRequired && effectiveLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) return void toast.error('Selecciona la cuenta contable para cada medio de pago');
     if (salesAccountingRequired && effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) return void toast.error('Selecciona el banco global para cada medio de pago bancario');
     if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) return void toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque');
@@ -570,11 +576,11 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     if (submittedCustomerFavorBase > 0.01 && !paymentCredit.customerId) return void toast.error('El crédito no tiene un cliente al cual aplicar saldo a favor');
     if (submittedPaymentTotalBase > creditBalanceBase + 0.01) return void toast.error('El pago supera el saldo disponible del crédito');
     if (paymentRemainingBase > 0.01 && !partialPaymentEnabled) return void toast.error('Activa "Pago parcial" para dejar un saldo pendiente del crédito');
-    const paymentToastId = toast.loading('Registrando pago del crédito...');
+    const paymentToastId = toast.loading(paymentCredit.kind === 'CUSTOMER_LOAN' ? 'Registrando abono del préstamo...' : 'Registrando pago del crédito...');
     try {
       setPaymentLoading(true);
       const firstLine = submittedLines[0];
-      const updatedCredit = await creditNotesService.apply(paymentCredit.id, {
+      const paymentPayload = {
         amount: Number(firstLine.amount),
         currency: firstLine.currency,
         paymentMethod: firstLine.method,
@@ -592,7 +598,10 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(line.method) ? line.cardCommissionPercent || undefined : undefined,
           reference: hasPaymentReferenceField(line.method) ? line.reference : undefined,
         })),
-      });
+      };
+      const updatedCredit = paymentCredit.kind === 'CUSTOMER_LOAN'
+        ? await customerLoansService.applyPayment(paymentCredit.id, paymentPayload, createIdempotencyKey('customer-loan-payment'))
+        : await creditNotesService.apply(paymentCredit.id, paymentPayload);
       const availableRows: any[] = Array.isArray((updatedCredit as any)?.payments) ? [...(updatedCredit as any).payments] : [];
       availableRows.sort((left, right) => new Date(right.createdAt || right.date || 0).getTime() - new Date(left.createdAt || left.date || 0).getTime());
       const receiptRows = submittedLines.map((line, index) => {
@@ -610,8 +619,11 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           number: matchedRow?.number || '',
           customerId: paymentCredit.customerId,
           customer: matchedRow?.customer || (updatedCredit as any)?.customer || customerFor(paymentCredit.customerId),
-          creditNoteId: paymentCredit.id,
-          creditNote: updatedCredit,
+          invoiceId: paymentCredit.kind === 'CUSTOMER_LOAN' ? paymentCredit.invoice?.id : undefined,
+          sourceType: paymentCredit.kind === 'CUSTOMER_LOAN' ? 'CUSTOMER_LOAN' : undefined,
+          sourceLabel: paymentCredit.kind === 'CUSTOMER_LOAN' ? `Abono de préstamo ${paymentCredit.number}` : undefined,
+          creditNoteId: paymentCredit.kind === 'CREDIT_NOTE' ? paymentCredit.id : undefined,
+          creditNote: paymentCredit.kind === 'CREDIT_NOTE' ? updatedCredit : undefined,
           date: matchedRow?.date || new Date().toISOString(),
           amount: lineAmount,
           baseAmount: matchedRow?.baseAmount ?? toBaseAmount(lineAmount, line.currency, Number(line.exchangeRate || globalRate || 1)),
@@ -641,7 +653,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         payments: receiptRows,
         balance: Number((updatedCredit as any)?.balance ?? paymentRemainingBase),
       } as PaymentReceived);
-      toast.success('Pago registrado y enviado a Pagos Recibidos', { id: paymentToastId });
+      toast.success(paymentCredit.kind === 'CUSTOMER_LOAN' ? 'Abono registrado y enviado a Pagos Recibidos' : 'Pago registrado y enviado a Pagos Recibidos', { id: paymentToastId });
       setPaymentCredit(null);
       setPaymentLines([]);
       setMixedPaymentEnabled(false);
@@ -700,17 +712,21 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     }
   };
 
-  const buildCreditPanel = (row: CreditNote): SalesDocumentPanelData => ({
+  const buildCreditPanel = (row: CreditDocument): SalesDocumentPanelData => ({
     id: row.id,
     number: row.number,
-    title: 'Crédito',
+    title: row.kind === 'CUSTOMER_LOAN' ? 'Préstamo' : 'Crédito',
     customerName: customerName(row),
     status: String(row.status || ''),
-    sourceLabel: row.invoice?.number ? `Factura origen: ${row.invoice.number}` : undefined,
+    sourceLabel: row.invoice?.number ? `${row.kind === 'CUSTOMER_LOAN' ? 'Factura del préstamo' : 'Factura origen'}: ${row.invoice.number}` : undefined,
     totalLabel: formatConvertedAmount(Number(row.total || 0), row.currency, row.exchangeRate),
     sourceCurrency: row.currency,
     sourceExchangeRate: row.exchangeRate,
     summaryDetails: [
+      ...(row.kind === 'CUSTOMER_LOAN' ? [
+        { label: 'Principal', value: formatConvertedAmount(Number(row.principal || 0), row.currency, row.exchangeRate) },
+        { label: 'Interés fijo', value: formatConvertedAmount(Number(row.interest || 0), row.currency, row.exchangeRate) },
+      ] : []),
       { label: 'Pagado', value: formatConvertedAmount(Number(row.amountPaid || 0), row.currency, row.exchangeRate) },
       { label: 'Saldo', value: formatConvertedAmount(Number(row.balance ?? row.total ?? 0), row.currency, row.exchangeRate) },
       ...normalizeSalesExtraCharges(row)
@@ -721,6 +737,10 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     metadata: [
       { label: 'Fecha', value: formatDate(row.date) },
       { label: 'Vencimiento', value: formatDate(row.dueDate) },
+      ...(row.kind === 'CUSTOMER_LOAN' ? [
+        { label: 'Frecuencia', value: ({ DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Quincenal', MONTHLY: 'Mensual' } as const)[row.frequency || 'WEEKLY'] },
+        { label: 'Tipo de mora', value: row.moraType?.name || row.moraTypeNameSnapshot || 'Sin tipo de mora' },
+      ] : []),
       ...(row.invoice?.number ? [{ label: 'Factura origen', value: row.invoice.number }] : []),
     ],
     lines: (row.items || []).map((item) => ({
@@ -732,7 +752,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), row.currency, row.exchangeRate),
       totalLabel: formatConvertedAmount(Number(item.total || 0), row.currency, row.exchangeRate),
     })),
-    reason: row.reason,
+    reason: row.kind === 'CUSTOMER_LOAN' ? 'Préstamo de cliente' : row.reason,
+    notes: row.kind === 'CUSTOMER_LOAN' ? row.notes || undefined : undefined,
   });
 
   const addItem = (itemType: 'PRODUCT' | 'SERVICE') => {
@@ -798,10 +819,10 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     setLocalDoc({ ...nextDoc, total: Number((lineTotal + getCreditAdditionalChargesAmount(nextDoc)).toFixed(2)) });
   };
 
-  const columns: ColumnDef<CreditNote>[] = [
-    { key: 'number', header: 'N° Nota de crédito', width: '140px', render: (value, row) => <span className={cn('text-xs font-black font-mono text-primary', 'cursor-pointer hover:underline')} onClick={() => setDetailCredit(row)}>{value}</span> },
+  const columns: ColumnDef<CreditDocument>[] = [
+    { key: 'number', header: 'N° Crédito', width: '165px', render: (value, row) => <span className="inline-flex max-w-full flex-wrap items-center gap-1.5"><Badge variant="outline" className={cn('shrink-0 text-[9px]', row.kind === 'CUSTOMER_LOAN' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-primary/20 bg-primary/10 text-primary')}>{row.kind === 'CUSTOMER_LOAN' ? 'Préstamo' : 'Crédito'}</Badge><span className={cn('cursor-pointer font-mono text-xs font-black text-primary hover:underline')} onClick={() => setDetailCredit(row)}>{value}</span></span> },
     { key: 'customerId', header: 'Cliente', headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customerId?.values || []} onSelect={(values) => colFilters.setValues('customerId', values)} sort={colFilters.state.customerId?.sort || null} onSort={(sort) => colFilters.setSort('customerId', sort)} />, render: (_, row) => <span className="text-[13px] font-bold text-foreground">{customerName(row)}</span> },
-    { key: 'invoiceId', header: 'Factura origen', width: '135px', render: (_, row) => row.invoice?.number ? <Badge className="border-none bg-primary/10 px-2 py-0.5 text-[9px] font-black text-primary">{row.invoice.number}</Badge> : <span className="text-xs text-muted-foreground">Crédito directo</span> },
+    { key: 'invoiceId', header: 'Factura origen', width: '135px', render: (_, row) => row.invoice?.number ? <Badge className="border-none bg-primary/10 px-2 py-0.5 text-[9px] font-black text-primary">{row.invoice.number}</Badge> : <span className="text-xs text-muted-foreground">{row.kind === 'CUSTOMER_LOAN' ? 'Sin factura asociada' : 'Crédito directo'}</span> },
     { key: 'dueDate', header: 'Vence', headerExtra: <ColumnFilterMenu label="Vence" sort={colFilters.state.dueDate?.sort || null} onSort={(sort) => colFilters.setSort('dueDate', sort)} sortOptions={[{ value: 'asc', label: 'Más antiguas' }, { value: 'desc', label: 'Más recientes' }]} />, render: (value) => <span className="text-xs font-medium text-muted-foreground">{formatDate(value as string)}</span> },
     { key: 'total', header: 'Monto total', width: '135px', headerExtra: <ColumnFilterMenu label="Monto total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />, render: (_, row) => <span className="text-[13px] font-black tabular-nums text-primary">{formatConvertedAmount(sourceInvoiceTotal(row), sourceCurrency(row), sourceExchangeRate(row))}</span> },
     { key: 'amountPaid', header: 'Abonado', width: '125px', headerExtra: <ColumnFilterMenu label="Abonado" sort={colFilters.state.amountPaid?.sort || null} onSort={(sort) => colFilters.setSort('amountPaid', sort)} />, render: (_, row) => <span className="text-[13px] font-black tabular-nums text-foreground">{formatConvertedAmount(sourceInvoicePaid(row), sourceCurrency(row), sourceExchangeRate(row))}</span> },
@@ -809,16 +830,16 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     { key: 'status', header: 'Estado', width: '115px', render: (value) => { const option = statusFor(value as string); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none', option?.color || 'bg-muted/20 text-muted-foreground')}>{option?.label || value}</Badge>; } },
   ];
 
-  const totalIssued = summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'PAID'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.total || 0), credit.currency, credit.exchangeRate), 0);
-  const totalOpen = summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate), 0);
+  const totalIssued = summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'OVERDUE', 'PAID'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.total || 0), credit.currency, credit.exchangeRate), 0);
+  const totalOpen = summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED', 'OVERDUE'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate), 0);
   const originalIssuedAmounts = summarizeAmountsByCurrency(
-    summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'PAID'].includes(normalizeStatus(credit.status))),
+    summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'OVERDUE', 'PAID'].includes(normalizeStatus(credit.status))),
     (credit) => Number(credit.total || 0),
     (credit) => credit.currency,
     baseCurrency,
   );
   const originalOpenAmounts = summarizeAmountsByCurrency(
-    summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(credit.status))),
+    summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED', 'OVERDUE'].includes(normalizeStatus(credit.status))),
     (credit) => Number(credit.balance ?? credit.total ?? 0),
     (credit) => credit.currency,
     baseCurrency,
@@ -1056,7 +1077,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         {!resolvedSummaryRows ? <SalesKpiCard title="Saldo abierto" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
           ? originalOpenAmounts.map((summary) => <SalesKpiCard key={`open-${summary.currency}`} title={`Saldo abierto (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Saldo abierto (${displayCurrency})`} value={formatConvertedAmount(totalOpen, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Activos" value={resolvedSummaryRows ? summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL'].includes(normalizeStatus(credit.status))).length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Activos" value={resolvedSummaryRows ? summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'OVERDUE'].includes(normalizeStatus(credit.status))).length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
         <SalesKpiCard title="Por vencer / vencidos" value={resolvedSummaryRows ? overdueCount : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" />
         </div>
       </div>
@@ -1118,11 +1139,13 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
             const status = normalizeStatus(row.status);
             const activeQueue = ['PENDING', 'CLAIMED'].includes(normalizeStatus(row.cashQueue?.status));
             return <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-              {canPerform('SALES_CREDIT_NOTES', 'issue') && status === 'DRAFT' && <Button title="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}
-              {canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) && Number(row.balance ?? row.total) > 0.01 && <Button title={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} aria-label={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} variant="ghost" size="icon" className={cn('size-8 rounded-lg', activeQueue ? 'text-amber-500' : 'text-emerald-500')} onClick={() => void handleSendToCash(row)} disabled={activeQueue}><Send className="size-4" /></Button>}
-              {canPerform('SALES_CREDIT_NOTES', 'pay') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) && Number(row.balance ?? row.total) > 0.01 && <Button title="Registrar pago" variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}
-              <Button title="Ver crédito completo" aria-label="Ver crédito completo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => { setDetailCredit(null); startEdit(row.id); }}><Eye className="size-4" /></Button>
-              {canPerform('SALES_CREDIT_NOTES', 'cancel') && status === 'DRAFT' && <Button title="Cancelar crédito" aria-label="Cancelar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>}
+              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && status === 'DRAFT' && <Button title="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}
+              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) && Number(row.balance ?? row.total) > 0.01 && <Button title={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} aria-label={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} variant="ghost" size="icon" className={cn('size-8 rounded-lg', activeQueue ? 'text-amber-500' : 'text-emerald-500')} onClick={() => void handleSendToCash(row)} disabled={activeQueue}><Send className="size-4" /></Button>}
+              {canPerform('SALES_CREDIT_NOTES', 'pay') && isPayableStatus(status) && Number(row.balance ?? row.total) > 0.01 && <Button title={row.kind === 'CUSTOMER_LOAN' ? 'Registrar abono' : 'Registrar pago'} aria-label={row.kind === 'CUSTOMER_LOAN' ? 'Registrar abono del préstamo' : 'Registrar pago del crédito'} variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}
+              {row.kind === 'CUSTOMER_LOAN'
+                ? <Button title="Ver préstamo" aria-label="Ver préstamo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => setDetailCredit(row)}><Eye className="size-4" /></Button>
+                : <Button title="Ver crédito completo" aria-label="Ver crédito completo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => { setDetailCredit(null); startEdit(row.id); }}><Eye className="size-4" /></Button>}
+              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && status === 'DRAFT' && <Button title="Cancelar crédito" aria-label="Cancelar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>}
             </div>;
           }}
         />
@@ -1134,18 +1157,18 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         entity="CREDIT_NOTE"
         open={Boolean(detailCredit)}
         onClose={() => setDetailCredit(null)}
-        onOpenDocument={() => {
+        onOpenDocument={detailCredit?.kind === 'CUSTOMER_LOAN' ? undefined : () => {
           if (!detailCredit) return;
           setDetailCredit(null);
           startEdit(detailCredit.id);
         }}
         extraActions={detailCredit ? <>
-          {canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Emitir crédito</Button>}
-          {canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={['PENDING', 'CLAIMED'].includes(normalizeStatus(detailCredit.cashQueue?.status))} onClick={() => void handleSendToCash(detailCredit)}><Send className="mr-2 size-4" />Enviar a Caja</Button>}
-          {canPerform('SALES_CREDIT_NOTES', 'pay') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => openPayment(detailCredit)}><CreditCard className="mr-2 size-4" />Registrar pago</Button>}
-          {canPerform('SALES_CREDIT_NOTES', 'cancel') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailCredit(null); setPendingDeleteId(detailCredit.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Emitir crédito</Button>}
+          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={['PENDING', 'CLAIMED'].includes(normalizeStatus(detailCredit.cashQueue?.status))} onClick={() => void handleSendToCash(detailCredit)}><Send className="mr-2 size-4" />Enviar a Caja</Button>}
+          {canPerform('SALES_CREDIT_NOTES', 'pay') && isPayableStatus(detailCredit.status) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => openPayment(detailCredit)}><CreditCard className="mr-2 size-4" />{detailCredit.kind === 'CUSTOMER_LOAN' ? 'Registrar abono' : 'Registrar pago'}</Button>}
+          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailCredit(null); setPendingDeleteId(detailCredit.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
-        onDownloadPdf={canPerform('SALES_CREDIT_NOTES', 'export') ? (format) => { if (detailCredit) void handleExportPDF(detailCredit, format); } : undefined}
+        onDownloadPdf={detailCredit?.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'export') ? (format) => { if (detailCredit) void handleExportPDF(detailCredit, format); } : undefined}
       />
 
       <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="¿Cancelar crédito?" description="El crédito quedará cancelado y se conservará el registro. Solo pueden cancelarse créditos pendientes de aprobación; los emitidos, aplicados o pagados no se modifican." confirmLabel="Cancelar crédito" variant="destructive" loading={deleteLoading} onConfirm={async () => { if (!canPerform('SALES_CREDIT_NOTES', 'cancel') || !pendingDeleteId) return; const id = toast.loading('Cancelando crédito...'); try { setDeleteLoading(true); await creditNotesService.cancel(pendingDeleteId); toast.success('Crédito cancelado', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar', { id }); } finally { setDeleteLoading(false); setPendingDeleteId(null); } }} />
@@ -1153,8 +1176,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       <Dialog open={Boolean(paymentCredit)} onOpenChange={(open) => !open && !paymentLoading && setPaymentCredit(null)}>
         <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight"><CircleDollarSign className="size-5 text-primary" /> Registrar pago del crédito</DialogTitle>
-            <DialogDescription>El pago quedará guardado también en Pagos Recibidos y actualizará el saldo del crédito.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight"><CircleDollarSign className="size-5 text-primary" /> {paymentCredit?.kind === 'CUSTOMER_LOAN' ? 'Registrar abono del préstamo' : 'Registrar pago del crédito'}</DialogTitle>
+            <DialogDescription>{paymentCredit?.kind === 'CUSTOMER_LOAN' ? 'El abono se aplicará a la factura del préstamo y quedará registrado en Pagos Recibidos.' : 'El pago quedará guardado también en Pagos Recibidos y actualizará el saldo del crédito.'}</DialogDescription>
           </DialogHeader>
           {paymentCredit && (
             <div className="space-y-4">
@@ -1196,7 +1219,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                   {paymentLines.map((line, index) => (
                     <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-start">
-                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => handlePaymentMethodChange(index, nextMethod as CreditPaymentLine['method'])} disabled={paymentLoading}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || paymentCustomerFavorBase > 0.01).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
+                      <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => handlePaymentMethodChange(index, nextMethod as CreditPaymentLine['method'])} disabled={paymentLoading}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || (paymentCredit.kind !== 'CUSTOMER_LOAN' && paymentCustomerFavorBase > 0.01)).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
                         <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} rateDecimals={2} label="Moneda" disabled={paymentLoading || line.method === 'CUSTOMER_BALANCE'} onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);

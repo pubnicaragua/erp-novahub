@@ -767,12 +767,23 @@ export interface CreditNote {
   } | null;
   currency?: Currency;
   exchangeRate?: number;
-  status: 'draft' | 'issued' | 'partial' | 'applied' | 'paid' | 'voided' | 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'APPLIED' | 'PAID' | 'VOIDED';
+  status: 'draft' | 'issued' | 'partial' | 'applied' | 'paid' | 'overdue' | 'voided' | 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'APPLIED' | 'PAID' | 'OVERDUE' | 'VOIDED';
   reason: string;
   accountId?: string;
   items: CreditNoteItem[];
   createdAt: string;
   updatedAt: string;
+}
+
+/** A normal credit note or a customer loan surfaced in the unified Credits view. */
+export interface CreditDocument extends CreditNote {
+  kind: 'CREDIT_NOTE' | 'CUSTOMER_LOAN';
+  frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+  principal?: number | string;
+  interest?: number | string;
+  moraType?: { id: string; name: string; description?: string } | null;
+  moraTypeNameSnapshot?: string;
+  notes?: string | null;
 }
 
 export interface CreditNoteItem {

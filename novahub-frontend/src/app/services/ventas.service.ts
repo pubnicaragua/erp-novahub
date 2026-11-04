@@ -2,7 +2,7 @@ import { api } from './api';
 import type {
   Customer, Estimate, SalesOrder, Invoice,
   RecurringInvoice, PaymentReceived, SalesReturn,
-  CreditNote, PaginatedResponse, ApiFilters,
+  CreditNote, CreditDocument, PaginatedResponse, ApiFilters,
 } from '../types';
 import type { CustomerHistoryProfile } from '../utils/customer-history-profile';
 
@@ -199,6 +199,15 @@ export const creditNotesService = {
   apply: (id: string, data: any, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/apply`, data, idempotencyKey),
   cancel: (id: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/sales/credit-notes/${id}`),
+};
+
+export const creditDocumentsService = {
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<CreditDocument>>('/sales/credit-documents', { params: filters as any, signal }),
+};
+
+export const customerLoansService = {
+  applyPayment: (id: string, data: Record<string, unknown>, idempotencyKey?: string) =>
+    api.idempotentPost<any>(`/sales/customer-loans/${id}/payments`, data, idempotencyKey),
 };
 
 export const reportsService = {

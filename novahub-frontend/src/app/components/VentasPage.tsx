@@ -23,12 +23,13 @@ import {
   recurringInvoicesService,
   salesReturnsService,
   creditNotesService,
+  creditDocumentsService,
   sellersService,
 } from '../services/ventas.service';
 import type { 
   Customer, Estimate, SalesOrder, Invoice, Employee,
   PaymentReceived, RecurringInvoice, SalesReturn,
-  CreditNote, Product
+  CreditNote, CreditDocument, Product
 } from '../types';
 import type { SalesPageSize, SalesPaginationControls } from '../types';
 import { inventoryService } from '../services/inventario.service';
@@ -195,7 +196,6 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const needsCatalogs = isListSection && activeSection !== 'clientes';
   const needsProducts = ['estimaciones', 'ordenes-venta', 'facturas', 'facturas-recurrentes', 'devoluciones-venta', 'notas-credito'].includes(activeSection);
   const needsInvoices = ['ordenes-venta', 'facturas', 'pagos-recibidos', 'devoluciones-venta'].includes(activeSection);
-  const needsCredits = ['notas-credito', 'pagos-recibidos'].includes(activeSection);
   const branchFilter = selectedBranchId ? { branchId: selectedBranchId } : {};
   const customersPage = pageFor('clientes');
   const estimatesPage = pageFor('estimaciones');
@@ -213,9 +213,6 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     : isReturnInvoiceCatalog
       ? { page: 1, pageSize: 200 }
     : invoicesPage;
-  const creditNotesQueryPage = isPaymentDocumentCatalog
-    ? { page: 1, pageSize: 200 }
-    : creditNotesPage;
   const customersDates = dateFor('clientes');
   const estimatesDates = dateFor('estimaciones');
   const ordersDates = dateFor('ordenes-venta');
@@ -348,19 +345,21 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     enabled: canViewSalesSection('devoluciones-venta') && activeSection === 'devoluciones-venta',
   });
   const creditNotesQuery = useQuery({
-    queryKey: isPaymentDocumentCatalog
-      ? ['sales', 'credit-notes-payment-catalog', tenantKey, selectedBranchId]
-      : ['sales', 'credit-notes', tenantKey, creditNotesQueryPage.page, creditNotesQueryPage.pageSize, searchFor('notas-credito'), creditNotesDates.dateFrom, creditNotesDates.dateTo, selectedBranchId],
-    queryFn: ({ signal }) => isPaymentDocumentCatalog
-      ? creditNotesService.getAll({ page: 1, pageSize: 200, ...branchFilter }, signal)
-      : creditNotesService.getAll({ page: creditNotesQueryPage.page, pageSize: creditNotesQueryPage.pageSize, search: searchFor('notas-credito'), ...creditNotesDates, ...branchFilter }, signal),
-    enabled: canViewSalesSection('notas-credito') && needsCredits,
+    queryKey: ['sales', 'credit-notes-payment-catalog', tenantKey, selectedBranchId],
+    queryFn: ({ signal }) => creditNotesService.getAll({ page: 1, pageSize: 200, ...branchFilter }, signal),
+    enabled: canViewSalesSection('pagos-recibidos') && isPaymentDocumentCatalog,
+    placeholderData: keepPreviousData,
+  });
+  const creditDocumentsQuery = useQuery({
+    queryKey: ['sales', 'credit-documents', tenantKey, creditNotesPage.page, creditNotesPage.pageSize, searchFor('notas-credito'), creditNotesDates.dateFrom, creditNotesDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => creditDocumentsService.getAll({ page: creditNotesPage.page, pageSize: creditNotesPage.pageSize, search: searchFor('notas-credito'), ...creditNotesDates, ...branchFilter }, signal),
+    enabled: canViewSalesSection('notas-credito') && activeSection === 'notas-credito',
     placeholderData: keepPreviousData,
   });
   const creditNotesSummaryQuery = useQuery({
-    queryKey: ['sales', 'credit-notes-kpi-summary', tenantKey, searchFor('notas-credito'), creditNotesDates.dateFrom, creditNotesDates.dateTo, selectedBranchId],
-    queryFn: ({ signal }) => fetchAllReportPages<CreditNote>(
-      (filters) => creditNotesService.getAll(filters, signal),
+    queryKey: ['sales', 'credit-documents-kpi-summary', tenantKey, searchFor('notas-credito'), creditNotesDates.dateFrom, creditNotesDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => fetchAllReportPages<CreditDocument>(
+      (filters) => creditDocumentsService.getAll(filters, signal),
       { pageSize: 5000, report: true, search: searchFor('notas-credito'), ...creditNotesDates, ...branchFilter },
       signal,
     ),
@@ -440,6 +439,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     pagos: toArray(paymentsQuery.data) as PaymentReceived[],
     devoluciones: toArray(returnsQuery.data) as SalesReturn[],
     notasCredito: toArray(creditNotesQuery.data) as CreditNote[],
+    documentosCredito: toArray(creditDocumentsQuery.data) as CreditDocument[],
     productos: [...toArray(productsQuery.data), ...toArray(servicesQuery.data)].map((product: any) => ({
       ...product,
       warehouseCatalog: (productsQuery.data as any)?.warehouseCatalog || (servicesQuery.data as any)?.warehouseCatalog || product.warehouseCatalog,
@@ -459,6 +459,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     pagos: filterByBranch(data.pagos),
     devoluciones: filterByBranch(data.devoluciones),
     notasCredito: filterByBranch(data.notasCredito),
+    documentosCredito: filterByBranch(data.documentosCredito),
     productos: data.productos,
     series: data.series,
     warehouses: data.warehouses,
@@ -535,11 +536,11 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
           : activeSection === 'facturas-recurrentes' ? recurringQuery
             : activeSection === 'pagos-recibidos' ? paymentsQuery
               : activeSection === 'devoluciones-venta' ? returnsQuery
-                : activeSection === 'notas-credito' ? creditNotesQuery
+                : activeSection === 'notas-credito' ? creditDocumentsQuery
                   : undefined;
   const productCatalogLoading = productsQuery.isPending || servicesQuery.isPending;
   const productCatalogError = productsQuery.isError || servicesQuery.isError;
-  const loading = Boolean(activeQuery?.isPending || (needsCatalogs && customersCatalogQuery.isPending) || (needsProducts && productCatalogLoading) || (needsCredits && creditNotesQuery.isPending));
+  const loading = Boolean(activeQuery?.isPending || (needsCatalogs && customersCatalogQuery.isPending) || (needsProducts && productCatalogLoading));
 
   const makePagination = (section: string, query: any): SalesPaginationControls => {
     const state = pageFor(section);
@@ -560,7 +561,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     recurrentes: makePagination('facturas-recurrentes', recurringQuery),
     pagos: makePagination('pagos-recibidos', paymentsQuery),
     devoluciones: makePagination('devoluciones-venta', returnsQuery),
-    notasCredito: makePagination('notas-credito', creditNotesQuery),
+    notasCredito: makePagination('notas-credito', creditDocumentsQuery),
   };
 
   const fetchData = useCallback(async () => {
@@ -679,7 +680,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <DevolucionesView data={filteredData.devoluciones} summaryData={returnsSummaryQuery.data} summaryLoading={returnsSummaryQuery.isPending || returnsSummaryQuery.isFetching} summaryError={returnsSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} products={data.productos} warehouses={data.warehouses} pagination={pagination.devoluciones} onSearchChange={(value) => updateSearch('devoluciones-venta', value)} dateFrom={returnsDates.dateFrom} dateTo={returnsDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('devoluciones-venta', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'notas-credito' && (
-                <NotasCreditoView data={filteredData.notasCredito} summaryData={creditNotesSummaryQuery.data} summaryLoading={creditNotesSummaryQuery.isPending || creditNotesSummaryQuery.isFetching} summaryError={creditNotesSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} dateFrom={creditNotesDates.dateFrom} dateTo={creditNotesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('notas-credito', from, to)} salesAlert={salesAlert || undefined} />
+                <NotasCreditoView data={filteredData.documentosCredito} summaryData={creditNotesSummaryQuery.data} summaryLoading={creditNotesSummaryQuery.isPending || creditNotesSummaryQuery.isFetching} summaryError={creditNotesSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} dateFrom={creditNotesDates.dateFrom} dateTo={creditNotesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('notas-credito', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'listas-precios' && (
                 <PriceListsView products={data.productos} onRefresh={fetchData} isSidebarCollapsed={isSidebarCollapsed} />
