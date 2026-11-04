@@ -15,6 +15,9 @@ assert.match(shell, /force-sales-customer-search-result/, 'El shell responde por
 assert.match(map, /force-sales-customer-search/, 'El mapa solicita resultados de clientes al shell');
 assert.match(map, /force-sales-customer-search-result/, 'El mapa consume respuestas del shell');
 assert.match(map, /role="combobox"/, 'La búsqueda del cliente expone semántica accesible de combobox');
+assert.ok(map.includes('data-customer-link-trigger'), 'El selector muestra un control desplegable antes de buscar');
+assert.ok(/data-customer-link-dropdown[^>]*hidden/.test(map), 'El campo de búsqueda abre dentro de un menú cerrado inicialmente');
+assert.ok(map.includes('function toggleCustomerLookup('), 'El selector permite abrir y cerrar el menú de búsqueda');
 assert.match(map, /data-customer-link/, 'Las opciones permiten seleccionar una ficha de cliente');
 assert.match(map, /customerId:\s*customerId|customerId\s*\?\s*customerId\s*:\s*null/, 'El mapa guarda o quita la referencia mediante el PATCH de prospectos');
 assert.match(map, /navigator\.onLine/, 'La vinculación queda deshabilitada sin conexión y no entra en la cola offline');

@@ -117,6 +117,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .crm{border-top:1px solid #e4ece9;padding-top:7px;margin-top:7px}.crm label{display:block;font-size:7.5px;text-transform:uppercase;font-weight:700;color:#62746e}
 .crm select,.crm input:not([type="checkbox"]):not([type="radio"]),.crm textarea{display:block;width:100%;max-width:100%;box-sizing:border-box;min-width:0;border:1px solid #dfe8e4;border-radius:8px;padding:6px;margin:3px 0 5px;font-size:8.5px}.crm textarea{height:42px;resize:vertical}.crm button{width:100%;border:0;border-radius:8px;background:#123e35;color:white;padding:7px;font-size:8.5px;font-weight:700}.crm input[type=file]{padding:5px;background:#f7fbf9}.crm .consent input[type="checkbox"]{display:inline-block;width:auto;max-width:none;min-width:0;min-height:0;margin:0 6px 0 0;padding:0;vertical-align:middle}.visit-readout{font-size:8px;color:#277443;background:#ecf9ee;border-radius:7px;padding:6px;margin:4px 0}
 .customer-link-current{overflow-wrap:anywhere;padding:6px 8px;border-radius:8px;background:#f2f8f5;color:#123f35;font-size:11px;font-weight:700}.customer-link-attribution{margin:5px 0 8px;padding:7px 8px;border-radius:8px;background:#f8faf9;color:#52665f;font-size:11px;line-height:1.45;overflow-wrap:anywhere}.customer-link-attribution strong{color:#123f35}.customer-link-results{display:grid;gap:5px;max-height:180px;overflow:auto;overscroll-behavior:contain;margin:4px 0 7px}.crm .customer-link-results [role="option"]{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:44px;border:1px solid #dce8e3;background:#f5faf7;color:#123f35;text-align:left;overflow-wrap:anywhere}.customer-link-results [role="option"] small{font-size:10px;color:#64766f;font-weight:500}.customer-link-status{min-height:1.4em;color:#52665f;font-size:11px;line-height:1.4}
+.customer-link-picker{margin:3px 0 5px}.crm .customer-link-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;margin:0;padding:7px 9px;border:1px solid #d5e2dd;background:#fff;color:#294c42;text-align:left;font-size:10px;font-weight:600;cursor:pointer}.customer-link-trigger[aria-expanded="true"]{border-color:#82b6a3;box-shadow:0 0 0 2px rgba(8,120,90,.1)}.customer-link-chevron{flex:none;color:#60756d;font-size:15px;line-height:1;transition:transform .16s ease}.customer-link-trigger[aria-expanded="true"] .customer-link-chevron{transform:rotate(180deg)}.customer-link-dropdown{margin:5px 0 7px;padding:7px;border:1px solid #dce8e3;border-radius:10px;background:#fff;box-shadow:0 6px 16px rgba(18,57,47,.1)}.customer-link-dropdown[hidden]{display:none!important}.customer-link-dropdown label{display:block;margin:0 0 4px;color:#62746e;font-size:8px;font-weight:700;text-transform:uppercase}.customer-link-dropdown .customer-link-results{max-height:150px;margin:5px 0 0}
 .customer-link-panel button:focus-visible,.customer-link-panel input:focus-visible,.customer-link-results [role="option"]:focus-visible{outline:3px solid #23735b;outline-offset:2px}
 .crm .assignee-retry{margin-top:5px;border:1px solid #dce8e3;background:#edf5f1;color:#35685a}
 .quick-heading{font-size:9px;font-weight:800;color:#123f35;margin-bottom:4px}.evidence-preview{display:flex;align-items:center;gap:7px;margin:3px 0 6px;padding:5px;border:1px solid #dce8e3;border-radius:8px;background:#f7fbf9}.evidence-preview[hidden]{display:none}.evidence-preview img{width:42px;height:42px;object-fit:cover;border-radius:6px}.evidence-preview span{font-size:8px;color:#526a60;line-height:1.35}.advanced-crm{margin-top:7px;border-top:1px solid #e4ece9;padding-top:7px}.advanced-crm summary{cursor:pointer;color:#0b7155;font-size:8px;font-weight:800}.advanced-crm .advanced-content{padding-top:6px}
@@ -2333,11 +2334,47 @@ function setCustomerLookupAvailability(panel){
   else if(!state.remoteId||state.syncPending)setCustomerLookupStatus(panel,'Sincroniza primero este punto comercial para cambiar el vínculo.');
   else if(linked)setCustomerLookupStatus(panel,'Quita el vínculo actual para seleccionar otro cliente.');
 }
+function closeCustomerLookup(panel,{restoreFocus=false}={}){
+  if(!panel)return;
+  const trigger=panel.querySelector('[data-customer-link-trigger]');
+  const dropdown=panel.querySelector('[data-customer-link-dropdown]');
+  const input=panel.querySelector('[data-customer-link-search]');
+  const wasOpen=Boolean(dropdown&&!dropdown.hidden);
+  if(!wasOpen&&!restoreFocus)return;
+  const pointId=String(panel.dataset.customerLinkPanel||'');
+  const timer=customerLookupTimers.get(pointId);
+  if(timer)clearTimeout(timer);
+  customerLookupTimers.delete(pointId);
+  for(const [requestId,pending] of customerLookupRequests){if(pending.pointId===pointId)customerLookupRequests.delete(requestId)}
+  if(dropdown)dropdown.hidden=true;
+  trigger?.setAttribute('aria-expanded','false');
+  if(input){input.value='';input.dataset.customerLookupRequest='';input.setAttribute('aria-expanded','false')}
+  panel.querySelector('[data-customer-link-results]')?.replaceChildren();
+  const business=findBusiness(pointId);
+  const state=business?stateOf(business):{};
+  if(!navigator.onLine||!state.remoteId||state.syncPending||business?.customerId||business?.customer?.id)setCustomerLookupAvailability(panel);
+  else setCustomerLookupStatus(panel,'Abre el selector para buscar clientes activos.');
+  if(restoreFocus)trigger?.focus();
+}
+function toggleCustomerLookup(trigger){
+  const panel=trigger?.closest?.('[data-customer-link-panel]');
+  const dropdown=panel?.querySelector('[data-customer-link-dropdown]');
+  const input=panel?.querySelector('[data-customer-link-search]');
+  if(!panel||!dropdown||!input||trigger.disabled)return;
+  if(!dropdown.hidden){closeCustomerLookup(panel);return}
+  document.querySelectorAll('[data-customer-link-dropdown]:not([hidden])').forEach(openDropdown=>closeCustomerLookup(openDropdown.closest('[data-customer-link-panel]')));
+  dropdown.hidden=false;
+  trigger.setAttribute('aria-expanded','true');
+  input.setAttribute('aria-expanded','false');
+  setCustomerLookupStatus(panel,'Escribe al menos 2 caracteres para buscar clientes activos.');
+  requestAnimationFrame(()=>input.focus());
+}
 function requestCustomerLookup(panel,search){
   const pointId=String(panel?.dataset.customerLinkPanel||'').trim();
+  const dropdown=panel?.querySelector('[data-customer-link-dropdown]');
   const input=panel?.querySelector('[data-customer-link-search]');
   const term=String(search||'').trim();
-  if(!panel||!input||!pointId)return;
+  if(!panel||!dropdown||dropdown.hidden||!input||!pointId)return;
   const business=findBusiness(pointId);
   if(!CAN_LINK_CUSTOMER||!canForceSales('updateProspect')||!navigator.onLine||!business||business.customerId||business.customer?.id||!stateOf(business).remoteId||stateOf(business).syncPending){
     setCustomerLookupAvailability(panel);return;
@@ -2362,17 +2399,20 @@ function renderCustomerLookupResponse(message){
   if(!pending||pending.pointId!==String(message?.pointId||''))return;
   customerLookupRequests.delete(requestId);
   const panel=[...document.querySelectorAll('[data-customer-link-panel]')].find(item=>item.dataset.customerLinkPanel===pending.pointId);
+  const dropdown=panel?.querySelector('[data-customer-link-dropdown]');
   const input=panel?.querySelector('[data-customer-link-search]');
-  if(!panel||!input||input.dataset.customerLookupRequest!==requestId||input.value.trim()!==pending.search)return;
+  if(!panel||!dropdown||dropdown.hidden||!input||input.dataset.customerLookupRequest!==requestId||input.value.trim()!==pending.search)return;
   const results=panel.querySelector('[data-customer-link-results]');
   const customers=Array.isArray(message.customers)?message.customers:[];
   if(message.error){
     if(results)results.innerHTML='';
+    input.setAttribute('aria-expanded','false');
     setCustomerLookupStatus(panel,message.error);
     return;
   }
   if(!customers.length){
     if(results)results.innerHTML='';
+    input.setAttribute('aria-expanded','false');
     setCustomerLookupStatus(panel,'No se encontraron clientes activos con ese texto.');
     return;
   }
@@ -2383,6 +2423,7 @@ function renderCustomerLookupResponse(message){
     const company=esc(customer.companyName||'');
     return `<button type="button" role="option" aria-label="Vincular ${name}${code?` código ${code}`:''}" data-customer-link-control data-customer-link-select="${customerId}" data-customer-name="${name}" data-customer-code="${code}" data-customer-company="${company}"><span>${name}</span><small>${code}${company?` · ${company}`:''}</small></button>`;
   }).join('');
+  input.setAttribute('aria-expanded','true');
   setCustomerLookupStatus(panel,`${customers.length} cliente${customers.length===1?'':'s'} disponible${customers.length===1?'':'s'}.`);
   setCustomerLookupAvailability(panel);
 }
@@ -2404,7 +2445,7 @@ document.addEventListener('keydown',event=>{
     const panel=input.closest('[data-customer-link-panel]');
     const options=[...(panel?.querySelectorAll('[role="option"]')||[])];
     if(event.key==='ArrowDown'&&options.length){event.preventDefault();options[0].focus()}
-    if(event.key==='Escape'){input.setAttribute('aria-expanded','false');panel?.querySelector('[data-customer-link-results]')?.replaceChildren()}
+    if(event.key==='Escape'){event.preventDefault();closeCustomerLookup(panel,{restoreFocus:true})}
     return;
   }
   const option=event.target?.closest?.('[data-customer-link-select]');
@@ -2414,15 +2455,35 @@ document.addEventListener('keydown',event=>{
   const current=options.indexOf(option);
   if(event.key==='ArrowDown'&&options.length){event.preventDefault();options[Math.min(current+1,options.length-1)].focus()}
   if(event.key==='ArrowUp'){event.preventDefault();if(current<=0)panel?.querySelector('[data-customer-link-search]')?.focus();else options[current-1].focus()}
-  if(event.key==='Escape'){event.preventDefault();panel?.querySelector('[data-customer-link-search]')?.focus()}
+  if(event.key==='Escape'){event.preventDefault();closeCustomerLookup(panel,{restoreFocus:true})}
+});
+document.addEventListener('focusout',event=>{
+  const picker=event.target?.closest?.('.customer-link-picker');
+  if(!picker)return;
+  const next=event.relatedTarget;
+  if(next&&picker.contains(next))return;
+  const panel=picker.closest('[data-customer-link-panel]');
+  setTimeout(()=>{
+    const dropdown=picker.querySelector('[data-customer-link-dropdown]');
+    if(dropdown&&!dropdown.hidden&&!picker.contains(document.activeElement))closeCustomerLookup(panel);
+  },0);
 });
 document.addEventListener('click',event=>{
+  const trigger=event.target?.closest?.('[data-customer-link-trigger]');
+  if(trigger){event.preventDefault();toggleCustomerLookup(trigger);return}
+  document.querySelectorAll('[data-customer-link-dropdown]:not([hidden])').forEach(dropdown=>{
+    const panel=dropdown.closest('[data-customer-link-panel]');
+    if(panel&&!panel.contains(event.target))closeCustomerLookup(panel);
+  });
   const option=event.target?.closest?.('[data-customer-link-select]');
   if(option){
     event.preventDefault();
-    void saveCustomerLink(option.closest('[data-customer-link-panel]')?.dataset.customerLinkPanel,option.dataset.customerLinkSelect,{
+    const panel=option.closest('[data-customer-link-panel]');
+    const customerSnapshot={
       id:option.dataset.customerLinkSelect,code:option.dataset.customerCode||'',name:option.dataset.customerName||'',companyName:option.dataset.customerCompany||null,
-    });
+    };
+    closeCustomerLookup(panel);
+    void saveCustomerLink(panel?.dataset.customerLinkPanel,option.dataset.customerLinkSelect,customerSnapshot);
     return;
   }
   const unlink=event.target?.closest?.('[data-customer-link-unlink]');
@@ -3435,9 +3496,9 @@ function popupHtml(b){
   const customerLinkPanel=CAN_LINK_CUSTOMER&&canForceSales('updateProspect')
     ? `<section class="crm customer-link-panel" data-customer-link-panel="${esc(b.id)}" aria-label="Vincular cliente de ventas">
         <div class="quick-heading">Cliente de ventas</div>
-        <div class="customer-link-current" data-customer-link-current>${hasCustomerLink?`${esc(c.customer?.name||'Cliente vinculado')}${c.customer?.code?` · ${esc(c.customer.code)}`:''}`:'Sin cliente vinculado'}</div>
-        ${hasCustomerLink?`${customerLinkAttribution}<button type="button" data-customer-link-unlink data-customer-link-control ${customerLinkDisabled?'disabled':''}>Quitar vínculo</button>`:`<label for="customer-link-search-${sid}">Buscar cliente activo</label><input id="customer-link-search-${sid}" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="customer-link-results-${sid}" data-customer-link-search data-customer-link-control placeholder="Nombre o código de cliente" autocomplete="off" ${customerLinkDisabled?'disabled':''}><div id="customer-link-results-${sid}" class="customer-link-results" role="listbox" aria-label="Clientes activos encontrados" data-customer-link-results></div>`}
-        <div class="customer-link-status" data-customer-link-status role="status" aria-live="polite">${!navigator.onLine?`Conéctate para ${hasCustomerLink?'quitar':'buscar'} clientes. Esta acción no se guarda offline.`:!c.remoteId||c.syncPending?'Sincroniza primero este punto comercial para cambiar el vínculo.':hasCustomerLink?'Quita el vínculo actual para seleccionar otro cliente.':'Escribe al menos 2 caracteres para buscar clientes activos.'}</div>
+        <div class="customer-link-current" data-customer-link-current ${hasCustomerLink?'':'hidden'}>${hasCustomerLink?`${esc(c.customer?.name||'Cliente vinculado')}${c.customer?.code?` · ${esc(c.customer.code)}`:''}`:''}</div>
+        ${hasCustomerLink?`${customerLinkAttribution}<button type="button" data-customer-link-unlink data-customer-link-control ${customerLinkDisabled?'disabled':''}>Quitar vínculo</button>`:`<div class="customer-link-picker"><button type="button" class="customer-link-trigger" data-customer-link-trigger data-customer-link-control aria-haspopup="dialog" aria-expanded="false" aria-controls="customer-link-dropdown-${sid}" ${customerLinkDisabled?'disabled':''}><span>Seleccionar cliente</span><span class="customer-link-chevron" aria-hidden="true">⌄</span></button><div id="customer-link-dropdown-${sid}" class="customer-link-dropdown" data-customer-link-dropdown role="dialog" aria-label="Buscar cliente activo" hidden><label for="customer-link-search-${sid}">Buscar cliente activo</label><input id="customer-link-search-${sid}" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="customer-link-results-${sid}" data-customer-link-search data-customer-link-control placeholder="Nombre o código de cliente" autocomplete="off" ${customerLinkDisabled?'disabled':''}><div id="customer-link-results-${sid}" class="customer-link-results" role="listbox" aria-label="Clientes activos encontrados" data-customer-link-results></div></div></div>`}
+        <div class="customer-link-status" data-customer-link-status role="status" aria-live="polite">${!navigator.onLine?`Conéctate para ${hasCustomerLink?'quitar':'buscar'} clientes. Esta acción no se guarda offline.`:!c.remoteId||c.syncPending?'Sincroniza primero este punto comercial para cambiar el vínculo.':hasCustomerLink?'Quita el vínculo actual para seleccionar otro cliente.':'Abre el selector para buscar clientes activos.'}</div>
       </section>`
     : '';
   const evidenceReadout=c.evidencePreviewUrl
