@@ -116,6 +116,15 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     ],
   },
   {
+    id: 'customerLoan', label: 'Préstamos a clientes', icon: Wallet,
+    description: 'Desembolso de préstamos y abonos: CxC, efectivo para Caja e ingresos por intereses',
+    fields: [
+      { key: 'cash', label: 'Caja de desembolso', side: 'credit', description: 'Se acredita al desembolsar el principal desde una sesión de Caja. Los desembolsos desde Banco usan la cuenta bancaria seleccionada.', defaultCode: '1000', defaultName: 'Caja General', defaultType: 'ASSET' },
+      { key: 'receivable', label: 'Préstamos por cobrar', side: 'debit', description: 'Se debita por el principal más el interés fijo reconocido en el préstamo.', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
+      { key: 'interestIncome', label: 'Ingresos por intereses de préstamos', side: 'credit', description: 'Se acredita por el interés fijo reconocido al emitir el préstamo.', defaultCode: '4200', defaultName: 'Ingresos por Intereses de Préstamos', defaultType: 'INCOME' },
+    ],
+  },
+  {
      id: 'purchaseReceipt', label: 'Recepciones de compra', icon: Package,
     description: 'Al aprobar la recepción se reconoce la compra; el pago posterior solo cancela CxP. La cuenta de Inventario/Gasto se toma de la bodega destino',
     fields: [
@@ -286,7 +295,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
 ]
 
-const SALES_MODULE_IDS = new Set(['invoice', 'payment', 'cashSale', 'saleReturn', 'creditNote', 'cashRegister'])
+const SALES_MODULE_IDS = new Set(['invoice', 'payment', 'cashSale', 'customerLoan', 'saleReturn', 'creditNote', 'cashRegister'])
 
 const OPERATIONAL_ONLY_MODULE_IDS = new Set(['paymentMade'])
 
