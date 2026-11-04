@@ -5,7 +5,8 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import App from './app/App.tsx';
 import './styles/index.css';
 import { queryClient } from './app/services/query-client';
-import { installVitePreloadRecovery } from './app/utils/chunk-recovery';
+import { flushPendingChunkIncident } from './app/utils/chunk-recovery';
+import { reportChunkLoadIncident } from './app/utils/chunk-telemetry';
 import { AuthProvider } from './app/contexts/AuthContext';
 
 Sentry.init({
@@ -14,6 +15,7 @@ Sentry.init({
     'https://e8777c5efd3a5c6531d70483c75a508b@o4511838597611520.ingest.us.sentry.io/4511838767939584',
   enabled: import.meta.env.VITE_E2E_DISABLE_SENTRY !== '1',
   environment: import.meta.env.MODE || 'development',
+  release: __NOVAHUB_BUILD_ID__,
   integrations: [
     Sentry.browserTracingIntegration(),
     Sentry.replayIntegration(),
@@ -31,7 +33,7 @@ Sentry.init({
   replaysOnErrorSampleRate: 1.0,
 });
 
-installVitePreloadRecovery();
+flushPendingChunkIncident(reportChunkLoadIncident);
 
 // Test trigger: visit /?sentry-test to send a metric + force a captured error
 if (new URLSearchParams(window.location.search).has('sentry-test')) {

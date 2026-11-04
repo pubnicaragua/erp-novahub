@@ -15,9 +15,7 @@ type SimilarProductLineDetails = {
 };
 
 const normalizeSku = (value: unknown) => String(value ?? '')
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .replace(/[^a-zA-Z0-9]+/g, '')
+  .trim()
   .toLowerCase();
 
 interface ProductSimilarityAlertProps {
@@ -31,6 +29,7 @@ interface ProductSimilarityAlertProps {
   existingProductActionMode?: 'link' | 'edit';
   canEditExistingProduct?: boolean;
   selectionHint?: string;
+  layer?: 'default' | 'above';
   onOpenChange: (open: boolean) => void;
   onContinue?: () => void;
   onSelectExisting?: (group: SimilarProductGroup, match: SimilarProductMatch, variant?: SimilarProductVariant) => void;
@@ -46,13 +45,14 @@ export function ProductSimilarityAlert({
   open,
   groups,
   title = 'Producto similar encontrado',
-  description = 'La alerta se genera por SKU exacto o por nombre igual/similar. Marca, descripción y atributos solo aportan contexto y no generan alertas por sí solos.',
+  description = 'La alerta se genera por SKU exacto o nombre igual, ignorando mayúsculas, tildes y espacios sobrantes. Marca, categoría, descripción y atributos no generan coincidencias.',
   continueLabel,
   existingProductActionLabel,
   createNewActionLabel,
   existingProductActionMode = 'link',
   canEditExistingProduct = true,
   selectionHint,
+  layer = 'default',
   onOpenChange,
   onContinue,
   onSelectExisting,
@@ -67,7 +67,10 @@ export function ProductSimilarityAlert({
   const [newSkuDrafts, setNewSkuDrafts] = useState<Record<string, string>>({});
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-3xl max-h-[min(88vh,calc(100dvh-3rem))] overflow-hidden flex flex-col">
+      <DialogContent
+        overlayClassName={layer === 'above' ? '!z-[70]' : undefined}
+        className={`w-[calc(100vw-2rem)] max-w-3xl max-h-[min(88vh,calc(100dvh-3rem))] overflow-hidden flex flex-col ${layer === 'above' ? '!z-[80]' : ''}`}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-warning">
             <AlertTriangle className="size-5 shrink-0" /> {title}

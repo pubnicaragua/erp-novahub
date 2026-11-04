@@ -59,6 +59,12 @@ export type SupportStreamEvent =
   | { type: 'support-conversation-updated'; conversationId: string; occurredAt?: string }
   | { type: 'support-conversations-resync'; occurredAt?: string };
 
+export interface CreateBranchSupportConversationPayload {
+  title: string;
+  content?: string;
+  attachmentUploadIds?: string[];
+}
+
 const conversationId = (id: string) => String(id || '').replace(/^support:/, '');
 const SUPPORT_ATTACHMENT_MIME_BY_EXTENSION: Record<string, string> = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
@@ -114,6 +120,7 @@ export const supportConversationsService = {
   preview: (targets: SupportScope[]) => api.post<SupportPreview>('/support-conversations/targets/preview', { targets }),
   getConversations: (signal?: AbortSignal) => api.get<SupportConversation[]>('/support-conversations/conversations', { signal }),
   getConversation: (id: string, signal?: AbortSignal) => api.get<SupportConversation>(`/support-conversations/conversations/${encodeURIComponent(conversationId(id))}`, { signal }),
+  createConversation: (payload: CreateBranchSupportConversationPayload, idempotencyKey: string) => api.idempotentPost<SupportConversation>('/support-conversations/conversations', payload, idempotencyKey),
   reply: (id: string, content: string, attachmentUploadIds: string[] = []) => api.post<SupportConversation>(`/support-conversations/conversations/${encodeURIComponent(conversationId(id))}/messages`, { content, attachmentUploadIds }),
   markRead: (id: string) => api.patch(`/support-conversations/conversations/${encodeURIComponent(conversationId(id))}/read`, {}),
   broadcast: (payload: { title: string; content: string; targets: SupportScope[]; attachmentUploadIds?: string[] }, key: string) => api.idempotentPost<SupportBroadcastResult>('/support-conversations/broadcasts', payload, key),

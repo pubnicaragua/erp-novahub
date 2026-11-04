@@ -4,6 +4,7 @@ const CACHE_NAME = `${CACHE_PREFIX}${BUILD_ID}`;
 const STATIC_DESTINATIONS = new Set(['script', 'style', 'image', 'font', 'manifest']);
 const LOCATION_DB_NAME = 'novahub-force-sales-location-v1';
 const LOCATION_SYNC_TAG = 'novahub-force-sales-location-points';
+const LOCATION_EVENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function contentType(response) {
   return (response.headers.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
@@ -43,8 +44,7 @@ self.addEventListener('install', (event) => {
           await cache.put('/index.html', response);
         }
       })
-      .catch(() => undefined)
-      .then(() => self.skipWaiting()),
+      .catch(() => undefined),
   );
 });
 
@@ -96,7 +96,20 @@ self.addEventListener('notificationclick', (event) => {
 
 function openLocationDatabase() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(LOCATION_DB_NAME, 1);
+    const request = indexedDB.open(LOCATION_DB_NAME);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains('points')) {
+        const points = database.createObjectStore('points', { keyPath: 'key' });
+        points.createIndex('byScope', 'scopeKey', { unique: false });
+      }
+      if (!database.objectStoreNames.contains('sessions')) {
+        database.createObjectStore('sessions', { keyPath: 'scopeKey' });
+      }
+      if (!database.objectStoreNames.contains('trackingLeases')) {
+        database.createObjectStore('trackingLeases', { keyPath: 'scopeKey' });
+      }
+    };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error('Location queue is unavailable'));
   });
@@ -117,6 +130,33 @@ function idbTransactionDone(transaction) {
   });
 }
 
+function createLocationEventId() {
+  const bytes = new Uint8Array(16);
+  if (self.crypto?.getRandomValues) self.crypto.getRandomValues(bytes);
+  else bytes.forEach((_value, index) => { bytes[index] = Math.floor(Math.random() * 256); });
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+async function normalizeLegacyEventIds(database, points) {
+  const normalized = points.map((point) => ({ ...point }));
+  if (!normalized.some((point) => !LOCATION_EVENT_UUID.test(String(point.eventId || '')))) return normalized;
+  const transaction = database.transaction('points', 'readwrite');
+  const store = transaction.objectStore('points');
+  normalized.forEach((point, index) => {
+    if (LOCATION_EVENT_UUID.test(String(point.eventId || ''))) return;
+    const original = points[index];
+    const eventId = createLocationEventId();
+    store.delete(original.key);
+    normalized[index] = { ...point, eventId, key: `${point.scopeKey}:${eventId}` };
+    store.put(normalized[index]);
+  });
+  await idbTransactionDone(transaction);
+  return normalized;
+}
+
 async function replayLocationPoints() {
   const database = await openLocationDatabase();
   try {
@@ -132,7 +172,7 @@ async function replayLocationPoints() {
       if (!scopedPoints.length) continue;
       let remaining = scopedPoints.length;
       for (let offset = 0; offset < scopedPoints.length && offset < 1000; offset += 200) {
-        const batch = scopedPoints.slice(offset, offset + 200);
+        const batch = await normalizeLegacyEventIds(database, scopedPoints.slice(offset, offset + 200));
         const response = await fetch(`${session.apiBase}/force-sales/location-points/batch`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.accessToken}` },
@@ -145,7 +185,12 @@ async function replayLocationPoints() {
           await idbTransactionDone(write);
           break;
         }
-        if (!response.ok) throw new Error(`Location sync failed with HTTP ${response.status}`);
+        if (!response.ok) {
+          const detail = await response.clone().json().catch(() => null);
+          const serverMessage = Array.isArray(detail?.message) ? detail.message.join('; ') : detail?.message;
+          const safeMessage = typeof serverMessage === 'string' ? serverMessage.slice(0, 240) : '';
+          throw new Error(`Location sync failed with HTTP ${response.status}${safeMessage ? `: ${safeMessage}` : ''}`);
+        }
         const payload = await response.json();
         const accepted = new Set(Array.isArray(payload.acceptedIds) ? payload.acceptedIds : []);
         if (!accepted.size) throw new Error('Location server did not confirm the batch');
@@ -176,28 +221,81 @@ self.addEventListener('sync', (event) => {
 });
 
 async function cacheStatic(request) {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request);
-  if (cached) return cached;
+  let cache;
+  let cached;
+  try {
+    cache = await caches.open(CACHE_NAME);
+    cached = await cache.match(request);
+  } catch {
+    // Storage is an optimization; a cache failure must not block the network.
+  }
 
-  const response = await fetch(request);
-  if (response.ok && response.type === 'basic' && hasExpectedContentType(request, response)) {
-    await cache.put(request, response.clone());
+  let retryWithoutHttpCache = false;
+  if (cached && hasExpectedContentType(request, cached)) return cached;
+  if (cached) {
+    retryWithoutHttpCache = true;
+    try {
+      await cache.delete(request);
+    } catch {
+      // Fetch below still bypasses the HTTP cache even if the stale entry remains.
+    }
+  }
+
+  const response = retryWithoutHttpCache
+    ? await fetch(request, { cache: 'reload' })
+    : await fetch(request);
+  if (cache && response.ok && response.type === 'basic' && hasExpectedContentType(request, response)) {
+    try {
+      await cache.put(request, response.clone());
+    } catch {
+      // Do not turn a valid response into a failed module import when storage is full.
+    }
   }
   return response;
 }
 
 async function networkFirstNavigation(request) {
+  let response;
   try {
-    const response = await fetch(request);
-    if (response.ok && response.type === 'basic' && isHtmlResponse(response)) {
+    response = await fetch(request);
+  } catch {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      return (await cache.match('/index.html')) || Response.error();
+    } catch {
+      return Response.error();
+    }
+  }
+
+  if (response.ok && response.type === 'basic' && isHtmlResponse(response)) {
+    try {
       const cache = await caches.open(CACHE_NAME);
       await cache.put('/index.html', response.clone());
+    } catch {
+      // Keep the fresh network shell even if it cannot be stored offline.
     }
-    return response;
+  }
+  return response;
+}
+
+async function fetchForceSalesMap(request) {
+  try {
+    const response = await fetch(request, { cache: 'no-store' });
+    if (!response.ok || !isHtmlResponse(response)) return response;
+
+    const mapDocument = await response.clone().text();
+    if (mapDocument.includes('id="sheet"') && mapDocument.includes('id="map"')) return response;
+
+    return new Response('El documento del mapa comercial no está disponible.', {
+      status: 404,
+      statusText: 'Force Sales map document not found',
+      headers: {
+        'Cache-Control': 'no-store',
+        'Content-Type': 'text/plain; charset=utf-8',
+      },
+    });
   } catch {
-    const cache = await caches.open(CACHE_NAME);
-    return cache.match('/index.html');
+    return Response.error();
   }
 }
 
@@ -207,9 +305,12 @@ self.addEventListener('fetch', (event) => {
 
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
-  // The map iframe carries runtime query parameters and Google tiles/scripts
-  // must remain online; never cache that URL or its credential-bearing query.
-  if (url.pathname.includes('dise') && url.pathname.endsWith('.html')) return;
+  // Do not cache the map URL or its credential-bearing query. Reject the SPA
+  // fallback when an old hashed map asset no longer exists after deployment.
+  if (url.pathname.toLowerCase().includes('dise') && url.pathname.toLowerCase().endsWith('.html')) {
+    event.respondWith(fetchForceSalesMap(request));
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(networkFirstNavigation(request));

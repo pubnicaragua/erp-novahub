@@ -561,6 +561,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const filteredData = colFilters.applyTo(filtered, filterGetters);
   const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
   const summarySearchRows = (resolvedSummaryRows || []).filter((invoice) => {
+    if (String(invoice.paymentMethod || '').toUpperCase() === 'CUSTOMER_LOAN') return false;
     const search = searchTerm.toLowerCase();
     return String(invoice.number || '').toLowerCase().includes(search) || String(invoice.customer?.name || '').toLowerCase().includes(search);
   });

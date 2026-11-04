@@ -8,7 +8,7 @@ import { Combobox } from '@/app/components/ui/Combobox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { Badge } from '@/app/components/ui/badge';
 import { ProductImagePicker } from '../ui/ProductImage';
-import { ArrowLeft, Trash2, Plus, Package, X, Tag, Check, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Trash2, Plus, Package, X, Tag, Check, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { inventoryService } from '@/app/services/inventario.service';
@@ -16,7 +16,6 @@ import { storageService } from '@/app/services/storage.service';
 import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
-import { ProductSimilarityAlert } from './ProductSimilarityAlert';
 import type { SimilarProductGroup, SimilarProductMatch } from '@/app/services/inventario.service';
 import { priceListsService, type PriceList } from '@/app/services/price-lists.service';
 import { resolveStandardProductPriceLists } from '@/app/utils/product-price-lists';
@@ -102,6 +101,100 @@ const normalizeSimilarityInputKey = (value: unknown) => String(value ?? '')
   .replace(/\s+/g, ' ')
   .toLowerCase();
 
+interface ProductSimilarityDecisionPanelProps {
+  groups: SimilarProductGroup[];
+  itemType: 'PRODUCT' | 'SERVICE';
+  canEditExistingProduct: boolean;
+  onSelectExisting: (group: SimilarProductGroup, match: SimilarProductMatch) => void;
+  onCreateNew: (group: SimilarProductGroup) => void;
+}
+
+function ProductSimilarityDecisionPanel({ groups, itemType, canEditExistingProduct, onSelectExisting, onCreateNew }: ProductSimilarityDecisionPanelProps) {
+  const itemLabel = itemType === 'SERVICE' ? 'servicio' : 'producto';
+
+  return (
+    <section
+      role="alert"
+      aria-live="polite"
+      aria-label={`Revisión de posible ${itemLabel} duplicado`}
+      data-testid="inventory-product-similarity-decision"
+      className="space-y-3 rounded-xl border border-warning/40 bg-warning/[0.04] p-3 sm:p-4"
+    >
+      <header className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden="true" />
+        <div className="min-w-0">
+          <h3 className="font-bold text-foreground">Este {itemLabel} podría estar duplicado</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Compara las coincidencias y elige editar el registro existente o confirmar la creación. Los datos escritos siguen en este formulario.
+          </p>
+        </div>
+      </header>
+
+      {groups.map((group) => {
+        const hasExactSkuMatch = group.matches.some((match) => (match.reasons || []).includes('SKU'));
+        return (
+          <article key={group.inputKey} className="space-y-3 rounded-lg border border-warning/30 bg-background p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Código que estás registrando</p>
+                <p className="mt-1 break-all font-mono text-sm font-bold text-foreground">{group.inputKey || 'Sin código'}</p>
+              </div>
+              <Badge variant="outline" className="border-warning/50 text-warning">
+                {group.matches.length} coincidencia{group.matches.length === 1 ? '' : 's'} posible{group.matches.length === 1 ? '' : 's'}
+              </Badge>
+            </div>
+
+            {group.matches.map((match) => (
+              <div key={`${group.inputKey}:${match.id}`} className="flex flex-col gap-3 rounded-lg border border-border/60 p-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <p className="break-words font-semibold text-foreground">{match.name || 'Producto sin nombre'}</p>
+                  <p className="break-all font-mono text-xs text-muted-foreground">Código/SKU: {match.sku || match.code || 'Sin código'}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Coincidencia por: {(match.reasons || []).join(', ') || 'datos del producto'}
+                  </p>
+                  {(match.brand || match.category) && (
+                    <p className="text-xs text-muted-foreground">
+                      {match.brand ? `Marca: ${match.brand}` : ''}{match.brand && match.category ? ' · ' : ''}{match.category ? `Categoría: ${match.category}` : ''}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 gap-2"
+                  disabled={!canEditExistingProduct}
+                  title={!canEditExistingProduct ? `No tienes permiso para editar ${itemLabel === 'servicio' ? 'servicios' : 'productos'}.` : undefined}
+                  onClick={() => onSelectExisting(group, match)}
+                >
+                  <Check className="size-4" /> Editar {itemLabel} existente
+                </Button>
+              </div>
+            ))}
+
+            {hasExactSkuMatch ? (
+              <p className="rounded-md border border-warning/30 bg-warning/[0.05] px-3 py-2 text-sm font-medium text-warning">
+                Ese código ya está registrado y debe ser único. Cámbialo para crear un {itemLabel} nuevo o edita el existente.
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+                <p className="text-xs text-muted-foreground">Si son registros distintos, puedes confirmar la creación con el código actual.</p>
+                <Button type="button" size="sm" className="gap-2" onClick={() => onCreateNew(group)}>
+                  <Plus className="size-4" /> Crear {itemLabel} nuevo
+                </Button>
+              </div>
+            )}
+
+            {!canEditExistingProduct && (
+              <p className="text-xs text-muted-foreground">Tu usuario no tiene permiso para editar este registro.</p>
+            )}
+          </article>
+        );
+      })}
+    </section>
+  );
+}
+
 export function AddProductsModal({ open, onOpenChange, categories, warehouses, brands = [], priceLists, onRefresh, onSelectExistingProduct, itemType = 'PRODUCT', presentation = 'dialog' }: AddProductsModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
@@ -165,6 +258,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const [draftProduct, setDraftProduct] = useState<any>({ ...defaultDraft });
   
   const [skuError, setSkuError] = useState('');
+  const [skuConflictNeedsList, setSkuConflictNeedsList] = useState(false);
   const [newCategoryOpen, setNewCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
@@ -173,13 +267,74 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const [similarGroups, setSimilarGroups] = useState<SimilarProductGroup[]>([]);
   const [similarPendingProducts, setSimilarPendingProducts] = useState<any[]>([]);
   const [similarResolutions, setSimilarResolutions] = useState<Record<string, { action: 'USE_EXISTING' | 'CREATE_NEW'; match?: SimilarProductMatch }>>({});
+  const similarityDecisionPanelRef = useRef<HTMLDivElement>(null);
+  const skuInputRef = useRef<HTMLInputElement>(null);
   const [attributesStepExpanded, setAttributesStepExpanded] = useState(true);
   const [valuesStepExpanded, setValuesStepExpanded] = useState(true);
   const [expandedAttributeId, setExpandedAttributeId] = useState<string | null>(null);
   const [variantsExpanded, setVariantsExpanded] = useState(true);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const skuValidationRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    if (similarGroups.length > 0) {
+      similarityDecisionPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      similarityDecisionPanelRef.current?.focus({ preventScroll: true });
+    }
+  }, [similarGroups]);
+
+  const focusSkuInput = () => {
+    window.requestAnimationFrame(() => {
+      skuInputRef.current?.focus();
+      skuInputRef.current?.select();
+    });
+  };
+
+  const invalidatePendingSkuCheck = () => {
+    skuValidationRequestIdRef.current += 1;
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+      debounceTimeoutRef.current = null;
+    }
+  };
+
+  const handleExactSkuConflict = (
+    groups: SimilarProductGroup[],
+    pendingProducts: any[],
+    remainingProducts = pendingProducts,
+  ) => {
+    const skuConflictGroup = groups.find((group) => {
+      const groupKey = normalizeSimilarityInputKey(group.inputKey);
+      return group.matches.some((match) => (
+        (match.reasons || []).some((reason) => reason.toLowerCase() === 'sku')
+        || [match.code, match.sku, ...(match.variants || []).map((variant) => variant.sku)]
+          .some((value) => normalizeSimilarityInputKey(value) === groupKey)
+      ));
+    });
+    if (!skuConflictGroup) return false;
+
+    invalidatePendingSkuCheck();
+    const inputKey = normalizeSimilarityInputKey(skuConflictGroup.inputKey);
+    const conflictingProduct = pendingProducts.find((product) =>
+      [product.code, product.sku, product.name]
+        .some((value) => normalizeSimilarityInputKey(value) === inputKey),
+    );
+    const conflictWasListed = Boolean(conflictingProduct && remainingProducts.some((product) => product.id === conflictingProduct.id));
+    if (conflictingProduct) setDraftProduct({ ...conflictingProduct });
+    setProductsList(remainingProducts.filter((product) => product.id !== conflictingProduct?.id));
+    setSkuConflictNeedsList(conflictWasListed);
+    setSimilarGroups([]);
+    setSimilarPendingProducts([]);
+    setSimilarResolutions({});
+    const sku = String(conflictingProduct?.code || skuConflictGroup.inputKey || '').trim();
+    const itemLabel = catalogItemType === 'SERVICE' ? 'servicio' : 'producto';
+    setSkuError(`El SKU “${sku}” ya existe. Ingresa otro SKU antes de guardar este ${itemLabel}.`);
+    focusSkuInput();
+    return true;
+  };
 
   const validateSkuDebounced = (code: string) => {
+    const requestId = ++skuValidationRequestIdRef.current;
     if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
     if (!code.trim()) {
       setSkuError('');
@@ -188,8 +343,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     debounceTimeoutRef.current = setTimeout(async () => {
       try {
         const response = await inventoryService.checkProductCode(code);
+        if (requestId !== skuValidationRequestIdRef.current) return;
         const exists = response?.exists;
-        setSkuError(exists ? 'Observación: este SKU ya está utilizado' : '');
+        setSkuError(exists
+          ? `El SKU “${code.trim()}” ya existe. Ingresa otro SKU antes de guardar este ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}.`
+          : '');
+        if (exists && productsList.length > 0) setSkuConflictNeedsList(true);
       } catch (e: any) {
         console.error('Error validating SKU', e);
       }
@@ -435,7 +594,14 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const handleUpdateDraft = (field: string, value: any) => {
     setDraftProduct((prev: any) => ({ ...prev, [field]: value }));
     if (field === 'code') {
+      setSkuError('');
       validateSkuDebounced(value as string);
+    }
+    if ((field === 'code' || field === 'name') && similarGroups.length > 0) {
+      // El aviso corresponde a los valores ya comprobados y se valida otra vez al guardar.
+      setSimilarGroups([]);
+      setSimilarPendingProducts([]);
+      setSimilarResolutions({});
     }
   };
 
@@ -524,6 +690,11 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       toast.error('Código, Nombre y Categoría son obligatorios');
       return;
     }
+    if (skuError) {
+      if (productsList.length > 0) setSkuConflictNeedsList(true);
+      focusSkuInput();
+      return;
+    }
     if (!hasValidSellingPrice(draftProduct)) {
       toast.error('Ingresa al menos un precio de venta válido');
       return;
@@ -563,7 +734,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       id: `draft-${Date.now()}`,
       categoryId: effectiveCategories[0]?.id || '',
     });
+    invalidatePendingSkuCheck();
     setSkuError('');
+    setSkuConflictNeedsList(false);
   };
 
   const handleRemoveFromList = (id: string) => {
@@ -661,18 +834,22 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       setDraftProduct({ ...defaultDraft, id: `draft-${Date.now()}`, categoryId: effectiveCategories[0]?.id || '' });
       setSimilarPendingProducts([]);
       setSimilarResolutions({});
+      invalidatePendingSkuCheck();
       setSkuError('');
+      setSkuConflictNeedsList(false);
       onOpenChange(false);
       onRefresh();
     } catch (error: any) {
       const similarMatches = (error?.data as any)?.matches;
       if (error?.code === 'PRODUCT_SIMILAR_MATCH' && Array.isArray(similarMatches) && similarMatches.length > 0) {
         const pendingProducts = listToSave.slice(successCount);
-        setSimilarGroups(similarMatches);
-        setSimilarPendingProducts(pendingProducts);
-        setProductsList((current) => current.slice(successCount));
-        setSimilarResolutions({});
-        toast.warning('La API volvió a detectar una posible coincidencia. Tus datos siguen guardados; revisa la coincidencia y confirma si deseas crear el producto.');
+        const pendingListedProducts = productsList.slice(successCount);
+        if (!handleExactSkuConflict(similarMatches, pendingProducts, pendingListedProducts)) {
+          setSimilarGroups(similarMatches);
+          setSimilarPendingProducts(pendingProducts);
+          setProductsList(pendingProducts);
+          setSimilarResolutions({});
+        }
       } else {
         toast.error(error?.message || `Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
       }
@@ -683,6 +860,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   };
 
   const handleSave = async () => {
+    if (skuError || skuConflictNeedsList) {
+      if (skuError && productsList.length > 0) setSkuConflictNeedsList(true);
+      focusSkuInput();
+      return;
+    }
+
     const listToSave = productsList.map((product) => ({
       ...product,
       initialStock: product.isVariable ? getVariantStockTotal(product) : product.initialStock,
@@ -696,9 +879,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       if (!hasValidSellingPrice(draftProduct)) {
         toast.error('Ingresa al menos un precio de venta válido');
         return;
-      }
-      if (skuError) {
-        toast.info('El SKU ya está utilizado; se abrirá una decisión para seleccionar el producto existente o revisar el código.');
       }
       if (draftProduct.isVariable) {
         if (draftProduct.linkedAttributes.length === 0) {
@@ -738,15 +918,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         name: product.name,
         description: product.description,
         brand: product.brand,
+        categoryId: product.categoryId,
+        categoryName: allCategories.find((category: any) => String(category.id) === String(product.categoryId))?.name,
         linkedAttributes: product.linkedAttributes,
         variants: product.isVariable ? buildVariantCombinations(product.linkedAttributes).map((attributes) => ({ attributes })) : undefined,
       })));
       const groups = response?.matches || [];
       if (groups.length > 0) {
+        if (handleExactSkuConflict(groups, listToSave, productsList)) return;
         setSimilarGroups(groups);
         setSimilarPendingProducts(listToSave);
         setSimilarResolutions({});
-        toast.warning('Se encontraron posibles productos existentes. Elige uno existente o confirma la creación de cada fila.');
         return;
       }
     } catch (error: any) {
@@ -759,9 +941,13 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const resolveSimilarGroup = async (group: SimilarProductGroup, resolution: { action: 'USE_EXISTING' | 'CREATE_NEW'; match?: SimilarProductMatch }) => {
     if (resolution.action === 'CREATE_NEW') {
       const inputKey = normalizeSimilarityInputKey(group.inputKey);
-      const exactSku = group.matches.some((match) => [match.code, match.sku].some((value) => normalizeSimilarityInputKey(value) === inputKey));
+      const exactSku = group.matches.some((match) => [
+        match.code,
+        match.sku,
+        ...(match.variants || []).map((variant) => variant.sku),
+      ].some((value) => normalizeSimilarityInputKey(value) === inputKey));
       if (exactSku) {
-        toast.error('Ese SKU ya existe. Cambia el SKU o selecciona el producto existente.');
+        handleExactSkuConflict([group], similarPendingProducts, productsList);
         return;
       }
     }
@@ -786,22 +972,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
 
   return (
     <>
-    <ProductSimilarityAlert
-      open={similarGroups.length > 0}
-      groups={similarGroups}
-      title={`Posible coincidencia de ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
-      description={`Este ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'} se parece a uno que ya existe. Compara los datos: puedes editar el existente o, si el código es distinto, confirmar la creación de uno nuevo. Al crear, conservaremos los datos ingresados.`}
-      existingProductActionLabel={catalogItemType === 'SERVICE' ? 'Editar servicio existente' : 'Editar producto existente'}
-      createNewActionLabel={catalogItemType === 'SERVICE' ? 'Crear servicio nuevo' : 'Crear producto nuevo'}
-      existingProductActionMode="edit"
-      canEditExistingProduct={canEditExistingProduct}
-      selectionHint={canEditExistingProduct
-        ? `«Editar ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'} existente» abrirá el registro encontrado para modificarlo.`
-        : `No tienes permiso para editar ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}. Solicita acceso de edición o cambia el código para crear uno nuevo.`}
-      onOpenChange={(value) => { if (!value) setSimilarGroups([]); }}
-      onSelectExisting={(group, match) => { void resolveSimilarGroup(group, { action: 'USE_EXISTING', match }); }}
-      onCreateNew={(group) => { void resolveSimilarGroup(group, { action: 'CREATE_NEW' }); }}
-    />
     <Dialog modal={false} open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
       <DialogContent className={presentation === 'page'
         ? '!fixed !inset-0 !top-0 !left-0 !z-[60] !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !gap-0 !overflow-hidden !rounded-none !border-0 !bg-background !p-4 !shadow-none !backdrop-blur-none sm:!p-6 lg:!p-10'
@@ -834,6 +1004,22 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         </DialogHeader>
 
         <div className={isPagePresentation ? 'min-h-0 flex-1 overflow-auto flex flex-col gap-3 p-0 xl:mx-auto xl:w-full xl:max-w-[1800px]' : 'flex-1 overflow-auto flex flex-col gap-6 p-1'} data-tour="inventory-product-add-data">
+          {similarGroups.length > 0 && (
+            <div
+              ref={similarityDecisionPanelRef}
+              tabIndex={-1}
+              aria-label="Decisión sobre coincidencias de productos"
+              className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-warning focus-visible:ring-offset-2"
+            >
+              <ProductSimilarityDecisionPanel
+                groups={similarGroups}
+                itemType={catalogItemType}
+                canEditExistingProduct={canEditExistingProduct}
+                onSelectExisting={(group, match) => { void resolveSimilarGroup(group, { action: 'USE_EXISTING', match }); }}
+                onCreateNew={(group) => { void resolveSimilarGroup(group, { action: 'CREATE_NEW' }); }}
+              />
+            </div>
+          )}
           
           {/* FORMULARIO SUPERIOR */}
           <div className={isPagePresentation
@@ -855,12 +1041,19 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                 <div className="flex flex-col gap-1 mt-1 w-full">
                   <Input
                     data-testid="inventory-product-code"
+                    ref={skuInputRef}
+                    aria-invalid={Boolean(skuError)}
+                    aria-describedby={[
+                      ...(skuError ? ['inventory-product-sku-error'] : []),
+                      ...(skuConflictNeedsList ? ['inventory-product-sku-recovery-hint'] : []),
+                    ].join(' ') || undefined}
                     value={draftProduct.code} 
                     onChange={e => handleUpdateDraft('code', e.target.value)} 
                     className={`h-8 text-xs font-mono w-full ${skuError ? 'border-warning focus-visible:ring-warning' : ''}`}
                     placeholder="SKU-001" 
                   />
-                  {skuError && <span className="text-[9px] text-warning dark:text-warning font-bold uppercase tracking-wider leading-tight">{skuError}</span>}
+                  {skuError && <p id="inventory-product-sku-error" role="alert" className="text-xs text-warning leading-snug">{skuError}</p>}
+                  {skuConflictNeedsList && <p id="inventory-product-sku-recovery-hint" role="status" className="text-xs text-muted-foreground leading-snug">Después de cambiar el SKU, agrega este producto a la lista para conservarlo en el lote.</p>}
                 </div>
               </div>
               <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-4 md:row-start-1 md:col-span-9' : 'sm:col-span-2 md:col-start-3 md:row-start-1 md:col-span-3'}>
@@ -1485,7 +1678,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           <Button
             data-testid="inventory-product-save"
             onClick={handleSave} 
-            disabled={isSaving || isCheckingAccounting || (productsList.length === 0 && (!draftProduct.code.trim() || !draftProduct.name.trim()))}
+            disabled={isSaving || isCheckingAccounting || skuConflictNeedsList || (productsList.length === 0 && (!draftProduct.code.trim() || !draftProduct.name.trim()))}
             className="font-bold bg-primary text-primary-foreground"
           >
             {isSaving ? 'Guardando...' : (productsList.length > 0 ? `Guardar ${productsList.length} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'}` : `Guardar ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`)}

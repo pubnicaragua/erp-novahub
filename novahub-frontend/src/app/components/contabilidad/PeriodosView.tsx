@@ -23,6 +23,7 @@ import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { formatDateOnly } from '../../utils/dateFormat';
 
 const statusStyles: Record<string, string> = {
   OPEN: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
@@ -78,8 +79,8 @@ export function PeriodosView() {
         name: form.name,
         month: Number(form.month),
         year: Number(form.year),
-        startDate: new Date(Number(form.year), Number(form.month) - 1, 1).toISOString(),
-        endDate: new Date(Number(form.year), Number(form.month), 0).toISOString(),
+        startDate: new Date(Date.UTC(Number(form.year), Number(form.month) - 1, 1)).toISOString(),
+        endDate: new Date(Date.UTC(Number(form.year), Number(form.month), 0)).toISOString(),
       });
       toast.success('Período creado');
       completeNotificationAction(actionToken);
@@ -199,8 +200,8 @@ export function PeriodosView() {
                   </TableCell>
                   <TableCell className="text-xs">{months.find((m) => m.value === String(p.month))?.label || p.month}</TableCell>
                   <TableCell className="text-xs font-mono">{p.year}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A'}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{p.endDate ? new Date(p.endDate).toLocaleDateString() : 'N/A'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{formatDateOnly(p.startDate) || 'N/A'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{formatDateOnly(p.endDate) || 'N/A'}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5', statusStyles[p.status || 'OPEN'])}>
                       {statusLabels[p.status || 'OPEN']}
@@ -253,7 +254,7 @@ export function PeriodosView() {
             {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : periods.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay períodos registrados</p> : periods.map((p) => (
               <div key={p.id} className={cn('min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3', isCurrentPeriod(p) && 'border-primary/30 bg-primary/[0.03]')}>
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-black">{p.name}</p><p className="mt-1 text-[10px] text-muted-foreground">{months.find((m) => m.value === String(p.month))?.label || p.month} {p.year}</p></div><Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[p.status || 'OPEN'])}>{statusLabels[p.status || 'OPEN']}</Badge></div>
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Inicio</span><span>{p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A'}</span></div><div><span className="block text-muted-foreground">Fin</span><span>{p.endDate ? new Date(p.endDate).toLocaleDateString() : 'N/A'}</span></div><div className="col-span-2 flex justify-end gap-1"><span className="sr-only">Acciones</span>{p.status === 'OPEN' && canClosePeriod && <Button variant="ghost" size="icon" className="size-7" onClick={() => setCloseConfirmId(p.id)} aria-label={`Cerrar período ${p.name}`}><Lock className="size-4" /></Button>}{p.status === 'CLOSED' && canReopenPeriod && <Button variant="ghost" size="icon" className="size-7" onClick={() => setReopenConfirmId(p.id)} aria-label={`Reabrir período ${p.name}`}><Unlock className="size-4" /></Button>}{p.status === 'CLOSED' && canLockPeriod && <Button variant="ghost" size="icon" className="size-7 text-amber-600" onClick={() => setLockConfirmId(p.id)} aria-label={`Bloquear período ${p.name}`}><Lock className="size-4" /></Button>}</div></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Inicio</span><span>{formatDateOnly(p.startDate) || 'N/A'}</span></div><div><span className="block text-muted-foreground">Fin</span><span>{formatDateOnly(p.endDate) || 'N/A'}</span></div><div className="col-span-2 flex justify-end gap-1"><span className="sr-only">Acciones</span>{p.status === 'OPEN' && canClosePeriod && <Button variant="ghost" size="icon" className="size-7" onClick={() => setCloseConfirmId(p.id)} aria-label={`Cerrar período ${p.name}`}><Lock className="size-4" /></Button>}{p.status === 'CLOSED' && canReopenPeriod && <Button variant="ghost" size="icon" className="size-7" onClick={() => setReopenConfirmId(p.id)} aria-label={`Reabrir período ${p.name}`}><Unlock className="size-4" /></Button>}{p.status === 'CLOSED' && canLockPeriod && <Button variant="ghost" size="icon" className="size-7 text-amber-600" onClick={() => setLockConfirmId(p.id)} aria-label={`Bloquear período ${p.name}`}><Lock className="size-4" /></Button>}</div></div>
               </div>
             ))}
           </div>

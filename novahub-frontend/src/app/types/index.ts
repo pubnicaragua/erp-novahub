@@ -121,6 +121,7 @@ export interface CustomerHistoricalSummary {
   clientTenantId: string;
   activityType: string;
   recordCount: number;
+  recordCountLabel?: string;
   measureLabel?: string | null;
   measureValue?: number | string | null;
   measureUnit?: string | null;
@@ -167,6 +168,13 @@ export interface Customer {
   balanceDueOriginalCurrencyBreakdown?: Array<{ currency: string; amount: number; count?: number }>;
   balanceFavorOriginalCurrencyBreakdown?: Array<{ currency: string; amount: number; count?: number }>;
   availableCredit?: number;
+  customerLoansSummary?: {
+    activeCount: number;
+    totalCount: number;
+    outstandingBalance: number;
+    currency: string;
+  };
+  customerLoans?: CustomerLoan[];
   balance: number;
   status: EntityStatus;
   notes?: string;
@@ -177,6 +185,32 @@ export interface Customer {
   historicalSummaries?: CustomerHistoricalSummary[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CustomerLoan {
+  id: string;
+  customerId: string;
+  principal: number | string;
+  interest: number | string;
+  total: number | string;
+  frequency: 'DAILY' | 'WEEKLY';
+  dueDate: string;
+  currency: string;
+  moraTypeId?: string | null;
+  moraTypeNameSnapshot: string;
+  moraTypeDescriptionSnapshot: string;
+  invoice: {
+    id: string;
+    number: string;
+    date: string;
+    dueDate?: string | null;
+    total: number | string;
+    amountPaid: number | string;
+    balance: number | string;
+    currency: string;
+    status: string;
+  };
+  moraType?: { id: string; name: string; description: string; isActive: boolean } | null;
 }
 
 export type ImageGalleryColumns = 1 | 2 | 3;
@@ -460,6 +494,7 @@ export interface Invoice {
   deliveryAmount?: number;
   amountPaid: number;
   balance: number;
+  paymentMethod?: string | null;
   /** Disponibilidad en moneda base, excluyendo esta factura y considerando la deuda restante del cliente. */
   creditAvailableBase?: number;
   currency: Currency;
@@ -496,7 +531,6 @@ export interface Invoice {
   paymentMethodSummary?: string | null;
   paymentMethods?: string[];
   notes?: string;
-  paymentMethod?: string;
   sellerEmployeeId?: string | null;
   commissionRate?: number | null;
   commissionType?: 'PERCENTAGE' | 'FIXED' | null;
@@ -1337,6 +1371,8 @@ export interface JournalEntry {
   createdBy?: { id: string; name: string; email?: string | null } | null;
   referenceNumber?: string | null;
   createdAt: string;
+  postedAt?: string | null;
+  voidedAt?: string | null;
   updatedAt?: string;
 }
 

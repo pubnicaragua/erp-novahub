@@ -9,6 +9,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { formatDateOnly } from '../../utils/dateFormat';
 
 interface ActivityLine {
   accountId: string | null;
@@ -177,7 +178,7 @@ export function ActividadModulosView() {
                               {item.documentLabel && <p className="text-[10px] text-muted-foreground">{item.documentLabel}</p>}
                             </TableCell>
                             <TableCell className="py-2 px-2 hidden md:table-cell text-xs whitespace-nowrap">
-                              {new Date(item.date).toLocaleDateString('es')}
+                              {formatDateOnly(item.date, 'es')}
                             </TableCell>
                             <TableCell className="py-2 px-2 hidden lg:table-cell text-xs text-muted-foreground max-w-[280px] truncate" title={item.description}>
                               {item.description}

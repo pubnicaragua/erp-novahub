@@ -40,6 +40,7 @@ import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency }
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerImportPhoneValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
 import { aggregateCustomerHistory, mergeCustomerHistoryByIdentifier, prepareCustomerHistoryForImport, type CustomerHistoryImportOptions, type CustomerHistorySourceRow } from '../../utils/customer-history-import';
+import { buildCustomerHistoryTemplateHeaders, DEFAULT_CUSTOMER_HISTORY_PROFILE, normalizeCustomerHistoryProfile, type CustomerHistoryProfile } from '../../utils/customer-history-profile';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -92,6 +93,7 @@ type CustomerHistoryImportConfig = {
   activityTypeColumn: string;
   countryColumn: string;
   activityType: string;
+  recordCountLabel: string;
   measureLabel: string;
   measureUnit: string;
   fallbackCurrency: SupportedCurrency | '';
@@ -104,9 +106,9 @@ const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO', coun
   country, countryCode, creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE',
 });
 
-const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'createdAt', 'status'];
+const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'customerLoans', 'createdAt', 'status'];
 
-type CustomerColumnPreferences = string[] | { version: 1; keys: string[] };
+type CustomerColumnPreferences = string[] | { version: number; keys: string[] };
 
 function migrateCustomerColumnKeys(preferences: CustomerColumnPreferences): string[] {
   if (!Array.isArray(preferences)) return preferences.keys;
@@ -167,12 +169,20 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const { canPerform, user } = useAuth();
   const { countries, defaultCountryCode } = useCustomerFormOptions();
   const tenantKey = user?.tenantId || 'anonymous';
+  const activeClientTenantKey = user?.clientTenantId || user?.tenantId || 'anonymous';
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
+  const [customerLoansEnabled, setCustomerLoansEnabled] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'ALL' | 'INDIVIDUAL' | 'COMPANY'>('ALL');
   const [pendingStatusChange, setPendingStatusChange] = useState<Customer | null>(null);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [pendingForceSalesDelete, setPendingForceSalesDelete] = useState<{
+    customerId: string;
+    customerName: string;
+    prospect: { id: string; name: string; address?: string | null };
+  } | null>(null);
+  const [forceSalesDeleteLoading, setForceSalesDeleteLoading] = useState(false);
   const [pendingBulkDeactivateIds, setPendingBulkDeactivateIds] = useState<(string | number)[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [importMode, setImportMode] = useState<CustomerImportMode>('CUSTOMERS');
@@ -183,9 +193,16 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const [customerImportBaseRows, setCustomerImportBaseRows] = useState<CustomerImportRow[]>([]);
   const [historySource, setHistorySource] = useState<CustomerHistorySource | null>(null);
   const [historyImportNotice, setHistoryImportNotice] = useState<string | null>(null);
+  const [historyProfile, setHistoryProfile] = useState<CustomerHistoryProfile>({ ...DEFAULT_CUSTOMER_HISTORY_PROFILE });
+  const [historyProfileBranchKey, setHistoryProfileBranchKey] = useState<string | null>(null);
+  const [historyProfileError, setHistoryProfileError] = useState<string | null>(null);
+  const [historyProfileDialogOpen, setHistoryProfileDialogOpen] = useState(false);
+  const [historyProfileSaving, setHistoryProfileSaving] = useState(false);
+  const [historyProfileDraft, setHistoryProfileDraft] = useState<CustomerHistoryProfile>({ ...DEFAULT_CUSTOMER_HISTORY_PROFILE });
+  const historyProfileLoading = importOpen && historyProfileBranchKey !== activeClientTenantKey;
   const [historyConfig, setHistoryConfig] = useState<CustomerHistoryImportConfig>({
     nameColumn: '', identifierColumn: '', amountColumn: '', measureColumn: '', documentColumn: '', currencyColumn: '', activityTypeColumn: '', countryColumn: '',
-    activityType: 'Estadías', measureLabel: '', measureUnit: '', fallbackCurrency: '',
+    activityType: DEFAULT_CUSTOMER_HISTORY_PROFILE.activityType, recordCountLabel: DEFAULT_CUSTOMER_HISTORY_PROFILE.recordCountLabel, measureLabel: '', measureUnit: '', fallbackCurrency: '',
   });
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
@@ -208,18 +225,20 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const [portalPassword, setPortalPassword] = useState('');
   const [portalEnabled, setPortalEnabled] = useState(true);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [columnPreferences, setColumnPreferences] = useLocalStorageState<CustomerColumnPreferences>(`sales-clients-columns-${tenantKey}`, { version: 1, keys: DEFAULT_CUSTOMER_COLUMN_KEYS }, 24 * 365);
+  const [columnPreferences, setColumnPreferences] = useLocalStorageState<CustomerColumnPreferences>(`sales-clients-columns-${tenantKey}`, { version: 2, keys: DEFAULT_CUSTOMER_COLUMN_KEYS }, 24 * 365);
   const visibleColumnKeys = migrateCustomerColumnKeys(columnPreferences);
   // Store the migration with the selection so later hiding survives reloads.
   useEffect(() => {
     if (Array.isArray(columnPreferences)) {
-      setColumnPreferences({ version: 1, keys: migrateCustomerColumnKeys(columnPreferences) });
+      setColumnPreferences({ version: 2, keys: migrateCustomerColumnKeys(columnPreferences) });
+    } else if (customerLoansEnabled && columnPreferences.version < 2) {
+      setColumnPreferences({ version: 2, keys: [...new Set([...migrateCustomerColumnKeys(columnPreferences), 'customerLoans'])] });
     }
-  }, [columnPreferences, setColumnPreferences]);
+  }, [columnPreferences, customerLoansEnabled, setColumnPreferences]);
   const setVisibleColumnKeys = (next: string[] | ((current: string[]) => string[])) => {
     setColumnPreferences((current) => {
       const keys = migrateCustomerColumnKeys(current);
-      return { version: 1, keys: typeof next === 'function' ? next(keys) : next };
+      return { version: 2, keys: typeof next === 'function' ? next(keys) : next };
     });
   };
   const [creating, setCreating] = useState(false);
@@ -235,6 +254,34 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   useEffect(() => {
     priceListsService.getAll().then((response: any) => setPriceLists(Array.isArray(response) ? response : (response?.data || []))).catch(() => setPriceLists([]));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    customersService.getCustomerLoansConfig()
+      .then((response: any) => { if (!cancelled) setCustomerLoansEnabled(Boolean((response?.data?.data ?? response?.data ?? response)?.enabled)); })
+      .catch(() => { if (!cancelled) setCustomerLoansEnabled(false); });
+    return () => { cancelled = true; };
+  }, [tenantKey]);
+
+  useEffect(() => {
+    if (!importOpen || !canPerform('SALES_CLIENTS', 'import') || historyProfileBranchKey === activeClientTenantKey) return;
+    let cancelled = false;
+    customersService.getCustomerHistoryProfile()
+      .then((profile) => {
+        if (cancelled) return;
+        setHistoryProfile(normalizeCustomerHistoryProfile(profile));
+        setHistoryProfileError(null);
+        setHistoryProfileBranchKey(activeClientTenantKey);
+      })
+      .catch((profileError: unknown) => {
+        if (!cancelled) {
+          setHistoryProfile({ ...DEFAULT_CUSTOMER_HISTORY_PROFILE });
+          setHistoryProfileError(profileError instanceof Error ? profileError.message : 'No se pudo cargar el perfil de historial.');
+          setHistoryProfileBranchKey(activeClientTenantKey);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [importOpen, activeClientTenantKey, canPerform, historyProfileBranchKey]);
 
   const normalizeHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_/-]+/g, '');
   const getCell = (row: Record<string, any>, aliases: string[]) => {
@@ -278,14 +325,14 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     });
   };
 
-  const defaultHistoryConfig = (headers: string[]): CustomerHistoryImportConfig => {
+  const defaultHistoryConfig = (headers: string[], profile: CustomerHistoryProfile = historyProfile): CustomerHistoryImportConfig => {
     const normalizedHeaders = headers.map(normalizeHeader);
     const pick = (aliases: string[]) => {
-      const aliasSet = aliases.map(normalizeHeader);
+      const aliasSet = aliases.map(normalizeHeader).filter(Boolean);
       const index = normalizedHeaders.findIndex((header) => aliasSet.includes(header));
       return index < 0 ? '' : String(index);
     };
-    const measureColumn = pick(['noches', 'cantidad', 'quantity', 'unidades']);
+    const measureColumn = pick([profile.measureLabel || '', 'noches', 'cantidad', 'quantity', 'unidades']);
     const measureHeader = measureColumn ? headers[Number(measureColumn)] : '';
     const normalizedMeasureHeader = normalizeHeader(measureHeader);
     return {
@@ -297,9 +344,10 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       currencyColumn: pick(['moneda', 'currency', 'divisa']),
       activityTypeColumn: pick(['tipoactividad', 'tipoactividadhistorica', 'actividad', 'tipodehistorial', 'activitytype']),
       countryColumn: pick(['paisclientesugerido', 'paiscliente', 'paisdelcliente', 'countrycustomer', 'customercountry', 'pais', 'country']),
-      activityType: 'Estadías',
-      measureLabel: measureHeader ? String(measureHeader).trim() : '',
-      measureUnit: normalizedMeasureHeader.includes('noche') ? 'noches' : '',
+      activityType: profile.activityType || DEFAULT_CUSTOMER_HISTORY_PROFILE.activityType,
+      recordCountLabel: profile.recordCountLabel || DEFAULT_CUSTOMER_HISTORY_PROFILE.recordCountLabel,
+      measureLabel: profile.measureLabel || (measureHeader ? String(measureHeader).trim() : ''),
+      measureUnit: profile.measureUnit || (normalizedMeasureHeader.includes('noche') ? 'noches' : ''),
       fallbackCurrency: '',
     };
   };
@@ -321,6 +369,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     }));
     const aggregationOptions: CustomerHistoryImportOptions = {
       activityType: config.activityType,
+      recordCountLabel: config.recordCountLabel,
       measureLabel: config.measureLabel,
       measureUnit: config.measureUnit,
       documentColumnSelected: Boolean(config.documentColumn),
@@ -379,6 +428,37 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       return;
     }
     setImportRows(validateImportRows(preparedHistoryRows));
+  };
+
+  const openHistoryProfileEditor = () => {
+    setHistoryProfileDraft({ ...historyProfile });
+    setHistoryProfileDialogOpen(true);
+  };
+
+  const saveHistoryProfile = async (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    if (!canPerform('SALES_CLIENTS', 'edit')) return;
+    setHistoryProfileSaving(true);
+    setHistoryProfileError(null);
+    try {
+      const saved = await customersService.saveCustomerHistoryProfile({
+        activityType: historyProfileDraft.activityType,
+        recordCountLabel: historyProfileDraft.recordCountLabel,
+        measureLabel: historyProfileDraft.measureLabel,
+        measureUnit: historyProfileDraft.measureUnit,
+      });
+      const normalized = normalizeCustomerHistoryProfile(saved);
+      setHistoryProfile(normalized);
+      setHistoryProfileDraft(normalized);
+      setHistoryProfileDialogOpen(false);
+      toast.success('Perfil de historial guardado para esta sucursal');
+    } catch (saveError: any) {
+      const message = String(saveError?.message || 'No se pudo guardar el perfil de historial.');
+      setHistoryProfileError(message);
+      toast.error(message);
+    } finally {
+      setHistoryProfileSaving(false);
+    }
   };
 
   const buildHistorySource = (raw: any[][]): CustomerHistorySource => ({
@@ -444,6 +524,10 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   };
 
   const downloadTemplate = async () => {
+    if (historyProfileLoading) {
+      toast.error('Espera a que cargue el perfil de historial antes de descargar la plantilla.');
+      return;
+    }
     let availablePriceLists = priceLists;
     try {
       const response: any = await priceListsService.getAll();
@@ -459,7 +543,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     const example = ['Cliente Ejemplo', '', 'PARTICULAR', '', defaultCountryCode === 'NI' ? '001-010190-1000A' : '', '', 'cliente@correo.com', defaultCountryCode === 'NI' ? '88888888' : '', '', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', countryNameForForm(defaultCountryCode, countries), defaultCountryCode, 'Régimen general', 0, displayCurrency, importablePriceLists[0]?.code || '', '', '', baseCurrency, 'ACTIVO', ''];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
-    const historyHeaders = ['Nombre', 'Identificación', 'Total', 'Noches', 'Moneda', 'TipoActividad'];
+    const historyHeaders = buildCustomerHistoryTemplateHeaders(historyProfile);
     const historySheet = XLSX.utils.aoa_to_sheet([historyHeaders]);
     historySheet['!cols'] = historyHeaders.map((header) => ({ wch: Math.max(16, Math.min(28, header.length + 5)) }));
     const guideRows: any[][] = [
@@ -477,10 +561,11 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       ['Correo, dirección y ubicación', 'Completa correo, dirección, ciudad y departamento cuando aplique.'],
       ['Régimen fiscal', 'Opcional. Ejemplo: Régimen general, cuota fija o exento.'],
       ['Lista de precios', 'Opcional. Usa el código o nombre de una lista existente. Si no existe, se mostrará un aviso y se importará sin asignación.'],
-      ['Hoja Historial', 'Opcional. Agrega una fila por estadía, factura u otro antecedente. Los clientes sin filas en esta hoja también se importan.'],
+      ['Hoja Historial', `Opcional. Agrega una fila por ${historyProfile.activityType.toLocaleLowerCase()} u otro antecedente. El sistema calcula “${historyProfile.recordCountLabel}” contando filas o documentos únicos si completas Número de documento. Los clientes sin filas en esta hoja también se importan.`],
       ['Identificación del historial', 'Debe coincidir con la cédula o RUC de la hoja Clientes. No se vincula por nombre; un historial sin coincidencia queda para revisión.'],
-      ['Total, medida y moneda', 'Indica el importe total y la moneda en cada registro. Para estadías, usa Noches. Un símbolo “$” necesita que selecciones USD o NIO en la vista previa.'],
-      ['TipoActividad', 'Escribe el tipo de antecedente, por ejemplo Estadías o Facturas. Se resumirá por tipo y moneda.'],
+      ['Total, medida y moneda', `Indica el importe total y la moneda en cada registro. La medida ${historyProfile.measureLabel ? `“${historyProfile.measureLabel}”` : 'es opcional'}; un símbolo “$” necesita que selecciones USD o NIO en la vista previa.`],
+      ['Número de documento', 'Opcional. Si el mismo documento aparece más de una vez con el mismo importe, se cuenta una sola vez y el importe no se duplica.'],
+      ['TipoActividad', `Opcional. Puedes separar los antecedentes por tipo y moneda. Si dejas la celda vacía, se usa “${historyProfile.activityType}”.`],
       ['Límite de crédito', 'Opcional. Usa un número mayor o igual a cero. El importe se guarda en la moneda indicada en la columna Moneda límite de crédito.'],
       ['Moneda límite de crédito', `Obligatoria si capturas un límite. Usa NIO o USD. Si el archivo no trae esta columna, se usará ${displayCurrency}, la moneda seleccionada arriba al preparar la importación.`],
       ['Tipo saldo inicial y saldo inicial', 'Opcional. Indica PENDIENTE para una deuda general que el cliente tiene con tu empresa o A FAVOR para un saldo disponible. Deja el importe vacío si no hay saldo inicial.'],
@@ -503,6 +588,10 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   };
 
   const readImportFile = async (file: File) => {
+    if (historyProfileLoading) {
+      toast.error('Espera a que cargue el perfil de historial antes de leer el archivo.');
+      return;
+    }
     setPreviewLoading(true);
     setPreviewProgress(3);
     setHistoryImportNotice(null);
@@ -1081,6 +1170,16 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         );
       },
     },
+    ...(customerLoansEnabled || data.some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) || (summaryData || []).some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) ? [{
+      key: 'customerLoans',
+      header: 'Préstamos vigentes',
+      width: '185px',
+      render: (_value: any, row: Customer) => {
+        const loans = row.customerLoansSummary;
+        if (!loans?.totalCount) return <span className="text-xs text-muted-foreground">Sin préstamos</span>;
+        return <div className="min-w-0 space-y-1"><p className="text-[11px] font-bold text-foreground">{loans.activeCount} vigente{loans.activeCount === 1 ? '' : 's'}</p><p className="break-words text-xs font-black tabular-nums text-rose-600 dark:text-rose-400">{formatConvertedAmount(Number(loans.outstandingBalance || 0), normalizeCurrency(loans.currency, baseCurrency))}</p></div>;
+      },
+    } as ColumnDef<Customer>] : []),
     { key: 'createdAt', header: 'Fecha de ingreso', width: '140px', render: (value) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(value)}</span> },
     { 
       key: 'status', 
@@ -1133,6 +1232,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     { key: 'creditLimit', label: 'Límite de crédito' },
     { key: 'creditDays', label: 'Plazo crédito' },
     { key: 'balance', label: 'Saldos del cliente' },
+    ...(customerLoansEnabled || data.some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) || (summaryData || []).some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) ? [{ key: 'customerLoans', label: 'Préstamos vigentes' }] : []),
     { key: 'createdAt', label: 'Fecha de ingreso' },
     { key: 'status', label: 'Estado' },
   ];
@@ -1280,6 +1380,15 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
                   if (String(selectedCustomerDetail?.id) === String(id)) setSelectedCustomerDetail(null);
                   onRefresh();
                 } catch (error: any) {
+                  if (error?.code === 'CUSTOMER_HAS_FORCE_SALES_POINT' && error?.data?.prospect?.id) {
+                    const customer = data.find((item) => String(item.id) === String(id));
+                    setPendingForceSalesDelete({
+                      customerId: String(id),
+                      customerName: customer?.name || 'este cliente',
+                      prospect: error.data.prospect,
+                    });
+                    return;
+                  }
                   toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar el cliente');
                   throw error;
                 }
@@ -1321,6 +1430,35 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={pendingForceSalesDelete !== null}
+        onOpenChange={(open) => { if (!open && !forceSalesDeleteLoading) setPendingForceSalesDelete(null); }}
+        title="¿Eliminar cliente vinculado?"
+        description={pendingForceSalesDelete
+          ? `“${pendingForceSalesDelete.customerName}” está vinculado al punto “${pendingForceSalesDelete.prospect.name}”${pendingForceSalesDelete.prospect.address ? ` (${pendingForceSalesDelete.prospect.address})` : ''}. Si confirmas, se eliminará el cliente y el punto comercial y su historial se conservarán sin vínculo.`
+          : ''}
+        confirmLabel="Eliminar y desvincular"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={forceSalesDeleteLoading}
+        onConfirm={async () => {
+          if (!pendingForceSalesDelete) return;
+          setForceSalesDeleteLoading(true);
+          try {
+            const confirmUnlinkForceSalesPoint = true;
+            await customersService.delete(pendingForceSalesDelete.customerId, confirmUnlinkForceSalesPoint);
+            toast.success('Cliente eliminado y punto comercial desvinculado');
+            if (String(selectedCustomerDetail?.id) === pendingForceSalesDelete.customerId) setSelectedCustomerDetail(null);
+            await onRefresh();
+            setPendingForceSalesDelete(null);
+          } catch (error: any) {
+            toast.error(error?.message || 'No se pudo eliminar el cliente vinculado');
+          } finally {
+            setForceSalesDeleteLoading(false);
+          }
+        }}
+      />
 
       <ConfirmDialog
         open={pendingStatusChange !== null}
@@ -1371,6 +1509,10 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         customerId={selectedCustomerDetail?.id ?? null}
         onOpenChange={(open) => !open && setSelectedCustomerDetail(null)}
         customerSnapshot={selectedCustomerDetail}
+        customerLoansEnabled={customerLoansEnabled}
+        canCreateLoan={canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'submit')}
+        canManageMora={canPerform('SALES_CLIENTS', 'edit')}
+        onLoansUpdated={() => { void onRefresh(); }}
         canExport={canPerform('SALES_CLIENTS', 'export')}
         extraActions={selectedCustomerDetail ? <>
           {canPerform('SALES_CLIENTS', 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedCustomerDetail(null); openEditCustomer(selectedCustomerDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}
@@ -1531,6 +1673,15 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar clientes</DialogTitle><DialogDescription>{isHistoryOnlyImport ? 'Vincula resúmenes acumulados a clientes existentes mediante identificación normalizada.' : isHistoricalImport ? 'Carga en un solo Excel los clientes, sus listas de precios y sus resúmenes históricos opcionales.' : 'Carga una plantilla Excel. Luego abre la previsualización completa para corregir los datos antes de crear los clientes.'}</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <label className="block max-w-full space-y-1.5"><span className="text-xs font-bold text-muted-foreground">Contenido del archivo</span><Select value={importMode} onValueChange={(value) => { setImportMode(value as CustomerImportMode); setImportFile(null); setImportRows([]); setCustomerImportBaseRows([]); setHistorySource(null); setHistoryImportNotice(null); setImportResult(null); if (importFileInputRef.current) importFileInputRef.current.value = ''; }} disabled={previewLoading || importing}><SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CUSTOMERS">Solo clientes</SelectItem><SelectItem value="HISTORICAL">Clientes + historial (un solo archivo)</SelectItem><SelectItem value="HISTORY_ONLY">Vincular historial a clientes existentes</SelectItem></SelectContent></Select></label>
+            {(isHistoricalImport || isHistoryOnlyImport) && <section className="flex min-w-0 flex-col gap-3 rounded-xl border border-primary/15 bg-primary/[0.025] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 text-xs">
+                <p className="font-black text-foreground">Perfil de historial de esta sucursal</p>
+                {historyProfileLoading ? <p className="mt-1 text-muted-foreground">Cargando configuración…</p> : <p className="mt-1 break-words text-muted-foreground">Actividad: <b className="text-foreground">{historyProfile.activityType}</b> · Conteo: <b className="text-foreground">{historyProfile.recordCountLabel}</b>{historyProfile.measureLabel ? <> · Medida: <b className="text-foreground">{historyProfile.measureLabel}{historyProfile.measureUnit ? ` (${historyProfile.measureUnit})` : ''}</b></> : null}</p>}
+                {historyProfileError && <p role="status" className="mt-1 text-amber-700 dark:text-amber-300">No se pudo leer el perfil; se usarán etiquetas neutrales. {historyProfileError}</p>}
+                <p className="mt-1 text-[10px] text-muted-foreground">Los cambios puntuales de esta importación no modifican el perfil.</p>
+              </div>
+              {canPerform('SALES_CLIENTS', 'edit') && <Button type="button" variant="outline" size="sm" className="shrink-0 gap-2" onClick={openHistoryProfileEditor} disabled={historyProfileLoading || historyProfileSaving}><Settings2 className="size-4" />Configurar perfil</Button>}
+            </section>}
             <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p>{!isHistoryOnlyImport && <p className="mt-2">La columna Fecha de ingreso es opcional; déjala vacía para usar la fecha actual. Si una fecha no es válida, podrás corregirla en la vista previa.</p>}{isHistoryOnlyImport ? <><p className="mt-2">Se guardará únicamente el resumen histórico informativo. El sistema busca cada identificación normalizada dentro del tenant y solo vincula cuando encuentra un cliente único. No crea ni modifica clientes, facturas, pedidos, pagos, saldos ni asientos.</p><p className="mt-2">Las identificaciones faltantes o sin coincidencia exacta quedan para revisión; no se vinculan automáticamente por nombre. Los totales de monedas distintas se mantienen separados.</p></> : isHistoricalImport ? <><p className="mt-2">Carga las hojas Clientes e Historial en un solo archivo. Se importan también los clientes sin historial. La lista de precios sale de la hoja Clientes.</p><p className="mt-2">El resumen se vincula solo por una cédula o RUC exacto y único. Las filas de Historial con moneda o importe inválido se omiten completas para ese cliente; no crean facturas, pagos, saldos ni asientos. Un “$” requiere seleccionar la moneda explícitamente.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla con historial</Button></> : <><p className="mt-2">El número de cliente lo asigna automáticamente el sistema. Las cédulas o RUC duplicados se marcarán como errores. Los avisos, como una lista de precios inexistente, no bloquean las filas.</p><p className="mt-2">Para teléfonos, indica el Código país ISO (por ejemplo, NI o US) y escribe los dígitos nacionales sin guiones: 88888888 con NI o 2025550123 con US. También se acepta el número completo con + y prefijo internacional; en ese caso, conserva la celda como Texto.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></>}</div>
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel {isHistoricalImport ? 'de clientes e historial' : 'de clientes'}</label><Input ref={importFileInputRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); event.currentTarget.value = ''; }} />{importFile && <div className="flex flex-wrap items-center justify-between gap-2"><p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {isHistoricalImport ? `${historySource?.rows.length || 0} filas de historial · ${importRows.length} clientes` : `${importRows.length} clientes`}</p><Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-destructive hover:text-destructive" onClick={clearCustomerImportFile} disabled={previewLoading || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}</div>
             {isHistoricalImport && historySource && <section className="space-y-3 rounded-2xl border border-primary/20 bg-primary/[0.025] p-4">
@@ -1541,12 +1692,13 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
                 {renderHistoryColumnSelector('amountColumn', 'Importe total', true)}
                 {renderHistoryColumnSelector('activityTypeColumn', 'Tipo de historial por fila')}
                 {renderHistoryColumnSelector('measureColumn', 'Medida opcional')}
-                {renderHistoryColumnSelector('documentColumn', 'Número de documento opcional')}
+                {renderHistoryColumnSelector('documentColumn', 'Número de documento o préstamo opcional')}
                 {renderHistoryColumnSelector('currencyColumn', 'Moneda de origen')}
                 {renderHistoryColumnSelector('countryColumn', 'País del cliente (opcional)')}
-                {!historyConfig.activityTypeColumn && <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Tipo de historial</span><Input value={historyConfig.activityType} onChange={(event) => updateHistoryConfig('activityType', event.target.value)} placeholder="Estadías o Facturas" className="h-9 rounded-lg text-xs" disabled={previewLoading || importing} /></label>}
-                {historyConfig.measureColumn && <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Etiqueta de medida</span><Input value={historyConfig.measureLabel} onChange={(event) => updateHistoryConfig('measureLabel', event.target.value)} placeholder="Noches" className="h-9 rounded-lg text-xs" disabled={previewLoading || importing} /></label>}
-                {historyConfig.measureColumn && <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Unidad de medida (opcional)</span><Input value={historyConfig.measureUnit} onChange={(event) => updateHistoryConfig('measureUnit', event.target.value)} placeholder="noches" className="h-9 rounded-lg text-xs" disabled={previewLoading || importing} /></label>}
+                {!historyConfig.activityTypeColumn && <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Tipo de historial</span><Input value={historyConfig.activityType} onChange={(event) => updateHistoryConfig('activityType', event.target.value)} placeholder={historyProfile.activityType} className="h-9 rounded-lg text-xs" disabled={previewLoading || importing} /></label>}
+                <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Etiqueta del conteo</span><Input value={historyConfig.recordCountLabel} onChange={(event) => updateHistoryConfig('recordCountLabel', event.target.value)} placeholder={historyProfile.recordCountLabel} className="h-9 rounded-lg text-xs" disabled={previewLoading || importing} /></label>
+                {historyConfig.measureColumn && <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Etiqueta de medida</span><Input value={historyConfig.measureLabel} onChange={(event) => updateHistoryConfig('measureLabel', event.target.value)} placeholder={historyProfile.measureLabel || 'Medida'} className="h-9 rounded-lg text-xs" disabled={previewLoading || importing} /></label>}
+                {historyConfig.measureColumn && <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Unidad de medida (opcional)</span><Input value={historyConfig.measureUnit} onChange={(event) => updateHistoryConfig('measureUnit', event.target.value)} placeholder={historyProfile.measureUnit || 'unidad'} className="h-9 rounded-lg text-xs" disabled={previewLoading || importing} /></label>}
                 <label className="min-w-0 space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">Moneda explícita para filas vacías o con $</span><Select value={historyConfig.fallbackCurrency || '__none__'} onValueChange={(value) => updateHistoryConfig('fallbackCurrency', value === '__none__' ? '' : value as SupportedCurrency)} disabled={previewLoading || importing}><SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue placeholder="Revisar moneda" /></SelectTrigger><SelectContent><SelectItem value="__none__">Seleccionar moneda</SelectItem><SelectItem value="NIO">Córdobas (NIO)</SelectItem><SelectItem value="USD">Dólares (USD)</SelectItem></SelectContent></Select></label>
               </div>
               <p className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-3 text-[10px] leading-relaxed text-muted-foreground">{isHistoryOnlyImport ? 'Se requiere identificación para buscar una coincidencia exacta y única dentro del tenant. No se crean clientes y nunca se vincula por nombre; importes, moneda y medida inválidos dejan el resumen pendiente.' : 'La identificación es necesaria para vincular el historial. Los clientes sin cédula o RUC igual se cargarán, pero sin resumen. Totales o monedas inválidos omiten el resumen completo de ese cliente; los datos se revisan antes de importar y no se estiman.'}</p></> : <p className="rounded-xl border border-border/60 bg-background/60 p-3 text-xs text-muted-foreground">{isHistoryOnlyImport ? 'La hoja Historial no tiene registros para vincular.' : 'La hoja Historial está vacía. Se cargarán los clientes con sus listas de precios y sin resumen histórico.'}</p>}
@@ -1554,6 +1706,27 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5">{isHistoryOnlyImport ? <><li>Asigna las columnas y la moneda explícita.</li><li>Revisa identificación, conteo, medida e importe de cada resumen.</li><li>Confirma para vincular solo las coincidencias exactas y únicas; revisa después los casos sin coincidencia.</li></> : isHistoricalImport ? <><li>Asigna nombre, identificación, importe y moneda; completa el tipo de historial.</li><li>Revisa los clientes agrupados y el conteo, medida e importe de cada resumen.</li><li>Corrige los errores de identidad. Los datos históricos inválidos se conservan como aviso y no generan resumen para ese cliente.</li><li>Confirma escribiendo IMPORTAR. El historial queda separado de los movimientos del sistema.</li></> : <><li>Descarga la plantilla y completa los datos del cliente, sin código.</li><li>Carga el archivo; el sistema lo prepara sin mostrar cambios todavía.</li><li>Presiona “Previsualizar clientes” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; los clientes válidos recibirán su número automático.</li></>}</ol></div>
           </div>
           <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)} disabled={previewLoading}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar {isHistoricalImport ? 'clientes e historial' : 'clientes'}</Button>}</DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={historyProfileDialogOpen} onOpenChange={(open) => { if (!historyProfileSaving) setHistoryProfileDialogOpen(open); }}>
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-[min(92vw,560px)] overflow-y-auto rounded-3xl p-5 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Settings2 className="size-4 text-primary" /> Perfil de historial de la sucursal</DialogTitle>
+            <DialogDescription>Estos valores se aplican como predeterminados a futuras plantillas y previsualizaciones de esta sucursal. Las importaciones anteriores conservan sus etiquetas.</DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={saveHistoryProfile}>
+            <label className="block min-w-0 space-y-1.5"><span className="text-xs font-bold text-muted-foreground">Tipo de actividad predeterminado</span><Input required maxLength={80} value={historyProfileDraft.activityType} onChange={(event) => setHistoryProfileDraft((profile) => ({ ...profile, activityType: event.target.value }))} placeholder="Ej.: Préstamos, Estadías" className="h-10 rounded-xl" disabled={historyProfileSaving} /></label>
+            <label className="block min-w-0 space-y-1.5"><span className="text-xs font-bold text-muted-foreground">Etiqueta del conteo</span><Input required maxLength={80} value={historyProfileDraft.recordCountLabel} onChange={(event) => setHistoryProfileDraft((profile) => ({ ...profile, recordCountLabel: event.target.value }))} placeholder="Ej.: Número de préstamos" className="h-10 rounded-xl" disabled={historyProfileSaving} /></label>
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block min-w-0 space-y-1.5"><span className="text-xs font-bold text-muted-foreground">Etiqueta de medida (opcional)</span><Input maxLength={80} value={historyProfileDraft.measureLabel} onChange={(event) => setHistoryProfileDraft((profile) => ({ ...profile, measureLabel: event.target.value }))} placeholder="Ej.: Noches, Monto original" className="h-10 rounded-xl" disabled={historyProfileSaving} /></label>
+              <label className="block min-w-0 space-y-1.5"><span className="text-xs font-bold text-muted-foreground">Unidad (opcional)</span><Input maxLength={32} value={historyProfileDraft.measureUnit} onChange={(event) => setHistoryProfileDraft((profile) => ({ ...profile, measureUnit: event.target.value }))} placeholder="Ej.: noches, USD" className="h-10 rounded-xl" disabled={historyProfileSaving} /></label>
+            </div>
+            {historyProfileError && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">{historyProfileError}</p>}
+            <DialogFooter className="flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => setHistoryProfileDialogOpen(false)} disabled={historyProfileSaving}>Cancelar</Button>
+              <Button type="submit" disabled={historyProfileSaving}>{historyProfileSaving ? 'Guardando…' : 'Guardar perfil'}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
       <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, validando columnas y preparando los clientes para revisión." />

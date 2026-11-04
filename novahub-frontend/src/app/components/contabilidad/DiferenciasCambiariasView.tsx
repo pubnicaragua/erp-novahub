@@ -13,6 +13,7 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { useAuth } from '../../contexts/AuthContext';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { formatDateOnly, todayIso } from '../../utils/dateFormat';
 
 type RevaluationPreview = {
   asOfDate: string;
@@ -63,13 +64,13 @@ type RevaluationRun = {
   reversal?: { id: string; number: string; status: string } | null;
 };
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+function today(timeZone?: string) {
+  return todayIso(timeZone);
 }
 
 function formatDate(value?: string | null) {
   if (!value) return '—';
-  return new Date(value).toLocaleDateString('es-NI');
+  return formatDateOnly(value);
 }
 
 function rateSourceLabel(source?: string | null) {
@@ -81,14 +82,14 @@ function rateSourceLabel(source?: string | null) {
 }
 
 export function DiferenciasCambiariasView() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canSaveRun = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'saveRun');
   const canCreateJournal = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'createJournal');
   const canPost = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'post');
   const canCreateReversal = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'createReversal');
-  const [asOfDate, setAsOfDate] = useState(today());
+  const [asOfDate, setAsOfDate] = useState(() => today(user?.clientTenant?.timeZone));
   const [rateInput, setRateInput] = useState('');
-  const [appliedAsOfDate, setAppliedAsOfDate] = useState(today());
+  const [appliedAsOfDate, setAppliedAsOfDate] = useState(() => today(user?.clientTenant?.timeZone));
   const [appliedRate, setAppliedRate] = useState('');
   const [run, setRun] = useState<RevaluationRun | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);

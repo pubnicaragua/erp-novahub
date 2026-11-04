@@ -4,6 +4,7 @@ import type {
   RecurringInvoice, PaymentReceived, SalesReturn,
   CreditNote, PaginatedResponse, ApiFilters,
 } from '../types';
+import type { CustomerHistoryProfile } from '../utils/customer-history-profile';
 
 export interface CustomerPortalAdminAccess {
   customerId: string;
@@ -23,6 +24,16 @@ export const customersService = {
   getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Pick<Customer, 'id' | 'code' | 'name' | 'companyName' | 'status' | 'phone' | 'contactPhone' | 'openingBalanceDue' | 'openingBalanceFavor'>>>('/sales/customers/lookup', { params: filters as any, signal }),
   getLookupById: (id: string, signal?: AbortSignal, purpose?: string) => api.get<Pick<Customer, 'id' | 'code' | 'name' | 'companyName' | 'status' | 'phone' | 'contactPhone'>>(`/sales/customers/lookup/${id}`, { params: purpose ? { purpose } : undefined, signal }),
   getById: (id: string) => api.get<Customer>(`/sales/customers/${id}`),
+  getCustomerHistoryProfile: () => api.get<CustomerHistoryProfile>('/sales/customers/history-profile'),
+  saveCustomerHistoryProfile: (profile: Pick<CustomerHistoryProfile, 'activityType' | 'recordCountLabel' | 'measureLabel' | 'measureUnit'>) =>
+    api.put<CustomerHistoryProfile>('/sales/customers/history-profile', profile),
+  getCustomerLoansConfig: () => api.get<{ enabled: boolean }>('/sales/customer-loans/config'),
+  getCustomerLoans: (customerId: string) => api.get<any[]>(`/sales/customers/${customerId}/loans`),
+  getLoanMoraTypes: () => api.get<any[]>('/sales/customer-loans/mora-types'),
+  createLoanMoraType: (data: { name: string; description: string }) => api.post<any>('/sales/customer-loans/mora-types', data),
+  updateLoanMoraType: (id: string, data: { name?: string; description?: string; isActive?: boolean }) => api.patch<any>(`/sales/customer-loans/mora-types/${id}`, data),
+  createCustomerLoan: (customerId: string, data: Record<string, unknown>, idempotencyKey: string) =>
+    api.idempotentPost<any>(`/sales/customers/${customerId}/loans`, data, idempotencyKey),
   create: (data: Partial<Customer>) => api.post<Customer>('/sales/customers', data),
   importMassive: (data: {
     openingBalanceDate?: string;
@@ -32,6 +43,7 @@ export const customersService = {
       identifier: string;
       activityType: string;
       recordCount: number;
+      recordCountLabel?: string;
       measureLabel?: string | null;
       measureValue?: number | null;
       measureUnit?: string | null;
@@ -42,7 +54,7 @@ export const customersService = {
   }) => api.post<{ total: number; created: number; historicalSummariesCreated?: number; historicalSummariesSkipped?: number; historicalSummariesUnmatched?: number; skipped: number; errors: string[]; warnings: string[] }>('/sales/customers/import', data),
   update: (id: string, data: Partial<Customer>) => api.patch<Customer>(`/sales/customers/${id}`, data),
   setStatus: (id: string, status: Customer['status']) => api.patch<Customer>(`/sales/customers/${id}/status`, { status }),
-  delete: (id: string) => api.delete<void>(`/sales/customers/${id}`),
+  delete: (id: string, confirmUnlinkForceSalesPoint = false) => api.delete<void>(`/sales/customers/${id}${confirmUnlinkForceSalesPoint ? '?confirmUnlinkForceSalesPoint=true' : ''}`),
   getPortalAccess: (id: string) => api.get<any>(`/customer-portal/admin/customers/${id}/access`),
   savePortalAccess: (id: string, data: { email: string; password?: string; isActive?: boolean }) => api.put<any>(`/customer-portal/admin/customers/${id}/access`, data),
   setPortalAccessStatus: (id: string, isActive: boolean) => api.patch<any>(`/customer-portal/admin/customers/${id}/access/status`, { isActive }),

@@ -99,7 +99,7 @@ function HistoricalSummaryPreview({ summaries, compact = false }: { summaries?: 
     const measureLabel = summary.measureLabel || 'medida';
     const measureUnit = String(summary.measureUnit || '').trim();
     const extraUnit = measureUnit && !measureLabel.toLocaleLowerCase().includes(measureUnit.toLocaleLowerCase()) ? ` ${measureUnit}` : '';
-    return `${summary.activityType}: ${summary.recordCount} registros${summary.measureValue !== null && summary.measureValue !== undefined ? ` · ${summary.measureValue} ${measureLabel}${extraUnit}` : ''} · ${formatCurrencyAmount(summary.amount, summary.currency, true)}`;
+    return `${summary.activityType} · ${summary.recordCountLabel || 'Registros'}: ${summary.recordCount}${summary.measureValue !== null && summary.measureValue !== undefined ? ` · ${summary.measureValue} ${measureLabel}${extraUnit}` : ''} · ${formatCurrencyAmount(summary.amount, summary.currency, true)}`;
   });
   if (compact) {
     const label = `Historial importado: ${summaryLines.join('; ')}`;

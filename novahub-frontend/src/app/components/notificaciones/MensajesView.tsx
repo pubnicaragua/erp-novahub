@@ -6,6 +6,7 @@ import {
   Bot,
   CheckCheck,
   CircleHelp,
+  LifeBuoy,
   Loader2,
   MailPlus,
   MessageCircle,
@@ -16,6 +17,7 @@ import {
 import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { ChatMessage, Message, MessageAttachment, MessageParticipant } from '../../types';
+import { createIdempotencyKey } from '../../services/api';
 import { messagesService } from '../../services/notificaciones.service';
 import { supportConversationsService, type SupportConversation } from '../../services/support-conversations.service';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
@@ -46,6 +48,7 @@ interface MensajesViewProps {
 }
 
 type MessageFilter = 'all' | 'unread' | 'direct' | 'support';
+type ComposeMode = 'DIRECT' | 'SUPPORT';
 type AttachmentComposerState = { attachments: MessageAttachment[]; uploading: boolean; hasError: boolean };
 const EMPTY_ATTACHMENT_STATE: AttachmentComposerState = { attachments: [], uploading: false, hasError: false };
 
@@ -98,6 +101,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [composeMode, setComposeMode] = useState<ComposeMode>('DIRECT');
   const [recipientId, setRecipientId] = useState('');
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
@@ -117,6 +121,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   const messageEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const lastSelectedIdRef = useRef<string | null>(null);
+  const supportCreateAttemptRef = useRef<{ signature: string; key: string } | null>(null);
   const supportConversationsQuery = useTenantQuery<SupportConversation[]>(
     ['support-conversations', user?.id || 'current', 'branch-inbox'],
     signal => supportConversationsService.getConversations(signal),
@@ -130,11 +135,12 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   const recipientsQuery = useTenantQuery<MessageParticipant[]>(
     ['notifications', 'recipients'],
     signal => messagesService.getRecipients(signal),
-    { enabled: composeOpen && canPerform('NOTIFICATIONS_MESSAGES', 'create') },
+    { enabled: composeOpen && composeMode === 'DIRECT' && canPerform('NOTIFICATIONS_MESSAGES', 'create') },
   );
   const recipients = asList(recipientsQuery.data) as MessageParticipant[];
   const recipientsLoading = recipientsQuery.isLoading || recipientsQuery.isFetching;
-  const composeFeedbackError = composeError || (composeOpen && recipientsQuery.isError ? 'No pudimos cargar las personas de tu empresa.' : '');
+  const composeFeedbackError = composeError || (composeOpen && composeMode === 'DIRECT' && recipientsQuery.isError ? 'No pudimos cargar las personas de tu empresa.' : '');
+  const canCreateSupportConversation = Boolean(!user?.isPlatformSupportAgent && canPerform('NOTIFICATIONS_MESSAGES', 'create'));
 
   useEffect(() => {
     if (selectedId && !threads.some((thread) => thread.id === selectedId)) {
@@ -222,9 +228,11 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
     setReplyError('');
   };
 
-  const openComposer = async () => {
+  const openComposer = (mode: ComposeMode = 'DIRECT') => {
     setComposeAttachmentState(EMPTY_ATTACHMENT_STATE);
     setComposeAttachmentResetKey((current) => current + 1);
+    setComposeMode(mode);
+    setRecipientId('');
     setComposeOpen(true);
     setComposeError('');
   };
@@ -236,14 +244,18 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
     setComposeAttachmentState(EMPTY_ATTACHMENT_STATE);
     setComposeAttachmentResetKey((current) => current + 1);
     setComposeError('');
+    setComposeMode('DIRECT');
+    supportCreateAttemptRef.current = null;
   };
 
   const sendNewMessage = async (event: React.FormEvent) => {
     event.preventDefault();
     const cleanSubject = subject.trim();
     const cleanContent = content.trim();
-    if (!recipientId || !cleanSubject || (!cleanContent && !composeAttachmentState.attachments.length)) {
-      setComposeError('Elegí un destinatario, completá el asunto y escribe un mensaje o adjunta un archivo.');
+    if ((composeMode === 'DIRECT' && !recipientId) || !cleanSubject || (!cleanContent && !composeAttachmentState.attachments.length)) {
+      setComposeError(composeMode === 'SUPPORT'
+        ? 'Completá el asunto y escribe un mensaje o adjunta un archivo.'
+        : 'Elegí un destinatario, completá el asunto y escribe un mensaje o adjunta un archivo.');
       return;
     }
     if (composeAttachmentState.uploading || composeAttachmentState.hasError) return;
@@ -251,18 +263,32 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
     setSending(true);
     setComposeError('');
     try {
-      const created = await messagesService.create({
-        recipientId,
-        title: cleanSubject,
-        content: cleanContent,
-        attachmentUploadIds: composeAttachmentState.attachments.map((attachment) => attachment.id),
-      });
-      queryClient.setQueryData<Message[]>(directMessagesCacheKey, (current) => upsertMessageThread(current, created));
+      const attachmentUploadIds = composeAttachmentState.attachments.map((attachment) => attachment.id);
+      const created = composeMode === 'SUPPORT'
+        ? await (() => {
+          const payload = { title: cleanSubject, content: cleanContent, attachmentUploadIds };
+          const signature = JSON.stringify(payload);
+          if (!supportCreateAttemptRef.current || supportCreateAttemptRef.current.signature !== signature) {
+            supportCreateAttemptRef.current = {
+              signature,
+              key: createIdempotencyKey('branch-support'),
+            };
+          }
+          return supportConversationsService.createConversation(payload, supportCreateAttemptRef.current.key);
+        })()
+        : await messagesService.create({
+          recipientId,
+          title: cleanSubject,
+          content: cleanContent,
+          attachmentUploadIds,
+        });
+      const cacheKey = composeMode === 'SUPPORT' ? supportConversationsCacheKey : directMessagesCacheKey;
+      queryClient.setQueryData<Message[]>(cacheKey, (current) => upsertMessageThread(current, created));
       setSelectedId(created.id);
       setMobileThreadOpen(true);
       setComposeOpen(false);
       resetComposer();
-      toast.success('Mensaje enviado');
+      toast.success(composeMode === 'SUPPORT' ? 'Mensaje enviado a Soporte Técnico' : 'Mensaje enviado');
     } catch (error: any) {
       setComposeError(error?.message || 'No pudimos enviar el mensaje.');
     } finally {
@@ -313,19 +339,27 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
       >
         <aside className={cn('w-full flex-col border-r border-border/60 bg-background/45 lg:flex lg:w-[370px] lg:shrink-0', mobileThreadOpen ? 'hidden' : 'flex')}>
           <div className="border-b border-border/60 p-4">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
+            <div className="mb-4 flex min-w-0 flex-col gap-2">
+              <div className="min-w-0">
                 <h2 className="text-xl font-bold tracking-tight">Mensajes</h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {loading ? 'Calculando conversaciones…' : `${searchFiltered.length} conversaciones · ${unreadTotal} sin leer`}
                 </p>
               </div>
-              {canPerform('NOTIFICATIONS_MESSAGES', 'create') && (
-                <Button onClick={openComposer} size="sm" className="h-9 gap-2 rounded-lg px-3" data-testid="new-message-button">
-                  <MailPlus className="size-4" />
-                  <span>Nuevo</span>
-                </Button>
-              )}
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 self-end">
+                {canPerform('NOTIFICATIONS_MESSAGES', 'create') && (
+                  <Button onClick={() => openComposer('DIRECT')} size="sm" className="h-9 gap-2 rounded-lg px-3" data-testid="new-message-button">
+                    <MailPlus className="size-4" />
+                    <span>Nuevo</span>
+                  </Button>
+                )}
+                {canCreateSupportConversation && (
+                  <Button onClick={() => openComposer('SUPPORT')} size="sm" variant="outline" className="h-9 gap-2 rounded-lg px-3" aria-label="Nuevo mensaje a soporte técnico" title="Nuevo mensaje a soporte técnico" data-testid="new-support-message-button">
+                    <LifeBuoy className="size-4" />
+                    <span>Soporte</span>
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -441,9 +475,16 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
               <h3 className="text-lg font-semibold">Elegí una conversación</h3>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">Leé mensajes de tu equipo o iniciá una conversación nueva.</p>
               {canPerform('NOTIFICATIONS_MESSAGES', 'create') && (
-                <Button onClick={openComposer} variant="outline" className="mt-5 gap-2">
-                  <MailPlus className="size-4" /> Nuevo mensaje
-                </Button>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  <Button onClick={() => openComposer('DIRECT')} variant="outline" className="gap-2">
+                    <MailPlus className="size-4" /> Nuevo mensaje
+                  </Button>
+                  {canCreateSupportConversation && (
+                    <Button onClick={() => openComposer('SUPPORT')} variant="outline" className="gap-2">
+                      <LifeBuoy className="size-4" /> Mensaje a soporte
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           ) : (
@@ -605,29 +646,43 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
           <form onSubmit={sendNewMessage} className="space-y-5" data-testid="new-message-form">
             <DialogHeader>
-              <DialogTitle>Nuevo mensaje</DialogTitle>
-              <DialogDescription>Iniciá una conversación privada con alguien de tu empresa.</DialogDescription>
+              <DialogTitle>{composeMode === 'SUPPORT' ? 'Nuevo mensaje a Soporte Técnico' : 'Nuevo mensaje'}</DialogTitle>
+              <DialogDescription>
+                {composeMode === 'SUPPORT'
+                  ? 'Iniciá una conversación privada que recibirán los agentes asignados a esta sucursal.'
+                  : 'Iniciá una conversación privada con alguien de tu empresa.'}
+              </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-2">
-              <label htmlFor="message-recipient" className="text-sm font-medium">Para</label>
-              <select
-                id="message-recipient"
-                value={recipientId}
-                onChange={(event) => setRecipientId(event.target.value)}
-                disabled={recipientsLoading || sending}
-                className="flex h-11 w-full rounded-lg border border-input bg-input-background px-3 text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
-                data-testid="message-recipient"
-              >
-                <option value="">{recipientsLoading ? 'Cargando personas…' : 'Seleccioná una persona'}</option>
-                {recipients.map((recipient) => (
-                  <option key={recipient.id} value={recipient.id}>{recipient.name} · {recipient.email}</option>
-                ))}
-              </select>
-              {!recipientsLoading && recipients.length === 0 && !composeFeedbackError && (
-                <p className="text-xs text-muted-foreground">No hay otros usuarios activos en esta empresa.</p>
-              )}
-            </div>
+            {composeMode === 'SUPPORT' ? (
+              <div className="flex min-w-0 items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><LifeBuoy className="size-5" /></span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">Soporte Técnico</span>
+                  <span className="block text-xs text-muted-foreground">Agentes con acceso asignado a esta sucursal</span>
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label htmlFor="message-recipient" className="text-sm font-medium">Para</label>
+                <select
+                  id="message-recipient"
+                  value={recipientId}
+                  onChange={(event) => setRecipientId(event.target.value)}
+                  disabled={recipientsLoading || sending}
+                  className="flex h-11 w-full max-w-full rounded-lg border border-input bg-input-background px-3 text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
+                  data-testid="message-recipient"
+                >
+                  <option value="">{recipientsLoading ? 'Cargando personas…' : 'Seleccioná una persona'}</option>
+                  {recipients.map((recipient) => (
+                    <option key={recipient.id} value={recipient.id}>{recipient.name} · {recipient.email}</option>
+                  ))}
+                </select>
+                {!recipientsLoading && recipients.length === 0 && !composeFeedbackError && (
+                  <p className="text-xs text-muted-foreground">No hay otros usuarios activos en esta empresa.</p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <label htmlFor="message-subject" className="text-sm font-medium">Asunto</label>
@@ -648,7 +703,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                 id="message-content"
                 value={content}
                 onChange={(event) => setContent(event.target.value.slice(0, 4000))}
-                placeholder="Escribí el mensaje con el contexto necesario…"
+                placeholder={composeMode === 'SUPPORT' ? 'Describe el problema o la ayuda que necesitas…' : 'Escribí el mensaje con el contexto necesario…'}
                 className="min-h-36"
                 disabled={sending}
                 data-testid="message-content"
@@ -657,8 +712,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
             </div>
 
             <MessageAttachmentComposer
-              key={`new-message-${composeAttachmentResetKey}`}
-              kind="DIRECT"
+              key={`new-message-${composeMode}-${composeAttachmentResetKey}`}
+              kind={composeMode === 'SUPPORT' ? 'SUPPORT' : 'DIRECT'}
               disabled={sending}
               onChange={onComposeAttachmentsChange}
             />
@@ -669,12 +724,12 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
               <Button type="button" variant="outline" onClick={() => setComposeOpen(false)} disabled={sending}>Cancelar</Button>
               <Button
                 type="submit"
-                disabled={sending || recipientsLoading || recipients.length === 0 || composeAttachmentState.uploading || composeAttachmentState.hasError || (!content.trim() && !composeAttachmentState.attachments.length)}
+                disabled={sending || (composeMode === 'DIRECT' && (recipientsLoading || recipients.length === 0)) || composeAttachmentState.uploading || composeAttachmentState.hasError || (!content.trim() && !composeAttachmentState.attachments.length)}
                 className="gap-2"
                 data-testid="send-new-message-button"
               >
                 {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                Enviar mensaje
+                {composeMode === 'SUPPORT' ? 'Enviar a soporte' : 'Enviar mensaje'}
               </Button>
             </DialogFooter>
           </form>

@@ -18,6 +18,15 @@ const destination = getNotificationNavigation(notification);
 assert.equal(destination.module, 'fuerza-comercial');
 assert.equal(destination.targetId, 'prospect-123', 'El destino conserva el ID exacto del punto');
 
+const routeDestination = getNotificationNavigation({
+  title: 'Te asignaron una ruta comercial',
+  message: 'La ruta está lista para revisar.',
+  link: 'fuerza-comercial',
+  metadata: { navigation: { module: 'fuerza-comercial', routeId: 'route-456', targetId: 'route-456' } },
+});
+assert.equal(routeDestination.module, 'fuerza-comercial');
+assert.equal(routeDestination.routeId, 'route-456', 'El destino conserva el ID exacto de la ruta');
+
 const inboxSource = await readFile(new URL('../src/app/components/notificaciones/InboxView.tsx', import.meta.url), 'utf8');
 assert.match(inboxSource, /getNotificationNavigation\(item\)/, 'El inbox debe abrir también destinos anidados de notificación');
 assert.match(inboxSource, /detail: destination/, 'El inbox debe entregar el destino completo al shell de navegación');

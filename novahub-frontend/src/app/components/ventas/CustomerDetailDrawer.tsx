@@ -90,7 +90,9 @@ import { runWithReportRequestLimit } from '../../utils/report-request-limiter';
 import { toast } from '@/app/services/toast';
 import type { Customer, Estimate, Invoice } from '../../types';
 import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
+import { CustomerLoansPanel } from './CustomerLoansPanel';
 import { countryCodeFromLegacy, formatCustomerPhoneForDisplay } from '../../utils/customer-data';
+import { getAuditOperationMethodLabel } from '../ui/audit-operation-method';
 
 interface CustomerDetailDrawerProps {
   customerId: string | null;
@@ -98,9 +100,13 @@ interface CustomerDetailDrawerProps {
   customerSnapshot?: Customer | null;
   canExport?: boolean;
   extraActions?: ReactNode;
+  customerLoansEnabled?: boolean;
+  canCreateLoan?: boolean;
+  canManageMora?: boolean;
+  onLoansUpdated?: () => void;
 }
 
-type TabKey = 'general' | 'movimientos' | 'resumen-historico' | 'historial';
+type TabKey = 'general' | 'movimientos' | 'resumen-historico' | 'historial' | 'prestamos';
 type MovementFilter = 'ALL' | 'Factura' | 'Orden de venta' | 'Cotización' | 'Nota de crédito' | 'Crédito' | 'Pago recibido' | 'Factura recurrente';
 type HistoryExportScope = 'ALL' | 'FILTERED';
 type HistoryExportCurrency = 'NIO' | 'USD';
@@ -206,6 +212,10 @@ export function CustomerDetailDrawer({
   customerSnapshot,
   canExport = true,
   extraActions,
+  customerLoansEnabled = false,
+  canCreateLoan = false,
+  canManageMora = false,
+  onLoansUpdated,
 }: CustomerDetailDrawerProps) {
   const { baseCurrency, formatConvertedAmount, formatExplicitAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
   const { user } = useAuth();
@@ -355,6 +365,9 @@ export function CustomerDetailDrawer({
   }, [customerId]);
 
   const customer = detail ?? customerSnapshot ?? null;
+  const showCustomerLoans = customerLoansEnabled
+    || Number(customer?.customerLoansSummary?.totalCount || 0) > 0
+    || Number(customer?.customerLoans?.length || 0) > 0;
   const customerCountryCode = String(customer?.countryCode || countryCodeFromLegacy(customer?.country) || 'NI');
   const customerTaxLabel = customerCountryCode === 'NI' ? 'Cédula' : customerCountryCode === 'CL' ? 'RUT' : 'Identificación fiscal';
   const customerRucLabel = customerCountryCode === 'CL' ? 'RUT / identificación' : customerCountryCode === 'PE' ? 'RUC' : 'RUC';
@@ -589,6 +602,9 @@ export function CustomerDetailDrawer({
               <TabsTrigger value="historial" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
                 <History className="size-3.5" /> Historial
               </TabsTrigger>
+              {showCustomerLoans && <TabsTrigger value="prestamos" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
+                <Banknote className="size-3.5" /> Préstamos
+              </TabsTrigger>}
             </TabsList>
           </SheetHeader>
 
@@ -781,7 +797,7 @@ export function CustomerDetailDrawer({
                             <div className="min-w-0">
                               <p className="break-words text-xs font-black text-foreground">{summary.activityType}</p>
                               <p className="mt-1 break-words text-[10px] leading-relaxed text-muted-foreground">
-                                {Number(summary.recordCount || 0).toLocaleString('es-NI')} registros
+                                {summary.recordCountLabel || 'Registros'}: {Number(summary.recordCount || 0).toLocaleString('es-NI')}
                                 {summary.measureValue !== null && summary.measureValue !== undefined ? ` · ${summary.measureLabel || 'Medida'}: ${Number(summary.measureValue).toLocaleString('es-NI')}${summary.measureUnit ? ` ${summary.measureUnit}` : ''}` : ''}
                               </p>
                             </div>
@@ -837,7 +853,7 @@ export function CustomerDetailDrawer({
                           </div>
                           <div className={`grid gap-2 ${summary.measureValue === null || summary.measureValue === undefined ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
                             <div className="min-w-0 rounded-lg border border-border/40 bg-background/70 p-2.5">
-                              <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Registros</p>
+                              <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">{summary.recordCountLabel || 'Registros'}</p>
                               <p className="mt-1 break-words text-base font-black tabular-nums text-foreground">{Number(summary.recordCount || 0).toLocaleString('es-NI')}</p>
                             </div>
                             {summary.measureValue !== null && summary.measureValue !== undefined && <div className="min-w-0 rounded-lg border border-border/40 bg-background/70 p-2.5">
@@ -860,6 +876,17 @@ export function CustomerDetailDrawer({
                 </Card>
               </TabsContent>
 
+              {showCustomerLoans && customer && <TabsContent value="prestamos" className="mt-0 min-w-0 space-y-4 outline-none">
+                <CustomerLoansPanel
+                  customerId={customer.id}
+                  customerName={customer.name}
+                  enabled={customerLoansEnabled}
+                  canCreateLoan={canCreateLoan}
+                  canManageMora={canManageMora}
+                  onUpdated={onLoansUpdated}
+                />
+              </TabsContent>}
+
               {/* Tab Historial */}
               <TabsContent value="historial" className="mt-0 space-y-4 outline-none">
                 <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">
@@ -871,11 +898,13 @@ export function CustomerDetailDrawer({
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Agregado por</p>
                       <p className="mt-1 break-words text-sm font-bold text-foreground">{historyLoading ? 'Cargando…' : createdAuditEvent ? auditActor(createdAuditEvent) : 'No disponible'}</p>
                       <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="size-3" /> {historyLoading ? 'Consultando auditoría…' : createdAuditEvent ? auditDate(createdAuditEvent) : 'Sin registro de auditoría'}</p>
+                      <p className="mt-1 text-[10px] font-semibold text-muted-foreground">Vía: {createdAuditEvent ? getAuditOperationMethodLabel(createdAuditEvent) : 'Método no registrado'}</p>
                     </div>
                     <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Última modificación por</p>
                       <p className="mt-1 break-words text-sm font-bold text-foreground">{historyLoading ? 'Cargando…' : updatedAuditEvent ? auditActor(updatedAuditEvent) : 'Sin modificaciones registradas'}</p>
                       <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="size-3" /> {historyLoading ? 'Consultando auditoría…' : updatedAuditEvent ? auditDate(updatedAuditEvent) : '—'}</p>
+                      {updatedAuditEvent && <p className="mt-1 text-[10px] font-semibold text-muted-foreground">Vía: {getAuditOperationMethodLabel(updatedAuditEvent)}</p>}
                     </div>
                   </div>
                   <div className="space-y-4 pl-2 border-l-2 border-border/40 ml-2 pt-1">
@@ -886,7 +915,7 @@ export function CustomerDetailDrawer({
                       const action = String(event.action || '').toUpperCase();
                       const title = action === 'CREATE' ? 'Cliente registrado' : action === 'UPDATE' ? 'Datos del cliente modificados' : action === 'DELETE' ? 'Cliente eliminado' : 'Cambio del registro';
                       const actorLabel = action === 'CREATE' ? 'Agregado por' : 'Modificado por';
-                      return <div key={event.id} className="relative space-y-1 pl-4"><div className="absolute -left-[21px] top-1 size-3 rounded-full border-2 border-background bg-primary" /><p className="text-xs font-bold text-foreground">{title}</p><p className="text-[11px] text-muted-foreground">{changes || details.fields_updated || 'Actualización registrada'}</p><p className="flex items-center gap-1 text-[11px] text-muted-foreground"><User className="size-3" />{actorLabel}: <span className="font-bold text-foreground">{auditActor(event)}</span></p><p className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground"><Clock className="size-3" />{event.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : '—'}</p></div>;
+                      return <div key={event.id} className="relative space-y-1 pl-4"><div className="absolute -left-[21px] top-1 size-3 rounded-full border-2 border-background bg-primary" /><p className="text-xs font-bold text-foreground">{title}</p><p className="text-[11px] text-muted-foreground">{changes || details.fields_updated || 'Actualización registrada'}</p><p className="flex items-center gap-1 text-[11px] text-muted-foreground"><User className="size-3" />{actorLabel}: <span className="font-bold text-foreground">{auditActor(event)}</span></p><p className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground"><Clock className="size-3" />{event.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : '—'}</p><p className="text-[10px] font-semibold text-muted-foreground">Vía: {getAuditOperationMethodLabel(event)}</p></div>;
                     }) : <>
                     {customer?.createdAt && (
                       <div className="relative pl-4 space-y-1">

@@ -59,9 +59,11 @@ test.describe('NovaHub ERP — catálogo de Inventario y stock inicial', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           statusCode: 409,
-          code: 'PRODUCT_SIMILAR_MATCH',
-          message: 'Se encontró una posible coincidencia.',
-          matches: possibleMatchFor(seedData, code),
+          message: {
+            code: 'PRODUCT_SIMILAR_MATCH',
+            message: 'Se encontró una posible coincidencia.',
+            matches: possibleMatchFor(seedData, code),
+          },
         }),
       });
     });
@@ -79,11 +81,26 @@ test.describe('NovaHub ERP — catálogo de Inventario y stock inicial', () => {
       await page.getByTestId('inventory-product-save').click();
       const decision = page.getByRole('dialog').filter({ hasText: /posible coincidencia/i }).last();
       await expect(decision).toBeVisible();
+      await expect(decision.getByRole('alert')).toBeVisible();
+      await expect(decision.locator('[aria-label="Decisión sobre coincidencias de productos"]')).toBeFocused();
       await expect(decision.getByRole('button', { name: 'Editar producto existente' })).toBeVisible();
       await expect(decision.getByRole('button', { name: 'Crear producto nuevo' })).toBeVisible();
+
+      for (const viewport of [
+        { width: 375, height: 844 },
+        { width: 768, height: 1024 },
+        { width: 1024, height: 800 },
+        { width: 1440, height: 900 },
+      ]) {
+        await page.setViewportSize(viewport);
+        await expect(decision.getByRole('alert')).toBeInViewport();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      }
+      await page.setViewportSize({ width: 1280, height: 800 });
       await decision.getByRole('button', { name: 'Crear producto nuevo' }).click();
 
       await expect(decision).toBeVisible();
+      await expect(decision.locator('[aria-label="Decisión sobre coincidencias de productos"]')).toBeFocused();
       await expect(page.getByTestId('inventory-product-code')).toHaveValue(code);
       await expect(page.getByTestId('inventory-product-name')).toHaveValue(name);
       const createdResponsePromise = page.waitForResponse((response) => (
@@ -110,7 +127,7 @@ test.describe('NovaHub ERP — catálogo de Inventario y stock inicial', () => {
     }
   });
 
-  test('un SKU exacto permite abrir el producto existente para editarlo, sin opción de duplicarlo', async ({
+  test('un SKU exacto bloquea la creación, conserva el formulario y enfoca el campo para corregirlo', async ({
     page,
     seedData,
   }) => {
@@ -121,27 +138,115 @@ test.describe('NovaHub ERP — catálogo de Inventario y stock inicial', () => {
     await inventoryPage.openCreateProduct();
     await completeProductDraft(page, {
       code: exactCode,
-      name: seedData.product.name,
+      name: `Registro distinto con SKU existente ${exactCode}`,
       categoryName: seedData.category.name,
       warehouseName: seedData.warehouse.name,
     });
 
-    await expect(page.getByText(/este SKU ya está utilizado/i)).toBeVisible();
+    const codeInput = page.getByTestId('inventory-product-code');
+    await expect(page.getByText(/ya existe.*ingresa otro SKU/i)).toBeVisible();
     await expect(page.getByTestId('inventory-product-save')).toBeEnabled();
     await page.getByTestId('inventory-product-save').click();
-    const decision = page.getByRole('dialog').filter({ hasText: /posible coincidencia/i }).last();
-    await expect(decision).toBeVisible();
-    await expect(decision.getByRole('button', { name: 'Editar producto existente' })).toBeVisible();
-    await expect(decision.getByRole('button', { name: 'Crear producto nuevo' })).toHaveCount(0);
-    await decision.getByRole('button', { name: 'Editar producto existente' }).click();
+    await expect(codeInput).toBeFocused();
+    await expect(codeInput).toHaveValue(exactCode);
+    await expect(page.getByTestId('inventory-product-name')).toHaveValue(`Registro distinto con SKU existente ${exactCode}`);
+    await expect(page.getByTestId('inventory-product-price-RETAIL')).toHaveValue('150');
+    await expect(page.getByTestId('inventory-product-cost')).toHaveValue('90');
+    await expect(page.getByTestId('inventory-product-similarity-decision')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Crear producto nuevo' })).toHaveCount(0);
+  });
 
-    const editor = page.getByRole('dialog').filter({ hasText: 'Editar Producto' }).last();
-    await expect(editor).toBeVisible();
-    await expect.poll(() => editor.locator('input').evaluateAll((inputs) => (
-      inputs.some((input) => (input as HTMLInputElement).value === exactCode)
-    ))).toBe(true);
-    await editor.getByRole('button', { name: 'Cancelar' }).click();
-    await expect(page.getByRole('button', { name: /^Nuevo$/i })).toBeVisible();
+  test('un SKU repetido en un lote vuelve al formulario sin perder sus datos', async ({ page, seedData }) => {
+    const inventoryPage = new InventoryPage(page);
+    const exactCode = String(seedData.product.code);
+    const enteredName = `Fila con SKU existente ${exactCode}`;
+
+    await page.route('**/api/inventory/products/check-code**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ exists: false }),
+      });
+    });
+
+    await inventoryPage.openProducts();
+    await inventoryPage.openCreateProduct();
+    await completeProductDraft(page, {
+      code: exactCode,
+      name: enteredName,
+      categoryName: seedData.category.name,
+      warehouseName: seedData.warehouse.name,
+    });
+    await page.getByTestId('inventory-product-add-to-list').click();
+    await expect(page.getByText(enteredName)).toBeVisible();
+    await page.getByTestId('inventory-product-save').click();
+
+    const codeInput = page.getByTestId('inventory-product-code');
+    await expect(codeInput).toBeFocused();
+    await expect(codeInput).toHaveValue(exactCode);
+    await expect(page.getByTestId('inventory-product-name')).toHaveValue(enteredName);
+    await expect(page.getByTestId('inventory-product-price-RETAIL')).toHaveValue('150');
+    await expect(page.getByTestId('inventory-product-cost')).toHaveValue('90');
+    await expect(page.getByText(/ya existe.*ingresa otro SKU/i)).toBeVisible();
+    await expect(page.getByText(enteredName)).toHaveCount(0);
+    await expect(page.getByTestId('inventory-product-similarity-decision')).toHaveCount(0);
+  });
+
+  test('si el servidor rechaza el SKU repetido al guardar, conserva los datos y enfoca el SKU', async ({
+    page,
+    tenantSession,
+    seedData,
+  }) => {
+    const inventoryPage = new InventoryPage(page);
+    const exactCode = String(seedData.product.code);
+    const uniqueName = `Prueba SKU duplicado ${tenantSession.runId}`;
+    let createAttempts = 0;
+
+    await page.route('**/api/inventory/products/check-similar', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ matches: [] }),
+      });
+    });
+    await page.route('**/api/inventory/products/check-code**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ exists: false }),
+      });
+    });
+    await page.route(/\/api\/inventory\/products\/?$/, async (route) => {
+      if (route.request().method() === 'POST') createAttempts += 1;
+      await route.continue();
+    });
+
+    await inventoryPage.openProducts();
+    await inventoryPage.openCreateProduct();
+    await completeProductDraft(page, {
+      code: exactCode,
+      name: uniqueName,
+      categoryName: seedData.category.name,
+      warehouseName: seedData.warehouse.name,
+    });
+
+    const conflictResponse = page.waitForResponse((response) => (
+      response.request().method() === 'POST'
+      && /\/api\/inventory\/products\/?$/.test(new URL(response.url()).pathname)
+      && response.status() === 409
+    ));
+    await page.getByTestId('inventory-product-save').click();
+    await conflictResponse;
+
+    const codeInput = page.getByTestId('inventory-product-code');
+    await expect(codeInput).toBeFocused();
+    await expect(codeInput).toHaveValue(exactCode);
+    await expect(page.getByTestId('inventory-product-name')).toHaveValue(uniqueName);
+    await expect(page.getByTestId('inventory-product-price-RETAIL')).toHaveValue('150');
+    await expect(page.getByTestId('inventory-product-cost')).toHaveValue('90');
+    await expect(page.getByText(/ya existe.*ingresa otro SKU/i)).toBeVisible();
+    await expect(page.getByTestId('inventory-product-similarity-decision')).toHaveCount(0);
+    expect(createAttempts).toBe(1);
   });
 
   test('si falla la consulta del producto parecido, conserva el formulario y permite reintentar', async ({
@@ -215,9 +320,11 @@ test.describe('NovaHub ERP — catálogo de Inventario y stock inicial', () => {
           contentType: 'application/json',
           body: JSON.stringify({
             statusCode: 409,
-            code: 'PRODUCT_SIMILAR_MATCH',
-            message: 'Se encontró una posible coincidencia.',
-            matches: possibleMatchFor(seedData, secondCode),
+            message: {
+              code: 'PRODUCT_SIMILAR_MATCH',
+              message: 'Se encontró una posible coincidencia.',
+              matches: possibleMatchFor(seedData, secondCode),
+            },
           }),
         });
         return;
@@ -313,11 +420,12 @@ test.describe('NovaHub ERP — catálogo de Inventario y stock inicial', () => {
       warehouseName: seedData.warehouse.name,
     });
     await page.getByTestId('inventory-product-save').click();
-    decision = page.getByRole('dialog').filter({ hasText: /posible coincidencia/i }).last();
-    await expect(decision.getByRole('button', { name: 'Editar producto existente' })).toBeVisible();
-    await expect(decision.getByRole('button', { name: 'Crear producto nuevo' })).toHaveCount(0);
-    await decision.getByRole('button', { name: 'Editar producto existente' }).click();
-    await expect(page.getByRole('dialog').filter({ hasText: 'Editar Producto' }).last()).toBeVisible();
+    const codeInput = page.getByTestId('inventory-product-code');
+    await expect(codeInput).toBeFocused();
+    await expect(codeInput).toHaveValue(String(seedData.product.code));
+    await expect(page.getByText(/ya existe.*ingresa otro SKU/i)).toBeVisible();
+    await expect(page.getByTestId('inventory-product-similarity-decision')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Crear producto nuevo' })).toHaveCount(0);
   });
 
   test('un usuario con permiso de crear pero sin permiso de editar no puede abrir el producto existente', async ({

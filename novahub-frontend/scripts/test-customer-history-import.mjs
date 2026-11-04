@@ -25,6 +25,19 @@ assert.deepEqual(consolidated.customers[0].summaries.map((summary) => ({
 ]);
 assert.equal(prepareCustomerHistoryForImport(consolidated.customers[0]).summaries.length, 2, 'complete history summaries remain importable');
 
+const loanHistory = aggregateCustomerHistory([
+  { rowNumber: 2, name: 'Cliente Invercredit', identifier: 'ID-LOAN-1', amount: 100, document: 'PRE-001', currency: 'NIO' },
+  { rowNumber: 3, name: 'Cliente Invercredit', identifier: 'ID-LOAN-1', amount: 75, document: 'PRE-002', currency: 'NIO' },
+], {
+  activityType: 'Préstamos',
+  recordCountLabel: 'Número de préstamos',
+  documentColumnSelected: true,
+  fallbackCurrency: null,
+});
+assert.equal(loanHistory.customers[0].summaries[0].recordCount, 2, 'one row per loan becomes a loan count');
+assert.equal(loanHistory.customers[0].summaries[0].recordCountLabel, 'Número de préstamos', 'the branch profile labels the count in the summary');
+assert.equal(loanHistory.customers[0].summaries[0].amount, 175, 'loan amounts are summed once per unique document');
+
 const importedCustomers = [
   { name: 'Ana Pérez', taxId: '001-010190-1000A', ruc: '', historicalSummaries: undefined },
   { name: 'Cliente sin cédula', taxId: '', ruc: '', historicalSummaries: undefined },

@@ -18,6 +18,7 @@ import { useAccountingQuery, accountingList } from '../../hooks/useAccountingQue
 import { useQueryClient } from '@tanstack/react-query';
 import { DateField } from '../ui/DateField';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { formatDateOnly } from '../../utils/dateFormat';
 
 interface CashFlowTx {
   id: string;
@@ -230,7 +231,7 @@ export function FlujoEfectivoView() {
           {item.transactions.map(tx => (
             <div key={tx.id} className="flex items-center gap-3 px-3 py-1.5">
               <span className="w-20 shrink-0 whitespace-nowrap text-[10px] text-muted-foreground">
-                {new Date(tx.date).toLocaleDateString('es')}
+                {formatDateOnly(tx.date, 'es')}
               </span>
               <span className="min-w-0 flex-1 truncate text-[11px]">
                 {tx.description}
@@ -425,7 +426,7 @@ export function FlujoEfectivoView() {
           <CardTitle className="text-lg font-bold">Flujo de Efectivo</CardTitle>
           <p className="text-xs text-muted-foreground">
             {dateFrom && dateTo
-              ? <>Período: {new Date(dateFrom).toLocaleDateString('es')} - {new Date(dateTo).toLocaleDateString('es')} <span className="text-primary">(últimos 30 días)</span></>
+              ? <>Período: {formatDateOnly(dateFrom, 'es')} - {formatDateOnly(dateTo, 'es')} <span className="text-primary">(últimos 30 días)</span></>
               : 'Seleccione un rango de fechas para ver el reporte'}
           </p>
         </CardHeader>

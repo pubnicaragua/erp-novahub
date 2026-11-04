@@ -3108,7 +3108,7 @@ const reportTemplateColumnAlign = (header: string): 'left' | 'center' | 'right' 
  * tabla del resto de las salidas configurables. El contenido sigue llegando
  * como secciones separadas para conservar sus bloques y gráficas.
  */
-export async function generateConfiguredReportSectionsPDF({ targetKey, title, tenantName, tenantLogo, sections, kpis, charts, dashboardPreferences, fileName, periodLabel, branchName, designOverride, forceNative = false, format = 'configured', save = true, onProgress }: {
+export async function generateConfiguredReportSectionsPDF({ targetKey, title, tenantName, tenantLogo, sections, kpis, charts, dashboardPreferences, fileName, periodLabel, branchName, designOverride, forceNative = false, useVectorTables = false, format = 'configured', save = true, onProgress }: {
   targetKey: string;
   title: string;
   tenantName: string;
@@ -3124,6 +3124,8 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   format?: PdfDownloadFormat;
   /** Fuerza el layout nativo cuando una salida operativa no debe heredar posiciones de una plantilla personalizada. */
   forceNative?: boolean;
+  /** Renderiza las tablas como texto/vector PDF, evitando rasterizar una imagen por página en listados grandes. */
+  useVectorTables?: boolean;
   save?: boolean;
   onProgress?: (progress: PdfTemplateRenderProgress) => void;
 }) {
@@ -3172,43 +3174,56 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
     });
   }
 
+  // Este reporte repite el detalle en tres tablas. Al superar 500 filas
+  // combinadas, rasterizar cada página conserva los datos pero bloquea la descarga.
+  const reportRowCount = reportSections.reduce((total, section) => total + section.rows.length, 0);
+  const useNativeVectorTables = useVectorTables && (
+    reportRowCount > 500
+    || (!configuredDefinition && !baseSettings.curatedTemplateSelection)
+  );
+  const vectorReportSections = reportSections
+    .map((section, templateIndex) => ({ section, templateIndex }))
+    .filter(({ templateIndex }) => !reportNode || reportNode.reportSectionVisibility?.[String(templateIndex)] !== false);
+
   const generatedAt = new Date().toLocaleString('es-NI');
   void branchName;
   const periodText = periodLabel ? `Período: ${periodLabel}` : '';
   const firstSection = reportSections[0];
   const firstRowSet = reportSections.flatMap(section => section.rows);
   let configuredOutput: Awaited<ReturnType<typeof renderConfiguredDefinition>> = null;
-  try {
-    configuredOutput = await renderConfiguredDefinition({
-      targetKey,
-      tenantName,
-      tenantLogo,
-      format,
-      fileName,
-      designOverride: design,
-      save,
-      onProgress,
-      data: {
-        company: { name: tenantName, logo: tenantLogo },
-        document: {
-          title,
-          period: periodText || undefined,
-          generated: `Generado: ${generatedAt}`,
-          meta: periodText,
+  if (!useNativeVectorTables) {
+    try {
+      configuredOutput = await renderConfiguredDefinition({
+        targetKey,
+        tenantName,
+        tenantLogo,
+        format,
+        fileName,
+        designOverride: design,
+        save,
+        onProgress,
+        data: {
+          company: { name: tenantName, logo: tenantLogo },
+          document: {
+            title,
+            period: periodText || undefined,
+            generated: `Generado: ${generatedAt}`,
+            meta: periodText,
+          },
+          reportSections,
+          reportKpis: (kpis || []).map(kpi => ({ label: String(kpi.label ?? ''), value: String(kpi.value ?? ''), detail: String(kpi.detail ?? '') })),
+          dashboardCharts: charts || [],
+          dashboardPreferences,
+          items: firstRowSet,
+          rows: firstRowSet,
+          tableColumns: firstSection?.columns,
         },
-        reportSections,
-        reportKpis: (kpis || []).map(kpi => ({ label: String(kpi.label ?? ''), value: String(kpi.value ?? ''), detail: String(kpi.detail ?? '') })),
-        dashboardCharts: charts || [],
-        dashboardPreferences,
-        items: firstRowSet,
-        rows: firstRowSet,
-        tableColumns: firstSection?.columns,
-      },
-    });
-  } catch (error) {
-    // Mantener una salida de contingencia si un contenido antiguo no es
-    // compatible con el renderer semántico. El camino normal usa la plantilla.
-    console.warn(`[PDF] Se usará la salida de contingencia para ${targetKey}.`, error);
+      });
+    } catch (error) {
+      // Mantener una salida de contingencia si un contenido antiguo no es
+      // compatible con el renderer semántico. El camino normal usa la plantilla.
+      console.warn(`[PDF] Se usará la salida de contingencia para ${targetKey}.`, error);
+    }
   }
   if (configuredOutput?.doc) return configuredOutput.doc;
 
@@ -3248,8 +3263,8 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   if (kpis?.length) {
     currentY = drawReportKpiCards({ doc, kpis: kpis.map(kpi => ({ ...kpi, color: primary })), marginX: margin, contentWidth, currentY, columns: Math.min(4, Math.max(1, kpis.length)), boxHeight: 22 });
   }
-  for (const [sectionIndex, section] of reportSections.entries()) {
-    if (currentY > pageHeight - 35) { doc.addPage(); currentY = 20; }
+  for (const { section, templateIndex: sectionIndex } of vectorReportSections) {
+    if (currentY > pageHeight - 35) { doc.addPage(); currentY = 53; }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(...text);
@@ -3281,7 +3296,7 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
     autoTable(doc, {
       startY: currentY,
       tableWidth: contentWidth,
-      margin: { left: margin, right: margin, bottom: 22 },
+      margin: { left: margin, right: margin, top: 53, bottom: 22 },
       head: [section.columns.map(column => column.label)],
       body: section.rows.length ? section.rows.map(row => section.columns.map(column => String(row[column.token] ?? row[column.id] ?? '—'))) : [section.columns.map(() => '—')],
       theme: 'grid',
@@ -3300,6 +3315,35 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
         if (columnText) hookData.cell.styles.textColor = pdfDesignColor(columnText, headerTextColor);
       },
     });
+    currentY = Number((doc as any).lastAutoTable?.finalY || currentY) + 8;
+  }
+
+  const pageCount = doc.internal.getNumberOfPages();
+  const footerText = String(settings.footerText || '');
+  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+    doc.setPage(pageNumber);
+    if (pageNumber > 1 && logo) {
+      try {
+        const logoSize = fitPdfImage(doc, logo, Math.min(30, contentWidth * 0.23), 12);
+        const imageType = logo.startsWith('data:image/jpeg') || logo.startsWith('data:image/jpg') ? 'JPEG' : 'PNG';
+        doc.addImage(logo, imageType, pageWidth - margin - logoSize.width, 12, logoSize.width, logoSize.height, undefined, 'FAST');
+      } catch { /* conserva el contenido del reporte aunque no se pueda repetir el logo */ }
+    }
+    doc.setDrawColor(...line);
+    doc.setLineWidth(0.25);
+    doc.line(margin, pageHeight - 16, pageWidth - margin, pageHeight - 16);
+    if (footerText) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(...text);
+      doc.text(doc.splitTextToSize(footerText, contentWidth * 0.72).slice(0, 1), margin, pageHeight - 10);
+    }
+    if (settings.showPageNumber !== false) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(...text);
+      doc.text(formatPdfPageNumber(settings.pageNumberFormat, settings.pageNumberCustom, pageNumber, pageCount), pageWidth - margin, pageHeight - 10, { align: 'right' });
+    }
   }
 
   if (save) doc.save(/\.pdf$/i.test(String(fileName)) ? String(fileName) : buildPdfFileName([fileName], 'configured'));

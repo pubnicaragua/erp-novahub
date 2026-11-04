@@ -13,6 +13,7 @@ export type CustomerHistorySourceRow = {
 
 export type CustomerHistoryImportOptions = {
   activityType: string;
+  recordCountLabel?: string;
   measureLabel?: string;
   measureUnit?: string;
   activityTypeColumnSelected?: boolean;
@@ -24,6 +25,7 @@ export type CustomerHistoryImportSummary = {
   identifier: string;
   activityType: string;
   recordCount: number;
+  recordCountLabel: string;
   measureLabel: string | null;
   measureValue: number | null;
   measureUnit: string | null;
@@ -184,7 +186,7 @@ export function aggregateCustomerHistory(
     }
 
     const rowActivityType = options.activityTypeColumnSelected
-      ? String(source.activityType ?? '').trim()
+      ? String(source.activityType ?? '').trim() || activityType
       : activityType;
     if (!rowActivityType) {
       addError(customer, `Fila ${source.rowNumber}: falta el tipo de historial.`);
@@ -254,10 +256,12 @@ export function aggregateCustomerHistory(
 
   for (const group of groups.values()) {
     const configuredMeasureLabel = String(options.measureLabel || '').trim() || null;
+    const recordCountLabel = String(options.recordCountLabel || '').trim() || 'Registros';
     const measureLabel = group.hasMeasure && configuredMeasureLabel
       ? `${configuredMeasureLabel}${group.missingMeasureCount ? ' registradas' : ''}`
       : null;
     const measureUnit = group.hasMeasure ? String(options.measureUnit || '').trim() || null : null;
+    if (recordCountLabel.length > 80) addError(group.customer, 'La etiqueta del conteo no puede superar 80 caracteres.');
     if (measureLabel && measureLabel.length > 80) addError(group.customer, 'La etiqueta de medida no puede superar 80 caracteres.');
     if (measureUnit && measureUnit.length > 32) addError(group.customer, 'La unidad de medida no puede superar 32 caracteres.');
     if (group.amount >= 10000000000000000) addError(group.customer, 'El total supera el importe máximo permitido.');
@@ -267,6 +271,7 @@ export function aggregateCustomerHistory(
       identifier: group.customer.identifier,
       activityType: group.activityType,
       recordCount: group.recordCount,
+      recordCountLabel,
       measureLabel,
       measureValue: group.hasMeasure ? Number(group.measureValue.toFixed(4)) : null,
       measureUnit,
@@ -278,7 +283,7 @@ export function aggregateCustomerHistory(
   for (const customer of customers.values()) {
     customer.summaries.sort((left, right) => left.currency.localeCompare(right.currency));
     if (customer.summaries.some((summary) => summary.measureValue !== null && !summary.measureLabel)) {
-      addError(customer, 'Indica el nombre de la medida (por ejemplo, Noches).');
+      addError(customer, 'Indica el nombre de la medida (por ejemplo, Cantidad).');
     }
   }
 

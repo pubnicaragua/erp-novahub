@@ -2,7 +2,61 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const html = await readFile(new URL('../maps/diseñoui_mapas_freelancers.html', import.meta.url), 'utf8');
+const forceSalesPageSource = await readFile(new URL('../src/app/components/FuerzaComercialPage.tsx', import.meta.url), 'utf8');
+const serviceWorkerSource = await readFile(new URL('../public/sw.js', import.meta.url), 'utf8');
+assert.match(
+  forceSalesPageSource,
+  /const mapUrl = `\$\{import\.meta\.env\.BASE_URL\}maps\/diseñoui_mapas_freelancers\.html`;/,
+  'El iframe debe usar una URL pública estable para que los chunks antiguos no reciban el shell SPA como fallback',
+);
+assert.match(
+  serviceWorkerSource,
+  /async function fetchForceSalesMap/,
+  'El service worker debe rechazar el shell SPA cuando una URL antigua del mapa reciba el fallback de Vercel',
+);
+const serviceWorkerListeners = new Map();
+let mapNetworkResponse = new Response('<!doctype html><div id="root"></div>', {
+  status: 200,
+  headers: { 'Content-Type': 'text/html; charset=utf-8' },
+});
+const serviceWorkerSandbox = {
+  URL,
+  Response,
+  fetch: async (_request, options) => {
+    assert.equal(options?.cache, 'no-store', 'El mapa con parámetros de sesión no se debe cachear');
+    return mapNetworkResponse;
+  },
+  self: {
+    location: { href: 'https://novahub.test/sw.js?v=map-test', origin: 'https://novahub.test' },
+    addEventListener: (type, listener) => serviceWorkerListeners.set(type, listener),
+  },
+};
+vm.runInNewContext(serviceWorkerSource, serviceWorkerSandbox, { filename: 'force-sales-service-worker.js' });
+const requestMapDocument = async (response) => {
+  mapNetworkResponse = response;
+  let handledResponse;
+  serviceWorkerListeners.get('fetch')({
+    request: {
+      method: 'GET',
+      mode: 'navigate',
+      destination: 'document',
+      url: 'https://novahub.test/assets/dise%C3%B1oui_mapas_freelancers-oldhash.html?tenantId=demo',
+    },
+    respondWith: (responsePromise) => { handledResponse = responsePromise; },
+  });
+  return handledResponse;
+};
+const blockedShellResponse = await requestMapDocument(mapNetworkResponse);
+assert.equal(blockedShellResponse.status, 404, 'Una página SPA recibida como mapa debe rechazarse');
+mapNetworkResponse = new Response('<aside id="sheet"></aside><div id="map"></div>', {
+  status: 200,
+  headers: { 'Content-Type': 'text/html; charset=utf-8' },
+});
+const validMapResponse = await requestMapDocument(mapNetworkResponse);
+assert.equal(validMapResponse.status, 200, 'El documento real del mapa debe conservarse');
+assert.match(await validMapResponse.text(), /id="sheet"/);
+
+const html = await readFile(new URL('../public/maps/diseñoui_mapas_freelancers.html', import.meta.url), 'utf8');
 const helperScript = html.match(/<script\s+id="nova-force-sales-location-core">([\s\S]*?)<\/script>/i)?.[1];
 assert.ok(helperScript, 'El mapa debe exponer los helpers puros de capas y recorridos');
 
@@ -59,8 +113,8 @@ assert.equal(quiet.segments.length, 0, 'El ruido dentro de la incertidumbre no d
 assert.ok(quiet.isolatedPoints.some((item) => item.reason === 'gps-noise-stop' && item.samples >= 2), 'El ruido se representa como parada resumida');
 
 const layers = core.normalizeMapLayers({ users: false, manualPoints: false, catalog: true, plannedRoutes: true, gpsTrail: true });
-assert.deepEqual({ ...layers }, { users: false, manualPoints: false, catalog: true, plannedRoutes: true, gpsTrail: false, labelMode: 'off' }, 'El recorrido GPS inicia apagado y los nombres de puntos se ocultan por defecto');
-assert.deepEqual({ ...core.DEFAULT_MAP_LAYERS }, { users: true, manualPoints: true, catalog: false, plannedRoutes: false, gpsTrail: false, labelMode: 'off' }, 'La vista limpia muestra usuarios y puntos manuales sin etiquetas');
+assert.deepEqual({ ...layers }, { users: false, manualPoints: false, catalog: true, plannedRoutes: true, gpsTrail: false, basePlaces: false, labelMode: 'off' }, 'El recorrido GPS inicia apagado y los nombres de puntos se ocultan por defecto');
+assert.deepEqual({ ...core.DEFAULT_MAP_LAYERS }, { users: true, manualPoints: true, catalog: false, plannedRoutes: false, gpsTrail: false, basePlaces: false, labelMode: 'off' }, 'La vista limpia muestra usuarios y puntos manuales sin etiquetas');
 assert.equal(core.normalizeMapLayers({ labelMode: 'all' }).labelMode, 'all', 'La preferencia de etiquetas se conserva al restaurar las capas');
 assert.equal(core.normalizeMapLayers({ labelMode: 'unknown' }).labelMode, 'off', 'Un modo de etiquetas inválido vuelve al valor seguro oculto');
 assert.equal(core.mapLayerStorageKey('tenant-1', 'user-2'), 'novaForceSalesMapLayersV1:tenant-1:user-2', 'Las preferencias se aíslan por usuario y tenant');
@@ -85,14 +139,16 @@ assert.match(html, /id="mapLayersPanel"/, 'El usuario debe tener un panel de cap
 assert.match(html, /Elementos de NovaHub/, 'El panel distingue las capas propias de NovaHub del mapa base');
 assert.match(html, /Lugares del mapa base/, 'El panel identifica que los POI pertenecen al mapa base');
 assert.match(html, /id="labels"[\s\S]*?data-mode="off"[^>]*aria-pressed="true"/, 'Ocultar etiquetas de puntos es la opción inicial accesible');
-assert.match(html, /Nombres de puntos NovaHub/, 'El control de etiquetas se refiere a los negocios marcados en NovaHub');
+assert.match(html, /Nombres de puntos/, 'El control de etiquetas se refiere a los negocios marcados en NovaHub');
 assert.match(html, /Restablecer vista limpia/, 'El usuario puede volver a la vista limpia');
 assert.match(html, /Ver lecturas originales/, 'El recorrido ofrece una vista diagnóstica de lecturas aisladas');
 assert.match(html, /Precisión desconocida/, 'La UI identifica lecturas sin precisión conocida');
 assert.match(html, /Trayectoria GPS aproximada/, 'La UI aclara que el historial no es una ruta exacta por calles');
 assert.match(html, /VITE_GOOGLE_MAPS_MAP_ID|mapId/, 'La configuración del mapa puede recibir el Map ID de estilo');
 assert.match(html, /mapProvider.*OPENSTREETMAP|etiquetas.*proveedor/i, 'La vista informa que los mosaicos externos controlan sus propias etiquetas');
-assert.match(html, /mapId: mapQuery\.get\('mapId'\) \|\| 'DEMO_MAP_ID'/, 'Google conserva el Map ID para los estilos fijos y marcadores avanzados');
+assert.match(html, /const GOOGLE_MAP_ID=String\(mapQuery\.get\('mapId'\)\|\|'DEMO_MAP_ID'\)/, 'Google conserva el Map ID para los estilos fijos y marcadores avanzados');
+assert.match(html, /const GOOGLE_CLEAN_MAP_ID=String\(mapQuery\.get\('cleanMapId'\)\|\|''\)/, 'La vista puede alternar un Map ID limpio configurado por el shell');
+assert.match(html, /mapId: CAN_TOGGLE_BASE_PLACES&&!mapLayers\.basePlaces\?GOOGLE_CLEAN_MAP_ID:GOOGLE_MAP_ID/, 'El Map ID aplicado corresponde a la elección de lugares del mapa base');
 assert.match(html, /window\.__novaAdvancedMarkerElement/, 'La vista conserva AdvancedMarkerElement y no cambia a OverlayView');
 assert.match(html, /sourceKey:prospect\.sourceKey/, 'La transformación conserva el origen del punto que devuelve el backend');
 assert.match(html, /function updateMapLayerVisibility\(\)[\s\S]*presenceMarkers\.forEach[\s\S]*routeStopMarkers\.forEach/, 'Las capas de usuarios y rutas controlan la visibilidad de sus marcadores');

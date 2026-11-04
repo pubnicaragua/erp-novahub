@@ -222,6 +222,7 @@ const BASE_PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'reportes.finance', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte financiero', structure: 'report', source: 'FinanceReportTab.exportPDF' },
   { key: 'reportes.hr', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de capital humano', structure: 'report', source: 'HRReportTab.exportPDF' },
   { key: 'reportes.subscriptions', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de suscripciones', structure: 'report', source: 'SubscriptionsReportTab.exportPDF' },
+  { key: 'reports.force-sales', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de gestores de cobro', structure: 'report', exportPermission: 'FORCE_SALES', source: 'ForceSalesReportsView.exportPdf' },
   { key: 'dashboard.tenant-overview', module: 'dashboard', moduleLabel: 'Dashboard', label: 'Reporte del dashboard', structure: 'dashboard', source: 'ExecutiveTenantOverview.exportDashboard' },
   { key: 'portal.customer-summary', module: 'portal-clientes', moduleLabel: 'Portal de clientes', label: 'Resumen del portal de clientes', structure: 'report', source: 'exportCustomerPortalPdf' },
 

@@ -1,37 +1,85 @@
 {
-  "headers": [
+  "routes": [
     {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
+      "src": "/index\\.html$",
+      "headers": {
+        "Cache-Control": "no-store, no-cache, must-revalidate"
+      },
+      "continue": true
     },
     {
-      "source": "/index.html",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
-      ]
+      "src": "/sw\\.js$",
+      "headers": {
+        "Cache-Control": "no-cache, no-store, must-revalidate"
+      },
+      "continue": true
     },
     {
-      "source": "/sw.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
-      ]
+      "src": "/assets/(.*)",
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      },
+      "continue": true
     },
     {
-      "source": "/(.*)",
+      "src": "/((?!assets/|maps/|pdf-template-packages/|.*\\.[^/]+$).*)",
       "has": [
-        { "type": "header", "key": "accept", "value": ".*text/html.*" }
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/html.*"
+        }
       ],
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
-      ]
-    }
-  ],
-  "rewrites": [
+      "headers": {
+        "Cache-Control": "no-store, no-cache, must-revalidate"
+      },
+      "continue": true
+    },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "handle": "filesystem"
+    },
+    {
+      "src": "/assets/(.*)",
+      "status": 404,
+      "headers": {
+        "Cache-Control": "no-store"
+      },
+      "continue": false
+    },
+    {
+      "src": "/maps/(.*)",
+      "status": 404,
+      "headers": {
+        "Cache-Control": "no-store"
+      },
+      "continue": false
+    },
+    {
+      "src": "/pdf-template-packages/(.*)",
+      "status": 404,
+      "headers": {
+        "Cache-Control": "no-store"
+      },
+      "continue": false
+    },
+    {
+      "src": "/.*\\.[^/]+$",
+      "status": 404,
+      "headers": {
+        "Cache-Control": "no-store"
+      },
+      "continue": false
+    },
+    {
+      "src": "/((?!assets/|maps/|pdf-template-packages/|.*\\.[^/]+$).*)",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/html.*"
+        }
+      ],
+      "dest": "/index.html"
     }
   ]
 }

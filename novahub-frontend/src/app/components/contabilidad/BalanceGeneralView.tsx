@@ -20,6 +20,7 @@ import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { ExportMenu } from '../ui/ExportMenu';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { formatDateOnly, todayIso } from '../../utils/dateFormat';
 
 const BALANCE_SHEET_SECTIONS: ReportSection[] = [
   { id: 'activos-corrientes', label: 'Activos corrientes', sign: 'ASSET', accountIds: [] },
@@ -74,10 +75,11 @@ interface BSData {
 
 export function BalanceGeneralView() {
   const { canPerform, user } = useAuth();
+  const today = todayIso(user?.clientTenant?.timeZone);
   const canExportBalanceSheet = canPerform('ACCOUNTING_BALANCE_SHEET', 'export') || canPerform('ACCOUNTING_BALANCE_SHEET', 'view');
   const { baseCurrency, formatCurrentAmount } = useCurrency();
   const [dateFrom, setDateFrom] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(today);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -464,8 +466,8 @@ export function BalanceGeneralView() {
               {date && (
                 <p className="text-xs text-muted-foreground mt-1">
                   {showOpening && dateFrom
-                    ? <>Período: {new Date(dateFrom).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })} - {new Date(date).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })}</>
-                    : <>Al {new Date(date).toLocaleDateString('es', { year: 'numeric', month: 'long', day: 'numeric' })}</>}
+                    ? <>Período: {formatDateOnly(dateFrom, 'es')} - {formatDateOnly(date, 'es')}</>
+                    : <>Al {formatDateOnly(date, 'es')}</>}
                   · Haz clic en una cuenta para consultar sus movimientos.
                 </p>
               )}

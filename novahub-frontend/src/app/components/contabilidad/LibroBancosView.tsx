@@ -17,8 +17,8 @@ import { api } from '../../services/api';
 import { toast } from '@/app/services/toast';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { ViewConnectionsDialog, type ViewConnection } from './ViewConnectionsDialog';
-
-const currentMonth = new Date().toISOString().slice(0, 7);
+import { useAuth } from '../../contexts/AuthContext';
+import { todayIso } from '../../utils/dateFormat';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   CHECKING: 'Cuenta corriente',
@@ -86,6 +86,10 @@ const formatAmount = (value: any, currency?: string) => {
 };
 
 export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId: string) => void }) {
+  const { user } = useAuth();
+  const timeZone = user?.clientTenant?.timeZone || 'America/Managua';
+  const today = todayIso(timeZone);
+  const currentMonth = today.slice(0, 7);
   const queryClient = useQueryClient();
   const [bankAccountId, setBankAccountId] = useState('');
   const [month, setMonth] = useState(currentMonth);
@@ -107,13 +111,12 @@ export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId:
       return { dateFrom: undefined, dateTo: undefined };
     }
     const [year, mon] = month.split('-').map(Number);
-    const today = new Date();
-    const isCurrentMonth = year === today.getFullYear() && mon === today.getMonth() + 1;
+    const isCurrentMonth = year === Number(today.slice(0, 4)) && mon === Number(today.slice(5, 7));
     return {
       dateFrom: `${year}-${String(mon).padStart(2, '0')}-01`,
-      dateTo: isCurrentMonth ? today.toISOString().slice(0, 10) : new Date(year, mon, 0).toISOString().slice(0, 10),
+      dateTo: isCurrentMonth ? today : new Date(Date.UTC(year, mon, 0)).toISOString().slice(0, 10),
     };
-  }, [month]);
+  }, [month, today]);
 
   const bookQuery = useAccountingQuery<any>(
     ['bank-daily-book', bankAccountId || 'all', month],

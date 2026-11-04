@@ -27,6 +27,7 @@ import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { formatDateOnly, formatInstant, todayIso } from '../../utils/dateFormat';
 
 const statusStyles: Record<string, string> = {
   PENDING: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -40,10 +41,10 @@ const statusLabels: Record<string, string> = {
   COMPLETED: 'Completada',
 };
 
-const currentMonth = new Date().toISOString().slice(0, 7);
-
 export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  const today = todayIso(user?.clientTenant?.timeZone);
+  const currentMonth = today.slice(0, 7);
   const canUpdateBalance = canPerform('ACCOUNTING_RECONCILIATION', 'updateBalance');
   const canAutoMatch = canPerform('ACCOUNTING_RECONCILIATION', 'autoMatch');
   const canAddMovement = canPerform('ACCOUNTING_RECONCILIATION', 'addMovement');
@@ -61,7 +62,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
   const [onlyUnmatched, setOnlyUnmatched] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [addItemLoading, setAddItemLoading] = useState(false);
-  const [addItemForm, setAddItemForm] = useState({ date: new Date().toISOString().split('T')[0], description: '', reference: '', amount: '', type: 'DEBIT' });
+  const [addItemForm, setAddItemForm] = useState({ date: today, description: '', reference: '', amount: '', type: 'DEBIT' });
   const [form, setForm] = useState({ accountId: '', period: '', endBalance: '' });
   const [preview, setPreview] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -269,7 +270,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
     try {
       setAddItemLoading(true);
       const updated = await contabilidadService.addReconciliationItem(detail.id, {
-        date: addItemForm.date || new Date().toISOString().split('T')[0],
+        date: addItemForm.date || todayIso(user?.clientTenant?.timeZone),
         description: addItemForm.description.trim(),
         reference: addItemForm.reference.trim() || undefined,
         amount,
@@ -277,7 +278,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
       });
       setDetail(updated);
       setAddItemOpen(false);
-      setAddItemForm({ date: new Date().toISOString().split('T')[0], description: '', reference: '', amount: '', type: 'DEBIT' });
+      setAddItemForm({ date: todayIso(user?.clientTenant?.timeZone), description: '', reference: '', amount: '', type: 'DEBIT' });
       toast.success('Movimiento del estado de cuenta agregado');
       completeNotificationAction(actionToken);
     } catch (e: any) {
@@ -339,7 +340,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
               <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
               <span>
                 Contabilizada: asiento <strong className="font-black">{detail.journalNumber}</strong>
-                {detail.journalDate ? ` del ${new Date(detail.journalDate).toLocaleDateString()}` : ''} generado con los movimientos del estado de cuenta.
+                {detail.journalDate ? ` del ${formatDateOnly(detail.journalDate)}` : ''} generado con los movimientos del estado de cuenta.
                 Verás el movimiento bancario en Libro Diario, Libro Mayor, Balance de Comprobación, Estado de Resultados, Balance General y Flujo de Efectivo.
               </span>
             </div>
@@ -351,7 +352,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                 <div><p className="text-[10px] text-muted-foreground">Cuenta</p><p className="text-xs font-black">{detail.account?.code} - {detail.account?.name}</p></div>
                 <div><p className="text-[10px] text-muted-foreground">Banco</p><p className="text-xs font-black">{detail.bank ? `${detail.bank.bankName} · ${detail.bank.accountNumber}` : 'No vinculado a una cuenta bancaria'}</p></div>
                 <div><p className="text-[10px] text-muted-foreground">Período</p><p className="text-xs font-black">{detail.period}</p></div>
-                <div><p className="text-[10px] text-muted-foreground">Rango</p><p className="text-xs font-black">{detail.startDate ? new Date(detail.startDate).toLocaleDateString() : 'N/A'} → {detail.endDate ? new Date(detail.endDate).toLocaleDateString() : 'N/A'}</p></div>
+                <div><p className="text-[10px] text-muted-foreground">Rango</p><p className="text-xs font-black">{detail.startDate ? formatDateOnly(detail.startDate) : 'N/A'} → {detail.endDate ? formatDateOnly(detail.endDate) : 'N/A'}</p></div>
               </div>
             </CardContent>
           </Card>
@@ -463,7 +464,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                   )}
                   {(detail.items || []).filter((item: any) => !onlyUnmatched || !item.matched).map((item: any) => (
                     <TableRow key={item.id} className={cn(item.matched && 'bg-emerald-500/5')}>
-                      <TableCell className="text-xs font-mono">{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</TableCell>
+                      <TableCell className="text-xs font-mono">{item.date ? formatDateOnly(item.date) : 'N/A'}</TableCell>
                       <TableCell className="text-xs font-medium">{item.description || 'N/A'}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{item.reference || 'N/A'}</TableCell>
                       <TableCell className="text-xs tabular-nums text-right">{Number(item.debit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
@@ -613,7 +614,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                       {statusLabels[r.status || 'PENDING']}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'N/A'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{r.createdAt ? formatInstant(r.createdAt, user?.clientTenant?.timeZone) : 'N/A'}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
                       onClick={(e) => { e.stopPropagation(); fetchDetail(r.id); }}>
@@ -629,7 +630,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
             {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : filtered.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay conciliaciones registradas</p> : filtered.map((r) => (
               <button key={r.id} type="button" className="block w-full min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3 text-left hover:bg-muted/40" onClick={() => fetchDetail(r.id)}>
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-black">{r.account?.code}</p><p className="break-words text-[10px] text-muted-foreground">{r.account?.name}</p>{r.bank && <p className="text-[9px] text-muted-foreground/60">{r.bank.bankName} · {r.bank.accountNumber}</p>}</div><Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[r.status || 'PENDING'])}>{statusLabels[r.status || 'PENDING']}</Badge></div>
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Período</span><span>{r.period}</span></div><div><span className="block text-muted-foreground">Fecha</span><span>{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'N/A'}</span></div><div><span className="block text-muted-foreground">Saldo inicial (libros)</span><span>{r.bank?.currency === 'USD' ? 'US$' : 'C$'} {Number(r.startBalance || 0).toLocaleString()}</span></div><div><span className="block text-muted-foreground">Saldo banco</span><span className="font-bold">{r.bank?.currency === 'USD' ? 'US$' : 'C$'} {Number(r.endBalance || 0).toLocaleString()}</span></div></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Período</span><span>{r.period}</span></div><div><span className="block text-muted-foreground">Fecha</span><span>{r.createdAt ? formatInstant(r.createdAt, user?.clientTenant?.timeZone) : 'N/A'}</span></div><div><span className="block text-muted-foreground">Saldo inicial (libros)</span><span>{r.bank?.currency === 'USD' ? 'US$' : 'C$'} {Number(r.startBalance || 0).toLocaleString()}</span></div><div><span className="block text-muted-foreground">Saldo banco</span><span className="font-bold">{r.bank?.currency === 'USD' ? 'US$' : 'C$'} {Number(r.endBalance || 0).toLocaleString()}</span></div></div>
               </button>
             ))}
           </div>

@@ -6,7 +6,8 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { referenceTypeLabel } from '../../utils/accountingLabels';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatDateOnly, formatInstant } from '../../utils/dateFormat';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface AccountMovementsDetailProps {
   accountId: string;
@@ -64,10 +65,7 @@ const formatQuantity = (value: number) => new Intl.NumberFormat('es-NI', {
 }).format(Number(value || 0));
 
 const formatDate = (value?: string) => {
-  if (!value) return '—';
-  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
-  if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString('es-NI');
-  return new Date(value).toLocaleDateString('es-NI');
+  return formatDateOnly(value) || '—';
 };
 
 const normalizeTransferDescription = (description: unknown, referenceType?: string | null) => {
@@ -84,6 +82,7 @@ const normalizeTransferDescription = (description: unknown, referenceType?: stri
 };
 
 export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFrom, dateTo }: AccountMovementsDetailProps) {
+  const { user } = useAuth();
   const query = useAccountingQuery<MovementRow[]>(
     ['account-movements-detail', accountId, dateFrom, dateTo],
     async (signal) => {
@@ -188,7 +187,7 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
               {rows.map((row) => (
                 <TableRow key={row.id} className="border-border/30 hover:bg-muted/25">
                   <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDate(row.date)}</TableCell>
-                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{row.createdAt ? formatDateEs(row.createdAt, true) : '—'}</TableCell>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{row.createdAt ? formatInstant(row.createdAt, user?.clientTenant?.timeZone) : '—'}</TableCell>
                   <TableCell className="whitespace-nowrap font-mono text-xs">{row.journalNumber || row.reference || '—'}</TableCell>
                   <TableCell className="min-w-[13rem] text-xs">
                     {row.referenceType ? (

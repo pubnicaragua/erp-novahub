@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, CircleHelp, Download, FileSpreadsheet, Layers, ListChecks, Loader2, Package, Pencil, Plus, Search, Settings2, Square, SquareCheckBig, Tag, Upload, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, CircleHelp, Download, FileSpreadsheet, History, Layers, ListChecks, Loader2, Package, Pencil, Plus, Search, Settings2, Square, SquareCheckBig, Tag, Upload, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -29,6 +29,7 @@ import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 import { buildDownloadFileName } from '../../utils/exportFileNames';
+import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 
 interface PriceListsViewProps { products?: any[]; onRefresh?: () => void; isSidebarCollapsed?: boolean; }
 type ImportRow = { code: string; name: string; cost: number | ''; prices: Record<string, number | ''>; error?: string };
@@ -282,6 +283,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const creatingListRef = useRef(false);
   const [editingListId, setEditingListId] = useState<string | null>(null);
   const [editingListName, setEditingListName] = useState('');
+  const [auditHistoryList, setAuditHistoryList] = useState<any | null>(null);
   const [savingListName, setSavingListName] = useState(false);
   const savingListNameRef = useRef(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -931,7 +933,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                 <TableHead>Código</TableHead>
                 <TableHead>{activeItemType === 'SERVICE' ? 'Servicio' : 'Producto'}</TableHead>
                 <TableHead>Categoría</TableHead>
-                {visibleLists.map((list) => <TableHead key={list.id} className="min-w-36 text-right">{list.name}</TableHead>)}
+                {visibleLists.map((list) => <TableHead key={list.id} className="min-w-36 text-right"><span className="inline-flex items-center justify-end gap-1.5">{list.name}{canPerform('SALES_PRICE_LISTS', 'view') && <Button type="button" variant="ghost" size="icon" className="size-7" aria-label={`Ver historial de ${list.name}`} title={`Ver historial de ${list.name}`} onClick={() => setAuditHistoryList(list)}><History className="size-3.5" /></Button>}</span></TableHead>)}
                 <TableHead className="w-24 text-right" style={{ position: 'sticky', top: 0, zIndex: 60, backgroundColor: 'var(--card)', backgroundClip: 'padding-box' }}>Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -1314,6 +1316,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <AuditHistoryModal isOpen={Boolean(auditHistoryList)} onClose={() => setAuditHistoryList(null)} entity="PRICE_LIST" entityId={auditHistoryList?.id || ''} title={`Historial: ${auditHistoryList?.name || 'lista de precios'}`} />
     {showTutorial && <GuidedTour steps={PRICE_LISTS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Listas de precios" allowTargetInteraction />}
   </div>;
 }

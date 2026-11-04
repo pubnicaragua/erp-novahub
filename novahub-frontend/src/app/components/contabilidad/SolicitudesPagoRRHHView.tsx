@@ -30,6 +30,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
+import { formatDateOnly, formatInstantDate } from '../../utils/dateFormat';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -90,7 +91,7 @@ function sourceLabel(request: PaymentRequest) {
   const source = request.source;
   if (request.requestType === 'PAYROLL') {
     const employee = source?.employee ? `${source.employee.firstName || ''} ${source.employee.lastName || ''}`.trim() : 'Empleado';
-    return `${employee} · ${source?.periodStart ? new Date(source.periodStart).toLocaleDateString('es-NI', { month: 'short', year: 'numeric' }) : 'Período'}`;
+    return `${employee} · ${source?.periodStart ? formatDateOnly(source.periodStart, 'es-NI') : 'Período'}`;
   }
   return request.requestType === 'TRAINING' ? source?.title || 'Capacitación' : source?.name || 'Beneficio';
 }
@@ -109,7 +110,7 @@ function formatPaymentInput(value: string | number) {
 }
 
 export function SolicitudesPagoRRHHView() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { formatConvertedAmount, formatExplicitAmount, displayCurrency, baseCurrency, exchangeRate, toBaseAmount, convertBetweenCurrencies } = useCurrency();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -336,7 +337,7 @@ export function SolicitudesPagoRRHHView() {
               <CardContent className="p-3 sm:p-4">
                 <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
                   <div className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', type.tint)}><TypeIcon className="size-4" /></div>
-                  <div className="min-w-0 flex-1"><div className="flex min-w-0 flex-wrap items-center gap-2"><Badge variant="outline" className="border-none px-2 text-[10px] font-black uppercase">{type.label}</Badge><span className="truncate text-xs text-muted-foreground">#{request.id.slice(0, 8)}</span></div><p className="mt-1 truncate text-base font-black">{sourceLabel(request)}</p><p className="mt-1 text-xs text-muted-foreground">Solicitada {request.requestedAt ? new Date(request.requestedAt).toLocaleDateString('es-NI') : '—'}</p></div>
+                  <div className="min-w-0 flex-1"><div className="flex min-w-0 flex-wrap items-center gap-2"><Badge variant="outline" className="border-none px-2 text-[10px] font-black uppercase">{type.label}</Badge><span className="truncate text-xs text-muted-foreground">#{request.id.slice(0, 8)}</span></div><p className="mt-1 truncate text-base font-black">{sourceLabel(request)}</p><p className="mt-1 text-xs text-muted-foreground">Solicitada {request.requestedAt ? formatInstantDate(request.requestedAt, user?.clientTenant?.timeZone) : '—'}</p></div>
                   <div className="min-w-[150px] lg:text-right"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto solicitado</p><p className="mt-1 text-lg font-black text-primary">{formatConvertedAmount(Number(request.amount || 0), request.currency as any, Number(request.exchangeRate || 1))}</p><p className="text-[10px] text-muted-foreground">Pagado: {formatNativeAmount((request.payments || []).reduce((sum, payment) => sum + Number(payment.baseAmount || 0), 0), baseCurrency)} · Saldo: {formatNativeAmount(Math.max(Number(request.baseAmount || 0) - (request.payments || []).reduce((sum, payment) => sum + Number(payment.baseAmount || 0), 0), 0), baseCurrency)}</p></div>
                   <Badge variant="outline" className={cn('w-fit shrink-0 gap-1 rounded-md px-3 py-1 text-[10px] font-black', status.className)}><StatusIcon className="size-3.5" /> {status.label}</Badge>
                   <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">

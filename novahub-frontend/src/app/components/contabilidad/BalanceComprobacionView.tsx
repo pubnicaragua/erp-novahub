@@ -31,6 +31,7 @@ import { generateTrialBalancePDF } from '../../utils/pdfGenerator';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { ExportMenu } from '../ui/ExportMenu';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { todayIso } from '../../utils/dateFormat';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -321,10 +322,10 @@ function buildTrialBalanceTree(
 
 export function BalanceComprobacionView() {
   const { user, canPerform } = useAuth();
+  const today = todayIso(user?.clientTenant?.timeZone);
   const canExportTrialBalance = canPerform('ACCOUNTING_TRIAL_BALANCE', 'export');
-  const today = new Date();
-  const [dateFrom, setDateFrom] = useState(`${today.getFullYear()}-01-01`);
-  const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10));
+  const [dateFrom, setDateFrom] = useState(`${today.slice(0, 4)}-01-01`);
+  const [dateTo, setDateTo] = useState(today);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());

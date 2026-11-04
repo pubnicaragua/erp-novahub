@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const html = await readFile(new URL('../maps/diseñoui_mapas_freelancers.html', import.meta.url), 'utf8');
+const html = await readFile(new URL('../public/maps/diseñoui_mapas_freelancers.html', import.meta.url), 'utf8');
 for (const [index, match] of [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].entries()) {
   if (/\bsrc\s*=/.test(match[1] || '') || /type=["'](?:application\/json|application\/ld\+json)/i.test(match[1] || '')) continue;
   new vm.Script(match[2], { filename: `force-sales-route-history-${index + 1}.js` });
@@ -37,16 +37,106 @@ assert.match(realtimeMapScript, /if\(!shouldLoadLocationTrail\(\)\)\{locationTra
 assert.match(realtimeMapScript, /requestId!==locationTrailRequestId\|\|!shouldLoadLocationTrail\(\)/, 'Una respuesta tardía no puede volver a dibujar una capa apagada');
 assert.match(realtimeMapScript, /if\(current\.fitCamera&&cameraPoints\.length\)[\s\S]*?googleMap\.fitBounds\(bounds,64\)[\s\S]*?googleMap\.panTo\(/, 'Solo una acción explícita de ver el recorrido cambia el encuadre');
 assert.match(realtimeMapScript, /const selectedUser=CAN_ASSIGN_TEAM\?String\(userSelect\?\.value\|\|''\):''/, 'El mapa y el historial consultan el usuario seleccionado, incluido el selector del mapa');
+assert.match(html, /function loadRecentGpsCaptures\(\)[\s\S]*force-sales\/location-points/, 'Los estados GPS del equipo se consultan desde el endpoint de historial existente');
+assert.match(html, /<b>Presencia:<\/b>[\s\S]*<b>GPS:<\/b>/, 'El popup presenta presencia y GPS como estados distintos');
+assert.doesNotMatch(html, /En línea · ubicación actualizada/, 'isOnline no se usa para afirmar que hay un GPS reciente');
+assert.doesNotMatch(html, /syncSellerPresence\(lastKnownCoords\)/, 'El mapa no reenvía coordenadas almacenadas al reactivar compartir');
 
 const trackingRuntime = await readFile(new URL('../src/app/components/ForceSalesTrackingRuntime.tsx', import.meta.url), 'utf8');
-assert.match(trackingRuntime, /import \{ MapPin \} from 'lucide-react'/, 'El indicador GPS móvil usa un icono pequeño de ubicación');
-assert.match(trackingRuntime, /className="[^"]*sm:hidden[^"]*" role="status" aria-label=\{`Estado GPS:/, 'El estado GPS móvil expone el estado solo de forma accesible, sin texto visible');
-assert.match(trackingRuntime, /<MapPin className=\{`size-4 \$\{gpsIconClass\}`\} aria-hidden="true" \/>/, 'En móvil solo se muestra el icono de ubicación');
-assert.match(trackingRuntime, /<div className="hidden sm:block">[\s\S]*?\{gpsLabel\}[\s\S]*?Pantalla activa/, 'El texto y controles completos se conservan solo desde escritorio');
-assert.doesNotMatch(trackingRuntime, /mobileExpanded|Mostrar detalles del rastreo|Buscando GPS.*sm:hidden/, 'El panel móvil no debe expandir ni mostrar las etiquetas del estado GPS');
+assert.match(trackingRuntime, /import \{ ChevronDown, ChevronUp, MapPin \} from 'lucide-react'/, 'El indicador GPS móvil usa un icono pequeño de ubicación');
+assert.match(trackingRuntime, /aria-expanded=\{panelOpen\}[\s\S]*?aria-controls="force-sales-tracking-panel"/, 'El icono GPS móvil es un control accesible que abre el panel');
+assert.match(trackingRuntime, /id="force-sales-tracking-panel"[\s\S]*?aria-label="Estado del rastreo GPS"/, 'El panel GPS tiene nombre y semántica accesibles');
+assert.match(trackingRuntime, /GPS reciente|Sin lectura reciente|Permiso bloqueado|Ruta pausada/, 'El panel expone estados GPS separados de la conexión');
+assert.match(trackingRuntime, /Puntos pendientes|pending\} punto/, 'El panel muestra el total de puntos pendientes');
+assert.match(trackingRuntime, /NovaHub permanece visible/, 'La opción de pantalla activa explica el límite de visibilidad');
+assert.doesNotMatch(trackingRuntime, /lastLocation\.current&&Date\.now\(\)-lastPresenceAt\.current/, 'Un temporizador no reenvía una coordenada retenida para renovar presencia');
+assert.match(trackingRuntime, /onFreshLocation[\s\S]*?isFreshLocationTimestamp/, 'La presencia parte de un callback GPS nuevo y validado por timestamp');
+assert.match(trackingRuntime, /WAKE_LOCK_KEY|novaForceSalesWakeLockV1/, 'La elección de mantener pantalla se conserva por identidad');
+assert.match(trackingRuntime, /const handleResume = \(\) => \{\s*if \(eligibleNow\(\)\) void startTracking\(false, false\);/, 'Al volver a Fuerza Comercial o a una ruta elegible, el runtime inicia el coordinador sin duplicar watches');
+assert.match(trackingRuntime, /if \(eligibleNow\(\)\) await startTracking\(false, false\);/, 'La primera carga inicia captura solo con sesión, identidad, compartir y módulo/ruta elegibles');
 
 assert.match(realtimeMapScript, /let remoteProspectsRefreshRequested=false/, 'El mapa conserva una invalidación recibida mientras carga prospectos');
 assert.match(realtimeMapScript, /if\(remoteProspectsLoading\)\{remoteProspectsRefreshRequested=true;return\}/, 'Un evento SSE durante una consulta activa agenda un refresco posterior');
 assert.match(realtimeMapScript, /if\(remoteProspectsRefreshRequested\)\{remoteProspectsRefreshRequested=false;void loadRemoteProspects\(\);\}/, 'La consulta activa vuelve a cargar los prospectos si recibió una invalidación mientras esperaba');
+assert.match(realtimeMapScript, /if\(routePlanningMode&&marker\._b\)\{toggleRouteBusiness\(marker\._b\);return;\}/, 'El mapa agrega o quita la parada al pulsar directamente su punto sin abrir su ficha');
+assert.match(realtimeMapScript, /const removeStop=\(\)=>\{if\(routePlanningMode\)toggleRouteBusiness\(business\)\}/, 'El marcador numerado permite quitar una parada desde el mapa');
+assert.match(realtimeMapScript, /idempotencyKey:routeSaveAttemptKey/, 'La clave de idempotencia del guardado permanece junto al borrador local');
+assert.match(realtimeMapScript, /routeSaveAttemptKey=draft\.idempotencyKey\|\|null/, 'Un reintento tras recargar conserva la clave de idempotencia');
+assert.doesNotMatch(realtimeMapScript, /if\(active&&!routeDraftDirty&&!hasStoredRouteDraft\(\)\)hydrateRemoteRoute\(active\)/, 'La carga de rutas no abre automáticamente una ruta arbitraria sobre el borrador');
+assert.match(realtimeMapScript, /route-stop-selected/, 'Las paradas del borrador tienen una marca visual de alto contraste');
+assert.match(realtimeMapScript, /routePlanningMode\|\|mapLayers\.plannedRoutes\?googleMap:null/, 'Las paradas del borrador permanecen visibles aunque la capa de rutas esté apagada');
+assert.match(realtimeMapScript, /routeStopKeys=new Set\(routeBusinesses\.map\(keyOf\)\)/, 'Las paradas seleccionadas se excluyen del agrupamiento de puntos comerciales');
+assert.match(realtimeMapScript, /activeRouteCount=userId=>routesUnavailable\?null:remoteRoutes\.filter/, 'El selector muestra el número de rutas activas sin interpretar una consulta fallida como cero');
+assert.match(html, /id="routeAssigneeHistory" hidden/, 'El historial de rutas queda plegado inicialmente');
+assert.doesNotMatch(html, /id="routeFilterAssignee"|id="routeSavedRoute"|id="routeHistoryDate"/, 'El constructor ya no muestra filtros o selectores separados de rutas guardadas');
+assert.match(html, /id="routeAssigneeSearch" type="text" role="combobox"[\s\S]*?id="routeAssigneeOptions"[^>]*role="listbox"/, 'El responsable de ruta se elige en un único buscador accesible');
+assert.doesNotMatch(html, /Se asignará a \$\{selectedAssigneeName\} al pulsar “Guardar y asignar”/, 'El selector no muestra mensajes de asignación pendientes intrusivos');
+assert.match(html, /<button class="save" id="routeSave" type="button">Guardar ruta<\/button>/, 'El constructor deja claro el único guardado de la ruta');
+const routeAssigneeTargetHelper = html.match(/function routeAssigneeOptionFromEventTarget\(target\)\{[\s\S]*?\n\}/)?.[0];
+assert.ok(routeAssigneeTargetHelper, 'El selector normaliza el destino del evento sin asumir que pertenece al mismo realm DOM');
+const findRouteAssigneeOption = vm.runInNewContext(`${routeAssigneeTargetHelper};routeAssigneeOptionFromEventTarget`, { Element: class Element {} });
+const expectedRouteOption = { id: 'selected-option' };
+const crossRealmRouteTarget = vm.runInNewContext(
+  '({nodeType: 1, closest(selector) { return selector === \'#routeAssigneeOptions [role="option"]\' ? option : null; }})',
+  { option: expectedRouteOption },
+);
+assert.equal(findRouteAssigneeOption(crossRealmRouteTarget), expectedRouteOption, 'Un clic cuyo target viene de otro realm DOM encuentra su opción de responsable');
+const routeAssigneePickerHandlers = html.match(/const routeAssigneeSearchInput=[\s\S]*?routeAssigneeSearchInput\.addEventListener\('blur'/)?.[0] || '';
+assert.match(routeAssigneePickerHandlers, /routeAssigneeOptionFromEventTarget\(event\.target\)/, 'Los eventos de puntero y clic usan el resolver validado para seleccionar el responsable');
+assert.match(routeAssigneePickerHandlers, /routeAssigneeOptions\.addEventListener\('pointerdown'/, 'El clic táctil o de ratón selecciona antes de perder el foco del combo');
+assert.match(html, /id="routeCatalog"/, 'El panel ofrece un catálogo persistente de rutas para reabrir y reasignar');
+assert.ok(/class="route-stop-nearby"[^>]*>\s*＋\s*Seleccionar puntos cercanos/.test(html), 'Cada parada muestra una acción visible para abrir la selección cercana');
+assert.match(html, /id="routeVicinityMode"/, 'El constructor ofrece selección de puntos cercanos por cantidad o radio');
+assert.match(html, /id="routeVicinityRadius" type="number"/, 'El radio se puede escribir como una distancia personalizada');
+assert.match(html, /id="routeVicinityRadiusUnit"/, 'El radio permite elegir metros o kilómetros');
+assert.ok(/route-stop-actions \.route-stop-nearby\{display:inline-flex;order:10;flex:1 0 100%/.test(html), 'La acción de cercanos tiene una fila visible en cada tarjeta de parada');
+assert.match(html, /input\.max=next==='km'\?'50':'50000';input\.step=next==='km'\?'0\.1':'50'/, 'Cambiar la unidad del radio convierte el valor y actualiza el rango');
+assert.match(html, /googleMap\.panTo\(\{lat:Number\(center\.lat\),lng:Number\(center\.lng\)\}\)/, 'Abrir selección de cercanos enfoca el punto central en el mapa');
+assert.match(html, /window\.beginRouteVicinity=beginRouteVicinity/, 'El botón generado puede invocar la acción del módulo embebido');
+assert.match(html, /addButton\.textContent=includedMatches\.length\?'Agregar/, 'El botón confirma cuántos candidatos marcados se agregarán');
+const routeVicinityHelperSources = [
+  html.match(/function routePointCoordinates\(business\)\{[\s\S]*?\n\}/)?.[0],
+  html.match(/function routeDistanceMeters\(a,b\)\{[\s\S]*?\n\}/)?.[0],
+  html.match(/function selectRouteVicinityMatches\(center,candidates,selectedKeys,mode,count,radiusMeters\)\{[\s\S]*?\n\}/)?.[0],
+];
+assert.ok(routeVicinityHelperSources.every(Boolean), 'La selección de cercanos conserva un algoritmo de distancia comprobable');
+const selectRouteVicinityMatches = vm.runInNewContext(`${routeVicinityHelperSources.join('\n')};selectRouteVicinityMatches`, { keyOf: business => business.id, isDiscarded: business => business.discarded === true });
+const center = { id: 'center', lat: 12, lng: -86 };
+const nearA = { id: 'near-a', name: 'Cercano A', lat: 12, lng: -86.001 };
+const nearB = { id: 'near-b', name: 'Cercano B', lat: 12, lng: -86.002 };
+const far = { id: 'far', name: 'Lejano', lat: 12, lng: -86.006 };
+const alreadySelected = { id: 'selected', name: 'Ya incluido', lat: 12, lng: -86.0005 };
+const discarded = { id: 'discarded', name: 'Descartado', lat: 12, lng: -86.0002, discarded: true };
+const invalid = { id: 'invalid', name: 'Coordenada inválida', lat: 95, lng: -86 };
+const nearbyCandidates = [far, nearB, center, alreadySelected, discarded, invalid, nearA];
+assert.deepEqual(Array.from(selectRouteVicinityMatches(center, nearbyCandidates, ['center', 'selected'], 'count', 2, 250), item => item.business.name), ['Cercano A', 'Cercano B'], 'La cantidad agrega los N puntos válidos más cercanos sin repetir el centro ni las paradas existentes');
+assert.deepEqual(Array.from(selectRouteVicinityMatches(center, nearbyCandidates, ['center', 'selected'], 'count', 0, 250)), [], 'Una cantidad fuera de rango no sustituye el valor por diez ni agrega puntos inesperados');
+assert.deepEqual(Array.from(selectRouteVicinityMatches(center, nearbyCandidates, ['center', 'selected'], 'radius', 10, 250), item => item.business.name), ['Cercano A', 'Cercano B'], 'El radio incluye únicamente los puntos dentro de la distancia geográfica elegida');
+const vicinityAdjustmentSources = [
+  html.match(/function toggleRouteVicinityKey\(keys,key\)\{[\s\S]*?\n\}/)?.[0],
+  html.match(/function routeVicinityIncludedMatches\(candidates,excludedKeys\)\{[\s\S]*?\n\}/)?.[0],
+];
+assert.ok(vicinityAdjustmentSources.every(Boolean), 'El borrador expone funciones comprobables para desmarcar y volver a marcar candidatos');
+const vicinityAdjustment = vm.runInNewContext(vicinityAdjustmentSources.join('\n') + ';({toggleRouteVicinityKey,routeVicinityIncludedMatches})', { keyOf: business => business.id });
+const candidateRows = [{ business: nearA, distance: 100 }, { business: nearB, distance: 200 }];
+const excludedCandidate = vicinityAdjustment.toggleRouteVicinityKey([], 'near-a');
+assert.deepEqual(Array.from(vicinityAdjustment.routeVicinityIncludedMatches(candidateRows, excludedCandidate), item => item.business.id), ['near-b'], 'Desmarcar un candidato lo excluye sin descartar los demás');
+const reselectedCandidate = vicinityAdjustment.toggleRouteVicinityKey(excludedCandidate, 'near-a');
+assert.deepEqual(Array.from(vicinityAdjustment.routeVicinityIncludedMatches(candidateRows, reselectedCandidate), item => item.business.id), ['near-a', 'near-b'], 'El mismo candidato puede volverse a marcar antes de agregarlo');
+assert.ok(/id="routeVicinityCandidates"/.test(html), 'La vista previa ofrece una lista para ajustar candidatos individualmente');
+assert.ok(/toggleRouteVicinityCandidate\(checkbox\.dataset\.vicinityKey,true\)/.test(html), 'Cambiar una casilla recalcula la vista previa conservando el foco');
+assert.ok(/marker\.addEventListener\('gmp-click',toggle\)/.test(html), 'Los marcadores del mapa también permiten incluir o excluir candidatos');
+assert.ok(/addButton\.disabled=!includedMatches\.length/.test(html), 'Guardar puntos cercanos exige al menos un candidato marcado');
+assert.match(html, /activeSavedRouteAssigneeId[\s\S]*?String\(assigneeId\|\|''\)!==String\(activeSavedRouteAssigneeId\|\|''\)/, 'La reasignación compara con el responsable persistido de la ruta');
+assert.match(html, /class="route-transfer-destination">A: <b id="routeTransferAssigneeName"/, 'La transferencia identifica dinámicamente al responsable elegido');
+assert.match(html, /class="route-transfer-checkbox"/, 'La transferencia usa una casilla personalizada');
+assert.match(html, /class="route-transfer-title"[\s\S]*class="route-transfer-count"[\s\S]*class="route-transfer-destination"/, 'La opción de transferencia separa título, usuario destino y cantidad');
+assert.match(html, /id="routeTransferUnit"/, 'El conteo muestra punto o puntos en singular/plural');
+assert.match(html, /id="routeTransferHelp"[\s\S]*transferHelp\.textContent=transferEnabled\?/, 'La ayuda explica el efecto real de activar o dejar desactivada la transferencia');
+assert.match(html, /route-transfer-checkbox:checked::after[\s\S]*route-transfer-checkbox:focus-visible/, 'La casilla personalizada muestra confirmación y foco accesible');
+assert.match(html, /route-transfer-option:has\(\.route-transfer-checkbox:checked\)/, 'La tarjeta cambia de estado visual al activar la transferencia');
+assert.match(html, /<b>Responsable del punto<\/b>[\s\S]*?<b>Responsable de la ruta actual<\/b>/, 'La ficha separa al responsable comercial del responsable de la ruta');
+assert.doesNotMatch(html, /id="owner-[^"]+"|<label>Dueño o decisor<\/label>/, 'La ficha ya no expone el dueño o decisor como asignación');
+assert.match(html, /c\.contactName=contactName;c\.contactPhone=contactPhone;[\s\S]*?body\.notes=note/, 'Guardar el seguimiento no borra el dueño histórico y conserva contacto/notas');
 
-console.log('force-sales route history: inline syntax and real-point-only gap segmentation passed');
+console.log('force-sales route history: inline syntax, GPS gap segmentation, and nearby-point selection passed');

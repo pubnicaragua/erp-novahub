@@ -32,6 +32,7 @@ import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAle
 import { BrowserNotificationPrompt } from './components/notificaciones/BrowserNotificationPrompt';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
 import { loadModuleWithChunkRecovery } from './utils/chunk-recovery';
+import { reportChunkLoadIncident } from './utils/chunk-telemetry';
 import { readPersistedDarkMode } from './utils/theme-mode';
 import { useResponsiveNativeTables } from './hooks/useResponsiveNativeTables';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from './utils/sidebarPermissions';
@@ -41,7 +42,7 @@ import { ForceSalesOfflineTrackingFallback } from './components/ForceSalesOfflin
 import { getOfflineRouteEligibility } from './services/force-sales-location-queue';
 
 function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(loader: () => Promise<T>, moduleName: string) {
-  return lazy(() => loadModuleWithChunkRecovery(loader, moduleName));
+  return lazy(() => loadModuleWithChunkRecovery(loader, moduleName, reportChunkLoadIncident));
 }
 
 const OverviewDashboard = lazyWithChunkRecovery(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })), 'dashboard');
@@ -685,12 +686,16 @@ function AppContent() {
   useEffect(() => {
     const handler = (event: Event) => {
       if (location.pathname === '/register' || location.pathname.startsWith('/public/')) return;
+      // Al iniciar, /auth/profile valida cualquier token guardado. Un 401 en
+      // esa comprobación es normal y debe dejar el login disponible, sin iniciar
+      // el flujo de cierre de una sesión que todavía no está autenticada.
+      if (!isAuthenticated) return;
       const code = (event as CustomEvent).detail?.code;
       setSessionClosed(code === 'SESSION_CLOSED' ? 'closed' : code === 'SESSION_EXPIRED' ? 'expired' : 'invalid');
     };
     window.addEventListener('session-closed', handler);
     return () => window.removeEventListener('session-closed', handler);
-  }, [location.pathname]);
+  }, [isAuthenticated, location.pathname]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -705,14 +710,14 @@ function AppContent() {
 
   // Al cerrarse la sesión (contador llega a 0), redirigir solo al login.
   useEffect(() => {
-    if (!sessionClosed) return;
+    if (!sessionClosed || !isAuthenticated) return;
     const timer = setTimeout(() => {
       safeRemoveItem('nh-auth-token');
       logout?.();
-      window.location.reload();
+      setSessionClosed(null);
     }, 4000);
     return () => clearTimeout(timer);
-  }, [sessionClosed, logout]);
+  }, [isAuthenticated, sessionClosed, logout]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', readPersistedDarkMode());
@@ -759,7 +764,7 @@ function AppContent() {
   const handleGuardLogout = () => {
     safeRemoveItem('nh-auth-token');
     logout?.();
-    window.location.reload();
+    setSessionClosed(null);
   };
 
   // La pantalla de trial/sesión es una barrera de presentación. El backend
