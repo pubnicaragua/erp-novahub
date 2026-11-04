@@ -10,21 +10,17 @@ assert.match(shell, /import \{ customersService \} from '\.\.\/services\/ventas\
 assert.match(shell, /canPerform\('SALES_CLIENTS',\s*'read'\)/, 'La búsqueda del cliente requiere permiso de lectura de Ventas');
 assert.match(shell, /canPerform\('FORCE_SALES',\s*'updateProspect'\)/, 'El vínculo requiere permiso para editar prospectos');
 assert.match(shell, /customersService\.getLookup/, 'La búsqueda reutiliza el endpoint de lookup de clientes');
-assert.match(shell, /force-sales-customer-search-result/, 'El shell responde por postMessage al iframe del mapa');
+assert.match(shell, /import \{ Combobox \} from '\.\/ui\/Combobox'/, 'La selección reutiliza el Combobox compartido');
+assert.match(shell, /force-sales-open-customer-link/, 'El shell abre el selector solicitado por el mapa');
+assert.match(shell, /force-sales-customer-link-selected/, 'El shell devuelve el cliente seleccionado al mapa');
+assert.match(shell, /onSearchChange=\{searchCustomerLinkCustomers\}/, 'La búsqueda del Combobox consulta clientes en el servidor');
 
-assert.match(map, /force-sales-customer-search/, 'El mapa solicita resultados de clientes al shell');
-assert.match(map, /force-sales-customer-search-result/, 'El mapa consume respuestas del shell');
-assert.match(map, /role="combobox"/, 'La búsqueda del cliente expone semántica accesible de combobox');
-assert.ok(map.includes('data-customer-link-trigger'), 'El selector muestra un control desplegable antes de buscar');
-assert.ok(/data-customer-link-dropdown[^>]*hidden/.test(map), 'El campo de búsqueda abre dentro de un menú cerrado inicialmente');
-assert.ok(map.includes('function toggleCustomerLookup('), 'El selector permite abrir y cerrar el menú de búsqueda');
-assert.match(map, /data-customer-link/, 'Las opciones permiten seleccionar una ficha de cliente');
+assert.match(map, /force-sales-open-customer-link/, 'El mapa solicita al shell abrir el selector');
+assert.match(map, /force-sales-customer-link-selected/, 'El mapa consume el cliente seleccionado por el shell');
+assert.ok(map.includes('data-customer-link-trigger'), 'El mapa presenta el acceso al selector compartido');
+assert.doesNotMatch(map, /data-customer-link-dropdown|data-customer-link-search|data-customer-link-select/, 'El mapa ya no contiene un buscador propio');
 assert.match(map, /customerId:\s*customerId|customerId\s*\?\s*customerId\s*:\s*null/, 'El mapa guarda o quita la referencia mediante el PATCH de prospectos');
 assert.match(map, /navigator\.onLine/, 'La vinculación queda deshabilitada sin conexión y no entra en la cola offline');
-assert.match(map, /Buscando clientes/, 'La búsqueda comunica su estado de carga');
-assert.match(map, /No se encontraron clientes activos/, 'La búsqueda comunica un estado vacío');
-assert.match(map, /message\.error/, 'La búsqueda comunica errores del servicio');
-assert.match(map, /ArrowDown|ArrowUp/, 'El selector permite recorrer opciones con el teclado');
 
 assert.match(customerView, /CUSTOMER_HAS_FORCE_SALES_POINT/, 'La lista reconoce el conflicto de borrado de un cliente vinculado');
 assert.match(customerView, /punto.*(?:desvincular|vínculo|vincul)/is, 'El borrado confirmado advierte que se quitará el vínculo del punto');

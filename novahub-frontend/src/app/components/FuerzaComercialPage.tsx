@@ -1,10 +1,12 @@
 import { ShieldAlert } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { customersService } from '../services/ventas.service';
 import { subscribeToNotificationEvents } from '../services/notifications.service';
+import { Combobox } from './ui/Combobox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
 
 const mapUrl = `${import.meta.env.BASE_URL}maps/diseñoui_mapas_freelancers.html`;
@@ -14,6 +16,13 @@ interface ForceSalesMapConfig {
   mapSearchMode?: string;
   mapTileUrl?: string | null;
   mapGeocoderUrl?: string | null;
+}
+
+interface ForceSalesCustomerOption {
+  id: string;
+  code?: string | null;
+  name: string;
+  companyName?: string | null;
 }
 
 export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: string; onSubModuleChange?: (value: string) => void }) {
@@ -28,6 +37,13 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [mapFrameError, setMapFrameError] = useState(false);
   const [mapFrameLoadVersion, setMapFrameLoadVersion] = useState(0);
+  const [customerLinkDialogOpen, setCustomerLinkDialogOpen] = useState(false);
+  const [customerLinkPointId, setCustomerLinkPointId] = useState('');
+  const [customerLinkCustomers, setCustomerLinkCustomers] = useState<ForceSalesCustomerOption[]>([]);
+  const [customerLinkLoading, setCustomerLinkLoading] = useState(false);
+  const [customerLinkError, setCustomerLinkError] = useState('');
+  const customerLinkLookupRequestRef = useRef(0);
+  const customerLinkLookupTimerRef = useRef<number | null>(null);
   if (previousSubModule !== activeSubModule) {
     setPreviousSubModule(activeSubModule);
     setMapFullscreen(false);
@@ -52,6 +68,28 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation',
   ] as const;
   const workflowPermissions = Object.fromEntries(workflowActions.map((action) => [action, canPerform('FORCE_SALES', action)]));
+  const loadCustomerLinkCustomers = useCallback((search: string, requestId: number) => {
+    setCustomerLinkLoading(true);
+    setCustomerLinkError('');
+    void customersService.getLookup({ search: search || undefined, status: 'ACTIVE', page: 1, pageSize: 25 }).then((result) => {
+      if (requestId === customerLinkLookupRequestRef.current) setCustomerLinkCustomers(result?.data || []);
+    }).catch(() => {
+      if (requestId !== customerLinkLookupRequestRef.current) return;
+      setCustomerLinkCustomers([]);
+      setCustomerLinkError('No se pudieron cargar los clientes activos. Intenta de nuevo.');
+    }).finally(() => {
+      if (requestId === customerLinkLookupRequestRef.current) setCustomerLinkLoading(false);
+    });
+  }, []);
+  const searchCustomerLinkCustomers = useCallback((search: string) => {
+    if (customerLinkLookupTimerRef.current !== null) window.clearTimeout(customerLinkLookupTimerRef.current);
+    const requestId = ++customerLinkLookupRequestRef.current;
+    const term = search.trim();
+    customerLinkLookupTimerRef.current = window.setTimeout(() => {
+      customerLinkLookupTimerRef.current = null;
+      loadCustomerLinkCustomers(term.length >= 2 ? term : '', requestId);
+    }, term.length >= 2 ? 250 : 0);
+  }, [loadCustomerLinkCustomers]);
   useEffect(() => {
     let cancelled = false;
     if (!isAuthorizedUser) return undefined;
@@ -204,22 +242,13 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     const onMapMessage = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow || event.origin !== window.location.origin) return;
       if (event.data?.source !== 'novahub-force-sales') return;
-      if (event.data?.type === 'force-sales-customer-search') {
-        const requestId = String(event.data.requestId || '').trim();
+      if (event.data?.type === 'force-sales-open-customer-link') {
         const pointId = String(event.data.pointId || '').trim();
-        const search = String(event.data.search || '').trim();
-        if (!canLinkCustomer || !requestId || !pointId) return;
-        void customersService.getLookup({ search, status: 'ACTIVE', page: 1, pageSize: 25 }).then((result) => {
-          iframeRef.current?.contentWindow?.postMessage({
-            source: 'novahub-force-sales', type: 'force-sales-customer-search-result', requestId, pointId,
-            customers: (result?.data || []).map(({ id, code, name, companyName }) => ({ id, code, name, companyName })),
-          }, window.location.origin);
-        }).catch(() => {
-          iframeRef.current?.contentWindow?.postMessage({
-            source: 'novahub-force-sales', type: 'force-sales-customer-search-result', requestId, pointId,
-            customers: [], error: 'No se pudieron buscar clientes. Intenta de nuevo.',
-          }, window.location.origin);
-        });
+        if (!canLinkCustomer || !pointId) return;
+        setCustomerLinkPointId(pointId);
+        setCustomerLinkDialogOpen(true);
+        if (customerLinkLookupTimerRef.current !== null) window.clearTimeout(customerLinkLookupTimerRef.current);
+        loadCustomerLinkCustomers('', ++customerLinkLookupRequestRef.current);
       }
       if (event.data?.type === 'fullscreen') setMapFullscreen(Boolean(event.data.active));
       if (event.data?.type === 'configuration-updated') setMapConfig(event.data.configuration || {});
@@ -229,7 +258,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
     };
     window.addEventListener('message', onMapMessage);
     return () => window.removeEventListener('message', onMapMessage);
-  }, [canLinkCustomer]);
+  }, [canLinkCustomer, loadCustomerLinkCustomers]);
 
   if (!isAuthorizedUser) {
     return (
@@ -268,6 +297,54 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
           </button>
         </div>
       </div>}
+      <Dialog open={customerLinkDialogOpen} onOpenChange={(open) => {
+        setCustomerLinkDialogOpen(open);
+        if (!open) {
+          setCustomerLinkPointId('');
+          if (customerLinkLookupTimerRef.current !== null) window.clearTimeout(customerLinkLookupTimerRef.current);
+          customerLinkLookupTimerRef.current = null;
+          customerLinkLookupRequestRef.current += 1;
+          setCustomerLinkLoading(false);
+        }
+      }}>
+        <DialogContent className="!z-[121] w-[calc(100%-2rem)] !max-w-md" overlayClassName="!z-[120]">
+          <DialogHeader>
+            <DialogTitle>Cliente de ventas</DialogTitle>
+          </DialogHeader>
+          <Combobox
+                options={customerLinkCustomers.map((customer) => ({
+                  label: customer.name,
+                  value: customer.id,
+                  description: [customer.code ? `[${customer.code}]` : '', customer.companyName || ''].filter(Boolean).join(' '),
+                }))}
+                value=""
+                onSearchChange={searchCustomerLinkCustomers}
+                onChange={(customerId) => {
+                  const customer = customerLinkCustomers.find((item) => item.id === customerId);
+                  if (!customer || !customerLinkPointId) return;
+                  if (customerLinkLookupTimerRef.current !== null) window.clearTimeout(customerLinkLookupTimerRef.current);
+                  customerLinkLookupTimerRef.current = null;
+                  customerLinkLookupRequestRef.current += 1;
+                  setCustomerLinkLoading(false);
+                  iframeRef.current?.contentWindow?.postMessage({
+                    source: 'novahub-force-sales',
+                    type: 'force-sales-customer-link-selected',
+                    pointId: customerLinkPointId,
+                    customer,
+                  }, window.location.origin);
+                  setCustomerLinkDialogOpen(false);
+                  setCustomerLinkPointId('');
+                }}
+                placeholder="Seleccionar Cliente"
+                searchPlaceholder="Buscar cliente"
+                emptyMessage="No se encontraron clientes activos."
+                ariaLabel="Seleccionar cliente de ventas"
+                contentClassName="!z-[122]"
+              />
+          {customerLinkLoading && <p className="text-xs text-muted-foreground">Cargando clientes activos…</p>}
+          {customerLinkError && <p role="alert" className="text-sm text-destructive">{customerLinkError}</p>}
+        </DialogContent>
+      </Dialog>
       <input
         ref={routeImportInputRef}
         type="file"

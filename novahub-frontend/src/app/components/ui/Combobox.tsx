@@ -23,6 +23,7 @@ interface ComboboxProps {
   options: { label: string; value: string; description?: string; disabled?: boolean }[]
   value?: string
   onChange: (value: string) => void
+  onSearchChange?: (value: string) => void
   placeholder?: string
   emptyMessage?: string
   searchPlaceholder?: string
@@ -39,6 +40,7 @@ export function Combobox({
   options,
   value,
   onChange,
+  onSearchChange,
   placeholder = "Seleccionar...",
   emptyMessage = "No se encontraron resultados.",
   searchPlaceholder,
@@ -66,7 +68,10 @@ export function Combobox({
   }, [maxVisibleOptions, options, search])
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) setSearch('')
+    if (!nextOpen) {
+      setSearch('')
+      onSearchChange?.('')
+    }
     setOpen(nextOpen)
   }
 
@@ -148,7 +153,10 @@ export function Combobox({
       </PopoverTrigger>
       <PopoverContent className={cn("w-full p-0", contentClassName)} align="start">
         <Command shouldFilter={false}>
-          <CommandInput value={search} onValueChange={setSearch} placeholder={searchPlaceholder || placeholder} className="h-8 text-xs" />
+          <CommandInput value={search} onValueChange={(nextSearch) => {
+            setSearch(nextSearch)
+            onSearchChange?.(nextSearch)
+          }} placeholder={searchPlaceholder || placeholder} className="h-8 text-xs" />
           <CommandList
             onWheelCapture={handleListWheel}
             className="touch-pan-y overscroll-contain"
