@@ -26,6 +26,7 @@ type BankAccountSelectProps = {
   currency?: string;
   valueMode?: 'id' | 'accountNumber';
   showUnavailableOptions?: boolean;
+  showCommissionPercent?: boolean;
 };
 
 export function BankAccountSelect({
@@ -42,6 +43,7 @@ export function BankAccountSelect({
   currency,
   valueMode = 'id',
   showUnavailableOptions = false,
+  showCommissionPercent = true,
 }: BankAccountSelectProps) {
   const normalizedCurrency = String(currency || '').trim().toUpperCase() || undefined;
   const requestCurrency = showUnavailableOptions ? undefined : normalizedCurrency;
@@ -84,7 +86,7 @@ export function BankAccountSelect({
             ].filter(Boolean);
             return (
               <SelectItem key={account.id} value={valueMode === 'accountNumber' ? account.accountNumber : account.id} disabled={!isSelectable(account)}>
-                {account.bankName} · {account.accountNumber} · {account.currency || 'NIO'}{commission > 0 ? ` · ${commission.toFixed(2)}%` : ''}{reasons.length > 0 ? ` · ${reasons.join(' · ')}` : ''}
+                {account.bankName} · {account.accountNumber} · {account.currency || 'NIO'}{showCommissionPercent && commission > 0 ? ` · ${commission.toFixed(2)}%` : ''}{reasons.length > 0 ? ` · ${reasons.join(' · ')}` : ''}
               </SelectItem>
             );
           })}
