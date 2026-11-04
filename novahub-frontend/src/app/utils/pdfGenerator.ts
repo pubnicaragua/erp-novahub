@@ -2437,6 +2437,7 @@ export async function printSalesPaymentTicket({
     ? paymentRows.reduce((sum: number, row: any) => sum + Number(row?.amount || 0), 0)
     : paymentRows.reduce((sum: number, row: any) => sum + Number(row?.baseAmount ?? (Number(row?.amount || 0) * Number(row?.exchangeRate || 1))), 0);
   const documentReference = payment?.invoice?.number
+    || payment?.invoiceNumber
     || payment?.creditNote?.number
     || (payment?.balanceApplicationType === 'GENERAL_BALANCE' ? 'Saldo general del cliente' : 'Anticipo');
   const receipt = {

@@ -620,6 +620,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           customerId: paymentCredit.customerId,
           customer: matchedRow?.customer || (updatedCredit as any)?.customer || customerFor(paymentCredit.customerId),
           invoiceId: paymentCredit.kind === 'CUSTOMER_LOAN' ? paymentCredit.invoice?.id : undefined,
+          invoiceNumber: paymentCredit.kind === 'CUSTOMER_LOAN' ? paymentCredit.invoice?.number || paymentCredit.number : undefined,
           sourceType: paymentCredit.kind === 'CUSTOMER_LOAN' ? 'CUSTOMER_LOAN' : undefined,
           sourceLabel: paymentCredit.kind === 'CUSTOMER_LOAN' ? `Abono de préstamo ${paymentCredit.number}` : undefined,
           creditNoteId: paymentCredit.kind === 'CREDIT_NOTE' ? paymentCredit.id : undefined,

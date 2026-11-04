@@ -24,14 +24,16 @@ export function SalesPaymentReceiptDialog({
   if (!payment) return null;
 
   const rows = payment.payments?.length ? payment.payments : [payment];
-  const documentNumber = payment.invoice?.number || payment.creditNote?.number;
-  const documentLabel = payment.invoice?.number
-    ? 'Factura'
-    : payment.creditNote?.number
-      ? 'Crédito'
-      : payment.balanceApplicationType === 'GENERAL_BALANCE'
-        ? 'Saldo general del cliente'
-        : 'Anticipo';
+  const documentNumber = payment.invoice?.number || payment.invoiceNumber || payment.creditNote?.number;
+  const documentLabel = payment.sourceType === 'CUSTOMER_LOAN'
+    ? 'Factura del préstamo'
+    : payment.invoice?.number || payment.invoiceNumber
+      ? 'Factura'
+      : payment.creditNote?.number
+        ? 'Crédito'
+        : payment.balanceApplicationType === 'GENERAL_BALANCE'
+          ? 'Saldo general del cliente'
+          : 'Anticipo';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -62,7 +64,7 @@ export function SalesPaymentReceiptDialog({
             </div>
             <div className="rounded-xl border border-border/50 bg-background/60 p-3">
               <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Documento aplicado</p>
-              <p className="mt-1 break-words text-sm font-bold">{documentNumber || documentLabel}</p>
+              <p className="mt-1 break-words text-sm font-bold">{payment.sourceType === 'CUSTOMER_LOAN' && documentNumber ? `${documentLabel}: ${documentNumber}` : documentNumber || documentLabel}</p>
             </div>
           </div>
 

@@ -629,6 +629,7 @@ export interface PaymentReceived {
   customerId: string;
   customer?: Customer;
   invoiceId?: string;
+  invoiceNumber?: string;
   invoice?: Invoice;
   creditNoteId?: string;
   creditNote?: CreditNote;
