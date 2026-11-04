@@ -382,7 +382,11 @@ async function sendBatch(session: SessionRecord, points: QueueRecord[]) {
     const response = await fetch(`${session.apiBase}/force-sales/location-points/batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.accessToken}` },
-      body: JSON.stringify({ points: normalizedPoints.map(({ key: _key, scopeKey: _scope, storedAt: _stored, ...point }) => point) }),
+      body: JSON.stringify({ points: normalizedPoints.map(({ key: _key, scopeKey: _scope, storedAt: _stored, ...point }) => ({
+        ...point,
+        accuracy: typeof point.accuracy === 'number' && Number.isFinite(point.accuracy) ? point.accuracy : undefined,
+        heading: typeof point.heading === 'number' && Number.isFinite(point.heading) ? point.heading : undefined,
+      })) }),
       signal: controller.signal,
       cache: 'no-store',
     });
@@ -474,7 +478,7 @@ export function flushLocationQueue(identity: LocationQueueIdentity): Promise<boo
     const attempt = Math.min((retryAttempts.get(scopeKey) || 0) + 1, 8);
     retryAttempts.set(scopeKey, attempt);
     const delay = Math.min(30000 * 2 ** (attempt - 1), 15 * 60 * 1000);
-    window.setTimeout(() => { void flushLocationQueue(identity); }, delay);
+    window.setTimeout(() => { void flushLocationQueue(identity).catch(() => undefined); }, delay);
     throw error;
   }).finally(() => flushes.delete(scopeKey));
   flushes.set(scopeKey, flush);
