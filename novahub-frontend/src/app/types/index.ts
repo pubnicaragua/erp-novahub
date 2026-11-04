@@ -193,7 +193,7 @@ export interface CustomerLoan {
   principal: number | string;
   interest: number | string;
   total: number | string;
-  frequency: 'DAILY' | 'WEEKLY';
+  frequency: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
   dueDate: string;
   currency: string;
   moraTypeId?: string | null;

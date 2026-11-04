@@ -6,6 +6,7 @@ const service = read('../src/app/services/ventas.service.ts');
 const page = read('../src/app/components/VentasPage.tsx');
 const creditsView = read('../src/app/components/ventas/NotasCreditoView.tsx');
 const loanPanel = read('../src/app/components/ventas/CustomerLoansPanel.tsx');
+const types = read('../src/app/types/index.ts');
 
 assert.match(service, /creditDocumentsService\s*=\s*\{[\s\S]*?getAll:[\s\S]*?\/sales\/credit-documents/,
   'Credits view should use the unified credit document endpoint');
@@ -21,5 +22,15 @@ assert.match(creditsView, /createIdempotencyKey\('customer-loan-payment'\)/,
   'Each loan payment should carry an explicit idempotency key');
 assert.match(creditsView, /paymentCredit\.kind\s*===\s*'CUSTOMER_LOAN'[\s\S]*?CUSTOMER_BALANCE/,
   'Customer balance should not be offered for loan payments');
+assert.match(types, /frequency:\s*'DAILY'\s*\|\s*'WEEKLY'\s*\|\s*'BIWEEKLY'\s*\|\s*'MONTHLY'/,
+  'Customer loan types should accept daily, weekly, biweekly, and monthly frequency values');
+assert.match(loanPanel, /<SelectItem value="BIWEEKLY">Quincenal<\/SelectItem>/,
+  'Loan creation should offer the biweekly cadence');
+assert.match(loanPanel, /<SelectItem value="MONTHLY">Mensual<\/SelectItem>/,
+  'Loan creation should offer the monthly cadence');
+assert.match(loanPanel, /loan-due-date" type="date" required/,
+  'Loan due date should remain required and manually entered');
+assert.match(loanPanel, /BIWEEKLY:\s*'Quincenal'[\s\S]*MONTHLY:\s*'Mensual'/,
+  'Saved loans should render the biweekly and monthly labels');
 
 console.log('Customer loans in Credits contract checks passed.');

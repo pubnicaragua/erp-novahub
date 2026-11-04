@@ -17,17 +17,24 @@ import { toast } from '@/app/services/toast';
 import { getCustomerLoanMoraActions } from '../../utils/customer-loan-permissions';
 
 type MoraType = { id: string; name: string; description: string; isActive: boolean };
+type LoanFrequency = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
 type CustomerLoan = {
   id: string;
   principal: number | string;
   interest: number | string;
   total: number | string;
-  frequency: 'DAILY' | 'WEEKLY';
+  frequency: LoanFrequency;
   dueDate: string;
   currency: string;
   moraTypeNameSnapshot: string;
   moraTypeDescriptionSnapshot: string;
   invoice: { id: string; number: string; date: string; dueDate?: string | null; total: number | string; amountPaid: number | string; balance: number | string; currency: string; status: string };
+};
+const loanFrequencyLabels: Record<LoanFrequency, string> = {
+  DAILY: 'Diaria',
+  WEEKLY: 'Semanal',
+  BIWEEKLY: 'Quincenal',
+  MONTHLY: 'Mensual',
 };
 type CashSessionOption = { id: string; registerId: string; registerName: string; sessionName: string };
 type LoanCurrency = 'NIO' | 'USD';
@@ -90,11 +97,11 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
   const [moraName, setMoraName] = useState('');
   const [moraDescription, setMoraDescription] = useState('');
   const [form, setForm] = useState<{
-    principal: string; interest: string; frequency: 'DAILY' | 'WEEKLY'; dueDate: string;
+    principal: string; interest: string; frequency: LoanFrequency; dueDate: string;
     moraTypeId: string; currency: LoanCurrency; disbursementSource: 'CASH' | 'BANK';
     cashRegisterSessionId: string; bankAccountId: string; notes: string;
   }>({
-    principal: '', interest: '0', frequency: 'WEEKLY' as 'DAILY' | 'WEEKLY', dueDate: '',
+    principal: '', interest: '0', frequency: 'WEEKLY' as LoanFrequency, dueDate: '',
     moraTypeId: '', currency: baseCurrency as LoanCurrency, disbursementSource: 'CASH',
     cashRegisterSessionId: '', bankAccountId: '', notes: '',
   });
@@ -235,7 +242,7 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
                 <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-lg border border-border/40 bg-muted/20 p-2.5"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Principal</p><p className="mt-1 break-words font-bold tabular-nums">{money(loan.principal, loan.currency)}</p></div>
                   <div className="rounded-lg border border-border/40 bg-muted/20 p-2.5"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Interés fijo</p><p className="mt-1 break-words font-bold tabular-nums">{money(loan.interest, loan.currency)}</p></div>
-                  <div className="rounded-lg border border-border/40 bg-muted/20 p-2.5"><p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-muted-foreground"><Clock3 className="size-3" /> Frecuencia</p><p className="mt-1 font-bold">{loan.frequency === 'DAILY' ? 'Diaria' : 'Semanal'}</p></div>
+                  <div className="rounded-lg border border-border/40 bg-muted/20 p-2.5"><p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-muted-foreground"><Clock3 className="size-3" /> Frecuencia</p><p className="mt-1 font-bold">{loanFrequencyLabels[loan.frequency]}</p></div>
                   <div className="rounded-lg border border-border/40 bg-muted/20 p-2.5"><p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-muted-foreground"><CalendarDays className="size-3" /> Vencimiento</p><p className="mt-1 font-bold">{localDate(loan.dueDate || loan.invoice?.dueDate)}</p></div>
                 </div>
                 <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.035] p-3">
@@ -254,7 +261,7 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
           <form id="customer-loan-form" onSubmit={submitLoan} className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5"><Label htmlFor="loan-principal">Principal a prestar *</Label><Input id="loan-principal" type="number" min="0.01" step="0.01" required value={form.principal} onChange={(event) => setForm({ ...form, principal: event.target.value })} /></div>
             <div className="space-y-1.5"><Label htmlFor="loan-interest">Interés fijo *</Label><Input id="loan-interest" type="number" min="0" step="0.01" required value={form.interest} onChange={(event) => setForm({ ...form, interest: event.target.value })} /></div>
-            <div className="space-y-1.5"><Label>Frecuencia de pago *</Label><Select value={form.frequency} onValueChange={(value) => setForm({ ...form, frequency: value as 'DAILY' | 'WEEKLY' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem></SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>Frecuencia de pago *</Label><Select value={form.frequency} onValueChange={(value) => setForm({ ...form, frequency: value as LoanFrequency })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select></div>
             <div className="space-y-1.5"><Label htmlFor="loan-due-date">Fecha de vencimiento *</Label><Input id="loan-due-date" type="date" required value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></div>
             <div className="space-y-1.5"><Label>Moneda *</Label><Select value={form.currency} onValueChange={(value) => setForm({ ...form, currency: value as LoanCurrency, bankAccountId: '' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>
             <div className="space-y-1.5"><Label>Tipo de mora *</Label><Select value={form.moraTypeId} onValueChange={(value) => setForm({ ...form, moraTypeId: value })}><SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger><SelectContent>{activeMoraTypes.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
