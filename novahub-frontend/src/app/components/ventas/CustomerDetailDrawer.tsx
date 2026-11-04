@@ -882,11 +882,18 @@ export function CustomerDetailDrawer({
                 <CustomerLoansPanel
                   customerId={customer.id}
                   customerName={customer.name}
+                  moraTypeId={customer.moraTypeId}
+                  moraType={customer.moraType}
                   enabled={customerLoansEnabled}
                   canCreateLoan={canCreateLoan}
                   canCreateMora={canCreateMora}
                   canEditMora={canEditMora}
                   onUpdated={onLoansUpdated}
+                  onMoraTypeUpdated={(nextMoraType) => setDetail((current) => ({
+                    ...(current?.id === customer.id ? current : customer),
+                    moraTypeId: nextMoraType?.id ?? null,
+                    moraType: nextMoraType,
+                  }))}
                 />
               </TabsContent>}
 

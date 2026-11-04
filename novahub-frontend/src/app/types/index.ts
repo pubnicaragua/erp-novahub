@@ -175,6 +175,8 @@ export interface Customer {
     currency: string;
   };
   customerLoans?: CustomerLoan[];
+  moraTypeId?: string | null;
+  moraType?: { id: string; name: string; description: string; isActive: boolean } | null;
   balance: number;
   status: EntityStatus;
   notes?: string;
@@ -197,8 +199,8 @@ export interface CustomerLoan {
   dueDate: string;
   currency: string;
   moraTypeId?: string | null;
-  moraTypeNameSnapshot: string;
-  moraTypeDescriptionSnapshot: string;
+  moraTypeNameSnapshot?: string | null;
+  moraTypeDescriptionSnapshot?: string | null;
   invoice: {
     id: string;
     number: string;
@@ -783,7 +785,7 @@ export interface CreditDocument extends CreditNote {
   principal?: number | string;
   interest?: number | string;
   moraType?: { id: string; name: string; description?: string } | null;
-  moraTypeNameSnapshot?: string;
+  moraTypeNameSnapshot?: string | null;
   notes?: string | null;
 }
 

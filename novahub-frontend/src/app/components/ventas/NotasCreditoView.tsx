@@ -740,7 +740,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       { label: 'Vencimiento', value: formatDate(row.dueDate) },
       ...(row.kind === 'CUSTOMER_LOAN' ? [
         { label: 'Frecuencia', value: ({ DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Quincenal', MONTHLY: 'Mensual' } as const)[row.frequency || 'WEEKLY'] },
-        { label: 'Tipo de mora', value: row.moraType?.name || row.moraTypeNameSnapshot || 'Sin tipo de mora' },
+        { label: 'Mora del cliente', value: row.customer?.moraType?.name || 'Sin clasificación asignada' },
       ] : []),
       ...(row.invoice?.number ? [{ label: 'Factura origen', value: row.invoice.number }] : []),
     ],

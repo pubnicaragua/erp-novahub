@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Banknote, CalendarDays, Clock3, FileText, Loader2, Plus, Settings2 } from 'lucide-react';
+import { Banknote, CalendarDays, Clock3, FileText, Loader2, Plus, Save, Settings2 } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -26,8 +26,8 @@ type CustomerLoan = {
   frequency: LoanFrequency;
   dueDate: string;
   currency: string;
-  moraTypeNameSnapshot: string;
-  moraTypeDescriptionSnapshot: string;
+  moraTypeNameSnapshot?: string | null;
+  moraTypeDescriptionSnapshot?: string | null;
   invoice: { id: string; number: string; date: string; dueDate?: string | null; total: number | string; amountPaid: number | string; balance: number | string; currency: string; status: string };
 };
 const loanFrequencyLabels: Record<LoanFrequency, string> = {
@@ -61,14 +61,17 @@ const localDate = (value?: string | null) => {
 interface CustomerLoansPanelProps {
   customerId: string;
   customerName: string;
+  moraTypeId?: string | null;
+  moraType?: MoraType | null;
   enabled: boolean;
   canCreateLoan: boolean;
   canCreateMora: boolean;
   canEditMora: boolean;
   onUpdated?: () => void;
+  onMoraTypeUpdated?: (moraType: MoraType | null) => void;
 }
 
-export function CustomerLoansPanel({ customerId, customerName, enabled, canCreateLoan, canCreateMora, canEditMora, onUpdated }: CustomerLoansPanelProps) {
+export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraType, enabled, canCreateLoan, canCreateMora, canEditMora, onUpdated, onMoraTypeUpdated }: CustomerLoansPanelProps) {
   const { baseCurrency } = useCurrency();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -96,13 +99,15 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
   const [editingMora, setEditingMora] = useState<MoraType | null>(null);
   const [moraName, setMoraName] = useState('');
   const [moraDescription, setMoraDescription] = useState('');
+  const [assignedMoraTypeId, setAssignedMoraTypeId] = useState(moraTypeId || '');
+  const [moraTypeSelection, setMoraTypeSelection] = useState(moraTypeId || '');
   const [form, setForm] = useState<{
     principal: string; interest: string; frequency: LoanFrequency; dueDate: string;
-    moraTypeId: string; currency: LoanCurrency; disbursementSource: 'CASH' | 'BANK';
+    currency: LoanCurrency; disbursementSource: 'CASH' | 'BANK';
     cashRegisterSessionId: string; bankAccountId: string; notes: string;
   }>({
     principal: '', interest: '0', frequency: 'WEEKLY' as LoanFrequency, dueDate: '',
-    moraTypeId: '', currency: baseCurrency as LoanCurrency, disbursementSource: 'CASH',
+    currency: baseCurrency as LoanCurrency, disbursementSource: 'CASH',
     cashRegisterSessionId: '', bankAccountId: '', notes: '',
   });
 
@@ -113,6 +118,12 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
   useEffect(() => {
     if (loansQuery.error) toast.error((loansQuery.error as any)?.message || 'No se pudo cargar el historial de préstamos.');
   }, [loansQuery.error]);
+
+  useEffect(() => {
+    const currentId = moraTypeId || '';
+    setAssignedMoraTypeId(currentId);
+    setMoraTypeSelection(currentId);
+  }, [customerId, moraTypeId]);
 
   const cashSessionsQuery = useQuery({
     queryKey: ['caja', 'customer-loan-disbursement-sessions', tenantId, user?.id],
@@ -141,20 +152,18 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
     if (cashSessionsQuery.error) toast.error((cashSessionsQuery.error as any)?.message || 'No se pudieron cargar las sesiones de Caja.');
   }, [cashSessionsQuery.error]);
 
-  const activeMoraTypes = useMemo(() => moraTypes.filter((item) => item.isActive), [moraTypes]);
   const outstandingByCurrency = loans.reduce<Record<string, number>>((totals, loan) => {
     const currency = String(loan.invoice?.currency || loan.currency || baseCurrency).toUpperCase();
     totals[currency] = (totals[currency] || 0) + Math.max(0, Number(loan.invoice?.balance || 0));
     return totals;
   }, {});
   const resetLoanForm = () => setForm({
-    principal: '', interest: '0', frequency: 'WEEKLY', dueDate: '', moraTypeId: activeMoraTypes[0]?.id || '',
+    principal: '', interest: '0', frequency: 'WEEKLY', dueDate: '',
     currency: baseCurrency as LoanCurrency, disbursementSource: 'CASH', cashRegisterSessionId: '', bankAccountId: '', notes: '',
   });
 
   const submitLoan = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!form.moraTypeId) { toast.error('Primero configura un tipo de mora activo.'); return; }
     if (form.disbursementSource === 'CASH' && !selectedCashSessionId) { toast.error('No hay una sesión abierta de Caja seleccionada.'); return; }
     if (form.disbursementSource === 'BANK' && !form.bankAccountId) { toast.error('Selecciona una cuenta bancaria.'); return; }
     setSaving(true);
@@ -162,7 +171,7 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
       const key = globalThis.crypto?.randomUUID?.() || `loan-${customerId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       await customersService.createCustomerLoan(customerId, {
         principal: Number(form.principal), interest: Number(form.interest || 0), frequency: form.frequency,
-        dueDate: form.dueDate, moraTypeId: form.moraTypeId, currency: form.currency,
+        dueDate: form.dueDate, currency: form.currency,
         disbursementSource: form.disbursementSource,
         ...(form.disbursementSource === 'CASH' ? { cashRegisterSessionId: selectedCashSessionId } : { bankAccountId: form.bankAccountId }),
         notes: form.notes,
@@ -174,6 +183,20 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
       onUpdated?.();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo crear el préstamo.');
+    } finally { setSaving(false); }
+  };
+
+  const saveCustomerMoraType = async () => {
+    setSaving(true);
+    try {
+      const nextId = moraTypeSelection || '';
+      await customersService.update(customerId, { moraTypeId: nextId || null });
+      setAssignedMoraTypeId(nextId);
+      onMoraTypeUpdated?.(nextId ? moraTypes.find((item) => item.id === nextId) || moraType || null : null);
+      toast.success(nextId ? 'Clasificación de mora actualizada para el cliente.' : 'Clasificación de mora retirada del cliente.');
+      onUpdated?.();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo actualizar la clasificación de mora.');
     } finally { setSaving(false); }
   };
 
@@ -220,7 +243,35 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
           </div>
         </div>
         {!enabled && <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">La creación de préstamos está desactivada. Los préstamos existentes siguen disponibles para consulta y cobro desde Pagos Recibidos.</p>}
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      </Card>
+
+      <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm sm:p-5">
+        <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            {canEditMora ? <Label htmlFor="customer-mora-type">Clasificación de mora del cliente</Label> : <p className="text-xs font-medium text-muted-foreground">Clasificación de mora del cliente</p>}
+            {canEditMora ? (
+              <Select value={moraTypeSelection || '__none__'} onValueChange={(value) => setMoraTypeSelection(value === '__none__' ? '' : value)}>
+                <SelectTrigger id="customer-mora-type" className="max-w-full"><SelectValue placeholder="Sin clasificación asignada" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sin clasificación asignada</SelectItem>
+                  {moraType && !moraTypes.some((item) => item.id === moraType.id) && <SelectItem value={moraType.id} disabled={!moraType.isActive}>{moraType.name}{!moraType.isActive ? ' · Inactivo' : ''}</SelectItem>}
+                  {moraTypes.map((item) => <SelectItem key={item.id} value={item.id} disabled={!item.isActive && item.id !== assignedMoraTypeId}>{item.name}{!item.isActive ? ' · Inactivo' : ''}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="flex min-h-10 items-center gap-2 rounded-xl border border-border/50 bg-muted/20 px-3">
+                <Badge variant="outline">{moraType?.name || moraTypes.find((item) => item.id === assignedMoraTypeId)?.name || 'Sin clasificación asignada'}</Badge>
+                {moraType && !moraType.isActive && <Badge variant="outline" className="text-[9px]">Inactivo</Badge>}
+              </div>
+            )}
+            <p className="text-[11px] leading-relaxed text-muted-foreground">Se asigna o cambia manualmente cuando el cliente deja de estar al día. No avanza automáticamente por días ni por vencimientos.</p>
+          </div>
+          {canEditMora && <Button type="button" variant="outline" className="shrink-0 gap-2 rounded-xl" disabled={saving || moraTypeSelection === assignedMoraTypeId} onClick={() => void saveCustomerMoraType()}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Guardar clasificación</Button>}
+        </div>
+      </Card>
+
+      <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm sm:p-5">
+        <div className="mt-0 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Préstamos vigentes</p><p className="mt-1 text-lg font-black tabular-nums text-foreground">{loans.filter((item) => Number(item.invoice?.balance || 0) > 0.01).length}</p></div>
           <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente por moneda</p><div className="mt-1 space-y-1">{Object.entries(outstandingByCurrency).length ? Object.entries(outstandingByCurrency).map(([currency, amount]) => <p key={currency} className="break-words text-lg font-black tabular-nums text-rose-600 dark:text-rose-400">{money(amount, currency)}</p>) : <p className="text-lg font-black tabular-nums text-rose-600 dark:text-rose-400">{money(0, baseCurrency)}</p>}</div></div>
         </div>
@@ -245,8 +296,9 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
                   <div className="rounded-lg border border-border/40 bg-muted/20 p-2.5"><p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-muted-foreground"><Clock3 className="size-3" /> Frecuencia</p><p className="mt-1 font-bold">{loanFrequencyLabels[loan.frequency]}</p></div>
                   <div className="rounded-lg border border-border/40 bg-muted/20 p-2.5"><p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-muted-foreground"><CalendarDays className="size-3" /> Vencimiento</p><p className="mt-1 font-bold">{localDate(loan.dueDate || loan.invoice?.dueDate)}</p></div>
                 </div>
-                <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.035] p-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Tipo de mora · {loan.moraTypeNameSnapshot}</p><p className="mt-1 break-words text-[11px] text-muted-foreground">{loan.moraTypeDescriptionSnapshot}</p></div><div className="shrink-0 sm:text-right"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Pendiente</p><p className="mt-1 text-sm font-black tabular-nums text-rose-600 dark:text-rose-400">{money(balance, loan.currency)}</p></div></div>
+                <div className="mt-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  {loan.moraTypeNameSnapshot && <div className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Clasificación histórica guardada al emitir</p><p className="mt-1 break-words text-xs font-bold text-foreground">{loan.moraTypeNameSnapshot}</p>{loan.moraTypeDescriptionSnapshot && <p className="mt-1 break-words text-[11px] text-muted-foreground">{loan.moraTypeDescriptionSnapshot}</p>}</div>}
+                  <div className="shrink-0 sm:ml-auto sm:text-right"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Pendiente</p><p className="mt-1 text-sm font-black tabular-nums text-rose-600 dark:text-rose-400">{money(balance, loan.currency)}</p></div>
                 </div>
                 <p className="mt-3 text-[10px] text-muted-foreground">Total facturado: <span className="font-bold text-foreground">{money(loan.total, loan.currency)}</span> · Abonado: <span className="font-bold text-foreground">{money(loan.invoice?.amountPaid, loan.currency)}</span></p>
               </Card>
@@ -264,11 +316,10 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
             <div className="space-y-1.5"><Label>Frecuencia de pago *</Label><Select value={form.frequency} onValueChange={(value) => setForm({ ...form, frequency: value as LoanFrequency })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select></div>
             <div className="space-y-1.5"><Label htmlFor="loan-due-date">Fecha de vencimiento *</Label><Input id="loan-due-date" type="date" required value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></div>
             <div className="space-y-1.5"><Label>Moneda *</Label><Select value={form.currency} onValueChange={(value) => setForm({ ...form, currency: value as LoanCurrency, bankAccountId: '' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>
-            <div className="space-y-1.5"><Label>Tipo de mora *</Label><Select value={form.moraTypeId} onValueChange={(value) => setForm({ ...form, moraTypeId: value })}><SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger><SelectContent>{activeMoraTypes.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5 sm:col-span-2"><Label>Desembolso desde *</Label><Select value={form.disbursementSource} onValueChange={(value) => setForm({ ...form, disbursementSource: value as 'CASH' | 'BANK', cashRegisterSessionId: '', bankAccountId: '' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Caja</SelectItem><SelectItem value="BANK">Banco</SelectItem></SelectContent></Select></div>
             {form.disbursementSource === 'CASH' ? <div className="space-y-1.5 sm:col-span-2"><Label>Sesión abierta de Caja *</Label><Select value={selectedCashSessionId} onValueChange={(value) => setForm({ ...form, cashRegisterSessionId: value })} disabled={cashLoading || cashSessions.length === 0}><SelectTrigger><SelectValue placeholder={cashLoading ? 'Buscando sesiones abiertas…' : 'Seleccionar sesión'} /></SelectTrigger><SelectContent>{cashSessions.map((item) => <SelectItem key={item.id} value={item.id}>{item.registerName}{item.sessionName ? ` · ${item.sessionName}` : ''}</SelectItem>)}</SelectContent></Select>{!cashLoading && cashSessions.length === 0 && <p className="text-[11px] text-destructive">No hay cajas con sesión abierta disponible.</p>}</div> : <BankAccountSelect className="sm:col-span-2" currency={form.currency} endpoint="/bank-accounts/payment-options" value={form.bankAccountId} onChange={(value) => setForm({ ...form, bankAccountId: value })} label="Cuenta bancaria de salida" showCommissionPercent={false} />}
             <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="loan-notes">Notas (opcional)</Label><Input id="loan-notes" maxLength={500} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Referencia o acuerdo de pago" /></div>
-            <p className="text-[11px] leading-relaxed text-muted-foreground sm:col-span-2">El principal más el interés debe caber en el límite de crédito disponible. La mora queda registrada como condición informativa y no se calcula automáticamente.</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground sm:col-span-2">El principal más el interés debe caber en el límite de crédito disponible. La clasificación de mora se administra manualmente en la ficha del cliente.</p>
           </form>
           <DialogFooter className="gap-2 sm:justify-end"><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button type="submit" form="customer-loan-form" disabled={saving || (form.disbursementSource === 'CASH' && cashLoading)}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />} Emitir y desembolsar</Button></DialogFooter>
         </DialogContent>
@@ -276,9 +327,9 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
 
       <Dialog open={moraOpen} onOpenChange={setMoraOpen}>
         <DialogContent className="max-h-[90dvh] w-[calc(100%-1rem)] overflow-y-auto rounded-2xl sm:max-w-xl">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Tipos de mora</DialogTitle><DialogDescription>Define nombres y explicaciones. No se calcula mora automáticamente; los préstamos guardan una copia histórica de esta condición.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Tipos de mora</DialogTitle><DialogDescription>Define las clasificaciones que se asignan manualmente a la ficha del cliente cuando deja de estar al día. No se modifican automáticamente según la fecha.</DialogDescription></DialogHeader>
           <div className="space-y-3">
-            {moraTypes.length === 0 && <p className="rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground">{moraActions.canCreateType ? 'Aún no hay tipos de mora. Agrega uno para poder crear préstamos.' : 'Aún no hay tipos de mora configurados para esta sucursal.'}</p>}
+            {moraTypes.length === 0 && <p className="rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground">{moraActions.canCreateType ? 'Aún no hay tipos de mora. Agrega uno para asignarlo manualmente a un cliente cuando corresponda.' : 'Aún no hay tipos de mora configurados para esta sucursal.'}</p>}
             {moraTypes.map((item) => <div key={item.id} className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><div className="flex items-center gap-2"><p className="break-words text-xs font-bold text-foreground">{item.name}</p><Badge variant="outline" className="shrink-0 text-[9px]">{item.isActive ? 'Activo' : 'Inactivo'}</Badge></div><p className="mt-1 break-words text-[11px] text-muted-foreground">{item.description}</p></div>{moraActions.canEditTypes && <div className="flex shrink-0 gap-2"><Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px]" onClick={() => openMoraForm(item)}>Editar</Button><Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px]" onClick={() => void toggleMoraType(item)}>{item.isActive ? 'Desactivar' : 'Activar'}</Button></div>}</div>)}
             {moraActions.canCreateType && <Button type="button" className="w-full gap-2 rounded-xl" onClick={() => openMoraForm()}><Plus className="size-4" /> Agregar tipo de mora</Button>}
           </div>
@@ -288,7 +339,7 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
 
       <Dialog open={moraFormOpen} onOpenChange={setMoraFormOpen}>
         <DialogContent className="w-[calc(100%-1rem)] rounded-2xl sm:max-w-md">
-          <DialogHeader><DialogTitle>{editingMora ? 'Editar tipo de mora' : 'Agregar tipo de mora'}</DialogTitle><DialogDescription>La explicación se conserva en cada préstamo aunque luego edites o desactives el tipo.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{editingMora ? 'Editar tipo de mora' : 'Agregar tipo de mora'}</DialogTitle><DialogDescription>La clasificación se asigna manualmente al cliente. Los datos históricos guardados en préstamos anteriores se conservan.</DialogDescription></DialogHeader>
           <form id="mora-type-form" onSubmit={saveMoraType} className="space-y-4">
             <div className="space-y-1.5"><Label htmlFor="mora-name">Nombre *</Label><Input id="mora-name" required maxLength={80} value={moraName} onChange={(event) => setMoraName(event.target.value)} /></div>
             <div className="space-y-1.5"><Label htmlFor="mora-description">Explicación *</Label><textarea id="mora-description" required maxLength={500} value={moraDescription} onChange={(event) => setMoraDescription(event.target.value)} className="min-h-24 w-full max-w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
