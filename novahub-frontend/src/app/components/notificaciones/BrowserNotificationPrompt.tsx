@@ -4,10 +4,17 @@ import { Button } from '../ui/button';
 import { enableBrowserNotifications, getBrowserNotificationStatus } from '../../utils/browserNotifications';
 import { toast } from '@/app/services/toast';
 
+const BROWSER_NOTIFICATION_PROMPT_DISMISSED_KEY = 'nh-browser-notification-prompt-dismissed';
+
 /** Small, explicit permission prompt for installed Android/iOS PWAs. */
 export function BrowserNotificationPrompt() {
   const [visible, setVisible] = useState(() => {
-    return typeof window !== 'undefined' && getBrowserNotificationStatus() === 'default';
+    if (typeof window === 'undefined' || getBrowserNotificationStatus() !== 'default') return false;
+    try {
+      return window.localStorage.getItem(BROWSER_NOTIFICATION_PROMPT_DISMISSED_KEY) !== 'true';
+    } catch {
+      return true;
+    }
   });
   const [loading, setLoading] = useState(false);
 
@@ -15,6 +22,9 @@ export function BrowserNotificationPrompt() {
 
   const dismiss = () => {
     setVisible(false);
+    try {
+      window.localStorage.setItem(BROWSER_NOTIFICATION_PROMPT_DISMISSED_KEY, 'true');
+    } catch { /* optional preference */ }
   };
 
   const enable = async () => {

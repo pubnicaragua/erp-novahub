@@ -19,7 +19,6 @@ import { DominiosView } from './DominiosView';
 import { TrialCountdownBanner } from '../auth/TrialCountdownBanner';
 import { tenantsService, type TenantUser } from '../../services/tenants.service';
 import { hrService } from '../../services/hr.service';
-import { usersService } from '../../services/users.service';
 import { customersService } from '../../services/ventas.service';
 import { brandingService } from '../../services/branding.service';
 import { authService } from '../../services/auth.service';
@@ -132,13 +131,12 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
   const [isWarehouseAccessDialogOpen, setIsWarehouseAccessDialogOpen] = useState(false);
-  const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
-  const [editingNameUser, setEditingNameUser] = useState<TenantUser | null>(null);
+  const [editingUser, setEditingUser] = useState<TenantUser | null>(null);
   const [editedUserName, setEditedUserName] = useState('');
-  const [savingUserName, setSavingUserName] = useState(false);
-  const [editingEmailUser, setEditingEmailUser] = useState<TenantUser | null>(null);
   const [editedUserEmail, setEditedUserEmail] = useState('');
-  const [savingUserEmail, setSavingUserEmail] = useState(false);
+  const [editedUserPassword, setEditedUserPassword] = useState('');
+  const [canChangePasswordInEditor, setCanChangePasswordInEditor] = useState(false);
+  const [savingUserEdits, setSavingUserEdits] = useState(false);
   const [isPortalAccessDialogOpen, setIsPortalAccessDialogOpen] = useState(false);
   const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -173,8 +171,6 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
   const [uploading, setUploading] = useState(false);
 
-  const [newPasswordForUser, setNewPasswordForUser] = useState('');
-  const [updatingPassword, setUpdatingPassword] = useState(false);
   const [userEmailError, setUserEmailError] = useState('');
   const [checkingUserEmail, setCheckingUserEmail] = useState(false);
   const userEmailFormatError = userForm.email.trim() && !isValidEmail(userForm.email)
@@ -435,97 +431,59 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
     }, 4500);
   };
 
-  const handleOpenChangePassword = (user: any) => {
-    if (!canEditUsers) return;
-    setSelectedUser(user);
-    setNewPasswordForUser('');
-    setIsChangePasswordDialogOpen(true);
-  };
-
-  const handleOpenEditUserName = (user: TenantUser) => {
+  const handleOpenEditUser = (user: TenantUser, allowPasswordChange: boolean) => {
     if (!canEditUsers || !user?.id) return;
-    setEditingNameUser(user);
+    setEditingUser(user);
     setEditedUserName(String(user.name || ''));
-  };
-
-  const handleSaveUserName = async () => {
-    const target = editingNameUser;
-    const name = editedUserName.trim();
-    if (!canEditUsers || !target?.id || !name || savingUserName) return;
-
-    try {
-      setSavingUserName(true);
-      const updatedUser = await tenantsService.updateUser(tenant.id, target.id, { name });
-      setUsers((current) => current.map((user) => user.id === target.id ? { ...user, ...updatedUser, name } : user));
-      setEditingNameUser(null);
-      setEditedUserName('');
-      toast.success('Nombre del usuario actualizado');
-      await fetchUsers();
-      if (currentUser?.id === target.id) {
-        try {
-          await refreshProfile();
-        } catch (error) {
-          console.warn('No se pudo refrescar el perfil después de cambiar el nombre', error);
-        }
-      }
-    } catch (error: unknown) {
-      toast.error(getApiErrorMessage(error, 'No se pudo actualizar el nombre del usuario'));
-    } finally {
-      setSavingUserName(false);
-    }
-  };
-
-  const handleOpenEditUserEmail = (user: TenantUser) => {
-    if (!canEditUsers || !user?.id) return;
-    setEditingEmailUser(user);
     setEditedUserEmail(String(user.email || ''));
+    setEditedUserPassword('');
+    setCanChangePasswordInEditor(allowPasswordChange);
   };
 
-  const handleSaveUserEmail = async () => {
-    const target = editingEmailUser;
+  const closeUserEditor = () => {
+    setEditingUser(null);
+    setEditedUserName('');
+    setEditedUserEmail('');
+    setEditedUserPassword('');
+    setCanChangePasswordInEditor(false);
+  };
+
+  const handleSaveUserEdits = async () => {
+    const target = editingUser;
+    const name = editedUserName.trim();
     const email = normalizeEmail(editedUserEmail);
-    if (!canEditUsers || !target?.id || !isValidEmail(email) || savingUserEmail) return;
-
-    try {
-      setSavingUserEmail(true);
-      const updatedUser = await tenantsService.updateUser(tenant.id, target.id, { email });
-      setUsers((current) => current.map((user) => user.id === target.id ? { ...user, ...updatedUser, email } : user));
-      setEditingEmailUser(null);
-      setEditedUserEmail('');
-      toast.success('Correo del usuario actualizado');
-      await fetchUsers();
-      if (currentUser?.id === target.id) {
-        try {
-          await refreshProfile();
-        } catch (error) {
-          console.warn('No se pudo refrescar el perfil después de cambiar el correo', error);
-        }
-      }
-    } catch (error: unknown) {
-      toast.error(getApiErrorMessage(error, 'No se pudo actualizar el correo del usuario'));
-    } finally {
-      setSavingUserEmail(false);
-    }
-  };
-
-  const handleAdminChangePassword = async () => {
-    if (!canEditUsers) return;
-    const passwordError = getPasswordError(newPasswordForUser);
-    if (passwordError) {
-      toast.error(passwordError);
+    const password = editedUserPassword;
+    const passwordError = getPasswordError(password, false);
+    if (!canEditUsers || !target?.id || !name || !isValidEmail(email) || savingUserEdits) return;
+    if (password && (!canChangePasswordInEditor || passwordError)) {
+      if (passwordError) toast.error(passwordError);
       return;
     }
-    if (!selectedUser?.id) return;
+
+    const updates: { name?: string; email?: string; password?: string } = {};
+    if (name !== String(target.name || '').trim()) updates.name = name;
+    if (email !== normalizeEmail(target.email)) updates.email = email;
+    if (password) updates.password = password;
+    if (!Object.keys(updates).length) return;
 
     try {
-      setUpdatingPassword(true);
-      await usersService.changePassword(selectedUser.id, newPasswordForUser);
-      toast.success('Contraseña del usuario actualizada correctamente');
-      setIsChangePasswordDialogOpen(false);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Error al cambiar la contraseña');
+      setSavingUserEdits(true);
+      const updatedUser = await tenantsService.updateUser(tenant.id, target.id, updates);
+      setUsers((current) => current.map((user) => user.id === target.id ? { ...user, ...updatedUser, name, email } : user));
+      closeUserEditor();
+      toast.success(password ? 'Datos y contraseña del usuario actualizados' : 'Datos del usuario actualizados');
+      await fetchUsers();
+      if (currentUser?.id === target.id) {
+        try {
+          await refreshProfile();
+        } catch (error) {
+          console.warn('No se pudo refrescar el perfil después de editar el usuario', error);
+        }
+      }
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'No se pudieron guardar los datos del usuario'));
     } finally {
-      setUpdatingPassword(false);
+      setSavingUserEdits(false);
     }
   };
 
@@ -1026,9 +984,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                     </Select>
                   </div>}
 
-                   {canEditUsers && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEditUserName(u)} title={`Editar nombre de ${u.name}`}><Pencil className="size-3" /> Editar nombre</Button>}
-                   {canEditUsers && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEditUserEmail(u)} title={`Cambiar correo de ${u.name}`}><Mail className="size-3" /> Cambiar correo</Button>}
-                   {canChangeThisPassword && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
+                   {canEditUsers && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEditUser(u, canChangeThisPassword)} title={`Editar usuario ${u.name}`}><Pencil className="size-3" /> Editar</Button>}
                    {canViewEmployees && (u.employee ? <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleUnlinkEmployee(u)} title={canEditEmployees ? 'Desvincular empleado' : 'Vínculo gestionado por Recursos Humanos'}><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title={canEditEmployees ? 'Vincular empleado' : 'Sin permiso para vincular'}><Link2 className="size-3" /> Vincular empleado</Button>)}
                   {canEditUsers && isCollaborator && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleOpenWarehouseAccess(u)} title="Administrar bodegas permitidas"><Warehouse className="size-3" /> Bodegas</Button>}
                   {(canViewUsers || canViewRoles) && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>}
@@ -1400,22 +1356,19 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(editingNameUser)} onOpenChange={(open) => {
-        if (!open && !savingUserName) {
-          setEditingNameUser(null);
-          setEditedUserName('');
-        }
+      <Dialog open={Boolean(editingUser)} onOpenChange={(open) => {
+        if (!open && !savingUserEdits) closeUserEditor();
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pencil className="size-5 text-primary" /> Editar nombre del usuario
+              <Pencil className="size-5 text-primary" /> Editar usuario
             </DialogTitle>
             <DialogDescription>
-              Cambia el nombre visible de {editingNameUser?.name || 'este usuario'}. Aparecerá en NovaHub y en el mapa de Fuerza Comercial.
+              Actualiza el nombre y el correo de {editingUser?.name || 'este usuario'}. Si cambias la contraseña, se guardarán todos los datos en una sola operación.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={(event) => { event.preventDefault(); void handleSaveUserName(); }} className="space-y-4">
+          <form onSubmit={(event) => { event.preventDefault(); void handleSaveUserEdits(); }} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="tenant-user-name-edit">Nombre completo</Label>
               <Input
@@ -1424,44 +1377,17 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                 autoComplete="name"
                 value={editedUserName}
                 onChange={(event) => setEditedUserName(event.target.value)}
-                placeholder="Ej: Ruta 5"
+                placeholder="Ej: María Pérez"
                 required
                 aria-invalid={!editedUserName.trim()}
                 className="h-11 bg-muted/10"
               />
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditingNameUser(null)} disabled={savingUserName}>Cancelar</Button>
-              <Button type="submit" disabled={savingUserName || !editedUserName.trim() || editedUserName.trim() === String(editingNameUser?.name || '').trim()}>
-                {savingUserName ? 'Guardando...' : 'Guardar nombre'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(editingEmailUser)} onOpenChange={(open) => {
-        if (!open && !savingUserEmail) {
-          setEditingEmailUser(null);
-          setEditedUserEmail('');
-        }
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Mail className="size-5 text-primary" /> Cambiar correo del usuario
-            </DialogTitle>
-            <DialogDescription>
-              Actualiza el correo de acceso de {editingEmailUser?.name || 'este usuario'}. Debe ser único en NovaHub.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={(event) => { event.preventDefault(); void handleSaveUserEmail(); }} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="tenant-user-email-edit">Correo de acceso</Label>
+              <Label htmlFor="tenant-user-email-edit" className="flex items-center gap-2"><Mail className="size-4" /> Correo de acceso</Label>
               <Input
                 id="tenant-user-email-edit"
                 type="email"
-                autoFocus
                 autoComplete="email"
                 value={editedUserEmail}
                 onChange={(event) => setEditedUserEmail(event.target.value)}
@@ -1470,49 +1396,37 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                 aria-invalid={Boolean(editedUserEmail) && !isValidEmail(editedUserEmail)}
                 className="h-11 bg-muted/10"
               />
-              <p className="text-xs text-muted-foreground">El correo no puede estar registrado en otra cuenta.</p>
+              <p className="text-xs text-muted-foreground">El correo debe ser único en NovaHub.</p>
             </div>
+            {canChangePasswordInEditor && <div className="space-y-2">
+              <Label htmlFor="tenant-user-password-edit" className="flex items-center gap-2"><KeyRound className="size-4" /> Nueva contraseña (opcional)</Label>
+              <Input
+                id="tenant-user-password-edit"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Déjala vacía para conservarla"
+                value={editedUserPassword}
+                onChange={(event) => setEditedUserPassword(event.target.value)}
+                aria-invalid={Boolean(editedUserPassword) && Boolean(getPasswordError(editedUserPassword, false))}
+                className={cn('h-11 bg-muted/10', editedUserPassword && getPasswordError(editedUserPassword, false) && 'border-destructive')}
+              />
+              <PasswordRequirements value={editedUserPassword} required={false} />
+              {editedUserPassword && getPasswordError(editedUserPassword, false) && <p className="text-xs text-destructive">{getPasswordError(editedUserPassword, false)}</p>}
+            </div>}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setEditingEmailUser(null); setEditedUserEmail(''); }} disabled={savingUserEmail}>Cancelar</Button>
-              <Button type="submit" disabled={savingUserEmail || !isValidEmail(editedUserEmail) || normalizeEmail(editedUserEmail) === normalizeEmail(editingEmailUser?.email)}>
-                {savingUserEmail ? 'Guardando…' : 'Guardar correo'}
+              <Button type="button" variant="outline" onClick={closeUserEditor} disabled={savingUserEdits}>Cancelar</Button>
+              <Button
+                type="submit"
+                disabled={savingUserEdits || !editedUserName.trim() || !isValidEmail(editedUserEmail) || Boolean(editedUserPassword && getPasswordError(editedUserPassword, false)) || !(
+                  editedUserName.trim() !== String(editingUser?.name || '').trim()
+                  || normalizeEmail(editedUserEmail) !== normalizeEmail(editingUser?.email)
+                  || Boolean(editedUserPassword)
+                )}
+              >
+                {savingUserEdits ? 'Guardando…' : 'Guardar cambios'}
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Change Password Dialog (Admin) */}
-      <Dialog open={isChangePasswordDialogOpen} onOpenChange={setIsChangePasswordDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-               <KeyRound className="size-5 text-primary" /> Cambiar Contraseña
-            </DialogTitle>
-            <DialogDescription>
-              Actualiza la contraseña del usuario <span className="font-bold text-foreground">{selectedUser?.name}</span>.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nueva Contraseña</Label>
-              <Input 
-                type="password" 
-                placeholder="8 caracteres, mayúscula, número y símbolo" 
-                value={newPasswordForUser}
-                onChange={(e) => setNewPasswordForUser(e.target.value)}
-                className={cn('bg-muted/10 h-11', getPasswordError(newPasswordForUser) && 'border-destructive')}
-              />
-              <PasswordRequirements value={newPasswordForUser} />
-              {getPasswordError(newPasswordForUser) && <p className="text-xs text-destructive">{getPasswordError(newPasswordForUser)}</p>}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsChangePasswordDialogOpen(false)} disabled={updatingPassword}>Cancelar</Button>
-             <Button onClick={handleAdminChangePassword} disabled={updatingPassword || !!getPasswordError(newPasswordForUser)} className="h-10 bg-primary font-bold text-primary-foreground hover:bg-primary/90">
-              {updatingPassword ? 'Guardando...' : 'Actualizar Contraseña'}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
