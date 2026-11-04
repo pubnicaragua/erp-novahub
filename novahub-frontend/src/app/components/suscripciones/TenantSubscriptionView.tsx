@@ -136,6 +136,9 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [editingNameUser, setEditingNameUser] = useState<TenantUser | null>(null);
   const [editedUserName, setEditedUserName] = useState('');
   const [savingUserName, setSavingUserName] = useState(false);
+  const [editingEmailUser, setEditingEmailUser] = useState<TenantUser | null>(null);
+  const [editedUserEmail, setEditedUserEmail] = useState('');
+  const [savingUserEmail, setSavingUserEmail] = useState(false);
   const [isPortalAccessDialogOpen, setIsPortalAccessDialogOpen] = useState(false);
   const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -469,6 +472,39 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
       toast.error(getApiErrorMessage(error, 'No se pudo actualizar el nombre del usuario'));
     } finally {
       setSavingUserName(false);
+    }
+  };
+
+  const handleOpenEditUserEmail = (user: TenantUser) => {
+    if (!canEditUsers || !user?.id) return;
+    setEditingEmailUser(user);
+    setEditedUserEmail(String(user.email || ''));
+  };
+
+  const handleSaveUserEmail = async () => {
+    const target = editingEmailUser;
+    const email = normalizeEmail(editedUserEmail);
+    if (!canEditUsers || !target?.id || !isValidEmail(email) || savingUserEmail) return;
+
+    try {
+      setSavingUserEmail(true);
+      const updatedUser = await tenantsService.updateUser(tenant.id, target.id, { email });
+      setUsers((current) => current.map((user) => user.id === target.id ? { ...user, ...updatedUser, email } : user));
+      setEditingEmailUser(null);
+      setEditedUserEmail('');
+      toast.success('Correo del usuario actualizado');
+      await fetchUsers();
+      if (currentUser?.id === target.id) {
+        try {
+          await refreshProfile();
+        } catch (error) {
+          console.warn('No se pudo refrescar el perfil después de cambiar el correo', error);
+        }
+      }
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'No se pudo actualizar el correo del usuario'));
+    } finally {
+      setSavingUserEmail(false);
     }
   };
 
@@ -991,6 +1027,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                   </div>}
 
                    {canEditUsers && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEditUserName(u)} title={`Editar nombre de ${u.name}`}><Pencil className="size-3" /> Editar nombre</Button>}
+                   {canEditUsers && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEditUserEmail(u)} title={`Cambiar correo de ${u.name}`}><Mail className="size-3" /> Cambiar correo</Button>}
                    {canChangeThisPassword && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
                    {canViewEmployees && (u.employee ? <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleUnlinkEmployee(u)} title={canEditEmployees ? 'Desvincular empleado' : 'Vínculo gestionado por Recursos Humanos'}><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title={canEditEmployees ? 'Vincular empleado' : 'Sin permiso para vincular'}><Link2 className="size-3" /> Vincular empleado</Button>)}
                   {canEditUsers && isCollaborator && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleOpenWarehouseAccess(u)} title="Administrar bodegas permitidas"><Warehouse className="size-3" /> Bodegas</Button>}
@@ -1397,6 +1434,48 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
               <Button type="button" variant="outline" onClick={() => setEditingNameUser(null)} disabled={savingUserName}>Cancelar</Button>
               <Button type="submit" disabled={savingUserName || !editedUserName.trim() || editedUserName.trim() === String(editingNameUser?.name || '').trim()}>
                 {savingUserName ? 'Guardando...' : 'Guardar nombre'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editingEmailUser)} onOpenChange={(open) => {
+        if (!open && !savingUserEmail) {
+          setEditingEmailUser(null);
+          setEditedUserEmail('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="size-5 text-primary" /> Cambiar correo del usuario
+            </DialogTitle>
+            <DialogDescription>
+              Actualiza el correo de acceso de {editingEmailUser?.name || 'este usuario'}. Debe ser único en NovaHub.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(event) => { event.preventDefault(); void handleSaveUserEmail(); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tenant-user-email-edit">Correo de acceso</Label>
+              <Input
+                id="tenant-user-email-edit"
+                type="email"
+                autoFocus
+                autoComplete="email"
+                value={editedUserEmail}
+                onChange={(event) => setEditedUserEmail(event.target.value)}
+                placeholder="usuario@empresa.com"
+                required
+                aria-invalid={Boolean(editedUserEmail) && !isValidEmail(editedUserEmail)}
+                className="h-11 bg-muted/10"
+              />
+              <p className="text-xs text-muted-foreground">El correo no puede estar registrado en otra cuenta.</p>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setEditingEmailUser(null); setEditedUserEmail(''); }} disabled={savingUserEmail}>Cancelar</Button>
+              <Button type="submit" disabled={savingUserEmail || !isValidEmail(editedUserEmail) || normalizeEmail(editedUserEmail) === normalizeEmail(editingEmailUser?.email)}>
+                {savingUserEmail ? 'Guardando…' : 'Guardar correo'}
               </Button>
             </DialogFooter>
           </form>
