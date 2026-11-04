@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { MARKETING_GUIDES } from './guides';
 import { Download, Plus } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
@@ -22,7 +23,7 @@ export function AnaliticaView() {
   const [tab, setTab] = useState<Tab>('kpi');
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Marketing" title="Analítica" subtitle="Presupuestos y resultados, competencia y mercado, y reportes exportables." />
+      <PageTitle guide={MARKETING_GUIDES.analitica} eyebrow="Marketing" title="Analítica" subtitle="Presupuestos y resultados, competencia y mercado, y reportes exportables." />
       <div role="tablist" aria-label="Secciones de analítica" className="flex flex-wrap gap-2">
         {([['kpi', 'Presupuestos y KPI'], ['competition', 'Competencia y mercado'], ['reports', 'Reportes']] as const).map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}

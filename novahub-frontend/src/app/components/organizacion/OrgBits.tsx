@@ -3,6 +3,7 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
 import { serifStyle } from './organizacion.utils';
+import { ViewGuide, type ViewGuideConfig } from './ViewGuide';
 
 export const controlClass = 'h-10 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-[13px] text-foreground outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -24,15 +25,20 @@ export function NativeSelect({ className, children, ...props }: SelectHTMLAttrib
   return <select {...props} className={cn(controlClass, 'appearance-auto pr-2', className)}>{children}</select>;
 }
 
-export function PageTitle({ eyebrow, title, subtitle, actions }: { eyebrow: string; title: string; subtitle: string; actions?: ReactNode }) {
+export function PageTitle({ eyebrow, title, subtitle, actions, guide }: { eyebrow: string; title: string; subtitle: string; actions?: ReactNode; guide?: ViewGuideConfig }) {
   return (
     <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
-      <div className="min-w-0">
+      <div className="min-w-0" data-tour="page-title">
         <p className="text-[12px] font-semibold text-accent-foreground/80"><span className="text-primary">{eyebrow}</span></p>
         <h1 className="mt-1 text-4xl leading-tight text-primary dark:text-foreground" style={serifStyle}>{title}</h1>
         <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">{subtitle}</p>
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {(actions || guide) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {guide && <ViewGuide guide={guide} />}
+          {actions && <div className="flex flex-wrap items-center gap-2" data-tour="page-actions">{actions}</div>}
+        </div>
+      )}
     </div>
   );
 }

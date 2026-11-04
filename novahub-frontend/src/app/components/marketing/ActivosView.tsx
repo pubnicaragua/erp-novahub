@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { MARKETING_GUIDES } from './guides';
 import { Download, FileText, Image as ImageIcon, Loader2, Trash2, Upload, Video } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -68,7 +69,7 @@ export function ActivosView() {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Marketing" title="Biblioteca de activos" subtitle="Archivos creativos y evidencias en almacenamiento privado, vinculados a campañas y piezas." />
+      <PageTitle guide={MARKETING_GUIDES.activos} eyebrow="Marketing" title="Biblioteca de activos" subtitle="Archivos creativos y evidencias en almacenamiento privado, vinculados a campañas y piezas." />
       <input ref={input} type="file" multiple className="sr-only" aria-label="Seleccionar archivos" onChange={(e) => void upload(e.target.files)} />
       <ResourceTable<MktAsset> id="assets" fetcher={mktResources.assets.list} columns={columns} searchPlaceholder="Buscar por nombre o descripción…" onRowClick={setSelected}
         filters={[{ key: 'rights', label: 'Derechos', options: options(RIGHTS_LABEL) }]}

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { MARKETING_GUIDES } from './guides';
 import { Loader2, Pencil, Plus, ShieldCheck } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -62,7 +63,7 @@ export function CampanasView() {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Marketing" title="Campañas" subtitle="Planifica, ejecuta y mide campañas digitales, deportivas, BTL, de eventos e internas." />
+      <PageTitle guide={MARKETING_GUIDES.campanas} eyebrow="Marketing" title="Campañas" subtitle="Planifica, ejecuta y mide campañas digitales, deportivas, BTL, de eventos e internas." />
       <ResourceTable<MktCampaign> id="campaigns" fetcher={mktResources.campaigns.list} columns={columns} searchPlaceholder="Buscar campaña o código…"
         filters={[{ key: 'status', label: 'Estado', options: options(CAMPAIGN_STATUS_LABEL) }, { key: 'type', label: 'Tipo', options: options(CAMPAIGN_TYPE_LABEL) }]}
         emptyTitle="Aún no hay campañas" emptyDescription="Crea una campaña vinculada a un cliente y un brief."

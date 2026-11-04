@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { ORGANIZACION_GUIDES } from './guides';
 import { useQueryClient } from '@tanstack/react-query';
 import { addMonths, format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -129,7 +130,7 @@ export function CompartidoView({ preferences, users, onOpenAgenda, onOpenSetting
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle
+      <PageTitle guide={ORGANIZACION_GUIDES.compartido}
         eyebrow="Organización personal" title="Compartido"
         subtitle="Consulta eventos de equipo, invitados y confirmaciones RSVP sin salir de NovaHub."
         actions={(

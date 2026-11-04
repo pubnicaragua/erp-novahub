@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MARKETING_GUIDES } from './guides';
 import { Check, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -42,7 +43,7 @@ function ConfigForm({ initial }: { initial: MktConfig }) {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Marketing" title="Configuración" subtitle="Canales, aprobadores y parámetros del módulo. No reemplaza la configuración global del ERP."
+      <PageTitle guide={MARKETING_GUIDES.configuracion} eyebrow="Marketing" title="Configuración" subtitle="Canales, aprobadores y parámetros del módulo. No reemplaza la configuración global del ERP."
         actions={canEdit ? <Button type="button" onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" aria-hidden="true" />}Guardar cambios</Button> : undefined} />
       {!canEdit && <p role="status" className="rounded-xl border border-border bg-muted/40 p-3 text-[12px] text-muted-foreground">Tu rol solo puede consultar esta configuración.</p>}
       {error && <ErrorState message={error} />}

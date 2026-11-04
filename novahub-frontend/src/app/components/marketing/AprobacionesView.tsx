@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MARKETING_GUIDES } from './guides';
 import { Check, Loader2, MessageSquareWarning, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -39,7 +40,7 @@ export function AprobacionesView() {
   const rows = q.data?.data ?? [];
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Marketing" title="Aprobaciones" subtitle="Bandeja de solicitudes de piezas, presupuestos y estrategias, con el historial de decisiones." />
+      <PageTitle guide={MARKETING_GUIDES.aprobaciones} eyebrow="Marketing" title="Aprobaciones" subtitle="Bandeja de solicitudes de piezas, presupuestos y estrategias, con el historial de decisiones." />
       <div role="tablist" aria-label="Estado de las solicitudes" className="flex gap-2">
         {([['PENDING', 'Pendientes'], ['RESOLVED', 'Historial de decisiones']] as const).map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}

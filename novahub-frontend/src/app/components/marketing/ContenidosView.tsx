@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { MARKETING_GUIDES } from './guides';
 import { addDays, format, startOfWeek } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Archive, ChevronLeft, ChevronRight, Loader2, Plus, Send } from 'lucide-react';
@@ -71,7 +72,7 @@ export function ContenidosView() {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Marketing" title="Contenidos" subtitle="Planifica, redacta, aprueba y programa piezas por canal. Aprobar no es publicar."
+      <PageTitle guide={MARKETING_GUIDES.contenidos} eyebrow="Marketing" title="Contenidos" subtitle="Planifica, redacta, aprueba y programa piezas por canal. Aprobar no es publicar."
         actions={canCreate ? <Button type="button" onClick={() => setCreateOpen(true)}><Plus className="size-4" aria-hidden="true" />Crear contenido</Button> : undefined} />
 
       <div role="tablist" aria-label="Vista de contenidos" className="flex gap-2">

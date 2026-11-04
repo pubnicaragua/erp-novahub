@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { ORGANIZACION_GUIDES } from './guides';
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, Clock, Eye, Info, Loader2, ShieldCheck, Trash2, UserPlus, Users, CalendarDays } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -90,7 +91,7 @@ export function ConfiguracionView({ preferences, users }: Props) {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Organización personal" title="Configuración" subtitle="Ajusta tu calendario, horario laboral y privacidad con los permisos de NovaHub." actions={saveButton} />
+      <PageTitle guide={ORGANIZACION_GUIDES.configuracion} eyebrow="Organización personal" title="Configuración" subtitle="Ajusta tu calendario, horario laboral y privacidad con los permisos de NovaHub." actions={saveButton} />
       {!canEdit && <p role="status" className="rounded-xl border border-border bg-muted/40 p-3 text-[12px] text-muted-foreground">Tu rol solo puede consultar estas preferencias.</p>}
       {error && <ErrorState message={error} />}
 

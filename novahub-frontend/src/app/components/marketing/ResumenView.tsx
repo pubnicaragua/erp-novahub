@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { MARKETING_GUIDES } from './guides';
 import { Activity, CalendarDays, CheckCircle2, FileCheck, Image as ImageIcon, Megaphone, Plus, TrendingUp, Upload, Users, Wallet } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
@@ -36,7 +37,7 @@ export function ResumenView({ go }: { go: (sub: string) => void }) {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Marketing" title="Marketing" subtitle="Gestiona tus campañas, contenidos y presupuesto desde un solo lugar."
+      <PageTitle guide={MARKETING_GUIDES.resumen} eyebrow="Marketing" title="Marketing" subtitle="Gestiona tus campañas, contenidos y presupuesto desde un solo lugar."
         actions={quick.filter((a) => canPerform(a.module, 'create')).map((a) => (
           <Button key={a.label} type="button" variant={a.primary ? 'default' : 'outline'} onClick={() => go(a.sub)}><a.icon className="size-4" aria-hidden="true" />{a.label}</Button>
         ))} />
@@ -52,7 +53,7 @@ export function ResumenView({ go }: { go: (sub: string) => void }) {
         <ErrorState message={errorMessage(q.error, 'No se pudo cargar el resumen')} onRetry={() => void q.refetch()} />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6" data-tour="overview-kpis">
             <Kpi label="Campañas activas" value={d.kpis.activeCampaigns} icon={<Megaphone className="size-4" />} />
             <Kpi label="Piezas por aprobar" value={d.kpis.pendingApprovals} icon={<FileCheck className="size-4" />} />
             <Kpi label="Publicaciones programadas" value={d.kpis.scheduledContent} icon={<CalendarDays className="size-4" />} hint="Programada no es publicada" />

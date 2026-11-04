@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { MARKETING_GUIDES } from './guides';
 import { Loader2, Plus, ShieldCheck } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useAuth } from '../../contexts/AuthContext';
@@ -103,7 +104,7 @@ export function ClientesView() {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Marketing" title="Clientes y briefs" subtitle="Directorio de cuentas de marketing y briefs con su estrategia. Los clientes de Ventas se vinculan, no se duplican." />
+      <PageTitle guide={MARKETING_GUIDES.clientes} eyebrow="Marketing" title="Clientes y briefs" subtitle="Directorio de cuentas de marketing y briefs con su estrategia. Los clientes de Ventas se vinculan, no se duplican." />
       <div role="tablist" aria-label="Clientes y briefs" className="flex gap-2">
         {([['accounts', 'Cuentas'], ['briefs', 'Briefs y estrategias']] as const).map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
