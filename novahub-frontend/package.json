@@ -27,6 +27,7 @@
     "test:customer-history-import": "node --experimental-strip-types scripts/test-customer-history-import.mjs",
     "test:customer-loan-permissions": "node --experimental-strip-types scripts/test-customer-loan-permissions.mjs",
     "test:customer-loans-credit-view": "node scripts/test-customer-loans-credit-view.mjs",
+    "test:customer-credit-limit-missing-ruc": "node --experimental-strip-types scripts/test-customer-credit-limit-missing-ruc.mjs",
     "test:customer-import-date": "node --experimental-strip-types scripts/test-customer-import-date.mjs",
     "test:sales-import-templates": "node --experimental-strip-types scripts/test-sales-import-templates.mjs",
     "test:sales-stock": "node --experimental-strip-types e2e/scripts/test-sales-stock.mjs",

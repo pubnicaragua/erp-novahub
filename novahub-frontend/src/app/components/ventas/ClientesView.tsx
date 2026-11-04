@@ -39,6 +39,7 @@ import { normalizeCustomerImportDate } from '../../utils/customer-import-date';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerImportPhoneValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
+import { resolveMissingRucCreditDecision } from '../../utils/customer-credit-confirmation';
 import { aggregateCustomerHistory, mergeCustomerHistoryByIdentifier, prepareCustomerHistoryForImport, type CustomerHistoryImportOptions, type CustomerHistorySourceRow } from '../../utils/customer-history-import';
 import { buildCustomerHistoryTemplateHeaders, DEFAULT_CUSTOMER_HISTORY_PROFILE, normalizeCustomerHistoryProfile, type CustomerHistoryProfile } from '../../utils/customer-history-profile';
 
@@ -80,6 +81,15 @@ type CustomerDraft = {
   notes: string;
   status: 'ACTIVE' | 'INACTIVE';
 };
+
+type CustomerUpdatePayload = Partial<Customer> & { confirmMissingRuc?: boolean };
+type PendingMissingRucConfirmation = {
+  customerId: string | number;
+  updates: CustomerUpdatePayload;
+  closeEditOnSuccess: boolean;
+};
+
+class MissingRucConfirmationRequired extends Error {}
 
 type CustomerImportMode = 'CUSTOMERS' | 'HISTORICAL' | 'HISTORY_ONLY';
 type CustomerHistoryColumn = 'nameColumn' | 'identifierColumn' | 'amountColumn' | 'measureColumn' | 'documentColumn' | 'currencyColumn' | 'activityTypeColumn' | 'countryColumn';
@@ -218,6 +228,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [editCustomer, setEditCustomer] = useState<CustomerDraft>(() => emptyCustomerDraft(displayCurrency, defaultCountryCode, countryNameForForm(defaultCountryCode, countries)));
   const [savingEdit, setSavingEdit] = useState(false);
+  const [pendingMissingRucConfirmation, setPendingMissingRucConfirmation] = useState<PendingMissingRucConfirmation | null>(null);
   const [portalAccess, setPortalAccess] = useState<any>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalSaving, setPortalSaving] = useState(false);
@@ -833,7 +844,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     { value: 'COMPANY', label: 'Empresa', count: filtered.filter((c) => String(c.type || '').toUpperCase() === 'COMPANY').length },
   ];
 
-  const handleUpdate = async (id: string | number, updates: Partial<Customer>) => {
+  const handleUpdate = async (id: string | number, updates: CustomerUpdatePayload) => {
     try {
       if (updates.status !== undefined && Object.keys(updates).length === 1) {
         await customersService.setStatus(id.toString(), updates.status);
@@ -848,7 +859,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         throw new Error('El correo no es válido (ej. cliente@correo.com)');
       }
       const currentCustomer = data.find((customer) => String(customer.id) === String(id));
-      const countryCode = String(updates.countryCode || currentCustomer?.countryCode || 'NI');
+      const countryCode = String(updates.countryCode || currentCustomer?.countryCode || countryCodeFromLegacy(currentCustomer?.country) || 'NI');
       if (updates.phone !== undefined && String(updates.phone || '').trim() && !isCustomerPhoneValid(String(updates.phone), countryCode)) throw new Error('El teléfono no es válido para el país seleccionado');
       if (updates.contactPhone !== undefined && String(updates.contactPhone || '').trim() && !isCustomerPhoneValid(String(updates.contactPhone), countryCode)) throw new Error('El teléfono del contacto no es válido para el país seleccionado');
       if (updates.creditLimit !== undefined) {
@@ -879,14 +890,32 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       if (duplicateCustomer) {
         throw new Error(`La cédula o el RUC ya está registrado en el cliente ${duplicateCustomer.name}.`);
       }
-      if (customerRucRequired(nextType, countryCode) && !nextRuc) {
+      const rucDecision = resolveMissingRucCreditDecision({
+        rucRequired: customerRucRequired(nextType, countryCode),
+        previousRucRequired: currentCustomer
+          ? customerRucRequired(String(currentCustomer.type || '').toUpperCase(), currentCustomer.countryCode || countryCodeFromLegacy(currentCustomer.country))
+          : false,
+        ruc: nextRuc,
+        previousRuc: currentCustomer?.ruc,
+        previousCreditLimit: currentCustomer?.creditLimit,
+        nextCreditLimit: effectiveUpdates.creditLimit ?? currentCustomer?.creditLimit,
+        previousCreditLimitCurrency: currentCustomer?.creditLimitCurrency || baseCurrency,
+        nextCreditLimitCurrency: effectiveUpdates.creditLimitCurrency ?? currentCustomer?.creditLimitCurrency,
+      });
+      if (rucDecision === 'block') {
         throw new Error('El RUC es obligatorio para una empresa');
+      }
+      if (rucDecision === 'confirm' && effectiveUpdates.confirmMissingRuc !== true) {
+        setPendingMissingRucConfirmation({ customerId: id, updates: effectiveUpdates, closeEditOnSuccess: false });
+        throw new MissingRucConfirmationRequired('Falta confirmar que se guardará el límite sin RUC.');
       }
       await customersService.update(id.toString(), effectiveUpdates);
       toast.success('Cliente actualizado correctamente');
       await onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar cliente');
+      if (!(e instanceof MissingRucConfirmationRequired)) {
+        toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar cliente');
+      }
       throw e;
     }
   };
@@ -914,7 +943,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     status: draft.status,
   });
 
-  const validateCustomerDraft = (draft: CustomerDraft, excludeCustomerId?: string) => {
+  const validateCustomerDraft = (draft: CustomerDraft, excludeCustomerId?: string, allowMissingRuc = false) => {
     if (!draft.name.trim()) {
       toast.error('El nombre del cliente es obligatorio');
       return false;
@@ -923,7 +952,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       toast.error('El correo del cliente no es válido');
       return false;
     }
-    if (customerRucRequired(draft.type, draft.countryCode) && !draft.ruc.trim()) {
+    if (customerRucRequired(draft.type, draft.countryCode) && !draft.ruc.trim() && !allowMissingRuc) {
       toast.error('El RUC es obligatorio para una empresa');
       return false;
     }
@@ -960,7 +989,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
 
   const openEditCustomer = (customer: Customer) => {
     setEditingCustomer(customer);
-    setEditCustomer(customerToDraft(customer, displayCurrency));
+    setEditCustomer(customerToDraft(customer, baseCurrency));
     setPortalAccess(null);
     setPortalEmail('');
     setPortalPassword('');
@@ -1001,12 +1030,49 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   };
 
   const handleSaveEdit = async () => {
-    if (!editingCustomer || !validateCustomerDraft(editCustomer, editingCustomer.id)) return;
+    if (!editingCustomer) return;
+    const decision = resolveMissingRucCreditDecision({
+      rucRequired: customerRucRequired(editCustomer.type, editCustomer.countryCode),
+      previousRucRequired: customerRucRequired(
+        String(editingCustomer.type || '').toUpperCase(),
+        editingCustomer.countryCode || countryCodeFromLegacy(editingCustomer.country),
+      ),
+      ruc: editCustomer.ruc,
+      previousRuc: editingCustomer.ruc,
+      previousCreditLimit: editingCustomer.creditLimit,
+      nextCreditLimit: editCustomer.creditLimit === '' ? undefined : Number(editCustomer.creditLimit),
+      previousCreditLimitCurrency: editingCustomer.creditLimitCurrency || baseCurrency,
+      nextCreditLimitCurrency: editCustomer.creditLimitCurrency,
+    });
+    if (!validateCustomerDraft(editCustomer, String(editingCustomer.id), decision !== 'block')) return;
+    const updates = buildCustomerPayload(editCustomer);
+    if (decision === 'confirm') {
+      setPendingMissingRucConfirmation({ customerId: editingCustomer.id, updates, closeEditOnSuccess: true });
+      return;
+    }
     setSavingEdit(true);
     try {
-      await handleUpdate(editingCustomer.id, buildCustomerPayload(editCustomer));
+      await handleUpdate(editingCustomer.id, updates);
       setEditOpen(false);
       setEditingCustomer(null);
+    } catch {
+      // handleUpdate already displays the server or validation error.
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const confirmSaveWithoutRuc = async () => {
+    if (!pendingMissingRucConfirmation) return;
+    const pending = pendingMissingRucConfirmation;
+    setSavingEdit(true);
+    try {
+      await handleUpdate(pending.customerId, { ...pending.updates, confirmMissingRuc: true });
+      if (pending.closeEditOnSuccess) {
+        setEditOpen(false);
+        setEditingCustomer(null);
+      }
+      setPendingMissingRucConfirmation(null);
     } catch {
       // handleUpdate already displays the server or validation error.
     } finally {
@@ -1236,6 +1302,21 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     { key: 'createdAt', label: 'Fecha de ingreso' },
     { key: 'status', label: 'Estado' },
   ];
+  const editMissingRucDecision = editingCustomer
+    ? resolveMissingRucCreditDecision({
+      rucRequired: customerRucRequired(editCustomer.type, editCustomer.countryCode),
+      previousRucRequired: customerRucRequired(
+        String(editingCustomer.type || '').toUpperCase(),
+        editingCustomer.countryCode || countryCodeFromLegacy(editingCustomer.country),
+      ),
+      ruc: editCustomer.ruc,
+      previousRuc: editingCustomer.ruc,
+      previousCreditLimit: editingCustomer.creditLimit,
+      nextCreditLimit: editCustomer.creditLimit === '' ? undefined : Number(editCustomer.creditLimit),
+      previousCreditLimitCurrency: editingCustomer.creditLimitCurrency || baseCurrency,
+      nextCreditLimitCurrency: editCustomer.creditLimitCurrency,
+    })
+    : 'block';
   const renderHistoryColumnSelector = (field: CustomerHistoryColumn, label: string, required = false) => (
     <label className="min-w-0 space-y-1.5">
       <span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}{required ? ' *' : ''}</span>
@@ -1430,6 +1511,18 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={pendingMissingRucConfirmation !== null}
+        onOpenChange={(open) => { if (!open && !savingEdit) setPendingMissingRucConfirmation(null); }}
+        title="Guardar límite sin RUC"
+        description="Este cliente no tiene RUC. Si confirmas, se guardará el cambio del límite de crédito sin ese dato. Podrás agregar el RUC después."
+        confirmLabel="Guardar sin RUC"
+        cancelLabel="Volver a editar"
+        variant="warning"
+        loading={savingEdit}
+        onConfirm={confirmSaveWithoutRuc}
+      />
 
       <ConfirmDialog
         open={pendingForceSalesDelete !== null}
@@ -1631,7 +1724,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><Select value={editCustomer.type} onValueChange={(value) => setEditCustomer({ ...editCustomer, type: value as CustomerDraft['type'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="individual">Particular</SelectItem><SelectItem value="company">Empresa</SelectItem></SelectContent></Select></div>
                 {editCustomer.type === 'company' && <div className="space-y-1.5 sm:col-span-2 xl:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre de empresa</label><Input value={editCustomer.companyName} onChange={(e) => setEditCustomer({ ...editCustomer, companyName: e.target.value })} placeholder="Nombre comercial o corporativo" className="h-11 rounded-xl" /></div>}
                 <CustomerIdentifierInput id="edit-customer-tax-id" value={editCustomer.taxId} onChange={(value) => setEditCustomer({ ...editCustomer, taxId: value })} countryCode={editCustomer.countryCode} kind="taxId" className="h-11 rounded-xl" />
-                <CustomerIdentifierInput id="edit-customer-ruc" value={editCustomer.ruc} onChange={(value) => setEditCustomer({ ...editCustomer, ruc: value })} countryCode={editCustomer.countryCode} kind="ruc" required={customerRucRequired(editCustomer.type, editCustomer.countryCode)} className="h-11 rounded-xl" />
+                <CustomerIdentifierInput id="edit-customer-ruc" value={editCustomer.ruc} onChange={(value) => setEditCustomer({ ...editCustomer, ruc: value })} countryCode={editCustomer.countryCode} kind="ruc" required={customerRucRequired(editCustomer.type, editCustomer.countryCode) && editMissingRucDecision === 'block'} className="h-11 rounded-xl" />
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><Select value={editCustomer.status} onValueChange={(value) => setEditCustomer({ ...editCustomer, status: value as CustomerDraft['status'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select></div>
               </div>
             </section>
