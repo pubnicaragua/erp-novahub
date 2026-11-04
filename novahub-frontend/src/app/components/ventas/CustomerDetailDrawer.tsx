@@ -102,7 +102,8 @@ interface CustomerDetailDrawerProps {
   extraActions?: ReactNode;
   customerLoansEnabled?: boolean;
   canCreateLoan?: boolean;
-  canManageMora?: boolean;
+  canCreateMora?: boolean;
+  canEditMora?: boolean;
   onLoansUpdated?: () => void;
 }
 
@@ -214,7 +215,8 @@ export function CustomerDetailDrawer({
   extraActions,
   customerLoansEnabled = false,
   canCreateLoan = false,
-  canManageMora = false,
+  canCreateMora = false,
+  canEditMora = false,
   onLoansUpdated,
 }: CustomerDetailDrawerProps) {
   const { baseCurrency, formatConvertedAmount, formatExplicitAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
@@ -882,7 +884,8 @@ export function CustomerDetailDrawer({
                   customerName={customer.name}
                   enabled={customerLoansEnabled}
                   canCreateLoan={canCreateLoan}
-                  canManageMora={canManageMora}
+                  canCreateMora={canCreateMora}
+                  canEditMora={canEditMora}
                   onUpdated={onLoansUpdated}
                 />
               </TabsContent>}

@@ -14,6 +14,7 @@ import { customersService } from '../../services/ventas.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from '@/app/services/toast';
+import { getCustomerLoanMoraActions } from '../../utils/customer-loan-permissions';
 
 type MoraType = { id: string; name: string; description: string; isActive: boolean };
 type CustomerLoan = {
@@ -55,11 +56,12 @@ interface CustomerLoansPanelProps {
   customerName: string;
   enabled: boolean;
   canCreateLoan: boolean;
-  canManageMora: boolean;
+  canCreateMora: boolean;
+  canEditMora: boolean;
   onUpdated?: () => void;
 }
 
-export function CustomerLoansPanel({ customerId, customerName, enabled, canCreateLoan, canManageMora, onUpdated }: CustomerLoansPanelProps) {
+export function CustomerLoansPanel({ customerId, customerName, enabled, canCreateLoan, canCreateMora, canEditMora, onUpdated }: CustomerLoansPanelProps) {
   const { baseCurrency } = useCurrency();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -78,6 +80,7 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
   });
   const loans = loansQuery.data?.loans ?? [];
   const moraTypes = loansQuery.data?.moraTypes ?? [];
+  const moraActions = getCustomerLoanMoraActions(canCreateMora, canEditMora);
   const loading = loansQuery.isPending;
   const [saving, setSaving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -205,7 +208,7 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
             <p className="mt-1 text-[11px] text-muted-foreground">Cada préstamo conserva su factura, desembolso y saldo por separado.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {canManageMora && <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl text-xs" onClick={() => setMoraOpen(true)}><Settings2 className="size-3.5" /> Tipos de mora</Button>}
+            {moraActions.canOpenCatalog && <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl text-xs" onClick={() => setMoraOpen(true)}><Settings2 className="size-3.5" /> Tipos de mora</Button>}
             {enabled && canCreateLoan && <Button type="button" size="sm" className="h-9 gap-1.5 rounded-xl text-xs" onClick={() => { resetLoanForm(); setCreateOpen(true); }}><Plus className="size-3.5" /> Nuevo préstamo</Button>}
           </div>
         </div>
@@ -268,9 +271,9 @@ export function CustomerLoansPanel({ customerId, customerName, enabled, canCreat
         <DialogContent className="max-h-[90dvh] w-[calc(100%-1rem)] overflow-y-auto rounded-2xl sm:max-w-xl">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Tipos de mora</DialogTitle><DialogDescription>Define nombres y explicaciones. No se calcula mora automáticamente; los préstamos guardan una copia histórica de esta condición.</DialogDescription></DialogHeader>
           <div className="space-y-3">
-            {moraTypes.length === 0 && <p className="rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground">Aún no hay tipos de mora. Agrega uno para poder crear préstamos.</p>}
-            {moraTypes.map((item) => <div key={item.id} className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><div className="flex items-center gap-2"><p className="break-words text-xs font-bold text-foreground">{item.name}</p><Badge variant="outline" className="shrink-0 text-[9px]">{item.isActive ? 'Activo' : 'Inactivo'}</Badge></div><p className="mt-1 break-words text-[11px] text-muted-foreground">{item.description}</p></div>{canManageMora && <div className="flex shrink-0 gap-2"><Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px]" onClick={() => openMoraForm(item)}>Editar</Button><Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px]" onClick={() => void toggleMoraType(item)}>{item.isActive ? 'Desactivar' : 'Activar'}</Button></div>}</div>)}
-            {canManageMora && <Button type="button" className="w-full gap-2 rounded-xl" onClick={() => openMoraForm()}><Plus className="size-4" /> Agregar tipo de mora</Button>}
+            {moraTypes.length === 0 && <p className="rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground">{moraActions.canCreateType ? 'Aún no hay tipos de mora. Agrega uno para poder crear préstamos.' : 'Aún no hay tipos de mora configurados para esta sucursal.'}</p>}
+            {moraTypes.map((item) => <div key={item.id} className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><div className="flex items-center gap-2"><p className="break-words text-xs font-bold text-foreground">{item.name}</p><Badge variant="outline" className="shrink-0 text-[9px]">{item.isActive ? 'Activo' : 'Inactivo'}</Badge></div><p className="mt-1 break-words text-[11px] text-muted-foreground">{item.description}</p></div>{moraActions.canEditTypes && <div className="flex shrink-0 gap-2"><Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px]" onClick={() => openMoraForm(item)}>Editar</Button><Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px]" onClick={() => void toggleMoraType(item)}>{item.isActive ? 'Desactivar' : 'Activar'}</Button></div>}</div>)}
+            {moraActions.canCreateType && <Button type="button" className="w-full gap-2 rounded-xl" onClick={() => openMoraForm()}><Plus className="size-4" /> Agregar tipo de mora</Button>}
           </div>
           <DialogFooter><Button type="button" variant="outline" onClick={() => setMoraOpen(false)}>Cerrar</Button></DialogFooter>
         </DialogContent>

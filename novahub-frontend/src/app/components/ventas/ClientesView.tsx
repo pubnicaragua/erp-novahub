@@ -1511,7 +1511,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         customerSnapshot={selectedCustomerDetail}
         customerLoansEnabled={customerLoansEnabled}
         canCreateLoan={canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'submit')}
-        canManageMora={canPerform('SALES_CLIENTS', 'edit')}
+        canCreateMora={canPerform('SALES_CLIENTS', 'create')}
+        canEditMora={canPerform('SALES_CLIENTS', 'edit')}
         onLoansUpdated={() => { void onRefresh(); }}
         canExport={canPerform('SALES_CLIENTS', 'export')}
         extraActions={selectedCustomerDetail ? <>
