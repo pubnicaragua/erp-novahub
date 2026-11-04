@@ -294,6 +294,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .route-transfer-count b{font-size:11px;font-weight:900}
 .route-transfer-help{display:block;color:var(--nova-ui-muted-foreground,#6c7c77);font-size:9px;line-height:1.4}
 .route-assignee-status.route-assignee-pending{margin:7px 0;padding:8px 10px;border:1px solid var(--nova-ui-border,#dce8e3);border-left:3px solid var(--nova-ui-primary,#08785a);border-radius:8px;background:var(--nova-ui-muted,#edf5f1);color:var(--nova-ui-foreground,#123f35);font-size:9px;font-weight:700;line-height:1.45}
+.route-assignee-status.route-assignee-warning{border-left-color:#b7791f;background:#fff8e8;color:#744210}
 .route-plan-pane>.confirm-modal-actions:last-child{position:sticky;bottom:-16px;z-index:8;margin:10px -17px -16px;padding:10px 17px max(10px,env(safe-area-inset-bottom));border-top:1px solid var(--nova-ui-border,#dce8e3);background:var(--nova-ui-card,#fbfdfc);box-shadow:0 -8px 18px rgba(18,53,43,.1)}
 .route-planner-tabs,.route-catalog-filters{display:flex;gap:6px;margin:8px 0;padding:4px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:12px;background:var(--nova-ui-muted,#edf5f1)}.route-planner-tabs button,.route-catalog-filters button{flex:1;min-height:36px;border:0;border-radius:9px;background:transparent;color:var(--nova-ui-muted-foreground,#6c7c77);font:700 10px Poppins,Arial,sans-serif;cursor:pointer}.route-planner-tabs button[aria-selected="true"],.route-catalog-filters button[aria-pressed="true"]{background:var(--nova-ui-card,#fff);color:var(--nova-ui-primary,#08785a);box-shadow:0 2px 8px rgba(18,57,47,.1)}.route-planner-tabs button:focus-visible,.route-catalog-filters button:focus-visible{outline:3px solid #3287e8;outline-offset:2px}.route-field{display:grid;gap:6px;margin:10px 0;color:var(--nova-ui-foreground,#123f35);font-size:10px;font-weight:800}.route-field input{width:100%;min-height:42px;max-width:100%;padding:8px 11px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);font:500 12px Poppins,Arial,sans-serif;accent-color:var(--nova-ui-primary,#08785a);color-scheme:light}.theme-dark .route-field input{color-scheme:dark}.route-field input:focus-visible{outline:3px solid #3287e8;outline-offset:2px}.route-vicinity-tools{margin:8px 0;padding:11px;border:1px solid var(--nova-ui-border,#cfe6dc);border-radius:12px;background:var(--nova-ui-muted,#f2f8f5);color:var(--nova-ui-foreground,#123f35)}.route-vicinity-tools[hidden]{display:none}.route-vicinity-head{display:flex;align-items:center;justify-content:space-between}.route-vicinity-head button{width:32px;height:32px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:inherit;font-size:18px}.route-vicinity-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.route-vicinity-controls label{display:grid;gap:4px;font-size:9px;font-weight:700}.route-vicinity-controls input,.route-vicinity-controls select{width:100%;min-width:0;min-height:36px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);padding:6px 8px}.route-vicinity-actions{display:flex;justify-content:flex-end;gap:7px}.route-vicinity-actions button{min-height:36px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);padding:7px 11px;font-weight:700}.route-vicinity-actions #routeVicinityAdd{background:var(--nova-ui-primary,#08785a);border-color:var(--nova-ui-primary,#08785a);color:#fff}
 .route-point-memberships{display:grid;gap:4px;margin:7px 0;padding:8px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-muted,#f4faf7);font-size:9px}.route-point-memberships b{color:var(--nova-ui-foreground,#123f35)}.route-point-memberships span{color:var(--nova-ui-muted-foreground,#61756d);line-height:1.4}
@@ -5544,9 +5545,18 @@ function renderRouteAssigneeOptions(){
   const rows=assignees.filter(item=>!query||String(item.name||'').toLocaleLowerCase('es-NI').includes(query));
   const selectedItem=selected?assignees.find(item=>String(item.id)===selected):null;
   const selectedFallback=selectedItem&&!rows.some(item=>String(item.id)===selected)?[selectedItem]:[];
-  const routesUnavailable=remoteRoutesLoading||forceSalesSyncErrors.has('rutas');
-  const activeRouteCount=userId=>routesUnavailable?null:remoteRoutes.filter(route=>String(route.assignedToId||'')===String(userId||'')&&['PLANNED','IN_PROGRESS'].includes(String(route.status||'').toUpperCase())).length;
-  const routeCountLabel=count=>count===null?(forceSalesSyncErrors.has('rutas')?'conteo no disponible':'cargando rutas…'):`${count} ${count===1?'ruta activa':'rutas activas'}`;
+  const activeRouteCount=userId=>{
+    if(assigneesLoadState!=='ready')return null;
+    const assignee=assignees.find(item=>String(item.id)===String(userId||''));
+    const rawCount=assignee?.activeRouteCount;
+    const count=Number(rawCount);
+    if(!assignee||rawCount===null||rawCount===undefined||!Number.isFinite(count))return null;
+    const currentRoute=activeRemoteRouteId?remoteRoutes.find(route=>String(route.id)===String(activeRemoteRouteId)):null;
+    if(activeRemoteRouteId&&!currentRoute&&forceSalesSyncErrors.has('rutas'))return null;
+    const excludesCurrent=currentRoute&&String(currentRoute.assignedToId||'')===String(userId||'')&&['PLANNED','IN_PROGRESS'].includes(String(currentRoute.status||'').toUpperCase());
+    return Math.max(0,count-(excludesCurrent?1:0));
+  };
+  const routeCountLabel=count=>count===null?(assigneesLoadState==='loading'?'consultando rutas…':'conteo no disponible'):`${count} ${count===1?'ruta activa':'rutas activas'}`;
   const selfChoice={id:String(CURRENT_USER_ID||''),name:'Yo mismo/a',count:activeRouteCount(CURRENT_USER_ID)};
   const noneChoice={id:ROUTE_UNASSIGNED,name:'Sin asignar',count:null};
   const choices=[...(!query||noneChoice.name.toLocaleLowerCase('es-NI').includes(query)?[{...noneChoice,count:0}]:[]),...(!query||selfChoice.name.toLocaleLowerCase('es-NI').includes(query)?[selfChoice]:[]),...rows.filter(item=>String(item.id)!==String(CURRENT_USER_ID)).map(item=>({id:String(item.id),name:String(item.name||'Usuario'),count:activeRouteCount(item.id)})),...selectedFallback.filter(item=>String(item.id)!==String(CURRENT_USER_ID)).map(item=>({id:String(item.id),name:String(item.name||'Usuario'),count:activeRouteCount(item.id)}))];
@@ -5561,7 +5571,13 @@ function renderRouteAssigneeOptions(){
   }
   const status=document.getElementById('routeAssigneeStatus');
   const catalogStatus=assigneeStatusMessage(query);
-  if(status){status.textContent=catalogStatus;status.classList.remove('route-assignee-pending')}
+  const selectedCount=selected&&selected!==ROUTE_UNASSIGNED?activeRouteCount(selected):null;
+  const assignmentWarning=selectedCount===null
+    ? (selected&&selected!==ROUTE_UNASSIGNED?(assigneesLoadState==='loading'?'Consultando las rutas activas de este gestor…':'No se pudo comprobar si este gestor tiene otra ruta activa. Puedes continuar y guardar.'):'')
+    : selectedCount>0
+      ? `Este gestor ya tiene ${selectedCount} otra${selectedCount===1?'':'s'} ruta${selectedCount===1?'':'s'} planificada${selectedCount===1?'':'s'} o en curso. Puedes guardar igualmente.`
+      : '';
+  if(status){status.textContent=[catalogStatus,assignmentWarning].filter(Boolean).join(' ');status.classList.toggle('route-assignee-pending',Boolean(catalogStatus||assignmentWarning));status.classList.toggle('route-assignee-warning',Boolean(assignmentWarning))}
   const retry=document.getElementById('routeAssigneeRetry');
   if(retry)retry.hidden=assigneesLoadState!=='error'||!canForceSales('assignRoute');
   const readOnly=document.getElementById('routeAssigneeReadOnly');
@@ -6055,7 +6071,7 @@ async function saveRouteAssignment(){
     toast(isExisting?(assigneeId?'Ruta actualizada':'Ruta actualizada sin responsable'):(assigneeId?'Ruta guardada y asignada':'Ruta guardada sin responsable'));
   }catch(error){
     console.warn('No se pudo persistir la ruta en el ERP',error);
-    if(error?.status===409)toast('La ruta cambió en otra sesión. El borrador se conservó; revisa Rutas guardadas y vuelve a guardar.');
+    if(error?.status===409)toast(`${error?.message || 'La ruta tiene un conflicto.'} El borrador se conservó.`);
     else toast(`No se pudo guardar la ruta: ${error?.message || 'el ERP rechazó la operación'}`);
   }finally{routeSaving=false;renderRoutePlanner()}
 }
