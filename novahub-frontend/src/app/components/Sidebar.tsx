@@ -44,6 +44,7 @@ import {
   HardDrive,
   Scale,
   AlertTriangle,
+  ShieldAlert,
   MessageCircle,
   MessageSquare,
   Send,
