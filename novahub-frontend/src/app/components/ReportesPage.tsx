@@ -11,6 +11,7 @@ import { PurchasesReportTab } from './reportes/PurchasesReportTab';
 import { CustomersReportTab } from './reportes/CustomersReportTab';
 import { InventoryReportTab } from './reportes/InventoryReportTab';
 import { HRReportTab } from './reportes/HRReportTab';
+import { MarketingReportTab } from './reportes/MarketingReportTab';
 import type { ReportExportRef } from './reportes/types';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { ExportMenu } from './ui/ExportMenu';
@@ -30,6 +31,8 @@ const REPORT_TAB_CONFIG = [
   { id: 'reportes-clientes', label: 'Clientes', module: 'REPORTS_CLIENTS' },
   { id: 'reportes-proveedores', label: 'Proveedores', module: 'REPORTS_PROVIDERS' },
   { id: 'reportes-rrhh', label: 'Recursos Humanos', module: 'REPORTS_HR' },
+  // Reutiliza el permiso de Marketing › Analítica (no existe un permiso REPORTS_MARKETING aparte).
+  { id: 'reportes-marketing', label: 'Marketing', module: 'MARKETING_ANALYTICS', exportAction: 'view' },
 ] as const;
 
 export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ReportesPageProps) {
@@ -45,6 +48,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const customersRef = useRef<ReportExportRef>(null);
   const inventoryRef = useRef<ReportExportRef>(null);
   const hrRef = useRef<ReportExportRef>(null);
+  const marketingRef = useRef<ReportExportRef>(null);
 
   const visibleReportTabs = useMemo(() => REPORT_TAB_CONFIG.filter((tab) => {
     const hasRequired = user?.enabledModules?.includes(tab.module);
@@ -55,7 +59,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
   }), [user, canPerform]);
 
   const activeReportTab = REPORT_TAB_CONFIG.find((tab) => tab.id === activeTab);
-  const canExportActiveReport = Boolean(activeReportTab && canPerform(activeReportTab.module, 'export'));
+  const canExportActiveReport = Boolean(activeReportTab && canPerform(activeReportTab.module, ('exportAction' in activeReportTab ? activeReportTab.exportAction : 'export')));
 
   useEffect(() => {
     if (visibleReportTabs.length > 0 && !visibleReportTabs.some((tab) => tab.id === activeTab)) {
@@ -89,6 +93,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
       case 'reportes-clientes': customersRef.current?.exportPDF(paperFormat); break;
       case 'reportes-inventario': inventoryRef.current?.exportPDF(paperFormat); break;
       case 'reportes-rrhh': hrRef.current?.exportPDF(paperFormat); break;
+      case 'reportes-marketing': marketingRef.current?.exportPDF(paperFormat); break;
     }
   };
 
@@ -107,6 +112,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
       case 'reportes-clientes': customersRef.current?.exportExcel(); break;
       case 'reportes-inventario': inventoryRef.current?.exportExcel(); break;
       case 'reportes-rrhh': hrRef.current?.exportExcel(); break;
+      case 'reportes-marketing': marketingRef.current?.exportExcel(); break;
     }
   };
 
@@ -166,6 +172,9 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
         </TabsContent>
         <TabsContent value="reportes-rrhh" className="m-0 mt-4 outline-none">
           {activeTab === 'reportes-rrhh' && <HRReportTab ref={hrRef} dateRange={dateRange} />}
+        </TabsContent>
+        <TabsContent value="reportes-marketing" className="m-0 mt-4 outline-none">
+          {activeTab === 'reportes-marketing' && <MarketingReportTab ref={marketingRef} dateRange={dateRange} />}
         </TabsContent>
       </Tabs>
     </div>

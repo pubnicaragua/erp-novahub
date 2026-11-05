@@ -8,13 +8,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { marketingApi, mktResources, type MktCompetitor, type MktKpi, type MktStudy } from '../../services/marketing.service';
 import { toast } from '../../services/toast';
-import { createReportWorkbook } from '../../utils/reportWorkbook';
-import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { EmptyState, ErrorState, Heading, PageTitle, Panel } from '../organizacion/OrgBits';
 import { errorMessage } from '../organizacion/organizacion.utils';
 import { CAMPAIGN_STATUS_LABEL, METRIC_LABEL, SOURCE_LABEL, compact, fmtDate, money } from './marketing.constants';
 import { FormSheet, Kpi, ResourceTable, StatusBadge, type Column } from './MktBits';
-import { options, toInitial, useMktConfig, useMktRefresh, type FieldDef } from './mkt.helpers';
+import { exportMarketingReportExcel, options, toInitial, useMktConfig, useMktRefresh, type FieldDef } from './mkt.helpers';
 
 type Tab = 'kpi' | 'competition' | 'reports';
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -155,18 +153,7 @@ function ReportsTab() {
   const q = useTenantQuery(['marketing', 'report', range.from, range.to], (s) => marketingApi.report(range, s), { staleTime: 30_000 });
   const d = q.data;
 
-  const exportExcel = () => {
-    if (!d) return;
-    createReportWorkbook({
-      fileName: buildDatedDownloadFileName(['reporte_marketing'], 'xlsx'),
-      filters: { Desde: from, Hasta: to, Moneda: currency },
-      sheets: [
-        { name: 'Campañas', rows: d.campaigns.map((c) => ({ Código: c.code, Campaña: c.name, Estado: CAMPAIGN_STATUS_LABEL[c.status], Presupuesto: c.budget, Ejecutado: c.spent, Alcance: c.metrics.REACH ?? 0, Leads: c.metrics.LEADS ?? 0, Inversión: c.metrics.SPEND ?? 0, Ingresos: c.metrics.REVENUE ?? 0, ROAS: c.roas === null ? '' : Number(c.roas.toFixed(2)) })) },
-        { name: 'Canales', rows: d.channels.map((c) => ({ Canal: c.channel, Alcance: c.metrics.REACH ?? 0, Clics: c.metrics.CLICKS ?? 0, Leads: c.metrics.LEADS ?? 0, Inversión: c.metrics.SPEND ?? 0, Ingresos: c.metrics.REVENUE ?? 0, ROAS: c.roas === null ? '' : Number(c.roas.toFixed(2)) })) },
-        { name: 'Historial', rows: d.history.map((h) => ({ Fecha: fmtDate(h.createdAt, true), Tipo: h.entityType, Acción: h.action, Detalle: h.summary })) },
-      ],
-    });
-  };
+  const exportExcel = () => { if (d) void exportMarketingReportExcel(d, { from, to, currency }); };
 
   return (
     <div className="space-y-4">

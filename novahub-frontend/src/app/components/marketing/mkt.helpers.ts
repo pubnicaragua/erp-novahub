@@ -1,7 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
-import { marketingApi } from '../../services/marketing.service';
-import { toInputDate, toInputDateTime } from './marketing.constants';
+import { marketingApi, type MktReport } from '../../services/marketing.service';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import { CAMPAIGN_STATUS_LABEL, fmtDate, toInputDate, toInputDateTime } from './marketing.constants';
 
 export type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'datetime' | 'select' | 'tags';
 export type FieldDef = {
@@ -60,4 +62,17 @@ export function useMktUsers() {
 
 export function useMktConfig() {
   return useTenantQuery(['marketing', 'settings'], (signal) => marketingApi.settings(signal), { staleTime: 60_000 });
+}
+
+/** Exporta el reporte de Marketing a Excel; lo comparten Analítica y la pestaña Marketing de Reportes. */
+export function exportMarketingReportExcel(d: MktReport, filters: { from: string; to: string; currency: string }) {
+  return createReportWorkbook({
+    fileName: buildDatedDownloadFileName(['reporte_marketing'], 'xlsx'),
+    filters: { Desde: filters.from, Hasta: filters.to, Moneda: filters.currency },
+    sheets: [
+      { name: 'Campañas', rows: d.campaigns.map((c) => ({ Código: c.code, Campaña: c.name, Estado: CAMPAIGN_STATUS_LABEL[c.status], Presupuesto: c.budget, Ejecutado: c.spent, Alcance: c.metrics.REACH ?? 0, Leads: c.metrics.LEADS ?? 0, Inversión: c.metrics.SPEND ?? 0, Ingresos: c.metrics.REVENUE ?? 0, ROAS: c.roas === null ? '' : Number(c.roas.toFixed(2)) })) },
+      { name: 'Canales', rows: d.channels.map((c) => ({ Canal: c.channel, Alcance: c.metrics.REACH ?? 0, Clics: c.metrics.CLICKS ?? 0, Leads: c.metrics.LEADS ?? 0, Inversión: c.metrics.SPEND ?? 0, Ingresos: c.metrics.REVENUE ?? 0, ROAS: c.roas === null ? '' : Number(c.roas.toFixed(2)) })) },
+      { name: 'Historial', rows: d.history.map((h) => ({ Fecha: fmtDate(h.createdAt, true), Tipo: h.entityType, Acción: h.action, Detalle: h.summary })) },
+    ],
+  });
 }
