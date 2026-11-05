@@ -12,6 +12,8 @@ export type SuggestedAccountMatch = {
   name: string
   score: number
   reason: string
+  autoSelect: boolean
+  confidence: 'CLEAR' | 'AMBIGUOUS' | 'POSSIBLE'
 }
 
 export const contabilidadService = {
@@ -157,7 +159,18 @@ export const contabilidadService = {
 
   // Cuentas sugeridas por tipo de documento
   getSuggestedAccounts: (signal?: AbortSignal) => api.get<{
-    mappings: Record<string, Record<string, { accountId: string | null; code: string | null; name: string | null; suggested: boolean; matches: SuggestedAccountMatch[] } | null>>
+    mappings: Record<string, Record<string, {
+      configuredCode: string | null
+      configuredAccountId: string | null
+      configuredName: string | null
+      configuredValid: boolean | null
+      configuredReason: string | null
+      expectedType: string
+      postingSides: Array<'DEBIT' | 'CREDIT'>
+      role: string
+      suggested: boolean
+      matches: SuggestedAccountMatch[]
+    } | null>>
     accounts: Array<{ id: string; code: string; name: string; type: string; subtype?: string; isActive?: boolean; acceptsPostings?: boolean }>
   }>('/accounting/suggested-accounts', { signal }),
 

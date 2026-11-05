@@ -71,17 +71,28 @@ type AccountInfo = {
 type ModuleField = {
   key: string
   label: string
-  side: 'debit' | 'credit'
+  side: 'debit' | 'credit' | 'both'
   description: string
   defaultCode: string
   defaultName: string
   defaultType: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE'
 }
 
-type AccountSuggestion = { accountId: string; code: string; name: string; score: number; reason: string }
+type AccountSuggestion = { accountId: string; code: string; name: string; score: number; reason: string; autoSelect?: boolean; confidence?: 'CLEAR' | 'AMBIGUOUS' | 'POSSIBLE' }
 type SuggestedAccountsResponse = {
-  mappings?: Record<string, Record<string, { matches?: AccountSuggestion[] } | null>>
+  mappings?: Record<string, Record<string, {
+    configuredCode?: string | null
+    configuredValid?: boolean | null
+    configuredReason?: string | null
+    expectedType?: string
+    postingSides?: Array<'DEBIT' | 'CREDIT'>
+    role?: string
+    suggested?: boolean
+    matches?: AccountSuggestion[]
+  } | null>>
 }
+
+const postingSideLabel = (side: ModuleField['side']) => side === 'both' ? 'Debe y haber' : side === 'debit' ? 'Debe' : 'Haber'
 
 const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; description: string; fields: ModuleField[] }[] = [
   {
@@ -120,7 +131,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Desembolso de préstamos y abonos: CxC, efectivo para Caja e ingresos por intereses',
     fields: [
       { key: 'cash', label: 'Caja de desembolso', side: 'credit', description: 'Se acredita al desembolsar el principal desde una sesión de Caja. Los desembolsos desde Banco usan la cuenta bancaria seleccionada.', defaultCode: '1000', defaultName: 'Caja General', defaultType: 'ASSET' },
-      { key: 'receivable', label: 'Préstamos por cobrar', side: 'debit', description: 'Se debita por el principal más el interés fijo reconocido en el préstamo.', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
+      { key: 'receivable', label: 'Préstamos por cobrar', side: 'both', description: 'Se debita al desembolsar y se acredita al recibir cada abono del préstamo.', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
       { key: 'interestIncome', label: 'Ingresos por intereses de préstamos', side: 'credit', description: 'Se acredita por el interés fijo reconocido al emitir el préstamo.', defaultCode: '4200', defaultName: 'Ingresos por Intereses de Préstamos', defaultType: 'INCOME' },
     ],
   },
@@ -347,7 +358,7 @@ const ACCOUNTING_MODULE_GROUPS = [
 const getDefaultAccountMappings = () => Object.fromEntries(
   BUILTIN_MODULES
     .filter(module => !OPERATIONAL_ONLY_MODULE_IDS.has(module.id))
-    .map(module => [module.id, Object.fromEntries(module.fields.map(field => [field.key, field.defaultCode]))]),
+    .map(module => [module.id, Object.fromEntries(module.fields.map(field => [field.key, '']))]),
 )
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -456,13 +467,15 @@ function ModuleStatusBadge({ status }: { status: { total: number; defined: numbe
   )
 }
 
-function AccountCodeInput({ code, field, moduleId, account, accountOptions, suggestions, onChange }: {
+function AccountCodeInput({ code, field, moduleId, account, accountOptions, suggestions, configuredValid, configuredReason, onChange }: {
   code: string
   field: ModuleField
   moduleId?: string
   account?: AccountInfo
   accountOptions: AccountOption[]
   suggestions: AccountSuggestion[]
+  configuredValid?: boolean | null
+  configuredReason?: string | null
   onChange: (val: string) => void
 }) {
   const accountState = account ? getAccountOptionState(account, field, moduleId) : null
@@ -538,8 +551,8 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
     <div className="min-w-0 space-y-1.5 rounded-xl border border-border/40 bg-background/60 p-3">
       <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${field.side === 'debit' ? 'bg-orange-500/10 text-orange-600' : 'bg-blue-500/10 text-blue-600'}`}>
-            {field.side === 'debit' ? 'Debe' : 'Haber'}
+          <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${field.side === 'debit' ? 'bg-orange-500/10 text-orange-600' : field.side === 'credit' ? 'bg-blue-500/10 text-blue-600' : 'bg-primary/10 text-primary'}`}>
+            {postingSideLabel(field.side)}
           </span>
           <span className="min-w-0 truncate text-[11px] font-bold">{field.label}</span>
         </div>
@@ -591,6 +604,8 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
                 ? ` · ${accountState?.label || 'Agrupadora'}`
                 : accountUnavailable
                   ? ` · ${accountState?.label || 'No seleccionable'}`
+                  : configuredValid === false
+                    ? ` · ${configuredReason || 'La cuenta no coincide con la función contable'}`
                   : ` · ${subtypeLabel(account.subtype)} · Disponible`}
           </span>
         ) : code ? (
@@ -601,7 +616,7 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
             <span className="min-w-0 truncate">Recomendación: {topRecommendation.code} · {topRecommendation.name}</span>
           </span>
         ) : (
-          <span className="text-[10px] text-muted-foreground">Sugerida: {field.defaultCode} · {accountTypeLabel(field.defaultType)}</span>
+          <span className="text-[10px] text-muted-foreground">Código de referencia, no asociado: {field.defaultCode} · {accountTypeLabel(field.defaultType)}</span>
         )}
       </div>
       <p className="text-[9px] leading-tight text-muted-foreground">{field.description}</p>
@@ -653,18 +668,21 @@ function AccountMappingQuickSetupDialog({
       .sort((left, right) => scoreName(right) - scoreName(left) || left.code.localeCompare(right.code))
   }
   const bestCandidateCodeFor = (moduleId: string, field: ModuleField) => {
-    const bestMatch = matchesFor(moduleId, field.key)[0]
-    if (bestMatch) return bestMatch.code
-    return fallbackAccountsFor(moduleId, field)[0]?.code || ''
+    return matchesFor(moduleId, field.key).find(match => match.autoSelect)?.code || ''
+  }
+  const hasValidCurrentMapping = (moduleId: string, field: ModuleField) => {
+    const currentCode = accountMappings[moduleId]?.[field.key] || ''
+    const currentAccount = accountsByCode.get(currentCode)
+    const configuredValid = suggestions?.[moduleId]?.[field.key]?.configuredValid
+    return Boolean(currentAccount
+      && !getAccountOptionState(currentAccount, field, moduleId).disabled
+      && configuredValid !== false)
   }
   const buildInitialSelection = () => {
     const nextCodes: Record<string, string> = {}
     for (const { module, field } of fields) {
       const id = fieldId(module.id, field.key)
-      const currentCode = accountMappings[module.id]?.[field.key] || field.defaultCode
-      const currentAccount = accountsByCode.get(currentCode)
-      const currentIsValid = Boolean(currentAccount && !getAccountOptionState(currentAccount, field, module.id).disabled)
-      nextCodes[id] = currentIsValid ? '' : bestCandidateCodeFor(module.id, field)
+      nextCodes[id] = hasValidCurrentMapping(module.id, field) ? '' : bestCandidateCodeFor(module.id, field)
     }
     return nextCodes
   }
@@ -677,7 +695,7 @@ function AccountMappingQuickSetupDialog({
     return fields.filter(({ module, field }) => normalizeText(`${module.label} ${field.label} ${field.key}`).includes(query))
   }, [fields, search])
 
-  const getCurrentCode = (moduleId: string, field: ModuleField) => accountMappings[moduleId]?.[field.key] || field.defaultCode
+  const getCurrentCode = (moduleId: string, field: ModuleField) => accountMappings[moduleId]?.[field.key] || ''
   const patches = fields.flatMap(({ module, field }) => {
     const id = fieldId(module.id, field.key)
     const currentCode = getCurrentCode(module.id, field)
@@ -691,7 +709,7 @@ function AccountMappingQuickSetupDialog({
     const nextCodes = { ...selectedCodes }
     for (const { module, field } of fields) {
       const id = fieldId(module.id, field.key)
-      nextCodes[id] = bestCandidateCodeFor(module.id, field)
+      nextCodes[id] = hasValidCurrentMapping(module.id, field) ? '' : bestCandidateCodeFor(module.id, field)
     }
     setSelectedCodes(nextCodes)
   }
@@ -744,6 +762,7 @@ function AccountMappingQuickSetupDialog({
                       const currentCode = getCurrentCode(module.id, field)
                       const currentAccount = accountsByCode.get(currentCode)
                       const currentState = currentAccount ? getAccountOptionState(currentAccount, field, module.id) : null
+                      const currentMapping = suggestions?.[module.id]?.[field.key]
                       const matches = matchesFor(module.id, field.key)
                       const fallbackAccounts = matches.length === 0 ? fallbackAccountsFor(module.id, field) : []
                       const selectedCode = selectedCodes[id] || ''
@@ -778,12 +797,14 @@ function AccountMappingQuickSetupDialog({
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="text-xs font-bold">{field.label}</span>
-                              <Badge variant="outline" className="text-[9px]">{field.side === 'debit' ? 'Debe' : 'Haber'}</Badge>
+                              <Badge variant="outline" className="text-[9px]">{postingSideLabel(field.side)}</Badge>
                               <Badge variant="outline" className="text-[9px]">{accountTypeLabel(field.defaultType)}</Badge>
                             </div>
                             <p className="mt-1 break-words text-[10px] text-muted-foreground">
                               Actual: {currentCode ? `${currentCode} · ${currentAccount?.name || 'No está en el plan'}` : 'Sin cuenta'}
-                              {currentState ? ` · ${currentState.disabled ? currentState.label : 'Válida'}` : ''}
+                              {currentMapping?.configuredValid === false
+                                ? ` · Inválida: ${currentMapping.configuredReason || 'no coincide con el tipo o función esperados'}`
+                                : currentState ? ` · ${currentState.disabled ? currentState.label : 'Válida'}` : ''}
                             </p>
                             {matches.length > 0 ? (
                               <div className="mt-1 space-y-0.5 text-[10px]">
@@ -796,7 +817,9 @@ function AccountMappingQuickSetupDialog({
                                     {' '}Si ninguna es adecuada, crea la cuenta correcta o selecciona otra.
                                   </p>
                                 ) : (
-                                  <p className="font-semibold text-emerald-600">Recomendada: {matches[0].code} · {matches[0].name}</p>
+                                  <p className={`font-semibold ${matches[0].autoSelect ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                    {matches[0].autoSelect ? 'Coincidencia clara' : 'Posible coincidencia para revisar'}: {matches[0].code} · {matches[0].name}
+                                  </p>
                                 )}
                                 {(isTie ? tiedTopMatches : matches.slice(0, 1)).map(match => (
                                   <p key={match.code} className="break-words text-muted-foreground">{match.reason} · puntaje {match.score}</p>
@@ -1203,6 +1226,8 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   const standardModuleDefs = allModuleDefs.filter(module => module.isBuiltin)
   const suggestionsForField = (moduleId: string, fieldKey: string) =>
     suggestedAccountsQuery.data?.mappings?.[moduleId]?.[fieldKey]?.matches || []
+  const suggestionDetailsForField = (moduleId: string, fieldKey: string) =>
+    suggestedAccountsQuery.data?.mappings?.[moduleId]?.[fieldKey]
   const openQuickSetup = async () => {
     if (!canEditAccounting || allAccounts.length === 0) return
     setAccountMappingsExpanded(true)
@@ -1351,12 +1376,14 @@ const [mappingsSearch, setMappingsSearch] = useState('')
             {fields.map(field => (
               <AccountCodeInput
                 key={field.key}
-                code={modMapping[field.key] || field.defaultCode}
+                code={modMapping[field.key] || ''}
                 field={field}
                 moduleId={mod.id}
-                account={accountsByCode.get(modMapping[field.key] || field.defaultCode)}
+                account={accountsByCode.get(modMapping[field.key] || '')}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
                 suggestions={suggestionsForField(mod.id, field.key)}
+                configuredValid={suggestionDetailsForField(mod.id, field.key)?.configuredValid}
+                configuredReason={suggestionDetailsForField(mod.id, field.key)?.configuredReason}
                 onChange={value => updateMapping(mod.id, field.key, value)}
               />
             ))}
@@ -1450,7 +1477,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
         </div>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {fields.map(({ module, field }) => {
-            const code = module.id === 'invoice' ? (invoiceMapping[field.key] || field.defaultCode) : (paymentMapping[field.key] || field.defaultCode)
+            const code = module.id === 'invoice' ? (invoiceMapping[field.key] || '') : (paymentMapping[field.key] || '')
             const hasAccount = Boolean(invoiceMapping[field.key] || paymentMapping[field.key]) && Boolean(accountsByCode.get(code))
             return (
               <span key={`${module.id}-${field.key}`} className={cn(
@@ -1466,7 +1493,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
         </div>
         <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
           {fields.map(({ module, mapping, field }) => {
-            const code = mapping[field.key] || field.defaultCode
+            const code = mapping[field.key] || ''
             return (
               <AccountCodeInput
                 key={`${module.id}-${field.key}`}
@@ -1476,6 +1503,8 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 account={accountsByCode.get(code)}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
                 suggestions={suggestionsForField(module.id, field.key)}
+                configuredValid={suggestionDetailsForField(module.id, field.key)?.configuredValid}
+                configuredReason={suggestionDetailsForField(module.id, field.key)?.configuredReason}
                 onChange={value => updateMapping(module.id, field.key, value)}
               />
             )
@@ -1504,7 +1533,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           {mod.fields.map(field => {
-            const code = modMapping[field.key] || field.defaultCode
+            const code = modMapping[field.key] || ''
             return (
               <AccountCodeInput
                 key={field.key}
@@ -1514,6 +1543,8 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 account={accountsByCode.get(code)}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
                 suggestions={suggestionsForField(mod.id, field.key)}
+                configuredValid={suggestionDetailsForField(mod.id, field.key)?.configuredValid}
+                configuredReason={suggestionDetailsForField(mod.id, field.key)?.configuredReason}
                 onChange={value => updateMapping(mod.id, field.key, value)}
               />
             )
