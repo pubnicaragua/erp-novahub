@@ -720,8 +720,8 @@ function AppContent() {
   }, [isAuthenticated, sessionClosed, logout]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', readPersistedDarkMode());
-  }, []);
+    document.documentElement.classList.toggle('dark', isAuthenticated && readPersistedDarkMode());
+  }, [isAuthenticated]);
 
   if (location.pathname === '/integrations/poket/callback') return <PoketPaymentCallbackPage />;
   if (location.pathname === '/public/tracking' || location.pathname.startsWith('/public/tracking/')) return <PublicTrackingPage />;

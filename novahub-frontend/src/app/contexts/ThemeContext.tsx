@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { brandingService, type Branding, type ThemePaletteMode, type UserThemeSettings } from '../services/branding.service';
 import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from './AuthContext';
@@ -186,7 +186,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [readyBrandingSessionKey, setReadyBrandingSessionKey] = useState<string | null>(
     () => user && activeTenantId !== 'default' ? null : 'anonymous',
   );
-  const didResolveInitialThemeMode = useRef(false);
+  const hasUserSession = Boolean(user);
   const isBrandingReady = !user || isPlatformUser || activeTenantId === 'default' || readyBrandingSessionKey === brandingSessionKey;
 
   const updateTheme = useCallback((colors: Partial<BrandColors>, paletteMode?: ThemePaletteMode) => {
@@ -315,13 +315,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useLayoutEffect(() => {
     // Apply brand colors and choose whether the sidebar is neutral or branded.
     const root = document.documentElement;
-    // Resolve the persisted mode in the same pre-paint phase as the brand
-    // variables. The later AppContent effect remains a harmless sync point,
-    // but cannot expose the light default palette before dark mode is applied.
-    if (!didResolveInitialThemeMode.current) {
-      root.classList.toggle('dark', readPersistedDarkMode());
-      didResolveInitialThemeMode.current = true;
-    }
+    // The login and all unauthenticated pages always use light mode. Keep the
+    // saved preference intact and restore it before paint once a session starts.
+    root.classList.toggle('dark', hasUserSession && readPersistedDarkMode());
     // During login, logout, or tenant switching, the previous tenant can remain
     // in state for one render. Never apply or persist that stale configuration.
     // Read the active tenant's persisted theme synchronously during the
@@ -389,7 +385,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       safeSetItem(themeStorageKey(themeUserId), JSON.stringify(themeConfig));
     }
     return () => observer.disconnect();
-  }, [canUsePersonalTheme, isPlatformUser, themeConfig, activeTenantId, themeUserId]);
+  }, [canUsePersonalTheme, isPlatformUser, themeConfig, activeTenantId, themeUserId, hasUserSession]);
 
   // Handle branding from server — re-fetch when user/token changes (login/switch/logout).
   // No se usa polling: `user` de useAuth cambia en login, switch de empresa y logout,

@@ -18,6 +18,11 @@ const PERSISTED_UI_KEYS = new Set([
   'novahub:manager-theme',
 ]);
 
+const PERSISTED_THEME_KEYS = new Set([
+  'erp-theme-mode',
+  'novahub:manager-theme',
+]);
+
 // These settings are intentionally tenant-scoped by their callers. Keep them
 // when the auth cache is cleared so a normal logout/login does not reset the
 // user's table configuration, while still clearing tenant data and drafts.
@@ -53,6 +58,9 @@ export function clearSessionCache(options: { preserveAuthToken?: boolean; preser
     for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
       const key = window.localStorage.key(index);
       if (!key || !shouldRemoveLocalKey(key)) continue;
+      // Theme mode is a browser preference: show light on login, then restore
+      // the same choice after authentication instead of erasing it on logout.
+      if (PERSISTED_THEME_KEYS.has(key)) continue;
       if (options.preserveAuthToken && key === 'nh-auth-token') continue;
       if (options.preserveSessionBranding && key === 'nh-session-branding') continue;
       // A hard refresh restores the same authenticated workspace. Keep the
