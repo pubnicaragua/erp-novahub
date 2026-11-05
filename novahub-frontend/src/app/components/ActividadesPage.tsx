@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ListTodo, CalendarDays, Bell, Database } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs } from './ui/tabs';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { TareasView } from './actividades/TareasView';
 import { EventosView } from './actividades/EventosView';
@@ -19,7 +20,6 @@ import { createReportWorkbook } from '../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import type { PdfDownloadFormat } from '../utils/pdfDownloadFormats';
 import { toast } from '../services/toast';
-import { getSidebarAwareNavigationClass } from '../utils/sidebarNavigation.mjs';
 
 interface ActividadesPageProps {
   activeSubModule?: string;
@@ -194,24 +194,14 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
 
           <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
             <div className="mb-4 flex w-full min-w-0 max-w-full items-center gap-2">
-            <div className={`${getSidebarAwareNavigationClass(isSidebarCollapsed)} min-w-0 flex-1 overscroll-x-contain overflow-x-auto custom-scrollbar`}>
-            <TabsList className="flex h-auto w-max min-w-full max-w-none gap-1.5 rounded-2xl border border-border/50 bg-card/80 p-1.5 shadow-sm backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
-              {visibleTabs.map((tab) => {
-                return (
-                <TabsTrigger 
-                  key={tab.id} 
-                  value={tab.id}
-                  className="flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-xs font-black uppercase tracking-widest sm:px-4
-                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-[background-color,color,box-shadow,transform] duration-200 active:scale-[0.98]"
-                >
-                  <tab.icon className="size-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </TabsTrigger>
-                );
-              })}
-            </TabsList>
-            </div>
+            <ModuleSubnavigation
+              items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
+              value={activeTab}
+              onValueChange={handleTabChange}
+              isSidebarCollapsed={isSidebarCollapsed}
+              ariaLabel="Navegación de Actividades"
+              className="mb-0 min-w-0 flex-1"
+            />
             {canExportActive && <ExportMenu onPdf={(paperFormat) => void exportActivities('pdf', paperFormat)} onExcel={() => void exportActivities('xlsx')} className="shrink-0" pdfDescription="Plantilla configurada para esta vista" excelDescription="Todos los registros autorizados" />}
             </div>
             

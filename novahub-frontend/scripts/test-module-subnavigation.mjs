@@ -48,7 +48,8 @@ for (const [name, component] of [
   ['Soporte técnico', technicalSupport],
   ['Soporte técnico administrador', technicalSupportAdmin],
 ]) {
-  assert.match(component, /getSidebarAwareNavigationClass\(isSidebarCollapsed\)/, `${name} hides its in-page navigation when the desktop sidebar is expanded`);
+  assert.match(component, /<ModuleSubnavigation\b/, `${name} uses the shared subnavigation component`);
+  assert.match(component, /isSidebarCollapsed=\{isSidebarCollapsed\}/, `${name} passes the sidebar state to the shared visibility rule`);
 }
 
 for (const [name, component] of [['Organización personal', organization], ['Marketing', marketing]]) {

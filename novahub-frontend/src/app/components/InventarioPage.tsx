@@ -17,7 +17,8 @@ import {
   Tags
 } from 'lucide-react';
 import { Button } from './ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsContent } from './ui/tabs';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { toast } from '@/app/services/toast';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -643,24 +644,17 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           if (onSubModuleChange) onSubModuleChange(nextTab);
         }}
       >
-        <div className={cn("mb-4 w-full overflow-x-auto custom-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")}>
-        <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground sm:min-w-0">
-          {INVENTORY_SECTIONS.map((section) => {
-            if (!canViewInventorySection(section.id)) return null;
-            return (
-              <TabsTrigger
-                key={section.id}
-                value={section.id} 
-                className="flex min-h-10 min-w-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest sm:min-w-[9rem]
-                  data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                  data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-                <section.icon className="size-4" />
-                <span className="hidden sm:inline">{section.label}</span>
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-        </div>
+        <ModuleSubnavigation
+          items={INVENTORY_SECTIONS.filter((section) => canViewInventorySection(section.id)).map((section) => ({ id: section.id, label: section.label, icon: <section.icon className="size-4" /> }))}
+          value={activeTab}
+          onValueChange={(nextTab) => {
+            if (!canViewInventorySection(nextTab)) return;
+            setActiveTab(nextTab);
+            onSubModuleChange?.(nextTab);
+          }}
+          isSidebarCollapsed={isSidebarCollapsed}
+          ariaLabel="Navegación de Inventario"
+        />
 
         {/* El key remonta las vistas al cambiar de sucursal: resetea formularios,
             filtros locales y selecciones que dependen del alcance de almacenes. */}

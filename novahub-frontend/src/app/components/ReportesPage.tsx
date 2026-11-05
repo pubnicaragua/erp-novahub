@@ -1,7 +1,7 @@
-﻿import { cn } from './ui/utils';
+import { BarChart3, MapPinned, Package, ShoppingCart, Truck, Users, Wallet } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsContent } from './ui/tabs';
 import { useAuth } from '../contexts/AuthContext';
 
 import { FinanceReportTab } from './reportes/FinanceReportTab';
@@ -14,6 +14,7 @@ import { HRReportTab } from './reportes/HRReportTab';
 import { MarketingReportTab } from './reportes/MarketingReportTab';
 import type { ReportExportRef } from './reportes/types';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { ExportMenu } from './ui/ExportMenu';
 import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 
@@ -24,15 +25,15 @@ interface ReportesPageProps {
 }
 
 const REPORT_TAB_CONFIG = [
-  { id: 'reportes-ventas', label: 'Ventas', module: 'REPORTS_SALES' },
-  { id: 'reportes-compras', label: 'Compras', module: 'REPORTS_PURCHASES' },
-  { id: 'reportes-financieros', label: 'Financiero', module: 'REPORTS_FINANCIAL' },
-  { id: 'reportes-inventario', label: 'Inventario de Mercancías', module: 'REPORTS_INVENTORY' },
-  { id: 'reportes-clientes', label: 'Clientes', module: 'REPORTS_CLIENTS' },
-  { id: 'reportes-proveedores', label: 'Proveedores', module: 'REPORTS_PROVIDERS' },
-  { id: 'reportes-rrhh', label: 'Recursos Humanos', module: 'REPORTS_HR' },
+  { id: 'reportes-ventas', label: 'Ventas', module: 'REPORTS_SALES', icon: ShoppingCart },
+  { id: 'reportes-compras', label: 'Compras', module: 'REPORTS_PURCHASES', icon: ShoppingCart },
+  { id: 'reportes-financieros', label: 'Financiero', module: 'REPORTS_FINANCIAL', icon: Wallet },
+  { id: 'reportes-inventario', label: 'Inventario de Mercancías', module: 'REPORTS_INVENTORY', icon: Package },
+  { id: 'reportes-clientes', label: 'Clientes', module: 'REPORTS_CLIENTS', icon: Users },
+  { id: 'reportes-proveedores', label: 'Proveedores', module: 'REPORTS_PROVIDERS', icon: Truck },
+  { id: 'reportes-rrhh', label: 'Recursos Humanos', module: 'REPORTS_HR', icon: Users },
   // Reutiliza el permiso de Marketing › Analítica (no existe un permiso REPORTS_MARKETING aparte).
-  { id: 'reportes-marketing', label: 'Marketing', module: 'MARKETING_ANALYTICS', exportAction: 'view' },
+  { id: 'reportes-marketing', label: 'Marketing', module: 'MARKETING_ANALYTICS', exportAction: 'view', icon: BarChart3 },
 ] as const;
 
 export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ReportesPageProps) {
@@ -57,6 +58,12 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
     const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'superadmin';
     return hasAccess && (!tab.superOnly || isSuperAdmin);
   }), [user, canPerform]);
+  const visibleNavigationTabs = [
+    ...visibleReportTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> })),
+    ...((!user?.enabledModules || user.enabledModules.includes('FORCE_SALES')) && canPerform('FORCE_SALES', 'view')
+      ? [{ id: 'reportes-gestores-cobro', label: 'Gestores de cobro', icon: <MapPinned className="size-4" /> }]
+      : []),
+  ];
 
   const activeReportTab = REPORT_TAB_CONFIG.find((tab) => tab.id === activeTab);
   const canExportActiveReport = Boolean(activeReportTab && canPerform(activeReportTab.module, ('exportAction' in activeReportTab ? activeReportTab.exportAction : 'export')));
@@ -138,19 +145,16 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
       <CurrencyValuationBanner />
 
       <Tabs value={activeTab} onValueChange={handleReportTabChange} className="w-full">
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-4 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
-          {visibleReportTabs.map((tab) => {
-            return (
-              <TabsTrigger 
-                key={tab.id}
-                value={tab.id} 
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-              >
-                {tab.label}
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
+        <ModuleSubnavigation
+          items={visibleNavigationTabs}
+          value={activeTab}
+          onValueChange={(value) => {
+            if (value === 'reportes-gestores-cobro') onSubModuleChange?.(value);
+            else handleReportTabChange(value);
+          }}
+          isSidebarCollapsed={isSidebarCollapsed}
+          ariaLabel="Navegación de Reportes"
+        />
 
         <TabsContent value="reportes-ventas" className="m-0 mt-4 outline-none">
           {activeTab === 'reportes-ventas' && <SalesReportTab ref={salesRef} dateRange={dateRange} />}

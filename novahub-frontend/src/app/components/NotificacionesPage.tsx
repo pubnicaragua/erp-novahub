@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, MessageSquare, Send } from 'lucide-react';
 import { cn } from './ui/utils';
-import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs } from './ui/tabs';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { Button } from './ui/button';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertasView } from './notificaciones/AlertasView';
@@ -160,20 +161,18 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
             onSubModuleChange?.(value);
           }}
         >
-          <div className={cn("mb-4 w-full overflow-x-auto custom-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")} data-tour="notificaciones-title">
-            <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="notificaciones-tabs">
-            {visibleTabs.map((tab) => (
-              <TabsTrigger
-                key={tab.id}
-                value={tab.id}
-                data-tour={`notificaciones-tab-${tab.id}`}
-                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg"
-              >
-                <tab.icon className="size-4" />
-                <span>{tab.label}</span>
-              </TabsTrigger>
-            ))}
-            </TabsList>
+          <div data-tour="notificaciones-title">
+            <ModuleSubnavigation
+              items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
+              value={activeTab}
+              onValueChange={(value) => {
+                setLocalActiveTab(value);
+                onSubModuleChange?.(value);
+              }}
+              isSidebarCollapsed={isSidebarCollapsed}
+              ariaLabel="Navegación de Notificaciones"
+              dataTour="notificaciones-tabs"
+            />
           </div>
 
           <AnimatePresence mode="wait">

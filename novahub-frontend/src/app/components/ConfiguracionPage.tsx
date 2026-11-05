@@ -16,7 +16,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsContent } from './ui/tabs';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { Separator } from './ui/separator';
 import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
@@ -593,7 +594,7 @@ const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
   proyectos: 'PROJECTS',
 };
 
-export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { initialTab?: string; onTabChange?: (tab: string) => void }) {
+export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSidebarCollapsed }: { initialTab?: string; onTabChange?: (tab: string) => void; isSidebarCollapsed?: boolean }) {
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
   const { user, userBranches, canPerform } = useAuth();
   const { refreshRate: refreshCurrencyContext } = useCurrency();
@@ -1352,20 +1353,13 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { in
       {/* —— TABS —— */}
       <Tabs value={activeTab} className="space-y-6" onValueChange={handleConfigurationTabChange}>
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
-            {visibleTabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <TabsTrigger key={tab.id} value={tab.id}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-                  <Icon className="size-4" />
-                  {tab.label}
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
+          <ModuleSubnavigation
+            items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
+            value={activeTab}
+            onValueChange={handleConfigurationTabChange}
+            isSidebarCollapsed={isSidebarCollapsed}
+            ariaLabel="Navegación de Configuración"
+          />
         </motion.div>
 
         {/* ══════════ TAB: BRANDING ══════════ */}

@@ -7,6 +7,7 @@ import { customersService } from '../services/ventas.service';
 import { subscribeToNotificationEvents } from '../services/notifications.service';
 import { Combobox } from './ui/Combobox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { ForceSalesNavigation } from './force-sales/ForceSalesNavigation';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
 
 const mapUrl = `${import.meta.env.BASE_URL}maps/diseñoui_mapas_freelancers.html`;
@@ -25,7 +26,7 @@ interface ForceSalesCustomerOption {
   companyName?: string | null;
 }
 
-export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: string; onSubModuleChange?: (value: string) => void }) {
+export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: { activeSubModule?: string; onSubModuleChange?: (value: string) => void; isSidebarCollapsed?: boolean }) {
   const { user, hasAccess, canPerform } = useAuth();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const mapSectionRef = useRef<HTMLElement>(null);
@@ -276,6 +277,11 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
 
   return (
     <section ref={mapSectionRef} className={mapFullscreen ? 'fixed inset-0 z-[100] h-[100dvh] min-h-0 overflow-hidden bg-background' : 'relative h-[calc(100dvh-4rem)] min-h-0 overflow-hidden bg-background'}>
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 px-3 pt-3 sm:px-4">
+        <div className="pointer-events-auto">
+          <ForceSalesNavigation activeSubModule={activeSubModule} onSubModuleChange={onSubModuleChange} isSidebarCollapsed={isSidebarCollapsed} />
+        </div>
+      </div>
       {mapConfig && <iframe
         ref={iframeRef}
         key={`${mapFrameLoadVersion}:${mapProvider}:${mapSearchMode}:${mapConfig?.mapTileUrl || ''}:${mapConfig?.mapGeocoderUrl || ''}`}

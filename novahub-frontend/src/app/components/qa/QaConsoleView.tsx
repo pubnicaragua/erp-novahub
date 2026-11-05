@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Progress } from '../ui/progress';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { Tabs, TabsContent } from '../ui/tabs';
+import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
@@ -275,7 +276,7 @@ function ModuleCard({ mod }: { mod: QaModuleSummary }) {
   );
 }
 
-export function QaConsoleView({ activeSubModule, onSubModuleChange }: { activeSubModule?: string; onSubModuleChange?: (subModule: string) => void }) {
+export function QaConsoleView({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: { activeSubModule?: string; onSubModuleChange?: (subModule: string) => void; isSidebarCollapsed?: boolean }) {
   const [activeTab, setActiveTab] = useState(() => ['resumen', 'checks', 'hallazgos'].includes(activeSubModule || '') ? activeSubModule! : 'resumen');
 
   useEffect(() => {
@@ -383,11 +384,17 @@ export function QaConsoleView({ activeSubModule, onSubModuleChange }: { activeSu
       )}
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList>
-          <TabsTrigger value="resumen">Resumen por módulo</TabsTrigger>
-          <TabsTrigger value="checks">Checks ({checks.length})</TabsTrigger>
-          <TabsTrigger value="hallazgos">Hallazgos ({findings.filter((f) => f.status === 'ABIERTO' || f.status === 'EN_PROGRESO').length})</TabsTrigger>
-        </TabsList>
+        <ModuleSubnavigation
+          items={[
+            { id: 'resumen', label: 'Resumen por módulo', icon: <ShieldCheck className="size-4" /> },
+            { id: 'checks', label: `Checks (${checks.length})`, icon: <CheckCircle2 className="size-4" /> },
+            { id: 'hallazgos', label: `Hallazgos (${findings.filter((finding) => finding.status === 'ABIERTO' || finding.status === 'EN_PROGRESO').length})`, icon: <Bug className="size-4" /> },
+          ]}
+          value={activeTab}
+          onValueChange={handleTabChange}
+          isSidebarCollapsed={isSidebarCollapsed}
+          ariaLabel="Navegación del Validador QA"
+        />
 
         <TabsContent value="resumen" className="space-y-4">
           {loading ? (

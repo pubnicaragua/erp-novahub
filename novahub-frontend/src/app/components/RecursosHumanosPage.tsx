@@ -1,8 +1,8 @@
-import { cn } from './ui/utils';
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsContent } from './ui/tabs';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { motion } from 'motion/react';
 import {
   Users,
@@ -418,57 +418,50 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     });
   };
 
+  const hrTabs = [
+    { id: 'dashboard', submodule: 'dashboard-hr', label: 'Dashboard', icon: BarChart3, module: 'HR_DASHBOARD' },
+    { id: 'empleados', submodule: 'empleados', label: 'Empleados', icon: Users, module: 'HR_EMPLOYEES' },
+    { id: 'departamentos', submodule: 'departamentos', label: 'Departamentos', icon: Building2, module: 'HR_EMPLOYEES' },
+    { id: 'nominas', submodule: 'nominas', label: 'Nóminas', icon: DollarSign, module: 'HR_PAYROLL' },
+    { id: 'comisiones', submodule: 'comisiones', label: 'Comisiones', icon: BadgePercent, module: 'HR_PAYROLL' },
+    { id: 'asistencia', submodule: 'asistencia', label: 'Asistencia', icon: UserCheck, module: 'HR_ATTENDANCE' },
+    { id: 'ausencias', submodule: 'ausencias', label: 'Vacaciones', icon: Calendar, module: 'HR_LEAVES' },
+    { id: 'ausencias-config', submodule: 'ausencias-config', label: 'Tipos Ausencia', icon: Calendar, module: 'HR_LEAVES' },
+    { id: 'evaluaciones', submodule: 'evaluaciones', label: 'Desempeño', icon: Award, module: 'HR_PERFORMANCE' },
+    { id: 'kpi', submodule: 'kpi', label: 'KPI', icon: BarChart3, module: 'HR_PERFORMANCE' },
+    { id: 'capacitaciones', submodule: 'capacitaciones', label: 'Formación', icon: GraduationCap, module: 'HR_TRAINING' },
+    { id: 'beneficios', submodule: 'beneficios', label: 'Beneficios', icon: HandHeart, module: 'HR_BENEFITS' },
+    { id: 'config-nomina', submodule: 'config-nomina', label: 'Config', icon: Settings2, module: 'HR_PAYROLL_CONFIG' },
+  ];
+  const visibleHrTabs = hrTabs.filter((tab) => {
+    const hasRequired = user?.enabledModules?.includes(tab.module);
+    const hasFallback = user?.enabledModules?.includes('HR');
+    const isCommissionsTab = tab.id === 'comisiones';
+    const hasCommissionSubscription = !user?.enabledModules || user.enabledModules.some((module) => ['HR', 'HR_PAYROLL', 'HR_COMMISSIONS'].includes(module));
+    const hasSubscriptionAccess = isCommissionsTab ? hasCommissionSubscription : (!user?.enabledModules || hasRequired || hasFallback);
+    const hasPermission = isCommissionsTab
+      ? canPerform('HR_COMMISSIONS', 'view') || canPerform('HR_COMMISSIONS_CONFIG', 'view')
+      : canPerform(tab.module, 'view');
+    return hasSubscriptionAccess && hasPermission;
+  });
+
 
   return (
     <div className="hr-module mx-auto w-full max-w-[1700px] min-w-0 space-y-6 overflow-x-hidden p-4 pb-20 sm:p-6 md:px-10 md:pb-20 md:pt-4">
 
       <CurrencyValuationBanner />
 
-      {/* Main Navigation Tabs - Estilo Compras (Píldoras Flexibles y con Scroll) */}
+      {/* Navegación principal compartida con el resto de módulos */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
         <div className="mb-4 flex min-w-0 items-center gap-2">
-          <div className="min-w-0 flex-1 overflow-x-auto">
-            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'HR_DASHBOARD' },
-            { id: 'empleados', label: 'Empleados', icon: Users, module: 'HR_EMPLOYEES' },
-            { id: 'departamentos', label: 'Departamentos', icon: Building2, module: 'HR_EMPLOYEES' },
-            { id: 'nominas', label: 'Nóminas', icon: DollarSign, module: 'HR_PAYROLL' },
-            { id: 'comisiones', label: 'Comisiones', icon: BadgePercent, module: 'HR_PAYROLL' },
-            { id: 'asistencia', label: 'Asistencia', icon: UserCheck, module: 'HR_ATTENDANCE' },
-            { id: 'ausencias', label: 'Vacaciones', icon: Calendar, module: 'HR_LEAVES' },
-            { id: 'ausencias-config', label: 'Tipos Ausencia', icon: Calendar, module: 'HR_LEAVES' },
-            { id: 'evaluaciones', label: 'Desempeño', icon: Award, module: 'HR_PERFORMANCE' },
-            { id: 'kpi', label: 'KPI', icon: BarChart3, module: 'HR_PERFORMANCE' },
-            { id: 'capacitaciones', label: 'Formación', icon: GraduationCap, module: 'HR_TRAINING' },
-            { id: 'beneficios', label: 'Beneficios', icon: HandHeart, module: 'HR_BENEFITS' },
-            { id: 'config-nomina', label: 'Config', icon: Settings2, module: 'HR_PAYROLL_CONFIG' }
-          ].map((tab) => {
-            const hasRequired = user?.enabledModules?.includes(tab.module);
-            // La suscripción al módulo padre (HR) habilita todas sus vistas,
-            // incluso con submódulos granulares contratados.
-            const hasFallback = user?.enabledModules?.includes('HR');
-            const isCommissionsTab = tab.id === 'comisiones';
-            const hasCommissionSubscription = !user?.enabledModules || user.enabledModules.some((module) => ['HR', 'HR_PAYROLL', 'HR_COMMISSIONS'].includes(module));
-            const hasSubscriptionAccess = isCommissionsTab ? hasCommissionSubscription : (!user?.enabledModules || hasRequired || hasFallback);
-            const hasPermission = isCommissionsTab
-              ? canPerform('HR_COMMISSIONS', 'view') || canPerform('HR_COMMISSIONS_CONFIG', 'view')
-              : canPerform(tab.module, 'view');
-            const hasAccess = hasSubscriptionAccess && hasPermission;
-            if (!hasAccess) return null;
-            return (
-              <TabsTrigger 
-                key={tab.id}
-                value={tab.id} 
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-              >
-                <tab.icon className="size-4" />
-                <span>{tab.label}</span>
-              </TabsTrigger>
-            );
-          })}
-            </TabsList>
-          </div>
+          <ModuleSubnavigation
+            items={visibleHrTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
+            value={activeTab}
+            onValueChange={handleTabChange}
+            isSidebarCollapsed={isSidebarCollapsed}
+            ariaLabel="Navegación de Recursos Humanos"
+            className="mb-0 min-w-0 flex-1"
+          />
           {canExportActiveHr && (
             <ExportMenu
               onPdf={(paperFormat) => void exportHr('pdf', paperFormat)}

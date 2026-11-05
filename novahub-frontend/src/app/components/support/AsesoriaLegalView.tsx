@@ -11,7 +11,8 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Tabs, TabsContent } from '../ui/tabs';
+import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
 import { cn } from '../ui/utils';
@@ -115,20 +116,13 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
         ) : (
           <motion.div key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-4 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
-                {canViewCases && <TabsTrigger value="cases"
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-                  <FileText className="size-4" /> Casos
-                </TabsTrigger>}
-                {canViewReminders && <TabsTrigger value="reminders"
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-                  <Bell className="size-4" /> Recordatorios
-                </TabsTrigger>}
-              </TabsList>
+              <ModuleSubnavigation
+                items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
+                value={activeTab}
+                onValueChange={handleTabChange}
+                isSidebarCollapsed={isSidebarCollapsed}
+                ariaLabel="Navegación de Asesoría Legal"
+              />
 
               <TabsContent value="cases" className="mt-0">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-4">

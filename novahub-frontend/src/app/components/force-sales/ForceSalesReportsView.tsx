@@ -14,6 +14,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ExportMenu } from '../ui/ExportMenu';
+import { ForceSalesNavigation } from './ForceSalesNavigation';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
@@ -93,7 +94,7 @@ function workbookRows(headers: string[], rows: Array<Array<string | number>>) {
   return rows.map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
 }
 
-export function ForceSalesReportsView() {
+export function ForceSalesReportsView({ activeSubModule, onSubModuleChange, isSidebarCollapsed, reportContext = false }: { activeSubModule?: string; onSubModuleChange?: (subModule: string) => void; isSidebarCollapsed?: boolean; reportContext?: boolean }) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [from, setFrom] = useState(todayInNicaragua());
@@ -227,6 +228,7 @@ export function ForceSalesReportsView() {
   return (
     <div className="min-h-[calc(100dvh-4rem)] bg-background px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1700px] space-y-5">
+        <ForceSalesNavigation activeSubModule={activeSubModule} onSubModuleChange={onSubModuleChange} isSidebarCollapsed={isSidebarCollapsed} reportContext={reportContext} />
         <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-primary"><Route className="size-3.5" /> Fuerza Comercial</div>

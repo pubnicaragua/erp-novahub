@@ -20,7 +20,7 @@ import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getSidebarAwareNavigationClass } from '../../utils/sidebarNavigation.mjs';
+import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 
 const CATEGORIES = [
   { id: 'ALL', label: 'Todos', icon: LifeBuoy },
@@ -176,13 +176,14 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange, isSideb
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input placeholder="Buscar por asunto o número..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-11 bg-background/50 border-transparent focus:bg-background rounded-2xl h-12 text-sm font-bold shadow-none" />
         </div>
-        <div className={`${getSidebarAwareNavigationClass(isSidebarCollapsed)} w-full min-w-0 overflow-x-auto custom-scrollbar`}>
-        <div className="flex w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5">
-          {CATEGORIES.map(cat => (
-            <button key={cat.id} onClick={() => handleCategoryChange(cat.id)} className={cn("flex-none shrink-0 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border border-transparent", activeCategory === cat.id ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground")}>{cat.label}</button>
-          ))}
-        </div>
-        </div>
+        <ModuleSubnavigation
+          items={CATEGORIES.map((category) => ({ id: category.id, label: category.label, icon: <category.icon className="size-4" /> }))}
+          value={activeCategory}
+          onValueChange={handleCategoryChange}
+          isSidebarCollapsed={isSidebarCollapsed}
+          ariaLabel="Categorías de Soporte Técnico"
+          className="mb-0 md:w-auto md:max-w-[65%]"
+        />
       </div>
 
       {/* Tickets List */}

@@ -32,12 +32,12 @@ import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
+import { Tabs } from '../ui/tabs';
+import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { trainingService } from '../../services/training.service';
 import { cn } from '../ui/utils';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
-import { getSidebarAwareNavigationClass } from '../../utils/sidebarNavigation.mjs';
 
 const MODULE_CATEGORIES = [
   { id: 'ALL', label: 'Todos', color: 'bg-primary/10 text-primary border-primary/20', gradient: 'from-primary/20 to-primary/5', icon: GraduationCap },
@@ -293,27 +293,13 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarC
           />
         </div>
         <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
-          <div className={`${getSidebarAwareNavigationClass(isSidebarCollapsed)} w-full overflow-x-auto custom-scrollbar`}>
-            <div className="flex w-full min-w-max justify-center">
-              <TabsList className="flex h-auto w-max shrink-0 flex-nowrap gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
-                {MODULE_CATEGORIES.map((cat) => {
-                  const Icon = cat.icon;
-                  return (
-                    <TabsTrigger
-                      key={cat.id}
-                      value={cat.id}
-                      className="flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-[10px] font-black uppercase tracking-widest transition-[background-color,color,box-shadow,transform] duration-200 active:scale-[0.98] sm:px-4
-                        data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                        data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg"
-                    >
-                      <Icon className="size-4" />
-                      <span>{cat.label}</span>
-                    </TabsTrigger>
-                  );
-                })}
-              </TabsList>
-            </div>
-          </div>
+          <ModuleSubnavigation
+            items={MODULE_CATEGORIES.map((cat) => ({ id: cat.id, label: cat.label, icon: <cat.icon className="size-4" /> }))}
+            value={activeCategory}
+            onValueChange={handleCategoryChange}
+            isSidebarCollapsed={isSidebarCollapsed}
+            ariaLabel="Navegación de Centro de Capacitación"
+          />
         </Tabs>
       </div>
 

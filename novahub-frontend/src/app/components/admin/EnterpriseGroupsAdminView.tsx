@@ -18,6 +18,7 @@ import { BrandLogo } from '../BrandLogo';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscriptionsService } from '../../services/subscriptions.service';
 import { PlatformSupportAgentsPanel } from './PlatformSupportAgentsPanel';
+import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 
 const normalizeSearchValue = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase();
 
@@ -34,7 +35,7 @@ function formatStorage(value: unknown) {
 const ENTERPRISE_GROUP_TABS = ['groups', 'legacy', 'requests', 'module-requests', 'quotes', 'support-agents'] as const;
 type EnterpriseGroupTab = typeof ENTERPRISE_GROUP_TABS[number];
 
-export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabChange }: { embedded?: boolean; initialTab?: string; onTabChange?: (tab: string) => void }) {
+export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabChange, isSidebarCollapsed }: { embedded?: boolean; initialTab?: string; onTabChange?: (tab: string) => void; isSidebarCollapsed?: boolean }) {
   const { user } = useAuth();
   const quoteOnly = user?.role === 'platform_quote_user';
   const isSuperAdmin = ['SUPER_ADMIN', 'SUPERADMIN'].includes(String(user?.role || '').toUpperCase().replace(/[-\s]/g, '_'));
@@ -104,20 +105,22 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
         </div>
       </div>
 
-      <div className="flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-muted/20 p-1" role="tablist" aria-label="Administración de grupos empresariales">
-        {([
+      <ModuleSubnavigation
+        items={([
           ['groups', 'Grupos actuales', Building2],
           ['legacy', 'Usuarios heredados', UserRound],
           ['requests', 'Solicitudes de trial', Clock3],
-          ['module-requests', 'Cotizar módulos', FileText],
+          ['module-requests', moduleQuotePendingCount > 0 ? `Cotizar módulos (${moduleQuotePendingCount})` : 'Cotizar módulos', FileText],
           ['quotes', 'Cotizaciones', FileText],
           ['support-agents', 'Agentes de soporte', LifeBuoy],
-        ] as const).filter(([tab]) => !quoteOnly && (tab !== 'module-requests' || isSuperAdmin) && (tab !== 'support-agents' || isSuperAdmin) || quoteOnly && tab === 'quotes').map(([tab, label, Icon]) => (
-          <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => handleTabChange(tab)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wide transition ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>
-            <Icon className="size-4" /> {label}{tab === 'module-requests' && moduleQuotePendingCount > 0 && <Badge className="ml-1 bg-background/20 px-1.5 py-0 text-[9px]">{moduleQuotePendingCount}</Badge>}
-          </button>
-        ))}
-      </div>
+        ] as const)
+          .filter(([tab]) => !quoteOnly && (tab !== 'module-requests' || isSuperAdmin) && (tab !== 'support-agents' || isSuperAdmin) || quoteOnly && tab === 'quotes')
+          .map(([id, label, Icon]) => ({ id, label, icon: <Icon className="size-4" /> }))}
+        value={activeTab}
+        onValueChange={(tab) => handleTabChange(tab as EnterpriseGroupTab)}
+        isSidebarCollapsed={isSidebarCollapsed}
+        ariaLabel="Navegación de Grupos y Cotizaciones"
+      />
 
       {activeTab === 'groups' ? <>
       <Card className="rounded-3xl border-primary/20 bg-primary/[0.03] shadow-sm">

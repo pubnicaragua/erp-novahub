@@ -11,7 +11,8 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsContent } from './ui/tabs';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { cn } from './ui/utils';
 import { toast } from '@/app/services/toast';
@@ -97,9 +98,10 @@ const FINANCING_TABS = [
 interface FinanciamientoPymePageProps {
   activeSubModule?: string;
   onSubModuleChange?: (subModule?: string) => void;
+  isSidebarCollapsed?: boolean;
 }
 
-export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange }: FinanciamientoPymePageProps) {
+export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: FinanciamientoPymePageProps) {
   const { user, canPerform } = useAuth();
   const visibleTabs = useMemo(() => FINANCING_TABS.filter((tab) => canPerform(tab.module, 'view')), [canPerform]);
   const [activeTab, setActiveTab] = useState<'solicitudes' | 'calculadora'>('solicitudes');
@@ -200,25 +202,18 @@ export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange }: F
           <motion.div key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               <div className="mb-4 flex min-w-0 items-center gap-2">
-                <div className="min-w-0 flex-1 overflow-x-auto custom-scrollbar">
-                  <TabsList className="flex h-auto w-max min-w-full flex-nowrap justify-start gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 pb-2 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0" data-tour="financing-tabs">
-                    {visibleTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-                  <tab.icon className="size-4" /> {tab.label}
-                </TabsTrigger>)}
-                {/* La clase se mantiene en el trigger generado arriba para
-                    conservar el patrón visual del módulo. */}
-                {/*
-                <TabsTrigger value="calculadora"
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-                  <Calculator className="size-4" /> Calculadora
-                </TabsTrigger> */}
-                  </TabsList>
-                </div>
+                <ModuleSubnavigation
+                  items={visibleTabs.map((tab) => ({ id: tab.sidebarId, label: tab.label, icon: <tab.icon className="size-4" /> }))}
+                  value={FINANCING_TABS.find((tab) => tab.id === activeTab)?.sidebarId || 'solicitudes-financiamiento'}
+                  onValueChange={(submodule) => {
+                    const tab = FINANCING_TABS.find((candidate) => candidate.sidebarId === submodule);
+                    if (tab) handleTabChange(tab.id);
+                  }}
+                  isSidebarCollapsed={isSidebarCollapsed}
+                  ariaLabel="Navegación de Financiamiento PYME"
+                  dataTour="financing-tabs"
+                  className="mb-0 min-w-0 flex-1"
+                />
                 <div className="flex shrink-0 items-center justify-end gap-2">
                   {canExportApplications && <ExportMenu onPdf={(paperFormat) => void exportApplications('pdf', paperFormat)} onExcel={() => void exportApplications('xlsx')} pdfDescription="Reporte configurado de solicitudes" excelDescription="Todas las solicitudes autorizadas" />}
                   <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo usar Financiamiento PyME" title="Cómo usar Financiamiento PyME">

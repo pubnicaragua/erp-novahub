@@ -6,7 +6,8 @@ import {
   Banknote, BadgeDollarSign,
   ClipboardPen, Tags,
 } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs } from './ui/tabs';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { Badge } from './ui/badge';
 import { cn } from './ui/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -539,23 +540,19 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
             lastSyncedSubModuleRef.current = val;
             onSubModuleChange?.(val);
           }}>
-        <div className={cn("w-full overflow-x-auto custom-scrollbar mb-4", !isSidebarCollapsed && "hidden lg:hidden")}>
-        <TabsList ref={tabsRef} className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
-              {COMPRAS_SECTIONS.map((section) => {
-                if (!canViewPurchasesSection(section.id)) return null;
-                return (
-                <TabsTrigger 
-                  key={section.id} 
-                  value={section.id}
-                  className="flex flex-none shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-                >
-                  <section.icon className="size-4" />
-                  <span className="hidden sm:inline">{section.label}</span>
-                </TabsTrigger>
-                );
-              })}
-        </TabsList>
-        </div>
+        <ModuleSubnavigation
+          listRef={tabsRef}
+          items={COMPRAS_SECTIONS.filter((section) => canViewPurchasesSection(section.id)).map((section) => ({ id: section.id, label: section.label, icon: <section.icon className="size-4" /> }))}
+          value={activeSection}
+          onValueChange={(value) => {
+            if (!canViewPurchasesSection(value)) return;
+            setActiveSection(value);
+            lastSyncedSubModuleRef.current = value;
+            onSubModuleChange?.(value);
+          }}
+          isSidebarCollapsed={isSidebarCollapsed}
+          ariaLabel="Navegación de Compras"
+        />
           <AnimatePresence mode="wait">
             {COMPRAS_SECTIONS.map(section => {
                if (activeSection !== section.id || !canViewPurchasesSection(section.id)) return null;

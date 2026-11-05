@@ -5,7 +5,8 @@ import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
 import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
-import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
+import { Tabs } from '../ui/tabs';
+import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { projectsService, type ProjectDetail } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,7 +23,6 @@ import { ProyectoCosteo6DPanel } from './ProyectoCosteo6DPanel';
 import { ProyectoEVMControlPanel } from './ProyectoEVMControlPanel';
 import { ProyectoCotizacionExportView } from './ProyectoCotizacionExportView';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
-import { getSidebarAwareNavigationClass } from '../../utils/sidebarNavigation.mjs';
 
 interface ProyectoDetalleViewProps {
   projectId: string;
@@ -32,7 +32,7 @@ interface ProyectoDetalleViewProps {
   isSidebarCollapsed?: boolean;
 }
 
-const TAB_DEFS = [
+export const PROJECT_DETAIL_TABS = [
   { id: 'resumen', label: 'Resumen', fullLabel: 'Resumen, Avance y Documentos', icon: LayoutDashboard, modules: ['PROJECTS_LIST'] },
   { id: 'cotizaciones', label: 'Cotizaciones', fullLabel: 'Cotizaciones Materiales', icon: ShoppingCart, modules: ['PROJECTS_QUOTATIONS'] },
   { id: 'planificacion', label: 'Planificación', fullLabel: 'Planificación y Tareas', icon: ListTodo, modules: ['PROJECTS_TASKS', 'PROJECTS_MILESTONES'] },
@@ -130,27 +130,19 @@ export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange
       ) : null}
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <div className={`${getSidebarAwareNavigationClass(isSidebarCollapsed)} mb-4 w-full min-w-0 max-w-full overflow-x-auto pb-1.5 custom-scrollbar`}>
-          <TabsList className="flex h-auto w-full min-w-max flex-nowrap items-center gap-1 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-1 [&>button]:min-w-fit [&>button]:justify-center [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
-            {TAB_DEFS.map((tab) => {
-              const hasEnabled = user?.enabledModules?.includes('PROJECTS') || tab.modules.some((module) => user?.enabledModules?.includes(module));
-              if (user?.enabledModules && !hasEnabled) return null;
-              const hasModuleRead = tab.id === 'planificacion'
-                ? tab.modules.some((module) => canPerform(module, 'view'))
-                : tab.modules.every((module) => canPerform(module, 'view'));
-              if (!hasModuleRead) return null;
-              return (
-                <TabsTrigger key={tab.id} value={tab.id}
-                  aria-label={tab.fullLabel || tab.label}
-                  title={tab.fullLabel || tab.label}
-                  className="flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-                  <tab.icon className="size-3.5 shrink-0" />
-                  <span className="whitespace-nowrap">{tab.label}</span>
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-        </div>
+        <ModuleSubnavigation
+          items={PROJECT_DETAIL_TABS.filter((tab) => {
+            const hasEnabled = user?.enabledModules?.includes('PROJECTS') || tab.modules.some((module) => user?.enabledModules?.includes(module));
+            if (user?.enabledModules && !hasEnabled) return false;
+            return tab.id === 'planificacion'
+              ? tab.modules.some((module) => canPerform(module, 'view'))
+              : tab.modules.every((module) => canPerform(module, 'view'));
+          }).map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
+          value={activeTab}
+          onValueChange={handleTabChange}
+          isSidebarCollapsed={isSidebarCollapsed}
+          ariaLabel="Navegación del proyecto"
+        />
 
         {activeTab === 'resumen' && project && canPerform('PROJECTS_LIST', 'view') ? (
           <div className="space-y-6">

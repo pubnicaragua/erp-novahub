@@ -33,6 +33,7 @@ import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
 import { toast } from '@/app/services/toast';
 import { AnimatePresence, motion } from 'motion/react';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
@@ -151,6 +152,7 @@ const RESTAURANT_TABS: Array<{ id: RestaurantTab; label: string; icon: typeof La
 interface RestaurantePageProps {
   activeSubModule?: string;
   onSubModuleChange?: (subModule?: string) => void;
+  isSidebarCollapsed?: boolean;
 }
 
 const tableStatus: Record<string, { label: string; className: string }> = {
@@ -243,7 +245,7 @@ const restaurantTabToSubmodule: Record<RestaurantTab, string> = {
   configuracion: 'configuracion',
 };
 
-export function RestaurantePage({ activeSubModule, onSubModuleChange }: RestaurantePageProps) {
+export function RestaurantePage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: RestaurantePageProps) {
   const { user, canPerform } = useAuth();
   const { accessibleBranches, selectedBranchId } = useBranchScope();
   const canViewTables = canPerform('RESTAURANT_SALON', 'view');
@@ -301,6 +303,12 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   const tab = requestedTab && visibleTabs.some(({ id }) => id === requestedTab)
     ? requestedTab
     : visibleTabs.some(({ id }) => id === localTab) ? localTab : visibleTabs[0]?.id || 'salon';
+  const handleTabChange = (value: string) => {
+    const nextTab = restaurantSubmoduleToTab[value];
+    if (!visibleTabs.some(({ id }) => id === nextTab)) return;
+    setLocalTab(nextTab);
+    onSubModuleChange?.(restaurantTabToSubmodule[nextTab]);
+  };
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menu, setMenu] = useState<RestaurantMenuCategory[]>([]);
   const [orders, setOrders] = useState<RestaurantOrder[]>([]);
@@ -1029,6 +1037,14 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
                 <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}><RefreshCw className={refreshing ? 'size-4 animate-spin' : 'size-4'} />Actualizar</Button>
               </> : <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}><RefreshCw className={refreshing ? 'size-4 animate-spin' : 'size-4'} />Actualizar</Button>}
           </div>
+
+          <ModuleSubnavigation
+            items={visibleTabs.map(({ id, label, icon: Icon }) => ({ id: restaurantTabToSubmodule[id], label, icon: <Icon className="size-4" /> }))}
+            value={restaurantTabToSubmodule[tab]}
+            onValueChange={handleTabChange}
+            isSidebarCollapsed={isSidebarCollapsed}
+            ariaLabel="Navegación de Restaurante"
+          />
 
           {tab === 'salon' && salonMode === 'floor' && (
             <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">

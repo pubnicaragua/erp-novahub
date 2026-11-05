@@ -10,7 +10,8 @@ import { cn } from '../ui/utils';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Tabs, TabsContent } from '../ui/tabs';
+import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { TeamAccessPanel } from './TeamAccessPanel';
@@ -43,6 +44,7 @@ interface TenantSubscriptionViewProps {
   tenant: any;
   activeSubModule?: string;
   onSubModuleChange?: (subModule?: string) => void;
+  isSidebarCollapsed?: boolean;
   availableModules: any[];
   requests: any[];
   moduleCatalog?: ModuleQuoteCatalogModule[];
@@ -103,7 +105,7 @@ const getDirectRolePermissions = (role: any) => {
   });
 };
 
-export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleChange, availableModules, requests, moduleCatalog = [], moduleQuoteRequests = [], customRoles = [], onRequestModule, onRequestQuote, onRefresh }: TenantSubscriptionViewProps) {
+export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleChange, isSidebarCollapsed, availableModules, requests, moduleCatalog = [], moduleQuoteRequests = [], customRoles = [], onRequestModule, onRequestQuote, onRefresh }: TenantSubscriptionViewProps) {
   const { updateConfig } = useTheme();
   const { user: currentUser, canPerform, refreshProfile } = useAuth();
   const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
@@ -276,17 +278,13 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
     ...(canViewDepartments ? ['departamentos'] : []),
     ...(canViewDomains ? ['dominio'] : []),
   ], [canViewCompany, canViewSubscriptions, canViewUsers, canViewRoles, canViewDepartments, canViewDomains]);
+  const submoduleByTab: Record<string, string> = {
+    general: 'mi-sucursal', plan: 'plan-sucursal', team: 'usuarios', roles: 'roles', departamentos: 'departamentos', dominio: 'dominio',
+  };
+  const tabBySubmodule = Object.fromEntries(Object.entries(submoduleByTab).map(([tab, submodule]) => [submodule, tab]));
 
   useEffect(() => {
     if (!activeSubModule) return;
-    const tabBySubmodule: Record<string, string> = {
-      'mi-sucursal': 'general',
-      'plan-sucursal': 'plan',
-      usuarios: 'team',
-      roles: 'roles',
-      departamentos: 'departamentos',
-      dominio: 'dominio',
-    };
     const targetTab = tabBySubmodule[activeSubModule];
     if (targetTab && visibleTabs.includes(targetTab)) setActiveTab(targetTab);
   }, [activeSubModule, visibleTabs]);
@@ -694,36 +692,20 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
 
       <Tabs value={activeTab} onValueChange={(value) => {
         setActiveTab(value);
-        onSubModuleChange?.(
-          value === 'general' ? 'mi-sucursal'
-            : value === 'plan' ? 'plan-sucursal'
-              : value === 'team' ? 'usuarios'
-                : value === 'roles' ? 'roles'
-                  : value === 'departamentos' ? 'departamentos'
-                    : value === 'dominio' ? 'dominio'
-                      : undefined,
-        );
+        onSubModuleChange?.(submoduleByTab[value]);
       }} className="w-full">
-        <TabsList className="mb-4 flex h-auto min-h-12 max-w-full flex-nowrap overflow-x-auto border border-border/50 bg-muted/20 p-1">
-          {canViewCompany && <TabsTrigger value="general" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Building2 className="size-4" /> General
-          </TabsTrigger>}
-          {canViewSubscriptions && <TabsTrigger value="plan" className="shrink-0 gap-2 px-8 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <LayoutGrid className="size-4" /> Módulos y Plan
-          </TabsTrigger>}
-          {canViewUsers && <TabsTrigger value="team" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Users className="size-4" /> Mi Equipo ({operationalUsers.length})
-          </TabsTrigger>}
-          {canViewRoles && <TabsTrigger value="roles" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Shield className="size-4" /> Roles
-          </TabsTrigger>}
-          {canViewDepartments && <TabsTrigger value="departamentos" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Building2 className="size-4" /> Departamentos
-          </TabsTrigger>}
-          {canViewDomains && <TabsTrigger value="dominio" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Globe className="size-4" /> Dominio propio
-          </TabsTrigger>}
-        </TabsList>
+        <ModuleSubnavigation
+          items={visibleTabs.map((tab) => ({ id: submoduleByTab[tab], label: tab === 'general' ? 'Datos generales' : tab === 'plan' ? 'Módulos y plan' : tab === 'team' ? `Mi equipo (${operationalUsers.length})` : tab === 'roles' ? 'Roles' : tab === 'departamentos' ? 'Departamentos' : 'Dominio propio', icon: <>{tab === 'plan' ? <LayoutGrid className="size-4" /> : tab === 'team' ? <Users className="size-4" /> : tab === 'roles' ? <Shield className="size-4" /> : tab === 'dominio' ? <Globe className="size-4" /> : <Building2 className="size-4" />}</> }))}
+          value={submoduleByTab[activeTab] || 'mi-sucursal'}
+          onValueChange={(submodule) => {
+            const tab = tabBySubmodule[submodule];
+            if (!tab || !visibleTabs.includes(tab)) return;
+            setActiveTab(tab);
+            onSubModuleChange?.(submodule);
+          }}
+          isSidebarCollapsed={isSidebarCollapsed}
+          ariaLabel="Navegación de Mi Sucursal"
+        />
 
         <TabsContent value="general" className="space-y-6">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

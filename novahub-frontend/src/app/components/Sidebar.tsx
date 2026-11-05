@@ -514,6 +514,9 @@ const menuItems: MenuItem[] = [
       { id: 'seguridad', label: 'Seguridad', icon: <ShieldCheck className="size-4" /> },
       { id: 'auditoria', label: 'Logs y auditoría', icon: <History className="size-4" /> },
       { id: 'currency', label: 'Moneda y cambio', icon: <Coins className="size-4" /> },
+      { id: 'nova-pulse', label: 'Nova Pulse', icon: <MessageCircle className="size-4" /> },
+      { id: 'poket', label: 'Poket PayLink', icon: <CreditCard className="size-4" /> },
+      { id: 'proyectos', label: 'Proyectos', icon: <FolderKanban className="size-4" /> },
     ],
   },
 ];
@@ -534,6 +537,18 @@ const auditWorkspaceMenuItem: MenuItem = {
     { id: 'clientes-auditados', label: 'Clientes y empresas auditadas', icon: <Building2 className="size-4" /> },
     { id: 'encargos-auditoria', label: 'Encargos de auditoría', icon: <BriefcaseBusiness className="size-4" /> },
     { id: 'aceptacion-auditoria', label: 'Aceptación e independencia', icon: <ClipboardCheck className="size-4" /> },
+    { id: 'planificacion-auditoria', label: 'Planificación y materialidad', icon: <FileCheck className="size-4" /> },
+    { id: 'importacion-contable', label: 'Importación contable', icon: <Database className="size-4" /> },
+    { id: 'balanza-auditoria', label: 'Balanza y cédulas', icon: <FileText className="size-4" /> },
+    { id: 'riesgos-controles', label: 'Matriz de riesgos y controles', icon: <ShieldAlert className="size-4" /> },
+    { id: 'programas-auditoria', label: 'Programas de auditoría', icon: <ClipboardCheck className="size-4" /> },
+    { id: 'muestreo-auditoria', label: 'Muestreo de auditoría', icon: <Database className="size-4" /> },
+    { id: 'papeles-trabajo', label: 'Papeles de trabajo y pruebas', icon: <FileText className="size-4" /> },
+    { id: 'centro-pbc', label: 'Centro documental y PBC', icon: <FolderOpen className="size-4" /> },
+    { id: 'hallazgos-ajustes', label: 'Hallazgos e incorrecciones', icon: <ShieldAlert className="size-4" /> },
+    { id: 'supervision-aprobaciones', label: 'Supervisión y aprobaciones', icon: <ClipboardCheck className="size-4" /> },
+    { id: 'conclusiones-informes', label: 'Conclusiones e informes', icon: <FileCheck className="size-4" /> },
+    { id: 'cierre-archivo', label: 'Cierre, archivo y seguimiento', icon: <FolderOpen className="size-4" /> },
     { id: 'logs-auditoria', label: 'Bitácora de auditoría', icon: <History className="size-4" /> },
   ],
 };
@@ -569,6 +584,14 @@ const platformMenuItems: MenuItem[] = [
     id: 'suscripciones',
     label: 'Grupos y cotizaciones',
     icon: <Building2 className="size-5" />,
+    submenu: [
+      { id: 'groups', label: 'Grupos actuales', icon: <Building2 className="size-4" /> },
+      { id: 'legacy', label: 'Usuarios heredados', icon: <Users className="size-4" /> },
+      { id: 'requests', label: 'Solicitudes de trial', icon: <Clock3 className="size-4" /> },
+      { id: 'module-requests', label: 'Cotizar módulos', icon: <FileText className="size-4" /> },
+      { id: 'quotes', label: 'Cotizaciones', icon: <FileText className="size-4" /> },
+      { id: 'support-agents', label: 'Agentes de soporte', icon: <LifeBuoy className="size-4" /> },
+    ],
   },
   {
     id: 'platform-users',
@@ -593,6 +616,11 @@ const platformMenuItems: MenuItem[] = [
     icon: <ShieldCheck className="size-5" />,
     section: 'NovaHub Platform',
     superadminOnly: true,
+    submenu: [
+      { id: 'resumen', label: 'Resumen por módulo', icon: <ShieldCheck className="size-4" /> },
+      { id: 'checks', label: 'Checks', icon: <ClipboardCheck className="size-4" /> },
+      { id: 'hallazgos', label: 'Hallazgos', icon: <Bug className="size-4" /> },
+    ],
   },
 ];
 
@@ -741,6 +769,14 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
     if (parentId === 'auditoria' && (user.isPlatformAdmin || user.auditWorkspaceEnabled)) return true;
+    if (parentId === 'suscripciones' && user.isPlatformAdmin) {
+      if (user.role === 'platform_quote_user') return subId === 'quotes';
+      const role = String(user.role || '').toUpperCase();
+      const isSuperAdmin = role === 'SUPER_ADMIN' || role === 'SUPERADMIN';
+      return ['groups', 'legacy', 'requests', 'quotes'].includes(subId)
+        || (isSuperAdmin && ['module-requests', 'support-agents'].includes(subId));
+    }
+    if (parentId === 'qa-console') return user.role === 'superadmin' && ['resumen', 'checks', 'hallazgos'].includes(subId);
     // These entries are filters inside one module, not independent permission
     // scopes. Their parent view owns authorization and the current role chooses
     // which filter family is reachable.

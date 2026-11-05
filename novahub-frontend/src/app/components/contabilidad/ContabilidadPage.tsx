@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '../ui/button';
+import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 import { Tag, Wallet } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { PlanCuentasView } from './PlanCuentasView';
@@ -378,33 +379,13 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
             {activeSection !== 'plan-cuentas' && helpTrigger}
           </div>
 
-          {/* Horizontal tab navigation */}
-          <div className={cn(
-            'accounting-tabs-scroll mb-4 w-full min-w-0 overflow-x-auto custom-scrollbar',
-            !isSidebarCollapsed && 'hidden lg:hidden',
-          )}>
-            <div className="erp-module-tabs-rail flex w-max min-w-full gap-1.5 rounded-lg border border-border bg-muted p-1">
-              {visibleSections.map((section) => {
-                const isActive = activeSection === section.id;
-                return (
-                  <button
-                    key={section.id}
-                    onClick={() => handleSectionChange(section.id)}
-                    data-state={isActive ? 'active' : 'inactive'}
-                    className={cn(
-                      'flex min-h-9 min-w-10 shrink-0 items-center justify-center gap-2 rounded-md border border-transparent px-2 py-2.5 text-xs font-semibold uppercase tracking-widest whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-200 sm:min-w-0 sm:justify-start sm:px-3',
-                      isActive
-                        ? 'bg-primary/[0.12] text-foreground shadow-[inset_0_-2px_0_var(--primary)]'
-                        : 'bg-transparent text-muted-foreground hover:bg-card hover:text-foreground'
-                    )}
-                  >
-                    <section.icon className="size-4" />
-                    <span className="hidden sm:inline">{section.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <ModuleSubnavigation
+            items={visibleSections.map((section) => ({ id: section.id, label: section.label, icon: <section.icon className="size-4" /> }))}
+            value={activeSection}
+            onValueChange={handleSectionChange}
+            isSidebarCollapsed={isSidebarCollapsed}
+            ariaLabel="Navegación de Contabilidad"
+          />
 
           <div className="flex min-w-0 flex-col gap-6 lg:flex-row">
             <div className="flex-1 min-w-0">

@@ -3,9 +3,10 @@ import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { ProyectosListView } from './proyectos/ProyectosListView';
-import { ProyectoDetalleView } from './proyectos/ProyectoDetalleView';
+import { ProyectoDetalleView, PROJECT_DETAIL_TABS } from './proyectos/ProyectoDetalleView';
 import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
-import { Info } from 'lucide-react';
+import { FolderKanban, Info } from 'lucide-react';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 
 interface ProyectosPageProps {
   activeSubModule?: string;
@@ -14,7 +15,7 @@ interface ProyectosPageProps {
 }
 
 export const ProyectosPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: ProyectosPageProps) => {
-  const { canPerform } = useAuth();
+  const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -85,6 +86,13 @@ export const ProyectosPage = ({ activeSubModule, onSubModuleChange, isSidebarCol
   };
 
   const targetTab = activeSubModule ? initialTabMap[activeSubModule] || 'resumen' : 'resumen';
+  const visibleProjectTabs = PROJECT_DETAIL_TABS.filter((tab) => {
+    const hasEnabled = user?.enabledModules?.includes('PROJECTS') || tab.modules.some((module) => user?.enabledModules?.includes(module));
+    if (user?.enabledModules && !hasEnabled) return false;
+    return tab.id === 'planificacion'
+      ? tab.modules.some((module) => canPerform(module, 'view'))
+      : tab.modules.every((module) => canPerform(module, 'view'));
+  });
 
   const handleDetailTabChange = (tabId: string) => {
     const sub = tabToSubModuleMap[tabId];
@@ -119,6 +127,16 @@ export const ProyectosPage = ({ activeSubModule, onSubModuleChange, isSidebarCol
             />
           ) : (
             <div className="space-y-4">
+              <ModuleSubnavigation
+                items={[
+                  { id: 'proyectos', label: 'Portafolio', icon: <FolderKanban className="size-4" /> },
+                  ...visibleProjectTabs.map((tab) => ({ id: tabToSubModuleMap[tab.id], label: tab.fullLabel, icon: <tab.icon className="size-4" /> })),
+                ]}
+                value={activeSubModule || 'proyectos'}
+                onValueChange={(submodule) => onSubModuleChange?.(submodule)}
+                isSidebarCollapsed={isSidebarCollapsed}
+                ariaLabel="Navegación de Proyectos"
+              />
               {activeSubModule && activeSubModule !== 'proyectos' && submoduleLabels[activeSubModule] ? (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-semibold">
                   <Info className="size-4 shrink-0" />

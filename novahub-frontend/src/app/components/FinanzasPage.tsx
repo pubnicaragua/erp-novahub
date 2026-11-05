@@ -5,7 +5,8 @@ import {
   CalendarClock, Landmark, RotateCcw, Wallet,
   AlertTriangle, Calendar, CalendarDays, Filter, X,
 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsContent } from './ui/tabs';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { DateField } from './ui/DateField';
@@ -602,8 +603,6 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const totalIncome = fIncomes.reduce((acc, i) => acc + toDisplayAmount(Number(i.amount || i.baseAmount || 0), i.currency, i.exchangeRate), 0);
   const totalExpense = fExpenses.reduce((acc, e) => acc + toDisplayAmount(Number(e.amount || e.baseAmount || 0), e.currency, e.exchangeRate), 0);
 
-  const tabTriggerClass = "flex min-w-10 shrink-0 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all sm:min-w-0 sm:justify-start sm:px-4";
-
   const tabs = [
     // El shell se autoriza con el padre; la vista concreta se decide con su
     // permiso hijo. Así, un hijo explícitamente permitido no queda oculto
@@ -662,17 +661,14 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       </div>
 
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 scroll-px-2 h-auto overflow-x-auto rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 pl-2 pr-2 mb-6 flex flex-nowrap gap-1.5 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
-          {tabs.map((tab) => {
-            if (!hasAccess(tab.module) || !tab.permission.some((module) => canPerform(module, 'view'))) return null;
-            return (
-              <TabsTrigger key={tab.id} value={tab.id} className={tabTriggerClass}>
-                <tab.icon className="size-4" />
-                <span className="hidden sm:inline">{tab.label}</span>
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
+        <ModuleSubnavigation
+          items={tabs.filter((tab) => hasAccess(tab.module) && tab.permission.some((module) => canPerform(module, 'view'))).map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
+          value={activeTab}
+          onValueChange={handleTabChange}
+          isSidebarCollapsed={isSidebarCollapsed}
+          ariaLabel="Navegación de Finanzas"
+          className="mb-6"
+        />
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-4 min-h-[600px] min-w-0">
           {loading ? (

@@ -16,6 +16,7 @@ import { buildCustomerWhatsAppUrl } from './ventas/WhatsAppActionButton';
 import { HotelCalendarView } from './hospedaje/HotelCalendarView';
 import { HotelReservationsView } from './hospedaje/HotelReservationsView';
 import { HotelRoomsView } from './hospedaje/HotelRoomsView';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 
 type HotelTab = 'calendario' | 'habitaciones' | 'reservas';
 const tabToSubmodule: Record<HotelTab, string> = { calendario: 'calendario-hospedaje', habitaciones: 'habitaciones', reservas: 'reservas' };
@@ -35,9 +36,9 @@ type GuestLinkMutationArgs = {
 };
 const emptyDraft = (): ReservationDraft => ({ guestName: '', guestEmail: '', guestPhone: '', checkIn: dateOnly(new Date()), checkOut: addCalendarDays(dateOnly(new Date()), 1), roomId: '' });
 
-interface HospedajePageProps { activeSubModule?: string; onSubModuleChange?: (subModule?: string) => void }
+interface HospedajePageProps { activeSubModule?: string; onSubModuleChange?: (subModule?: string) => void; isSidebarCollapsed?: boolean }
 
-export function HospedajePage({ activeSubModule, onSubModuleChange }: HospedajePageProps) {
+export function HospedajePage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: HospedajePageProps) {
   const { canPerform } = useAuth();
   const { accessibleBranches, selectedBranchId, isLoading: branchesLoading } = useBranchScope();
   const queryClient = useQueryClient();
@@ -217,7 +218,17 @@ export function HospedajePage({ activeSubModule, onSubModuleChange }: HospedajeP
 
       <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"><div className="min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-wider text-muted-foreground">Habitaciones activas</p><p className="mt-2 text-2xl font-black">{(roomsQuery.data || []).filter((room) => room.isActive).length}</p></div><div className="min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-wider text-muted-foreground">Estadías en curso</p><p className="mt-2 text-2xl font-black">{reservations.filter((item) => item.status === 'CHECKED_IN').length}</p></div><div className="min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-wider text-muted-foreground">Llegadas confirmadas</p><p className="mt-2 text-2xl font-black">{reservations.filter((item) => item.status === 'CONFIRMED' && item.checkIn.slice(0, 10) === dateOnly(new Date())).length}</p></div></div>
 
-      <div className="flex min-w-0 flex-wrap gap-1 rounded-xl border border-border/60 bg-muted/30 p-1">{visibleTabs.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => selectTab(id)} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${tab === id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:bg-card/60 hover:text-foreground'}`}><Icon className="size-4 shrink-0" />{label}</button>)}</div>
+      <ModuleSubnavigation
+        items={visibleTabs.map(({ id, label, icon: Icon }) => ({ id: tabToSubmodule[id], label, icon: <Icon className="size-4" /> }))}
+        value={tabToSubmodule[tab]}
+        onValueChange={(submodule) => {
+          const nextTab = submoduleToTab[submodule];
+          if (nextTab && visibleTabs.some((item) => item.id === nextTab)) selectTab(nextTab);
+        }}
+        isSidebarCollapsed={isSidebarCollapsed}
+        ariaLabel="Navegación de Hotel"
+        className="mb-0"
+      />
 
       {statusFilter !== undefined && tab === 'reservas' && <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-muted-foreground">{reservations.length} registros visibles</p><select aria-label="Filtrar estado de reserva" className="h-10 w-full min-w-0 max-w-full rounded-xl border border-border bg-card px-3 text-sm sm:w-auto" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">Todos los estados</option><option value="CONFIRMED">Confirmadas</option><option value="CHECKED_IN">En curso</option><option value="CHECKED_OUT">Finalizadas</option><option value="CANCELLED">Canceladas</option><option value="NO_SHOW">No llegó</option></select></div>}
 

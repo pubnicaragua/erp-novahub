@@ -140,10 +140,11 @@ const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'EMPLOYEE' | 'VIEWER'> = {
 interface SuscripcionesPageProps {
   activeSubModule?: string;
   onSubModuleChange?: (subModule?: string) => void;
+  isSidebarCollapsed?: boolean;
   embedded?: boolean;
 }
 
-export function SuscripcionesPage({ activeSubModule, onSubModuleChange, embedded = false }: SuscripcionesPageProps = {}) {
+export function SuscripcionesPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed, embedded = false }: SuscripcionesPageProps = {}) {
   const { user, refreshEnabledModules, canPerform } = useAuth();
   const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
   const canViewUsers = canPerform('CONFIG_USERS', 'view');
@@ -697,6 +698,7 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange, embedded
         tenant={myTenant} 
         activeSubModule={activeSubModule}
         onSubModuleChange={onSubModuleChange}
+        isSidebarCollapsed={isSidebarCollapsed}
         availableModules={AVAILABLE_MODULES} 
         requests={requests.filter((r: any) => r.clientTenantId === user.tenantId)}
         moduleCatalog={moduleCatalog}

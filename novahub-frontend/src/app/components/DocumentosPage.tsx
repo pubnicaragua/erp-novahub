@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Files, FileText, Scale, FileBarChart, HardDrive, Cloud } from 'lucide-react';
 import { cn } from './ui/utils';
-import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs } from './ui/tabs';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { ContratosView } from './documentos/ContratosView';
 import { FacturasLegalesView } from './documentos/FacturasLegalesView';
@@ -91,24 +92,13 @@ export const DocumentosPage = ({ activeSubModule, onSubModuleChange, isSidebarCo
           <CurrencyValuationBanner className="mb-3" />
 
           <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
-          <div className={cn("mb-4 w-full min-w-0 max-w-full overscroll-x-contain overflow-x-auto custom-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")}>
-          <TabsList className="flex h-auto w-max min-w-full max-w-none gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
-              {visibleTabs.map((tab) => {
-                return (
-                <TabsTrigger 
-                  key={tab.id} 
-                  value={tab.id}
-                  className="flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-xs font-black uppercase tracking-widest sm:px-4
-                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-                >
-                  <tab.icon className="size-4" />
-                  <span>{tab.label}</span>
-                </TabsTrigger>
-                );
-              })}
-          </TabsList>
-          </div>
+          <ModuleSubnavigation
+            items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
+            value={activeTab}
+            onValueChange={handleTabChange}
+            isSidebarCollapsed={isSidebarCollapsed}
+            ariaLabel="Navegación de Documentos"
+          />
             
             <AnimatePresence mode="wait">
               <motion.div
