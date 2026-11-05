@@ -490,7 +490,7 @@ export function DiarioView() {
       setRawImportRows(mapped);
       setReadingProgress(100);
       toast.success(`${mapped.length} filas leídas del archivo`);
-    } catch (err) {
+    } catch {
       toast.error('Error al leer el archivo Excel');
     } finally {
       setReadingFile(false);
@@ -652,10 +652,6 @@ export function DiarioView() {
     if (journalDetailQuery.error) toast.error(journalDetailQuery.error.message || 'Error al cargar detalle');
   }, [journalDetailQuery.error]);
 
-  useEffect(() => {
-    setJournalPage(1);
-  }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch]);
-
   return (
     <div className="min-w-0 space-y-6">
       {/* Header & Actions */}
@@ -708,7 +704,10 @@ export function DiarioView() {
               <Input
                 placeholder="Descripción, # asiento, referencia..."
                 value={filterSearch}
-                onChange={(e) => setFilterSearch(e.target.value)}
+                onChange={(e) => {
+                  setFilterSearch(e.target.value);
+                  setJournalPage(1);
+                }}
                 className="h-8 text-xs"
               />
             </div>
@@ -716,7 +715,10 @@ export function DiarioView() {
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Estado
               </Label>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <Select value={filterStatus} onValueChange={(value) => {
+                setFilterStatus(value);
+                setJournalPage(1);
+              }}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
@@ -740,6 +742,7 @@ export function DiarioView() {
                     setFilterDateTo(val);
                   }
                   setFilterDateFrom(val);
+                  setJournalPage(1);
                 }}
                 maxDate={filterDateTo || undefined}
                 placeholder="Desde"
@@ -757,6 +760,7 @@ export function DiarioView() {
                     return;
                   }
                   setFilterDateTo(val);
+                  setJournalPage(1);
                 }}
                 minDate={filterDateFrom || undefined}
                 placeholder="Hasta"
@@ -769,7 +773,10 @@ export function DiarioView() {
               <Combobox
                 options={accountOptions}
                 value={filterAccountId}
-                onChange={setFilterAccountId}
+                onChange={(value) => {
+                  setFilterAccountId(value);
+                  setJournalPage(1);
+                }}
                 placeholder="Todas las cuentas"
                 emptyMessage="Sin resultados"
               />
@@ -781,7 +788,10 @@ export function DiarioView() {
               <Combobox
                 options={refTypeOptions}
                 value={filterRefType}
-                onChange={setFilterRefType}
+                onChange={(value) => {
+                  setFilterRefType(value);
+                  setJournalPage(1);
+                }}
                 placeholder="Todos"
                 emptyMessage="Sin resultados"
               />
@@ -793,7 +803,10 @@ export function DiarioView() {
               <Input
                 placeholder="ID del documento..."
                 value={filterRefId}
-                onChange={(e) => setFilterRefId(e.target.value)}
+                onChange={(e) => {
+                  setFilterRefId(e.target.value);
+                  setJournalPage(1);
+                }}
                 className="h-8 text-xs"
               />
             </div>
@@ -809,6 +822,7 @@ export function DiarioView() {
                 setFilterRefType('');
                 setFilterRefId('');
                 setFilterSearch('');
+                setJournalPage(1);
               }}
             >
               <RotateCcw className="size-3.5" />
