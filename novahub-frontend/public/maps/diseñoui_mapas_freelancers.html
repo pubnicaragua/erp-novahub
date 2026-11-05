@@ -507,6 +507,7 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
 .route-next-stop-details{font-size:11px;font-weight:700}
 .route-action-panel button.route-start-action{width:100%;min-height:48px;font-size:12px}
 #routeOrderLockHint{padding:8px 10px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-muted,#f2f8f5)}
+.route-planner-tabs[hidden],#routePlanPane[hidden],#routeListPane[hidden]{display:none!important}
 @media(max-width:820px){.route-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.route-stat:nth-child(3){grid-column:1/-1}}
 </style>
 </head>
@@ -2612,7 +2613,19 @@ function renderSavedRouteOptions(){
   historyList?.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>openSavedRoute(button.dataset.openRoute)));
   renderRouteCatalog();
 }
+function isRouteExecutionView(route=activeRemoteRoute()){
+  const routeId=route?.id||activeRemoteRouteId;
+  return String(route?.status||'').toUpperCase()==='IN_PROGRESS'||Boolean(routeId&&routeHasPendingStart(routeId));
+}
 function setRoutePlannerTab(tab){
+  const tabs=document.querySelector('.route-planner-tabs');
+  if(isRouteExecutionView()){
+    if(tabs)tabs.hidden=true;
+    document.getElementById('routePlanPane').hidden=true;
+    document.getElementById('routeListPane').hidden=true;
+    return;
+  }
+  if(tabs)tabs.hidden=false;
   const plans=tab==='plan';
   document.getElementById('routePlanPane').hidden=!plans;
   document.getElementById('routeListPane').hidden=plans;
@@ -5800,6 +5813,13 @@ function refreshRoutePermissionVisibility(){
 function renderRoutePlanner(){
   const activeRoute=activeRemoteRoute();
   const activeStatus=String(activeRoute?.status||'').toUpperCase();
+  const tabs=document.querySelector('.route-planner-tabs');
+  const planTab=document.getElementById('routePlanTab');
+  const executionView=isRouteExecutionView(activeRoute);
+  const showPlan=planTab?.getAttribute('aria-selected')==='true';
+  if(tabs)tabs.hidden=executionView;
+  document.getElementById('routePlanPane').hidden=executionView||!showPlan;
+  document.getElementById('routeListPane').hidden=executionView||showPlan;
   routeProgress=activeRoute?routeNextPendingIndex(activeRoute):Math.max(0,Math.min(routeProgress,routeBusinesses.length));
   renderSavedRouteOptions();
   refreshRoutePermissionVisibility();
@@ -5849,10 +5869,10 @@ function renderRoutePlanner(){
   const orderLockHint=document.getElementById('routeOrderLockHint');
   const routeDate=routeDateLabel(scheduledFor?.value || localRouteDate());
   if(title)title.textContent=activeRoute?'Seguimiento de ruta':'Planificar ruta comercial';
-  if(description)description.textContent=activeRoute
-    ? `${routeBusinesses.length} paradas · ${routeDate} · ${activeStatus==='IN_PROGRESS'?'la ruta está en curso.':activeStatus==='COMPLETED'?'la ruta está finalizada.':activeStatus==='CANCELLED'?'la ruta está cancelada.':'ordena las paradas antes de iniciar.'}`
-    : routeBusinesses.length ? `${routeBusinesses.length} paradas · ${routeDate} · el recorrido comienza en la primera parada.` : routePlanningMode ? 'Empieza a marcar los puntos comerciales pulsando sus marcadores en el mapa. Cada punto agregado aparecerá aquí.' : 'Activa “Armar ruta” y empieza a marcar los puntos comerciales en el mapa.';
   const startIsPending=Boolean(activeRoute&&routeHasPendingStart(activeRoute.id));
+  if(description)description.textContent=activeRoute
+    ? `${routeBusinesses.length} paradas · ${routeDate} · ${activeStatus==='IN_PROGRESS'?'la ruta está en curso.':startIsPending?'inicio pendiente de sincronizar.':activeStatus==='COMPLETED'?'la ruta está finalizada.':activeStatus==='CANCELLED'?'la ruta está cancelada.':'ordena las paradas antes de iniciar.'}`
+    : routeBusinesses.length ? `${routeBusinesses.length} paradas · ${routeDate} · el recorrido comienza en la primera parada.` : routePlanningMode ? 'Empieza a marcar los puntos comerciales pulsando sus marcadores en el mapa. Cada punto agregado aparecerá aquí.' : 'Activa “Armar ruta” y empieza a marcar los puntos comerciales en el mapa.';
   if(orderLockHint)orderLockHint.textContent=startIsPending
     ? 'El inicio está pendiente de sincronizar. La ruta y su orden están bloqueados en este dispositivo.'
     : activeStatus==='IN_PROGRESS'
