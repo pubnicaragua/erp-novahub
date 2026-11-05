@@ -1794,6 +1794,16 @@ function getPaymentVoucherContext(transaction: any) {
     ? Math.max(0, effectiveDocumentTotal - Math.max(paidInLinkedCurrency, accumulatedLinkedPayment))
     : 0;
   const effectiveBalance = hasExplicitBalance ? reportedBalance : derivedBalance;
+  const balanceBeforeCandidates = [transaction?.balanceBeforePayment, transaction?.previousBalance];
+  const explicitBalanceBefore = balanceBeforeCandidates.find((value) => value !== undefined && value !== null && Number.isFinite(Number(value)));
+  const balanceBeforePayment = linkedDocument
+    ? explicitBalanceBefore !== undefined
+      ? Math.max(0, Number(explicitBalanceBefore))
+      : Math.min(
+        effectiveDocumentTotal > 0 ? effectiveDocumentTotal : Number.POSITIVE_INFINITY,
+        Math.max(0, effectiveBalance) + paidInLinkedCurrency,
+      )
+    : null;
   const isCreditSettled = isCreditLink && effectiveBalance <= 0.01;
   const isPartial = !isCreditSettled && (
     effectiveBalance > 0.01
@@ -1819,6 +1829,7 @@ function getPaymentVoucherContext(transaction: any) {
     settlementLabel,
     statusLabel,
     effectiveBalance,
+    balanceBeforePayment,
     financialDocument,
     financialSubtotal,
     financialCurrency,
@@ -1858,6 +1869,7 @@ async function generateSalesPaymentVoucherPDF({
     settlementLabel,
     statusLabel,
     effectiveBalance,
+    balanceBeforePayment,
     financialCurrency,
     financialRate,
     financialTotal,
@@ -1914,7 +1926,7 @@ async function generateSalesPaymentVoucherPDF({
     const headerHeight = logoSize.height + countLines(companyName, width === 58 ? 9 : 10) * 4 + (settings.slogan ? 4 : 0) + (settings.fiscalInfo ? 4 : 0) + 16;
     const metaHeight = 5 * 4.2 + countLines(customerName, 7.2) * 3.5 + 12;
     const detailHeight = 10 + methodRows.reduce((total: number, row: any) => total + 10 + countLines(`${row.method} · ${row.reference}${row.bank ? ` · ${row.bank}` : ''}`, 6.5) * 3.2, 0);
-    const summaryHeight = 28 + financialRows.length * 4 + (changeAmount > 0.01 ? 4 : 0);
+    const summaryHeight = 28 + (balanceBeforePayment !== null ? 4 : 0) + financialRows.length * 4 + (changeAmount > 0.01 ? 4 : 0);
     const paymentDetailsHeight = paymentDetails ? countLines(`Detalles del pago: ${paymentDetails}`, 6.5, contentWidth) * 3.2 + 6 : 0;
     const pageHeight = Math.max(150, margin + headerHeight + metaHeight + detailHeight + summaryHeight + paymentDetailsHeight + 20);
     const doc = new jsPDF({ unit: 'mm', format: [width, pageHeight], orientation: 'portrait' });
@@ -2028,6 +2040,7 @@ async function generateSalesPaymentVoucherPDF({
       financialRows.forEach(drawFinancialRow);
     }
     drawRow('Monto final', money(financialTotal || documentTotal || voucherTotal, financialTotal ? financialCurrency : linkedCurrency, financialTotal ? financialRate : linkedRate), true);
+    if (balanceBeforePayment !== null) drawRow('Saldo antes del pago', money(balanceBeforePayment, financialCurrency, financialRate));
     drawRow('Este pago', money(voucherTotal, voucherCurrency, voucherRate));
     drawRow('Saldo pendiente', money(pendingBalance, financialCurrency, financialRate));
     if (changeAmount > 0.01) drawRow('Cambio / vuelto', money(changeAmount, voucherCurrency, voucherRate));
@@ -2180,6 +2193,7 @@ async function generateSalesPaymentVoucherPDF({
     ['Este pago', money(voucherTotal, voucherCurrency, voucherRate)],
     ['Saldo pendiente', money(pendingBalance, financialCurrency, financialRate)],
   ];
+  if (balanceBeforePayment !== null) summaryRows.splice(1, 0, ['Saldo antes del pago', money(balanceBeforePayment, financialCurrency, financialRate)]);
   if (changeAmount > 0.01) summaryRows.push(['Cambio / vuelto', money(changeAmount, voucherCurrency, voucherRate)]);
   if (currentY + summaryRows.length * 8 + 35 > pageHeight - margin) {
     doc.addPage();
@@ -2562,6 +2576,7 @@ export async function generateSalesTransactionPDF({
             rows: [
               { label: 'Subtotal', value: formatAmount(paymentContext.financialSubtotal, paymentContext.financialCurrency, paymentContext.financialRate) },
               { label: 'Monto final', value: formatAmount(paymentContext.financialTotal, paymentContext.financialCurrency, paymentContext.financialRate), emphasis: true, separatorBefore: true },
+              ...(paymentContext.balanceBeforePayment !== null ? [{ label: 'Saldo antes del pago', value: formatAmount(paymentContext.balanceBeforePayment, paymentContext.financialCurrency, paymentContext.financialRate) }] : []),
               { label: 'Este pago', value: formatAmount(paymentContext.voucherTotal, paymentContext.voucherCurrency, paymentContext.voucherRate) },
               { label: 'Saldo pendiente', value: formatAmount(paymentContext.effectiveBalance, paymentContext.financialCurrency, paymentContext.financialRate), emphasis: true },
             ],

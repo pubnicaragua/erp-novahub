@@ -656,6 +656,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         exchangeRate: receiptRate,
         method: receiptRows.length > 1 ? 'MIXED' : receiptRows[0]?.method || firstLine.method,
         paymentLabel: paymentRemainingBase > 0.01 ? 'Pago parcial' : 'Pago completo',
+        balanceBeforePayment: creditBalance,
         customer: (updatedCredit as any)?.customer || customerFor(paymentCredit.customerId),
         creditNote: paymentCredit.kind === 'CREDIT_NOTE' ? updatedCredit as any : undefined,
         invoice: paymentCredit.kind === 'CUSTOMER_LOAN'
