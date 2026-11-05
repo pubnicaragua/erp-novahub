@@ -41,7 +41,21 @@ export interface MasterConsoleOverview {
     clientTenant?: { name?: string } | null;
   }>;
   openTickets: number;
-  recentAlerts: any[];
+  recentAlerts: Array<{
+    id: string;
+    title: string;
+    content: string;
+    createdAt: string;
+    clientTenantId: string | null;
+    userId: string | null;
+  }>;
+  empresasConDeuda: Array<{
+    id: string;
+    name: string;
+    plan: string;
+    deuda: number;
+    facturasVencidas: number;
+  }>;
   tenantsSummary: Array<{
     id: string;
     name: string;
@@ -62,5 +76,5 @@ export const masterConsoleService = {
   getStorageMetrics: (signal?: AbortSignal) =>
     api.get<MasterConsoleStorageMetrics>('/master-console/storage-metrics', { signal }),
   getClientDetail: (tenantId: string, signal?: AbortSignal) =>
-    api.get<any>(`/master-console/client/${tenantId}`, { signal }),
+    api.get<Record<string, unknown>>('/master-console/client/' + tenantId, { signal }),
 };
