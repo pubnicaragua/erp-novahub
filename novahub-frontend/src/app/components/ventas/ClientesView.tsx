@@ -1236,7 +1236,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         );
       },
     },
-    ...(customerLoansEnabled || data.some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) || (summaryData || []).some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) ? [{
+    ...(customerLoansEnabled ? [{
       key: 'customerLoans',
       header: 'Préstamos vigentes',
       width: '185px',
@@ -1298,7 +1298,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     { key: 'creditLimit', label: 'Límite de crédito' },
     { key: 'creditDays', label: 'Plazo crédito' },
     { key: 'balance', label: 'Saldos del cliente' },
-    ...(customerLoansEnabled || data.some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) || (summaryData || []).some((item) => Number(item.customerLoansSummary?.totalCount || 0) > 0) ? [{ key: 'customerLoans', label: 'Préstamos vigentes' }] : []),
+    ...(customerLoansEnabled ? [{ key: 'customerLoans', label: 'Préstamos vigentes' }] : []),
     { key: 'createdAt', label: 'Fecha de ingreso' },
     { key: 'status', label: 'Estado' },
   ];

@@ -367,9 +367,7 @@ export function CustomerDetailDrawer({
   }, [customerId]);
 
   const customer = detail ?? customerSnapshot ?? null;
-  const showCustomerLoans = customerLoansEnabled
-    || Number(customer?.customerLoansSummary?.totalCount || 0) > 0
-    || Number(customer?.customerLoans?.length || 0) > 0;
+  const showCustomerLoans = customerLoansEnabled;
   const customerCountryCode = String(customer?.countryCode || countryCodeFromLegacy(customer?.country) || 'NI');
   const customerTaxLabel = customerCountryCode === 'NI' ? 'Cédula' : customerCountryCode === 'CL' ? 'RUT' : 'Identificación fiscal';
   const customerRucLabel = customerCountryCode === 'CL' ? 'RUT / identificación' : customerCountryCode === 'PE' ? 'RUC' : 'RUC';
