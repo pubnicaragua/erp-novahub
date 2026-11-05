@@ -1774,11 +1774,16 @@ const ROUTE_STORAGE_KEY = 'novaFuerzaRouteV2';
 const ROUTE_PROGRESS_KEY = 'novaFuerzaRouteProgressV2';
 let routeProgress = Math.max(0, Number(readStore(ROUTE_PROGRESS_KEY, 0)) || 0);
 let routePolyline = null;
+let routePreviewPolyline = null;
 let routeDirectionsRequestId = 0;
 let routeMapRefreshTimer = null;
 let routeMapLastRefreshAt = 0;
 let routeMapLastOrigin = null;
 let routeStopMarkers = new Map();
+function clearRoutePolylineSegments(){
+  routePolyline?.setMap(null);routePolyline=null;
+  routePreviewPolyline?.setMap(null);routePreviewPolyline=null;
+}
 let activeRouteAssigneeId = null;
 let activeSavedRouteAssigneeId = null;
 const ROUTE_UNASSIGNED = '__unassigned__';
@@ -1800,7 +1805,7 @@ function markRouteDraftChanged(){
   routeDraftDirty=true;
   routeSaveAttemptKey=null;
   routeDirectionsRequestId+=1;
-  routePolyline?.setMap(null);routePolyline=null;
+  clearRoutePolylineSegments();
   const metrics=document.getElementById('routeMetrics');if(metrics){metrics.hidden=true;metrics.textContent=''}
   persistRouteDraft();
 }
@@ -2563,7 +2568,7 @@ function showSavedRouteOnMap(route,{automatic=false}={}){
   autoDisplayedRouteId=routeAssignedToCurrentUser(route)?String(route.id):null;
   if(routeMapRefreshTimer){window.clearTimeout(routeMapRefreshTimer);routeMapRefreshTimer=null}
   routeMapLastOrigin=null;routeMapLastRefreshAt=0;
-  routePolyline?.setMap(null);routePolyline=null;routeDirectionsRequestId+=1;
+  clearRoutePolylineSegments();routeDirectionsRequestId+=1;
   setRoutePlanningMode(false);
   hydrateRemoteRoute(route);
   if(!mapLayers.plannedRoutes){mapLayers={...mapLayers,plannedRoutes:true};persistMapLayers()}
@@ -2742,7 +2747,7 @@ function startNewRoute(){
   if(routeDraftDirty&&!confirm('Tienes cambios pendientes. ¿Descartarlos y comenzar otra ruta?'))return;
   const selectedAssignee=routeAssigneeDraftValue();
   clearRouteDraftStorage();routeDraftDirty=false;routeSaveAttemptKey=null;
-  routePolyline?.setMap(null);routePolyline=null;routeDirectionsRequestId+=1;
+  clearRoutePolylineSegments();routeDirectionsRequestId+=1;
   routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;autoDisplayedRouteId=null;activeRouteAssigneeId=selectedAssignee||ROUTE_UNASSIGNED;activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
   document.getElementById('routeName').value='';
   document.getElementById('routeFrequency').value='ONCE';
@@ -4609,6 +4614,7 @@ function updateMapLayerVisibility(){
   presenceMarkers.forEach(marker=>setNovaMarkerMap(marker,mapLayers.users?googleMap:null));
   renderPresenceClusters();
   routePolyline?.setMap(mapLayers.plannedRoutes?googleMap:null);
+  routePreviewPolyline?.setMap(mapLayers.plannedRoutes?googleMap:null);
   routeStopMarkers.forEach(marker=>setNovaMarkerMap(marker,routePlanningMode||mapLayers.plannedRoutes?googleMap:null));
 }
 function saveMapCameraForReload(){
@@ -5919,11 +5925,11 @@ function renderRoutePlanner(){
   if(orderLockHint)orderLockHint.textContent=startIsPending
     ? 'El inicio está pendiente de sincronizar. La ruta y su orden están bloqueados en este dispositivo.'
     : activeStatus==='IN_PROGRESS'
-      ? 'Ruta iniciada: el mapa muestra un tramo punteado hasta la parada pendiente más cercana. Al marcar la visita aparece el siguiente tramo; sin GPS reciente se conserva el orden guardado.'
+      ? 'Ruta iniciada: línea verde continua hasta la parada más cercana y discontinua hacia la siguiente. Al marcar una visita, ambas se actualizan; sin GPS reciente se conserva el orden guardado.'
     : activeStatus==='COMPLETED'||activeStatus==='CANCELLED'
       ? 'Esta ruta ya terminó y su orden no se puede cambiar.'
       : activeRoute
-        ? 'Antes de iniciar puedes subir o bajar las paradas y guardar los cambios. Durante la ruta, se mostrará un tramo punteado hasta el punto pendiente más cercano y después de cada visita aparecerá el siguiente; sin GPS reciente se sigue el orden guardado.'
+        ? 'Antes de iniciar puedes subir o bajar las paradas y guardar los cambios. Durante la ruta, la línea continua va al punto pendiente más cercano y la discontinua al siguiente; después de cada visita se actualizan ambas.'
         : routeBusinesses.length
           ? 'Ajusta el orden con ↑ y ↓, guarda la ruta y luego iníciala desde el panel de seguimiento.'
           : 'Marca puntos en el mapa para agregarlos. Después podrás cambiar su orden antes de iniciar la ruta.';
@@ -6121,13 +6127,13 @@ function scheduleActiveRouteMapRefresh(force=false){
 async function drawRouteOnMap(options={}){
   const notify=message=>{if(!options.silent)toast(message)};
   if(routeMapRefreshTimer){window.clearTimeout(routeMapRefreshTimer);routeMapRefreshTimer=null}
-  routePolyline?.setMap(null);routePolyline=null;routeDirectionsRequestId+=1;
+  clearRoutePolylineSegments();routeDirectionsRequestId+=1;
   const route=activeRemoteRoute();
   const liveRoute=Boolean(route&&isRouteExecutionView(route)&&routeAssignedToCurrentUser(route));
   const origin=liveRoute?currentRouteOrigin(route,true):null;
   if(liveRoute&&!origin){routeMapLastOrigin=null;routeMapLastRefreshAt=0}
   const pendingStops=liveRoute?routeNavigationBusinesses(route,origin):routeBusinesses;
-  const stops=liveRoute?pendingStops.slice(0,1):pendingStops;
+  const stops=liveRoute?pendingStops.slice(0,2):pendingStops;
   const metrics=document.getElementById('routeMetrics');
   if(!stops.length){
     if(liveRoute&&metrics){metrics.hidden=false;metrics.textContent='No quedan paradas pendientes en esta ruta.'}
@@ -6135,43 +6141,73 @@ async function drawRouteOnMap(options={}){
     return;
   }
   if(stops.some(b=>!routePointCoordinates(b))){notify('Una o más paradas necesitan coordenadas válidas');return}
+  if(liveRoute&&!origin){
+    googleMap.panTo({lat:Number(stops[0].lat),lng:Number(stops[0].lng)});googleMap.setZoom(Math.max(15,Number(googleMap.getZoom())||15));
+    if(metrics){metrics.hidden=false;metrics.textContent=`GPS sin lectura reciente · orden guardado: ${stops[0].name||'siguiente parada'} · pulsa “Mi ubicación” para trazar desde tu posición.`}
+    notify('Actualiza tu ubicación para trazar la ruta desde tu posición');return;
+  }
   const points=[...(origin?[origin]:[]),...stops.map(b=>({lat:Number(b.lat),lng:Number(b.lng)}))];
-  if(points.length===1){googleMap.panTo(points[0]);googleMap.setZoom(Math.max(15,Number(googleMap.getZoom())||15));if(metrics){metrics.hidden=false;metrics.textContent=liveRoute?`GPS sin lectura reciente · siguiente parada: ${stops[0].name||'Punto comercial'} · pulsa “Mi ubicación” para trazar el tramo punteado.`:'Una parada · no requiere trazar un tramo por carretera.'}notify(liveRoute?'Actualiza tu ubicación para trazar el tramo hacia la siguiente parada':'Ruta de una parada enfocada en el mapa');return}
+  if(points.length===1){googleMap.panTo(points[0]);googleMap.setZoom(Math.max(15,Number(googleMap.getZoom())||15));if(metrics){metrics.hidden=false;metrics.textContent='Una parada · no requiere trazar un tramo por carretera.'}notify('Ruta de una parada enfocada en el mapa');return}
   if(!window.google?.maps?.DirectionsService){if(liveRoute&&metrics){metrics.hidden=false;metrics.textContent=`No está disponible el servicio de rutas por carretera. Puedes abrir ${stops[0].name||'la siguiente parada'} en Waze o Google Maps.`}notify('El motor de rutas por carretera no está disponible');return}
   const requestId=++routeDirectionsRequestId;
   const service=new google.maps.DirectionsService();
-  const roadPath=[];
-  let totalDistance=0,totalDuration=0;
+  let mainRoadPath=[],previewRoadPath=[];
+  let mainDistance=0,mainDuration=0,previewDistance=0,previewDuration=0,totalDistance=0,totalDuration=0,previewError=null;
   if(origin){routeMapLastOrigin=origin;routeMapLastRefreshAt=Date.now()}
+  const overviewPath=result=>(result.routes[0].overview_path||[]).map(point=>({lat:point.lat(),lng:point.lng()}));
+  const routeMetricsFor=result=>(result.routes[0].legs||[]).reduce((sum,leg)=>({
+    distance:sum.distance+(Number(leg.distance?.value)||0),
+    duration:sum.duration+(Number(leg.duration?.value)||0),
+  }),{distance:0,duration:0});
   try{
-    // Google Directions admite un número limitado de waypoints por consulta.
-    // Se divide una ruta larga en tramos contiguos y se conserva el orden elegido.
-    let start=0;
-    while(start<points.length-1){
-      const end=Math.min(points.length-1,start+23);
-      const result=await requestGoogleDirections(service,{
-        origin:points[start],destination:points[end],waypoints:points.slice(start+1,end).map(location=>({location,stopover:true})),
-        optimizeWaypoints:false,travelMode:google.maps.TravelMode.DRIVING,
+    if(liveRoute){
+      const mainResult=await requestGoogleDirections(service,{
+        origin:points[0],destination:points[1],waypoints:[],optimizeWaypoints:false,travelMode:google.maps.TravelMode.DRIVING,
       });
-      (result.routes[0].legs||[]).forEach(leg=>{totalDistance+=Number(leg.distance?.value)||0;totalDuration+=Number(leg.duration?.value)||0});
-      const overview=result.routes[0].overview_path || [];
-      overview.forEach((point,index)=>{
-        if(start>0&&index===0)return;
-        roadPath.push({lat:point.lat(),lng:point.lng()});
-      });
-      start=end;
+      mainRoadPath=overviewPath(mainResult);
+      const mainStats=routeMetricsFor(mainResult);mainDistance=mainStats.distance;mainDuration=mainStats.duration;
+      if(points.length>2){
+        try{
+          const previewResult=await requestGoogleDirections(service,{
+            origin:points[1],destination:points[2],waypoints:[],optimizeWaypoints:false,travelMode:google.maps.TravelMode.DRIVING,
+          });
+          previewRoadPath=overviewPath(previewResult);
+          const previewStats=routeMetricsFor(previewResult);previewDistance=previewStats.distance;previewDuration=previewStats.duration;
+        }catch(error){previewError=error;console.warn('No se pudo calcular el siguiente tramo de la ruta',error)}
+      }
+    }else{
+      // Google Directions admite un número limitado de waypoints por consulta.
+      // Se divide una ruta larga en tramos contiguos y se conserva el orden elegido.
+      let start=0;
+      while(start<points.length-1){
+        const end=Math.min(points.length-1,start+23);
+        const result=await requestGoogleDirections(service,{
+          origin:points[start],destination:points[end],waypoints:points.slice(start+1,end).map(location=>({location,stopover:true})),
+          optimizeWaypoints:false,travelMode:google.maps.TravelMode.DRIVING,
+        });
+        const stats=routeMetricsFor(result);totalDistance+=stats.distance;totalDuration+=stats.duration;
+        const segment=overviewPath(result);
+        mainRoadPath.push(...(start>0?segment.slice(1):segment));
+        start=end;
+      }
     }
   }catch(error){routeMapLastOrigin=null;console.warn('No se pudo calcular la ruta por carretera',error);if(metrics){metrics.hidden=false;metrics.textContent=liveRoute?`No se pudo calcular el tramo hasta ${stops[0].name||'la siguiente parada'}. Puedes abrirla en Waze o Google Maps.`:'No se pudo calcular el recorrido por carretera. Las paradas se conservaron y puedes guardar la ruta.'}notify(error?.message || 'No se pudo calcular la ruta por carretera');return}
-  if(requestId!==routeDirectionsRequestId||roadPath.length<2)return;
+  if(liveRoute){totalDistance=mainDistance+previewDistance;totalDuration=mainDuration+previewDuration}
+  if(requestId!==routeDirectionsRequestId||mainRoadPath.length<2)return;
   if(!mapLayers.plannedRoutes){mapLayers={...mapLayers,plannedRoutes:true};persistMapLayers();updateMapLayerControls();updateMapLayerVisibility()}
-  routePolyline?.setMap(null);
-  routePolyline=new google.maps.Polyline({map:mapLayers.plannedRoutes?googleMap:null,path:roadPath,geodesic:false,strokeColor:'#08785a',strokeOpacity:liveRoute?0:.95,strokeWeight:liveRoute?1:5,icons:liveRoute?[{icon:{path:google.maps.SymbolPath.CIRCLE,fillColor:'#08785a',fillOpacity:1,strokeColor:'#fff',strokeOpacity:.95,strokeWeight:1,scale:3},offset:'0',repeat:'12px'}]:[],zIndex:1100});
-  if(metrics){metrics.hidden=false;metrics.textContent=liveRoute?`Tramo punteado a ${stops[0].name||'la parada más cercana'} · ${pendingStops.length} punto${pendingStops.length===1?' pendiente':'s pendientes'} · aproximadamente ${(totalDistance/1000).toFixed(1)} km · ${Math.max(1,Math.round(totalDuration/60))} min por carretera.`:`${stops.length} parada${stops.length===1?'':'s'} restantes · aproximadamente ${(totalDistance/1000).toFixed(1)} km · ${Math.max(1,Math.round(totalDuration/60))} min por carretera.`}
+  routePolyline=new google.maps.Polyline({map:mapLayers.plannedRoutes?googleMap:null,path:mainRoadPath,geodesic:false,strokeColor:'#08785a',strokeOpacity:.95,strokeWeight:5,zIndex:1101});
+  if(liveRoute&&previewRoadPath.length>=2)routePreviewPolyline=new google.maps.Polyline({
+    map:mapLayers.plannedRoutes?googleMap:null,path:previewRoadPath,geodesic:false,strokeColor:'#08785a',strokeOpacity:0,strokeWeight:1,
+    icons:[{icon:{path:google.maps.SymbolPath.CIRCLE,fillColor:'#08785a',fillOpacity:1,strokeColor:'#fff',strokeOpacity:.95,strokeWeight:1,scale:3},offset:'0',repeat:'12px'}],zIndex:1100,
+  });
+  if(metrics){metrics.hidden=false;metrics.textContent=liveRoute
+    ? `Línea continua hasta ${stops[0].name||'la parada más cercana'}: ${(mainDistance/1000).toFixed(1)} km · ${Math.max(1,Math.round(mainDuration/60))} min${previewRoadPath.length>=2?` · luego discontinua hasta ${stops[1].name||'la siguiente parada'}: ${(previewDistance/1000).toFixed(1)} km`:(previewError?' · no se pudo calcular el tramo siguiente':'')} · ${pendingStops.length} parada${pendingStops.length===1?' pendiente':'s pendientes'}.`
+    : `${stops.length} parada${stops.length===1?'':'s'} restantes · aproximadamente ${(totalDistance/1000).toFixed(1)} km · ${Math.max(1,Math.round(totalDuration/60))} min por carretera.`}
   const bounds=new google.maps.LatLngBounds();
-  roadPath.forEach(point=>bounds.extend(point));
+  [...mainRoadPath,...previewRoadPath].forEach(point=>bounds.extend(point));
   if(options.fitBounds!==false)googleMap.fitBounds(bounds,64);
   if(options.closeModal!==false)document.getElementById('routeModal').hidden=true;
-  notify(liveRoute?`Tramo punteado desde tu ubicación hasta ${stops[0].name||'la parada más cercana'}`:`${stops.length} parada${stops.length===1?'':'s'} trazada${stops.length===1?'':'s'} por carretera`);
+  notify(liveRoute?`Línea continua hasta ${stops[0].name||'la parada más cercana'}${previewRoadPath.length>=2?` · discontinua hacia ${stops[1].name||'la siguiente parada'}`:''}`:`${stops.length} parada${stops.length===1?'':'s'} trazada${stops.length===1?'':'s'} por carretera`);
 }
 function openRouteStop(index){
   const stop=routeBusinesses[index];
@@ -6250,7 +6286,7 @@ async function completeCurrentRouteStop(){
     await flushPendingRouteActions();
     const updatedRoute=activeRemoteRoute();
     if(!updatedRoute||routeNextPendingIndex(updatedRoute)>=routeBusinesses.length){
-      routePolyline?.setMap(null);routePolyline=null;routeDirectionsRequestId+=1;routeMapLastOrigin=null;routeMapLastRefreshAt=0;
+      clearRoutePolylineSegments();routeDirectionsRequestId+=1;routeMapLastOrigin=null;routeMapLastRefreshAt=0;
       const routeFinished=String(updatedRoute?.status||'').toUpperCase()==='COMPLETED';
       const hasPendingVisitSync=routePendingStopIds(updatedRoute?.id).length>0;
       const metrics=document.getElementById('routeMetrics');if(metrics){metrics.hidden=false;metrics.textContent=routeFinished?'Ruta finalizada · no quedan paradas pendientes.':hasPendingVisitSync?'No quedan más destinos; la última visita está pendiente de sincronizar.':'No quedan paradas pendientes.'}
@@ -6293,7 +6329,7 @@ function clearRoute(){
   if(!routeDraftDirty){toast('No hay cambios de ruta que descartar');return}
   if(!confirm('¿Descartar los cambios pendientes de esta ruta?'))return;
   clearRouteDraftStorage();routeDraftDirty=false;routeSaveAttemptKey=null;
-  routePolyline?.setMap(null);routePolyline=null;routeDirectionsRequestId+=1;
+  clearRoutePolylineSegments();routeDirectionsRequestId+=1;
   if(activeRemoteRouteId){
     const saved=activeRemoteRoute();
     if(saved){hydrateRemoteRoute(saved);setRoutePlanningMode(true);document.getElementById('routeModal').hidden=false;toast('Cambios descartados; se restauró la ruta guardada');return}
