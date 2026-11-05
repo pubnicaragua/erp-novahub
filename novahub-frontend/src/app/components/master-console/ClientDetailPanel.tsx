@@ -441,7 +441,7 @@ export function ClientDetailPanel({ data, onBack, onRefresh }: Props) {
                 </tr></thead>
                 <tbody>{data.subscriptionRequests.slice(0, 15).map((r: any) => (
                   <tr key={r.id} className="border-b border-border/30 hover:bg-muted/5">
-                    <td className="p-3 font-bold">{(r.requestedModule || '').replace(/_/g, ' ')}</td>
+                    <td className="p-3 font-bold">{getModuleLabel(r.requestedModule || '')}</td>
                     <td className="p-3 text-muted-foreground text-xs max-w-[200px] truncate">{r.notes || '—'}</td>
                     <td className="p-3 text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</td>
                     <td className="p-3 text-center">
