@@ -44,6 +44,7 @@ import {
   HardDrive,
   Scale,
   AlertTriangle,
+  MessageCircle,
   MessageSquare,
   Send,
   Archive,
