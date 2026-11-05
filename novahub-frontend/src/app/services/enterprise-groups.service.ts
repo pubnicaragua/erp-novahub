@@ -20,6 +20,7 @@ export interface ManagerGroup {
     businessType?: string | null;
     enabledModules?: string[];
     moduleViewOverrides?: Record<string, string[]>;
+    enabledFeatureKeys?: string[];
   }>;
   businessUnits?: Array<{
     id: string;
@@ -650,7 +651,7 @@ export const enterpriseGroupsService = {
     api.delete<{ id: string; deleted: boolean }>(
       `/enterprise-groups/platform/quotes/${id}`,
     ),
-  createPlatformBranch: (groupId: string, body: any) =>
+  createPlatformBranch: (groupId: string, body: Record<string, unknown> & { enabledFeatureKeys?: string[] }) =>
     api.idempotentPost(`/enterprise-groups/platform/${groupId}/branches`, body),
   createPlatformBusinessUnit: (groupId: string, body: any) =>
     api.idempotentPost(
@@ -680,7 +681,7 @@ export const enterpriseGroupsService = {
       `/enterprise-groups/platform/${groupId}/business-units/${unitId}`,
       body,
     ),
-  updatePlatformBranch: (groupId: string, branchId: string, body: any) =>
+  updatePlatformBranch: (groupId: string, branchId: string, body: Record<string, unknown> & { enabledFeatureKeys?: string[] }) =>
     api.idempotentPatch(
       `/enterprise-groups/platform/${groupId}/branches/${branchId}`,
       body,

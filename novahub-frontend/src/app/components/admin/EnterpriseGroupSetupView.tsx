@@ -21,13 +21,14 @@ import {
   Users,
   Warehouse,
 } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { enterpriseGroupsService } from "../../services/enterprise-groups.service";
+import { tenantFeaturesService, type TenantFeatureDefinition } from "../../services/tenant-features.service";
 import { storageService } from "../../services/storage.service";
 import { optimizeImageFile } from "../../utils/image-optimization";
 import { authService } from "../../services/auth.service";
@@ -137,6 +138,11 @@ export function EnterpriseGroupSetupView({
 }) {
   const { user } = useAuth();
   const canManageIntegrationPolicies = user?.role === "superadmin";
+  const tenantFeatureCatalogQuery = useQuery({
+    queryKey: ["platform-tenant-feature-catalog"],
+    queryFn: ({ signal }) => tenantFeaturesService.getCatalog(signal),
+    staleTime: 5 * 60 * 1000,
+  });
   const [step, setStep] = useState<SetupStep>("identity");
   const [editDetailOpen, setEditDetailOpen] = useState(mode === "edit");
   const [activeEditTab, setActiveEditTab] = useState<EditTab>("identity");
@@ -198,6 +204,7 @@ export function EnterpriseGroupSetupView({
     moduleMode: "INHERIT" as "INHERIT" | "CUSTOM",
     enabledModules: [] as string[],
     moduleViewOverrides: {} as Record<string, string[]>,
+    enabledFeatureKeys: [] as string[],
     salesFinanceIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
     salesAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
     inventoryAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
@@ -559,6 +566,7 @@ export function EnterpriseGroupSetupView({
         moduleMode: branchForm.moduleMode,
         enabledModules: branchForm.enabledModules,
         moduleViewOverrides: branchForm.moduleViewOverrides,
+        enabledFeatureKeys: branchForm.enabledFeatureKeys,
       }),
     onSuccess: async () => {
       setBranchForm({
@@ -575,6 +583,7 @@ export function EnterpriseGroupSetupView({
         moduleMode: "INHERIT",
         enabledModules: [],
         moduleViewOverrides: {},
+        enabledFeatureKeys: [],
         salesFinanceIntegrationOverride: "INHERIT",
         salesAccountingIntegrationOverride: "INHERIT",
         inventoryAccountingIntegrationOverride: "INHERIT",
@@ -698,6 +707,7 @@ export function EnterpriseGroupSetupView({
       moduleMode: branchForm.moduleMode,
       enabledModules: branchForm.enabledModules,
       moduleViewOverrides: branchForm.moduleViewOverrides,
+      enabledFeatureKeys: branchForm.enabledFeatureKeys,
       salesFinanceIntegrationOverride: branchForm.salesFinanceIntegrationOverride,
       salesAccountingIntegrationOverride: branchForm.salesAccountingIntegrationOverride,
       inventoryAccountingIntegrationOverride: branchForm.inventoryAccountingIntegrationOverride,
@@ -724,6 +734,7 @@ export function EnterpriseGroupSetupView({
       moduleMode: "INHERIT",
       enabledModules: [],
       moduleViewOverrides: {},
+      enabledFeatureKeys: [],
       salesFinanceIntegrationOverride: "INHERIT",
       salesAccountingIntegrationOverride: "INHERIT",
       inventoryAccountingIntegrationOverride: "INHERIT",
@@ -910,6 +921,7 @@ export function EnterpriseGroupSetupView({
         ? branch.enabledModules
         : [],
       moduleViewOverrides: branch.moduleViewOverrides || {},
+      enabledFeatureKeys: Array.isArray(branch.enabledFeatureKeys) ? branch.enabledFeatureKeys : [],
       salesFinanceIntegrationOverride: branch.integrationPolicyOverrides?.SALES_TO_FINANCE || branch.salesFinanceIntegrationOverride || "INHERIT",
       salesAccountingIntegrationOverride: branch.integrationPolicyOverrides?.SALES_TO_ACCOUNTING || branch.salesAccountingIntegrationOverride || "INHERIT",
       inventoryAccountingIntegrationOverride: branch.integrationPolicyOverrides?.INVENTORY_TO_ACCOUNTING || "INHERIT",
@@ -939,6 +951,7 @@ export function EnterpriseGroupSetupView({
               moduleMode: branchForm.moduleMode,
               enabledModules: branchForm.enabledModules,
               moduleViewOverrides: branchForm.moduleViewOverrides,
+              enabledFeatureKeys: branchForm.enabledFeatureKeys,
               salesFinanceIntegrationOverride: branchForm.salesFinanceIntegrationOverride,
               salesAccountingIntegrationOverride: branchForm.salesAccountingIntegrationOverride,
               inventoryAccountingIntegrationOverride: branchForm.inventoryAccountingIntegrationOverride,
@@ -963,6 +976,7 @@ export function EnterpriseGroupSetupView({
       moduleMode: "INHERIT",
       enabledModules: [],
       moduleViewOverrides: {},
+      enabledFeatureKeys: [],
       salesFinanceIntegrationOverride: "INHERIT",
       salesAccountingIntegrationOverride: "INHERIT",
       inventoryAccountingIntegrationOverride: "INHERIT",
@@ -988,6 +1002,7 @@ export function EnterpriseGroupSetupView({
         moduleMode: branchForm.moduleMode,
         enabledModules: branchForm.enabledModules,
         moduleViewOverrides: branchForm.moduleViewOverrides,
+        enabledFeatureKeys: branchForm.enabledFeatureKeys,
         salesFinanceIntegrationOverride: branchForm.salesFinanceIntegrationOverride,
         salesAccountingIntegrationOverride: branchForm.salesAccountingIntegrationOverride,
         inventoryAccountingIntegrationOverride: branchForm.inventoryAccountingIntegrationOverride,
@@ -1087,6 +1102,7 @@ export function EnterpriseGroupSetupView({
           adminPassword: branch.adminPassword,
           enabledModules:
             branch.moduleMode === "CUSTOM" ? branch.enabledModules : undefined,
+          enabledFeatureKeys: branch.enabledFeatureKeys || [],
           moduleViewOverrides: branch.moduleViewOverrides || {},
         })),
       });
@@ -1422,6 +1438,10 @@ export function EnterpriseGroupSetupView({
                 editMode={mode === "edit"}
                 availableModules={groupModuleIds}
                 groupPolicies={groupForm.modulePolicies || {}}
+                featureCatalog={tenantFeatureCatalogQuery.data || []}
+                featureCatalogLoading={tenantFeatureCatalogQuery.isLoading}
+                featureCatalogError={tenantFeatureCatalogQuery.isError && !tenantFeatureCatalogQuery.data}
+                onRetryFeatureCatalog={() => tenantFeatureCatalogQuery.refetch()}
                 form={branchForm}
                 setForm={setBranchForm}
                 creating={isDraft ? false : branchMutation.isPending || updateBranchMutation.isPending}
@@ -1456,6 +1476,7 @@ export function EnterpriseGroupSetupView({
                     moduleMode: "INHERIT",
                     enabledModules: [],
                     moduleViewOverrides: {},
+                    enabledFeatureKeys: [],
                     salesFinanceIntegrationOverride: "INHERIT",
                     salesAccountingIntegrationOverride: "INHERIT",
                     inventoryAccountingIntegrationOverride: "INHERIT",
@@ -2880,12 +2901,112 @@ function WarehousesStep({
   );
 }
 
+function BranchSpecificFeaturesSelector({
+  catalog,
+  loading,
+  error,
+  onRetry,
+  activeModules,
+  branchIsActive,
+  value,
+  onChange,
+}: {
+  catalog: TenantFeatureDefinition[];
+  loading: boolean;
+  error: boolean;
+  onRetry: () => void;
+  activeModules: string[];
+  branchIsActive: boolean;
+  value: string[];
+  onChange: (enabledFeatureKeys: string[]) => void;
+}) {
+  const moduleNames: Record<string, string> = {
+    SALES: "Ventas",
+    INVENTORY: "Inventario",
+    PURCHASES: "Compras",
+    FINANCE: "Finanzas",
+    ACCOUNTING: "Contabilidad",
+  };
+  const activeModuleSet = new Set(activeModules.map((module) => String(module).toUpperCase()));
+
+  return (
+    <fieldset className="rounded-2xl border border-border/60 bg-background/50 p-4">
+      <legend className="px-1 text-xs font-bold text-muted-foreground">Funciones específicas de la sucursal</legend>
+      <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+        Estas funciones se configuran por sucursal y no se heredan del grupo.
+      </p>
+      {loading ? (
+        <p className="rounded-xl border border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground" role="status">
+          Cargando funciones disponibles…
+        </p>
+      ) : error ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3 sm:flex-row sm:items-center sm:justify-between" role="alert">
+          <p className="text-sm text-muted-foreground">No se pudieron cargar las funciones. Puedes guardar otros cambios; la selección actual se conservará. Reintenta para modificarla.</p>
+          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={onRetry}>Reintentar</Button>
+        </div>
+      ) : catalog.length ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {catalog.map((feature) => {
+            const selected = value.includes(feature.key);
+            const moduleActive = !feature.requiredModule || activeModuleSet.has(feature.requiredModule.toUpperCase());
+            const canEnable = moduleActive && branchIsActive;
+            const requiredModuleLabel = feature.requiredModule
+              ? moduleNames[feature.requiredModule.toUpperCase()] || feature.requiredModule
+              : "";
+            const description = !moduleActive
+              ? selected
+                ? `Está asignada, pero no estará disponible hasta activar ${requiredModuleLabel}.`
+                : `Requiere tener activo ${requiredModuleLabel}.`
+              : !branchIsActive && !selected
+                ? "Activa la sucursal antes de habilitar esta función."
+                : feature.description;
+
+            return (
+              <label
+                key={feature.key}
+                htmlFor={`branch-feature-${feature.key}`}
+                className="flex min-w-0 items-start gap-3 rounded-xl border border-border/60 bg-card p-3 transition-colors hover:border-primary/30 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40"
+              >
+                <input
+                  id={`branch-feature-${feature.key}`}
+                  type="checkbox"
+                  checked={selected}
+                  disabled={!selected && !canEnable}
+                  aria-describedby={`branch-feature-description-${feature.key}`}
+                  className="mt-0.5 size-4 shrink-0 accent-primary disabled:cursor-not-allowed"
+                  onChange={(event) => onChange(event.target.checked
+                    ? [...new Set([...value, feature.key])]
+                    : value.filter((key) => key !== feature.key))}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-foreground">{feature.label}</span>
+                  <span id={`branch-feature-description-${feature.key}`} className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                    {description}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="rounded-xl border border-dashed border-border/60 p-3 text-sm text-muted-foreground">
+          No hay funciones específicas disponibles por el momento.
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
 function BranchesStep({
   units,
   branches,
   editMode,
   availableModules,
   groupPolicies,
+  featureCatalog,
+  featureCatalogLoading,
+  featureCatalogError,
+  onRetryFeatureCatalog,
   form,
   setForm,
   creating,
@@ -2902,6 +3023,11 @@ function BranchesStep({
   const selectedUnit = units.find(
     (unit: any) => unit.id === form.businessUnitId,
   );
+  const editingBranch = branches.find((branch: any) => branch.id === editingId);
+  const branchIsActive = !editingId || editingBranch?.isActive !== false;
+  const branchModules = form.moduleMode === "CUSTOM"
+    ? form.enabledModules || []
+    : selectedUnit?.enabledModules || availableModules || [];
   return (
     <div className="space-y-6">
       <SectionIntro
@@ -3133,6 +3259,18 @@ function BranchesStep({
             <div className="mt-3"><ModuleViewOverrideEditor modules={form.moduleMode === "CUSTOM" ? (form.enabledModules || []) : (selectedUnit?.enabledModules || availableModules)} groupPolicies={groupPolicies || {}} parentViewOverrides={selectedUnit?.moduleViewOverrides || {}} value={form.moduleViewOverrides || {}} onChange={(moduleViewOverrides) => setForm((current: any) => ({ ...current, moduleViewOverrides }))} /></div>
           </div>
           <div className="sm:col-span-2">
+            <BranchSpecificFeaturesSelector
+              catalog={featureCatalog || []}
+              loading={featureCatalogLoading}
+              error={featureCatalogError}
+              onRetry={onRetryFeatureCatalog}
+              activeModules={branchModules}
+              branchIsActive={branchIsActive}
+              value={form.enabledFeatureKeys || []}
+              onChange={(enabledFeatureKeys) => setForm((current: any) => ({ ...current, enabledFeatureKeys }))}
+            />
+          </div>
+          <div className="sm:col-span-2">
             <IntegrationPolicyOverrideFields
               value={form}
               onChange={(changes) => setForm((current: any) => ({ ...current, ...changes }))}
@@ -3144,7 +3282,7 @@ function BranchesStep({
           <div className="sm:col-span-2 flex justify-end gap-2">
             <Button
               className="rounded-xl"
-              disabled={!canCreate || creating}
+              disabled={!canCreate || creating || featureCatalogLoading}
               onClick={onCreate}
             >
               {creating
