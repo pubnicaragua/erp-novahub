@@ -17,6 +17,7 @@ export const REFERENCE_TYPE_LABELS: Record<string, string> = {
   EXPENSE: 'Gasto',
   FINANCIAL_INCOME: 'Ingreso financiero',
   FINANCIAL_EXPENSE: 'Gasto financiero',
+  CUSTOMER_LOAN_DISBURSEMENT: 'Desembolso de préstamo',
   INVENTORY_ADJUSTMENT: 'Ajuste de inventario',
   TRANSFER: 'Transferencia de inventario',
   CASH_REGISTER_SESSION: 'Cierre de caja',
@@ -110,6 +111,13 @@ const ACCOUNTING_DESCRIPTION_PHRASES: Array<[RegExp, string]> = [
 export function accountingDescriptionLabel(value?: unknown): string {
   const raw = String(value ?? '').trim();
   if (!raw) return '—';
+  const legacyLoanLineLabels: Record<string, string> = {
+    'cuenta por cobrar del préstamo': 'Total a cobrar al cliente (principal + intereses)',
+    'principal desembolsado': 'Efectivo entregado al cliente (solo principal)',
+    'interés reconocido al desembolso': 'Ganancia por intereses del préstamo',
+  };
+  const legacyLoanLabel = legacyLoanLineLabels[raw.toLocaleLowerCase()];
+  if (legacyLoanLabel) return legacyLoanLabel;
   const withPhrases = ACCOUNTING_DESCRIPTION_PHRASES.reduce(
     (description, [pattern, label]) => description.replace(pattern, label),
     raw,

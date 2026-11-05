@@ -58,6 +58,30 @@ function referenceDisplay(journal: JournalEntry): string {
   return journal.referenceNumber || 'Sin número de documento';
 }
 
+function getCustomerLoanDisbursementAmounts(journal: JournalEntry | null) {
+  if (String(journal?.referenceType || '').toUpperCase() !== 'CUSTOMER_LOAN_DISBURSEMENT') return null;
+  const normalize = (value?: string) => String(value || '')
+    .toLocaleLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  const kindOf = (description?: string) => {
+    const normalized = normalize(description);
+    if (normalized.includes('cuenta por cobrar') || normalized.includes('total a cobrar')) return 'receivable';
+    if (normalized.includes('principal desembolsado') || normalized.includes('efectivo entregado')) return 'principal';
+    if (normalized.includes('interes reconocido al desembolso') || normalized.includes('ganancia por interes')) return 'interest';
+    return null;
+  };
+  const sum = (kind: string, side: 'debit' | 'credit') => (journal?.lines || [])
+    .filter((line) => kindOf(line.description) === kind)
+    .reduce((total, line) => total + Number(line[side] || 0), 0);
+  const amounts = {
+    receivable: sum('receivable', 'debit'),
+    principal: sum('principal', 'credit'),
+    interest: sum('interest', 'credit'),
+  };
+  return amounts.receivable > 0 && amounts.principal > 0 ? amounts : null;
+}
+
 const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 const ASIENTOS_TEMPLATE_HEADERS = ['Código de cuenta', 'Descripción', 'Débito', 'Crédito', 'Referencia', 'Mes'];
@@ -172,6 +196,7 @@ export function DiarioView() {
   );
   const journals = accountingList(journalsQuery.data) as JournalEntry[];
   const viewJournal = journalDetailQuery.data || null;
+  const customerLoanDisbursementAmounts = getCustomerLoanDisbursementAmounts(viewJournal);
   const formatCurrency = (value: number) => formatAmount(Number(value || 0), baseCurrency);
 
   const canExport = canPerform('ACCOUNTING_JOURNAL', 'export');
@@ -1014,7 +1039,11 @@ export function DiarioView() {
                           <ArrowDownLeft className="size-4 text-primary" />
                           <h3 className="truncate text-sm font-black uppercase tracking-tight">Asientos del Diario</h3>
                         </div>
-                        <p className="mt-1 text-[11px] text-muted-foreground">Movimientos de débito y crédito del asiento.</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {customerLoanDisbursementAmounts
+                            ? <>Efectivo entregado: {formatCurrency(customerLoanDisbursementAmounts.principal)}. Total a cobrar: {formatCurrency(customerLoanDisbursementAmounts.receivable)}{customerLoanDisbursementAmounts.interest > 0 ? `, incluidos ${formatCurrency(customerLoanDisbursementAmounts.interest)} de ganancia por intereses.` : '.'}</>
+                            : 'Movimientos de débito y crédito del asiento.'}
+                        </p>
                       </div>
                     </div>
 

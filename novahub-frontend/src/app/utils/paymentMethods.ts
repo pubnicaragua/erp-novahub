@@ -6,6 +6,7 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   TRANSFER: 'Transferencia',
   CHECK: 'Cheque',
   CREDIT: 'Crédito',
+  CUSTOMER_LOAN: 'Préstamo',
   CUSTOMER_BALANCE: 'Saldo a favor',
   OTHER: 'Otro',
   MIXED: 'Pago mixto',
@@ -27,6 +28,7 @@ export function getInvoicePaymentPresentation(invoice: {
   creditNotes?: Array<{ status?: string | null; payments?: Array<{ method?: string | null }> }>;
 }) {
   const relatedCredits = invoice.creditNotes || [];
+  const isCustomerLoan = String(invoice.paymentMethod || '').toUpperCase() === 'CUSTOMER_LOAN';
   const hasCreditHistory = String(invoice.paymentModality || '').toUpperCase() === 'CREDIT'
     || String(invoice.paymentMethod || '').toUpperCase() === 'CREDIT'
     || relatedCredits.some((credit) => CREDIT_HISTORY_STATUSES.has(String(credit.status || '').toUpperCase()));
@@ -45,8 +47,8 @@ export function getInvoicePaymentPresentation(invoice: {
       : uniqueMethods[0] || (String(invoice.paymentMethod || '').toUpperCase() !== 'CREDIT' ? String(invoice.paymentMethod || '').toUpperCase() : null);
 
   return {
-    isCredit: hasCreditHistory,
-    modalityLabel: hasCreditHistory ? 'A crédito' : 'Contado',
+    isCredit: hasCreditHistory || isCustomerLoan,
+    modalityLabel: hasCreditHistory || isCustomerLoan ? 'A crédito' : 'Contado',
     method,
     methodLabel: method ? paymentMethodLabel(method) : null,
   };
@@ -63,7 +65,7 @@ export function paymentMethodLabel(method?: string | null): string {
 export function translatePaymentMethodText(value: unknown): string {
   if (value === null || value === undefined) return '';
 
-  return String(value).replace(/\b(CASH|CARD|TRANSFER|CHECK|CREDIT|CUSTOMER_BALANCE|OTHER)\b/gi, (match) =>
+  return String(value).replace(/\b(CASH|CARD|TRANSFER|CHECK|CREDIT|CUSTOMER_LOAN|CUSTOMER_BALANCE|OTHER)\b/gi, (match) =>
     PAYMENT_METHOD_LABELS[match.toUpperCase()] || match,
   );
 }
