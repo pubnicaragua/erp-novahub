@@ -70,11 +70,19 @@ export interface MasterConsoleOverview {
   }>;
 }
 
+export interface MasterConsoleClientDetail extends Record<string, unknown> {
+  enabledSpecificFeatures: Array<{
+    key: string;
+    label: string;
+    description: string;
+  }>;
+}
+
 export const masterConsoleService = {
   getOverview: (signal?: AbortSignal) =>
     api.get<MasterConsoleOverview>('/master-console/overview', { signal }),
   getStorageMetrics: (signal?: AbortSignal) =>
     api.get<MasterConsoleStorageMetrics>('/master-console/storage-metrics', { signal }),
   getClientDetail: (tenantId: string, signal?: AbortSignal) =>
-    api.get<Record<string, unknown>>('/master-console/client/' + tenantId, { signal }),
+    api.get<MasterConsoleClientDetail>('/master-console/client/' + tenantId, { signal }),
 };

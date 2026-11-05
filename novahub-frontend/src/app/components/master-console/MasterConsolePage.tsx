@@ -9,7 +9,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { toast } from '@/app/services/toast';
-import { masterConsoleService, type MasterConsoleOverview } from '../../services/master-console.service';
+import { masterConsoleService, type MasterConsoleClientDetail, type MasterConsoleOverview } from '../../services/master-console.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -25,7 +25,7 @@ type TenantSummary = MasterConsoleOverview['tenantsSummary'][number];
 type TenantStatusFilter = 'all' | 'active' | 'mora' | 'suspended' | 'pending';
 type TenantStatus = Exclude<TenantStatusFilter, 'all'>;
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [50, 100, 150, 200] as const;
 
 const statusLabels: Record<TenantStatus, string> = {
   active: 'Activa',
@@ -79,13 +79,14 @@ export function MasterConsolePage() {
   const [overview, setOverview] = useState<MasterConsoleOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [clientDetail, setClientDetail] = useState<Record<string, unknown> | null>(null);
+  const [clientDetail, setClientDetail] = useState<MasterConsoleClientDetail | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<TenantStatusFilter>('all');
   const [planFilter, setPlanFilter] = useState('all');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(50);
   const { formatAmount } = useCurrency();
 
   const fetchOverview = useCallback(async () => {
@@ -148,11 +149,11 @@ export function MasterConsolePage() {
     });
   }, [overview, searchTerm, statusFilter, planFilter]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredTenants.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(filteredTenants.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const visibleTenants = filteredTenants.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const firstVisibleRow = filteredTenants.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
-  const lastVisibleRow = Math.min(currentPage * PAGE_SIZE, filteredTenants.length);
+  const visibleTenants = filteredTenants.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const firstVisibleRow = filteredTenants.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const lastVisibleRow = Math.min(currentPage * pageSize, filteredTenants.length);
 
   const exportCompanies = () => {
     const headers = [
@@ -457,7 +458,23 @@ export function MasterConsolePage() {
                   <p>
                     Mostrando {firstVisibleRow}–{lastVisibleRow} de {filteredTenants.length} empresas
                   </p>
-                  <div className="flex items-center justify-between gap-2 sm:justify-end">
+                  <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
+                    <Select
+                      value={String(pageSize)}
+                      onValueChange={(value) => {
+                        setPageSize(Number(value) as (typeof PAGE_SIZE_OPTIONS)[number]);
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-28 bg-background" aria-label="Empresas por página">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                          <SelectItem key={size} value={String(size)}>{size} por página</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button
                       type="button"
                       variant="outline"

@@ -4,7 +4,6 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../ui/utils';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from '@/app/services/toast';
 import {
@@ -14,7 +13,105 @@ import {
 } from 'lucide-react';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { masterConsoleService } from '../../services/master-console.service';
-import { tenantsService } from '../../services/tenants.service';
+import { ENTERPRISE_MODULE_OPTIONS } from '../../constants/enterpriseModules';
+
+const MODULE_LABEL_OVERRIDES: Record<string, string> = {
+  DASHBOARD: 'Panel de control',
+  CLIENTS: 'Clientes',
+  PROVIDERS: 'Proveedores',
+  TRAINING: 'Capacitación',
+  SERVICES: 'Servicios',
+  RETAIL_POS: 'Punto de venta',
+  HEALTHCARE: 'Salud',
+  EDUCATION: 'Educación',
+  TOOLS: 'Herramientas',
+  SUPPORT: 'Soporte',
+  TWILIO: 'Telefonía Twilio',
+  FINANCIAL_JOURNAL: 'Finanzas · Libro diario',
+  FINANCIAL_LEDGER: 'Finanzas · Libro mayor',
+  FINANCIAL_BALANCE: 'Finanzas · Balance general',
+  ACCOUNTING_TRIAL_BALANCE: 'Contabilidad · Balance de comprobación',
+  ACCOUNTING_PROFIT_LOSS: 'Contabilidad · Pérdidas y ganancias',
+  ACCOUNTING_BALANCE_SHEET: 'Contabilidad · Balance general',
+  ACCOUNTING_CASH_FLOW: 'Contabilidad · Flujo de efectivo',
+  SALES_CREDIT_NOTES: 'Ventas · Notas de crédito',
+  PURCHASES_EXPENSES_REC: 'Compras · Gastos recurrentes',
+  PURCHASES_INVOICES_REC: 'Compras · Facturas recurrentes',
+  FINANCIAL_INCOMES_REC: 'Finanzas · Ingresos recurrentes',
+};
+
+const MODULE_ROOT_LABELS: Record<string, string> = {
+  SALES: 'Ventas',
+  PURCHASES: 'Compras',
+  INVENTORY: 'Inventario',
+  FINANCIAL: 'Finanzas',
+  HR: 'Recursos Humanos',
+  CONFIG: 'Configuración',
+  TICKETS: 'Tickets',
+  PROJECTS: 'Proyectos',
+  NOTIFICATIONS: 'Notificaciones',
+  ACTIVITIES: 'Actividades',
+  DOCUMENTS: 'Nova Cloud',
+  REPORTS: 'Reportes',
+  ACCOUNTING: 'Contabilidad',
+  HOTEL: 'Hotel',
+  ORGANIZATION: 'Organización',
+  MARKETING: 'Marketing',
+  LEGAL: 'Asesoría legal',
+  ASANA: 'Asana',
+  TWILIO: 'Telefonía Twilio',
+};
+
+const MODULE_SEGMENT_LABELS: Record<string, string> = {
+  TASKS: 'Tareas', CLIENTS: 'Clientes', PROVIDERS: 'Proveedores', QUOTES: 'Cotizaciones',
+  ORDERS: 'Pedidos', INVOICES: 'Facturas', RECURRING: 'Recurrentes', REC: 'Recurrentes',
+  RETURNS: 'Devoluciones', CREDIT: 'Crédito', NOTES: 'Notas', PAYMENTS: 'Pagos',
+  COMMISSIONS: 'Comisiones', POS: 'Punto de venta', EXPENSES: 'Gastos', REQUESTS: 'Solicitudes',
+  RECEIPTS: 'Recepciones', DASHBOARD: 'Panel', PRODUCTS: 'Productos', WAREHOUSES: 'Bodegas',
+  TRANSFERS: 'Transferencias', ADJUSTMENTS: 'Ajustes', MOVEMENTS: 'Movimientos', COUNT: 'Conteo',
+  SERIALS: 'Series', LOTS: 'Lotes', ACCOUNTS: 'Cuentas', JOURNAL: 'Libro diario', LEDGER: 'Libro mayor',
+  BANK: 'Bancos', BUDGET: 'Presupuestos', REPORTS: 'Reportes', INCOMES: 'Ingresos',
+  BALANCE: 'Balance general', EMPLOYEES: 'Empleados', PAYROLL: 'Nómina', ATTENDANCE: 'Asistencia',
+  LEAVES: 'Permisos', PERFORMANCE: 'Desempeño', TRAINING: 'Capacitación', COURSES: 'Cursos',
+  BENEFITS: 'Beneficios', LIST: 'Listado', MILESTONES: 'Hitos', TIME: 'Tiempo', DOCUMENTS: 'Documentos',
+  ALERTS: 'Alertas', MESSAGES: 'Mensajes', PUSH: 'Notificaciones push', INBOX: 'Bandeja',
+  EVENTS: 'Eventos', REMINDERS: 'Recordatorios', BITACORA: 'Bitácora', FILES: 'Archivos',
+  FOLDERS: 'Carpetas', CONTRACTS: 'Contratos', SALES: 'Ventas', FINANCIAL: 'Finanzas',
+  INVENTORY: 'Inventario', PURCHASES: 'Compras', HR: 'Recursos Humanos', SUBSCRIPTIONS: 'Suscripciones',
+  COMPANY: 'Empresa', BRANDING: 'Marca', ROLES: 'Roles', SECURITY: 'Seguridad', CURRENCY: 'Moneda',
+  USERS: 'Usuarios', TENANCY: 'Multiempresa', PLATFORM: 'Plataforma', DOMAINS: 'Dominios',
+  FAQS: 'Preguntas frecuentes', AGENTS: 'Agentes', CASES: 'Casos', CALENDAR: 'Calendario', MEETINGS: 'Reuniones',
+  SHARED: 'Compartido', SETTINGS: 'Configuración', TEAM: 'Equipo', OVERVIEW: 'Resumen',
+  CAMPAIGNS: 'Campañas', CONTENT: 'Contenido', APPROVALS: 'Aprobaciones', ASSETS: 'Recursos',
+  ANALYTICS: 'Analítica', ROOMS: 'Habitaciones', RESERVATIONS: 'Reservas',
+  CHART: 'Plan de cuentas', FISCAL: 'Fiscal', PERIODS: 'Períodos', RECONCILIATION: 'Conciliación',
+  CONFIG: 'Configuración',
+};
+
+const ENTERPRISE_MODULE_LABELS = new Map(
+  ENTERPRISE_MODULE_OPTIONS.map(({ id, label }) => [id, label]),
+);
+
+function getModuleLabel(module: string) {
+  const normalized = String(module || '').toUpperCase();
+  if (MODULE_LABEL_OVERRIDES[normalized]) return MODULE_LABEL_OVERRIDES[normalized];
+  if (ENTERPRISE_MODULE_LABELS.has(normalized)) return ENTERPRISE_MODULE_LABELS.get(normalized) || normalized;
+
+  const root = Object.keys(MODULE_ROOT_LABELS)
+    .sort((left, right) => right.length - left.length)
+    .find((prefix) => normalized.startsWith(prefix + '_'));
+  const segments = (root ? normalized.slice(root.length + 1) : normalized).split('_');
+  const translatedSegments = segments.map((segment) => MODULE_SEGMENT_LABELS[segment] || segment.toLocaleLowerCase('es-NI'));
+  const translatedName = translatedSegments.join(' ');
+  return root ? MODULE_ROOT_LABELS[root] + ' · ' + translatedName : translatedName;
+}
+
+function getUserRoleLabel(user: { role?: string | null; customRole?: { name: string } | null }) {
+  if (user.role === 'ADMIN') return 'Administrador';
+  if (user.customRole?.name) return user.customRole.name;
+  if (user.role === 'EMPLOYEE') return 'Colaborador';
+  return user.role || 'Sin rol';
+}
 
 interface Props { data: any; onBack: () => void; onRefresh?: () => void; }
 
@@ -64,22 +161,6 @@ export function ClientDetailPanel({ data, onBack, onRefresh }: Props) {
       onRefresh?.();
     } catch (e: any) { toast.error(e.message || 'Error'); }
     finally { setActionLoading(null); }
-  };
-
-  const handleRoleChange = async (userId: string, newRole: string, newCustomRoleId?: string | null) => {
-    setActionLoading(`role-${userId}`);
-    try {
-      await tenantsService.updateUser(data.id, userId, { 
-        role: newRole,
-        customRoleId: newRole === 'ADMIN' ? null : newCustomRoleId
-      });
-      toast.success('Rol actualizado');
-      onRefresh?.();
-    } catch (e: any) {
-      toast.error(e.message || 'Error al actualizar rol');
-    } finally {
-      setActionLoading(null);
-    }
   };
 
   const getPlanColor = (p: string) => {
@@ -254,38 +335,11 @@ export function ClientDetailPanel({ data, onBack, onRefresh }: Props) {
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <div className="flex items-center gap-2">
-                      <Select
-                        disabled={!!actionLoading}
-                        value={u.role}
-                        onValueChange={(val) => handleRoleChange(u.id, val, u.customRoleId)}
-                      >
-                        <SelectTrigger className="h-6 text-[9px] w-28 bg-transparent border-border/40">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ADMIN">Admin</SelectItem>
-                          <SelectItem value="EMPLOYEE">Colaborador</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Badge variant="outline" className="max-w-36 truncate text-[10px] font-medium">
+                        {getUserRoleLabel(u)}
+                      </Badge>
                       <div className={cn("size-2 rounded-full", u.isActive ? "bg-emerald-500" : "bg-rose-500")} />
                     </div>
-                    {u.role === 'EMPLOYEE' && (
-                      <Select
-                        disabled={!!actionLoading}
-                        value={u.customRoleId || 'none'}
-                        onValueChange={(val) => handleRoleChange(u.id, 'EMPLOYEE', val === 'none' ? null : val)}
-                      >
-                        <SelectTrigger className="h-5 text-[8px] w-28 bg-muted/30 border-border/40 mt-1">
-                          <SelectValue placeholder="Sin rol" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Sin rol</SelectItem>
-                          {data.roles?.map((r: any) => (
-                            <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
                   </div>
                 </div>
               ))}
@@ -300,7 +354,7 @@ export function ClientDetailPanel({ data, onBack, onRefresh }: Props) {
               {data.modules?.map((m: any) => (
                 <div key={m.id} className={cn("p-2.5 rounded-lg border text-xs font-medium flex items-center gap-2", m.isActive ? "border-primary/20 bg-primary/5 text-foreground" : "border-border/30 text-muted-foreground")}>
                   {m.isActive ? <Check className="size-3 text-primary" /> : <X className="size-3 text-muted-foreground/40" />}
-                  {m.module.replace(/_/g, ' ')}
+                  {getModuleLabel(m.module)}
                   {Number(m.price) > 0 && <span className="ml-auto text-[10px] text-primary font-bold">{formatAmount(Number(m.price), 'USD')}</span>}
                 </div>
               ))}
@@ -308,6 +362,30 @@ export function ClientDetailPanel({ data, onBack, onRefresh }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="bg-card border-border/50 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-widest">
+            <Zap className="size-4" /> Funciones específicas activas ({data.enabledSpecificFeatures?.length || 0})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {data.enabledSpecificFeatures?.length ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {data.enabledSpecificFeatures.map((feature: { key: string; label: string; description: string }) => (
+                <div key={feature.key} className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                  <p className="text-sm font-semibold text-foreground">{feature.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{feature.description}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="py-3 text-sm text-muted-foreground">
+              Esta sucursal no tiene funciones específicas activas.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── BLOQUE 4: Documentos y Soporte ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
