@@ -77,6 +77,7 @@ function NuevaActividadForm({ onOpenChange, initialKind, initialDate, timezone, 
   const [location, setLocation] = useState('');
   const [isMeeting, setIsMeeting] = useState(false);
   const [priority, setPriority] = useState('MEDIUM');
+  const [estimate, setEstimate] = useState('');
   const [participants, setParticipants] = useState<string[]>([]);
   const [participantSearch, setParticipantSearch] = useState('');
   const [reminderMinutes, setReminderMinutes] = useState('15');
@@ -118,6 +119,7 @@ function NuevaActividadForm({ onOpenChange, initialKind, initialDate, timezone, 
         await tasksService.create({
           title: title.trim(), description: description.trim() || undefined, dueDate: start.toISOString(), priority,
           assignedTo: [user.id],
+          ...(estimate.trim() ? { estimatedMinutes: Number(estimate) } : {}),
           ...(customer ? { customFields: { cliente: customer.companyName || customer.name, clienteId: customer.id } } : {}),
         } as never);
         toast.success('Tarea creada. También aparece en Actividades.');
@@ -286,6 +288,9 @@ function NuevaActividadForm({ onOpenChange, initialKind, initialDate, timezone, 
                     <NativeSelect id="org-priority" value={priority} onChange={(e) => setPriority(e.target.value)}>
                       <option value="LOW">Baja</option><option value="MEDIUM">Media</option><option value="HIGH">Alta</option><option value="URGENT">Urgente</option>
                     </NativeSelect>
+                  </Field>
+                  <Field label="Tiempo estimado (minutos, opcional)" htmlFor="org-estimate" hint="Se compara con el tiempo realmente registrado para medir qué tareas tardan más de lo previsto.">
+                    <input id="org-estimate" type="number" min={1} max={100000} step={1} inputMode="numeric" className={controlClass} value={estimate} onChange={(e) => setEstimate(e.target.value)} />
                   </Field>
                   {canListCustomers && (
                     <Field label="Cliente (opcional)" htmlFor="org-customer" hint="Asocia la tarea a un cliente existente.">

@@ -75,6 +75,12 @@ function Resumen({ members, loading, error, onRetry, onOpen, canManage, onManage
                 <span className={cn('rounded-full px-2 py-0.5', m.overdue ? 'bg-red-100 text-red-900' : 'bg-slate-100 text-slate-800')}>{m.overdue} vencidas</span>
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-900">{m.completedRecently} completadas</span>
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                Calidad: {m.quality.firstPassRate === null ? 'sin entregas evaluadas' : `${m.quality.firstPassRate}% aprobadas a la primera`}
+                {m.quality.rejected > 0 && ` · ${m.quality.rejected} rechazada${m.quality.rejected === 1 ? '' : 's'}`}
+                {m.quality.inReview > 0 && ` · ${m.quality.inReview} en revisión`}
+                {m.quality.overEstimate > 0 && ` · ${m.quality.overEstimate} sobre lo estimado`}
+              </p>
               <p className="mt-auto text-[10px] text-muted-foreground">Origen: {m.sources.map((s) => SOURCE_LABEL[s]).join(', ')}</p>
             </button>
           </li>

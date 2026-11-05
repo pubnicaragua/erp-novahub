@@ -50,18 +50,25 @@ export function EquipoHistorial({ members, initialUser }: { members: TeamMember[
         : (query.data?.data.length ?? 0) === 0 ? <EmptyState title="Sin tareas" description="No hay tareas con esos filtros." />
         : (
           <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[680px] text-[13px]">
+            <table className="w-full min-w-[820px] text-[13px]">
               <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                <tr><th scope="col" className="px-3 py-2">Tarea</th><th scope="col" className="px-3 py-2">Responsable</th><th scope="col" className="px-3 py-2">Límite</th><th scope="col" className="px-3 py-2">Estado</th><th scope="col" className="px-3 py-2 text-right">Tiempo registrado</th></tr>
+                <tr><th scope="col" className="px-3 py-2">Tarea</th><th scope="col" className="px-3 py-2">Responsable</th><th scope="col" className="px-3 py-2">Límite</th><th scope="col" className="px-3 py-2">Estado</th><th scope="col" className="px-3 py-2">Lista</th><th scope="col" className="px-3 py-2 text-right">Estimado / real</th></tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {query.data!.data.map((t) => (
                   <tr key={t.id}>
-                    <td className="px-3 py-2.5 font-semibold">{t.title}</td>
+                    <td className="px-3 py-2.5">
+                      <span className="font-semibold">{t.title}</span>
+                      {t.rejectedAt && <span className="mt-0.5 block text-[11px] text-red-800" title={t.rejectedReason ?? undefined}>Rechazada el {fmt(t.rejectedAt)}{t.rejectedReason ? `: ${t.rejectedReason}` : ''}</span>}
+                    </td>
                     <td className="px-3 py-2.5">{t.assignees.map((a) => a.name).join(', ') || '—'}</td>
                     <td className="px-3 py-2.5">{fmt(t.dueDate)}</td>
                     <td className="px-3 py-2.5">{STATUS_LABEL[t.status] ?? t.status}</td>
-                    <td className="px-3 py-2.5 text-right">{duration(t.trackedMinutes)}</td>
+                    <td className="px-3 py-2.5">{t.checklist ? `${t.checklist.done}/${t.checklist.total}` : '—'}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      {t.estimatedMinutes ? duration(t.estimatedMinutes) : '—'} / {duration(t.trackedMinutes)}
+                      {t.deviationPct !== null && <span className={t.deviationPct > 25 ? 'ml-1 font-semibold text-red-700' : 'ml-1 text-muted-foreground'}>({t.deviationPct > 0 ? '+' : ''}{t.deviationPct}%)</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

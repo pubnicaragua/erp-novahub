@@ -115,6 +115,7 @@ export type SupervisionSource = SupervisionScope | 'DEPARTMENT_HEAD' | 'REPORTS_
 export interface TeamMember {
   id: string; name: string; email: string; department: string | null; role: string | null;
   sources: SupervisionSource[]; pending: number; overdue: number; completedRecently: number;
+  quality: { inReview: number; delivered: number; rejected: number; firstPassRate: number | null; withEstimate: number; overEstimate: number };
 }
 export interface TeamAgenda {
   range: { from: string; to: string };
@@ -124,7 +125,8 @@ export interface TeamAgenda {
 }
 export interface TeamTask {
   id: string; title: string; status: string; priority?: string; dueDate: string | null; createdAt: string;
-  assignees: OrgUser[]; trackedMinutes: number;
+  assignees: OrgUser[]; trackedMinutes: number; estimatedMinutes: number | null; deviationPct: number | null;
+  checklist: { done: number; total: number } | null; rejectedAt: string | null; rejectedReason: string | null;
 }
 export interface TeamTaskPage { data: TeamTask[]; total: number; page: number; pageSize: number }
 export interface SupervisionRule {
