@@ -19,6 +19,7 @@ import { createReportWorkbook } from '../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import type { PdfDownloadFormat } from '../utils/pdfDownloadFormats';
 import { toast } from '../services/toast';
+import { getSidebarAwareNavigationClass } from '../utils/sidebarNavigation.mjs';
 
 interface ActividadesPageProps {
   activeSubModule?: string;
@@ -41,7 +42,7 @@ const activityExportDate = (value: unknown) => {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('es-NI');
 };
 
-export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: ActividadesPageProps) => {
+export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: ActividadesPageProps) => {
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [internalActiveTab, setInternalActiveTab] = useState('tareas');
@@ -193,7 +194,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
 
           <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
             <div className="mb-4 flex w-full min-w-0 max-w-full items-center gap-2">
-            <div className="min-w-0 flex-1 overscroll-x-contain overflow-x-auto custom-scrollbar">
+            <div className={`${getSidebarAwareNavigationClass(isSidebarCollapsed)} min-w-0 flex-1 overscroll-x-contain overflow-x-auto custom-scrollbar`}>
             <TabsList className="flex h-auto w-max min-w-full max-w-none gap-1.5 rounded-2xl border border-border/50 bg-card/80 p-1.5 shadow-sm backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {visibleTabs.map((tab) => {
                 return (

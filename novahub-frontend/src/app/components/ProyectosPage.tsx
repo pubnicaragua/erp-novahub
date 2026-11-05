@@ -13,7 +13,7 @@ interface ProyectosPageProps {
   onSubModuleChange?: (sub: string) => void;
 }
 
-export const ProyectosPage = ({ activeSubModule, onSubModuleChange }: ProyectosPageProps) => {
+export const ProyectosPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: ProyectosPageProps) => {
   const { canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -115,6 +115,7 @@ export const ProyectosPage = ({ activeSubModule, onSubModuleChange }: ProyectosP
               onBack={() => handleSelectProject(null)}
               initialTab={targetTab}
               onTabChange={handleDetailTabChange}
+              isSidebarCollapsed={isSidebarCollapsed}
             />
           ) : (
             <div className="space-y-4">

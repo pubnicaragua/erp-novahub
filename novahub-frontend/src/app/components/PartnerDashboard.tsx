@@ -107,7 +107,7 @@ export function PartnerDashboard({ onNavigate }: PartnerDashboardProps) {
                     <div>
                       <p className="text-sm font-bold text-foreground">{tenant.name}</p>
                       <p className="text-xs text-muted-foreground/60 font-medium uppercase tracking-tighter flex items-center gap-2">
-                         <span className="text-primary/50">✦ {tenant.industry || 'General'}</span>
+                         <span className="text-primary">✦ {tenant.industry || 'General'}</span>
                          <span className="opacity-20">|</span>
                          <span>{enabledModulesFor(tenant)} Módulos</span>
                       </p>

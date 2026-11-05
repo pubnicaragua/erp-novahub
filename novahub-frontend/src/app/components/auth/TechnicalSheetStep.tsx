@@ -158,7 +158,7 @@ const GRID_NOTE = 'Haz clic en cada celda para editar. Usa los campos vacíos pa
 function SectionNote({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex items-start gap-1.5 text-[10px] text-muted-foreground leading-relaxed">
-      <Info className="size-3 shrink-0 mt-0.5 text-primary/70" /> {children}
+      <Info className="size-3 shrink-0 mt-0.5 text-primary" /> {children}
     </p>
   );
 }

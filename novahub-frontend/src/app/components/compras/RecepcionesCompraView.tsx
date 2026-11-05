@@ -2236,7 +2236,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     <div className="hidden items-center justify-center text-primary md:flex"><ArrowRight className="size-5" /></div>
 
                     <div className="rounded-2xl border border-primary/25 bg-primary/[0.06] p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-primary/70">Entrada recibida</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-primary">Entrada recibida</p>
                       <p className="mt-3 text-xl font-black tabular-nums text-primary">+{formatInventoryOperationQuantity(receivedQuantity)} uds.</p>
                       <p className="mt-1 text-xs text-muted-foreground">{formatInventoryOperationAmount(receivedUnitCost, operation.baseCurrency)} por unidad efectivo</p>
                       <p className="mt-2 border-t border-primary/15 pt-2 text-xs font-black tabular-nums text-primary">Valor: {formatInventoryOperationAmount(receivedTotalCost, operation.baseCurrency)}</p>
@@ -2266,7 +2266,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                       <p className="mt-1 font-black tabular-nums text-amber-600">-{formatInventoryOperationAmount(receivedWithholdingTotal, operation.baseCurrency)}</p>
                     </div>
                     <div className="border-t border-primary/15 pt-2 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-primary/70">Costo efectivo entrada</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-primary">Costo efectivo entrada</p>
                       <p className="mt-1 font-black tabular-nums text-primary">{formatInventoryOperationAmount(receivedTotalCost, operation.baseCurrency)}</p>
                     </div>
                   </div>

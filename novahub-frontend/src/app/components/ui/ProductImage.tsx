@@ -61,7 +61,7 @@ export function ProductThumbnail({
       ) : (
         <Package
           className={cn(
-            "text-primary/45",
+            "text-primary",
             size === "sm" ? "size-4" : size === "hero" || size === "catalog" ? "size-9" : "size-5",
           )}
         />

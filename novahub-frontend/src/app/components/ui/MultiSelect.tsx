@@ -135,7 +135,7 @@ export function MultiSelect({
                         {option.description && (
                           <span className={cn(
                             "text-[10px] transition-colors",
-                            isSelected ? "text-primary/70" : "text-muted-foreground"
+                            isSelected ? "text-primary" : "text-muted-foreground"
                           )}>
                             {option.description}
                           </span>

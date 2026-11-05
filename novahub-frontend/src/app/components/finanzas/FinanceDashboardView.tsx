@@ -347,7 +347,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                 </div>
               ))}
               {incomes.length > 5 && (
-                <button onClick={() => onNavigate?.('ingresos')} className="w-full mt-2 py-2 text-[10px] font-black uppercase tracking-widest text-primary hover:text-primary/80 transition-colors">
+                <button onClick={() => onNavigate?.('ingresos')} className="w-full mt-2 py-2 text-[10px] font-black uppercase tracking-widest text-primary hover:text-primary transition-colors">
                   Ver todos ({incomes.length}) →
                 </button>
               )}
@@ -380,7 +380,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                 </div>
               ))}
               {expenses.length > 5 && (
-                <button onClick={() => onNavigate?.('gastos')} className="w-full mt-2 py-2 text-[10px] font-black uppercase tracking-widest text-primary hover:text-primary/80 transition-colors">
+                <button onClick={() => onNavigate?.('gastos')} className="w-full mt-2 py-2 text-[10px] font-black uppercase tracking-widest text-primary hover:text-primary transition-colors">
                   Ver todos ({expenses.length}) →
                 </button>
               )}

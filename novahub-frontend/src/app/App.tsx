@@ -520,16 +520,16 @@ function DashboardLayout() {
       case 'ventas': return <ModuleErrorBoundary moduleName="Ventas"><VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'restaurante': return <ModuleErrorBoundary moduleName="Restaurante"><RestaurantePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'hospedaje': return <ModuleErrorBoundary moduleName="Hotel"><HospedajePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
-      case 'tracking': return <ModuleErrorBoundary moduleName="Tracking"><TrackingPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
-      case 'intl-imports': return <ModuleErrorBoundary moduleName="Importaciones Internacionales"><IntlImportsPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
+      case 'tracking': return <ModuleErrorBoundary moduleName="Tracking"><TrackingPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
+      case 'intl-imports': return <ModuleErrorBoundary moduleName="Importaciones Internacionales"><IntlImportsPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'compras': return <ModuleErrorBoundary moduleName="Compras"><ComprasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'finanzas': return <ModuleErrorBoundary moduleName="Finanzas"><FinanzasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'clientes': return <ClientesPage />;
       case 'proveedores': return <ProveedoresPage />;
       case 'actividades': return <ActividadesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'organizacion': return <ModuleErrorBoundary moduleName="Organización personal"><OrganizacionPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
-      case 'marketing': return <ModuleErrorBoundary moduleName="Marketing"><MarketingPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
+      case 'organizacion': return <ModuleErrorBoundary moduleName="Organización personal"><OrganizacionPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
+      case 'marketing': return <ModuleErrorBoundary moduleName="Marketing"><MarketingPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'asana': return <ModuleErrorBoundary moduleName="Asana"><AsanaPage /></ModuleErrorBoundary>;
       case 'proyectos': return <ModuleErrorBoundary moduleName="Proyectos"><ProyectosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'fuerza-comercial': return activeSubModule === 'fuerza-comercial-reportes'
@@ -551,7 +551,7 @@ function DashboardLayout() {
       case 'tenant-admin': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView initialTab={activeSubModule} onTabChange={setActiveSubModule} /> : <SuscripcionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'schema': return <PrismaSchemaPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'financiamiento-pyme': return <FinanciamientoPymePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
-      case 'centro-capacitacion': return <TrainingHubView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
+      case 'centro-capacitacion': return <TrainingHubView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'soporte-tecnico': return user?.isPlatformAdmin ? <SoporteTecnicoAdminView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /> : <SoporteTecnicoView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'contabilidad': return <ContabilidadPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'asesoria-legal': return <AsesoriaLegalPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;

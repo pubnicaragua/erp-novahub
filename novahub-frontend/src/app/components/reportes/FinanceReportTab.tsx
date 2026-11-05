@@ -1326,7 +1326,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
                 </div>
               )}
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <button onClick={() => navigateContabilidad('estado-resultados')} className="text-[10px] font-black uppercase tracking-wider text-primary hover:text-primary/80 flex items-center gap-1">
+                <button onClick={() => navigateContabilidad('estado-resultados')} className="text-[10px] font-black uppercase tracking-wider text-primary hover:text-primary flex items-center gap-1">
                   Ver Estado de Resultados completo <ArrowUpRight className="size-3" />
                 </button>
                 <p className="text-[9px] text-muted-foreground/60">Fuente: Accounting (Estado de Resultados devengado). La utilidad no se calcula desde cobros y pagos.</p>
@@ -1383,7 +1383,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-3">
-                <button onClick={() => setModal({ type: 'liquidez' })} className="text-[10px] font-black uppercase tracking-wider text-primary hover:text-primary/80 flex items-center gap-1">
+                <button onClick={() => setModal({ type: 'liquidez' })} className="text-[10px] font-black uppercase tracking-wider text-primary hover:text-primary flex items-center gap-1">
                   Ver detalle de liquidez <ArrowUpRight className="size-3" />
                 </button>
                 <p className="text-[9px] text-muted-foreground/60">La cobertura del período (KPI superior) mide cobros frente a pagos ya realizados; la cobertura futura mide el efectivo actual frente a pagos previstos.</p>
@@ -1598,7 +1598,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
                 {recurrentes.nextIng?.fecha ? `Próxima entrada: ${recurrentes.nextIng.fecha.toLocaleDateString('es-NI')} · ${formatConvertedAmount(recurrentes.nextIng.monto, 'NIO')}` : 'Sin próximas entradas'}
                 {recurrentes.nextExp?.fecha ? ` · Próximo pago: ${recurrentes.nextExp.fecha.toLocaleDateString('es-NI')} · ${formatConvertedAmount(recurrentes.nextExp.monto, 'NIO')}` : ''}
               </p>
-              <button onClick={() => setModal({ type: 'recurrentes' })} className="mt-1 text-[9px] font-black uppercase tracking-wider text-primary hover:text-primary/80 flex items-center gap-1">
+              <button onClick={() => setModal({ type: 'recurrentes' })} className="mt-1 text-[9px] font-black uppercase tracking-wider text-primary hover:text-primary flex items-center gap-1">
                 Ver recurrentes <ArrowUpRight className="size-3" />
               </button>
             </div>

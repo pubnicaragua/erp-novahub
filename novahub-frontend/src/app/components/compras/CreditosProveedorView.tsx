@@ -471,7 +471,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       headerExtra: <ColumnFilterMenu label="Proveedor" options={distinctSuppliers} selected={colFilters.state.supplier?.values || []} onSelect={(values) => colFilters.setValues('supplier', values)} sort={colFilters.state.supplier?.sort || null} onSort={(sort) => colFilters.setSort('supplier', sort)} />,
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'supplierInvoice', header: 'Doc. Origen', width: '110px',
-      render: (_v, row) => row.supplierInvoice ? <span className="flex items-center gap-1 text-xs font-mono font-bold text-muted-foreground"><FileText className="size-3 text-primary/60" />{row.supplierInvoice.number}</span> : <span className="text-xs text-muted-foreground/40">—</span> },
+      render: (_v, row) => row.supplierInvoice ? <span className="flex items-center gap-1 text-xs font-mono font-bold text-muted-foreground"><FileText className="size-3 text-primary" />{row.supplierInvoice.number}</span> : <span className="text-xs text-muted-foreground/40">—</span> },
     { key: 'date',     header: 'Fecha',      width: '100px',
       headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
       render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },

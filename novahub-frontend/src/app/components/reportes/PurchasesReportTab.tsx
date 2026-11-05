@@ -1453,7 +1453,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                   <p className="text-lg font-black">{cicloPromedio.total === null ? 'N/D' : `${cicloPromedio.total.toFixed(1)} días`}</p>
                   <p className="text-[9px] text-muted-foreground">Solicitud → aprobación → recepción → factura → pago (desglose en tooltip)</p>
                 </div>
-                <button onClick={() => setCicloCompleto(!cicloCompleto)} className="w-full text-center py-2 text-[10px] font-black uppercase tracking-wider text-primary hover:text-primary/80 flex items-center justify-center gap-1">
+                <button onClick={() => setCicloCompleto(!cicloCompleto)} className="w-full text-center py-2 text-[10px] font-black uppercase tracking-wider text-primary hover:text-primary flex items-center justify-center gap-1">
                   {cicloCompleto ? 'Ocultar ciclo completo' : 'Ver ciclo completo'} <ArrowUpRight className="size-3" />
                 </button>
                 {cicloCompleto && (
@@ -1705,7 +1705,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                       ? <span className="font-black text-orange-500">{(proximoVencimiento.due || new Date()).toLocaleDateString('es-NI')} · {proximoVencimiento.number} · {formatConvertedAmount(proximoVencimiento.monto, 'NIO')}</span>
                       : 'sin facturas por vencer'}
                   </p>
-                  <button onClick={() => setModal({ type: 'cxp' })} className="text-[9px] font-black uppercase tracking-wider text-primary hover:text-primary/80 shrink-0">Abrir facturas</button>
+                  <button onClick={() => setModal({ type: 'cxp' })} className="text-[9px] font-black uppercase tracking-wider text-primary hover:text-primary shrink-0">Abrir facturas</button>
                 </div>
                 <div className="mt-2 space-y-1">
                   {agingBuckets.map(b => (
@@ -1741,7 +1741,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                 <p className="text-xs text-muted-foreground">
                   El 100% de las compras del período corresponde a <span className="font-black text-foreground">{suppliersPerf.list[0]?.name}</span>. Dependencia de un único proveedor representa un riesgo gerencial.
                 </p>
-                <button onClick={() => supplierRowModal(suppliersPerf.list[0]?.name)} className="text-[10px] font-black uppercase tracking-wider text-primary hover:text-primary/80 flex items-center gap-1">
+                <button onClick={() => supplierRowModal(suppliersPerf.list[0]?.name)} className="text-[10px] font-black uppercase tracking-wider text-primary hover:text-primary flex items-center gap-1">
                   Ver detalle del proveedor <ArrowUpRight className="size-3" />
                 </button>
               </div>

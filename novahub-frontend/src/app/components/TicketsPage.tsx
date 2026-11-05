@@ -19,6 +19,7 @@ import { createReportWorkbook } from '../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import type { PdfDownloadFormat } from '../utils/pdfDownloadFormats';
 import { toast } from '../services/toast';
+import { getSidebarAwareNavigationClass } from '../utils/sidebarNavigation.mjs';
 
 interface SupportAgent {
   id: string;
@@ -51,7 +52,7 @@ interface TicketsPageProps {
   onSubModuleChange?: (module: string) => void;
 }
 
-export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageProps) => {
+export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: TicketsPageProps) => {
   const { canPerform, user } = useAuth();
   const canViewTickets = canPerform('TICKETS_LIST', 'view');
   const canViewKnowledge = canPerform('TICKETS_KNOWLEDGE_BASE', 'view');
@@ -180,7 +181,7 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
         <div className="mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] overflow-x-hidden p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
           <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
             <div className="mb-4 flex w-full min-w-0 max-w-full items-center gap-2">
-              <div className="min-w-0 flex-1 overflow-x-auto custom-scrollbar">
+              <div className={`${getSidebarAwareNavigationClass(isSidebarCollapsed)} min-w-0 flex-1 overflow-x-auto custom-scrollbar`}>
               <TabsList className="flex h-auto min-w-full w-max max-w-none gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="tickets-tabs">
               {visibleTabs.map((tab) => (
                 <TabsTrigger 

@@ -127,7 +127,7 @@ export const InboxView: React.FC<InboxViewProps> = ({ data, loading, onRefresh }
           <div className="size-16 border-4 border-primary/10 border-t-primary rounded-full animate-spin" />
           <Sparkles className="absolute -top-2 -right-2 size-6 text-primary animate-bounce" />
         </div>
-        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/40 animate-pulse italic">Cargando Actividad...</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary animate-pulse italic">Cargando Actividad...</p>
       </div>
     );
   }

@@ -18,6 +18,12 @@
     // flash after F5. The React theme context remains the source of truth.
     try {
       var mode = localStorage.getItem('erp-theme-mode');
+      if (mode !== 'dark' && mode !== 'light') {
+        var managerTheme = JSON.parse(localStorage.getItem('novahub:manager-theme') || 'null');
+        if (managerTheme && (managerTheme.mode === 'dark' || managerTheme.mode === 'light')) {
+          mode = managerTheme.mode;
+        }
+      }
       if (mode === 'dark') document.documentElement.classList.add('dark');
       if (mode === 'light') document.documentElement.classList.remove('dark');
     } catch (_) {}

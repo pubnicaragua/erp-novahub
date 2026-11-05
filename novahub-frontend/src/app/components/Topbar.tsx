@@ -855,7 +855,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               </Avatar>
               <div className="hidden flex-col items-start text-left lg:flex leading-tight">
                 <span className="font-semibold text-[14px] text-foreground">{user?.name}</span>
-                <span className="text-[12px] text-primary/80 font-medium capitalize">
+                <span className="text-[12px] text-primary font-medium capitalize">
                   {user?.customRoleName || getRoleLabel(user?.role || '')}
                 </span>
               </div>

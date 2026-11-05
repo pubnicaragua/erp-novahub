@@ -535,7 +535,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                 <p className="text-xs text-muted-foreground">
                   Es el ancla de la rama contable de inventario. Los movimientos se registran en las cuentas de cada bodega
                   (nivel más bajo) y se consolidan automáticamente aquí en el Plan de Cuentas:
-                  <span className="mt-1 block font-mono text-[10px] text-primary/80">
+                  <span className="mt-1 block font-mono text-[10px] text-primary">
                     Cuenta control → Cuenta de sucursal (agrupa) → Cuenta de bodega (recibe movimientos)
                   </span>
                 </p>

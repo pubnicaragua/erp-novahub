@@ -529,7 +529,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             className="flex flex-wrap items-center justify-between gap-3 p-3 bg-primary/5 border border-primary/20 rounded-xl mb-4"
           >
             <div className="flex min-w-0 items-center gap-3">
-              <span className="text-xs font-black uppercase tracking-widest text-primary/60">
+              <span className="text-xs font-black uppercase tracking-widest text-primary">
                 {selectedIds.size} Seleccionados
               </span>
             </div>

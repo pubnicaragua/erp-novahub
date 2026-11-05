@@ -443,7 +443,7 @@ export function IntlPackageModal({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-6 px-1.5 text-[11px] text-primary hover:text-primary/80 gap-1"
+                  className="h-6 px-1.5 text-[11px] text-primary hover:text-primary gap-1"
                   onClick={() => window.open('/clientes', '_blank')}
                   title="Registrar cliente en el portal de clientes"
                 >

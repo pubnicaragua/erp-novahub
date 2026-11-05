@@ -606,7 +606,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                             <span className="text-xs font-medium truncate">{name}</span>
                             {training.status !== 'COMPLETED' && enrollment.status !== 'COMPLETED' && canPerform('HR_TRAINING', 'completeEnrollment') ? (
                               <button
-                                className="text-[10px] font-black uppercase text-primary hover:text-primary/80 flex items-center gap-1 shrink-0"
+                                className="text-[10px] font-black uppercase text-primary hover:text-primary flex items-center gap-1 shrink-0"
                                 disabled={completingEnrollment === `${training.id}:${enrollment.employeeId}`}
                                 onClick={() => handleCompleteEnrollment(training.id, enrollment.employeeId)}
                               >

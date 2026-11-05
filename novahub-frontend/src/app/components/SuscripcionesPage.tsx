@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -1220,7 +1220,7 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange, embedded
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground uppercase font-bold tracking-tighter">
                         <span className="flex items-center gap-1"><Building2 className="size-3" /> {req.clientTenant?.name}</span>
-                        <span className="flex items-center gap-1 text-primary/80"><DollarSign className="size-3" /> Precio Proyectado: ${req.customPrice || 0}</span>
+                        <span className="flex items-center gap-1 text-primary"><DollarSign className="size-3" /> Precio Proyectado: ${req.customPrice || 0}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

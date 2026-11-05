@@ -170,7 +170,7 @@ export function InvoiceDetailSheet({
                         <p className="break-words text-sm font-semibold text-foreground">{item.description || 'Artículo sin descripción'}</p>
                         {item.productCode && <p className="mt-1 break-words font-mono text-[10px] font-semibold text-primary">Código: {item.productCode}</p>}
                         {item.variantSku && <p className="mt-1 break-words font-mono text-[10px] text-muted-foreground">SKU variante: {item.variantSku}</p>}
-                        {item.commercialNoteSnapshot && <p className="mt-1 break-words text-[11px] text-primary/80">Nota: {item.commercialNoteSnapshot}</p>}
+                        {item.commercialNoteSnapshot && <p className="mt-1 break-words text-[11px] text-primary">Nota: {item.commercialNoteSnapshot}</p>}
                         <p className="mt-1 text-xs text-muted-foreground">{Number(item.quantity || 0)} × {formatAmount(Number(item.unitPrice || 0), invoice.currency, invoice.exchangeRate)}</p>
                       </div>
                       <p className="shrink-0 text-sm font-black tabular-nums">{formatAmount(Number(item.total || 0), invoice.currency, invoice.exchangeRate)}</p>

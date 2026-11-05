@@ -75,6 +75,11 @@ import {
   Globe,
   Boxes,
   Eye, Megaphone,
+  Bug,
+  CheckCircle2,
+  Clock3,
+  HelpCircle,
+  Zap,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -112,6 +117,40 @@ interface MenuItem {
   superadminOnly?: boolean;
   platformPermission?: string;
 }
+
+const TRAINING_SUBMODULES: SubMenuItem[] = [
+  { id: 'ALL', label: 'Todos', icon: <GraduationCap className="size-4" /> },
+  { id: 'SALES', label: 'Ventas', icon: <DollarSign className="size-4" /> },
+  { id: 'PURCHASES', label: 'Compras', icon: <ShoppingCart className="size-4" /> },
+  { id: 'INVENTORY', label: 'Inventario de Mercancías', icon: <Package className="size-4" /> },
+  { id: 'FINANCIAL', label: 'Finanzas', icon: <Wallet className="size-4" /> },
+  { id: 'HR', label: 'Recursos Humanos', icon: <Users className="size-4" /> },
+  { id: 'ACTIVITIES', label: 'Actividades', icon: <ClipboardList className="size-4" /> },
+  { id: 'CONFIGURATION', label: 'Configuración', icon: <Settings className="size-4" /> },
+];
+
+const SUPPORT_COMMON_SUBMODULES: SubMenuItem[] = [
+  { id: 'ALL', label: 'Todos', icon: <LifeBuoy className="size-4" /> },
+];
+
+const SUPPORT_CUSTOMER_SUBMODULES: SubMenuItem[] = [
+  { id: 'BUG', label: 'Error / Bug', icon: <Bug className="size-4" /> },
+  { id: 'HELP', label: 'Ayuda General', icon: <HelpCircle className="size-4" /> },
+  { id: 'CONFIG', label: 'Configuración', icon: <Settings className="size-4" /> },
+  { id: 'FEATURE', label: 'Solicitud', icon: <Zap className="size-4" /> },
+  { id: 'GENERAL', label: 'General', icon: <MessageSquare className="size-4" /> },
+];
+
+const SUPPORT_ADMIN_SUBMODULES: SubMenuItem[] = [
+  { id: 'OPEN', label: 'Abierto', icon: <Clock3 className="size-4" /> },
+  { id: 'IN_PROGRESS', label: 'En progreso', icon: <Activity className="size-4" /> },
+  { id: 'RESOLVED', label: 'Resuelto', icon: <CheckCircle2 className="size-4" /> },
+  { id: 'CLOSED', label: 'Cerrado', icon: <X className="size-4" /> },
+];
+
+const SUPPORT_CUSTOMER_SUBMODULE_IDS = new Set(SUPPORT_CUSTOMER_SUBMODULES.map(({ id }) => id));
+const SUPPORT_ADMIN_SUBMODULE_IDS = new Set(SUPPORT_ADMIN_SUBMODULES.map(({ id }) => id));
+const SUPPORT_SUBMODULES = [...SUPPORT_COMMON_SUBMODULES, ...SUPPORT_CUSTOMER_SUBMODULES, ...SUPPORT_ADMIN_SUBMODULES];
 
 // La matriz de permisos y el sidebar deben consultar el mismo catálogo.
 const SUBMENU_MODULE_REQUIREMENTS = SIDEBAR_SUBMENU_MODULE_REQUIREMENTS;
@@ -406,8 +445,9 @@ const menuItems: MenuItem[] = [
     label: 'Centro de capacitación',
     icon: <GraduationCap className="size-5" />,
     section: 'Ayuda',
+    submenu: TRAINING_SUBMODULES,
   },
-  { id: 'soporte-tecnico', label: 'Soporte técnico', icon: <LifeBuoy className="size-5" /> },
+  { id: 'soporte-tecnico', label: 'Soporte técnico', icon: <LifeBuoy className="size-5" />, submenu: SUPPORT_SUBMODULES },
   { 
     id: 'asesoria-legal', 
     label: 'Asesoría legal',
@@ -543,8 +583,9 @@ const platformMenuItems: MenuItem[] = [
     label: 'Capacitación ERP',
     icon: <GraduationCap className="size-5" />,
     section: 'Ayuda',
+    submenu: TRAINING_SUBMODULES,
   },
-  { id: 'soporte-tecnico', label: 'Soporte técnico', icon: <LifeBuoy className="size-5" /> },
+  { id: 'soporte-tecnico', label: 'Soporte técnico', icon: <LifeBuoy className="size-5" />, submenu: SUPPORT_SUBMODULES },
   { id: 'asesoria-legal', label: 'Asesoría legal', icon: <Scale className="size-5" /> },
   {
     id: 'qa-console',
@@ -623,7 +664,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
     if (item.submenu) {
       if (sidebarCollapsed) {
-        const visibleSubmenu = item.submenu.filter(subItem => !subItem.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subItem.id) && hasSubmenuAccess(item.id, subItem.id));
+        const visibleSubmenu = item.submenu.filter((subItem) => canShowSubmenuItem(item.id, subItem));
         const currentSubmenu = activeModule === item.id
           ? visibleSubmenu.find(subItem => subItem.id === activeSubModule)
           : undefined;
@@ -700,6 +741,13 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
     if (parentId === 'auditoria' && (user.isPlatformAdmin || user.auditWorkspaceEnabled)) return true;
+    // These entries are filters inside one module, not independent permission
+    // scopes. Their parent view owns authorization and the current role chooses
+    // which filter family is reachable.
+    if (parentId === 'centro-capacitacion') return canPerform('HR_TRAINING', 'view');
+    if (parentId === 'soporte-tecnico') {
+      return canPerform('SUPPORT_TECH', 'view') && isSubmenuVisibleForCurrentRole(parentId, subId);
+    }
     // Operación POS is the restaurant's main entry point. Keep it visible when
     // the order permission is available even if an older module-view policy
     // has not yet persisted this newly introduced view id.
@@ -764,6 +812,20 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
         || (parentMod ? canPerform(parentMod, 'view') : false);
   };
 
+  const isSubmenuVisibleForCurrentRole = (parentId: Module | 'overview', subId: string) => {
+    if (parentId !== 'soporte-tecnico' || subId === 'ALL') return true;
+    return user?.isPlatformAdmin
+      ? SUPPORT_ADMIN_SUBMODULE_IDS.has(subId)
+      : SUPPORT_CUSTOMER_SUBMODULE_IDS.has(subId);
+  };
+
+  const canShowSubmenuItem = (parentId: Module | 'overview', subItem: SubMenuItem) => (
+    !subItem.hidden
+    && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subItem.id)
+    && isSubmenuVisibleForCurrentRole(parentId, subItem.id)
+    && hasSubmenuAccess(parentId, subItem.id)
+  );
+
   const sectionHeaderIds = (() => {
     const headers = new Set<string>();
     let lastSection = '';
@@ -774,7 +836,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
         continue;
       }
       const visibleSubmenu = item.submenu
-        ? item.submenu.filter(subItem => !subItem.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subItem.id) && hasSubmenuAccess(item.id, subItem.id))
+        ? item.submenu.filter((subItem) => canShowSubmenuItem(item.id, subItem))
         : undefined;
       if (item.submenu && (!visibleSubmenu || visibleSubmenu.length === 0)) continue;
       if (item.section && item.section !== lastSection) headers.add(item.id);
@@ -848,7 +910,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                   return null;
                 }
                 const visibleSubmenu = item.submenu
-                  ? item.submenu.filter(subItem => !subItem.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subItem.id) && hasSubmenuAccess(item.id, subItem.id))
+                  ? item.submenu.filter((subItem) => canShowSubmenuItem(item.id, subItem))
                   : undefined;
 
                 if (item.submenu && (!visibleSubmenu || visibleSubmenu.length === 0)) return null;

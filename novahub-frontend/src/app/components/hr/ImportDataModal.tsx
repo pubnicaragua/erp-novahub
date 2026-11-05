@@ -1085,7 +1085,7 @@ export function ImportDataModal({
                   <CheckCircle2 className="size-4 text-primary" />
                   <span className="text-xs font-bold text-primary">Configuración de nómina activa</span>
                   {onNavigateToConfig && (
-                    <button onClick={onNavigateToConfig} className="ml-auto text-xs text-primary underline hover:text-primary/80">Revisar</button>
+                    <button onClick={onNavigateToConfig} className="ml-auto text-xs text-primary underline hover:text-primary">Revisar</button>
                   )}
                 </div>
               )}

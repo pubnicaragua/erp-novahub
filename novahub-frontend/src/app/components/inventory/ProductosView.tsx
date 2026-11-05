@@ -4494,7 +4494,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                     <div className="min-w-0">
                       <p className="line-clamp-2 break-words font-semibold leading-tight" title={product.name}>{product.name}{String(openingId) === String(product.id) && <span role="status" className="ml-2 inline-flex shrink-0 items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</p>
                       {!isServiceView && hasProductVariants(product) && (
-                        <span className="mt-0.5 block text-[9px] font-black uppercase tracking-wider text-primary/80">Variante</span>
+                        <span className="mt-0.5 block text-[9px] font-black uppercase tracking-wider text-primary">Variante</span>
                       )}
                       <p className="truncate font-mono text-xs text-muted-foreground">{product.code}</p>
                     </div>
@@ -4721,7 +4721,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                             {product.name}
                           </button>
                           {!isServiceView && hasProductVariants(product) && (
-                            <span className="mt-0.5 block text-[9px] font-black uppercase tracking-wider text-primary/80">Variante</span>
+                            <span className="mt-0.5 block text-[9px] font-black uppercase tracking-wider text-primary">Variante</span>
                           )}
                           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
                             {!isServiceView && Boolean(

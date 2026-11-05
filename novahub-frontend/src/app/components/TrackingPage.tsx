@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Anchor,
   Boxes,
@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Settings2,
   Ship,
   Trash2,
   Truck,
@@ -52,6 +53,7 @@ import { Billing } from './tracking/Billing';
 import { LogisticsConfig } from './tracking/LogisticsConfig';
 import { TrackingViewTutorial } from './tracking/TrackingViewTutorial';
 import { ExportMenu } from './ui/ExportMenu';
+import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
@@ -59,14 +61,14 @@ import type { PdfDownloadFormat } from '../utils/pdfDownloadFormats';
 
 type TrackingTab = 'transit' | 'reception' | 'batches' | 'packages' | 'reconciliation' | 'billing' | 'config';
 
-const TRACKING_TABS: Array<{ id: TrackingTab; label: string }> = [
-  { id: 'transit', label: 'En tránsito' },
-  { id: 'reception', label: 'Recepción' },
-  { id: 'batches', label: 'Recepción en lote' },
-  { id: 'packages', label: 'Paquetes recibidos' },
-  { id: 'reconciliation', label: 'Conciliación de compras' },
-  { id: 'billing', label: 'Disponibles para facturar' },
-  { id: 'config', label: 'Configuración' },
+const TRACKING_TABS: Array<{ id: TrackingTab; label: string; icon: ReactNode }> = [
+  { id: 'transit', label: 'En tránsito', icon: <Ship className="size-4" /> },
+  { id: 'reception', label: 'Recepción', icon: <PackageCheck className="size-4" /> },
+  { id: 'batches', label: 'Recepción en lote', icon: <Boxes className="size-4" /> },
+  { id: 'packages', label: 'Paquetes recibidos', icon: <PackageSearch className="size-4" /> },
+  { id: 'reconciliation', label: 'Conciliación de compras', icon: <FileText className="size-4" /> },
+  { id: 'billing', label: 'Disponibles para facturar', icon: <FileText className="size-4" /> },
+  { id: 'config', label: 'Configuración', icon: <Settings2 className="size-4" /> },
 ];
 
 const TRACKING_TAB_PERMISSION: Record<TrackingTab, string[]> = {
@@ -109,6 +111,7 @@ const TRACKING_NOTIFICATION_TAB: Record<string, TrackingTab> = {
 interface TrackingPageProps {
   activeSubModule?: string;
   onSubModuleChange?: (subModule?: string) => void;
+  isSidebarCollapsed?: boolean;
 }
 
 const STATUS_OPTIONS = Object.keys(TRACKING_STATUS_LABELS) as TrackingStatus[];
@@ -123,7 +126,7 @@ const INITIAL_FORM = {
   estimatedAt: '',
 };
 
-export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPageProps) {
+export function TrackingPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: TrackingPageProps) {
   const { canPerform, user } = useAuth();
   const [shipments, setShipments] = useState<TrackingShipment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -387,17 +390,16 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
 
   return (
     <div className="tracking-module flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-3 sm:px-6">
-        {visibleTabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => changeTab(t.id)}
-            className={`rounded-t-xl px-4 py-2 text-xs font-black uppercase tracking-widest transition-colors ${tab === t.id ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-          >
-            {t.label}
-          </button>
-        ))}
-        <div className="ml-auto pb-1">
+      <div className="flex flex-col gap-2 border-b border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:gap-3 sm:px-6">
+        {visibleTabs.length > 0 && <ModuleSubnavigation
+          items={visibleTabs}
+          value={tab}
+          onValueChange={(value) => changeTab(value as TrackingTab)}
+          isSidebarCollapsed={isSidebarCollapsed}
+          ariaLabel="Navegación de Tracking"
+          className="mb-0 min-w-0 flex-1"
+        />}
+        <div className="flex shrink-0 items-center justify-end gap-2 sm:pb-1">
           <div className="flex items-center gap-2">
             {canExportTransit && <ExportMenu onPdf={(paperFormat) => void exportTransit('pdf', paperFormat)} onExcel={() => void exportTransit('xlsx')} pdfDescription="Reporte configurado de tracking" excelDescription="Todos los envíos filtrados" />}
             <TrackingViewTutorial view={tab} />

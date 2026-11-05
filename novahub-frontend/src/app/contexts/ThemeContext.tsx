@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { brandingService, type Branding, type ThemePaletteMode, type UserThemeSettings } from '../services/branding.service';
 import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from './AuthContext';
-import { ensureReadableForeground, validateThemeRoot } from '../utils/color-contrast';
+import { ensureReadableBrandColor, ensureReadableForeground, validateThemeRoot } from '../utils/color-contrast';
+import { readPersistedDarkMode } from '../utils/theme-mode';
 
 export interface BrandColors {
   primary: string;
@@ -48,6 +49,11 @@ const defaultColors: BrandColors = {
 };
 
 const DEFAULT_PALETTE_MODE: ThemePaletteMode = 'details';
+const DARK_BRAND_SURFACES = [
+  'oklch(0.205 0.005 155)',
+  'oklch(0.245 0.005 155)',
+  'oklch(0.235 0.005 155)',
+] as const;
 
 const SIDEBAR_CSS_VARIABLES = [
   '--sidebar',
@@ -117,11 +123,7 @@ function normalizeUserTheme(value: unknown): UserThemeSettings {
 }
 
 function resolveThemeForeground(background: string, foreground?: string): string {
-  // A manually selected foreground is part of the user's branding choice.
-  // Keep it when present; use the contrast helper only when no value exists.
-  return typeof foreground === 'string' && foreground.trim()
-    ? foreground.trim()
-    : ensureReadableForeground(background);
+  return ensureReadableForeground(background, foreground);
 }
 
 function readStoredTheme(userId: string, tenantId: string): ThemeConfig {
@@ -184,6 +186,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [readyBrandingSessionKey, setReadyBrandingSessionKey] = useState<string | null>(
     () => user && activeTenantId !== 'default' ? null : 'anonymous',
   );
+  const didResolveInitialThemeMode = useRef(false);
   const isBrandingReady = !user || isPlatformUser || activeTenantId === 'default' || readyBrandingSessionKey === brandingSessionKey;
 
   const updateTheme = useCallback((colors: Partial<BrandColors>, paletteMode?: ThemePaletteMode) => {
@@ -312,6 +315,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useLayoutEffect(() => {
     // Apply brand colors and choose whether the sidebar is neutral or branded.
     const root = document.documentElement;
+    // Resolve the persisted mode in the same pre-paint phase as the brand
+    // variables. The later AppContent effect remains a harmless sync point,
+    // but cannot expose the light default palette before dark mode is applied.
+    if (!didResolveInitialThemeMode.current) {
+      root.classList.toggle('dark', readPersistedDarkMode());
+      didResolveInitialThemeMode.current = true;
+    }
     // During login, logout, or tenant switching, the previous tenant can remain
     // in state for one render. Never apply or persist that stale configuration.
     // Read the active tenant's persisted theme synchronously during the
@@ -322,18 +332,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       : themeConfig.userId === themeUserId && themeConfig.tenantId === activeTenantId
       ? themeConfig
       : readStoredTheme(themeUserId, activeTenantId);
-    const sidebarKeys = new Set(['sidebar', 'sidebarForeground', 'sidebarPrimary', 'sidebarAccent']);
-    Object.entries(activeTheme.colors).forEach(([key, value]) => {
-      if (sidebarKeys.has(key)) return;
-      const cssVarName = `--${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-      const safeValue = key === 'primaryForeground'
-        ? resolveThemeForeground(activeTheme.colors.primary, value)
-        : key === 'accentForeground'
-          ? resolveThemeForeground(activeTheme.colors.accent, value)
-          : value;
-      root.style.setProperty(cssVarName, safeValue);
-    });
-
     const validateAppliedTheme = () => {
       const issues = validateThemeRoot(root);
       root.dataset.themeContrast = issues.length === 0 ? 'pass' : 'issues';
@@ -342,7 +340,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    const applySidebarVariant = () => {
+    const applyPalette = () => {
+      const isDark = root.classList.contains('dark');
+      const primary = isDark
+        ? ensureReadableBrandColor(activeTheme.colors.primary, DARK_BRAND_SURFACES)
+        : activeTheme.colors.primary;
+      const primaryForeground = resolveThemeForeground(primary, activeTheme.colors.primaryForeground);
+      const accent = activeTheme.colors.accent;
+      const accentForeground = resolveThemeForeground(accent, activeTheme.colors.accentForeground);
+
+      root.style.setProperty('--primary', primary);
+      root.style.setProperty('--primary-foreground', primaryForeground);
+      root.style.setProperty('--accent', accent);
+      root.style.setProperty('--accent-foreground', accentForeground);
+      root.style.setProperty('--ring', primary);
       root.dataset.novahubPaletteMode = activeTheme.paletteMode;
       if (activeTheme.paletteMode === 'details') {
         // Let theme.css provide white in light mode and the matching dark
@@ -354,21 +365,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       }
       const sidebar = activeTheme.colors.sidebar;
       const foreground = resolveThemeForeground(sidebar, activeTheme.colors.sidebarForeground);
-      const primary = activeTheme.colors.sidebarPrimary;
-      const accent = activeTheme.colors.sidebarAccent;
-      const primaryForeground = resolveThemeForeground(primary, activeTheme.colors.primaryForeground);
-      const accentForeground = resolveThemeForeground(accent, activeTheme.colors.accentForeground);
+      const sidebarPrimary = isDark
+        ? ensureReadableBrandColor(activeTheme.colors.sidebarPrimary, [sidebar])
+        : activeTheme.colors.sidebarPrimary;
+      const sidebarAccent = activeTheme.colors.sidebarAccent;
+      const sidebarPrimaryForeground = resolveThemeForeground(sidebarPrimary, activeTheme.colors.primaryForeground);
+      const sidebarAccentForeground = resolveThemeForeground(sidebarAccent, activeTheme.colors.accentForeground);
       root.style.setProperty('--sidebar', sidebar);
       root.style.setProperty('--sidebar-foreground', foreground);
-      root.style.setProperty('--sidebar-primary', primary);
-      root.style.setProperty('--sidebar-primary-foreground', primaryForeground);
-      root.style.setProperty('--sidebar-accent', accent);
-      root.style.setProperty('--sidebar-accent-foreground', accentForeground);
+      root.style.setProperty('--sidebar-primary', sidebarPrimary);
+      root.style.setProperty('--sidebar-primary-foreground', sidebarPrimaryForeground);
+      root.style.setProperty('--sidebar-accent', sidebarAccent);
+      root.style.setProperty('--sidebar-accent-foreground', sidebarAccentForeground);
       validateAppliedTheme();
     };
 
-    applySidebarVariant();
-    const observer = new MutationObserver(applySidebarVariant);
+    applyPalette();
+    const observer = new MutationObserver(applyPalette);
     observer.observe(root, { attributes: true, attributeFilter: ['class'] });
 
     // No persistir un tema de otra sesión durante una transición de usuario.

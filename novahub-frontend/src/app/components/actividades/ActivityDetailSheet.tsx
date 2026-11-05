@@ -600,7 +600,7 @@ function EventGuestsList({ item }: { item: any }) {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[11px] text-muted-foreground">
                     {email ? (
                       <span className="truncate flex items-center gap-1">
-                        <Mail className="size-3 shrink-0 text-primary/70" /> {email}
+                        <Mail className="size-3 shrink-0 text-primary" /> {email}
                       </span>
                     ) : (
                       <span className="text-muted-foreground/60 italic">Sin correo</span>

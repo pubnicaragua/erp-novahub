@@ -237,7 +237,7 @@ export function AdminOverview() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-foreground truncate">{req.clientTenant?.name}</p>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-primary/60">{req.requestedModule}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-primary">{req.requestedModule}</p>
                 </div>
                 <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[9px] font-black uppercase px-2 py-0.5">Pendiente</Badge>
               </CardContent>

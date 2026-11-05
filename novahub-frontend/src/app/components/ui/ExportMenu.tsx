@@ -58,7 +58,7 @@ export function ExportMenu({ onPdf, onExcel, disabled = false, className, label 
         </>}
         {hasPdf && hasExcel && <DropdownMenuSeparator />}
         {hasExcel && <DropdownMenuItem onClick={onExcel} className="gap-2 rounded-xl py-2.5">
-          <FileSpreadsheet className="size-4 text-emerald-600" />
+          <FileSpreadsheet className="size-4 text-primary" />
           <span className="min-w-0 flex-1"><span className="block font-bold">{excelLabel}</span><span className="block text-[10px] text-popover-foreground/75">{excelDescription}</span></span>
         </DropdownMenuItem>}
       </DropdownMenuContent>

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   GraduationCap, 
   Play, 
@@ -37,6 +37,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { trainingService } from '../../services/training.service';
 import { cn } from '../ui/utils';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
+import { getSidebarAwareNavigationClass } from '../../utils/sidebarNavigation.mjs';
 
 const MODULE_CATEGORIES = [
   { id: 'ALL', label: 'Todos', color: 'bg-primary/10 text-primary border-primary/20', gradient: 'from-primary/20 to-primary/5', icon: GraduationCap },
@@ -99,7 +100,7 @@ const OPERATIONAL_GUIDES = [
   },
 ];
 
-export function TrainingHubView({ activeSubModule, onSubModuleChange }: { activeSubModule?: string; onSubModuleChange?: (subModule: string) => void }) {
+export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: { activeSubModule?: string; onSubModuleChange?: (subModule: string) => void; isSidebarCollapsed?: boolean }) {
   const { user } = useAuth();
   const isSuperAdmin = String(user?.role || '').toLowerCase().replace(/[_\s-]/g, '') === 'superadmin';
   
@@ -263,7 +264,7 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange }: { active
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="bg-gradient-to-br from-primary/10 to-transparent p-4 rounded-3xl border border-primary/20 backdrop-blur-sm shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-primary/60 mb-1">Total Guías</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Total Guías</p>
           <p className="text-3xl font-black tracking-tighter italic">{videos.length} VIDEOS</p>
         </div>
         <div className="bg-gradient-to-br from-emerald-500/10 to-transparent p-4 rounded-3xl border border-emerald-500/20 backdrop-blur-sm shadow-sm">
@@ -292,7 +293,7 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange }: { active
           />
         </div>
         <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
-          <div className="w-full overflow-x-auto custom-scrollbar">
+          <div className={`${getSidebarAwareNavigationClass(isSidebarCollapsed)} w-full overflow-x-auto custom-scrollbar`}>
             <div className="flex w-full min-w-max justify-center">
               <TabsList className="flex h-auto w-max shrink-0 flex-nowrap gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
                 {MODULE_CATEGORIES.map((cat) => {
@@ -662,7 +663,7 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange }: { active
                         {uploadData.file ? (
                           <><CheckCircle2 className="size-8 text-emerald-500 mb-2" /><p className="text-xs font-black uppercase tracking-tighter text-emerald-600 line-clamp-1 px-4">{uploadData.file.name}</p></>
                         ) : (
-                          <><Upload className="size-8 text-muted-foreground/40 mb-2 group-hover:text-primary/60" /><p className="text-xs font-black uppercase tracking-tighter text-muted-foreground">Click para seleccionar archivo</p></>
+                          <><Upload className="size-8 text-muted-foreground/40 mb-2 group-hover:text-primary" /><p className="text-xs font-black uppercase tracking-tighter text-muted-foreground">Click para seleccionar archivo</p></>
                         )}
                       </div>
                     </div>

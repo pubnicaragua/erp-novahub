@@ -582,7 +582,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background p-6">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="size-8 animate-spin text-primary/40" />
+          <Loader2 className="size-8 animate-spin text-primary" />
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{LOADING_STEPS[Math.min(loadStep, LOADING_STEPS.length - 1)]}</p>
         </div>
       </div>
@@ -710,7 +710,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
           {selectedKpiData.length === 0 ? (
             <Card className="rounded-2xl border-dashed border-border/60 bg-card/70">
               <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-                <Settings2 className="size-8 text-primary/60" />
+                <Settings2 className="size-8 text-primary" />
                 <p className="text-sm font-bold text-foreground">No hay KPIs seleccionados</p>
                 <p className="max-w-md text-xs text-muted-foreground">Abre Configuración para elegir los indicadores que quieres ver en tu dashboard.</p>
                 <Button size="sm" onClick={openKpiConfig} className="rounded-xl">Configurar KPIs</Button>
@@ -893,7 +893,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                         <TableRow key={`${tx.transactionType || 'transaction'}-${tx.id || i}`} className="border-border/30 hover:bg-muted/30 transition-colors cursor-pointer group" onClick={() => navigateToTransaction(tx)}>
                           <TableCell className="font-black pl-5 text-xs group-hover:text-primary transition-colors">{tx.number || `FAC-${String(i + 1).padStart(3, '0')}`}</TableCell>
                           <TableCell className="text-xs font-bold py-2.5">
-                            <div className="flex items-center gap-1.5"><Store className="size-3 text-primary/75" />{tx.origin || tx.register?.name || 'FACTURA DE VENTA'}</div>
+                            <div className="flex items-center gap-1.5"><Store className="size-3 text-primary" />{tx.origin || tx.register?.name || 'FACTURA DE VENTA'}</div>
                             {tx.originDetail && <span className="ml-[18px] text-[9px] font-medium text-foreground/70">{tx.originDetail}</span>}
                           </TableCell>
                           <TableCell className="text-xs font-bold text-foreground/70">{tx.customer || 'Cliente General'}</TableCell>
@@ -944,7 +944,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                         <div key={r.registerId || i} className="cursor-pointer group" onClick={() => navigateWithTarget('ventas', { subModule: 'control-caja', section: 'history', registerId: r.registerId })}>
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-2 min-w-0">
-                              <Store className="size-3 text-primary/70 shrink-0 group-hover:text-primary transition-colors" />
+                              <Store className="size-3 text-primary shrink-0 group-hover:text-primary transition-colors" />
                               <span className="text-xs font-bold truncate group-hover:text-primary transition-colors">{r.registerName || `Caja ${r.registerCode}`}</span>
                             </div>
                             <span className="text-xs font-black tabular-nums">{fmt(r.total || 0)}</span>

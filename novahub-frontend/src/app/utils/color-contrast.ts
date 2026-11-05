@@ -186,6 +186,82 @@ function rgbLuminance(rgb: Rgb): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+function rgbToHsl([red, green, blue]: Rgb): [number, number, number] {
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  const delta = max - min;
+  const lightness = (max + min) / 2;
+  if (delta === 0) return [0, 0, lightness];
+
+  const saturation = delta / (1 - Math.abs(2 * lightness - 1));
+  const hue = max === red
+    ? ((green - blue) / delta + (green < blue ? 6 : 0)) / 6
+    : max === green
+      ? ((blue - red) / delta + 2) / 6
+      : ((red - green) / delta + 4) / 6;
+  return [hue, saturation, lightness];
+}
+
+function hslToRgb(hue: number, saturation: number, lightness: number): Rgb {
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const hueSector = hue * 6;
+  const secondary = chroma * (1 - Math.abs((hueSector % 2) - 1));
+  const offset = lightness - chroma / 2;
+  const sectorRgb: Rgb = hueSector < 1
+    ? [chroma, secondary, 0]
+    : hueSector < 2
+      ? [secondary, chroma, 0]
+      : hueSector < 3
+        ? [0, chroma, secondary]
+        : hueSector < 4
+          ? [0, secondary, chroma]
+          : hueSector < 5
+            ? [secondary, 0, chroma]
+            : [chroma, 0, secondary];
+  return [
+    sectorRgb[0] + offset,
+    sectorRgb[1] + offset,
+    sectorRgb[2] + offset,
+  ];
+}
+
+function rgbToHex([red, green, blue]: Rgb): string {
+  return `#${[red, green, blue]
+    .map((channel) => Math.round(clamp(channel) * 255).toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+/**
+ * Lightens a brand color in dark mode until it remains readable on every
+ * supplied surface. Existing readable custom colors are returned unchanged;
+ * deficient colors keep their hue and use a calmer saturation cap.
+ */
+export function ensureReadableBrandColor(
+  color: string,
+  backgrounds: readonly string[],
+  minRatio = WCAG_TEXT_CONTRAST,
+): string {
+  const parsed = parseColor(color);
+  if (!parsed || backgrounds.length === 0) return color;
+  if (backgrounds.every((background) => (contrastRatio(color, background) ?? 0) >= minRatio)) return color;
+
+  const [hue, saturation, currentLightness] = rgbToHsl(parsed.rgb);
+  const readableSaturation = Math.min(saturation, 0.72);
+  const startLightness = Math.min(0.995, Math.max(currentLightness, 0.04));
+  const steps = 192;
+  for (let step = 1; step <= steps; step += 1) {
+    const lightness = startLightness + ((0.995 - startLightness) * step) / steps;
+    const candidate = rgbToHex(hslToRgb(hue, readableSaturation, lightness));
+    if (backgrounds.every((background) => (contrastRatio(candidate, background) ?? 0) >= minRatio)) {
+      return candidate;
+    }
+  }
+
+  // White is the only safe fallback if the input format or backdrop prevents
+  // the hue-preserving search from reaching the requested contrast.
+  return '#ffffff';
+}
+
 /** Returns the relative luminance of a CSS color, including common theme formats. */
 export function relativeLuminance(color: string): number | null {
   const parsed = parseColor(color);
@@ -264,6 +340,9 @@ export function validateThemeRoot(root: HTMLElement): ContrastIssue[] {
   const token = (name: string) => styles.getPropertyValue(name).trim();
   return validateContrastPairs([
     { name: 'primary', foreground: token('--primary-foreground'), background: token('--primary') },
+    { name: 'primary-text-background', foreground: token('--primary'), background: token('--background') },
+    { name: 'primary-text-card', foreground: token('--primary'), background: token('--card') },
+    { name: 'primary-text-popover', foreground: token('--primary'), background: token('--popover') },
     { name: 'accent', foreground: token('--accent-foreground'), background: token('--accent') },
     { name: 'sidebar', foreground: token('--sidebar-foreground'), background: token('--sidebar') },
     { name: 'sidebar-primary', foreground: token('--sidebar-primary-foreground'), background: token('--sidebar-primary') },

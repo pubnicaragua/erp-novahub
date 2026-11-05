@@ -1113,7 +1113,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
                   <PieChartIcon className="size-10 text-muted-foreground/30" />
                   <p className="text-sm font-bold text-muted-foreground">Productos sin categorizar</p>
                   <p className="text-xs text-muted-foreground/70 max-w-xs">Todos los productos vendidos en este período están pendientes de categorización.</p>
-                  <button onClick={() => setModal({ type: 'uncategorized' })} className="text-[10px] font-black uppercase tracking-wider text-primary hover:text-primary/80 flex items-center gap-1">
+                  <button onClick={() => setModal({ type: 'uncategorized' })} className="text-[10px] font-black uppercase tracking-wider text-primary hover:text-primary flex items-center gap-1">
                     Ver productos sin categoría <ArrowUpRight className="size-3" />
                   </button>
                 </div>

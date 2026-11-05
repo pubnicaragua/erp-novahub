@@ -22,12 +22,14 @@ import { ProyectoCosteo6DPanel } from './ProyectoCosteo6DPanel';
 import { ProyectoEVMControlPanel } from './ProyectoEVMControlPanel';
 import { ProyectoCotizacionExportView } from './ProyectoCotizacionExportView';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
+import { getSidebarAwareNavigationClass } from '../../utils/sidebarNavigation.mjs';
 
 interface ProyectoDetalleViewProps {
   projectId: string;
   onBack: () => void;
   initialTab?: string;
   onTabChange?: (tabId: string) => void;
+  isSidebarCollapsed?: boolean;
 }
 
 const TAB_DEFS = [
@@ -43,7 +45,7 @@ const TAB_DEFS = [
   { id: 'actividades', label: 'Historial', fullLabel: 'Actividades e Historial de Auditoría', icon: History, modules: ['PROJECTS_LIST'] },
 ];
 
-export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange }: ProyectoDetalleViewProps) {
+export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange, isSidebarCollapsed }: ProyectoDetalleViewProps) {
   const { user, canPerform } = useAuth();
   const [activeTab, setActiveTab] = useState(initialTab || 'resumen');
   const [lastInitialTab, setLastInitialTab] = useState(initialTab);
@@ -128,7 +130,7 @@ export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange
       ) : null}
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <div className="mb-4 w-full min-w-0 max-w-full overflow-x-auto pb-1.5 custom-scrollbar">
+        <div className={`${getSidebarAwareNavigationClass(isSidebarCollapsed)} mb-4 w-full min-w-0 max-w-full overflow-x-auto pb-1.5 custom-scrollbar`}>
           <TabsList className="flex h-auto w-full min-w-max flex-nowrap items-center gap-1 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-1 [&>button]:min-w-fit [&>button]:justify-center [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
             {TAB_DEFS.map((tab) => {
               const hasEnabled = user?.enabledModules?.includes('PROJECTS') || tab.modules.some((module) => user?.enabledModules?.includes(module));

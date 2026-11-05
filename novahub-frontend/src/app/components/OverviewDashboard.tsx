@@ -16,7 +16,7 @@ export function OverviewDashboard({ onNavigate }: OverviewDashboardProps) {
   if (!user) {
     return (
       <div className="h-[80vh] flex flex-col items-center justify-center gap-4 text-muted-foreground">
-        <Loader2 className="size-10 animate-spin text-primary/20" />
+        <Loader2 className="size-10 animate-spin text-primary" />
         <p className="font-black uppercase tracking-widest text-xs animate-pulse">Sincronizando Workspace NovaHub...</p>
       </div>
     );

@@ -5,12 +5,14 @@ import { OriginWarehouseTab } from './OriginWarehouseTab';
 import { ContainersTab } from './ContainersTab';
 import { CustomsProrationTab } from './CustomsProrationTab';
 import { IntlConfigTab } from './IntlConfigTab';
+import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 
 type IntlImportsSubModule = 'bodega-origen' | 'bodega-panama' | 'contenedores' | 'aduana-prorrateo' | 'configuracion';
 
 interface IntlImportsPageProps {
   activeSubModule?: string;
   onSubModuleChange?: (subModule: string) => void;
+  isSidebarCollapsed?: boolean;
 }
 
 const INTL_SUBMODULE_TABS: Array<{ id: IntlImportsSubModule; label: string; icon: React.ReactNode }> = [
@@ -20,7 +22,7 @@ const INTL_SUBMODULE_TABS: Array<{ id: IntlImportsSubModule; label: string; icon
   { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
 ];
 
-export function IntlImportsPage({ activeSubModule, onSubModuleChange }: IntlImportsPageProps) {
+export function IntlImportsPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: IntlImportsPageProps) {
   const { canPerform } = useAuth();
 
   const normalizedSubModule = activeSubModule === 'bodega-panama' ? 'bodega-origen' : activeSubModule;
@@ -95,36 +97,14 @@ export function IntlImportsPage({ activeSubModule, onSubModuleChange }: IntlImpo
       </div>
 
       {/* Navegación por Pestañas Superior (Estilo Navbar Segmentada como Imagen 2) */}
-      <div className="min-w-0 max-w-full overflow-x-auto scrollbar-none py-0.5">
-        <div
-          data-intl-tabs="true"
-          className="inline-flex h-11 w-full sm:w-auto items-center justify-start rounded-2xl border border-border/60 bg-muted/40 dark:bg-muted/20 p-1 text-muted-foreground gap-1"
-        >
-          {INTL_SUBMODULE_TABS.map((tab) => {
-            if (!canReadByTab[tab.id]) return null;
-            const isActive = currentTab === tab.id || (tab.id === 'bodega-origen' && currentTab === 'bodega-panama');
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                data-active={isActive ? 'true' : undefined}
-                onClick={() => handleTabChange(tab.id)}
-                className={`relative inline-flex h-full flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all whitespace-nowrap select-none ${
-                  isActive
-                    ? 'bg-background text-primary shadow-xs dark:bg-card border border-border/40'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-              >
-                <span className={`shrink-0 ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>{tab.icon}</span>
-                <span className="truncate">{tab.label}</span>
-                {isActive && (
-                  <span className="absolute bottom-0.5 left-3 right-3 h-0.5 rounded-full bg-primary" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {visibleTabs.length > 0 && <ModuleSubnavigation
+        items={visibleTabs}
+        value={currentTab || ''}
+        onValueChange={(value) => handleTabChange(value as IntlImportsSubModule)}
+        isSidebarCollapsed={isSidebarCollapsed}
+        ariaLabel="Navegación de Importaciones Internacionales"
+        className="py-0.5"
+      />}
 
       {/* Contenido Dinámico de la Pestaña Activa */}
       <div className="min-w-0 max-w-full">

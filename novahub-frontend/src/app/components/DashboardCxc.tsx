@@ -110,7 +110,7 @@ function DashboardCxc() {
   if (loading) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background p-6">
-        <Loader2 className="size-8 animate-spin text-primary/40" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }

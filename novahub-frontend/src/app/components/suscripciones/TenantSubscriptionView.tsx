@@ -776,7 +776,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                     <Input value={newIndustryName} onChange={(event) => setNewIndustryName(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void handleAddIndustry()} placeholder="Ej: Logística y Transporte" className="h-9 flex-1 rounded-xl text-xs" autoFocus />
                     <Button size="sm" onClick={() => void handleAddIndustry()} className="h-9 rounded-xl text-xs font-bold">Agregar</Button>
                     <Button size="sm" variant="ghost" onClick={() => { setShowAddIndustry(false); setNewIndustryName(''); }} className="h-9 text-xs">Cancelar</Button>
-                  </div> : <button onClick={() => setShowAddIndustry(true)} className="flex items-center gap-1.5 text-xs font-bold text-primary transition-colors hover:text-primary/80"><Plus className="size-3.5" />Agregar nueva industria</button>)}
+                  </div> : <button onClick={() => setShowAddIndustry(true)} className="flex items-center gap-1.5 text-xs font-bold text-primary transition-colors hover:text-primary"><Plus className="size-3.5" />Agregar nueva industria</button>)}
                 </div>
                 <div className="space-y-2 rounded-xl border border-border/40 bg-muted/10 p-4">
                   <Label htmlFor="default-sales-customer-search" className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cliente General para importaciones</Label>
@@ -875,7 +875,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
               {orderedCatalog.map((module) => {
                 const moduleRequest = module.openRequest;
                 const moduleIsActive = module.status === 'ACTIVE';
-                const moduleIconClass = moduleIsActive ? 'bg-primary/15 text-primary' : module.status === 'PARTIAL' ? 'bg-primary/10 text-primary/80' : 'bg-muted text-muted-foreground';
+                const moduleIconClass = moduleIsActive ? 'bg-primary/15 text-primary' : module.status === 'PARTIAL' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground';
                 const orderedViews = [...module.views].sort((left, right) => Number(right.status === 'ACTIVE') - Number(left.status === 'ACTIVE') || left.label.localeCompare(right.label, 'es'));
                 return (
                   <Card key={module.id} className={cn('min-w-0 overflow-hidden border-border/50 shadow-sm', moduleIsActive && 'border-primary/20 bg-primary/[0.025]')}>
@@ -951,7 +951,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                         </div>
                       </div>
                       <p className={cn('mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground', isUserCard ? 'break-all' : 'truncate')}><Mail className="size-3 shrink-0" /> {u.email}</p>
-                      {(() => { const groupingDepartments = userGroupingDepartments(u); return <><p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary/80">{groupingDepartments.map((department: any) => department.name).join(' · ') || 'Sin departamento'}</p><p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><Building2 className="size-3" /> {groupingDepartments.length} {groupingDepartments.length === 1 ? 'departamento' : 'departamentos'} de equipo</p></>; })()}
+                      {(() => { const groupingDepartments = userGroupingDepartments(u); return <><p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary">{groupingDepartments.map((department: any) => department.name).join(' · ') || 'Sin departamento'}</p><p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><Building2 className="size-3" /> {groupingDepartments.length} {groupingDepartments.length === 1 ? 'departamento' : 'departamentos'} de equipo</p></>; })()}
                        {u.employee ? <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1 text-[10px] font-semibold text-primary"><UserRoundCheck className="size-3 shrink-0" /> Empleado: {u.employee.firstName} {u.employee.lastName}{linkedEmployeePuesto(u, employees) ? <span className="normal-case"> · Puesto: {linkedEmployeePuesto(u, employees)}</span> : <span className="font-semibold text-muted-foreground"> · Sin puesto</span>}</p> : <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><UserRoundCheck className="size-3 shrink-0" /> Sin puesto</p>}
                     </div>
                   </div>

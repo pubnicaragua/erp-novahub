@@ -2575,7 +2575,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                           </div>
                           <div>
                             <p className="text-xs font-bold text-foreground leading-snug">{prod.name}</p>
-                            {prod.brand && <p className="text-[10px] font-bold text-primary/80 uppercase mt-0.5">{prod.brand}{prod.brandCustomerName ? ` · ${prod.brandCustomerName}` : ''}</p>}
+                            {prod.brand && <p className="text-[10px] font-bold text-primary uppercase mt-0.5">{prod.brand}{prod.brandCustomerName ? ` · ${prod.brandCustomerName}` : ''}</p>}
                             {prod.itemType !== 'SERVICE' && prod.trackInventory && (
                               <SalesWarehouseStockHint
                                 product={prod}
@@ -2668,7 +2668,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                                 />
                               )}
                               {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
-                              {prod.commercialNote && <p className="max-w-[320px] truncate text-[10px] text-primary/70" title={prod.commercialNote}>Nota: {prod.commercialNote}</p>}
+                              {prod.commercialNote && <p className="max-w-[320px] truncate text-[10px] text-primary" title={prod.commercialNote}>Nota: {prod.commercialNote}</p>}
                             </td>
                             <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">
                               {getCatalogPrice(prod) === undefined ? <span className="text-[10px] font-black uppercase text-rose-500">Sin precio</span> : formatCurrency(getCatalogPrice(prod) ?? 0)}

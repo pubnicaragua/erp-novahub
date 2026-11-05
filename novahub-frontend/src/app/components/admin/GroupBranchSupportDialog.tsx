@@ -265,7 +265,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
                   <div className="min-w-0">
                     <p className="truncate font-bold">{item.name}</p>
                     <p className="truncate text-xs text-muted-foreground">{item.email}</p>
-                    <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-primary/70">{getBranchUserIdentityLabel(item)}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-primary">{getBranchUserIdentityLabel(item)}</p>
                   </div>
                   <div className="flex flex-wrap gap-2 sm:shrink-0">
                     <Button variant="outline" className="rounded-xl" onClick={() => { setNameUser(item); setNewName(item.name || ''); }}>

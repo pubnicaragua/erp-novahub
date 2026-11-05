@@ -9,17 +9,26 @@ import { ConfiguracionView } from './ConfiguracionView';
 import { EquipoView } from './EquipoView';
 import { ErrorState } from './OrgBits';
 import { errorMessage } from './organizacion.utils';
+import { CalendarDays, Eye, Settings, Users } from 'lucide-react';
+import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 
 interface Props {
   activeSubModule?: string;
   onSubModuleChange?: (sub: string) => void;
+  isSidebarCollapsed?: boolean;
 }
 
 type View = 'mi-agenda' | 'compartido' | 'equipo' | 'configuracion';
 const PERMISSION: Record<View, string> = { 'mi-agenda': 'ORGANIZATION_CALENDAR', compartido: 'ORGANIZATION_SHARED', equipo: 'ORGANIZATION_TEAM', configuracion: 'ORGANIZATION_SETTINGS' };
+const VIEW_TABS: Array<{ id: View; label: string; icon: ReactNode }> = [
+  { id: 'mi-agenda', label: 'Mi agenda', icon: <CalendarDays className="size-4" /> },
+  { id: 'compartido', label: 'Compartido', icon: <Users className="size-4" /> },
+  { id: 'equipo', label: 'Equipo', icon: <Eye className="size-4" /> },
+  { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-4" /> },
+];
 
 /** Organización personal: tres vistas (Mi agenda, Compartido, Configuración) sobre el módulo Actividades. */
-export function OrganizacionPage({ activeSubModule, onSubModuleChange }: Props) {
+export function OrganizacionPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: Props) {
   const { canPerform } = useAuth();
   const allowed = (Object.keys(PERMISSION) as View[]).filter((v) => canPerform(PERMISSION[v], 'view'));
   const requested = (activeSubModule as View) in PERMISSION ? (activeSubModule as View) : 'mi-agenda';
@@ -27,6 +36,16 @@ export function OrganizacionPage({ activeSubModule, onSubModuleChange }: Props) 
 
   const preferences = useTenantQuery(['organizacion', 'preferences'], (signal) => organizacionService.getPreferences(signal), { enabled: view !== null, staleTime: 30_000 });
   const users = useTenantQuery(['organizacion', 'users'], (signal) => organizacionService.getUsers(signal), { enabled: view !== null, staleTime: 5 * 60_000 });
+
+  const subnavigation = view ? <ModuleSubnavigation
+    items={VIEW_TABS.filter((tab) => allowed.includes(tab.id))}
+    value={view}
+    onValueChange={(sub) => {
+      if (allowed.includes(sub as View)) onSubModuleChange?.(sub);
+    }}
+    isSidebarCollapsed={isSidebarCollapsed}
+    ariaLabel="Navegación de Organización personal"
+  /> : null;
 
   if (!view) {
     return (
@@ -37,19 +56,22 @@ export function OrganizacionPage({ activeSubModule, onSubModuleChange }: Props) 
   }
 
   if (preferences.isLoading) {
-    return <Frame><div className="space-y-3" aria-busy="true" aria-label="Cargando Organización personal"><Skeleton className="h-12 w-64" /><Skeleton className="h-[480px] w-full" /></div></Frame>;
+    return <Frame>{subnavigation}<div className="space-y-3" aria-busy="true" aria-label="Cargando Organización personal"><Skeleton className="h-12 w-64" /><Skeleton className="h-[480px] w-full" /></div></Frame>;
   }
   if (preferences.isError || !preferences.data) {
-    return <Frame><ErrorState message={errorMessage(preferences.error, 'No se pudieron cargar tus preferencias de agenda')} onRetry={() => void preferences.refetch()} /></Frame>;
+    return <Frame>{subnavigation}<ErrorState message={errorMessage(preferences.error, 'No se pudieron cargar tus preferencias de agenda')} onRetry={() => void preferences.refetch()} /></Frame>;
   }
 
-  const go = (sub: View) => onSubModuleChange?.(sub);
+  const go = (sub: View) => {
+    if (allowed.includes(sub)) onSubModuleChange?.(sub);
+  };
   const userList = users.data ?? [];
 
   // La clave incluye zona horaria y primer día para reiniciar la vista cuando cambian las preferencias.
   const key = `${preferences.data.timezone}-${preferences.data.weekStartsOn}-${preferences.data.showWeekends}`;
   return (
     <Frame>
+      {subnavigation}
       {view === 'compartido' && <CompartidoView key={key} preferences={preferences.data} users={userList} onOpenAgenda={() => go('mi-agenda')} onOpenSettings={() => go('configuracion')} />}
       {view === 'equipo' && <EquipoView preferences={preferences.data} />}
       {view === 'configuracion' && <ConfiguracionView preferences={preferences.data} users={userList} />}

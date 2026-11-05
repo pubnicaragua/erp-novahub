@@ -123,7 +123,7 @@ export function PdfDownloadButton({ onDownload, onExcel, className, disabled = f
           <DropdownMenuSeparator />
         </>}
         {onExcel && <>
-          <DropdownMenuItem onClick={() => onExcel(scopeSelector ? scope : undefined, filterSelector ? filter : undefined)} className="gap-2 rounded-xl py-2.5 [&_svg]:text-emerald-600 data-[highlighted]:[&_svg]:!text-primary-foreground">
+          <DropdownMenuItem onClick={() => onExcel(scopeSelector ? scope : undefined, filterSelector ? filter : undefined)} className="gap-2 rounded-xl py-2.5 [&_svg]:text-primary data-[highlighted]:[&_svg]:!text-primary-foreground">
             <FileSpreadsheet className="size-4" />
             <span className="min-w-0 flex-1"><span className="block font-bold">Exportar Excel</span><span className="block text-[10px] text-popover-foreground/75">Todos los registros filtrados</span></span>
           </DropdownMenuItem>
