@@ -110,6 +110,28 @@ export interface AccessList { granted: AccessGrant[]; received: AccessGrant[] }
 
 type Range = { from: string; to: string };
 
+export type SupervisionScope = 'ALL' | 'USER' | 'DEPARTMENT' | 'ROLE';
+export type SupervisionSource = SupervisionScope | 'DEPARTMENT_HEAD' | 'REPORTS_TO';
+export interface TeamMember {
+  id: string; name: string; email: string; department: string | null; role: string | null;
+  sources: SupervisionSource[]; pending: number; overdue: number; completedRecently: number;
+}
+export interface TeamAgenda {
+  range: { from: string; to: string };
+  users: OrgUser[];
+  events: Array<{ id: string; kind: 'EVENT' | 'MEETING'; title: string; status: string; startDate: string | null; endDate: string | null; location?: string | null; userIds: string[] }>;
+  tasks: Array<{ id: string; kind: 'TASK'; title: string; status: string; priority?: string; dueDate: string | null; startDate: string | null; endDate: string | null; userIds: string[] }>;
+}
+export interface TeamTask {
+  id: string; title: string; status: string; priority?: string; dueDate: string | null; createdAt: string;
+  assignees: OrgUser[]; trackedMinutes: number;
+}
+export interface TeamTaskPage { data: TeamTask[]; total: number; page: number; pageSize: number }
+export interface SupervisionRule {
+  id: string; supervisor: OrgUser; scopeType: SupervisionScope; scopeValue: string; scopeLabel: string; includeSubDepartments: boolean; createdAt: string;
+}
+export interface RuleTargets { departments: Array<{ id: string; name: string }>; roles: Array<{ id: string; name: string }> }
+
 export const organizacionService = {
   getPreferences: (signal?: AbortSignal) => api.get<OrgPreferences>('/organization/preferences', { signal }),
   updatePreferences: (data: Partial<Omit<OrgPreferences, 'persisted'>>) => api.patch<OrgPreferences>('/organization/preferences', data),
@@ -126,4 +148,12 @@ export const organizacionService = {
   updateAccess: (granteeUserId: string, data: { level?: OrgAccessLevel; allowPersonalTaskEdit?: boolean }) =>
     api.patch<AccessGrant>(`/organization/access/${granteeUserId}`, data),
   revokeAccess: (granteeUserId: string) => api.delete<{ success: boolean }>(`/organization/access/${granteeUserId}`),
+  // Equipo (supervisión)
+  getTeam: (signal?: AbortSignal) => api.get<TeamMember[]>('/organization/team', { signal }),
+  getTeamAgenda: (params: Range & { userIds?: string }, signal?: AbortSignal) => api.get<TeamAgenda>('/organization/team/agenda', { params, signal }),
+  getTeamTasks: (params: Record<string, string | number | undefined>, signal?: AbortSignal) => api.get<TeamTaskPage>('/organization/team/tasks', { params, signal }),
+  getSupervisionRules: (signal?: AbortSignal) => api.get<SupervisionRule[]>('/organization/team/rules', { signal }),
+  getRuleTargets: (signal?: AbortSignal) => api.get<RuleTargets>('/organization/team/rule-targets', { signal }),
+  createSupervisionRule: (data: { supervisorUserId: string; scopeType: SupervisionScope; scopeValue?: string; includeSubDepartments?: boolean }) => api.post<{ id: string }>('/organization/team/rules', data),
+  deleteSupervisionRule: (id: string) => api.delete<{ success: boolean }>(`/organization/team/rules/${id}`),
 };

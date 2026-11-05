@@ -3,7 +3,7 @@ import type { ViewGuideConfig } from './ViewGuide';
 const TITLE = '[data-tour="page-title"]';
 const ACTIONS = '[data-tour="page-actions"]';
 
-export const ORGANIZACION_GUIDES: Record<'agenda' | 'compartido' | 'configuracion', ViewGuideConfig> = {
+export const ORGANIZACION_GUIDES: Record<'agenda' | 'compartido' | 'configuracion' | 'equipo', ViewGuideConfig> = {
   agenda: {
     title: 'Mi agenda',
     steps: [
@@ -19,6 +19,15 @@ export const ORGANIZACION_GUIDES: Record<'agenda' | 'compartido' | 'configuracio
       { target: TITLE, title: 'Eventos del equipo', description: 'Consulta los eventos con invitados en los que participas o que otras personas comparten contigo. Respeta los permisos de Actividades.', placement: 'bottom' },
       { target: '[aria-label="Secciones de Compartido"]', title: 'Tres secciones', description: 'Eventos compartidos, tus invitaciones RSVP y los usuarios autorizados a tu agenda.', placement: 'bottom' },
       { target: '[data-tour="page-actions"]', title: 'Nuevo evento', description: 'Crea un evento e invita a tu equipo. Las confirmaciones (RSVP) solo confirman asistencia: no son reservas ni booking público.', placement: 'bottom' },
+    ],
+  },
+  equipo: {
+    title: 'Equipo',
+    steps: [
+      { target: TITLE, title: 'Tu equipo en un solo lugar', description: 'Aquí ves, en solo lectura, en qué trabajan las personas que supervisas: tareas pendientes, vencidas e historial. Nadie ve a quien no tenga asignado.', placement: 'bottom' },
+      { target: '[data-tour="team-tabs"]', title: 'Resumen, calendario e historial', description: 'El resumen muestra la carga de cada persona; el calendario junta todas sus actividades por día; el historial permite filtrar por persona, estado y fechas e indica los minutos registrados.', tip: 'Haz clic en una persona del resumen para abrir su historial.', placement: 'bottom' },
+      { target: '[data-tour="team-kpis"]', title: 'Indicadores', description: 'Pendientes, vencidas y completadas de los últimos 30 días de todo tu equipo. «Completadas» se cuenta por fecha límite de la tarea.', placement: 'bottom' },
+      { target: '[data-tour="team-rule-form"]', title: 'Supervisores (solo administración)', description: 'Conecta a un supervisor con todo el equipo, una persona, un departamento o un rol. Los jefes de departamento y quienes tienen personal a cargo en el organigrama ven automáticamente a su gente. Todo queda en auditoría.', placement: 'right' },
     ],
   },
   configuracion: {

@@ -136,3 +136,8 @@ export function errorMessage(error: unknown, fallback = 'No se pudo completar la
   if (Array.isArray(message)) return message.join(', ');
   return typeof message === 'string' && message ? message : fallback;
 }
+
+/** Origen de cada conexión de supervisión, mostrado con transparencia en la vista Equipo. */
+export const SOURCE_LABEL: Record<string, string> = {
+  ALL: 'Todo el equipo', USER: 'Asignado', DEPARTMENT: 'Departamento', ROLE: 'Rol', DEPARTMENT_HEAD: 'Jefe de departamento', REPORTS_TO: 'Organigrama',
+};

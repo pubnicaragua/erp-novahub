@@ -12,6 +12,7 @@ export const PERMISSION_ACTION_DEFINITIONS = [
   { key: 'deleteCost', label: 'Eliminar costo del proyecto', description: 'Permite eliminar un costo registrado en el proyecto.' },
   { key: 'deleteCostingLine', label: 'Eliminar partida de costeo', description: 'Permite eliminar una partida del costeo 6D del proyecto.' },
   { key: 'approve', label: 'Aprobar', description: 'Permite resolver aprobaciones explícitas del proceso.' },
+  { key: 'authorize', label: 'Autorizar', description: 'Permite acciones que requieren autorización expresa, como publicar contenido o definir quién supervisa a quién.' },
   { key: 'startTask', label: 'Iniciar tarea', description: 'Permite mover una tarea pendiente a En progreso.' },
   { key: 'returnTaskToPending', label: 'Devolver a pendientes', description: 'Permite mover una tarea en progreso a Pendiente.' },
   { key: 'manageSubtasks', label: 'Administrar subtareas', description: 'Permite crear, editar, completar y eliminar subtareas.' },
@@ -215,7 +216,7 @@ export type PermissionMatrixAction =
   | typeof SENSITIVE_PERMISSION_ACTION_DEFINITIONS[number]['key'];
 
 const GRANULAR_PERMISSION_ACTIONS = new Set<PermissionMatrixAction>([
-  'deleteManagement', 'import',
+  'deleteManagement', 'import', 'authorize',
   'deactivate', 'archive', 'terminateEmployee', 'deleteEmployeeDocument', 'deleteBudgetLine', 'deleteCost', 'deleteCostingLine', 'submit', 'requestPayment', 'pay', 'createPaymentLink', 'reconcilePaymentLink', 'cancelPaymentLink', 'createAppToAppPayment', 'reconcileAppToAppPayment', 'assign', 'enroll', 'cancel', 'cancelInvoice', 'reject', 'convert', 'receive', 'retryInventory', 'confirm', 'completeEnrollment',
   'registerInvoice', 'issue', 'apply', 'void', 'pause', 'resume', 'send', 'sendToCredit', 'sendToCash',
   'claim', 'release', 'deliver', 'open', 'start', 'close', 'reopen', 'movement', 'count', 'resolve', 'configure', 'process',
@@ -423,6 +424,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   ORGANIZATION_CALENDAR: ['read'],
   ORGANIZATION_SHARED: ['read', 'edit'],
   ORGANIZATION_SETTINGS: ['read', 'edit'],
+  ORGANIZATION_TEAM: ['read', 'authorize'],
 
   MARKETING_OVERVIEW: ['read'],
   MARKETING_CLIENTS: ['read', 'create', 'edit', 'delete', 'submit'],

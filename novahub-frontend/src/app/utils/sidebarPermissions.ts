@@ -159,6 +159,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'ORGANIZATION_CALENDAR', label: 'Mi agenda', parent: 'ORGANIZATION' },
   { id: 'ORGANIZATION_SHARED', label: 'Compartido', parent: 'ORGANIZATION' },
   { id: 'ORGANIZATION_SETTINGS', label: 'Configuración', parent: 'ORGANIZATION' },
+  { id: 'ORGANIZATION_TEAM', label: 'Equipo', parent: 'ORGANIZATION' },
 
   // Marketing
   { id: 'MARKETING_OVERVIEW', label: 'Resumen', parent: 'MARKETING' },
@@ -376,6 +377,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'organizacion:mi-agenda': ['ORGANIZATION_CALENDAR'],
   'organizacion:compartido': ['ORGANIZATION_SHARED'],
   'organizacion:configuracion': ['ORGANIZATION_SETTINGS'],
+  'organizacion:equipo': ['ORGANIZATION_TEAM'],
   'marketing:resumen': ['MARKETING_OVERVIEW'],
   'marketing:clientes': ['MARKETING_CLIENTS'],
   'marketing:campanas': ['MARKETING_CAMPAIGNS'],

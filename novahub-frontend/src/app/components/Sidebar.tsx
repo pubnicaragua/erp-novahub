@@ -346,6 +346,7 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'mi-agenda', label: 'Mi agenda', icon: <CalendarDays className="size-4" /> },
       { id: 'compartido', label: 'Compartido', icon: <Users className="size-4" /> },
+      { id: 'equipo', label: 'Equipo', icon: <Eye className="size-4" /> },
       { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-4" /> },
     ]
   },

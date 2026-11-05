@@ -6,6 +6,7 @@ import { organizacionService } from '../../services/organizacion.service';
 import { MiAgendaView } from './MiAgendaView';
 import { CompartidoView } from './CompartidoView';
 import { ConfiguracionView } from './ConfiguracionView';
+import { EquipoView } from './EquipoView';
 import { ErrorState } from './OrgBits';
 import { errorMessage } from './organizacion.utils';
 
@@ -14,8 +15,8 @@ interface Props {
   onSubModuleChange?: (sub: string) => void;
 }
 
-type View = 'mi-agenda' | 'compartido' | 'configuracion';
-const PERMISSION: Record<View, string> = { 'mi-agenda': 'ORGANIZATION_CALENDAR', compartido: 'ORGANIZATION_SHARED', configuracion: 'ORGANIZATION_SETTINGS' };
+type View = 'mi-agenda' | 'compartido' | 'equipo' | 'configuracion';
+const PERMISSION: Record<View, string> = { 'mi-agenda': 'ORGANIZATION_CALENDAR', compartido: 'ORGANIZATION_SHARED', equipo: 'ORGANIZATION_TEAM', configuracion: 'ORGANIZATION_SETTINGS' };
 
 /** Organización personal: tres vistas (Mi agenda, Compartido, Configuración) sobre el módulo Actividades. */
 export function OrganizacionPage({ activeSubModule, onSubModuleChange }: Props) {
@@ -50,6 +51,7 @@ export function OrganizacionPage({ activeSubModule, onSubModuleChange }: Props) 
   return (
     <Frame>
       {view === 'compartido' && <CompartidoView key={key} preferences={preferences.data} users={userList} onOpenAgenda={() => go('mi-agenda')} onOpenSettings={() => go('configuracion')} />}
+      {view === 'equipo' && <EquipoView preferences={preferences.data} />}
       {view === 'configuracion' && <ConfiguracionView preferences={preferences.data} users={userList} />}
       {view === 'mi-agenda' && <MiAgendaView key={key} preferences={preferences.data} users={userList} onOpenSettings={() => go('configuracion')} />}
     </Frame>

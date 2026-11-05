@@ -206,6 +206,7 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
   ORGANIZATION_CALENDAR: 'Mi agenda',
   ORGANIZATION_SHARED: 'Compartido',
   ORGANIZATION_SETTINGS: 'Configuración',
+  ORGANIZATION_TEAM: 'Equipo',
   MARKETING_OVERVIEW: 'Resumen de Marketing',
   MARKETING_CLIENTS: 'Clientes y briefs',
   MARKETING_CAMPAIGNS: 'Campañas',

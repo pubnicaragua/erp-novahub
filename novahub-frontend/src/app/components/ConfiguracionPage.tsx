@@ -186,6 +186,7 @@ export const LEGACY_SUBMODULES_FOR_PERMS = [
   { id: 'ORGANIZATION_CALENDAR', label: 'Mi agenda', parent: 'ORGANIZATION' },
   { id: 'ORGANIZATION_SHARED', label: 'Compartido', parent: 'ORGANIZATION' },
   { id: 'ORGANIZATION_SETTINGS', label: 'Configuración', parent: 'ORGANIZATION' },
+  { id: 'ORGANIZATION_TEAM', label: 'Equipo', parent: 'ORGANIZATION' },
   { id: 'MARKETING_OVERVIEW', label: 'Resumen', parent: 'MARKETING' },
   { id: 'MARKETING_CLIENTS', label: 'Clientes y briefs', parent: 'MARKETING' },
   { id: 'MARKETING_CAMPAIGNS', label: 'Campañas', parent: 'MARKETING' },

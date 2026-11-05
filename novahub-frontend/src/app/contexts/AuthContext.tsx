@@ -1014,7 +1014,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ],
       organizacion: [
         'ORGANIZATION',
-        'ORGANIZATION_CALENDAR', 'ORGANIZATION_SHARED', 'ORGANIZATION_SETTINGS',
+        'ORGANIZATION_CALENDAR', 'ORGANIZATION_SHARED', 'ORGANIZATION_SETTINGS', 'ORGANIZATION_TEAM',
       ],
       marketing: [
         'MARKETING',
