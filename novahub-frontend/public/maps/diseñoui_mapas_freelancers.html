@@ -1630,6 +1630,7 @@ let forceSalesConfig = null;
 let lastForceSalesConfigRefreshAt = 0;
 let remoteRoutes = [];
 let activeRemoteRouteId = null;
+let autoDisplayedRouteId = null;
 let routeStopIds = new Map();
 let pendingRouteActions = [];
 let routeActionsFlushing = false;
@@ -2504,7 +2505,13 @@ async function loadRemoteRoutes(){
     remoteRoutes=rows;
     forceSalesSyncErrors.delete('rutas');
     const refreshedActiveRoute=activeRemoteRouteId&&!routeDraftDirty?rows.find(route=>String(route.id)===String(activeRemoteRouteId)):null;
-    if(refreshedActiveRoute)hydrateRemoteRoute(refreshedActiveRoute);
+    const refreshedStatus=String(refreshedActiveRoute?.status||'').toUpperCase();
+    const mayAdvanceAutoRoute=Boolean(autoDisplayedRouteId&&String(autoDisplayedRouteId)===String(activeRemoteRouteId)
+      &&(!refreshedActiveRoute||['COMPLETED','CANCELLED'].includes(refreshedStatus)));
+    const mayChooseAssignedRoute=!routeDraftDirty&&!routePlanningMode&&(!activeRemoteRouteId||mayAdvanceAutoRoute);
+    const assignedRoute=mayChooseAssignedRoute?preferredAssignedRouteForMap(rows):null;
+    if(assignedRoute&&String(assignedRoute.id)!==String(activeRemoteRouteId||''))showSavedRouteOnMap(assignedRoute,{automatic:true});
+    else if(refreshedActiveRoute)hydrateRemoteRoute(refreshedActiveRoute);
     else renderSavedRouteOptions();
     updateOfflineStatus();
   }catch(error){
@@ -2515,6 +2522,38 @@ async function loadRemoteRoutes(){
     renderSavedRouteOptions();
     if(remoteRoutesRefreshRequested){remoteRoutesRefreshRequested=false;void loadRemoteRoutes()}
   }
+}
+function preferredAssignedRouteForMap(routes){
+  const today=localRouteDate();
+  const active=(Array.isArray(routes)?routes:[]).filter(route=>routeAssignedToCurrentUser(route)
+    &&['PLANNED','IN_PROGRESS'].includes(String(route.status||'').toUpperCase()));
+  active.sort((a,b)=>{
+    const statusRank=route=>String(route.status||'').toUpperCase()==='IN_PROGRESS'?0:1;
+    const rankDifference=statusRank(a)-statusRank(b);
+    if(rankDifference)return rankDifference;
+    const dateA=routeDateValue(a),dateB=routeDateValue(b);
+    const dayRank=date=>date===today?0:date>today?1:2;
+    const dayDifference=dayRank(dateA)-dayRank(dateB);
+    if(dayDifference)return dayDifference;
+    if(dateA!==dateB)return dateA>today?dateA.localeCompare(dateB):dateB.localeCompare(dateA);
+    return String(b.updatedAt||'').localeCompare(String(a.updatedAt||''));
+  });
+  return active[0]||null;
+}
+function showSavedRouteOnMap(route,{automatic=false}={}){
+  if(!route?.id||routeDraftDirty)return false;
+  if(automatic&&!routeAssignedToCurrentUser(route))return false;
+  activeRemoteRouteId=String(route.id);
+  autoDisplayedRouteId=routeAssignedToCurrentUser(route)?String(route.id):null;
+  routePolyline?.setMap(null);routePolyline=null;routeDirectionsRequestId+=1;
+  setRoutePlanningMode(false);
+  hydrateRemoteRoute(route);
+  if(!mapLayers.plannedRoutes){mapLayers={...mapLayers,plannedRoutes:true};persistMapLayers()}
+  updateMapLayerControls();
+  updateMapLayerVisibility();
+  renderRouteMarkers();
+  void drawRouteOnMap({closeModal:false,silent:true});
+  return true;
 }
 function routeAssigneeName(route){
   const assigned=route?.assignedTo || assignees.find(item=>String(item.id)===String(route?.assignedToId));
@@ -2657,7 +2696,9 @@ function openSavedRoute(routeId){
   if(!route)return false;
   setRoutePlanningMode(true);
   hydrateRemoteRoute(route);
+  autoDisplayedRouteId=routeAssignedToCurrentUser(route)?String(route.id):null;
   document.getElementById('routeModal').hidden=false;
+  void drawRouteOnMap({closeModal:false,silent:true});
   void loadPendingRouteActions().then(()=>renderRoutePlanner());
   return true;
 }
@@ -2672,7 +2713,7 @@ function startNewRoute(){
   const selectedAssignee=routeAssigneeDraftValue();
   clearRouteDraftStorage();routeDraftDirty=false;routeSaveAttemptKey=null;
   routePolyline?.setMap(null);routePolyline=null;routeDirectionsRequestId+=1;
-  routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=selectedAssignee||ROUTE_UNASSIGNED;activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
+  routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;autoDisplayedRouteId=null;activeRouteAssigneeId=selectedAssignee||ROUTE_UNASSIGNED;activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
   document.getElementById('routeName').value='';
   document.getElementById('routeFrequency').value='ONCE';
   document.getElementById('routeScheduledFor').value=localRouteDate();
@@ -5903,7 +5944,7 @@ function openRoutePlanner(ids){
   setRoutePlanningMode(true);
   const restored=requested.length===0&&restoreRouteDraft();
   if(requested.length){
-    routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
+    routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;autoDisplayedRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
     const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value='';
     const frequency=document.getElementById('routeFrequency');if(frequency)frequency.value='ONCE';
     requested.forEach(business=>{if(routePointCoordinates(business)&&!routeBusinesses.some(item=>keyOf(item)===keyOf(business)))routeBusinesses.push(business)});
@@ -5912,7 +5953,7 @@ function openRoutePlanner(ids){
     const transfer=document.getElementById('routeTransferOwnership');if(transfer)transfer.checked=false;
     markRouteDraftChanged();
   }else if(!restored){
-    routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
+    routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;autoDisplayedRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
     const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value='';
     const frequency=document.getElementById('routeFrequency');if(frequency)frequency.value='ONCE';
     const scheduledFor=document.getElementById('routeScheduledFor');if(scheduledFor)scheduledFor.value=localRouteDate();
@@ -5950,11 +5991,13 @@ function requestGoogleDirections(service,request){
   });
 }
 async function drawRouteOnMap(options={}){
-  if(!routeBusinesses.length){toast('Selecciona negocios para armar una ruta');return}
-  if(routeBusinesses.some(b=>!routePointCoordinates(b))){toast('Una o más paradas necesitan coordenadas válidas');return}
+  const notify=message=>{if(!options.silent)toast(message)};
+  routePolyline?.setMap(null);routePolyline=null;routeDirectionsRequestId+=1;
+  if(!routeBusinesses.length){notify('Selecciona negocios para armar una ruta');return}
+  if(routeBusinesses.some(b=>!routePointCoordinates(b))){notify('Una o más paradas necesitan coordenadas válidas');return}
   const points=routeBusinesses.map(b=>({lat:Number(b.lat),lng:Number(b.lng)}));
-  if(points.length===1){googleMap.panTo(points[0]);googleMap.setZoom(Math.max(15,Number(googleMap.getZoom())||15));const metrics=document.getElementById('routeMetrics');if(metrics){metrics.hidden=false;metrics.textContent='Una parada · no requiere trazar un tramo por carretera.'}toast('Ruta de una parada enfocada en el mapa');return}
-  if(!window.google?.maps?.DirectionsService){toast('El motor de rutas por carretera no está disponible');return}
+  if(points.length===1){googleMap.panTo(points[0]);googleMap.setZoom(Math.max(15,Number(googleMap.getZoom())||15));const metrics=document.getElementById('routeMetrics');if(metrics){metrics.hidden=false;metrics.textContent='Una parada · no requiere trazar un tramo por carretera.'}notify('Ruta de una parada enfocada en el mapa');return}
+  if(!window.google?.maps?.DirectionsService){notify('El motor de rutas por carretera no está disponible');return}
   const requestId=++routeDirectionsRequestId;
   const service=new google.maps.DirectionsService();
   const roadPath=[];
@@ -5977,7 +6020,7 @@ async function drawRouteOnMap(options={}){
       });
       start=end;
     }
-  }catch(error){console.warn('No se pudo calcular la ruta por carretera',error);const metrics=document.getElementById('routeMetrics');if(metrics){metrics.hidden=false;metrics.textContent='No se pudo calcular el recorrido por carretera. Las paradas se conservaron y puedes guardar la ruta.'}toast(error?.message || 'No se pudo calcular la ruta por carretera');return}
+  }catch(error){console.warn('No se pudo calcular la ruta por carretera',error);const metrics=document.getElementById('routeMetrics');if(metrics){metrics.hidden=false;metrics.textContent='No se pudo calcular el recorrido por carretera. Las paradas se conservaron y puedes guardar la ruta.'}notify(error?.message || 'No se pudo calcular la ruta por carretera');return}
   if(requestId!==routeDirectionsRequestId||roadPath.length<2)return;
   if(!mapLayers.plannedRoutes){mapLayers={...mapLayers,plannedRoutes:true};persistMapLayers();updateMapLayerControls();updateMapLayerVisibility()}
   routePolyline?.setMap(null);
@@ -5988,7 +6031,7 @@ async function drawRouteOnMap(options={}){
   roadPath.forEach(point=>bounds.extend(point));
   googleMap.fitBounds(bounds,64);
   if(options.closeModal!==false)document.getElementById('routeModal').hidden=true;
-  toast(`${routeBusinesses.length} paradas trazadas por carretera`);
+  notify(`${routeBusinesses.length} paradas trazadas por carretera`);
 }
 function openRouteStop(index){
   const stop=routeBusinesses[index];
@@ -6163,6 +6206,7 @@ async function saveRouteAssignment(){
     persistRouteDraft();
     const saved=await forceSalesRequest(isExisting?`/force-sales/routes/${encodeURIComponent(activeRemoteRouteId)}`:'/force-sales/routes',{method:isExisting?'PATCH':'POST',headers:{'Idempotency-Key':routeSaveAttemptKey},body:JSON.stringify(payload)});
     activeRemoteRouteId=saved?.id || activeRemoteRouteId;
+    autoDisplayedRouteId=routeAssignedToCurrentUser(saved)?String(saved.id):null;
     activeRouteAssigneeId=saved?.assignedToId===null?ROUTE_UNASSIGNED:(saved?.assignedToId ?? assigneeId ?? null);
     activeSavedRouteAssigneeId=saved?.assignedToId ?? assigneeId;
     const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value=(saved?.assignedToId ?? assigneeId)===null?'':(saved?.assignedToId ?? assigneeId ?? '');
@@ -6186,7 +6230,7 @@ function addSelectedToRoute(){
   if(!requireForceSales('createRoute'))return;
   const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona negocios para armar una ruta');return}
   const startsNewRoute=Boolean(activeRemoteRouteId);
-  if(startsNewRoute){routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value='';const frequency=document.getElementById('routeFrequency');if(frequency)frequency.value='ONCE'}
+  if(startsNewRoute){routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;autoDisplayedRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value='';const frequency=document.getElementById('routeFrequency');if(frequency)frequency.value='ONCE'}
   const current=startsNewRoute?[]:routeBusinesses; const keys=new Set(current.map(keyOf));
   chosen.forEach(b=>{if(!keys.has(keyOf(b))){current.push(b)}});
   routeBusinesses=current.slice(0,ROUTE_MAX_STOPS);setRoutePlanningMode(true);markRouteDraftChanged();renderRoutePlanner();document.getElementById('routeModal').hidden=false;
