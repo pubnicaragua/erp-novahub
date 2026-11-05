@@ -1508,11 +1508,29 @@ function createTotalsNode(node: PdfTemplateNode, data: PdfTemplateData, settings
   element.style.padding = isRollPaper ? '4px 6px' : '0 10px';
   element.style.fontSize = pdfPointsToCss(Math.max(isRollPaper ? 7 : 8, (node.fontSize || settings.fontSize || 9) - 0.5));
   const totals = data.totals || {};
-  [['subtotal', 'Subtotal'], ['tax', 'Impuestos'], ['discount', 'Descuento'], ['total', 'Total']].forEach(([key, label]) => {
-    const row = document.createElement('div'); row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.gap = '8px'; row.style.marginBottom = key === 'total' ? '0' : isRollPaper ? '2px' : '3px'; row.style.lineHeight = '1.35'; row.style.fontSize = pdfPointsToCss(key === 'total' ? (isRollPaper ? 8.5 : 9.5) : (isRollPaper ? 7.5 : 8)); if (key === 'total') { row.style.borderTop = `1px solid ${safeHtml2CanvasColor(settings.lineColor, '#cbd5e1')}`; row.style.marginTop = isRollPaper ? '4px' : '6px'; row.style.paddingTop = isRollPaper ? '4px' : '5px'; row.style.fontWeight = '700'; }
-    const labelElement = document.createElement('span'); labelElement.textContent = label;
-    const valueElement = document.createElement('span'); valueElement.textContent = escapeValue(totals[key]);
-    valueElement.style.fontWeight = key === 'total' ? '800' : '600';
+  const customRows = Array.isArray(totals.rows)
+    ? totals.rows.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    : [];
+  const rows = customRows.length
+    ? customRows.map((item) => ({
+      label: String(item.label || ''),
+      value: item.value,
+      emphasis: Boolean(item.emphasis),
+      separatorBefore: Boolean(item.separatorBefore),
+    }))
+    : [['subtotal', 'Subtotal'], ['tax', 'Impuestos'], ['discount', 'Descuento'], ['total', 'Total']].map(([key, label]) => ({
+      label,
+      value: totals[key],
+      emphasis: key === 'total',
+      separatorBefore: key === 'total',
+    }));
+  rows.forEach((summaryRow, index) => {
+    const isLast = index === rows.length - 1;
+    const row = document.createElement('div'); row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.gap = '8px'; row.style.marginBottom = isLast ? '0' : isRollPaper ? '2px' : '3px'; row.style.lineHeight = '1.35'; row.style.fontSize = pdfPointsToCss(summaryRow.emphasis ? (isRollPaper ? 8.5 : 9.5) : (isRollPaper ? 7.5 : 8)); if (summaryRow.separatorBefore) { row.style.borderTop = `1px solid ${safeHtml2CanvasColor(settings.lineColor, '#cbd5e1')}`; row.style.marginTop = isRollPaper ? '4px' : '6px'; row.style.paddingTop = isRollPaper ? '4px' : '5px'; }
+    const labelElement = document.createElement('span'); labelElement.textContent = summaryRow.label;
+    const valueElement = document.createElement('span'); valueElement.textContent = escapeValue(summaryRow.value);
+    valueElement.style.fontWeight = summaryRow.emphasis ? '800' : '600';
+    if (summaryRow.emphasis) row.style.fontWeight = '700';
     row.append(labelElement, valueElement); element.appendChild(row);
   });
   return element;
@@ -2060,7 +2078,7 @@ function reflowIndividualPage(page: HTMLElement, definition: PdfTemplateDefiniti
     .sort((left, right) => Math.min(...left.map(item => item.originalTop)) - Math.min(...right.map(item => item.originalTop)))
     .forEach(group => {
       const originalTop = Math.min(...group.map(item => item.originalTop));
-      const isSummaryGroup = group.some(item => item.node.type === 'totals' || item.node.id === 'notes');
+    const isSummaryGroup = group.some(item => item.node.type === 'totals' || item.node.id === 'notes');
       const moveSummaryBelowItems = tableNode.id === 'items-table' && isSummaryGroup;
       const nextTop = moveSummaryBelowItems ? flowTop : Math.max(originalTop, flowTop);
       if (moveSummaryBelowItems) {

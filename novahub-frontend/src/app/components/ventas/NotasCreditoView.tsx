@@ -602,25 +602,33 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       const updatedCredit = paymentCredit.kind === 'CUSTOMER_LOAN'
         ? await customerLoansService.applyPayment(paymentCredit.id, paymentPayload, createIdempotencyKey('customer-loan-payment'))
         : await creditNotesService.apply(paymentCredit.id, paymentPayload);
-      const availableRows: any[] = Array.isArray((updatedCredit as any)?.payments) ? [...(updatedCredit as any).payments] : [];
+      const updatedPayment = updatedCredit as any;
+      const availableRows: any[] = Array.isArray(updatedPayment?.payments)
+        ? [...updatedPayment.payments]
+        : updatedPayment?.number && updatedPayment?.amount !== undefined
+          ? [updatedPayment]
+          : [];
       availableRows.sort((left, right) => new Date(right.createdAt || right.date || 0).getTime() - new Date(left.createdAt || left.date || 0).getTime());
-      const receiptRows = submittedLines.map((line, index) => {
+      const receiptRows = submittedLines.map((line) => {
         const lineAmount = Number(String(line.amount || '').replace(/,/g, '') || 0);
         const matchingIndex = availableRows.findIndex((row) =>
           String(row.method || '').toUpperCase() === String(line.method || '').toUpperCase()
           && String(row.currency || '').toUpperCase() === String(line.currency || '').toUpperCase()
           && Math.abs(Number(row.amount || 0) - lineAmount) <= 0.01
-          && (!line.reference || String(row.reference || '').trim() === String(line.reference || '').trim()),
+          && (!hasPaymentReferenceField(line.method) || !line.reference || String(row.reference || '').trim() === String(line.reference || '').trim()),
         );
         const matchedRow = matchingIndex >= 0 ? availableRows.splice(matchingIndex, 1)[0] : null;
         return {
           ...(matchedRow || {}),
-          id: matchedRow?.id || `credit-payment-${index}`,
+          id: matchedRow?.id || '',
           number: matchedRow?.number || '',
           customerId: paymentCredit.customerId,
           customer: matchedRow?.customer || (updatedCredit as any)?.customer || customerFor(paymentCredit.customerId),
           invoiceId: paymentCredit.kind === 'CUSTOMER_LOAN' ? paymentCredit.invoice?.id : undefined,
           invoiceNumber: paymentCredit.kind === 'CUSTOMER_LOAN' ? paymentCredit.invoice?.number || paymentCredit.number : undefined,
+          invoice: paymentCredit.kind === 'CUSTOMER_LOAN'
+            ? matchedRow?.invoice || updatedPayment?.invoice || paymentCredit.invoice
+            : matchedRow?.invoice,
           sourceType: paymentCredit.kind === 'CUSTOMER_LOAN' ? 'CUSTOMER_LOAN' : undefined,
           sourceLabel: paymentCredit.kind === 'CUSTOMER_LOAN' ? `Abono de préstamo ${paymentCredit.number}` : undefined,
           creditNoteId: paymentCredit.kind === 'CREDIT_NOTE' ? paymentCredit.id : undefined,
@@ -649,10 +657,22 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         method: receiptRows.length > 1 ? 'MIXED' : receiptRows[0]?.method || firstLine.method,
         paymentLabel: paymentRemainingBase > 0.01 ? 'Pago parcial' : 'Pago completo',
         customer: (updatedCredit as any)?.customer || customerFor(paymentCredit.customerId),
-        creditNote: updatedCredit as any,
-        creditNoteId: paymentCredit.id,
+        creditNote: paymentCredit.kind === 'CREDIT_NOTE' ? updatedCredit as any : undefined,
+        invoice: paymentCredit.kind === 'CUSTOMER_LOAN'
+          ? (updatedPayment?.invoice || receiptRows[0]?.invoice || paymentCredit.invoice)
+          : receiptRows[0]?.invoice,
+        creditNoteId: paymentCredit.kind === 'CREDIT_NOTE' ? paymentCredit.id : undefined,
         payments: receiptRows,
-        balance: Number((updatedCredit as any)?.balance ?? paymentRemainingBase),
+        balance: Number(
+          (paymentCredit.kind === 'CUSTOMER_LOAN' ? updatedPayment?.invoice?.balance : updatedPayment?.balance)
+          ?? convertBetweenCurrencies(
+            paymentRemainingBase,
+            baseCurrency,
+            creditCurrency,
+            1,
+            Number(paymentCredit.exchangeRate || globalRate || 1),
+          ),
+        ),
       } as PaymentReceived);
       toast.success(paymentCredit.kind === 'CUSTOMER_LOAN' ? 'Abono registrado y enviado a Pagos Recibidos' : 'Pago registrado y enviado a Pagos Recibidos', { id: paymentToastId });
       setPaymentCredit(null);

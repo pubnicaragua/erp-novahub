@@ -1672,6 +1672,12 @@ function getPaymentVoucherRows(transaction: any) {
   return rows.filter((row: any) => row && typeof row === 'object');
 }
 
+function getPaymentVoucherNumber(transaction: any) {
+  const paymentNumber = String(transaction?.number || '').trim()
+    || String(getPaymentVoucherRows(transaction).find((row: any) => String(row?.number || '').trim())?.number || '').trim();
+  return paymentNumber || 'Sin número asignado';
+}
+
 function paymentVariantDetails(transaction: any) {
   const linkedItemSets = [
     transaction?.creditNote?.items,
@@ -1705,12 +1711,15 @@ function paymentVariantDetails(transaction: any) {
 }
 
 function getPaymentVoucherContext(transaction: any) {
-  const isCreditLink = Boolean(transaction?.creditNote || transaction?.creditNoteId);
+  const isCustomerLoanPayment = String(transaction?.sourceType || '').toUpperCase() === 'CUSTOMER_LOAN';
+  const isCreditLink = !isCustomerLoanPayment && Boolean(transaction?.creditNote || transaction?.creditNoteId);
   const linkedDocument = isCreditLink
     ? transaction?.creditNote || transaction?.invoice || null
     : transaction?.invoice || transaction?.creditNote || null;
   const linkedDocumentType = isCreditLink
     ? 'Crédito'
+    : isCustomerLoanPayment
+      ? 'Préstamo'
     : transaction?.invoice || transaction?.invoiceId
       ? 'Factura'
       : 'Anticipo';
@@ -1720,9 +1729,10 @@ function getPaymentVoucherContext(transaction: any) {
     || (linkedDocumentType === 'Anticipo' ? 'Sin documento' : 'Sin número');
   const explicitLabel = String(transaction?.paymentLabel || transaction?.operationLabel || '').trim();
   const linkedStatus = String(linkedDocument?.status || '').toUpperCase();
-  const documentTotal = Number(linkedDocument?.total || 0);
+  const documentTotal = Number(linkedDocument?.total ?? transaction?.invoice?.total ?? 0);
   const financialDocument = transaction?.invoice || linkedDocument?.invoice || linkedDocument || null;
-  const financialTotal = Number(financialDocument?.total || documentTotal || 0);
+  const financialTotal = Number(financialDocument?.total ?? documentTotal ?? 0);
+  const financialSubtotal = Math.max(0, Number(financialDocument?.subtotal ?? financialTotal));
   const financialCurrency = String(financialDocument?.currency || linkedDocument?.currency || transaction?.currency || 'NIO').toUpperCase();
   const financialRate = Number(financialDocument?.exchangeRate || linkedDocument?.exchangeRate || transaction?.exchangeRate || 1) || 1;
   const financialRows: Array<{ label: string; amount: number; negative?: boolean }> = [
@@ -1732,6 +1742,32 @@ function getPaymentVoucherContext(transaction: any) {
     ...getSalesPdfAdditionalCharges(financialDocument).map((charge) => ({ label: charge.label, amount: charge.amount })),
   ].filter((row) => row.amount > 0.001);
   const paymentRows = getPaymentVoucherRows(transaction);
+  const paymentCurrencies = [...new Set(paymentRows.map((row: any) => String(row.currency || transaction?.currency || financialCurrency).toUpperCase()))];
+  const mixedPaymentCurrencies = paymentCurrencies.length > 1;
+  const voucherCurrency = String(
+    transaction?.total !== undefined && transaction?.total !== null
+      ? transaction?.currency || paymentCurrencies[0] || financialCurrency
+      : mixedPaymentCurrencies
+        ? transaction?.baseCurrency || financialCurrency
+        : paymentCurrencies[0] || transaction?.currency || financialCurrency,
+  ).toUpperCase();
+  const voucherRate = Number(
+    transaction?.total !== undefined && transaction?.total !== null
+      ? transaction?.exchangeRate || 1
+      : mixedPaymentCurrencies
+        ? 1
+        : paymentRows[0]?.exchangeRate || transaction?.exchangeRate || financialRate || 1,
+  ) || 1;
+  const paymentRowsTotal = paymentRows.reduce((sum: number, row: any) => sum + Number(
+    mixedPaymentCurrencies ? (row.baseAmount ?? row.amount ?? 0) : (row.amount || 0),
+  ), 0);
+  const voucherTotal = Number(
+    transaction?.total !== undefined && transaction?.total !== null
+      ? transaction.total
+      : paymentRows.length > 1
+        ? paymentRowsTotal
+        : transaction?.amount ?? paymentRowsTotal,
+  );
   const linkedCurrency = String(linkedDocument?.currency || transaction?.currency || 'NIO').toUpperCase();
   const linkedRate = Number(linkedDocument?.exchangeRate || transaction?.exchangeRate || 1) || 1;
   const paidInLinkedCurrency = paymentRows.reduce((sum: number, row: any) => {
@@ -1741,27 +1777,30 @@ function getPaymentVoucherContext(transaction: any) {
     const baseAmount = Number(row.baseAmount ?? (rowCurrency === 'USD' ? amount * Number(row.exchangeRate || 1) : amount));
     return sum + (linkedCurrency === 'USD' ? baseAmount / linkedRate : baseAmount);
   }, 0);
-  const explicitBalance = transaction?.remaining ?? transaction?.pendingBalance;
-  const hasExplicitBalance = explicitBalance !== undefined && explicitBalance !== null && Number.isFinite(Number(explicitBalance));
-  const reportedBalance = hasExplicitBalance
-    ? Math.max(0, Number(explicitBalance))
-    : Number(linkedDocument?.balance || 0);
-  const linkedAmountPaid = Number(linkedDocument?.amountPaid);
+  const balanceCandidates = [
+    transaction?.remaining,
+    transaction?.pendingBalance,
+    transaction?.balance,
+    linkedDocument?.balance,
+    financialDocument?.balance,
+  ];
+  const explicitBalance = balanceCandidates.find((value) => value !== undefined && value !== null && Number.isFinite(Number(value)));
+  const hasExplicitBalance = explicitBalance !== undefined;
+  const reportedBalance = hasExplicitBalance ? Math.max(0, Number(explicitBalance)) : 0;
+  const linkedAmountPaid = Number(financialDocument?.amountPaid ?? linkedDocument?.amountPaid);
   const accumulatedLinkedPayment = Number.isFinite(linkedAmountPaid) ? Math.max(0, linkedAmountPaid) : 0;
-  const derivedBalance = documentTotal > 0
-    ? Math.max(0, documentTotal - Math.max(paidInLinkedCurrency, accumulatedLinkedPayment))
+  const effectiveDocumentTotal = financialTotal || documentTotal;
+  const derivedBalance = effectiveDocumentTotal > 0
+    ? Math.max(0, effectiveDocumentTotal - Math.max(paidInLinkedCurrency, accumulatedLinkedPayment))
     : 0;
-  const effectiveBalance = hasExplicitBalance || reportedBalance > 0.01 ? reportedBalance : derivedBalance;
+  const effectiveBalance = hasExplicitBalance ? reportedBalance : derivedBalance;
   const isCreditSettled = isCreditLink && effectiveBalance <= 0.01;
   const isPartial = !isCreditSettled && (
     effectiveBalance > 0.01
     || (!hasExplicitBalance && (/parcial|abono/i.test(explicitLabel)
       || linkedStatus === 'PARTIAL'
-      || (documentTotal > 0 && paidInLinkedCurrency + 0.01 < documentTotal)))
+      || (effectiveDocumentTotal > 0 && Math.max(paidInLinkedCurrency, accumulatedLinkedPayment) + 0.01 < effectiveDocumentTotal)))
   );
-  const accumulatedPaid = financialTotal > 0
-    ? Math.min(financialTotal, Math.max(0, financialTotal - effectiveBalance))
-    : paidInLinkedCurrency;
   const operation = linkedDocument
     ? isPartial ? 'ABONO PARCIAL' : 'PAGO COMPLETO'
     : 'PAGO RECIBIDO';
@@ -1781,11 +1820,14 @@ function getPaymentVoucherContext(transaction: any) {
     statusLabel,
     effectiveBalance,
     financialDocument,
+    financialSubtotal,
     financialCurrency,
     financialRate,
     financialTotal,
+    voucherCurrency,
+    voucherRate,
+    voucherTotal,
     financialRows,
-    accumulatedPaid,
     isCreditSettled,
   };
 }
@@ -1819,14 +1861,13 @@ async function generateSalesPaymentVoucherPDF({
     financialCurrency,
     financialRate,
     financialTotal,
+    voucherCurrency,
+    voucherRate,
+    voucherTotal,
     financialRows,
-    accumulatedPaid,
   } = getPaymentVoucherContext(transaction);
   const linkedCurrency = linkedDocument?.currency || transaction?.currency || 'NIO';
   const linkedRate = Number(linkedDocument?.exchangeRate || transaction?.exchangeRate || 1);
-  const voucherCurrency = transaction?.currency || linkedCurrency;
-  const voucherRate = Number(transaction?.exchangeRate || linkedRate || 1);
-  const voucherTotal = Number(transaction?.total ?? transaction?.amount ?? rows.reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0));
   const documentTotal = Number(linkedDocument?.total || 0);
   const pendingBalance = effectiveBalance;
   const changeAmount = Math.max(0, Number(transaction?.change ?? transaction?.changeAmount ?? 0));
@@ -1873,7 +1914,7 @@ async function generateSalesPaymentVoucherPDF({
     const headerHeight = logoSize.height + countLines(companyName, width === 58 ? 9 : 10) * 4 + (settings.slogan ? 4 : 0) + (settings.fiscalInfo ? 4 : 0) + 16;
     const metaHeight = 5 * 4.2 + countLines(customerName, 7.2) * 3.5 + 12;
     const detailHeight = 10 + methodRows.reduce((total: number, row: any) => total + 10 + countLines(`${row.method} · ${row.reference}${row.bank ? ` · ${row.bank}` : ''}`, 6.5) * 3.2, 0);
-    const summaryHeight = 32 + financialRows.length * 4 + (changeAmount > 0.01 ? 4 : 0);
+    const summaryHeight = 28 + financialRows.length * 4 + (changeAmount > 0.01 ? 4 : 0);
     const paymentDetailsHeight = paymentDetails ? countLines(`Detalles del pago: ${paymentDetails}`, 6.5, contentWidth) * 3.2 + 6 : 0;
     const pageHeight = Math.max(150, margin + headerHeight + metaHeight + detailHeight + summaryHeight + paymentDetailsHeight + 20);
     const doc = new jsPDF({ unit: 'mm', format: [width, pageHeight], orientation: 'portrait' });
@@ -1936,7 +1977,7 @@ async function generateSalesPaymentVoucherPDF({
     doc.setFont(fontName, 'normal');
     doc.setFontSize(6.8);
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-    doc.text(`Nº ${transaction?.number || transaction?.id || 'Sin número'}`, width / 2, y, { align: 'center' });
+    doc.text(`Nº ${getPaymentVoucherNumber(transaction)}`, width / 2, y, { align: 'center' });
     y += 3.8;
     doc.text(`Fecha ${transaction?.date ? new Date(transaction.date).toLocaleString('es-NI') : new Date().toLocaleString('es-NI')}`, width / 2, y, { align: 'center' });
     y += 5;
@@ -1986,9 +2027,8 @@ async function generateSalesPaymentVoucherPDF({
       y += 4;
       financialRows.forEach(drawFinancialRow);
     }
-    drawRow('Monto total', money(financialTotal || documentTotal || voucherTotal, financialTotal ? financialCurrency : linkedCurrency, financialTotal ? financialRate : linkedRate), true);
+    drawRow('Monto final', money(financialTotal || documentTotal || voucherTotal, financialTotal ? financialCurrency : linkedCurrency, financialTotal ? financialRate : linkedRate), true);
     drawRow('Este pago', money(voucherTotal, voucherCurrency, voucherRate));
-    drawRow('Abonado', money(accumulatedPaid, financialCurrency, financialRate));
     drawRow('Saldo pendiente', money(pendingBalance, financialCurrency, financialRate));
     if (changeAmount > 0.01) drawRow('Cambio / vuelto', money(changeAmount, voucherCurrency, voucherRate));
     y += 2;
@@ -2059,7 +2099,7 @@ async function generateSalesPaymentVoucherPDF({
     doc.setTextColor(isBannerHeader ? 255 : primaryColor[0], isBannerHeader ? 255 : primaryColor[1], isBannerHeader ? 255 : primaryColor[2]);
     doc.text('COMPROBANTE DE PAGO', centerX, centeredY + 2, { align: 'center' });
     doc.setFontSize(8.5);
-    doc.text(`${operation} · Nº ${transaction?.number || transaction?.id || 'Sin número'}`, centerX, centeredY + 8, { align: 'center' });
+    doc.text(`${operation} · Nº ${getPaymentVoucherNumber(transaction)}`, centerX, centeredY + 8, { align: 'center' });
     doc.setFont(fontName, 'normal');
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
     doc.text(`Fecha ${transaction?.date ? new Date(transaction.date).toLocaleString('es-NI') : new Date().toLocaleString('es-NI')}`, centerX, centeredY + 14, { align: 'center' });
@@ -2091,7 +2131,7 @@ async function generateSalesPaymentVoucherPDF({
     doc.setFont(fontName, 'normal');
     doc.setFontSize(8);
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-    doc.text(`Nº ${transaction?.number || transaction?.id || 'Sin número'}`, rightEdge, 37, { align: 'right' });
+    doc.text(`Nº ${getPaymentVoucherNumber(transaction)}`, rightEdge, 37, { align: 'right' });
     doc.text(`Fecha ${transaction?.date ? new Date(transaction.date).toLocaleString('es-NI') : new Date().toLocaleString('es-NI')}`, rightEdge, 42, { align: 'right' });
   }
 
@@ -2136,9 +2176,8 @@ async function generateSalesPaymentVoucherPDF({
     currentY = ((doc as any).lastAutoTable?.finalY || currentY + financialRows.length * 5) + 5;
   }
   const summaryRows: string[][] = [
-    ['Monto total', money(financialTotal || documentTotal || voucherTotal, financialTotal ? financialCurrency : linkedCurrency, financialTotal ? financialRate : linkedRate)],
+    ['Monto final', money(financialTotal || documentTotal || voucherTotal, financialTotal ? financialCurrency : linkedCurrency, financialTotal ? financialRate : linkedRate)],
     ['Este pago', money(voucherTotal, voucherCurrency, voucherRate)],
-    ['Abonado', money(accumulatedPaid, financialCurrency, financialRate)],
     ['Saldo pendiente', money(pendingBalance, financialCurrency, financialRate)],
   ];
   if (changeAmount > 0.01) summaryRows.push(['Cambio / vuelto', money(changeAmount, voucherCurrency, voucherRate)]);
@@ -2514,16 +2553,18 @@ export async function generateSalesTransactionPDF({
         fileName: buildSalesPdfFileName(documentType, transaction?.number, renderFormat),
         data: {
           company: { name: tenantName, logo: tenantLogo },
-          document: { title: SALES_TRANSACTION_TITLES[documentType], number: transaction?.number || transaction?.id || 'N/A', date: transaction?.date || new Date().toLocaleDateString('es-NI'), status: paymentContext.statusLabel, notes: [transaction?.notes || paymentContext.settlementLabel, paymentVariantDetails(transaction)].filter(Boolean).join('\n') },
+          document: { title: SALES_TRANSACTION_TITLES[documentType], number: getPaymentVoucherNumber(transaction), date: transaction?.date || new Date().toLocaleDateString('es-NI'), status: paymentContext.statusLabel, extra: paymentContext.operation, notes: [transaction?.notes || paymentContext.settlementLabel, paymentVariantDetails(transaction)].filter(Boolean).join('\n') },
           party: { name: transaction?.customer?.name || transaction?.customerName || 'Cliente general' },
           customer: { name: transaction?.customer?.name || transaction?.customerName || 'Cliente general', taxId: transaction?.customer?.taxId || transaction?.customer?.ruc || '', address: transaction?.customer?.address || '', phone: transaction?.customer?.phone || '' },
           rows: paymentRows,
           items: paymentRows,
           totals: {
-            subtotal: formatAmount(paymentContext.financialTotal, paymentContext.financialCurrency, paymentContext.financialRate),
-            tax: formatAmount(paymentContext.effectiveBalance, paymentContext.financialCurrency, paymentContext.financialRate),
-            discount: formatAmount(Number(paymentContext.financialDocument?.discountAmount ?? 0), paymentContext.financialCurrency, paymentContext.financialRate),
-            total: formatAmount(Number(transaction?.total ?? transaction?.amount ?? 0), transaction?.currency || paymentContext.financialCurrency, Number(transaction?.exchangeRate || paymentContext.financialRate || 1)),
+            rows: [
+              { label: 'Subtotal', value: formatAmount(paymentContext.financialSubtotal, paymentContext.financialCurrency, paymentContext.financialRate) },
+              { label: 'Monto final', value: formatAmount(paymentContext.financialTotal, paymentContext.financialCurrency, paymentContext.financialRate), emphasis: true, separatorBefore: true },
+              { label: 'Este pago', value: formatAmount(paymentContext.voucherTotal, paymentContext.voucherCurrency, paymentContext.voucherRate) },
+              { label: 'Saldo pendiente', value: formatAmount(paymentContext.effectiveBalance, paymentContext.financialCurrency, paymentContext.financialRate), emphasis: true },
+            ],
           },
         },
         save,
