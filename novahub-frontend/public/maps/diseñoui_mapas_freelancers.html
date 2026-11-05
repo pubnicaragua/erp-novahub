@@ -500,6 +500,14 @@ body.embedded-view.workspace-kanban .more-tools-content .view-tabs,body.embedded
 body.embedded-view details>summary::marker{content:""}
 body.embedded-view details>summary::-webkit-details-marker{display:none!important}
 @media(max-width:820px){body.embedded-view .sidebar:not(.collapsed):not(.workspace-view){height:var(--nova-visible-height);max-height:var(--nova-visible-height);border-top:0;border-radius:0;box-shadow:none}}
+.route-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+.route-stat{min-width:0}
+#routeNextStop{overflow-wrap:anywhere;white-space:normal;line-height:1.25}
+.route-action-heading{margin:0;color:var(--nova-ui-foreground,#123f35);font-size:13px;font-weight:800}
+.route-next-stop-details{font-size:11px;font-weight:700}
+.route-action-panel button.route-start-action{width:100%;min-height:48px;font-size:12px}
+#routeOrderLockHint{padding:8px 10px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-muted,#f2f8f5)}
+@media(max-width:820px){.route-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.route-stat:nth-child(3){grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -713,11 +721,13 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
  <section class="confirm-modal route-planner-card" role="region" aria-labelledby="routeTitle">
   <header class="route-planner-head"><div><h2 id="routeTitle">Planificar ruta comercial</h2><p id="routeDescription">Empieza a marcar los puntos comerciales en el mapa. Cada punto agregado aparecerá aquí para ordenarlo.</p></div><button class="route-panel-close" id="routePanelClose" type="button" aria-label="Cerrar panel de rutas" title="Cerrar panel de rutas">×</button></header>
   <div class="route-planner-body">
-  <div class="route-summary"><div class="route-stat"><b id="routeStopCount">0</b><span>Paradas</span></div><div class="route-stat"><b id="routeCompletedCount">0</b><span>Completadas</span></div><div class="route-stat"><b id="routeNextStop">—</b><span>Siguiente</span></div></div>
+  <div class="route-summary" aria-label="Progreso de la ruta"><div class="route-stat"><b id="routeStopCount">0</b><span>Puntos en ruta</span></div><div class="route-stat"><b id="routeCompletedCount">0</b><span>Completadas</span></div><div class="route-stat"><b id="routeNextStop">—</b><span>Siguiente parada</span></div></div>
   <p class="route-order-note" id="routeMetrics" aria-live="polite" hidden></p>
   <div class="route-progress"><span id="routeProgressBar" style="width:0%"></span></div>
   <section class="route-action-panel" id="routeActionPanel" aria-label="Seguimiento de la ruta" hidden>
-   <button class="primary-action" id="routeStart" type="button" hidden>Iniciar ruta</button>
+   <p class="route-action-heading" id="routeActionHeading" aria-live="polite"></p>
+   <button class="primary-action route-start-action" id="routeStart" type="button" hidden>Iniciar ruta</button>
+   <p class="route-action-status route-next-stop-details" id="routeNextStopDetails" role="status" aria-live="polite"></p>
    <p class="route-action-status" id="routeStartedAt" role="status" aria-live="polite"></p>
    <div class="route-action-buttons"><button id="routeOpenMaps" type="button">Abrir siguiente en Waze</button><button id="routeOpenGoogleMaps" type="button">Abrir siguiente en Google Maps</button></div>
    <label for="routeVisitNotes">Notas de visita (opcional)<textarea id="routeVisitNotes" maxlength="1000" rows="2" placeholder="Acuerdos, resultado o seguimiento"></textarea></label>
@@ -749,6 +759,7 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
   <label class="route-transfer-option" id="routeTransferWrap"><input class="route-transfer-checkbox" id="routeTransferOwnership" type="checkbox" aria-describedby="routeTransferHelp"><span class="route-transfer-copy"><span class="route-transfer-header"><span class="route-transfer-title">Transferir responsable de los puntos</span><span class="route-transfer-count"><b id="routeTransferCount">0</b><span id="routeTransferUnit">puntos</span></span></span><span class="route-transfer-destination">A: <b id="routeTransferAssigneeName">Sin responsable</b></span><small class="route-transfer-help" id="routeTransferHelp">Si no activas esta opción, cada punto conserva su responsable actual.</small></span></label>
   <div class="route-offline-status" id="routeOfflineStatus" hidden>El borrador se conserva en este dispositivo. Conéctate a internet para guardar y asignar.</div>
   <div class="meta" id="routeImportStatus">El orden inicial será el de selección. “Ordenar por cercanía” usa una aproximación desde la primera parada.</div>
+  <p class="route-order-note" id="routeOrderLockHint" role="status" aria-live="polite"></p>
   <p class="route-order-note">“Ver recorrido” dibuja el trayecto por carretera cuando el servicio está disponible.</p>
   <p class="route-vicinity-hint" id="routeVicinityHint" hidden>En cada parada puedes elegir sus puntos cercanos por cantidad o por radio.</p>
   <section id="routeVicinityTools" class="route-vicinity-tools" hidden aria-label="Selección de puntos cercanos">
@@ -2148,7 +2159,7 @@ function bindMapMarkerPopup(marker,factory){
   marker.bindPopup=function(nextFactory){bindMapMarkerPopup(marker,nextFactory);return marker};
   if(!marker._popupOpenListener){
     const open=()=>{
-      if(routePlanningMode&&marker._b){toggleRouteBusiness(marker._b);return;}
+      if(routePlanningMode&&marker._b&&canEditRouteComposition()){toggleRouteBusiness(marker._b);return;}
       if(focusedQuickPointMarker&&marker!==focusedQuickPointMarker)clearFocusedQuickPoint();
       marker.openPopup();
     };
@@ -5437,12 +5448,15 @@ function routeNextPendingIndex(route=activeRemoteRoute()){
   return fallback<0?routeBusinesses.length:fallback;
 }
 function nextPendingRouteStop(route){
+  if(['COMPLETED','CANCELLED'].includes(String(route?.status||'').toUpperCase()))return null;
   const pendingIds=new Set(routePendingStopIds(route?.id));
   const pending=(route?.stops||[])
     .filter(stop=>!['COMPLETED','SKIPPED'].includes(String(stop.status||'PENDING').toUpperCase())&&!pendingIds.has(String(stop.id)))
     .slice()
     .sort((a,b)=>(Number(a.position)||0)-(Number(b.position)||0));
   if(!pending.length)return null;
+  const routeStarted=String(route?.status||'').toUpperCase()==='IN_PROGRESS'||routeHasPendingStart(route?.id);
+  if(routeStarted)return pending[0];
   const origin=lastKnownCoords&&window.NovaForceSalesLocation.isFreshLocationTimestamp(lastKnownCoords.capturedAt)
     ? {lat:Number(lastKnownCoords.latitude),lng:Number(lastKnownCoords.longitude)}
     : null;
@@ -5614,6 +5628,8 @@ function routeActionStatusText(routeId=activeRemoteRouteId){
 function renderRouteActionFeedback(){
   const route=activeRemoteRoute();
   const started=document.getElementById('routeStartedAt');
+  const heading=document.getElementById('routeActionHeading');
+  const nextDetails=document.getElementById('routeNextStopDetails');
   const status=document.getElementById('routeActionStatus');
   const retry=document.getElementById('routeRetryActions');
   const panel=document.getElementById('routeActionPanel');
@@ -5626,10 +5642,12 @@ function renderRouteActionFeedback(){
   const pendingStart=routeHasPendingStart(route?.id);
   const blockedStart=routeActionsFor(route?.id).some(action=>action.type==='START_ROUTE'&&action.status==='BLOCKED');
   const isStarted=String(route?.status||'').toUpperCase()==='IN_PROGRESS';
+  const routeStatus=String(route?.status||'').toUpperCase();
+  if(heading)heading.textContent=pendingStart?'Inicio pendiente de sincronizar':blockedStart?'Inicio requiere revisión':isStarted?'Ruta en curso':routeStatus==='COMPLETED'?'Ruta finalizada':routeStatus==='CANCELLED'?'Ruta cancelada':route?(routeAssignedToCurrentUser(route)?'Ruta lista para iniciar':'Ruta planificada'):'';
   if(start){
     start.hidden=!route||!routeAssignedToCurrentUser(route)||!canOperateAssignedRouteAction('changeRouteStatus',route)||!['PLANNED'].includes(String(route.status||'').toUpperCase());
-    start.disabled=pendingStart||blockedStart||routeActionsLoading;
-    start.textContent=pendingStart?'Inicio pendiente de sincronizar':blockedStart?'Inicio requiere revisión':'Iniciar ruta';
+    start.disabled=pendingStart||blockedStart||routeActionsLoading||routeDraftDirty;
+    start.textContent=pendingStart?'Inicio pendiente de sincronizar':blockedStart?'Inicio requiere revisión':routeDraftDirty?'Guarda cambios antes de iniciar':'Iniciar ruta';
   }
   if(started){
     started.hidden=!route;
@@ -5647,15 +5665,20 @@ function renderRouteActionFeedback(){
   }
   if(retry){retry.hidden=!records.some(action=>action.status==='BLOCKED');retry.disabled=routeActionsFlushing||!navigator.onLine;}
   const canVisit=Boolean(route&&routeAssignedToCurrentUser(route)&&canOperateAssignedRouteAction('completeRouteStop',route)&&(isStarted||pendingStart));
-  if(complete){complete.hidden=!route||!canOperateAssignedRouteAction('completeRouteStop',route);complete.disabled=!canVisit||routeNextPendingIndex(route)>=routeBusinesses.length||routeActionsFlushing||routeHasBlockedAction(route.id);}
+  if(complete){complete.hidden=!route||['COMPLETED','CANCELLED'].includes(routeStatus)||!canOperateAssignedRouteAction('completeRouteStop',route);complete.disabled=!canVisit||routeNextPendingIndex(route)>=routeBusinesses.length||routeActionsFlushing||routeHasBlockedAction(route.id);}
   const index=route?routeNextPendingIndex(route):routeProgress;
   const business=routeBusinesses[index];
+  if(nextDetails){nextDetails.hidden=!route;nextDetails.textContent=routeStatus==='CANCELLED'?'La ruta fue cancelada.':business?`Siguiente parada: ${business.name||'Punto comercial'} · ${index+1} de ${routeBusinesses.length}`:routeBusinesses.length?'Todas las paradas están completadas.':'La ruta no tiene paradas.'}
   const urls=window.NovaForceSalesRouteTools.navigationUrls(business||{});
-  if(waze)waze.disabled=!business||!urls.waze;
-  if(google)google.disabled=!business||!urls.googleMaps;
+  if(waze)waze.disabled=!business||['COMPLETED','CANCELLED'].includes(routeStatus)||!urls.waze;
+  if(google)google.disabled=!business||['COMPLETED','CANCELLED'].includes(routeStatus)||!urls.googleMaps;
 }
 function canManageCurrentRoute(){return canForceSales(routeManageAction())}
-function canEditRouteComposition(){return !activeRemoteRouteId ? canForceSales('createRoute') : String(activeRemoteRoute()?.status||'').toUpperCase()==='PLANNED'&&canManageCurrentRoute()}
+function canEditRouteComposition(){
+  if(!activeRemoteRouteId)return canForceSales('createRoute');
+  const route=activeRemoteRoute(),isPlanned=String(route?.status||'').toUpperCase()==='PLANNED';
+  return Boolean(route&&isPlanned&&!routeHasPendingStart(route.id)&&canManageCurrentRoute());
+}
 function setRoutePlanningMode(active){routePlanningMode=Boolean(active);document.body.classList.toggle('route-planning-active',routePlanningMode)}
 function renderRouteAssigneeOptions(){
   const picker=document.getElementById('routeAssigneeSearch');
@@ -5722,7 +5745,10 @@ function assigneeStatusMessage(search=''){
 }
 function refreshRoutePermissionVisibility(){
   const canManage=canManageCurrentRoute();
-  const canAssign=canForceSales('assignRoute');
+  const route=activeRemoteRoute();
+  const routeStatus=String(route?.status||'').toUpperCase();
+  const routeIsEditable=!activeRemoteRouteId||Boolean(route&&routeStatus==='PLANNED'&&!routeHasPendingStart(route.id));
+  const canAssign=canForceSales('assignRoute')&&routeIsEditable;
   const canTransfer=CAN_ASSIGN_PROSPECT_OWNER&&canForceSales('assignProspect');
   const clear=document.getElementById('routeClear');
   const optimize=document.getElementById('routeOptimize');
@@ -5752,8 +5778,8 @@ function refreshRoutePermissionVisibility(){
   if(newRoute)newRoute.hidden=!canForceSales('createRoute');
   if(complete)complete.hidden=!canOperateAssignedRouteAction('completeRouteStop');
   if(save){
-    save.hidden=!(canEditRouteComposition() || (Boolean(activeRemoteRouteId)&&canAssign));
-    save.textContent='Guardar ruta';
+    save.hidden=!(routeIsEditable&&(canEditRouteComposition() || (Boolean(activeRemoteRouteId)&&canAssign)));
+    save.textContent=activeRemoteRouteId&&routeDraftDirty?'Guardar cambios':'Guardar ruta';
   }
   const top=document.getElementById('routeTop');
   if(top){
@@ -5773,6 +5799,7 @@ function refreshRoutePermissionVisibility(){
 }
 function renderRoutePlanner(){
   const activeRoute=activeRemoteRoute();
+  const activeStatus=String(activeRoute?.status||'').toUpperCase();
   routeProgress=activeRoute?routeNextPendingIndex(activeRoute):Math.max(0,Math.min(routeProgress,routeBusinesses.length));
   renderSavedRouteOptions();
   refreshRoutePermissionVisibility();
@@ -5783,7 +5810,7 @@ function renderRoutePlanner(){
   const isDailyRoute=Boolean(activeRoute?.dailyScheduleId);
   if(frequency){if(activeRoute)frequency.value=isDailyRoute?'DAILY':'ONCE';frequency.disabled=Boolean(activeRoute)}
   if(frequencyHint)frequencyHint.textContent=activeRoute?(isDailyRoute?'Esta ejecución pertenece a una ruta diaria; sus visitas quedan separadas por fecha.':'Esta ruta guarda una sola ejecución.'):(frequency?.value==='DAILY'?'Desde la fecha seleccionada se generará una ejecución nueva cada día, con sus propias visitas.':'Se guardará una sola ejecución de esta ruta.');
-  if(scheduledFor)scheduledFor.disabled=isDailyRoute;
+  if(scheduledFor)scheduledFor.disabled=isDailyRoute||!canEditRouteComposition();
   const canManage=canEditRouteComposition();
   const canRemoveStops=canManage;
   const select=document.getElementById('routeAssignee');
@@ -5796,7 +5823,7 @@ function renderRoutePlanner(){
   const completedCount=activeRoute?routeCompletedStopCount(activeRoute):routeProgress;
   if(count)count.textContent=String(routeBusinesses.length);
   if(completed)completed.textContent=String(completedCount);
-  if(next)next.textContent=routeBusinesses[routeProgress]?.name ? routeBusinesses[routeProgress].name.slice(0,18) : 'Finalizada';
+  if(next)next.textContent=activeStatus==='CANCELLED'?'Cancelada':activeStatus==='COMPLETED'?'Finalizada':routeBusinesses[routeProgress]?.name || (activeRoute?'Finalizada':'—');
   if(progressBar)progressBar.style.width=`${routeBusinesses.length ? Math.round((completedCount/routeBusinesses.length)*100) : 0}%`;
   const stops=document.getElementById('routeStops');
   if(stops){
@@ -5810,15 +5837,33 @@ function renderRoutePlanner(){
       const isBlocked=action?.status==='BLOCKED';
       const tag=isCompleted?'✓ Visita realizada':isPendingSync?'Visita pendiente de sincronizar':isBlocked?'Error de sincronización: revisar':isCurrent?'Siguiente parada':'Pendiente';
       const responsible=assignees.find(item=>String(item.id)===String(stateOf(b).assignedToId||''));
-      const reorder=canManage?`<button type="button" title="Subir parada" onclick="moveRouteStop(${index},-1)">↑</button><button type="button" title="Bajar parada" onclick="moveRouteStop(${index},1)">↓</button>`:'';
-      const remove=canRemoveStops?`<button class="danger" type="button" title="Quitar parada" onclick="removeRouteStop(${index})">×</button>`:'';
+      const reorder=canManage?`<button type="button" title="Subir parada" aria-label="Subir ${esc(b.name)} una posición" onclick="moveRouteStop(${index},-1)">↑</button><button type="button" title="Bajar parada" aria-label="Bajar ${esc(b.name)} una posición" onclick="moveRouteStop(${index},1)">↓</button>`:'';
+      const remove=canRemoveStops?`<button class="danger" type="button" title="Quitar parada" aria-label="Quitar ${esc(b.name)} de la ruta" onclick="removeRouteStop(${index})">×</button>`:'';
       const nearby=canManage?`<button class="route-stop-nearby" type="button" aria-label="Seleccionar puntos cercanos a ${esc(b.name)}" onclick="event.stopPropagation();beginRouteVicinity(${index})">＋ Seleccionar puntos cercanos</button>`:'';
       const membership=remoteRoutes.filter(route=>(route.stops||[]).some(stop=>String(stop.prospectId||stop.prospect?.id)===String(stateOf(b).remoteId||''))).map(route=>esc(route.name||'Ruta sin nombre')).join(', ')||'Aún no está en rutas guardadas';
-      return `<div class="route-stop ${isCurrent?'current ':''}${isCompleted?'completed':''}" role="button" tabindex="0" aria-label="Centrar mapa en parada ${index+1}: ${esc(b.name)}" onclick="if(!event.target.closest('button'))focusRouteStop(${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();focusRouteStop(${index})}"><span class="route-number">${index+1}</span><div class="route-stop-copy"><b>${esc(b.name)}</b><span>${esc(b.address || b.zone || 'Dirección pendiente')}</span><span class="route-stop-tag">${tag}</span><span class="route-stop-assignment">Responsable del punto: ${esc(responsible?.name||stateOf(b).assignedToName||'Sin asignar')} · Responsable de la ruta: ${esc(routeAssigneeName||'Sin asignar')}</span><span class="route-stop-assignment">Rutas guardadas: ${membership}</span></div><div class="route-stop-actions">${reorder}${nearby}<button type="button" title="Abrir esta parada en Waze" onclick="event.stopPropagation();openRouteStop(${index})">W</button>${remove}</div></div>`;
+      return `<div class="route-stop ${isCurrent?'current ':''}${isCompleted?'completed':''}" role="button" tabindex="0" aria-label="Centrar mapa en parada ${index+1}: ${esc(b.name)}" onclick="if(!event.target.closest('button'))focusRouteStop(${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();focusRouteStop(${index})}"><span class="route-number">${index+1}</span><div class="route-stop-copy"><b>${esc(b.name)}</b><span>${esc(b.address || b.zone || 'Dirección pendiente')}</span><span class="route-stop-tag">${tag}</span><span class="route-stop-assignment">Responsable del punto: ${esc(responsible?.name||stateOf(b).assignedToName||'Sin asignar')} · Responsable de la ruta: ${esc(routeAssigneeName||'Sin asignar')}</span><span class="route-stop-assignment">Rutas guardadas: ${membership}</span></div><div class="route-stop-actions">${reorder}${nearby}<button type="button" title="Abrir esta parada en Waze" aria-label="Abrir ${esc(b.name)} en Waze" onclick="event.stopPropagation();openRouteStop(${index})">W</button>${remove}</div></div>`;
     }).join('') : '<div class="history-empty">Empieza a marcar puntos comerciales en el mapa para agregarlos a la ruta.</div>';
   }
+  const title=document.getElementById('routeTitle');
   const description=document.getElementById('routeDescription');
-  if(description)description.textContent=routeBusinesses.length ? `${routeBusinesses.length} parada${routeBusinesses.length===1?'':'s'} · ${routeDateLabel(scheduledFor?.value || localRouteDate())} · el recorrido comienza en la primera parada.` : routePlanningMode ? 'Empieza a marcar los puntos comerciales pulsando sus marcadores en el mapa. Cada punto agregado aparecerá aquí.' : 'Activa “Armar ruta” y empieza a marcar los puntos comerciales en el mapa.';
+  const orderLockHint=document.getElementById('routeOrderLockHint');
+  const routeDate=routeDateLabel(scheduledFor?.value || localRouteDate());
+  if(title)title.textContent=activeRoute?'Seguimiento de ruta':'Planificar ruta comercial';
+  if(description)description.textContent=activeRoute
+    ? `${routeBusinesses.length} paradas · ${routeDate} · ${activeStatus==='IN_PROGRESS'?'la ruta está en curso.':activeStatus==='COMPLETED'?'la ruta está finalizada.':activeStatus==='CANCELLED'?'la ruta está cancelada.':'ordena las paradas antes de iniciar.'}`
+    : routeBusinesses.length ? `${routeBusinesses.length} paradas · ${routeDate} · el recorrido comienza en la primera parada.` : routePlanningMode ? 'Empieza a marcar los puntos comerciales pulsando sus marcadores en el mapa. Cada punto agregado aparecerá aquí.' : 'Activa “Armar ruta” y empieza a marcar los puntos comerciales en el mapa.';
+  const startIsPending=Boolean(activeRoute&&routeHasPendingStart(activeRoute.id));
+  if(orderLockHint)orderLockHint.textContent=startIsPending
+    ? 'El inicio está pendiente de sincronizar. La ruta y su orden están bloqueados en este dispositivo.'
+    : activeStatus==='IN_PROGRESS'
+      ? 'Ruta iniciada: las paradas y su orden quedaron bloqueados. Completa cada visita y continúa con la siguiente.'
+    : activeStatus==='COMPLETED'||activeStatus==='CANCELLED'
+      ? 'Esta ruta ya terminó y su orden no se puede cambiar.'
+      : activeRoute
+        ? 'Antes de iniciar puedes subir o bajar las paradas y guardar los cambios. Al iniciar, el ERP seguirá el orden guardado y la ruta quedará bloqueada.'
+        : routeBusinesses.length
+          ? 'Ajusta el orden con ↑ y ↓, guarda la ruta y luego iníciala desde el panel de seguimiento.'
+          : 'Marca puntos en el mapa para agregarlos. Después podrás cambiar su orden antes de iniciar la ruta.';
   const vicinityHint=document.getElementById('routeVicinityHint');if(vicinityHint)vicinityHint.hidden=!canManage||!routeBusinesses.length;
   const transferCount=document.getElementById('routeTransferCount');
   const transferUnit=document.getElementById('routeTransferUnit');
@@ -5839,7 +5884,7 @@ function renderRoutePlanner(){
   const offlineStatus=document.getElementById('routeOfflineStatus');
   if(offlineStatus)offlineStatus.hidden=navigator.onLine;
   const saveButton=document.getElementById('routeSave');
-  if(saveButton){saveButton.disabled=routeSaving||!navigator.onLine||!routeBusinesses.length;saveButton.textContent=routeSaving?'Guardando ruta…':'Guardar ruta'}
+  if(saveButton){saveButton.disabled=routeSaving||!navigator.onLine||!routeBusinesses.length;saveButton.textContent=routeSaving?'Guardando…':activeRoute&&routeDraftDirty?'Guardar cambios':'Guardar ruta'}
   renderRouteActionFeedback();
   renderRouteMarkers();
   persistRoute();
@@ -5911,18 +5956,20 @@ function renderRouteVicinityPreview(){
   });
 }
 function beginRouteVicinity(index){
+  if(!canEditRouteComposition())return;
   const center=routeBusinesses[index];if(!center||!routePointCoordinates(center))return;
   routeVicinityPreview={center,items:[]};document.getElementById('routeVicinityTitle').textContent=`Seleccionar puntos cercanos a ${center.name||'esta parada'}`;const tools=document.getElementById('routeVicinityTools');tools.hidden=false;renderRouteVicinityPreview();
   if(googleMap){googleMap.panTo({lat:Number(center.lat),lng:Number(center.lng)});if((googleMap.getZoom()||0)<14)googleMap.setZoom(14)}
   tools.scrollIntoView?.({behavior:'smooth',block:'nearest'});document.getElementById('routeVicinityMode').focus({preventScroll:true});
 }
 function addRouteVicinityPoints(){
-  if(!routeVicinityPreview||!routeVicinityPreview.items.length||!requireForceSales(routeManageAction()))return;
+  if(!canEditRouteComposition()||!routeVicinityPreview||!routeVicinityPreview.items.length||!requireForceSales(routeManageAction()))return;
   const present=new Set(routeBusinesses.map(keyOf)),added=routeVicinityPreview.items.filter(b=>!present.has(keyOf(b))&&routePointCoordinates(b));
   routeBusinesses.push(...added);clearRouteVicinityPreview();markRouteDraftChanged();renderRoutePlanner();toast(`${added.length} punto(s) cercano(s) agregado(s)`);
 }
 function toggleRouteBusiness(business){
   if(!routePlanningMode)return;
+  if(activeRemoteRouteId&&!canEditRouteComposition()){toast('La ruta ya inició y sus paradas quedaron bloqueadas');return}
   if(!requireForceSales(routeManageAction()))return;
   if(!routePointCoordinates(business)){toast('Este punto no tiene coordenadas válidas. Corrige su ubicación antes de agregarlo.');return}
   const key=keyOf(business),index=routeBusinesses.findIndex(item=>keyOf(item)===key);
@@ -5972,7 +6019,7 @@ function focusRouteStop(index){
 }
 function routeDistance(a,b){return Math.hypot(Number(a.lat)-Number(b.lat),Number(a.lng)-Number(b.lng))}
 function optimizeRoute(){
-  if(!requireForceSales(routeManageAction()))return;
+  if(!canEditRouteComposition()||!requireForceSales(routeManageAction()))return;
   if(routeBusinesses.length<3){toast('Agrega al menos tres paradas para ordenar por cercanía');return}
   const pending=routeBusinesses.slice(1); const ordered=[routeBusinesses[0]];
   while(pending.length){
@@ -6053,6 +6100,7 @@ function openRouteInMaps(){openNextRouteStop('waze')}
 async function startCurrentRoute(){
   const route=activeRemoteRoute();
   if(!route){toast('Abre una ruta asignada antes de iniciarla');return}
+  if(routeDraftDirty){toast('Guarda los cambios de la ruta antes de iniciarla');return}
   if(!requireAssignedRouteAction('changeRouteStatus',route))return;
   if(!routeAssignedToCurrentUser(route)){toast('Solo la persona asignada puede iniciar esta ruta');return}
   if(String(route.status||'').toUpperCase()==='IN_PROGRESS'){toast('La ruta ya está iniciada');return}
@@ -6154,8 +6202,11 @@ window.beginRouteVicinity=beginRouteVicinity;
 async function saveRouteAssignment(){
   if(routeSaving)return;
   const isExisting=Boolean(activeRemoteRouteId);
+  const existingRoute=activeRemoteRoute();
+  const existingStatus=String(existingRoute?.status||'').toUpperCase();
+  if(isExisting&&(existingStatus!=='PLANNED'||routeHasPendingStart(activeRemoteRouteId))){toast('La ruta ya inició o tiene el inicio pendiente; sus datos y paradas quedaron bloqueados');return}
   const canManage=canEditRouteComposition();
-  const canAssign=canForceSales('assignRoute');
+  const canAssign=canForceSales('assignRoute')&&(!isExisting||existingStatus==='PLANNED');
   if(!canManage&&!(isExisting&&canAssign)){
     requireForceSales(isExisting?'assignRoute':'createRoute');
     return;
