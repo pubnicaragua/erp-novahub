@@ -349,6 +349,12 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
 .route-vicinity-marker-excluded{border-color:var(--nova-ui-border,#dce8e3)!important;background:var(--nova-ui-muted,#edf5f1)!important;color:var(--nova-ui-muted-foreground,#6c7c77)!important;box-shadow:0 0 0 4px color-mix(in srgb,var(--nova-ui-muted-foreground,#6c7c77) 18%,transparent),0 5px 14px rgba(36,55,47,.2)!important;opacity:.76}
 </style>
 <style>
+.route-assignee-actions{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex:none;flex-wrap:wrap}
+.route-assignee-actions button[data-start-route]{background:var(--nova-ui-primary,#08785a);border-color:var(--nova-ui-primary,#08785a);color:#fff}
+.route-assignee-actions button:disabled{cursor:not-allowed;opacity:.6}
+@media(max-width:820px){.route-assignee-actions{width:100%;flex:1 0 100%;justify-content:flex-start}.route-assignee-actions button{flex:1;min-height:44px;font-size:13px}}
+</style>
+<style>
 @media(min-width:821px) and (max-width:1439px){:root{--sheet:360px}}
 @media(min-width:1440px){:root{--sheet:420px}}
 body.embedded-view .sidebar{background:var(--nova-ui-card);border-right:1px solid var(--nova-ui-border);box-shadow:0 8px 24px rgba(19,45,37,.08)}
@@ -721,6 +727,8 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
   <nav class="route-planner-tabs" role="tablist" aria-label="Gestión de rutas"><button type="button" role="tab" id="routePlanTab" aria-selected="true" aria-controls="routePlanPane">Planificar</button><button type="button" role="tab" id="routeListTab" aria-selected="false" aria-controls="routeListPane">Rutas</button></nav>
   <section id="routePlanPane" class="route-plan-pane" role="tabpanel" aria-labelledby="routePlanTab">
   <div class="route-toolbar"><span>Orden de visita · selección desde el mapa</span><button id="routeImport" type="button">Importar clientes / rutas</button><button id="routeClear" type="button">Descartar borrador</button></div>
+  <label class="route-field" for="routeFrequency">Frecuencia<select id="routeFrequency"><option value="ONCE">Solo una vez</option><option value="DAILY">Diaria</option></select></label>
+  <p class="meta" id="routeFrequencyHint">Se guardará una sola ejecución de esta ruta.</p>
   <label class="route-field" for="routeScheduledFor">Fecha de operación<input id="routeScheduledFor" type="date"></label>
   <label for="routeAssigneeSearch" id="routeAssigneeLabel">Responsable de la ruta</label>
   <div class="route-assignee-picker" id="routeAssigneePicker">
@@ -1582,13 +1590,14 @@ const potentialLegend = document.getElementById('potentialLegend');
 if(potentialLegend)potentialLegend.hidden=!IS_PLATFORM_ADMIN;
 const CAN_ASSIGN_TEAM = mapQuery.get('canAssignTeam') === 'true';
 const CAN_ASSIGN_PROSPECT_OWNER = mapQuery.get('canAssignProspectOwner') === 'true';
+const CAN_OPERATE_ASSIGNED_ROUTES = mapQuery.get('canOperateAssignedRoutes') === 'true';
 const CAN_DELETE_TEST = IS_PLATFORM_ADMIN;
 function applyForceSalesPermissionVisibility(){
   const visibility = {
     refresh: 'importProspects', searchGoogle: 'importProspects', searchViewport: 'importProspects', newPoint: 'importProspects',
     clearCatalog: 'delete',
     zoneManager: 'assignProspect', bulkKanban: 'changeStage', bulkRoute: 'createRoute', bulkVisit: 'registerVisit', bulkWhatsApp: 'send', bulkDiscard: 'discardProspect',
-    routeImport: 'importProspects', routeImportQuick: 'importProspects', routePlannerQuick: ['createRoute', 'editRoute', 'assignRoute', 'completeRouteStop', 'changeRouteStatus'], routeOptimize: 'editRoute', routeStart: 'changeRouteStatus', routeCompleteStop: 'completeRouteStop', routeSave: ['createRoute', 'editRoute'],
+    routeImport: 'importProspects', routeImportQuick: 'importProspects', routeOptimize: 'editRoute', routeStart: 'changeRouteStatus', routeCompleteStop: 'completeRouteStop', routeSave: ['createRoute', 'editRoute'],
     routeAssignee: 'assignRoute', zoneAssign: 'assignProspect', quickCaptureTakePhoto: ['attachEvidence', 'importProspects'], quickCaptureChoosePhoto: ['attachEvidence', 'importProspects'], quickCaptureRemovePhoto: ['attachEvidence', 'importProspects'],
     quickCaptureSave: 'importProspects',
   };
@@ -1598,8 +1607,10 @@ function applyForceSalesPermissionVisibility(){
     const allowed=Array.isArray(action)?action.some(canForceSales):canForceSales(action);
     element.hidden=!allowed;
   });
+  const routePlannerQuick=document.getElementById('routePlannerQuick');
+  if(routePlannerQuick)routePlannerQuick.hidden=!(CAN_OPERATE_ASSIGNED_ROUTES||canForceSales('createRoute')||canForceSales('editRoute')||canForceSales('assignRoute')||canForceSales('completeRouteStop')||canForceSales('changeRouteStatus'));
   const routeTop=document.getElementById('routeTop');
-  if(routeTop)routeTop.hidden=!canForceSales('createRoute');
+  if(routeTop){routeTop.hidden=!(CAN_OPERATE_ASSIGNED_ROUTES||canForceSales('createRoute'));routeTop.textContent=canForceSales('createRoute')?'Armar ruta':'Mis rutas'}
   const locationSettings=document.getElementById('locationSettings');
   if(locationSettings)locationSettings.hidden=!(canForceSales('updatePresence')||canForceSales('hidePresence'));
   const togglePresence=document.getElementById('togglePresence');
@@ -1783,6 +1794,7 @@ function persistRouteDraft(){
       routeId:activeRemoteRouteId,
       prospectIds:routeBusinesses.map(b=>String(stateOf(b).remoteId||keyOf(b))),
       name:document.getElementById('routeName')?.value || '',
+      frequency:document.getElementById('routeFrequency')?.value || 'ONCE',
       scheduledFor:document.getElementById('routeScheduledFor')?.value || localRouteDate(),
       assignedToId:activeRouteAssigneeId===ROUTE_UNASSIGNED?null:(document.getElementById('routeAssignee')?.value || activeRouteAssigneeId || ''),
       originalAssignedToId:activeSavedRouteAssigneeId,
@@ -1810,6 +1822,7 @@ function restoreRouteDraft(){
   routeProgress=0;
   routeStopIds=new Map();
   const name=document.getElementById('routeName');if(name)name.value=draft.name||'';
+  const frequency=document.getElementById('routeFrequency');if(frequency)frequency.value=draft.frequency==='DAILY'?'DAILY':'ONCE';
   const date=document.getElementById('routeScheduledFor');if(date)date.value=draft.scheduledFor||localRouteDate();
   const transfer=document.getElementById('routeTransferOwnership');if(transfer)transfer.checked=draft.transferProspectOwnership===true;
   routeDraftDirty=true;
@@ -2518,15 +2531,21 @@ function renderSavedRouteOptions(){
   if(list)list.innerHTML=routeLoadError?'<p class="meta route-empty">No se pudieron cargar las rutas de este usuario.</p>':remoteRoutesLoading?'<p class="meta route-empty">Cargando rutas asignadas…</p>':active.length?active.map(route=>{
     const stops=route.stops||[],completed=routeCompletedStopCount(route);
     const status=String(route.status).toUpperCase()==='IN_PROGRESS'?'En curso':'Planificada';
-    const localPendingStops=new Set(routePendingStopIds(route.id));
-    const next=stops.find(stop=>!['COMPLETED','SKIPPED'].includes(String(stop.status||'PENDING').toUpperCase())&&!localPendingStops.has(String(stop.id)));
+    const next=nextPendingRouteStop(route);
     const nextName=next?.prospect?.name||next?.prospect?.businessName||'Sin paradas pendientes';
     const started=route.startedAt?` · Inicio ${new Date(route.startedAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}`:'';
     const actionStatus=routeActionStatusText(route.id);
     const actionLine=routeActionsFor(route.id).length?`<span class="route-action-status" data-state="${routeHasBlockedAction(route.id)?'error':'pending'}">${esc(actionStatus)}</span>`:'';
-    return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${status} · ${completed}/${stops.length} visitas${esc(started)}</span><span>Siguiente parada: ${esc(nextName)}</span>${actionLine}</div><button type="button" data-open-route="${esc(route.id)}">Abrir</button></article>`;
+    const recurrenceLine=route.dailyScheduleId?`<span>Ruta diaria · ${route.dailySchedule?.active?'nueva ejecución cada día':'programación detenida'}</span>`:'<span>Ruta de una sola vez</span>';
+    const startAction=routeAssignedToCurrentUser(route)&&canOperateAssignedRouteAction('changeRouteStatus',route)&&String(route.status||'').toUpperCase()==='PLANNED';
+    const startPending=routeActionsFor(route.id).some(action=>action.type==='START_ROUTE'&&action.status==='PENDING');
+    const startBlocked=routeActionsFor(route.id).some(action=>action.type==='START_ROUTE'&&action.status==='BLOCKED');
+    const startButton=startAction?`<button type="button" data-start-route="${esc(route.id)}" ${startPending||startBlocked?'disabled':''}>${startPending?'Inicio pendiente':startBlocked?'Revisar inicio':'Iniciar ruta'}</button>`:'';
+    const openLabel=String(route.status||'').toUpperCase()==='IN_PROGRESS'?'Continuar':'Abrir';
+    return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${status} · ${completed}/${stops.length} visitas${esc(started)}</span>${recurrenceLine}<span>Siguiente parada: ${esc(nextName)}</span>${actionLine}</div><div class="route-assignee-actions">${startButton}<button type="button" data-open-route="${esc(route.id)}">${openLabel}</button></div></article>`;
   }).join(''):'<p class="meta route-empty">Sin rutas activas para este usuario.</p>';
   list?.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>openSavedRoute(button.dataset.openRoute)));
+  list?.querySelectorAll('[data-start-route]').forEach(button=>button.addEventListener('click',()=>void startSavedRoute(button.dataset.startRoute)));
   const historySection=document.getElementById('routeAssigneeHistory');
   const historyList=document.getElementById('routeAssigneeHistoryList');
   const routeListStatus=document.getElementById('routeListStatus');
@@ -2537,7 +2556,8 @@ function renderSavedRouteOptions(){
   if(historyList)historyList.innerHTML=history.map(route=>{
     const stops=route.stops||[],completed=stops.filter(stop=>String(stop.status).toUpperCase()==='COMPLETED').length;
     const status=String(route.status).toUpperCase()==='COMPLETED'?'Completada':'Cancelada';
-    return `<article class="route-assignee-history-card"><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${status} · ${completed}/${stops.length} visitas</span><button type="button" data-open-route="${esc(route.id)}">Consultar</button></article>`;
+    const recurrenceLine=route.dailyScheduleId?`Ruta diaria · ${route.dailySchedule?.active?'programación activa':'programación detenida'}`:'Ruta de una sola vez';
+    return `<article class="route-assignee-history-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${status} · ${completed}/${stops.length} visitas</span><span>${recurrenceLine}</span></div><button type="button" data-open-route="${esc(route.id)}">Consultar</button></article>`;
   }).join('');
   historyList?.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>openSavedRoute(button.dataset.openRoute)));
   renderRouteCatalog();
@@ -2569,12 +2589,35 @@ function renderRouteCatalog(){
     const stops=route.stops||[],done=stops.filter(stop=>String(stop.status).toUpperCase()==='COMPLETED').length;
     const state=({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado';
     const assigned=route.assignedTo?.name||assignees.find(user=>String(user.id)===String(route.assignedToId))?.name||'Sin asignar';
-    const next=stops.find(stop=>!['COMPLETED','SKIPPED'].includes(String(stop.status||'PENDING').toUpperCase()));
+    const next=nextPendingRouteStop(route);
     const nextName=next?.prospect?.name||next?.prospect?.businessName||'Sin paradas pendientes';
     const started=route.startedAt?`Inicio: ${new Date(route.startedAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}`:'Sin inicio';
-    return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${state} · ${done}/${stops.length} visitas</span><span>Inicio: ${esc(started.replace(/^Inicio: /,''))}</span><span>Siguiente parada: ${esc(nextName)}</span><span>Responsable: ${esc(assigned)}</span></div><button type="button" data-open-route="${esc(route.id)}">Abrir</button></article>`;
+    const startAction=routeAssignedToCurrentUser(route)&&canOperateAssignedRouteAction('changeRouteStatus',route)&&String(route.status||'').toUpperCase()==='PLANNED';
+    const startPending=routeActionsFor(route.id).some(action=>action.type==='START_ROUTE'&&action.status==='PENDING');
+    const startBlocked=routeActionsFor(route.id).some(action=>action.type==='START_ROUTE'&&action.status==='BLOCKED');
+    const startButton=startAction?`<button type="button" data-start-route="${esc(route.id)}" ${startPending||startBlocked?'disabled':''}>${startPending?'Inicio pendiente':startBlocked?'Revisar inicio':'Iniciar ruta'}</button>`:'';
+    const recurrenceLabel=route.dailyScheduleId?`Ruta diaria · ${route.dailySchedule?.active?'nueva ejecución cada día':'programación detenida'}`:'Ruta de una sola vez';
+    const recurrenceAction=route.dailyScheduleId&&canForceSales('editRoute')?`<button type="button" data-toggle-daily-route="${esc(route.dailyScheduleId)}" data-active="${route.dailySchedule?.active?'true':'false'}">${route.dailySchedule?.active?'Detener ruta diaria':'Reanudar ruta diaria'}</button>`:'';
+    const openLabel=String(route.status||'').toUpperCase()==='IN_PROGRESS'?'Continuar':['COMPLETED','CANCELLED'].includes(String(route.status||'').toUpperCase())?'Consultar':'Abrir';
+    return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${state} · ${done}/${stops.length} visitas</span><span>${recurrenceLabel}</span><span>Inicio: ${esc(started.replace(/^Inicio: /,''))}</span><span>Siguiente parada: ${esc(nextName)}</span><span>Responsable: ${esc(assigned)}</span></div><div class="route-assignee-actions">${startButton}<button type="button" data-open-route="${esc(route.id)}">${openLabel}</button>${recurrenceAction}</div></article>`;
   }).join(''):'<p class="meta route-empty">No hay rutas que coincidan con este filtro.</p>';
   list.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>{if(openSavedRoute(button.dataset.openRoute))setRoutePlannerTab('plan')}));
+  list.querySelectorAll('[data-start-route]').forEach(button=>button.addEventListener('click',()=>void startSavedRoute(button.dataset.startRoute)));
+  list.querySelectorAll('[data-toggle-daily-route]').forEach(button=>button.addEventListener('click',()=>void setDailyRouteScheduleActive(button.dataset.toggleDailyRoute,button.dataset.active!=='true')));
+}
+async function setDailyRouteScheduleActive(scheduleId,active){
+  if(!canForceSales('editRoute')){requireForceSales('editRoute');return}
+  if(!navigator.onLine){toast('Conéctate a internet para cambiar la programación diaria');return}
+  const prompt=active?'¿Reanudar esta ruta diaria?':'¿Detener las próximas ejecuciones diarias? Las visitas ya registradas se conservarán.';
+  if(!confirm(prompt))return;
+  try{
+    await forceSalesRequest(`/force-sales/routes/schedules/${encodeURIComponent(scheduleId)}`,{method:'PATCH',body:JSON.stringify({active})});
+    forceSalesSyncErrors.delete('rutas');
+    await loadRemoteRoutes();
+    toast(active?'Programación diaria reanudada':'La ruta diaria quedó detenida');
+  }catch(error){
+    toast(`No se pudo cambiar la ruta diaria: ${error?.message||'el ERP rechazó la operación'}`);
+  }
 }
 function hydrateRemoteRoute(route){
   if(!route?.id)return;
@@ -2618,6 +2661,12 @@ function openSavedRoute(routeId){
   void loadPendingRouteActions().then(()=>renderRoutePlanner());
   return true;
 }
+async function startSavedRoute(routeId){
+  if(!openSavedRoute(routeId))return;
+  setRoutePlannerTab('plan');
+  await loadPendingRouteActions();
+  await startCurrentRoute();
+}
 function startNewRoute(){
   if(routeDraftDirty&&!confirm('Tienes cambios pendientes. ¿Descartarlos y comenzar otra ruta?'))return;
   const selectedAssignee=routeAssigneeDraftValue();
@@ -2625,6 +2674,7 @@ function startNewRoute(){
   routePolyline?.setMap(null);routePolyline=null;routeDirectionsRequestId+=1;
   routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=selectedAssignee||ROUTE_UNASSIGNED;activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
   document.getElementById('routeName').value='';
+  document.getElementById('routeFrequency').value='ONCE';
   document.getElementById('routeScheduledFor').value=localRouteDate();
   document.getElementById('routeTransferOwnership').checked=false;
   setRoutePlanningMode(true);persistRoute();renderRoutePlanner();document.getElementById('routeModal').hidden=false;
@@ -3879,6 +3929,7 @@ document.addEventListener('click',event=>{
   if(retryButton){event.preventDefault();void loadAssignees()}
 });
 document.getElementById('routeName').addEventListener('input',markRouteDraftChanged);
+document.getElementById('routeFrequency').addEventListener('change',()=>{markRouteDraftChanged();renderRoutePlanner()});
 document.getElementById('routeScheduledFor').addEventListener('change',markRouteDraftChanged);
 document.getElementById('routeTransferOwnership').addEventListener('change',()=>{markRouteDraftChanged();renderRoutePlanner()});
 document.getElementById('routeImport').addEventListener('click',()=>window.parent?.postMessage({source:'novahub-force-sales',type:'request-import-file'},'*'));
@@ -5304,6 +5355,14 @@ function routeManageAction(){return activeRemoteRouteId?'editRoute':'createRoute
 function activeRemoteRoute(){return remoteRoutes.find(route=>String(route.id)===String(activeRemoteRouteId||''))||null}
 function routeActionsFor(routeId=activeRemoteRouteId){return pendingRouteActions.filter(action=>String(action.routeId)===String(routeId||''))}
 function routePendingStopIds(routeId=activeRemoteRouteId){return routeActionsFor(routeId).filter(action=>action.type==='COMPLETE_STOP'&&action.status==='PENDING').map(action=>String(action.stopId))}
+function canOperateAssignedRouteAction(action,route=activeRemoteRoute()){
+  return canForceSales(action)||(['changeRouteStatus','completeRouteStop'].includes(action)&&CAN_OPERATE_ASSIGNED_ROUTES&&routeAssignedToCurrentUser(route));
+}
+function requireAssignedRouteAction(action,route=activeRemoteRoute()){
+  if(canOperateAssignedRouteAction(action,route))return true;
+  toast('Tu rol no tiene permiso para esta acción');
+  return false;
+}
 const ROUTE_VISIT_DRAFTS_STORAGE_KEY=`novaFuerzaRouteVisitDraftsV1:${window.NovaForceSalesOfflineIdentity.scopeKey(CURRENT_IDENTITY)||'unresolved-identity'}`;
 function routeVisitDrafts(){try{const value=JSON.parse(localStorage.getItem(ROUTE_VISIT_DRAFTS_STORAGE_KEY)||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}catch{return {}}}
 function routeVisitDraftKey(routeId,stopId){return JSON.stringify([String(routeId||''),String(stopId||'')])}
@@ -5324,13 +5383,36 @@ function syncRouteVisitNotesDraft(force=false){
 }
 function routeNextPendingIndex(route=activeRemoteRoute()){
   if(!route)return Math.max(0,Math.min(routeProgress,routeBusinesses.length));
+  const nextStop=nextPendingRouteStop(route);
+  if(!nextStop)return routeBusinesses.length;
+  const index=routeBusinesses.findIndex(business=>String(stateOf(business).remoteId||'')===String(nextStop.prospectId||''));
+  if(index>=0)return index;
   const stops=routeBusinesses.map(business=>{
     const prospectId=String(stateOf(business).remoteId||'');
     const id=routeStopIds.get(prospectId);
     return route.stops?.find(stop=>String(stop.id)===String(id))||{id,status:'PENDING'};
   });
-  const index=window.NovaForceSalesRouteTools.nextPendingStopIndex(stops,routePendingStopIds(route.id));
-  return index<0?routeBusinesses.length:index;
+  const fallback=window.NovaForceSalesRouteTools.nextPendingStopIndex(stops,routePendingStopIds(route.id));
+  return fallback<0?routeBusinesses.length:fallback;
+}
+function nextPendingRouteStop(route){
+  const pendingIds=new Set(routePendingStopIds(route?.id));
+  const pending=(route?.stops||[])
+    .filter(stop=>!['COMPLETED','SKIPPED'].includes(String(stop.status||'PENDING').toUpperCase())&&!pendingIds.has(String(stop.id)))
+    .slice()
+    .sort((a,b)=>(Number(a.position)||0)-(Number(b.position)||0));
+  if(!pending.length)return null;
+  const origin=lastKnownCoords&&window.NovaForceSalesLocation.isFreshLocationTimestamp(lastKnownCoords.capturedAt)
+    ? {lat:Number(lastKnownCoords.latitude),lng:Number(lastKnownCoords.longitude)}
+    : null;
+  if(origin&&routePointCoordinates(origin)){
+    const candidates=pending.map((stop,index)=>{
+      const business=stop.prospect||routeBusinesses.find(item=>String(stateOf(item).remoteId||'')===String(stop.prospectId||''));
+      return routePointCoordinates(business)?{stop,index,distance:routeDistanceMeters(origin,business)}:null;
+    }).filter(Boolean).sort((a,b)=>a.distance-b.distance||a.index-b.index);
+    if(candidates.length)return candidates[0].stop;
+  }
+  return pending[0];
 }
 function routeCompletedStopCount(route=activeRemoteRoute()){
   const confirmed=(route?.stops||[]).filter(stop=>String(stop.status||'').toUpperCase()==='COMPLETED').length;
@@ -5504,7 +5586,7 @@ function renderRouteActionFeedback(){
   const blockedStart=routeActionsFor(route?.id).some(action=>action.type==='START_ROUTE'&&action.status==='BLOCKED');
   const isStarted=String(route?.status||'').toUpperCase()==='IN_PROGRESS';
   if(start){
-    start.hidden=!route||!routeAssignedToCurrentUser(route)||!canForceSales('changeRouteStatus')||!['PLANNED'].includes(String(route.status||'').toUpperCase());
+    start.hidden=!route||!routeAssignedToCurrentUser(route)||!canOperateAssignedRouteAction('changeRouteStatus',route)||!['PLANNED'].includes(String(route.status||'').toUpperCase());
     start.disabled=pendingStart||blockedStart||routeActionsLoading;
     start.textContent=pendingStart?'Inicio pendiente de sincronizar':blockedStart?'Inicio requiere revisión':'Iniciar ruta';
   }
@@ -5523,8 +5605,8 @@ function renderRouteActionFeedback(){
     status.dataset.state=blocked?'error':records.length?'pending':'ready';
   }
   if(retry){retry.hidden=!records.some(action=>action.status==='BLOCKED');retry.disabled=routeActionsFlushing||!navigator.onLine;}
-  const canVisit=Boolean(route&&routeAssignedToCurrentUser(route)&&canForceSales('completeRouteStop')&&(isStarted||pendingStart));
-  if(complete){complete.hidden=!route||!canForceSales('completeRouteStop');complete.disabled=!canVisit||routeNextPendingIndex(route)>=routeBusinesses.length||routeActionsFlushing||routeHasBlockedAction(route.id);}
+  const canVisit=Boolean(route&&routeAssignedToCurrentUser(route)&&canOperateAssignedRouteAction('completeRouteStop',route)&&(isStarted||pendingStart));
+  if(complete){complete.hidden=!route||!canOperateAssignedRouteAction('completeRouteStop',route);complete.disabled=!canVisit||routeNextPendingIndex(route)>=routeBusinesses.length||routeActionsFlushing||routeHasBlockedAction(route.id);}
   const index=route?routeNextPendingIndex(route):routeProgress;
   const business=routeBusinesses[index];
   const urls=window.NovaForceSalesRouteTools.navigationUrls(business||{});
@@ -5627,13 +5709,26 @@ function refreshRoutePermissionVisibility(){
   if(assigneeRetry)assigneeRetry.hidden=!canAssign||assigneesLoadState!=='error';
   if(transfer)transfer.hidden=!canTransfer||Boolean(activeRemoteRouteId&&String(activeRemoteRoute()?.status||'').toUpperCase()!=='PLANNED');
   if(newRoute)newRoute.hidden=!canForceSales('createRoute');
-  if(complete)complete.hidden=!canForceSales('completeRouteStop');
+  if(complete)complete.hidden=!canOperateAssignedRouteAction('completeRouteStop');
   if(save){
     save.hidden=!(canEditRouteComposition() || (Boolean(activeRemoteRouteId)&&canAssign));
     save.textContent='Guardar ruta';
   }
   const top=document.getElementById('routeTop');
-  if(top)top.hidden=!(canForceSales('createRoute')||canForceSales('changeRouteStatus')||Boolean(activeRemoteRouteId&&(canForceSales('editRoute')||canForceSales('assignRoute')||canForceSales('completeRouteStop'))));
+  if(top){
+    const canCreate=canForceSales('createRoute');
+    top.hidden=!(CAN_OPERATE_ASSIGNED_ROUTES||canCreate||canForceSales('changeRouteStatus')||Boolean(activeRemoteRouteId&&(canForceSales('editRoute')||canForceSales('assignRoute')||canOperateAssignedRouteAction('completeRouteStop'))));
+    top.textContent=canCreate?'Armar ruta':'Mis rutas';
+    top.setAttribute('aria-label',canCreate?'Armar una ruta comercial':'Consultar mis rutas asignadas');
+  }
+  const routePlannerQuick=document.getElementById('routePlannerQuick');
+  if(routePlannerQuick){
+    const canManageRoutes=canForceSales('createRoute')||canForceSales('editRoute')||canForceSales('assignRoute');
+    const title=routePlannerQuick.querySelector('.action-card-copy b');
+    const description=routePlannerQuick.querySelector('.action-card-copy small');
+    if(title)title.textContent=canManageRoutes?'Rutas y gestores':'Mis rutas asignadas';
+    if(description)description.textContent=canManageRoutes?'Gestiona rutas y vendedores':'Inicia y sigue tus rutas comerciales';
+  }
 }
 function renderRoutePlanner(){
   const activeRoute=activeRemoteRoute();
@@ -5642,6 +5737,12 @@ function renderRoutePlanner(){
   refreshRoutePermissionVisibility();
   const scheduledFor=document.getElementById('routeScheduledFor');
   if(scheduledFor&&!scheduledFor.value)scheduledFor.value=activeRemoteRouteId ? routeDateValue(remoteRoutes.find(route=>String(route.id)===String(activeRemoteRouteId))) : localRouteDate();
+  const frequency=document.getElementById('routeFrequency');
+  const frequencyHint=document.getElementById('routeFrequencyHint');
+  const isDailyRoute=Boolean(activeRoute?.dailyScheduleId);
+  if(frequency){if(activeRoute)frequency.value=isDailyRoute?'DAILY':'ONCE';frequency.disabled=Boolean(activeRoute)}
+  if(frequencyHint)frequencyHint.textContent=activeRoute?(isDailyRoute?'Esta ejecución pertenece a una ruta diaria; sus visitas quedan separadas por fecha.':'Esta ruta guarda una sola ejecución.'):(frequency?.value==='DAILY'?'Desde la fecha seleccionada se generará una ejecución nueva cada día, con sus propias visitas.':'Se guardará una sola ejecución de esta ruta.');
+  if(scheduledFor)scheduledFor.disabled=isDailyRoute;
   const canManage=canEditRouteComposition();
   const canRemoveStops=canManage;
   const select=document.getElementById('routeAssignee');
@@ -5791,8 +5892,11 @@ function toggleRouteBusiness(business){
 function openRoutePlanner(ids){
   const requested=(ids || []).map(findBusiness).filter(Boolean);
   if(!canForceSales('createRoute')){
-    if(activeRemoteRouteId&&(canForceSales('editRoute')||canForceSales('assignRoute')||canForceSales('completeRouteStop'))){
+    if(activeRemoteRouteId&&(canForceSales('editRoute')||canForceSales('assignRoute')||canOperateAssignedRouteAction('completeRouteStop'))){
       setRoutePlanningMode(true);renderRoutePlanner();document.getElementById('routeModal').hidden=false;return;
+    }
+    if(CAN_OPERATE_ASSIGNED_ROUTES){
+      setRoutePlanningMode(true);renderRoutePlanner();document.getElementById('routeModal').hidden=false;setRoutePlannerTab('routes');void loadRemoteRoutes();return;
     }
     requireForceSales('createRoute');return;
   }
@@ -5801,6 +5905,7 @@ function openRoutePlanner(ids){
   if(requested.length){
     routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
     const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value='';
+    const frequency=document.getElementById('routeFrequency');if(frequency)frequency.value='ONCE';
     requested.forEach(business=>{if(routePointCoordinates(business)&&!routeBusinesses.some(item=>keyOf(item)===keyOf(business)))routeBusinesses.push(business)});
     const scheduledFor=document.getElementById('routeScheduledFor');if(scheduledFor)scheduledFor.value=localRouteDate();
     const routeName=document.getElementById('routeName');if(routeName)routeName.value='';
@@ -5809,6 +5914,7 @@ function openRoutePlanner(ids){
   }else if(!restored){
     routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();
     const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value='';
+    const frequency=document.getElementById('routeFrequency');if(frequency)frequency.value='ONCE';
     const scheduledFor=document.getElementById('routeScheduledFor');if(scheduledFor)scheduledFor.value=localRouteDate();
     const routeName=document.getElementById('routeName');if(routeName)routeName.value='';
     const transfer=document.getElementById('routeTransferOwnership');if(transfer)transfer.checked=false;
@@ -5902,9 +6008,9 @@ function openNextRouteStop(provider='waze'){
 }
 function openRouteInMaps(){openNextRouteStop('waze')}
 async function startCurrentRoute(){
-  if(!requireForceSales('changeRouteStatus'))return;
   const route=activeRemoteRoute();
   if(!route){toast('Abre una ruta asignada antes de iniciarla');return}
+  if(!requireAssignedRouteAction('changeRouteStatus',route))return;
   if(!routeAssignedToCurrentUser(route)){toast('Solo la persona asignada puede iniciar esta ruta');return}
   if(String(route.status||'').toUpperCase()==='IN_PROGRESS'){toast('La ruta ya está iniciada');return}
   if(String(route.status||'').toUpperCase()!=='PLANNED'){toast('Esta ruta ya no se puede iniciar');return}
@@ -5926,9 +6032,9 @@ async function startCurrentRoute(){
   }catch(error){console.warn('No se pudo guardar el inicio de la ruta',error);toast(error?.message||'No se pudo guardar el inicio de esta ruta')}
 }
 async function completeCurrentRouteStop(){
-  if(!requireForceSales('completeRouteStop'))return;
   const route=activeRemoteRoute();
   if(!route){toast('Guarda la ruta en el ERP antes de completar una visita');return}
+  if(!requireAssignedRouteAction('completeRouteStop',route))return;
   if(!routeAssignedToCurrentUser(route)){toast('Solo la persona asignada puede registrar visitas de esta ruta');return}
   const started=String(route.status||'').toUpperCase()==='IN_PROGRESS'||routeHasPendingStart(route.id);
   if(!started){toast('Inicia la ruta antes de registrar una visita');return}
@@ -6046,6 +6152,7 @@ async function saveRouteAssignment(){
     if(!Object.keys(payload).length){toast('No hay cambios autorizados para guardar');return}
   }else{
     payload.name=routeName;
+    payload.frequency=document.getElementById('routeFrequency')?.value==='DAILY'?'DAILY':'ONCE';
     payload.scheduledFor=scheduledFor;
     payload.prospectIds=routeBusinesses.map(b=>stateOf(b).remoteId).filter(Boolean);
     payload.logoUri=ROUTE_LOGO_URI || null;
@@ -6079,7 +6186,7 @@ function addSelectedToRoute(){
   if(!requireForceSales('createRoute'))return;
   const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona negocios para armar una ruta');return}
   const startsNewRoute=Boolean(activeRemoteRouteId);
-  if(startsNewRoute){routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value=''}
+  if(startsNewRoute){routeBusinesses=[];routeProgress=0;activeRemoteRouteId=null;activeRouteAssigneeId=defaultRouteAssigneeValue();activeSavedRouteAssigneeId=null;activeRemoteUpdatedAt=null;routeStopIds=new Map();const routeAssignee=document.getElementById('routeAssignee');if(routeAssignee)routeAssignee.value='';const frequency=document.getElementById('routeFrequency');if(frequency)frequency.value='ONCE'}
   const current=startsNewRoute?[]:routeBusinesses; const keys=new Set(current.map(keyOf));
   chosen.forEach(b=>{if(!keys.has(keyOf(b))){current.push(b)}});
   routeBusinesses=current.slice(0,ROUTE_MAX_STOPS);setRoutePlanningMode(true);markRouteDraftChanged();renderRoutePlanner();document.getElementById('routeModal').hidden=false;
