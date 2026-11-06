@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock3, FileText, MapPinned, RefreshCw, Route, Search, Users, XCircle } from 'lucide-react';
+import { CalendarDays, CheckCircle2, History, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock3, FileText, MapPinned, RefreshCw, Route, Search, Users, XCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { api, getApiErrorMessage } from '../../services/api';
@@ -15,6 +15,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ExportMenu } from '../ui/ExportMenu';
 import { ForceSalesNavigation } from './ForceSalesNavigation';
+import { useForceSalesReportHistory, type ForceSalesReportHistoryEntry } from './useForceSalesReportHistory';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
@@ -109,6 +110,7 @@ export function ForceSalesReportsView({ activeSubModule, onSubModuleChange, isSi
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<ReportPageSize>(50);
   const canExport = canPerform('FORCE_SALES', 'export');
+  const history = useForceSalesReportHistory(user?.clientTenantId, user?.id);
 
   const loadReport = useCallback(async (showToast = false) => {
     if (!from || !to) return;
@@ -167,6 +169,18 @@ export function ForceSalesReportsView({ activeSubModule, onSubModuleChange, isSi
   const lastVisibleRecord = Math.min(visiblePage * pageSize, report.rows.length);
   const filtersLabel = `Del ${from} al ${to} · ${hourFrom || hourTo ? `${hourFrom || '00:00'}–${hourTo || '23:59'}` : 'todo el día (00:00–23:59)'}`;
 
+  const recordDownload = (format: ForceSalesReportHistoryEntry['format'], fileName: string) => history.add({
+    format, fileName, from, to, hourFrom, hourTo, assignedToId, routeId,
+    managerLabel: assignedToId ? personName(managerOptions.find((manager) => manager.id === assignedToId) || null) : 'Todos',
+    routeLabel: routeId ? report.routes.find((route) => route.id === routeId)?.name || 'Ruta seleccionada' : 'Todas',
+    records: report.rows.length,
+  });
+
+  const reuseHistoryEntry = (entry: ForceSalesReportHistoryEntry) => {
+    setFrom(entry.from); setTo(entry.to); setHourFrom(entry.hourFrom); setHourTo(entry.hourTo); setAssignedToId(entry.assignedToId); setRouteId(entry.routeId);
+    toast.success('Filtros restaurados. Pulsa "Generar reporte" para consultar de nuevo.', { position: 'bottom-center' });
+  };
+
   const exportExcel = async () => {
     if (!canExport || loading || exporting || !report.rows.length) return;
     const toastId = toast.loading('Generando Excel del reporte…', { position: 'bottom-center' });
@@ -185,6 +199,7 @@ export function ForceSalesReportsView({ activeSubModule, onSubModuleChange, isSi
         ],
       });
       await downloadExcelWorkbook(workbook, fileName);
+      recordDownload('Excel', fileName);
       toast.success('Reporte Excel descargado.', { id: toastId, position: 'bottom-center' });
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo generar el Excel.'), { id: toastId, position: 'bottom-center' });
@@ -199,6 +214,7 @@ export function ForceSalesReportsView({ activeSubModule, onSubModuleChange, isSi
     setExporting(true);
     try {
       await waitForBrowserPaint();
+      const pdfFileName = buildDateFilteredPdfFileName(['reporte_gestores_cobro'], format, from, to);
       await generateConfiguredReportSectionsPDF({
         targetKey: 'reports.force-sales',
         title: 'Reporte de gestores de cobro',
@@ -206,7 +222,7 @@ export function ForceSalesReportsView({ activeSubModule, onSubModuleChange, isSi
         tenantLogo: themeConfig.logo || user?.clientTenant?.logo || null,
         periodLabel: filtersLabel,
         format,
-        fileName: buildDateFilteredPdfFileName(['reporte_gestores_cobro'], format, from, to),
+        fileName: pdfFileName,
         sections: [
           { id: 'summary', title: 'Resumen operativo', headers: summaryHeaders, rows: summaryRows },
           { id: 'managers', title: 'Actividad por gestor', headers: managerHeaders, rows: managerRows },
@@ -217,6 +233,7 @@ export function ForceSalesReportsView({ activeSubModule, onSubModuleChange, isSi
         ],
         useVectorTables: true,
       });
+      recordDownload('PDF', pdfFileName);
       toast.success('PDF descargado.', { id: toastId, position: 'bottom-center' });
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo generar el PDF.'), { id: toastId, position: 'bottom-center' });
@@ -261,6 +278,41 @@ export function ForceSalesReportsView({ activeSubModule, onSubModuleChange, isSi
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-sm"><span><span className="font-black">Período:</span> {filtersLabel} · hora local de Nicaragua</span>{!canExport && <Badge variant="outline">Exportación no habilitada para este rol</Badge>}</div>
+
+        <Card className="rounded-3xl border-border/60 shadow-sm" data-testid="force-sales-report-history">
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="flex flex-wrap items-center gap-2 text-base font-black">
+              <History className="size-5 text-primary" /> Historial de reportes descargados
+              <Badge variant="secondary" className="ml-auto">{history.entries.length}</Badge>
+              {history.entries.length > 0 && <Button type="button" variant="ghost" size="sm" className="h-7 rounded-lg text-xs" onClick={history.clear}>Limpiar historial</Button>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {history.entries.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">Aún no has descargado reportes. Cada Excel o PDF que descargues quedará registrado aquí con sus filtros.</p> : (
+              <div className="max-h-72 overflow-auto">
+                <table className="w-full min-w-[760px] text-left text-xs">
+                  <thead className="sticky top-0 bg-muted/60 text-[10px] uppercase tracking-wider text-muted-foreground"><tr>{['Descargado', 'Formato', 'Período', 'Gestor', 'Ruta', 'Registros', ''].map((header) => <th key={header} className="px-4 py-2 font-black">{header}</th>)}</tr></thead>
+                  <tbody className="divide-y divide-border/60">
+                    {history.entries.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-muted/20">
+                        <td className="whitespace-nowrap px-4 py-2 font-semibold">{displayDate(entry.createdAt)}</td>
+                        <td className="px-4 py-2"><Badge variant="outline">{entry.format}</Badge></td>
+                        <td className="whitespace-nowrap px-4 py-2">{entry.from} → {entry.to}{entry.hourFrom || entry.hourTo ? ` · ${entry.hourFrom || '00:00'}–${entry.hourTo || '23:59'}` : ''}</td>
+                        <td className="px-4 py-2">{entry.managerLabel}</td>
+                        <td className="px-4 py-2">{entry.routeLabel}</td>
+                        <td className="px-4 py-2 tabular-nums">{entry.records}</td>
+                        <td className="whitespace-nowrap px-4 py-2 text-right">
+                          <Button type="button" variant="outline" size="sm" className="h-7 rounded-lg text-xs" onClick={() => reuseHistoryEntry(entry)} title={entry.fileName}>Usar filtros</Button>
+                          <Button type="button" variant="ghost" size="icon" className="ml-1 size-7" onClick={() => history.remove(entry.id)} aria-label="Quitar del historial"><Trash2 className="size-3.5" /></Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <Card className="min-w-0 rounded-3xl border-border/60 shadow-sm">

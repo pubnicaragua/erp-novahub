@@ -175,7 +175,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingPayroll, setEditingPayroll] = useState<any | null>(null);
-  const [payrollForm, setPayrollForm] = useState({ periodStart: '', periodEnd: '', notes: '' });
+  const [payrollForm, setPayrollForm] = useState({ periodStart: '', periodEnd: '', notes: '', bonuses: '', overtime: '', deductions: '' });
   const [payrollSaveLoading, setPayrollSaveLoading] = useState(false);
   const [payrollRecalculateLoading, setPayrollRecalculateLoading] = useState(false);
 
@@ -191,6 +191,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       periodStart: toDateInputValue(payroll.periodStart),
       periodEnd: toDateInputValue(payroll.periodEnd),
       notes: payroll.notes || '',
+      bonuses: String(Number(payroll.bonuses || 0)),
+      overtime: String(Number(payroll.overtime || 0)),
+      deductions: String(Number(payroll.deductions || 0)),
     });
   };
 
@@ -203,6 +206,16 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       toast.error('La fecha final debe ser posterior o igual a la inicial');
       return;
     }
+    const amounts = {
+      bonuses: Number(payrollForm.bonuses || 0),
+      overtime: Number(payrollForm.overtime || 0),
+      deductions: Number(payrollForm.deductions || 0),
+    };
+    if (Object.values(amounts).some((value) => !Number.isFinite(value) || value < 0)) {
+      toast.error('Bono, horas extra y deducciones deben ser números iguales o mayores a 0');
+      return;
+    }
+    const amountsChanged = (['bonuses', 'overtime', 'deductions'] as const).some((key) => amounts[key] !== Number(editingPayroll[key] || 0));
     const actionToken = beginNotificationAction();
     try {
       setPayrollSaveLoading(true);
@@ -210,8 +223,11 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         periodStart: new Date(`${payrollForm.periodStart}T00:00:00`).toISOString(),
         periodEnd: new Date(`${payrollForm.periodEnd}T23:59:59.999`).toISOString(),
         notes: payrollForm.notes || null,
+        ...(amountsChanged ? amounts : {}),
       });
-      toast.success('Nómina actualizada');
+      // Al cambiar el bono, las horas extra o las deducciones se recalculan bruto, INSS, IR y neto.
+      if (amountsChanged) await hrService.recalculatePayroll(editingPayroll.id);
+      toast.success(amountsChanged ? 'Nómina actualizada y recalculada' : 'Nómina actualizada');
       completeNotificationAction(actionToken);
       setEditingPayroll(null);
       onRefresh();
@@ -946,7 +962,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <DialogHeader>
             <DialogTitle>Editar nómina</DialogTitle>
             <DialogDescription>
-              Actualiza el período y las notas de una nómina pendiente. Los montos calculados se conservan.
+              Actualiza el período, el bono, las horas extra, las deducciones y las notas de una nómina pendiente. Si cambias un monto, se recalculan el bruto, las retenciones y el neto.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4 sm:grid-cols-2">
@@ -957,6 +973,18 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             <div className="space-y-2">
               <label htmlFor="payroll-period-end" className="text-sm font-medium">Fin del período</label>
               <Input id="payroll-period-end" type="date" value={payrollForm.periodEnd} onChange={(e) => setPayrollForm((current) => ({ ...current, periodEnd: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="payroll-bonuses" className="text-sm font-medium">Bono</label>
+              <Input id="payroll-bonuses" type="number" min="0" step="0.01" value={payrollForm.bonuses} onChange={(e) => setPayrollForm((current) => ({ ...current, bonuses: e.target.value }))} placeholder="0.00" />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="payroll-overtime" className="text-sm font-medium">Horas extra</label>
+              <Input id="payroll-overtime" type="number" min="0" step="0.01" value={payrollForm.overtime} onChange={(e) => setPayrollForm((current) => ({ ...current, overtime: e.target.value }))} placeholder="0.00" />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <label htmlFor="payroll-deductions" className="text-sm font-medium">Otras deducciones</label>
+              <Input id="payroll-deductions" type="number" min="0" step="0.01" value={payrollForm.deductions} onChange={(e) => setPayrollForm((current) => ({ ...current, deductions: e.target.value }))} placeholder="0.00" />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <label htmlFor="payroll-notes" className="text-sm font-medium">Notas</label>

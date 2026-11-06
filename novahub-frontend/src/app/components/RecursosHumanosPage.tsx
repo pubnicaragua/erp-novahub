@@ -224,7 +224,9 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     benefits: list(hrQuery.data?.benefits),
     stats: hrQuery.data?.stats || null,
   }), [hrQuery.data]);
-  const loading = activeTab !== 'comisiones' && (hrQuery.isLoading || hrQuery.isFetching);
+  // Solo se bloquea la pantalla en la primera carga. Si se bloqueara también al refrescar,
+  // los formularios abiertos (p. ej. un empleado a medio llenar) se desmontarían y perderían sus datos.
+  const loading = activeTab !== 'comisiones' && hrQuery.isLoading;
   const queryError = hrQuery.error as any;
   const errorMessage = queryError?.response?.data?.message || queryError?.message || 'No se pudieron cargar los datos de Recursos Humanos.';
   const activeExportTarget = HR_EXPORT_TARGETS[activeTab];

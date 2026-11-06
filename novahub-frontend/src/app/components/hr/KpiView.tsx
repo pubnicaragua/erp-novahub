@@ -132,7 +132,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
     enabled: canViewHr,
     placeholderData: keepPreviousData,
   });
-  const loading = kpiQuery.isLoading || kpiQuery.isFetching;
+  const loading = kpiQuery.isLoading; // no desmontar formularios abiertos al refrescar
   const definitions = (kpiQuery.data?.definitions || []) as KpiDefinition[];
   const results = (kpiQuery.data?.results || []) as KpiResult[];
   const fetchAll = useCallback(

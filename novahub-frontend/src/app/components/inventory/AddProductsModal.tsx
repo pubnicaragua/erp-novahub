@@ -33,6 +33,9 @@ interface AddProductsModalProps {
   presentation?: 'dialog' | 'page';
 }
 
+import { MarginPriceSuggestion, BulkMarginBar } from './MarginPricing';
+import { priceFromCost, type MarginMode } from '../../utils/marginPricing';
+
 const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   id: `draft-${Date.now()}`,
   code: '',
@@ -461,6 +464,34 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       prices: { ...(prev.prices || {}), [code]: value },
       salePrice: String(code).toUpperCase() === 'RETAIL' ? value : prev.salePrice,
     }));
+  };
+
+  const applySuggestedPrice = (price: number) => {
+    setDraftProduct((prev: any) => {
+      const prices: Record<string, number | string> = { ...(prev.prices || {}) };
+      effectivePriceLists.forEach((list) => { prices[list.code] = price; });
+      return { ...prev, prices, salePrice: price };
+    });
+    toast.success('Precio sugerido aplicado. Puedes ajustarlo antes de guardar.');
+  };
+
+  // Masivo: cada producto de la lista recibe su precio calculado desde su propio costo.
+  const applyMarginToList = (percent: number, mode: MarginMode) => {
+    let updated = 0;
+    let skipped = 0;
+    setProductsList((current) => current.map((product) => {
+      const price = priceFromCost(Number(product.costPrice), percent, mode);
+      if (price === null) { skipped += 1; return product; }
+      updated += 1;
+      const prices: Record<string, number | string> = { ...(product.prices || {}) };
+      effectivePriceLists.forEach((list) => { prices[list.code] = price; });
+      return { ...product, prices, salePrice: price };
+    }));
+    // setState diferido: el conteo se informa en el siguiente turno del event loop
+    window.setTimeout(() => {
+      if (updated > 0) toast.success(`Precio calculado en ${updated} producto(s)${skipped ? `; ${skipped} sin costo se omitieron` : ''}.`);
+      else toast.warning('Ningún producto de la lista tiene costo para calcular el precio.');
+    }, 0);
   };
 
   const validateVariableStockDistribution = (product: any) => {
@@ -1255,6 +1286,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   placeholder="0.00" 
                 />
               </div>}
+              {canViewInventoryCost && <MarginPriceSuggestion cost={draftProduct.costPrice} onApply={applySuggestedPrice} />}
                {catalogItemType !== 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Serie/IMEI</label>
                 <Button
@@ -1612,6 +1644,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           )}
 
           {/* TABLA INFERIOR */}
+          {productsList.length > 1 && canViewInventoryCost && <BulkMarginBar count={productsList.length} onApply={applyMarginToList} />}
           {productsList.length > 0 && (
             <div className="sales-responsive-table border rounded-md bg-card flex-1 overflow-auto min-h-[200px]" data-tour="inventory-product-add-items">
                <Table>
