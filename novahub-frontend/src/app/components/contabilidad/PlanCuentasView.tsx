@@ -117,8 +117,10 @@ type AccountColumnKey = (typeof ACCOUNT_COLUMN_DEFS)[number]['key'];
 const PERIOD_COLUMN_KEYS: AccountColumnKey[] = ['opening', 'debits', 'credits'];
 const DEFAULT_ACCOUNT_COLUMN_KEYS: AccountColumnKey[] = ACCOUNT_COLUMN_DEFS.map((column) => column.key).filter((key) => !PERIOD_COLUMN_KEYS.includes(key));
 
-function recentMonthOptions(count = 24) {
+// Solo los meses del año en curso (de enero hasta el mes actual): la empresa no tiene movimientos anteriores.
+function recentMonthOptions() {
   const now = new Date();
+  const count = now.getMonth() + 1;
   return Array.from({ length: count }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -858,8 +860,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
           {helpTrigger}
           {canExportAccounts && <ExportMenu onPdf={(format) => void handleExportPdf(format)} onExcel={() => void handleExport()} />}
           {canPerform('ACCOUNTING_CHART', 'create') && (
-            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-              <Upload className="w-4 h-4 mr-1" /> Importar
+            <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => setImportOpen(true)}>
+              <Upload className="size-4 shrink-0 text-primary" /> Importar
             </Button>
           )}
           {canPerform('ACCOUNTING_CHART', 'create') && (
