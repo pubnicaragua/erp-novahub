@@ -16,7 +16,21 @@ export type SuggestedAccountMatch = {
   confidence: 'CLEAR' | 'AMBIGUOUS' | 'POSSIBLE'
 }
 
+export type CostCenter = { id: string; code: string; name: string; type?: string; isActive: boolean }
+export type CostCenterReport = {
+  dateFrom: string; dateTo: string
+  centros: { centroId: string; codigo: string; nombre: string; ingresos: number; gastos: number; resultado: number; cuentas: { codigo: string; nombre: string; tipo: string; monto: number }[] }[]
+  sinCentro: { ingresos: number; gastos: number; resultado: number }
+  totalIngresos: number; totalGastos: number; resultado: number
+}
+
 export const contabilidadService = {
+  // Centros de costo (por área): dimensión aparte del plan de cuentas
+  getCostCenters: (signal?: AbortSignal) => api.get<CostCenter[]>('/accounting/cost-centers', { signal }),
+  createCostCenter: (data: { code: string; name: string; type?: string }) => api.post<CostCenter>('/accounting/cost-centers', data),
+  updateCostCenter: (id: string, data: { name?: string; type?: string; isActive?: boolean }) => api.patch<CostCenter>(`/accounting/cost-centers/${id}`, data),
+  getCostCenterReport: (dateFrom: string, dateTo: string, signal?: AbortSignal) => api.get<CostCenterReport>('/accounting/reports/cost-centers', { params: { dateFrom, dateTo }, signal }),
+
   // Plan de Cuentas
   getChartOfAccounts: (refresh = false, signal?: AbortSignal, range?: { dateFrom?: string; dateTo?: string }) => {
     // Con rango de fechas el backend calcula saldo inicial, movimientos y saldo final por período.

@@ -34,6 +34,7 @@ import { formatDateOnly } from '../../utils/dateFormat';
 import { AccountImportPreview } from './AccountImportPreview';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { CostCentersDialog } from './CostCentersDialog';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { Combobox } from '../ui/Combobox';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -216,6 +217,7 @@ interface PlanCuentasViewProps {
 export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: PlanCuentasViewProps) {
   const { canPerform, user } = useAuth();
   const canExportAccounts = canPerform('ACCOUNTING_CHART', 'export');
+  const [costCentersOpen, setCostCentersOpen] = useState(false);
   const { baseCurrency, formatConvertedAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
 
@@ -850,6 +852,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
+      <CostCentersDialog open={costCentersOpen} onOpenChange={setCostCentersOpen} canEdit={canPerform('ACCOUNTING_CONFIG', 'edit')} />
       <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo las hojas, validando la jerarquía y preparando las cuentas para revisión." />
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -859,6 +862,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
         <div className="erp-toolbar-primary-group flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {helpTrigger}
           {canExportAccounts && <ExportMenu onPdf={(format) => void handleExportPdf(format)} onExcel={() => void handleExport()} />}
+          <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => setCostCentersOpen(true)}>
+            <FolderTree className="size-4 shrink-0 text-primary" /> Centros de costo
+          </Button>
           {canPerform('ACCOUNTING_CHART', 'create') && (
             <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => setImportOpen(true)}>
               <Upload className="size-4 shrink-0 text-primary" /> Importar

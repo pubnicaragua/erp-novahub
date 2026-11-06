@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { CostCenterSelect } from './CostCenterSelect';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Wallet
@@ -291,6 +292,10 @@ export function BudgetItemsView() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-bold">Centro de costo (opcional)</Label>
+              <CostCenterSelect value={form.costCenterId} onChange={(id) => setForm(p => ({ ...p, costCenterId: id }))} />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">

@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Fragment, useState, useEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react'
 import { motion } from 'motion/react'
 import {
   Settings2, Save, Building2, Upload, FileDown, RefreshCw,
@@ -14,6 +14,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import { Switch } from '../ui/switch'
+import { CostCentersDialog } from './CostCentersDialog'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
@@ -393,13 +394,33 @@ function isBankParentMapping(moduleId: string | undefined, fieldKey: string) {
     && (moduleId === 'payment' || moduleId === 'cashSale')
 }
 
+// Interruptor del usuario: permite elegir cuentas de cualquier tipo (p. ej. de resultados donde se espera balance).
+// Nunca habilita cuentas inactivas ni agrupadoras: el asiento no puede publicarse en ellas.
+const ANY_TYPE_STORAGE_KEY = 'accounting-config-any-account-type'
+let allowAnyAccountType = typeof window !== 'undefined' && window.localStorage?.getItem(ANY_TYPE_STORAGE_KEY) === '1'
+
+const anyTypeListeners = new Set<() => void>()
+function setAllowAnyAccountType(next: boolean) {
+  allowAnyAccountType = next
+  try { window.localStorage.setItem(ANY_TYPE_STORAGE_KEY, next ? '1' : '0') } catch { /* sin almacenamiento */ }
+  anyTypeListeners.forEach(listener => listener())
+}
+function useAllowAnyAccountType() {
+  return useSyncExternalStore(
+    listener => { anyTypeListeners.add(listener); return () => { anyTypeListeners.delete(listener) } },
+    () => allowAnyAccountType,
+  )
+}
+
 function getAccountOptionStateForType(
   account: AccountInfo,
   expectedType: ModuleField['defaultType'],
   allowBankParent = false,
+  anyType = allowAnyAccountType,
 ): AccountOptionState {
   if (account.isActive === false) return { disabled: true, label: 'Inactiva', className: 'text-red-500' }
-  if (String(account.type).toUpperCase() !== expectedType) {
+  const typeMismatch = String(account.type).toUpperCase() !== expectedType
+  if (typeMismatch && !anyType) {
     return { disabled: true, label: `Activa · Es ${accountTypeLabel(account.type)}`, className: 'text-amber-500' }
   }
   const grouping = isGroupingAccount(account)
@@ -412,11 +433,12 @@ function getAccountOptionStateForType(
     }
     return { disabled: true, label: 'Activa · Agrupadora; requiere cuenta de detalle', className: 'text-red-500' }
   }
+  if (typeMismatch) return { disabled: false, label: `Activa · Es ${accountTypeLabel(account.type)} (tipo distinto al habitual)`, className: 'text-amber-500' }
   return { disabled: false, label: 'Activa · Disponible', className: 'text-emerald-600' }
 }
 
-function getAccountOptionState(account: AccountInfo, field: ModuleField, moduleId?: string) {
-  const state = getAccountOptionStateForType(account, field.defaultType, isBankParentMapping(moduleId, field.key))
+function getAccountOptionState(account: AccountInfo, field: ModuleField, moduleId?: string, anyType = allowAnyAccountType) {
+  const state = getAccountOptionStateForType(account, field.defaultType, isBankParentMapping(moduleId, field.key), anyType)
   if (!state.disabled && field.key === 'ivaPayable' && !isSalesVatPayableAccount(account)) {
     return { disabled: true, label: 'No corresponde a IVA por pagar', className: 'text-red-500' }
   }
@@ -478,14 +500,15 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
   configuredReason?: string | null
   onChange: (val: string) => void
 }) {
+  const anyAccountType = useAllowAnyAccountType()
   const accountState = account ? getAccountOptionState(account, field, moduleId) : null
   const accountUnavailable = Boolean(accountState?.disabled)
   const accountTypeMismatch = Boolean(account && String(account.type).toUpperCase() !== field.defaultType)
   const accountIsGroup = account ? isGroupingAccount(account) : false
   const effectiveAccountOptions = useMemo(() => accountOptions.map(accountOption => {
-    const optionState = getAccountOptionState(accountOption, field, moduleId)
+    const optionState = getAccountOptionState(accountOption, field, moduleId, anyAccountType)
     return { ...accountOption, disabled: optionState.disabled, optionState }
-  }), [accountOptions, field, moduleId])
+  }), [accountOptions, field, moduleId, anyAccountType])
   const recommended = useMemo(() => suggestions.flatMap(suggestion => {
     const option = effectiveAccountOptions.find(item => item.code === suggestion.code && !item.disabled)
     return option ? [{ option, suggestion }] : []
@@ -887,6 +910,8 @@ type ConnectionModule = {
 export function ConfiguracionContableView() {
   const { canPerform } = useAuth()
   const canEditAccounting = canPerform('ACCOUNTING_CONFIG', 'edit')
+  const anyAccountType = useAllowAnyAccountType()
+  const [costCentersOpen, setCostCentersOpen] = useState(false)
   const canImportAccounting = canPerform('ACCOUNTING_CONFIG', 'import')
   const canExportAccounting = canPerform('ACCOUNTING_CONFIG', 'export')
   const canReadAccountingJournals = canPerform('ACCOUNTING_JOURNAL', 'read')
@@ -1603,6 +1628,11 @@ const [mappingsSearch, setMappingsSearch] = useState('')
             <RefreshCw className={`size-3.5 mr-1 ${connectionsLoading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Probar conexiones</span>
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setCostCentersOpen(true)}>Centros de costo</Button>
+          <label className="flex items-center gap-2 rounded-xl border px-2 text-xs" title="Permite elegir cuentas de cualquier tipo, por ejemplo de resultados donde normalmente se piden de balance. Las agrupadoras siguen bloqueadas.">
+            <Switch checked={anyAccountType} onCheckedChange={setAllowAnyAccountType} aria-label="Mostrar cuentas de todos los tipos" />
+            Cuentas de todos los tipos
+          </label>
           {canEditAccounting && <Button variant="outline" size="sm" onClick={handleSeedConfig} disabled={seeding}>
             {seeding ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <RefreshCw className="size-3.5 mr-1" />}
             Restablecer
@@ -2308,6 +2338,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
           </div>
         </CardContent>
       </Card>
+      <CostCentersDialog open={costCentersOpen} onOpenChange={setCostCentersOpen} canEdit={canEditAccounting} />
     </div>
   )
 }
