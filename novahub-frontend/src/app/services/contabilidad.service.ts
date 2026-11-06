@@ -18,7 +18,13 @@ export type SuggestedAccountMatch = {
 
 export const contabilidadService = {
   // Plan de Cuentas
-  getChartOfAccounts: (refresh = false, signal?: AbortSignal) => api.get<ChartAccount[]>(`/accounting/accounts${refresh ? `?refresh=true&_t=${Date.now()}` : ''}`, { signal }),
+  getChartOfAccounts: (refresh = false, signal?: AbortSignal, range?: { dateFrom?: string; dateTo?: string }) => {
+    // Con rango de fechas el backend calcula saldo inicial, movimientos y saldo final por período.
+    if (range?.dateFrom || range?.dateTo) {
+      return api.get<ChartAccount[]>('/accounting/accounts', { params: { dateFrom: range.dateFrom, dateTo: range.dateTo }, signal });
+    }
+    return api.get<ChartAccount[]>(`/accounting/accounts${refresh ? `?refresh=true&_t=${Date.now()}` : ''}`, { signal });
+  },
   getAccount: (id: string, signal?: AbortSignal) => api.get<ChartAccount>(`/accounting/accounts/${id}`, { signal }),
   createAccount: (data: Partial<ChartAccount>) => api.post<ChartAccount>('/accounting/accounts', data),
   updateAccount: (id: string, data: Partial<ChartAccount>) => api.put<ChartAccount>(`/accounting/accounts/${id}`, data),

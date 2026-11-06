@@ -51,6 +51,9 @@ interface AccountNode {
   type: AccountType;
   parentId: string | null;
   balance: number;
+  openingBalance?: number;
+  periodDebit?: number;
+  periodCredit?: number;
   currency: Currency;
   isActive: boolean;
   subtype: AccountSubtype;
@@ -102,12 +105,32 @@ const ACCOUNT_COLUMN_DEFS = [
   { key: 'subtype', label: 'Subtipo', width: 'minmax(78px,1fr)' },
   { key: 'detailType', label: 'Tipo detalle', width: 'minmax(78px,1fr)' },
   { key: 'manual', label: 'Manual', width: 'minmax(58px,.75fr)' },
+  { key: 'opening', label: 'Saldo inicial', width: 'minmax(82px,1fr)' },
+  { key: 'debits', label: 'Débitos', width: 'minmax(78px,1fr)' },
+  { key: 'credits', label: 'Créditos', width: 'minmax(78px,1fr)' },
   { key: 'balance', label: 'Saldo', width: 'minmax(82px,1fr)' },
   { key: 'currency', label: 'Mon', width: 'minmax(36px,.45fr)' },
   { key: 'status', label: 'Estado', width: 'minmax(55px,.75fr)' },
 ] as const;
 type AccountColumnKey = (typeof ACCOUNT_COLUMN_DEFS)[number]['key'];
-const DEFAULT_ACCOUNT_COLUMN_KEYS: AccountColumnKey[] = ACCOUNT_COLUMN_DEFS.map((column) => column.key);
+// Columnas que solo aparecen al filtrar por mes o rango de fechas.
+const PERIOD_COLUMN_KEYS: AccountColumnKey[] = ['opening', 'debits', 'credits'];
+const DEFAULT_ACCOUNT_COLUMN_KEYS: AccountColumnKey[] = ACCOUNT_COLUMN_DEFS.map((column) => column.key).filter((key) => !PERIOD_COLUMN_KEYS.includes(key));
+
+function recentMonthOptions(count = 24) {
+  const now = new Date();
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    return { value, label: d.toLocaleDateString('es-NI', { month: 'long', year: 'numeric' }) };
+  });
+}
+
+function monthToRange(value: string) {
+  const [year, month] = value.split('-').map(Number);
+  const last = new Date(year, month, 0).getDate();
+  return { from: `${value}-01`, to: `${value}-${String(last).padStart(2, '0')}` };
+}
 
 function accountGridTemplate(visibleKeys: AccountColumnKey[]) {
   const columns = ACCOUNT_COLUMN_DEFS
@@ -194,7 +217,19 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
   const { baseCurrency, formatConvertedAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
 
-  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(true, signal)), {
+  // Filtro por mes o rango de fechas: saldo inicial, débitos, créditos y saldo final.
+  const [periodFrom, setPeriodFrom] = useState('');
+  const [periodTo, setPeriodTo] = useState('');
+  const periodActive = Boolean(periodFrom || periodTo);
+  const monthOptions = useMemo(() => recentMonthOptions(), []);
+  const selectedMonth = useMemo(() => {
+    const match = monthOptions.find((option) => {
+      const range = monthToRange(option.value);
+      return range.from === periodFrom && range.to === periodTo;
+    });
+    return match?.value ?? '';
+  }, [monthOptions, periodFrom, periodTo]);
+  const accountsQuery = useAccountingQuery<any[]>(periodActive ? ['accounts', 'period', periodFrom, periodTo] : ['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(true, signal, periodActive ? { dateFrom: periodFrom || undefined, dateTo: periodTo || undefined } : undefined)), {
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
   });
@@ -279,6 +314,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
         id: a.id, code: a.code ?? '', name: a.name ?? '',
         type: (a.type ?? 'ASSET').toUpperCase() as AccountType,
         parentId: a.parentId ?? null, balance: Number(a.balance ?? 0),
+        openingBalance: Number(a.openingBalance ?? 0), periodDebit: Number(a.periodDebit ?? 0), periodCredit: Number(a.periodCredit ?? 0),
         currency: a.currency ?? 'USD', isActive: a.isActive !== false,
         subtype: a.subtype ?? 'DETAIL_ACCOUNT',
         detailType: a.detailType ?? ((a.type === 'INCOME' || a.type === 'EXPENSE') ? 'INCOME_STATEMENT' : 'BALANCE_SHEET'),
@@ -291,7 +327,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       return buildTree(nodes);
   }, [accountsQuery.data]);
   const fetchAccounts = (_refresh = false) => accountsQuery.refetch();
-  const accountGridColumns = useMemo(() => accountGridTemplate(visibleAccountColumnKeys), [visibleAccountColumnKeys]);
+  const effectiveColumnKeys = useMemo<AccountColumnKey[]>(() => {
+    const base = visibleAccountColumnKeys.filter((key) => !PERIOD_COLUMN_KEYS.includes(key));
+    if (!periodActive) return base;
+    const index = base.includes('balance') ? base.indexOf('balance') : base.length;
+    return [...base.slice(0, index), ...PERIOD_COLUMN_KEYS, ...base.slice(index)];
+  }, [visibleAccountColumnKeys, periodActive]);
+  const accountGridColumns = useMemo(() => accountGridTemplate(effectiveColumnKeys), [effectiveColumnKeys]);
 
   const selectAccount = (account: AccountNode) => {
     setSelectedAccount(account);
@@ -757,15 +799,18 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
               {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
             </button>
           </div>
-          {visibleAccountColumnKeys.includes('code') && <span className="min-w-0 truncate px-2 font-mono text-xs text-muted-foreground">{account.code}</span>}
-          {visibleAccountColumnKeys.includes('name') && <span className={cn('min-w-0 truncate px-2 text-xs', !account.isActive && 'line-through')}>{account.name}</span>}
-          {visibleAccountColumnKeys.includes('type') && <Badge variant="outline" className={cn('mx-2 max-w-full justify-center truncate px-1.5 py-0 text-[10px] font-medium', TYPE_COLOR_MAP[account.type])}>{getTypeLabel(account.type)}</Badge>}
-          {visibleAccountColumnKeys.includes('subtype') && <span className="min-w-0 truncate px-2 text-[10px] text-muted-foreground" title={getSubtypeLabel(account.subtype)}>{getSubtypeLabel(account.subtype)}</span>}
-          {visibleAccountColumnKeys.includes('detailType') && <span className="min-w-0 truncate px-2 text-[10px] text-muted-foreground" title={getDetailTypeLabel(account.detailType)}>{getDetailTypeLabel(account.detailType)}</span>}
-          {visibleAccountColumnKeys.includes('manual') && <Badge variant={account.allowManualEntry ? 'outline' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.allowManualEntry ? 'Manual' : 'No manual'}</Badge>}
-          {visibleAccountColumnKeys.includes('balance') && <span className="min-w-0 truncate px-2 text-right text-sm font-medium tabular-nums">{formatConvertedAmount(account.balance, baseCurrency)}</span>}
-          {visibleAccountColumnKeys.includes('currency') && <Badge variant="outline" className="mx-2 max-w-full justify-center truncate text-[10px] text-muted-foreground">{account.currency}</Badge>}
-          {visibleAccountColumnKeys.includes('status') && <Badge variant={account.isActive ? 'default' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.isActive ? 'Activo' : 'Inactivo'}</Badge>}
+          {effectiveColumnKeys.includes('code') && <span className="min-w-0 truncate px-2 font-mono text-xs text-muted-foreground">{account.code}</span>}
+          {effectiveColumnKeys.includes('name') && <span className={cn('min-w-0 truncate px-2 text-xs', !account.isActive && 'line-through')}>{account.name}</span>}
+          {effectiveColumnKeys.includes('type') && <Badge variant="outline" className={cn('mx-2 max-w-full justify-center truncate px-1.5 py-0 text-[10px] font-medium', TYPE_COLOR_MAP[account.type])}>{getTypeLabel(account.type)}</Badge>}
+          {effectiveColumnKeys.includes('subtype') && <span className="min-w-0 truncate px-2 text-[10px] text-muted-foreground" title={getSubtypeLabel(account.subtype)}>{getSubtypeLabel(account.subtype)}</span>}
+          {effectiveColumnKeys.includes('detailType') && <span className="min-w-0 truncate px-2 text-[10px] text-muted-foreground" title={getDetailTypeLabel(account.detailType)}>{getDetailTypeLabel(account.detailType)}</span>}
+          {effectiveColumnKeys.includes('manual') && <Badge variant={account.allowManualEntry ? 'outline' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.allowManualEntry ? 'Manual' : 'No manual'}</Badge>}
+          {effectiveColumnKeys.includes('opening') && <span className="min-w-0 truncate px-2 text-right text-xs tabular-nums text-muted-foreground">{formatConvertedAmount(account.openingBalance ?? 0, baseCurrency)}</span>}
+          {effectiveColumnKeys.includes('debits') && <span className="min-w-0 truncate px-2 text-right text-xs tabular-nums text-muted-foreground">{formatConvertedAmount(account.periodDebit ?? 0, baseCurrency)}</span>}
+          {effectiveColumnKeys.includes('credits') && <span className="min-w-0 truncate px-2 text-right text-xs tabular-nums text-muted-foreground">{formatConvertedAmount(account.periodCredit ?? 0, baseCurrency)}</span>}
+          {effectiveColumnKeys.includes('balance') && <span className="min-w-0 truncate px-2 text-right text-sm font-medium tabular-nums">{formatConvertedAmount(account.balance, baseCurrency)}</span>}
+          {effectiveColumnKeys.includes('currency') && <Badge variant="outline" className="mx-2 max-w-full justify-center truncate text-[10px] text-muted-foreground">{account.currency}</Badge>}
+          {effectiveColumnKeys.includes('status') && <Badge variant={account.isActive ? 'default' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.isActive ? 'Activo' : 'Inactivo'}</Badge>}
           <div className="flex shrink-0 items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
             {canPerform('ACCOUNTING_CHART', 'edit') && (
               <>
@@ -849,6 +894,33 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
             <SelectItem value="INACTIVE">Solo inactivas</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={selectedMonth || 'NONE'}
+          onValueChange={(value) => {
+            if (value === 'NONE') { setPeriodFrom(''); setPeriodTo(''); return; }
+            const range = monthToRange(value);
+            setPeriodFrom(range.from);
+            setPeriodTo(range.to);
+          }}
+        >
+          <SelectTrigger className="h-9 w-full sm:w-[190px]" aria-label="Filtrar saldos por mes">
+            <SelectValue placeholder="Saldos por mes" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="NONE">{periodActive && !selectedMonth ? 'Rango personalizado' : 'Saldo actual (sin filtro)'}</SelectItem>
+            {monthOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1.5">
+          <Input type="date" className="h-9 w-[150px]" aria-label="Saldos desde" value={periodFrom} max={periodTo || undefined} onChange={(event) => setPeriodFrom(event.target.value)} />
+          <span className="text-xs text-muted-foreground">a</span>
+          <Input type="date" className="h-9 w-[150px]" aria-label="Saldos hasta" value={periodTo} min={periodFrom || undefined} onChange={(event) => setPeriodTo(event.target.value)} />
+          {periodActive && (
+            <Button type="button" variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setPeriodFrom(''); setPeriodTo(''); }}>Limpiar</Button>
+          )}
+        </div>
         <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => fetchAccounts(true)} title="Recargar">
           <RefreshCw className="w-4 h-4" />
         </Button>
@@ -915,8 +987,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                     {/* Header row */}
                     <div className="sticky top-0 z-20 hidden min-w-0 items-center gap-0 border-b border-border/60 bg-card/95 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground backdrop-blur sm:grid" style={{ gridTemplateColumns: accountGridColumns }}>
                       <span className="px-2" aria-hidden="true" />
-                      {ACCOUNT_COLUMN_DEFS.filter((column) => visibleAccountColumnKeys.includes(column.key)).map((column) => (
-                        <span key={column.key} className={cn('min-w-0 truncate px-2', column.key === 'balance' && 'text-right', (column.key === 'manual' || column.key === 'currency' || column.key === 'status') && 'text-center')}>
+                      {ACCOUNT_COLUMN_DEFS.filter((column) => effectiveColumnKeys.includes(column.key)).map((column) => (
+                        <span key={column.key} className={cn('min-w-0 truncate px-2', (column.key === 'balance' || PERIOD_COLUMN_KEYS.includes(column.key)) && 'text-right', (column.key === 'manual' || column.key === 'currency' || column.key === 'status') && 'text-center')}>
                           <span className="inline-flex items-center gap-1">
                             {column.label}
                             {column.key === 'type' && <ColumnFilterMenu label="Tipo" hideLabel options={typeOptionsForFilter} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} />}
@@ -1220,7 +1292,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
             <DialogDescription>Selecciona las columnas que quieres mantener visibles en la jerarquía de cuentas. Los cambios se reflejan inmediatamente.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {ACCOUNT_COLUMN_DEFS.map((column) => {
+            {ACCOUNT_COLUMN_DEFS.filter((column) => !PERIOD_COLUMN_KEYS.includes(column.key)).map((column) => {
               const active = visibleAccountColumnKeys.includes(column.key);
               return (
                 <button
