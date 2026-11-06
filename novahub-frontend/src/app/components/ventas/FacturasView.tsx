@@ -25,6 +25,8 @@ import { CurrencySelector } from '../ui/CurrencySelector';
 import { Switch } from '../ui/switch';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSalesLineIncome } from '../../hooks/useSalesLineIncome';
+import { InvoiceLineIncomeFields } from './InvoiceLineIncomeFields';
 import { useTheme } from '../../contexts/ThemeContext';
 import { previewSalesTransactionPDF, printSalesPaymentTicket } from '../../utils/pdfGenerator';
 import { canShowInvoiceSubmitAction, getInvoicePaymentBalance, shouldSubmitExistingDraftBeforePayment } from '../../utils/invoicePaymentWorkflow';
@@ -147,6 +149,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     toBaseAmount,
   } = useCurrency();
   const { user, canPerform } = useAuth();
+  const lineIncome = useSalesLineIncome();
   const salesIntegrationQuery = useSalesIntegrationPolicy();
   const salesAccountingRequired = salesIntegrationQuery.data?.accountingRequired ?? true;
   const salesFinanceEnabled = salesIntegrationQuery.data?.financeEnabled ?? true;
@@ -1159,6 +1162,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             taxRate: resolveItemType(item) === 'SERVICE' ? 0 : Number(item.taxRate || 0),
             discount: Number(item.discount || 0),
             priceListId: item.priceListId || localDoc.priceListId || undefined,
+            incomeAccountId: item.incomeAccountId || undefined,
+            costCenterId: item.costCenterId || undefined,
             total: Number(item.total || 0),
           })),
           subtotal: Number(localDoc.subtotal || 0),
@@ -2339,6 +2344,22 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                       setLocalDoc({ ...localDoc, items: newItems, ...calc });
                     }}><Trash2 className="size-3" /></Button>
                   </div>
+                  {lineIncome.enabled && (
+                    <div className="col-span-full">
+                      <InvoiceLineIncomeFields
+                        incomeAccountId={item.incomeAccountId}
+                        costCenterId={item.costCenterId}
+                        options={lineIncome.options}
+                        disabled={isInvoiceLocked}
+                        onChange={(patch) => {
+                          const newItems = [...(localDoc.items || [])];
+                          newItems[idx] = { ...newItems[idx], ...patch };
+                          setLocalDoc({ ...localDoc, items: newItems });
+                          if (!isCreating) handleUpdate(localDoc!.id, { items: newItems });
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
               {(!localDoc.items || localDoc.items.length === 0) && (

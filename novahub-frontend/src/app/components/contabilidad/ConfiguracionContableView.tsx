@@ -15,6 +15,7 @@ import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import { Switch } from '../ui/switch'
 import { CostCentersDialog } from './CostCentersDialog'
+import { SalesLineIncomeSettings } from './SalesLineIncomeSettings'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
@@ -2338,6 +2339,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
           </div>
         </CardContent>
       </Card>
+      <SalesLineIncomeSettings canEdit={canEditAccounting} />
       <CostCentersDialog open={costCentersOpen} onOpenChange={setCostCentersOpen} canEdit={canEditAccounting} />
     </div>
   )
