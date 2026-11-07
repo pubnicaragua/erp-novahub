@@ -438,7 +438,7 @@ export function ReceptionWizard({ onDone, onOpenBatch }: { onDone?: (trackingCod
 function CustomerDatalist() {
   const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
   useEffect(() => {
-    customersService.getLookup({ page: 1, pageSize: 200 } as any)
+    customersService.getAllLookup()
       .then((res: any) => {
         const list = Array.isArray(res) ? res : res?.items || [];
         setCustomers(list.map((c: any) => ({ id: c.id, name: c.name })));

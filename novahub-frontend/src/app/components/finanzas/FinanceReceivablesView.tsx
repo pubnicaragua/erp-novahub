@@ -30,7 +30,7 @@ export function FinanceReceivablesView() {
 
   const invoicesQuery = useQuery({
     queryKey: ['finance', 'sales-invoices', tenantKey],
-    queryFn: ({ signal }) => sourceDocumentsService.getLookup({ origin: 'SALES', page: 1, pageSize: 200 }, signal),
+    queryFn: ({ signal }) => sourceDocumentsService.getAllLookup({ origin: 'SALES' }, signal),
     enabled: canReadSales,
     staleTime: 30_000,
     gcTime: 5 * 60_000,

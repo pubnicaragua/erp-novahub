@@ -234,7 +234,7 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
   const [costToDelete, setCostToDelete] = useState<ProjectCost | null>(null);
 
   const costsQuery = useTenantQuery<any>(['projects', 'costs', projectId, status, source, page], (s) => projectsService.costs(projectId, { status: status === 'ALL' ? undefined : status, source: source === 'ALL' ? undefined : source, page, pageSize: 20 }, s), { enabled: true });
-  const suppliersQuery = useTenantQuery<any[]>(['projects', 'suppliers'], (s) => suppliersService.getLookup({ page: 1, pageSize: 200 }, s).then((res: any) => asList(res)), { enabled: dialog.open });
+  const suppliersQuery = useTenantQuery<any[]>(['projects', 'suppliers'], (s) => suppliersService.getAllLookup(undefined, s), { enabled: dialog.open });
 
   const rows = asList(costsQuery.data) as ProjectCost[];
   const total = Number(costsQuery.data?.total ?? 0);

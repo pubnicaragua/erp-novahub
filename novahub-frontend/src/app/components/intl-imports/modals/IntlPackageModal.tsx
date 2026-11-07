@@ -92,7 +92,7 @@ export function IntlPackageModal({
   const loadCustomers = useCallback(async () => {
     try {
       setFetchingCustomers(true);
-      const res = await (customersService.getLookup as (params?: { limit?: number }) => Promise<unknown>)({ limit: 100 });
+      const res = await (customersService.getAllLookup as () => Promise<unknown>)();
       const list = Array.isArray(res)
         ? res
         : Array.isArray((res as { data?: unknown })?.data)
@@ -108,7 +108,7 @@ export function IntlPackageModal({
 
   useEffect(() => {
     let mounted = true;
-    (customersService.getLookup as (params?: { limit?: number }) => Promise<unknown>)({ limit: 100 })
+    (customersService.getAllLookup as () => Promise<unknown>)()
       .then((res: unknown) => {
         if (!mounted) return;
         const list = Array.isArray(res)
@@ -120,7 +120,7 @@ export function IntlPackageModal({
       })
       .catch(() => undefined);
 
-    (suppliersService.getLookup as (params?: { limit?: number }) => Promise<unknown>)({ limit: 100 })
+    (suppliersService.getAllLookup as () => Promise<unknown>)()
       .then((res: unknown) => {
         if (!mounted) return;
         const list = Array.isArray(res)

@@ -101,7 +101,7 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarColla
   const agentsQuery = useTenantQuery<SupportAgent[]>(['support', 'agents'], signal => supportAgentsService.getAll({ status: 'ACTIVE' }, signal), {
     enabled: canViewAgents && (activeTab === 'agents' || activeTab === 'tickets'),
   });
-  const customersQuery = useTenantQuery<any[]>(['support', 'customers'], signal => customersService.getLookup({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal).then(asList), {
+  const customersQuery = useTenantQuery<any[]>(['support', 'customers'], signal => customersService.getAllLookup({ status: 'ACTIVE' }, signal), {
     enabled: canViewTickets && activeTab === 'tickets',
   });
   const categoriesQuery = useTenantQuery<any[]>(['support', 'categories'], signal => supportService.getCategories(signal).then(asList), {

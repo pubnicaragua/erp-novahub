@@ -75,7 +75,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
 
   const suppliersQuery = useTenantQuery(
     ['purchases', 'suppliers', 'lookup'],
-    (signal) => suppliersService.getLookup({ page: 1, pageSize: 200 }, signal).then((res: any) => asList(res)),
+    (signal) => suppliersService.getAllLookup(undefined, signal),
     { enabled: Boolean(projectId) && canRead && canSendToSuppliers },
   );
 

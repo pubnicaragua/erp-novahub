@@ -1,4 +1,5 @@
 import { api } from './api';
+import { fetchAllReportPages } from '../utils/reportPagination';
 import type {
   Account, Income, Expense, RecurringExpense,
   JournalEntry, Transaction, PaginatedResponse, ApiFilters,
@@ -36,6 +37,13 @@ export interface FinanceAccountLookup {
 export const sourceDocumentsService = {
   getLookup: (filters?: ApiFilters & { origin: 'SALES' | 'PURCHASES'; branchId?: string; warehouseId?: string }, signal?: AbortSignal) =>
     api.get<PaginatedResponse<FinanceSourceDocumentLookup>>('/financials/source-documents/lookup', { params: filters as any, signal }),
+  /** Todos los documentos origen (páginas de 200); una sola página dejaba fuera los más antiguos. */
+  getAllLookup: (filters: ApiFilters & { origin: 'SALES' | 'PURCHASES'; branchId?: string; warehouseId?: string }, signal?: AbortSignal) =>
+    fetchAllReportPages<FinanceSourceDocumentLookup>(
+      (page) => sourceDocumentsService.getLookup({ ...filters, ...page }, signal),
+      { pageSize: 200 },
+      signal,
+    ),
 };
 
 export const accountsService = {

@@ -88,11 +88,11 @@ function NuevaActividadForm({ onOpenChange, initialKind, initialDate, timezone, 
 
   const { data: customers } = useQuery({
     queryKey: ['organizacion', 'customers-lookup', user?.clientTenantId],
-    queryFn: ({ signal }) => customersService.getLookup({ pageSize: 100 }, signal),
+    queryFn: ({ signal }) => customersService.getAllLookup(undefined, signal),
     enabled: kind === 'TASK' && canListCustomers,
     staleTime: 5 * 60_000,
   });
-  const customerList = customers?.data ?? [];
+  const customerList = customers ?? [];
 
   const others = useMemo(() => users.filter((u) => u.id !== user?.id), [users, user?.id]);
   const filteredUsers = useMemo(() => {

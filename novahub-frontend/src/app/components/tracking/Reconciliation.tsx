@@ -97,11 +97,11 @@ export function Reconciliation() {
     (async () => {
       try {
         const [sup, ord, bch] = await Promise.all([
-          suppliersService.getLookup({ page: 1, pageSize: 200 } as any),
+          suppliersService.getAllLookup(),
           purchaseOrdersService.getLookup({ page: 1, pageSize: 200, status: 'APPROVED' } as any),
           logisticsService.listBatches({ page: 1, pageSize: 200 }),
         ]);
-        const supplierList: any[] = sup?.data || (sup as any)?.items || [];
+        const supplierList: any[] = Array.isArray(sup) ? sup : (sup as any)?.data || (sup as any)?.items || [];
         const orderList: any[] = ord?.data || (ord as any)?.items || [];
         setSuppliers(supplierList.map((s) => ({ id: s.id, name: s.name, code: s.code })));
         setOrders(orderList.map((o) => ({ id: o.id, number: o.number, status: o.status })));

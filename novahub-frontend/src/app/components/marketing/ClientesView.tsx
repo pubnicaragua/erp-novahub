@@ -33,12 +33,12 @@ export function ClientesView({ openCreate = false }: { openCreate?: boolean }) {
 
   // Clientes de Ventas: se vinculan (sin duplicar sus datos) solo si el rol puede consultarlos.
   const canLinkCustomers = canPerform('SALES_CLIENTS', 'view');
-  const customers = useTenantQuery(['marketing', 'customers-lookup'], (signal) => customersService.getLookup({ pageSize: 100 }, signal), { enabled: canLinkCustomers, staleTime: 5 * 60_000 });
+  const customers = useTenantQuery(['marketing', 'customers-lookup'], (signal) => customersService.getAllLookup(undefined, signal), { enabled: canLinkCustomers, staleTime: 5 * 60_000 });
   const accountsList = useTenantQuery(['marketing', 'accounts-all'], (signal) => mktResources.accounts.list({ pageSize: 100 }, signal), { staleTime: 60_000 });
 
   const accountFields: FieldDef[] = useMemo(() => [
     { key: 'name', label: 'Nombre del cliente o cuenta', type: 'text', required: true, span: 2 },
-    ...(canLinkCustomers ? [{ key: 'customerId', label: 'Cliente de Ventas', type: 'select', options: (customers.data?.data ?? []).map((c) => ({ value: c.id, label: c.companyName || c.name })), hint: 'Vincula el registro existente sin duplicar sus datos.', placeholder: 'Sin vincular' } as FieldDef] : []),
+    ...(canLinkCustomers ? [{ key: 'customerId', label: 'Cliente de Ventas', type: 'select', options: (customers.data ?? []).map((c) => ({ value: c.id, label: c.companyName || c.name })), hint: 'Vincula el registro existente sin duplicar sus datos.', placeholder: 'Sin vincular' } as FieldDef] : []),
     { key: 'industry', label: 'Industria', type: 'text' },
     { key: 'tier', label: 'Tipo de cuenta', type: 'select', options: [{ value: 'STANDARD', label: 'Estándar' }, { value: 'STRATEGIC', label: 'Estratégica' }] },
     { key: 'status', label: 'Estado', type: 'select', options: options(ACCOUNT_STATUS_LABEL) },

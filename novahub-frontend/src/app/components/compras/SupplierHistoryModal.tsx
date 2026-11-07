@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { fetchAllReportPages } from '../../utils/reportPagination';
 import { 
   FileText, CreditCard, Receipt, ShoppingCart, 
   History, TrendingUp, AlertCircle, Calendar,
@@ -51,16 +52,19 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
     setLoading(true);
     try {
       const toArr = (res: any) => Array.isArray(res) ? res : (res?.data || []);
-      const filters = { pageSize: 1000 }; 
+      // pageSize fuera de 50/100/200 se reducía a 50 en el backend: se filtra por proveedor en el
+      // servidor y se recorren todas las páginas.
+      const allForSupplier = (fetchPage: (f: any) => Promise<any>) =>
+        fetchAllReportPages((page) => fetchPage({ ...page, supplierId: supplier.id }), { pageSize: 200 });
 
       const [
         ordersRes, invoicesRes, receptionsRes, creditsRes, paymentsRes
       ] = await Promise.all([
-        purchaseOrdersService.getAll(filters),
-        supplierInvoicesService.getAll(filters),
-        purchaseReceiptsService.getAll(filters),
-        vendorCreditsService.getAll(filters),
-        paymentsService.getAll(filters)
+        allForSupplier((f) => purchaseOrdersService.getAll(f)),
+        allForSupplier((f) => supplierInvoicesService.getAll(f)),
+        allForSupplier((f) => purchaseReceiptsService.getAll(f)),
+        allForSupplier((f) => vendorCreditsService.getAll(f)),
+        allForSupplier((f) => paymentsService.getAll(f))
       ]);
 
       const matchSupplier = (item: any) => 

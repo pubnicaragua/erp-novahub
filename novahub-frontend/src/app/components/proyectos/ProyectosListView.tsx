@@ -60,7 +60,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
   const [editing, setEditing] = useState<ProjectListItem | null>(null);
 
   const usersQuery = useTenantQuery<any[]>(['projects', 'users'], (signal) => usersService.getLookup(undefined, signal), { enabled: true });
-  const customersQuery = useTenantQuery<any[]>(['projects', 'customers'], (signal) => customersService.getLookup({ page: 1, pageSize: 200 }, signal).then((res: any) => asList(res)), { enabled: dialogOpen });
+  const customersQuery = useTenantQuery<any[]>(['projects', 'customers'], (signal) => customersService.getAllLookup(undefined, signal), { enabled: dialogOpen });
 
   const listQuery = useTenantQuery<any>(
     ['projects', 'list', search, status, priority, branchId, managerId, page],

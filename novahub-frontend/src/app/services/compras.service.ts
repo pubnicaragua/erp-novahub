@@ -1,4 +1,5 @@
 import { api } from './api';
+import { fetchAllReportPages } from '../utils/reportPagination';
 import type {
   Supplier, PurchaseOrder, PurchaseReceipt, SupplierInvoice,
   RecurringSupplierInvoice, PaymentMade, SupplierCredit,
@@ -9,6 +10,12 @@ import type {
 export const suppliersService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Supplier>>('/purchases/suppliers', { params: filters as any, signal }),
   getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Pick<Supplier, 'id' | 'code' | 'name' | 'status'>>>('/purchases/lookups/suppliers', { params: filters as any, signal }),
+  /** Todos los proveedores del lookup (páginas de 200); evita que el selector se quede en la primera página. */
+  getAllLookup: (filters?: ApiFilters, signal?: AbortSignal) => fetchAllReportPages<Pick<Supplier, 'id' | 'code' | 'name' | 'status'>>(
+    (page) => suppliersService.getLookup(page, signal),
+    { ...filters, pageSize: 200 },
+    signal,
+  ),
   getById: (id: string) => api.get<Supplier>(`/purchases/suppliers/${id}`),
   create: (data: Partial<Supplier>) => api.post<Supplier>('/purchases/suppliers', data),
   importMassive: (data: { openingBalanceDate?: string; rows: Array<Partial<Supplier> & { type?: 'COMPANY' | 'INDIVIDUAL'; companyName?: string; openingBalanceType?: 'PENDING' | 'FAVOR'; openingBalanceAmount?: string | number; openingBalanceCurrency?: string; paymentTerms?: string }> }) => api.post<{ total: number; created: number; skipped: number; errors: string[]; warnings: string[] }>('/purchases/suppliers/import', data),

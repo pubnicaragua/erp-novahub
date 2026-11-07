@@ -30,7 +30,7 @@ export function FinancePayablesView() {
 
   const invoicesQuery = useQuery({
     queryKey: ['finance', 'supplier-invoices', tenantKey],
-    queryFn: ({ signal }) => sourceDocumentsService.getLookup({ origin: 'PURCHASES', page: 1, pageSize: 200 }, signal),
+    queryFn: ({ signal }) => sourceDocumentsService.getAllLookup({ origin: 'PURCHASES' }, signal),
     enabled: canReadPurchases,
     staleTime: 30_000,
     gcTime: 5 * 60_000,

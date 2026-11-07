@@ -114,10 +114,10 @@ export function BatchReception() {
     (async () => {
       try {
         const [sup, sub, wh, customerResponse] = await Promise.all([
-          suppliersService.getLookup({ page: 1, pageSize: 200 } as any),
+          suppliersService.getAllLookup(),
           logisticsService.listSubagencies(),
           logisticsService.listWarehouses(),
-          customersService.getLookup({ page: 1, pageSize: 200 } as any),
+          customersService.getAllLookup(),
         ]);
         const supplierPayload: any = (sup as any)?.data ?? sup;
         const supplierList: any[] = Array.isArray(supplierPayload) ? supplierPayload : supplierPayload?.items || [];

@@ -66,7 +66,7 @@ export function LogisticsConfig() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    suppliersService.getLookup({ page: 1, pageSize: 200 } as any)
+    suppliersService.getAllLookup()
       .then((sup: any) => {
         const payload = sup?.data ?? sup;
         const data = payload?.data ?? payload;

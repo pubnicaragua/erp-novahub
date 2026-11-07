@@ -134,7 +134,7 @@ export function Billing() {
   }, [load]);
 
   useEffect(() => {
-    customersService.getLookup({ page: 1, pageSize: 200 } as any)
+    customersService.getAllLookup()
       .then((response: any) => {
         const payload = response?.data ?? response;
         const list = Array.isArray(payload) ? payload : payload?.items || payload?.rows || [];

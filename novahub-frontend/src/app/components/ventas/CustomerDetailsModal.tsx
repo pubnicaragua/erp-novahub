@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { fetchAllReportPages } from '../../utils/reportPagination';
 import { 
   FileText, CreditCard, Receipt, ShoppingCart, 
   History, TrendingUp, AlertCircle, Calendar,
@@ -53,19 +54,23 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
       // Helper following VentasPage.tsx pattern to handle different API response formats
       const toArr = (res: any) => Array.isArray(res) ? res : (res?.data || []);
       
-      const filters = { pageSize: 1000 }; // Fetch broad set to ensure we don't miss records
+      // El backend ignora pageSize fuera de 50/100/200 (devolvía solo 50 de todo el tenant) y el
+      // historial se filtraba luego en el navegador. Ahora se filtra por cliente en el servidor y
+      // se recorren todas las páginas.
+      const allForCustomer = (fetchPage: (f: any) => Promise<any>) =>
+        fetchAllReportPages((page) => fetchPage({ ...page, customerId: customer.id }), { pageSize: 200 });
 
       const [
         invoicesRes, recurringRes, paymentsRes, 
         returnsRes, creditNotesRes, estimatesRes, ordersRes
       ] = await Promise.all([
-        invoicesService.getAll(filters),
-        recurringInvoicesService.getAll(filters),
-        paymentsService.getAll(filters),
-        salesReturnsService.getAll(filters),
-        creditNotesService.getAll(filters),
-        estimatesService.getAll(filters),
-        salesOrdersService.getAll(filters)
+        allForCustomer((f) => invoicesService.getAll(f)),
+        allForCustomer((f) => recurringInvoicesService.getAll(f)),
+        allForCustomer((f) => paymentsService.getAll(f)),
+        allForCustomer((f) => salesReturnsService.getAll(f)),
+        allForCustomer((f) => creditNotesService.getAll(f)),
+        allForCustomer((f) => estimatesService.getAll(f)),
+        allForCustomer((f) => salesOrdersService.getAll(f))
       ]);
 
       const matchCustomer = (item: any) => 

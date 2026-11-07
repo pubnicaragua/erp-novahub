@@ -230,8 +230,8 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
     enabled: canViewPurchasesSection('proveedores') && activeSection === 'proveedores',
   });
   const suppliersCatalogQuery = useQuery({
-    queryKey: ['purchases', 'suppliers-lookup', tenantKey, activeSection, 1, 200],
-    queryFn: ({ signal }) => suppliersService.getLookup({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal),
+    queryKey: ['purchases', 'suppliers-lookup', tenantKey, activeSection, 'all'],
+    queryFn: ({ signal }) => suppliersService.getAllLookup({ status: 'ACTIVE' }, signal),
     // Un flujo consumidor no debe depender del permiso de la pantalla
     // completa de Proveedores. El endpoint devuelve una proyección mínima.
     enabled: canViewPurchasesSection(activeSection) && ['solicitudes', 'gastos', 'gastos-rec', 'ordenes', 'recepciones', 'facturas-rec', 'pagos', 'creditos'].includes(activeSection),

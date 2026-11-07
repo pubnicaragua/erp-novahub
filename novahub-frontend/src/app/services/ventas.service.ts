@@ -5,6 +5,7 @@ import type {
   CreditNote, CreditDocument, PaginatedResponse, ApiFilters,
 } from '../types';
 import type { CustomerHistoryProfile } from '../utils/customer-history-profile';
+import { fetchAllReportPages } from '../utils/reportPagination';
 
 export interface CustomerPortalAdminAccess {
   customerId: string;
@@ -22,6 +23,15 @@ export const customersService = {
   getFormOptions: () => api.get<{ defaultCountryCode: string; countries: Array<{ code: string; name: string; phoneCode: string; taxIdLabel: string; rucLabel: string; strictIdentifiers: boolean; phoneNationalDigits?: number }> }>('/sales/customers/formats'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Customer>>('/sales/customers', { params: filters as any, signal }),
   getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Pick<Customer, 'id' | 'code' | 'name' | 'companyName' | 'status' | 'phone' | 'contactPhone' | 'openingBalanceDue' | 'openingBalanceFavor'>>>('/sales/customers/lookup', { params: filters as any, signal }),
+  /**
+   * Todos los clientes del lookup, recorriendo las páginas. El lookup entrega como máximo 200 por
+   * página ordenados por nombre; usar solo la primera dejaba fuera a los demás clientes del selector.
+   */
+  getAllLookup: (filters?: ApiFilters, signal?: AbortSignal) => fetchAllReportPages<Pick<Customer, 'id' | 'code' | 'name' | 'companyName' | 'status' | 'phone' | 'contactPhone' | 'openingBalanceDue' | 'openingBalanceFavor'>>(
+    (page) => customersService.getLookup(page, signal),
+    { ...filters, pageSize: 200 },
+    signal,
+  ),
   getLookupById: (id: string, signal?: AbortSignal, purpose?: string) => api.get<Pick<Customer, 'id' | 'code' | 'name' | 'companyName' | 'status' | 'phone' | 'contactPhone'>>(`/sales/customers/lookup/${id}`, { params: purpose ? { purpose } : undefined, signal }),
   getById: (id: string) => api.get<Customer>(`/sales/customers/${id}`),
   getCustomerHistoryProfile: () => api.get<CustomerHistoryProfile>('/sales/customers/history-profile'),

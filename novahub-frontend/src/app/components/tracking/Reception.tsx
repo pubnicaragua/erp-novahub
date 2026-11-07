@@ -153,8 +153,8 @@ export function Reception() {
       try {
         const [context, supplierResponse, customerResponse, subagencyResponse] = await Promise.all([
           logisticsService.getContext(),
-          suppliersService.getLookup({ page: 1, pageSize: 200 } as any),
-          customersService.getLookup({ page: 1, pageSize: 200 } as any),
+          suppliersService.getAllLookup(),
+          customersService.getAllLookup(),
           logisticsService.listSubagencies().catch(() => []),
         ]);
         setCtx({
