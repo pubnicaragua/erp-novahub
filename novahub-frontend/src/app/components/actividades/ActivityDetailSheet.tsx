@@ -14,6 +14,7 @@ import { SubtasksManager } from './SubtasksManager';
 import { TimeTracker } from './TimeTracker';
 import { SlaBadge } from './SlaBadge';
 import { ReassignTaskModal } from './ReassignTaskModal';
+import { TaskRatingPanel } from '../organizacion/TaskRating';
 import { computeActivitySlaConsumedRatio, evaluateActivitySla } from './actividades.sla';
 import { CUSTOM_FIELD_PRESETS, MAX_CUSTOM_FIELDS, MAX_CUSTOM_FIELD_LENGTH, normalizeCustomFields, toCustomFieldsRecord } from './actividades.constants';
 import { tasksService } from '../../services/actividades.service';
@@ -379,7 +380,7 @@ function TaskCustomFieldsSection({ task, canEdit, onTaskSaved }: { task: Pick<Ta
   );
 }
 
-function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, canStartTimeTracking, canStopTimeTracking, canAddManualTimeEntry, onReassign }: {
+function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, canStartTimeTracking, canStopTimeTracking, canAddManualTimeEntry, canRate, onReassign }: {
   item: any;
   onUpdate?: () => void;
   canEdit: boolean;
@@ -388,6 +389,8 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
   canStartTimeTracking: boolean;
   canStopTimeTracking: boolean;
   canAddManualTimeEntry: boolean;
+  /** Puede calificar: permiso de aprobar tareas y no ser una de las personas que la hicieron. */
+  canRate: boolean;
   onReassign?: () => void;
 }) {
   const now = new Date();
@@ -449,6 +452,12 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
       </DetailSection>
 
       <TaskSlaCard task={item} now={now} />
+
+      {displayStatus === 'COMPLETED' && (
+        <DetailSection title="Cumplimiento y calificación" icon={ShieldCheck}>
+          <TaskRatingPanel key={`${item.id}:${item.ratedAt ?? ''}`} task={item} canRate={canRate} onSaved={() => onUpdate?.()} />
+        </DetailSection>
+      )}
 
       <DetailSection title="Responsables" icon={Users}>
         {assignments.length > 0 ? <div className="flex flex-wrap gap-2">{assignments.map((assignment: any) => <Badge key={assignment.id || assignment.userId} variant="secondary" className="rounded-lg px-2.5 py-1 text-xs">{assignment.user?.name || assignment.user?.email || assignment.userId || 'Usuario'}</Badge>)}</div> : <p className="text-sm text-muted-foreground">Sin usuarios asignados.</p>}
@@ -825,8 +834,11 @@ function DetailSection({ title, icon: Icon, children }: { title: string; icon: a
 export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense, linkedIncome, linkedExpenseAccount, linkedIncomeAccount, linkedExpenseJournal, linkedIncomeJournal, extraActions, onUpdate, onDelete, onOpenChange }: ActivityDetailSheetProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const isTask = kind === 'task';
+  const isAssignedToMe = isTask && Boolean(user?.id) && ((item?.assignments || []) as Array<{ userId?: string; user?: { id?: string } }>)
+    .some((assignment) => String(assignment.userId || assignment.user?.id || '') === String(user!.id));
+  const canRateTask = isTask && canPerform('ACTIVITIES_TASKS', 'approve') && !isAssignedToMe && String(item?.assignedToId || '') !== String(user?.id || 'sin-usuario');
   const canEditTask = isTask && canPerform('ACTIVITIES_TASKS', 'edit');
   const canManageSubtasks = isTask && canPerform('ACTIVITIES_TASKS', 'manageSubtasks');
   const canStartTimeTracking = isTask && canPerform('ACTIVITIES_TASKS', 'startTimeTracking');
@@ -850,7 +862,7 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>
           {(extraActions || onDelete) && <div className="flex flex-wrap gap-2" data-tour="activity-detail-actions">{extraActions}{onDelete && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => setDeleteOpen(true)}><Trash2 className="mr-2 size-4" />Eliminar</Button>}</div>}
         </SheetHeader>
-        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} canEdit={canEditTask} canReassign={canReassignTask} canManageSubtasks={canManageSubtasks} canStartTimeTracking={canStartTimeTracking} canStopTimeTracking={canStopTimeTracking} canAddManualTimeEntry={canAddManualTimeEntry} onReassign={() => setReassignOpen(true)} />}{item && (kind === 'event' || kind === 'meeting') && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
+        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} canEdit={canEditTask} canReassign={canReassignTask} canManageSubtasks={canManageSubtasks} canStartTimeTracking={canStartTimeTracking} canStopTimeTracking={canStopTimeTracking} canAddManualTimeEntry={canAddManualTimeEntry} canRate={canRateTask} onReassign={() => setReassignOpen(true)} />}{item && (kind === 'event' || kind === 'meeting') && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
         <SheetFooter className="border-t border-border/50 px-5 py-3 sm:px-6"><Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}><XCircle className="mr-2 size-4" />Cerrar</Button></SheetFooter>
       </SheetContent>
     </Sheet>

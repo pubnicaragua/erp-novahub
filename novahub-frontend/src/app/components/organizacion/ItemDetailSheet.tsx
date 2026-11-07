@@ -11,8 +11,9 @@ import { eventsService, remindersService, tasksService } from '../../services/ac
 import { toast } from '../../services/toast';
 import type { AgendaEvent, AgendaReminder, AgendaTask } from '../../services/organizacion.service';
 import { Field, controlClass } from './OrgBits';
-import { KIND_LABEL, errorMessage, serifStyle, type CalendarItem } from './organizacion.utils';
+import { KIND_LABEL, MAX_FEEDBACK_LENGTH, errorMessage, serifStyle, type CalendarItem } from './organizacion.utils';
 import { fromZonedInputs, toZonedInputs } from './organizacion.time';
+import { TaskRatingPanel } from './TaskRating';
 
 interface Props {
   item: CalendarItem | null;
@@ -51,6 +52,7 @@ function ItemDetailForm({ item, readOnly, timezone, timezoneLabel, onClose, onCh
   const [busy, setBusy] = useState<'save' | 'complete' | 'delete' | null>(null);
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deliveryNote, setDeliveryNote] = useState('');
 
   const module = item.kind === 'TASK' ? 'ACTIVITIES_TASKS'
     : item.kind === 'REMINDER' ? 'ACTIVITIES_REMINDERS'
@@ -91,7 +93,7 @@ function ItemDetailForm({ item, readOnly, timezone, timezoneLabel, onClose, onCh
   };
 
   const complete = () => run('complete', () => (item.kind === 'TASK'
-    ? tasksService.complete(item.id)
+    ? tasksService.complete(item.id, deliveryNote.trim() ? { notes: deliveryNote.trim() } : undefined)
     : eventsService.update(item.id, { status: 'COMPLETED' } as never)), 'Marcado como completado');
 
   const remove = () => run('delete', () => (item.kind === 'TASK'
@@ -153,6 +155,17 @@ function ItemDetailForm({ item, readOnly, timezone, timezoneLabel, onClose, onCh
                 )}
                 {item.kind === 'REMINDER' && (item.raw as AgendaReminder).description && (
                   <p className="text-[12px] text-muted-foreground">{(item.raw as AgendaReminder).description}</p>
+                )}
+                {item.kind === 'TASK' && canComplete && (
+                  <Field label="Nota de entrega" htmlFor="det-delivery-note" hint="Opcional. Qué hiciste y qué quedó pendiente; la verá quien revise la tarea.">
+                    <Textarea id="det-delivery-note" rows={2} maxLength={MAX_FEEDBACK_LENGTH} value={deliveryNote} onChange={(e) => setDeliveryNote(e.target.value)} />
+                  </Field>
+                )}
+                {item.kind === 'TASK' && item.completed && (item.raw as AgendaTask).deliveryNote && (
+                  <p className="rounded-xl bg-muted/40 p-3 text-[12px]"><span className="font-semibold">Nota de entrega: </span>{(item.raw as AgendaTask).deliveryNote}</p>
+                )}
+                {item.kind === 'TASK' && (
+                  <TaskRatingPanel key={`${item.key}:${(item.raw as AgendaTask).ratedAt ?? ''}`} task={item.raw as AgendaTask} canRate={false} />
                 )}
               </>
             )}

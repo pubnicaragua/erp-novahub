@@ -49,6 +49,14 @@ export interface AgendaTask {
   endDate: string | null;
   customFields?: Record<string, string> | null;
   assigneeIds: string[];
+  estimatedMinutes?: number | null;
+  /** Cuándo se completó (null en tareas anteriores a este registro). */
+  completedAt?: string | null;
+  deliveryNote?: string | null;
+  rating?: number | null;
+  ratingComment?: string | null;
+  ratedAt?: string | null;
+  ratedBy?: { id: string; name: string } | null;
 }
 
 export interface AgendaReminder {
@@ -116,6 +124,8 @@ export interface TeamMember {
   id: string; name: string; email: string; department: string | null; role: string | null;
   sources: SupervisionSource[]; pending: number; overdue: number; completedRecently: number;
   quality: { inReview: number; delivered: number; rejected: number; firstPassRate: number | null; withEstimate: number; overEstimate: number };
+  /** Entregas a tiempo/tardías y calificación promedio de los últimos 30 días. */
+  compliance: { onTime: number; late: number; onTimeRate: number | null; rated: number; averageRating: number | null };
 }
 export interface TeamAgenda {
   range: { from: string; to: string };
@@ -127,7 +137,13 @@ export interface TeamTask {
   id: string; title: string; status: string; priority?: string; dueDate: string | null; createdAt: string;
   assignees: OrgUser[]; trackedMinutes: number; estimatedMinutes: number | null; deviationPct: number | null;
   checklist: { done: number; total: number } | null; rejectedAt: string | null; rejectedReason: string | null;
+  completedAt: string | null; deliveryNote: string | null;
+  punctuality: 'ON_TIME' | 'LATE' | 'UNKNOWN'; lateMinutes: number;
+  rating: number | null; ratingComment: string | null; ratedAt: string | null; ratedBy: OrgUser | null;
 }
+export type DigestSlot = 'START_OF_DAY' | 'BEFORE_LUNCH' | 'END_OF_DAY';
+/** Resumen programado: hora local de cada persona y días de la semana (1 = lunes … 7 = domingo). */
+export interface DigestSetting { slot: DigestSlot; enabled: boolean; localTime: string; weekdays: number[] }
 export interface TeamTaskPage { data: TeamTask[]; total: number; page: number; pageSize: number }
 export interface SupervisionRule {
   id: string; supervisor: OrgUser; scopeType: SupervisionScope; scopeValue: string; scopeLabel: string; includeSubDepartments: boolean; createdAt: string;
@@ -158,4 +174,7 @@ export const organizacionService = {
   getRuleTargets: (signal?: AbortSignal) => api.get<RuleTargets>('/organization/team/rule-targets', { signal }),
   createSupervisionRule: (data: { supervisorUserId: string; scopeType: SupervisionScope; scopeValue?: string; includeSubDepartments?: boolean }) => api.post<{ id: string }>('/organization/team/rules', data),
   deleteSupervisionRule: (id: string) => api.delete<{ success: boolean }>(`/organization/team/rules/${id}`),
+  // Resúmenes programados (administración)
+  getDigestSettings: (signal?: AbortSignal) => api.get<DigestSetting[]>('/organization/team/digests', { signal }),
+  saveDigestSetting: (slot: DigestSlot, data: Partial<Omit<DigestSetting, 'slot'>>) => api.put<DigestSetting>(`/organization/team/digests/${slot}`, data),
 };

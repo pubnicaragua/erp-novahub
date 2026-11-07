@@ -39,6 +39,10 @@ export const tasksService = {
   reject: async (id: string, reason: string) => {
     return await api.post(`/activities/tasks/${id}/reject`, { reason });
   },
+  /** Califica (1–5) una tarea completada y deja retroalimentación; con 2 o menos la retroalimentación es obligatoria. */
+  rate: async (id: string, payload: { rating: number; comment?: string }) => {
+    return await api.post(`/activities/tasks/${id}/rate`, payload);
+  },
   reassign: async (id: string, payload: { newAssigneeId: string; reason: string }) => {
     return await api.post(`/activities/tasks/${id}/reassign`, payload) as Task;
   },

@@ -141,3 +141,46 @@ export function errorMessage(error: unknown, fallback = 'No se pudo completar la
 export const SOURCE_LABEL: Record<string, string> = {
   ALL: 'Todo el equipo', USER: 'Asignado', DEPARTMENT: 'Departamento', ROLE: 'Rol', DEPARTMENT_HEAD: 'Jefe de departamento', REPORTS_TO: 'Organigrama',
 };
+
+// ───────────── Cumplimiento y calificación de tareas ─────────────
+export type TaskPunctuality = 'ON_TIME' | 'LATE' | 'UNKNOWN';
+
+/** 150 → «2 h 30 min»; 45 → «45 min»; 1500 → «1 d 1 h». */
+export function formatMinutes(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  if (total < 60) return `${total} min`;
+  if (total < 24 * 60) {
+    const rest = total % 60;
+    return rest ? `${Math.floor(total / 60)} h ${rest} min` : `${Math.floor(total / 60)} h`;
+  }
+  const hours = Math.floor((total % (24 * 60)) / 60);
+  return hours ? `${Math.floor(total / (24 * 60))} d ${hours} h` : `${Math.floor(total / (24 * 60))} d`;
+}
+
+/**
+ * ¿Se entregó a tiempo? Mismo criterio que el servidor: completada en o antes de la hora límite. Sin hora límite
+ * o sin fecha de cierre (tareas anteriores a este registro) no se puede medir y se dice así, sin inventar.
+ */
+export function taskPunctuality(task: { status?: string; dueDate?: string | null; completedAt?: string | null }): { kind: TaskPunctuality; lateMinutes: number } {
+  if (task.status !== 'COMPLETED' || !task.dueDate || !task.completedAt) return { kind: 'UNKNOWN', lateMinutes: 0 };
+  const due = new Date(task.dueDate).getTime();
+  const done = new Date(task.completedAt).getTime();
+  if (Number.isNaN(due) || Number.isNaN(done)) return { kind: 'UNKNOWN', lateMinutes: 0 };
+  return done <= due ? { kind: 'ON_TIME', lateMinutes: 0 } : { kind: 'LATE', lateMinutes: Math.max(1, Math.round((done - due) / 60_000)) };
+}
+
+export const RATING_LABEL: Record<number, string> = { 1: 'Deficiente', 2: 'Por mejorar', 3: 'Cumple', 4: 'Muy bueno', 5: 'Excelente' };
+/** Con esta calificación o menos, el servidor exige explicar qué mejorar. */
+export const FEEDBACK_REQUIRED_AT_OR_BELOW = 2;
+export const MAX_FEEDBACK_LENGTH = 1000;
+
+export const DIGEST_LABEL: Record<'START_OF_DAY' | 'BEFORE_LUNCH' | 'END_OF_DAY', { title: string; hint: string }> = {
+  START_OF_DAY: { title: 'Inicio de la jornada', hint: 'Tareas que vencen hoy, atrasadas y eventos del día.' },
+  BEFORE_LUNCH: { title: 'Antes del almuerzo', hint: 'Lo que falta por cerrar antes de salir a almorzar.' },
+  END_OF_DAY: { title: 'Cierre del día', hint: 'Lo completado hoy y lo que queda pendiente.' },
+};
+/** Días de la semana para los resúmenes: 1 = lunes … 7 = domingo (igual que el servidor). */
+export const DIGEST_WEEKDAYS: Array<{ id: number; short: string; label: string }> = [
+  { id: 1, short: 'L', label: 'Lunes' }, { id: 2, short: 'M', label: 'Martes' }, { id: 3, short: 'X', label: 'Miércoles' },
+  { id: 4, short: 'J', label: 'Jueves' }, { id: 5, short: 'V', label: 'Viernes' }, { id: 6, short: 'S', label: 'Sábado' }, { id: 7, short: 'D', label: 'Domingo' },
+];

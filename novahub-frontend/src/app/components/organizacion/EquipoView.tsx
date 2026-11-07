@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, ListTodo } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ListTodo, Star, Timer } from 'lucide-react';
 import { Skeleton } from '../ui/skeleton';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,7 +23,7 @@ export function EquipoView({ preferences }: { preferences: OrgPreferences }) {
   const [historyUser, setHistoryUser] = useState('');
   const team = useTenantQuery(['organizacion', 'team'], (signal) => organizacionService.getTeam(signal), { staleTime: 30_000 });
 
-  const tabs: Array<[Tab, string]> = [['resumen', 'Resumen del equipo'], ['calendario', 'Calendario'], ['historial', 'Historial de tareas'], ...(canManage ? [['reglas', 'Supervisores'] as [Tab, string]] : [])];
+  const tabs: Array<[Tab, string]> = [['resumen', 'Resumen del equipo'], ['calendario', 'Calendario'], ['historial', 'Historial de tareas'], ...(canManage ? [['reglas', 'Supervisores y avisos'] as [Tab, string]] : [])];
   const openHistory = (userId: string) => { setHistoryUser(userId); setTab('historial'); };
 
   return (
@@ -52,17 +52,24 @@ function Resumen({ members, loading, error, onRetry, onOpen, canManage, onManage
   if (!members?.length) {
     return (
       <EmptyState title="Aún no supervisas a nadie"
-        description={canManage ? 'Define quién supervisa a quién en la pestaña «Supervisores», o asigna jefes de departamento en el organigrama.' : 'Cuando la administración te asigne personas a supervisar, aparecerán aquí.'}
+        description={canManage ? 'Define quién supervisa a quién en la pestaña «Supervisores y avisos», o asigna jefes de departamento en el organigrama.' : 'Cuando la administración te asigne personas a supervisar, aparecerán aquí.'}
         action={canManage ? <button type="button" className="mt-2 text-[13px] font-semibold text-primary underline dark:text-accent" onClick={onManage}>Configurar supervisores</button> : undefined} />
     );
   }
-  const totals = members.reduce((t, m) => ({ pending: t.pending + m.pending, overdue: t.overdue + m.overdue, done: t.done + m.completedRecently }), { pending: 0, overdue: 0, done: 0 });
+  const totals = members.reduce((t, m) => ({
+    pending: t.pending + m.pending, overdue: t.overdue + m.overdue, done: t.done + m.completedRecently,
+    onTime: t.onTime + m.compliance.onTime, late: t.late + m.compliance.late,
+    rated: t.rated + m.compliance.rated, ratingSum: t.ratingSum + (m.compliance.averageRating ?? 0) * m.compliance.rated,
+  }), { pending: 0, overdue: 0, done: 0, onTime: 0, late: 0, rated: 0, ratingSum: 0 });
+  const measured = totals.onTime + totals.late;
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3" data-tour="team-kpis">
+      <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-5" data-tour="team-kpis">
         <Stat icon={<ListTodo className="size-4" />} label="Tareas pendientes" value={totals.pending} />
         <Stat icon={<AlertTriangle className="size-4" />} label="Vencidas" value={totals.overdue} tone={totals.overdue ? 'danger' : undefined} />
         <Stat icon={<CheckCircle2 className="size-4" />} label="Completadas (30 días)" value={totals.done} />
+        <Stat icon={<Timer className="size-4" />} label="Entregas a tiempo" value={measured ? `${Math.round((totals.onTime / measured) * 100)}%` : '—'} />
+        <Stat icon={<Star className="size-4" />} label="Calificación promedio" value={totals.rated ? `${(Math.round((totals.ratingSum / totals.rated) * 10) / 10).toFixed(1)}/5` : '—'} />
       </div>
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {members.map((m) => (
@@ -81,17 +88,21 @@ function Resumen({ members, loading, error, onRetry, onOpen, canManage, onManage
                 {m.quality.inReview > 0 && ` · ${m.quality.inReview} en revisión`}
                 {m.quality.overEstimate > 0 && ` · ${m.quality.overEstimate} sobre lo estimado`}
               </p>
+              <p className="text-[11px] text-muted-foreground">
+                Cumplimiento: {m.compliance.onTimeRate === null ? 'sin entregas medidas' : `${m.compliance.onTimeRate}% a tiempo (${m.compliance.onTime} de ${m.compliance.onTime + m.compliance.late})`}
+                {m.compliance.averageRating !== null && ` · Calificación ${m.compliance.averageRating.toFixed(1)}/5 (${m.compliance.rated})`}
+              </p>
               <p className="mt-auto text-[10px] text-muted-foreground">Origen: {m.sources.map((s) => SOURCE_LABEL[s]).join(', ')}</p>
             </button>
           </li>
         ))}
       </ul>
-      <p className="text-[11px] text-muted-foreground">Cada consulta al historial de una persona queda registrada en la auditoría. «Completadas» se cuenta por fecha límite de la tarea.</p>
+      <p className="text-[11px] text-muted-foreground">Cada consulta al historial de una persona queda registrada en la auditoría. «Completadas», «a tiempo» y la calificación cuentan los últimos 30 días por fecha de cierre; las tareas anteriores al control de cierre se cuentan por su fecha límite y no entran en «a tiempo».</p>
     </div>
   );
 }
 
-function Stat({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number; tone?: 'danger' }) {
+function Stat({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number | string; tone?: 'danger' }) {
   return (
     <div className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-center gap-2 text-[12px] text-muted-foreground"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/20 text-primary dark:text-accent">{icon}</span>{label}</div>

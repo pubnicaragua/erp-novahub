@@ -8,6 +8,7 @@ import { organizacionService, type SupervisionScope } from '../../services/organ
 import { toast } from '../../services/toast';
 import { EmptyState, ErrorState, Field, NativeSelect, Panel } from './OrgBits';
 import { errorMessage } from './organizacion.utils';
+import { EquipoResumenes } from './EquipoResumenes';
 
 const SCOPE_LABEL: Record<SupervisionScope, string> = { ALL: 'Todo el equipo', USER: 'Una persona', DEPARTMENT: 'Un departamento', ROLE: 'Un rol' };
 
@@ -43,6 +44,7 @@ export function EquipoReglas() {
 
   return (
     <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+      <div className="min-w-0 lg:col-span-2"><EquipoResumenes /></div>
       <Panel title="Conectar calendarios" icon={<Plus className="size-4" />}>
         <div className="space-y-3" data-tour="team-rule-form">
           <Field label="Supervisor" htmlFor="sup-user" required>

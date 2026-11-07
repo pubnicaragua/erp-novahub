@@ -1869,6 +1869,14 @@ export interface Task {
   customFields?: Record<string, string> | null;
   slaDueAt?: string | null;
   slaBreachedAt?: string | null;
+  estimatedMinutes?: number | null;
+  /** Cuándo pasó a completada (null en tareas anteriores a este registro). */
+  completedAt?: string | null;
+  /** Calificación 1–5 de quien revisó la tarea y su retroalimentación. */
+  rating?: number | null;
+  ratingComment?: string | null;
+  ratedAt?: string | null;
+  ratedBy?: { id: string; name: string } | null;
   reassignmentHistory?: ActivityReassignmentEntry[];
   subtasks?: ActivitySubtask[];
   timeEntries?: ActivityTimeEntry[];
