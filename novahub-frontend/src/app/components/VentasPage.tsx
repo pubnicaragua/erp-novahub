@@ -242,8 +242,14 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     enabled: canViewSalesSection('clientes') && activeSection === 'clientes',
   });
   const customersCatalogQuery = useQuery({
-    queryKey: ['sales', 'customers-catalog', tenantKey, 1, 200],
-    queryFn: ({ signal }) => customersService.getLookup({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal),
+    queryKey: ['sales', 'customers-catalog', tenantKey, 'all'],
+    // El lookup limita cada página a 200 y ordena por nombre; con una sola página
+    // los clientes más nuevos (o con nombres tardíos) no aparecían al facturar.
+    queryFn: ({ signal }) => fetchAllReportPages<Customer>(
+      (filters) => customersService.getLookup(filters, signal),
+      { pageSize: 200, status: 'ACTIVE' },
+      signal,
+    ),
     // El flujo consumidor autoriza el lookup mínimo; no se exige abrir la
     // pantalla completa de Clientes para facturar, cobrar o devolver.
     enabled: canViewSalesSection(activeSection) && needsCatalogs,
