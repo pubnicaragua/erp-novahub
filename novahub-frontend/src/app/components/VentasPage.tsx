@@ -392,7 +392,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   });
   const employeesQuery = useQuery({
     queryKey: ['sales', 'employees', tenantKey],
-    queryFn: () => hrService.getEmployees({ status: 'ACTIVE', isSeller: true, pageSize: 500 }),
+    // RRHH admite como máximo 200 por página; pedir 500 dejaba fuera a los demás vendedores.
+    queryFn: ({ signal }) => fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), { status: 'ACTIVE', isSeller: true, pageSize: 200 }, signal),
     enabled: canReadHr && ['ordenes-venta', 'facturas'].includes(activeSection),
     placeholderData: keepPreviousData,
   });
