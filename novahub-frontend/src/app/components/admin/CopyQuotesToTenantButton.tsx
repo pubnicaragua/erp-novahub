@@ -4,7 +4,6 @@ import { toast } from '@/app/services/toast';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
-import { tenantFeaturesService } from '../../services/tenant-features.service';
 import { tenantQuotesService } from '../../services/tenant-quotes.service';
 import { cn } from '../ui/utils';
 
@@ -17,7 +16,7 @@ export function CopyQuotesToTenantButton() {
   const [search, setSearch] = useState('');
   const [tenantId, setTenantId] = useState('');
   const [busy, setBusy] = useState(false);
-  const candidates = useTenantQuery(['admin', 'quote-copy-targets', search], (signal) => tenantFeaturesService.searchBranches('ADVANCED_QUOTES', search, signal), { enabled: open, staleTime: 30_000 });
+  const candidates = useTenantQuery(['admin', 'quote-copy-targets', search], (signal) => tenantQuotesService.listCopyTargets(search, signal), { enabled: open, staleTime: 30_000 });
 
   const copy = async () => {
     if (!tenantId) return;
@@ -43,7 +42,7 @@ export function CopyQuotesToTenantButton() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Copiar cotizaciones a una empresa</DialogTitle>
-            <DialogDescription>Se copian todas las cotizaciones de plataforma como cotizaciones propias de la empresa elegida. Las tuyas no se modifican ni se eliminan, y las ya copiadas no se repiten.</DialogDescription>
+            <DialogDescription>Solo aparecen las empresas que ya tienen «Cotizaciones avanzadas» habilitada. Se copian todas las cotizaciones de plataforma como cotizaciones de la empresa (sin responsable asignado). Las tuyas no se modifican ni se eliminan, y las ya copiadas no se repiten.</DialogDescription>
           </DialogHeader>
           <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar empresa…" aria-label="Buscar empresa" className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm outline-none focus:border-primary" /></div>
           <ul className="max-h-64 space-y-1.5 overflow-auto" role="listbox" aria-label="Empresas">
@@ -56,7 +55,7 @@ export function CopyQuotesToTenantButton() {
                 </button>
               </li>
             ))}
-            {candidates.data && candidates.data.length === 0 && <li className="p-3 text-sm text-muted-foreground">No hay empresas con ese nombre.</li>}
+            {candidates.data && candidates.data.length === 0 && <li className="p-3 text-sm text-muted-foreground">No hay empresas con «Cotizaciones avanzadas» habilitada{search ? ' que coincidan con la búsqueda' : ''}.</li>}
           </ul>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busy} onClick={() => setOpen(false)}>Cancelar</Button>

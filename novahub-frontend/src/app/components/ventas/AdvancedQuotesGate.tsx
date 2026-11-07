@@ -13,6 +13,7 @@ const tenantQuoteApi: QuoteApi = {
   update: (id, body) => tenantQuotesService.update(id, body),
   updateStatus: (id, status) => tenantQuotesService.updateStatus(id, status),
   remove: (id) => tenantQuotesService.remove(id),
+  owners: (signal) => tenantQuotesService.getOwners(signal),
 };
 
 /**
@@ -26,7 +27,8 @@ export function AdvancedQuotesGate({ simple }: { simple: ReactNode }) {
   const [tab, setTab] = useState<'proposals' | 'simple'>('proposals');
   const capabilities = useTenantQuery(['sales', 'proposals-capabilities'], (signal) => tenantQuotesService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0 });
   const canCreate = canPerform('SALES_QUOTES', 'create');
-  const extraActions = useMemo(() => canCreate ? <ImportQuotesButton onImported={() => { void queryClient.invalidateQueries({ queryKey: ['tenant-module'] }); }} /> : null, [canCreate, queryClient]);
+  const canImport = canCreate && Boolean(capabilities.data?.canManageAll);
+  const extraActions = useMemo(() => canImport ? <ImportQuotesButton onImported={() => { void queryClient.invalidateQueries({ queryKey: ['tenant-module'] }); }} /> : null, [canImport, queryClient]);
 
   if (!capabilities.data?.advancedQuotes) return <>{simple}</>;
   const tabs: Array<{ id: 'proposals' | 'simple'; label: string }> = [{ id: 'proposals', label: 'Propuestas comerciales' }, { id: 'simple', label: 'Cotizaciones simples' }];

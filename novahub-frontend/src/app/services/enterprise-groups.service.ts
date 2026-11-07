@@ -545,6 +545,10 @@ export interface PlatformQuote {
   status: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED";
   enterpriseGroup?: { id: string; name: string; slug: string } | null;
   clientTenant?: { id: string; name: string; slug: string } | null;
+  /** Solo en cotizaciones de empresa: quién la emitió y su responsable (sin responsable = de la empresa). */
+  issuerTenantId?: string | null;
+  ownerUserId?: string | null;
+  ownerName?: string | null;
   items: PlatformQuoteItem[];
   createdAt: string;
   updatedAt: string;
