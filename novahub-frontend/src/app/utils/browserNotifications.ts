@@ -29,6 +29,8 @@ export async function enableBrowserNotifications(): Promise<BrowserNotificationS
       : await Notification.requestPermission();
     if (permission === 'granted') {
       try { window.localStorage.setItem(BROWSER_NOTIFICATIONS_ENABLED_KEY, 'true'); } catch { /* optional preference */ }
+      // Además del aviso con la pestaña abierta, registra el dispositivo para recibir push con la app cerrada.
+      void import('./pushSubscription').then((module) => module.subscribeThisDevice()).catch(() => undefined);
     }
     return permission;
   } catch {
@@ -44,6 +46,7 @@ export function isBrowserNotificationsEnabled() {
 export function disableBrowserNotifications() {
   if (typeof window === 'undefined') return;
   try { window.localStorage.setItem(BROWSER_NOTIFICATIONS_ENABLED_KEY, 'false'); } catch { /* optional preference */ }
+  void import('./pushSubscription').then((module) => module.unsubscribeThisDevice()).catch(() => undefined);
 }
 
 export async function showPersistentBrowserNotification({
@@ -66,6 +69,14 @@ export async function showPersistentBrowserNotification({
   onClick?: () => void;
 }) {
   if (!isBrowserNotificationsEnabled()) return false;
+  // Si el push del servidor ya mostró este aviso (app en segundo plano), no se muestra dos veces.
+  if (notificationId && 'serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      const shown = (await registration?.getNotifications?.()) || [];
+      if (shown.some((item) => (item.data as { notificationId?: string } | null)?.notificationId === notificationId)) return true;
+    } catch { /* se continúa con la notificación local */ }
+  }
   const options = {
     body,
     tag,

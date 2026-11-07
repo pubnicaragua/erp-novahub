@@ -235,6 +235,31 @@ export const messagesService = {
     api.patch<{ success: true }>(`/notifications/messages/${threadId}/read`, {}),
 };
 const pushNotificationsCrudService = createCrudService<any>('/notifications/push', { dedupe: true });
+// ---- Web Push por dispositivo ----
+export interface PushDevice {
+  id: string;
+  endpoint: string;
+  deviceLabel: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  failureCount: number;
+}
+export interface PushSubscriptionPayload {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  userAgent?: string;
+  deviceLabel?: string;
+}
+export const pushDevicesService = {
+  getConfig: () => api.get<{ enabled: boolean; publicKey: string | null }>('/notifications/push/config'),
+  list: (signal?: AbortSignal) => api.get<PushDevice[]>('/notifications/push/subscriptions', { signal }),
+  subscribe: (payload: PushSubscriptionPayload) => api.post<{ id: string }>('/notifications/push/subscriptions', payload),
+  remove: (endpoint: string) => api.post<{ removed: number }>('/notifications/push/subscriptions/remove', { endpoint }),
+  sendTest: () => api.post<{ devices: number; sent: number; failed: number }>('/notifications/push/test', {}),
+};
+
 export const pushNotificationsService = {
   getAll: pushNotificationsCrudService.getAll,
   getById: pushNotificationsCrudService.getById,

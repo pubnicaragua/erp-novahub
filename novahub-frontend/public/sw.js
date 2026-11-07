@@ -56,9 +56,8 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Allows a future Web Push provider to show a notification even when the PWA
-// is backgrounded. In-app notifications continue to use the authenticated SSE
-// channel and do not depend on this listener.
+// Web Push del servidor (VAPID): llega aunque la app esté cerrada o el teléfono bloqueado.
+// Si NovaHub está abierto y a la vista, la propia página ya avisa por el canal en vivo: no se duplica.
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text?.() || '' }; }
@@ -71,7 +70,18 @@ self.addEventListener('push', (event) => {
     data: { url: data.url || '/', notificationId: data.notificationId || null },
     vibrate: [180, 80, 180],
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const visible = windows.some((client) => client.visibilityState === 'visible' && client.url.startsWith(self.location.origin));
+    // La prueba se muestra siempre, para poder comprobar que el dispositivo recibe push.
+    const isTest = String(data.notificationId || '').startsWith('test-');
+    if (visible && !isTest) return;
+    if (data.notificationId) {
+      const shown = await self.registration.getNotifications();
+      if (shown.some((item) => item.data?.notificationId === data.notificationId)) return;
+    }
+    await self.registration.showNotification(title, options);
+  })());
 });
 
 self.addEventListener('notificationclick', (event) => {

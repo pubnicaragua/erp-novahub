@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BellRing, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { enableBrowserNotifications, getBrowserNotificationStatus } from '../../utils/browserNotifications';
+import { ensureThisDeviceSubscribed } from '../../utils/pushSubscription';
 import { toast } from '@/app/services/toast';
 
 const BROWSER_NOTIFICATION_PROMPT_DISMISSED_KEY = 'nh-browser-notification-prompt-dismissed';
@@ -17,6 +18,9 @@ export function BrowserNotificationPrompt() {
     }
   });
   const [loading, setLoading] = useState(false);
+
+  // Mantiene vigente la suscripción push de este dispositivo (los navegadores la rotan o la expiran).
+  useEffect(() => { void ensureThisDeviceSubscribed(); }, []);
 
   if (!visible) return null;
 

@@ -11,6 +11,7 @@ import { pushNotificationsService } from '../../services/notificaciones.service'
 import { navigateToNotification } from '../../utils/notificationNavigation';
 import { enableBrowserNotifications, getBrowserNotificationStatus, isBrowserNotificationsEnabled, type BrowserNotificationStatus } from '../../utils/browserNotifications';
 import { NotificationTable } from './NotificationTable';
+import { DevicePushCard } from './DevicePushCard';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 
@@ -118,6 +119,8 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, summaryError 
           </Button>
         </CardContent>
       </Card>
+
+      <DevicePushCard />
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
