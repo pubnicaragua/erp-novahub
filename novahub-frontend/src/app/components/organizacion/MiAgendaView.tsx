@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ORGANIZACION_GUIDES } from './guides';
 import { useQueryClient } from '@tanstack/react-query';
 import { format, isSameMonth } from 'date-fns';
@@ -107,7 +107,10 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
       window.removeEventListener('focus', sync);
     };
   }, [tz]);
-  const gridRef = useRef<HTMLDivElement>(null);
+  // La cuadrícula aparece cuando terminan de cargar los datos, no en el primer render: la referencia avisa al montarse.
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [gridMounted, setGridMounted] = useState(false);
+  const setGrid = useCallback((element: HTMLDivElement | null) => { gridRef.current = element; setGridMounted(Boolean(element)); }, []);
 
   const { start, end } = useMemo(() => visibleCivilRange(view, anchor, weekStartsOn), [view, anchor, weekStartsOn]);
   const range = useMemo(() => rangeToInstants(start, end, tz), [start, end, tz]);
@@ -196,13 +199,13 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
 
   // Al abrir la cuadrícula se desplaza a la hora actual (o al inicio de la jornada si hoy no está a la vista).
   const todayVisible = days.some((d) => civilKey(d) === civilKey(today));
+  const anchorKey = civilKey(anchor);
   useEffect(() => {
     const grid = gridRef.current;
-    if (!grid || (view !== 'WEEK' && view !== 'DAY')) return;
+    if (!gridMounted || !grid || (view !== 'WEEK' && view !== 'DAY')) return;
     const focusMinutes = todayVisible ? Math.min(Math.max(minutesOfDay(new Date(), tz), HOUR_START * 60), (HOUR_END - 2) * 60) : 8 * 60;
     grid.scrollTop = Math.max(0, ((focusMinutes - HOUR_START * 60) / 60) * ROW_H - ROW_H * 1.5);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, zoom, todayVisible, civilKey(anchor)]);
+  }, [gridMounted, view, ROW_H, todayVisible, anchorKey, tz]);
 
   const tzLabel = timeZoneLabel(tz);
   const hours = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
@@ -224,7 +227,7 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
   );
 
   const renderTimeGrid = () => (
-    <div ref={gridRef} className="max-h-[640px] overflow-auto rounded-xl border border-border" role="grid" aria-label={`Calendario: ${title}`}>
+    <div ref={setGrid} className="max-h-[640px] overflow-auto rounded-xl border border-border" role="grid" aria-label={`Calendario: ${title}`}>
       <div className="grid min-w-[640px]" style={{ gridTemplateColumns: `56px repeat(${days.length}, minmax(0, 1fr))` }}>
         <div className="sticky top-0 z-20 border-b border-border bg-card" />
         {days.map((day) => {
