@@ -1054,6 +1054,9 @@ export function serializePermissionActions(input: any): any[] {
       const module = String(permission.module).trim().toUpperCase();
       const serializableActions = PERMISSION_ACTION_DEFINITIONS.filter(({ key }) => {
         if (key === 'delete' && !supportsPermissionAction(module, 'delete')) return false;
+        // `approve` gobierna a las demás acciones de aprobación (autorizar, enviar, cerrar…). Si la vista no
+        // tiene «aprobar», guardar `approve: false` anulaba esas acciones aunque estuvieran marcadas.
+        if (key === 'approve' && !supportsPermissionAction(module, 'approve')) return false;
         if (!GRANULAR_PERMISSION_ACTIONS.has(key as PermissionMatrixAction)) return true;
         const frontendKey = `can${key.charAt(0).toUpperCase()}${key.slice(1)}`;
         return supportsPermissionAction(module, key as PermissionMatrixAction)
@@ -1062,7 +1065,7 @@ export function serializePermissionActions(input: any): any[] {
       });
       return {
         module,
-        ...Object.fromEntries(serializableActions.map(({ key }) => [key, permissionValue(permission, key)])),
+        ...Object.fromEntries(serializableActions.map(({ key }) => [key, permissionValue(permission, key, module)])),
         viewCost: permissionValue(permission, 'viewCost'),
         write: permissionValue(permission, 'create') || permissionValue(permission, 'edit') || permission.write === true,
         ...(Object.prototype.hasOwnProperty.call(permission, 'allowedPriceListIds')

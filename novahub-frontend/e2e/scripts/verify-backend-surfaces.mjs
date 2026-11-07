@@ -73,6 +73,8 @@ const SURFACE_CLASSIFICATION = {
   'src/support-conversations/support-agents.controller.ts': { category: 'ui', uiModule: 'tenant-admin' },
   'src/support-conversations/support-conversations.controller.ts': { category: 'ui', uiModule: 'notificaciones' },
   'src/support-tickets/support-tickets.controller.ts': { category: 'ui', uiModule: 'soporte-tecnico' },
+  'src/common/tenant-features/tenant-features.controller.ts': { category: 'backend-only', reason: 'funciones específicas por empresa administradas desde Grupos empresariales' },
+  'src/tenant-quotes/tenant-quotes.controller.ts': { category: 'ui', uiModule: 'ventas' },
   'src/tenants/admin.controller.ts': { category: 'ui', uiModule: 'tenant-admin' },
   'src/tenants/tenants.controller.ts': { category: 'backend-only', reason: 'provisionamiento y administración de tenants' },
   'src/tools/tools.controller.ts': { category: 'infrastructure', reason: 'herramientas operativas' },

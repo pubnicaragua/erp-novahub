@@ -597,7 +597,9 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
   const updatePermissionActions = (permission: any, moduleId: string, shouldEnable: boolean) => {
     permissionActions.forEach(({ key }) => {
       if (actionIsAvailable(moduleId, key)) permission[key] = shouldEnable;
-      else if (key === 'approve') permission[key] = false;
+      // Sin «aprobar» en la vista, el valor viejo se elimina (no se fija en false): `approve: false` anulaba
+      // las acciones propias de la vista como «Autorizar» o «Enviar».
+      else if (key === 'approve') delete permission[key];
     });
     permission.write = shouldEnable && (actionIsAvailable(moduleId, 'create') || actionIsAvailable(moduleId, 'edit'));
     if (!shouldEnable) LEGACY_PERMISSION_KEYS.forEach((key) => { permission[key] = false; });

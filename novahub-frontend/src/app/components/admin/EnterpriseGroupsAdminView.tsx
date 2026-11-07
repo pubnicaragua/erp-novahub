@@ -13,6 +13,7 @@ import { GroupManagerSupportDialog } from './GroupManagerSupportDialog';
 import { EnterpriseGroupSetupView } from './EnterpriseGroupSetupView';
 import { TrialExtensionRequestsPanel } from '../suscripciones/TrialExtensionRequestsPanel';
 import { PlatformQuotesPanel } from './PlatformQuotesPanel';
+import { CopyQuotesToTenantButton } from './CopyQuotesToTenantButton';
 import { ModuleQuoteRequestsPanel } from './ModuleQuoteRequestsPanel';
 import { BrandLogo } from '../BrandLogo';
 import { useAuth } from '../../contexts/AuthContext';
@@ -213,7 +214,7 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
       ) : activeTab === 'support-agents' ? (
         <PlatformSupportAgentsPanel />
       ) : (
-        <PlatformQuotesPanel groups={data?.groupOptions?.length ? data.groupOptions : data?.groups || []} />
+        <PlatformQuotesPanel groups={data?.groupOptions?.length ? data.groupOptions : data?.groups || []} extraActions={<CopyQuotesToTenantButton />} />
       )}
     </section>
   );
