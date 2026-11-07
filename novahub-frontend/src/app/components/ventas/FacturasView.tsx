@@ -2684,7 +2684,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         open={pendingDeleteInvoiceId !== null}
         onOpenChange={(open) => !open && setPendingDeleteInvoiceId(null)}
         title="¿Eliminar factura en borrador?"
-        description="La factura y sus líneas se eliminarán definitivamente. Las facturas emitidas deben pasar por la solicitud de anulación contable."
+        description="Si es la última factura de la serie se elimina y su número queda libre. Si ya hay facturas posteriores, queda anulada y conserva su número, porque la numeración debe ser continua. Las facturas emitidas deben pasar por la solicitud de anulación contable."
         confirmLabel="Eliminar borrador"
         variant="destructive"
         loading={invoiceDeleteLoading}
@@ -2693,8 +2693,13 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           const deleteToastId = toast.loading('Eliminando factura en borrador...');
           setInvoiceDeleteLoading(true);
           try {
-            await invoicesService.delete(pendingDeleteInvoiceId);
-            toast.success('Factura en borrador eliminada', { id: deleteToastId });
+            const removal: any = await invoicesService.delete(pendingDeleteInvoiceId);
+            toast.success(
+              removal?.annulledInsteadOfDeleted
+                ? 'El borrador quedó anulado y conserva su número para mantener la numeración continua'
+                : 'Factura en borrador eliminada',
+              { id: deleteToastId },
+            );
             setPendingDeleteInvoiceId(null);
             setDetailInvoice(null);
             setEditingId(null);

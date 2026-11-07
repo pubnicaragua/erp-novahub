@@ -136,7 +136,8 @@ export const invoicesService = {
     api.get<any[]>('/sales/invoices/cancellation-requests', { params: { status }, signal }),
   reviewCancellationRequest: (requestId: string, decision: 'APPROVE' | 'REJECT', reason?: string, idempotencyKey?: string) =>
     api.idempotentPost<any>(`/sales/invoices/cancellation-requests/${requestId}/review`, { decision, reason }, idempotencyKey),
-  delete: (id: string) => api.delete<void>(`/sales/invoices/${id}`),
+  /** Un borrador que no es el último de su serie queda anulado (conserva su número); lo indica annulledInsteadOfDeleted. */
+  delete: (id: string) => api.delete<{ annulledInsteadOfDeleted?: boolean } | void>(`/sales/invoices/${id}`),
 };
 
 export interface InvoiceSeriesConfiguration {
