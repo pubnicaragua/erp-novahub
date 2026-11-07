@@ -33,6 +33,9 @@ import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
+/** Valor del elemento «Sin …» de los selectores (Radix Select no admite un valor vacío). */
+const NO_SELECTION = '__none__';
+
 export function EmpleadosView({ employees, departments, positions, onRefresh, isSidebarCollapsed = false }: any) {
   const { canPerform, user } = useAuth();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
@@ -753,11 +756,11 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   };
 
   const createEmptyEmployeeDraft = () => {
-    const departmentId = departments[0]?.id || '';
+    // Departamento y puesto son opcionales: un empleado nuevo no se asigna a ninguno hasta que se elija.
     return {
       employeeNumber: getNextEmployeeNumber(), firstName: '', lastName: '', email: '', phone: '', nationalId: '',
-      dateOfBirth: '', hireDate: new Date().toISOString().split('T')[0], departmentId,
-      positionId: positions.find((position: any) => position.departmentId === departmentId)?.id || '',
+      dateOfBirth: '', hireDate: new Date().toISOString().split('T')[0], departmentId: '',
+      positionId: '',
       contractType: 'FULL_TIME', salary: '', currency: 'NIO', employmentStatus: 'ACTIVE',
       address: '', city: '', state: '', postalCode: '', country: 'Nicaragua',
       emergencyContact: '', emergencyPhone: '', socialSecurityNumber: '',
@@ -832,7 +835,10 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const updateNewEmployeeForm = (field: string, value: any) => {
     setNewEmployeeForm((current: any) => {
       const next = { ...current, [field]: value };
-      if (field === 'departmentId') next.positionId = positions.find((position: any) => position.departmentId === value)?.id || '';
+      if (field === 'departmentId') {
+        const keep = positions.find((position: any) => String(position.id) === String(current.positionId) && (!value || String(position.departmentId) === String(value)));
+        next.positionId = keep ? current.positionId : '';
+      }
       return next;
     });
   };
@@ -1312,8 +1318,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
               <div><p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Información laboral</p><p className="mt-1 text-xs text-muted-foreground">Solo la fecha de contratación y el salario son obligatorios. Si indicas departamento y puesto, deben pertenecer a los catálogos de Recursos Humanos; el tipo de contrato es «Tiempo completo» si no lo cambias.</p></div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-2"><Label>Fecha de contratación *</Label><Input data-testid="hr-employee-hire-date" type="date" value={newEmployeeForm.hireDate || ''} onChange={(event) => updateNewEmployeeForm('hireDate', event.target.value)} /></div>
-                <div className="space-y-2"><Label>Departamento</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.departmentId || ''} onValueChange={(value) => updateNewEmployeeForm('departmentId', value)}><SelectTrigger data-testid="hr-employee-department"><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{departments.map((department: any) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewDeptName(''); setPendingImportDepartmentRow(null); setShowNewDeptModal(true); }} title="Crear departamento" aria-label="Crear departamento"><Plus className="size-3.5" /></Button></div></div>
-                <div className="space-y-2"><Label>Puesto</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.positionId || ''} onValueChange={(value) => updateNewEmployeeForm('positionId', value)}><SelectTrigger data-testid="hr-employee-position"><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{positions.filter((position: any) => !newEmployeeForm.departmentId || position.departmentId === newEmployeeForm.departmentId).map((position: any) => <SelectItem key={position.id} value={position.id}>{position.title}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewPosTitle(''); setNewPosDeptId(newEmployeeForm.departmentId || ''); setPendingImportPositionRow(null); setShowNewPosModal(true); }} title="Crear puesto" aria-label="Crear puesto" disabled={!newEmployeeForm.departmentId}><Plus className="size-3.5" /></Button></div></div>
+                <div className="space-y-2"><Label>Departamento</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.departmentId || ''} onValueChange={(value) => updateNewEmployeeForm('departmentId', value === NO_SELECTION ? '' : value)}><SelectTrigger data-testid="hr-employee-department"><SelectValue placeholder="Sin departamento" /></SelectTrigger><SelectContent><SelectItem value={NO_SELECTION}>Sin departamento</SelectItem>{departments.map((department: any) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewDeptName(''); setPendingImportDepartmentRow(null); setShowNewDeptModal(true); }} title="Crear departamento" aria-label="Crear departamento"><Plus className="size-3.5" /></Button></div></div>
+                <div className="space-y-2"><Label>Puesto</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.positionId || ''} onValueChange={(value) => updateNewEmployeeForm('positionId', value === NO_SELECTION ? '' : value)}><SelectTrigger data-testid="hr-employee-position"><SelectValue placeholder="Sin puesto" /></SelectTrigger><SelectContent><SelectItem value={NO_SELECTION}>Sin puesto</SelectItem>{positions.filter((position: any) => !newEmployeeForm.departmentId || position.departmentId === newEmployeeForm.departmentId).map((position: any) => <SelectItem key={position.id} value={position.id}>{position.title}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewPosTitle(''); setNewPosDeptId(newEmployeeForm.departmentId || ''); setPendingImportPositionRow(null); setShowNewPosModal(true); }} title="Crear puesto" aria-label="Crear puesto" disabled={!newEmployeeForm.departmentId}><Plus className="size-3.5" /></Button></div></div>
                 <div className="space-y-2"><Label>Tipo de contrato</Label><Select value={newEmployeeForm.contractType || 'FULL_TIME'} onValueChange={(value) => updateNewEmployeeForm('contractType', value)}><SelectTrigger data-testid="hr-employee-contract"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="FULL_TIME">Tiempo completo</SelectItem><SelectItem value="PART_TIME">Medio tiempo</SelectItem><SelectItem value="CONTRACTOR">Contratista</SelectItem><SelectItem value="INTERN">Pasante</SelectItem><SelectItem value="TEMPORARY">Temporal</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2"><Label>Salario *</Label><Input data-testid="hr-employee-salary" type="number" min="0" value={newEmployeeForm.salary ?? ''} onChange={(event) => updateNewEmployeeForm('salary', event.target.value === '' ? '' : Number(event.target.value))} placeholder="0.00" /></div>
                 <div className="space-y-2"><Label>Moneda</Label><Select value={newEmployeeForm.currency || 'NIO'} onValueChange={(value) => updateNewEmployeeForm('currency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO - Córdoba</SelectItem><SelectItem value="USD">USD - Dólar</SelectItem></SelectContent></Select></div>

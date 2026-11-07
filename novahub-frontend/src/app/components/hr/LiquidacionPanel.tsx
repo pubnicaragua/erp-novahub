@@ -38,6 +38,8 @@ const REASONS: Array<{ value: string; label: string }> = [
   { value: 'FIN_CONTRATO', label: 'Fin de contrato' },
 ];
 
+const longDate = (iso: string) => new Date(`${String(iso).slice(0, 10)}T12:00:00`).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
+
 const todayISO = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -73,7 +75,8 @@ export function LiquidacionPanel({ employees }: { employees: EmployeeOption[] })
     { enabled: Boolean(submitted), retry: false, staleTime: 0 },
   );
   const result = query.data;
-  const errorMessage = (query.error as any)?.response?.data?.message || (query.error as any)?.message;
+  const failure = query.error as { response?: { data?: { message?: string } }; message?: string } | null;
+  const errorMessage = failure?.response?.data?.message || failure?.message;
   const money = (amount: number, currency = 'NIO') => formatExplicitAmount(amount, normalizeCurrency(currency));
 
   const calculate = () => {
@@ -92,7 +95,7 @@ export function LiquidacionPanel({ employees }: { employees: EmployeeOption[] })
     if (!result) return;
     const text = [
       `Liquidación de ${result.employee.name} (${result.employee.employeeNumber}) — ${result.reasonLabel}`,
-      `Fecha de salida: ${result.terminationDate} · Años de servicio: ${result.yearsOfService.toFixed(2)} · Salario mensual: ${money(result.monthlySalary, result.currency)}`,
+      `Fecha de salida: ${longDate(result.terminationDate)} · Años de servicio: ${result.yearsOfService.toFixed(2)} · Salario mensual: ${money(result.monthlySalary, result.currency)}`,
       ...result.lines.map((line) => `${line.label}: ${money(line.amount, result.currency)} (${line.detail})`),
       `TOTAL: ${money(result.total, result.currency)}`,
       '',
@@ -153,7 +156,7 @@ export function LiquidacionPanel({ employees }: { employees: EmployeeOption[] })
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-black">{result.employee.name} <span className="font-normal text-muted-foreground">· {result.employee.employeeNumber}</span></p>
-                <p className="text-xs text-muted-foreground">{result.reasonLabel} · salida el {result.terminationDate} · {result.yearsOfService.toFixed(2)} año(s) de servicio · salario mensual {money(result.monthlySalary, result.currency)}</p>
+                <p className="text-xs text-muted-foreground">{result.reasonLabel} · salida el {longDate(result.terminationDate)} · {result.yearsOfService.toFixed(2)} año(s) de servicio · salario mensual {money(result.monthlySalary, result.currency)}</p>
               </div>
               <Button type="button" size="sm" variant="outline" onClick={() => void copySummary()}><Copy className="mr-1.5 size-4" aria-hidden /> Copiar resumen</Button>
             </div>
