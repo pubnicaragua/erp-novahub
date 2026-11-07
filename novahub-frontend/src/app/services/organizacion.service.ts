@@ -49,6 +49,8 @@ export interface AgendaTask {
   endDate: string | null;
   customFields?: Record<string, string> | null;
   assigneeIds: string[];
+  /** Cuándo se creó: con ella se reconoce una tarea sin plazo real (su fecha límite es la de creación). */
+  createdAt?: string | null;
   estimatedMinutes?: number | null;
   /** Cuándo se completó (null en tareas anteriores a este registro). */
   completedAt?: string | null;
@@ -124,8 +126,8 @@ export interface TeamMember {
   id: string; name: string; email: string; department: string | null; role: string | null;
   sources: SupervisionSource[]; pending: number; overdue: number; completedRecently: number;
   quality: { inReview: number; delivered: number; rejected: number; firstPassRate: number | null; withEstimate: number; overEstimate: number };
-  /** Entregas a tiempo/tardías y calificación promedio de los últimos 30 días. */
-  compliance: { onTime: number; late: number; onTimeRate: number | null; rated: number; averageRating: number | null };
+  /** Entregas a tiempo/tardías y calificación promedio de los últimos 30 días; `noDeadline` son las completadas sin plazo real, que no entran al porcentaje. */
+  compliance: { onTime: number; late: number; onTimeRate: number | null; noDeadline: number; rated: number; averageRating: number | null };
 }
 export interface TeamAgenda {
   range: { from: string; to: string };
@@ -138,7 +140,7 @@ export interface TeamTask {
   assignees: OrgUser[]; trackedMinutes: number; estimatedMinutes: number | null; deviationPct: number | null;
   checklist: { done: number; total: number } | null; rejectedAt: string | null; rejectedReason: string | null;
   completedAt: string | null; deliveryNote: string | null;
-  punctuality: 'ON_TIME' | 'LATE' | 'UNKNOWN'; lateMinutes: number;
+  punctuality: 'ON_TIME' | 'LATE' | 'NO_DEADLINE' | 'UNKNOWN'; lateMinutes: number;
   rating: number | null; ratingComment: string | null; ratedAt: string | null; ratedBy: OrgUser | null;
 }
 export type DigestSlot = 'START_OF_DAY' | 'BEFORE_LUNCH' | 'END_OF_DAY';

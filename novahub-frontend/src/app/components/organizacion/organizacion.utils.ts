@@ -143,7 +143,15 @@ export const SOURCE_LABEL: Record<string, string> = {
 };
 
 // ───────────── Cumplimiento y calificación de tareas ─────────────
-export type TaskPunctuality = 'ON_TIME' | 'LATE' | 'UNKNOWN';
+/** `NO_DEADLINE`: la tarea no tiene un plazo real, así que no hay contra qué medirla. */
+export type TaskPunctuality = 'ON_TIME' | 'LATE' | 'NO_DEADLINE' | 'UNKNOWN';
+
+/**
+ * El formulario de tareas guarda la hora de creación como fecha límite cuando el vencimiento queda vacío. Una fecha
+ * límite a menos de este margen de la creación (antes o después, por la diferencia de reloj con el servidor) no es
+ * un plazo real. Mismo valor y criterio que el servidor.
+ */
+export const NO_DEADLINE_MARGIN_MS = 5 * 60_000;
 
 /** 150 → «2 h 30 min»; 45 → «45 min»; 1500 → «1 d 1 h». */
 export function formatMinutes(minutes: number): string {
@@ -158,14 +166,20 @@ export function formatMinutes(minutes: number): string {
 }
 
 /**
- * ¿Se entregó a tiempo? Mismo criterio que el servidor: completada en o antes de la hora límite. Sin hora límite
- * o sin fecha de cierre (tareas anteriores a este registro) no se puede medir y se dice así, sin inventar.
+ * ¿Se entregó a tiempo? Mismo criterio que el servidor: completada en o antes de la hora límite. Sin plazo real no
+ * hay contra qué medir, y sin fecha de cierre (tareas anteriores a este registro) tampoco: se dice así, sin inventar.
+ * Sin `createdAt` no se puede reconocer una tarea sin plazo y la fecha límite se toma tal cual.
  */
-export function taskPunctuality(task: { status?: string; dueDate?: string | null; completedAt?: string | null }): { kind: TaskPunctuality; lateMinutes: number } {
-  if (task.status !== 'COMPLETED' || !task.dueDate || !task.completedAt) return { kind: 'UNKNOWN', lateMinutes: 0 };
+export function taskPunctuality(task: { status?: string; dueDate?: string | null; completedAt?: string | null; createdAt?: string | null }): { kind: TaskPunctuality; lateMinutes: number } {
+  if (task.status !== 'COMPLETED') return { kind: 'UNKNOWN', lateMinutes: 0 };
+  if (!task.dueDate) return { kind: 'NO_DEADLINE', lateMinutes: 0 };
   const due = new Date(task.dueDate).getTime();
+  if (Number.isNaN(due)) return { kind: 'UNKNOWN', lateMinutes: 0 };
+  const created = task.createdAt ? new Date(task.createdAt).getTime() : Number.NaN;
+  if (!Number.isNaN(created) && Math.abs(due - created) <= NO_DEADLINE_MARGIN_MS) return { kind: 'NO_DEADLINE', lateMinutes: 0 };
+  if (!task.completedAt) return { kind: 'UNKNOWN', lateMinutes: 0 };
   const done = new Date(task.completedAt).getTime();
-  if (Number.isNaN(due) || Number.isNaN(done)) return { kind: 'UNKNOWN', lateMinutes: 0 };
+  if (Number.isNaN(done)) return { kind: 'UNKNOWN', lateMinutes: 0 };
   return done <= due ? { kind: 'ON_TIME', lateMinutes: 0 } : { kind: 'LATE', lateMinutes: Math.max(1, Math.round((done - due) / 60_000)) };
 }
 

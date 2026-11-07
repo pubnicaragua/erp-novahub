@@ -14,6 +14,8 @@ export interface RatableTask {
   id: string;
   status?: string;
   dueDate?: string | null;
+  /** Con ella se reconoce una tarea sin plazo real (su fecha límite es la de creación). */
+  createdAt?: string | null;
   completedAt?: string | null;
   rating?: number | null;
   ratingComment?: string | null;
@@ -38,9 +40,10 @@ export function RatingStars({ value, className }: { value: number; className?: s
   );
 }
 
-/** «A tiempo», «Tardía por 2 h» o «Sin medir» (tareas anteriores al registro de cierre). */
-export function PunctualityBadge({ task }: { task: Pick<RatableTask, 'status' | 'dueDate' | 'completedAt'> }) {
+/** «A tiempo», «Tardía por 2 h», «Sin plazo definido» o «Sin medir» (tareas anteriores al registro de cierre). */
+export function PunctualityBadge({ task }: { task: Pick<RatableTask, 'status' | 'dueDate' | 'createdAt' | 'completedAt'> }) {
   const { kind, lateMinutes } = taskPunctuality(task);
+  if (kind === 'NO_DEADLINE') return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">Sin plazo definido</span>;
   if (kind === 'UNKNOWN') return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">Cumplimiento sin medir</span>;
   return kind === 'ON_TIME'
     ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900"><CheckCircle2 className="size-3" aria-hidden="true" />A tiempo</span>

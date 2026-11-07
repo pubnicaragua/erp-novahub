@@ -90,6 +90,7 @@ function Resumen({ members, loading, error, onRetry, onOpen, canManage, onManage
               </p>
               <p className="text-[11px] text-muted-foreground">
                 Cumplimiento: {m.compliance.onTimeRate === null ? 'sin entregas medidas' : `${m.compliance.onTimeRate}% a tiempo (${m.compliance.onTime} de ${m.compliance.onTime + m.compliance.late})`}
+                {m.compliance.noDeadline > 0 && ` · ${m.compliance.noDeadline} sin plazo`}
                 {m.compliance.averageRating !== null && ` · Calificación ${m.compliance.averageRating.toFixed(1)}/5 (${m.compliance.rated})`}
               </p>
               <p className="mt-auto text-[10px] text-muted-foreground">Origen: {m.sources.map((s) => SOURCE_LABEL[s]).join(', ')}</p>
@@ -97,7 +98,7 @@ function Resumen({ members, loading, error, onRetry, onOpen, canManage, onManage
           </li>
         ))}
       </ul>
-      <p className="text-[11px] text-muted-foreground">Cada consulta al historial de una persona queda registrada en la auditoría. «Completadas», «a tiempo» y la calificación cuentan los últimos 30 días por fecha de cierre; las tareas anteriores al control de cierre se cuentan por su fecha límite y no entran en «a tiempo».</p>
+      <p className="text-[11px] text-muted-foreground">Cada consulta al historial de una persona queda registrada en la auditoría. «Completadas», «a tiempo» y la calificación cuentan los últimos 30 días por fecha de cierre; las tareas anteriores al control de cierre se cuentan por su fecha límite y no entran en «a tiempo». Tampoco entran las tareas sin plazo definido (cuando se deja el vencimiento vacío se guarda la hora de creación): se indican como «sin plazo».</p>
     </div>
   );
 }
