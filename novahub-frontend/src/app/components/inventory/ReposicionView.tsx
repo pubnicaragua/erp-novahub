@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronDown, ChevronRight, PackagePlus, PackageX, Search, Sparkles, TrendingDown, Wallet } from 'lucide-react';
 import { Badge } from '../ui/badge';
@@ -84,7 +84,7 @@ export function ReposicionView({ warehouses }: Props) {
     }, signal),
     { placeholderData: keepPreviousData, staleTime: 30_000 },
   );
-  const rows = query.data?.data ?? [];
+  const rows = useMemo(() => query.data?.data ?? [], [query.data]);
   const summary = query.data?.summary;
   const meta = query.data?.meta;
 
@@ -119,7 +119,7 @@ export function ReposicionView({ warehouses }: Props) {
     const failed: string[] = [];
     for (const group of groups) {
       try {
-        const order: any = await purchaseOrdersService.create({
+        const order = await purchaseOrdersService.create({
           supplierId: group.supplierId,
           warehouseId: group.warehouseId,
           date: today,
@@ -136,10 +136,11 @@ export function ReposicionView({ warehouses }: Props) {
             unitPrice: row.unitCost ?? 0,
             stockApplies: true,
           })),
-        } as any);
+        } as unknown as Parameters<typeof purchaseOrdersService.create>[0]);
         created.push(order?.number || group.supplierName);
-      } catch (error: any) {
-        failed.push(`${group.supplierName}: ${error?.response?.data?.message || error?.message || 'no se pudo crear'}`);
+      } catch (error) {
+        const detail = error as { response?: { data?: { message?: string } }; message?: string };
+        failed.push(`${group.supplierName}: ${detail?.response?.data?.message || detail?.message || 'no se pudo crear'}`);
       }
     }
     setCreating(false);
@@ -277,8 +278,8 @@ export function ReposicionView({ warehouses }: Props) {
                 const meta = URGENCY_META[row.urgency];
                 const open = expanded === row.key;
                 return (
-                  <>
-                    <TableRow key={row.key} className={cn(row.urgency === 'OUT_OF_STOCK' && 'bg-rose-500/5')}>
+                  <Fragment key={row.key}>
+                    <TableRow className={cn(row.urgency === 'OUT_OF_STOCK' && 'bg-rose-500/5')}>
                       {canCreateOrders && (
                         <TableCell>
                           <Checkbox checked={selected[row.key] !== undefined} disabled={row.suggestedQty <= 0} aria-label={`Elegir ${row.productName}`} onCheckedChange={(checked) => toggleRow(row, checked === true)} />
@@ -334,7 +335,7 @@ export function ReposicionView({ warehouses }: Props) {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>
