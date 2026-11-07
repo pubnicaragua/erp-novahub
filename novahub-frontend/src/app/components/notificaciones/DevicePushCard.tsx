@@ -40,7 +40,10 @@ export function DevicePushCard() {
     return () => { window.clearTimeout(timer); window.removeEventListener('focus', onFocus); };
   }, [refresh]);
 
-  const errorMessage = (error: any, fallback: string) => error?.response?.data?.message || error?.message || fallback;
+  const errorMessage = (error: unknown, fallback: string) => {
+    const detail = error as { response?: { data?: { message?: string } }; message?: string } | null;
+    return detail?.response?.data?.message || detail?.message || fallback;
+  };
 
   const activate = async () => {
     setBusy('toggle');
