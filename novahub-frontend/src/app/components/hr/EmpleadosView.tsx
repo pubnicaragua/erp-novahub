@@ -309,24 +309,15 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       return false;
     }
 
-    if (!newEmployeeForm.email?.trim()) {
-      toast.error('El correo electrónico es obligatorio');
-      return false;
-    }
-
+    // El correo es opcional; si se escribe, debe tener formato válido.
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(newEmployeeForm.email.trim())) {
+    if (newEmployeeForm.email?.trim() && !emailRegex.test(newEmployeeForm.email.trim())) {
       toast.error('El formato del correo electrónico no es válido');
       return false;
     }
 
     if (!newEmployeeForm.hireDate) {
       toast.error('La fecha de contratación es obligatoria');
-      return false;
-    }
-
-    if (!newEmployeeForm.departmentId || !newEmployeeForm.positionId) {
-      toast.error('El departamento y el puesto son obligatorios');
       return false;
     }
 
@@ -342,12 +333,12 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         employeeNumber: newEmployeeForm.employeeNumber.trim(),
         firstName: newEmployeeForm.firstName.trim(),
         lastName: newEmployeeForm.lastName.trim(),
-        email: newEmployeeForm.email.trim(),
+        email: newEmployeeForm.email?.trim() || null,
         phone: newEmployeeForm.phone?.trim() || null,
         dateOfBirth: newEmployeeForm.dateOfBirth || null,
         hireDate: newEmployeeForm.hireDate || null,
-        departmentId: newEmployeeForm.departmentId,
-        positionId: newEmployeeForm.positionId,
+        departmentId: newEmployeeForm.departmentId || null,
+        positionId: newEmployeeForm.positionId || null,
         contractType: newEmployeeForm.contractType || 'FULL_TIME',
         salary: isNaN(newEmployeeForm.salary) ? 0 : Number(newEmployeeForm.salary),
         currency: newEmployeeForm.currency || 'NIO',
@@ -520,11 +511,11 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         !number ? 'Número de empleado obligatorio' : existingNumbers.has(number.toLowerCase()) || seenNumbers.has(number.toLowerCase()) ? 'Número de empleado duplicado' : '',
         !String(row.firstName || '').trim() ? 'Nombres obligatorios' : '',
         !String(row.lastName || '').trim() ? 'Apellidos obligatorios' : '',
-        !email || !/^\S+@\S+\.\S+$/.test(email) ? 'Correo inválido' : existingEmails.has(email) || seenEmails.has(email) ? 'Correo duplicado' : '',
+        email && !/^\S+@\S+\.\S+$/.test(email) ? 'Correo inválido' : email && (existingEmails.has(email) || seenEmails.has(email)) ? 'Correo duplicado' : '',
         nationalId && (existingNationalIds.has(nationalId) || seenNationalIds.has(nationalId)) ? 'Cédula duplicada en esta empresa' : '',
         !row.hireDate || Number.isNaN(new Date(row.hireDate).getTime()) ? 'Fecha de contratación inválida' : '',
-        !departmentExists ? 'Departamento no encontrado' : '',
-        !positionExists ? 'Puesto no encontrado' : '',
+        (departmentValue || row.departmentId) && !departmentExists ? 'Departamento no encontrado' : '',
+        (positionValue || row.positionId) && !positionExists ? 'Puesto no encontrado' : '',
         positionMatch && departmentId && String(positionMatch.departmentId) !== String(departmentId) ? 'El puesto no pertenece al departamento' : '',
         !contractValues.includes(contractType) ? 'Tipo de contrato inválido: usa Tiempo completo, Medio tiempo, Contratista, Pasante o Temporal' : '',
         !Number.isFinite(salary) || salary < 0 ? 'Salario inválido' : '',
@@ -684,7 +675,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     const actionToken = beginNotificationAction();
     try {
       const response: any = await hrService.bulkImportEmployees(validRows.map((row) => ({
-        sourceRow: row.sourceRow, employeeNumber: row.employeeNumber.trim(), firstName: row.firstName.trim(), lastName: row.lastName.trim(), email: row.email.trim(), phone: row.phone.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId, department: row.department, positionId: row.positionId, position: row.position, contractType: row.contractType, salary: Number(row.salary), currency: row.currency, address: row.address || undefined, city: row.city || undefined, state: row.state || undefined, country: row.country || undefined, postalCode: row.postalCode || undefined, emergencyContact: row.emergencyContact || undefined, emergencyPhone: row.emergencyPhone || undefined, nationalId: row.nationalId || undefined, socialSecurityNumber: row.socialSecurityNumber || undefined, probationEndDate: row.probationEndDate || undefined, payFrequency: row.payFrequency || 'MONTHLY', employmentStatus: row.employmentStatus || 'ACTIVE', notes: row.notes || undefined,
+        sourceRow: row.sourceRow, employeeNumber: row.employeeNumber.trim(), firstName: row.firstName.trim(), lastName: row.lastName.trim(), email: row.email?.trim() || undefined, phone: row.phone.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId, department: row.department, positionId: row.positionId, position: row.position, contractType: row.contractType, salary: Number(row.salary), currency: row.currency, address: row.address || undefined, city: row.city || undefined, state: row.state || undefined, country: row.country || undefined, postalCode: row.postalCode || undefined, emergencyContact: row.emergencyContact || undefined, emergencyPhone: row.emergencyPhone || undefined, nationalId: row.nationalId || undefined, socialSecurityNumber: row.socialSecurityNumber || undefined, probationEndDate: row.probationEndDate || undefined, payFrequency: row.payFrequency || 'MONTHLY', employmentStatus: row.employmentStatus || 'ACTIVE', notes: row.notes || undefined,
       })));
       const result = response?.data || response;
       setImportProgress(90);
@@ -784,20 +775,23 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const validateEmployeeDraft = (row: any, ignorePendingId?: string | null) => {
     if (!row.employeeNumber?.trim()) return 'El número de empleado es obligatorio';
     if (!row.firstName?.trim() || !row.lastName?.trim()) return 'El nombre y apellido son obligatorios';
-    if (!row.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())) return 'El formato del correo electrónico no es válido';
+    // Correo, departamento y puesto son opcionales; si se indican deben ser válidos y coherentes entre sí.
+    if (row.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())) return 'El formato del correo electrónico no es válido';
     if (!row.hireDate) return 'La fecha de contratación es obligatoria';
-    if (!row.departmentId || !row.positionId) return 'Selecciona departamento y puesto';
-    const position = positions.find((item: any) => String(item.id) === String(row.positionId));
-    if (!position || String(position.departmentId) !== String(row.departmentId)) return 'El puesto no pertenece al departamento seleccionado';
+    if (row.positionId) {
+      const position = positions.find((item: any) => String(item.id) === String(row.positionId));
+      if (!position) return 'El puesto seleccionado no existe';
+      if (row.departmentId && String(position.departmentId) !== String(row.departmentId)) return 'El puesto no pertenece al departamento seleccionado';
+    }
     if (row.salary === '' || row.salary === null || !Number.isFinite(Number(row.salary)) || Number(row.salary) < 0) return 'Ingresa un salario válido';
     const employeeNumber = row.employeeNumber.trim().toLowerCase();
-    const email = row.email.trim().toLowerCase();
+    const email = String(row.email || '').trim().toLowerCase();
     const nationalId = normalizeImportNationalId(row.nationalId);
     if (employees.some((employee: any) => String(employee.employeeNumber || '').trim().toLowerCase() === employeeNumber)) return 'El número de empleado ya existe';
-    if (employees.some((employee: any) => String(employee.email || '').trim().toLowerCase() === email)) return 'El correo ya está registrado';
+    if (email && employees.some((employee: any) => String(employee.email || '').trim().toLowerCase() === email)) return 'El correo ya está registrado';
     if (nationalId && employees.some((employee: any) => normalizeImportNationalId(employee.nationalId) === nationalId)) return 'La cédula ya está registrada en esta empresa';
     if (newRows.some((pending: any) => pending.tempId !== ignorePendingId && String(pending.employeeNumber || '').trim().toLowerCase() === employeeNumber)) return 'El número de empleado ya está en la lista';
-    if (newRows.some((pending: any) => pending.tempId !== ignorePendingId && String(pending.email || '').trim().toLowerCase() === email)) return 'El correo ya está en la lista';
+    if (email && newRows.some((pending: any) => pending.tempId !== ignorePendingId && String(pending.email || '').trim().toLowerCase() === email)) return 'El correo ya está en la lista';
     if (nationalId && newRows.some((pending: any) => pending.tempId !== ignorePendingId && normalizeImportNationalId(pending.nationalId) === nationalId)) return 'La cédula ya está en la lista';
     return null;
   };
@@ -813,7 +807,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     if (error) { toast.error(error); return; }
     const draft = {
       ...newEmployeeForm,
-      employeeNumber: newEmployeeForm.employeeNumber.trim(), firstName: newEmployeeForm.firstName.trim(), lastName: newEmployeeForm.lastName.trim(), email: newEmployeeForm.email.trim(),
+      employeeNumber: newEmployeeForm.employeeNumber.trim(), firstName: newEmployeeForm.firstName.trim(), lastName: newEmployeeForm.lastName.trim(), email: (newEmployeeForm.email || '').trim(),
       phone: newEmployeeForm.phone?.trim() || '', nationalId: newEmployeeForm.nationalId?.trim() || '', salary: Number(newEmployeeForm.salary),
       tempId: editingPendingId || `new-${Date.now()}`,
     };
@@ -844,8 +838,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   };
 
   const buildEmployeePayload = (row: any) => ({
-    employeeNumber: row.employeeNumber.trim(), firstName: row.firstName.trim(), lastName: row.lastName.trim(), email: row.email.trim(),
-    phone: row.phone?.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId, positionId: row.positionId,
+    employeeNumber: row.employeeNumber.trim(), firstName: row.firstName.trim(), lastName: row.lastName.trim(), email: row.email?.trim() || undefined,
+    phone: row.phone?.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId || undefined, positionId: row.positionId || undefined,
     contractType: row.contractType || 'FULL_TIME', salary: Number(row.salary), currency: row.currency || 'NIO', employmentStatus: row.employmentStatus || 'ACTIVE',
     address: row.address?.trim() || undefined, city: row.city?.trim() || undefined, state: row.state?.trim() || undefined, country: row.country?.trim() || undefined, postalCode: row.postalCode?.trim() || undefined,
     nationalId: row.nationalId?.trim() || undefined, socialSecurityNumber: row.socialSecurityNumber?.trim() || undefined, emergencyContact: row.emergencyContact?.trim() || undefined, emergencyPhone: row.emergencyPhone?.trim() || undefined,
@@ -878,7 +872,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         employeeNumber: newEmployeeForm.employeeNumber.trim(),
         firstName: newEmployeeForm.firstName.trim(),
         lastName: newEmployeeForm.lastName.trim(),
-        email: newEmployeeForm.email.trim(),
+        email: (newEmployeeForm.email || '').trim(),
         phone: newEmployeeForm.phone?.trim() || '',
         nationalId: newEmployeeForm.nationalId?.trim() || '',
         salary: Number(newEmployeeForm.salary),
@@ -1308,19 +1302,19 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                 <div className="space-y-2"><Label>Nombres *</Label><Input data-testid="hr-employee-first-name" value={newEmployeeForm.firstName || ''} onChange={(event) => updateNewEmployeeForm('firstName', event.target.value)} placeholder="Nombres" /></div>
                 <div className="space-y-2"><Label>Apellidos *</Label><Input data-testid="hr-employee-last-name" value={newEmployeeForm.lastName || ''} onChange={(event) => updateNewEmployeeForm('lastName', event.target.value)} placeholder="Apellidos" /></div>
                 <div className="space-y-2"><Label>Cédula</Label><Input value={newEmployeeForm.nationalId || ''} onChange={(event) => updateNewEmployeeForm('nationalId', event.target.value)} placeholder="001-010190-1000A" /></div>
-                <div className="space-y-2 sm:col-span-2"><Label>Correo electrónico *</Label><Input data-testid="hr-employee-email" type="email" value={newEmployeeForm.email || ''} onChange={(event) => updateNewEmployeeForm('email', event.target.value)} placeholder="empleado@empresa.com" /></div>
+                <div className="space-y-2 sm:col-span-2"><Label>Correo electrónico</Label><Input data-testid="hr-employee-email" type="email" value={newEmployeeForm.email || ''} onChange={(event) => updateNewEmployeeForm('email', event.target.value)} placeholder="empleado@empresa.com" /></div>
                 <div className="space-y-2"><Label>Teléfono</Label><Input value={newEmployeeForm.phone || ''} onChange={(event) => updateNewEmployeeForm('phone', event.target.value)} placeholder="8888-8888" /></div>
                 <div className="space-y-2"><Label>Fecha de nacimiento</Label><Input type="date" value={newEmployeeForm.dateOfBirth || ''} onChange={(event) => updateNewEmployeeForm('dateOfBirth', event.target.value)} /></div>
               </div>
             </section>
 
             <section className="space-y-3 border-t pt-5" data-tour="hr-employee-form-items">
-              <div><p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Información laboral</p><p className="mt-1 text-xs text-muted-foreground">El departamento y el puesto deben pertenecer a los catálogos de Recursos Humanos.</p></div>
+              <div><p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Información laboral</p><p className="mt-1 text-xs text-muted-foreground">Solo la fecha de contratación y el salario son obligatorios. Si indicas departamento y puesto, deben pertenecer a los catálogos de Recursos Humanos; el tipo de contrato es «Tiempo completo» si no lo cambias.</p></div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-2"><Label>Fecha de contratación *</Label><Input data-testid="hr-employee-hire-date" type="date" value={newEmployeeForm.hireDate || ''} onChange={(event) => updateNewEmployeeForm('hireDate', event.target.value)} /></div>
-                <div className="space-y-2"><Label>Departamento *</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.departmentId || ''} onValueChange={(value) => updateNewEmployeeForm('departmentId', value)}><SelectTrigger data-testid="hr-employee-department"><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{departments.map((department: any) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewDeptName(''); setPendingImportDepartmentRow(null); setShowNewDeptModal(true); }} title="Crear departamento" aria-label="Crear departamento"><Plus className="size-3.5" /></Button></div></div>
-                <div className="space-y-2"><Label>Puesto *</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.positionId || ''} onValueChange={(value) => updateNewEmployeeForm('positionId', value)}><SelectTrigger data-testid="hr-employee-position"><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{positions.filter((position: any) => !newEmployeeForm.departmentId || position.departmentId === newEmployeeForm.departmentId).map((position: any) => <SelectItem key={position.id} value={position.id}>{position.title}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewPosTitle(''); setNewPosDeptId(newEmployeeForm.departmentId || ''); setPendingImportPositionRow(null); setShowNewPosModal(true); }} title="Crear puesto" aria-label="Crear puesto" disabled={!newEmployeeForm.departmentId}><Plus className="size-3.5" /></Button></div></div>
-                <div className="space-y-2"><Label>Tipo de contrato *</Label><Select value={newEmployeeForm.contractType || 'FULL_TIME'} onValueChange={(value) => updateNewEmployeeForm('contractType', value)}><SelectTrigger data-testid="hr-employee-contract"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="FULL_TIME">Tiempo completo</SelectItem><SelectItem value="PART_TIME">Medio tiempo</SelectItem><SelectItem value="CONTRACTOR">Contratista</SelectItem><SelectItem value="INTERN">Pasante</SelectItem><SelectItem value="TEMPORARY">Temporal</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label>Departamento</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.departmentId || ''} onValueChange={(value) => updateNewEmployeeForm('departmentId', value)}><SelectTrigger data-testid="hr-employee-department"><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{departments.map((department: any) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewDeptName(''); setPendingImportDepartmentRow(null); setShowNewDeptModal(true); }} title="Crear departamento" aria-label="Crear departamento"><Plus className="size-3.5" /></Button></div></div>
+                <div className="space-y-2"><Label>Puesto</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.positionId || ''} onValueChange={(value) => updateNewEmployeeForm('positionId', value)}><SelectTrigger data-testid="hr-employee-position"><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{positions.filter((position: any) => !newEmployeeForm.departmentId || position.departmentId === newEmployeeForm.departmentId).map((position: any) => <SelectItem key={position.id} value={position.id}>{position.title}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewPosTitle(''); setNewPosDeptId(newEmployeeForm.departmentId || ''); setPendingImportPositionRow(null); setShowNewPosModal(true); }} title="Crear puesto" aria-label="Crear puesto" disabled={!newEmployeeForm.departmentId}><Plus className="size-3.5" /></Button></div></div>
+                <div className="space-y-2"><Label>Tipo de contrato</Label><Select value={newEmployeeForm.contractType || 'FULL_TIME'} onValueChange={(value) => updateNewEmployeeForm('contractType', value)}><SelectTrigger data-testid="hr-employee-contract"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="FULL_TIME">Tiempo completo</SelectItem><SelectItem value="PART_TIME">Medio tiempo</SelectItem><SelectItem value="CONTRACTOR">Contratista</SelectItem><SelectItem value="INTERN">Pasante</SelectItem><SelectItem value="TEMPORARY">Temporal</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2"><Label>Salario *</Label><Input data-testid="hr-employee-salary" type="number" min="0" value={newEmployeeForm.salary ?? ''} onChange={(event) => updateNewEmployeeForm('salary', event.target.value === '' ? '' : Number(event.target.value))} placeholder="0.00" /></div>
                 <div className="space-y-2"><Label>Moneda</Label><Select value={newEmployeeForm.currency || 'NIO'} onValueChange={(value) => updateNewEmployeeForm('currency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO - Córdoba</SelectItem><SelectItem value="USD">USD - Dólar</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2"><Label>Frecuencia de pago</Label><Select value={newEmployeeForm.payFrequency || 'MONTHLY'} onValueChange={(value) => updateNewEmployeeForm('payFrequency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select></div>

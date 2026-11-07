@@ -25,6 +25,7 @@ import { DashboardHRView } from './hr/DashboardHRView';
 import { EmpleadosView } from './hr/EmpleadosView';
 import { DepartamentosView } from './hr/DepartamentosView';
 import { NominasView } from './hr/NominasView';
+import { PrestacionesSection } from './hr/PrestacionesSection';
 import { AsistenciaView } from './hr/AsistenciaView';
 import { AusenciasView } from './hr/AusenciasView';
 import { AusenciasConfigView } from './hr/AusenciasConfigView';
@@ -536,6 +537,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
               </TabsContent>
 
               <TabsContent value="nominas" className="m-0">
+                <PrestacionesSection employees={responseRows(data.employees)} />
                 <NominasView
                   payrolls={data.payrolls}
                   employees={data.employees}

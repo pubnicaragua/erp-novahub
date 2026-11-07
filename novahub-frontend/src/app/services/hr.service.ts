@@ -136,6 +136,10 @@ export const hrService = {
   rejectEmployee: (id: string, reason: string) => api.post(`/hr/employees/${id}/reject`, { reason }),
   getEmployeeChangeLog: (id: string, signal?: AbortSignal) => api.get(`/hr/employees/${id}/changelog`, withSignal(undefined, signal)),
 
+  // ─── AGUINALDO ───────────────────────────────────────────────────────
+  getAguinaldo: (asOf?: string, signal?: AbortSignal) => api.get('/hr/aguinaldo', withSignal({ asOf }, signal)),
+  getEmployeeSettlement: (employeeId: string, params: Record<string, string | undefined>, signal?: AbortSignal) => api.get(`/hr/employees/${employeeId}/settlement`, withSignal(params, signal)),
+
   // ─── VACATION BALANCE ────────────────────────────────────────────────
   getVacationBalance: (employeeId: string, year?: number, signal?: AbortSignal) => api.get(`/hr/vacation-balance/${employeeId}`, withSignal({ year }, signal)),
   getVacationBalances: (year?: number, signal?: AbortSignal) => api.get('/hr/vacation-balance', withSignal({ year }, signal)),
