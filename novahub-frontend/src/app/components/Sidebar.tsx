@@ -81,6 +81,7 @@ import {
   CheckCircle2,
   Clock3,
   HelpCircle,
+  Sparkles,
   Zap,
 } from 'lucide-react';
 import { cn } from './ui/utils';
@@ -271,6 +272,7 @@ const menuItems: MenuItem[] = [
     icon: <Package className="size-5" />,
     submenu: [
       { id: 'productos', label: 'Productos', icon: <Package className="size-4" /> },
+      { id: 'reposicion', label: 'Reposición', icon: <Sparkles className="size-4" /> },
       { id: 'marcas-clientes', label: 'Marcas por cliente', icon: <Tags className="size-4" /> },
       { id: 'servicios', label: 'Servicios', icon: <BriefcaseBusiness className="size-4" /> },
       { id: 'atributos', label: 'Atributos y Categoría', icon: <Tags className="size-4" /> },

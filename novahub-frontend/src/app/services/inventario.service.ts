@@ -54,7 +54,65 @@ export interface SimilarityResolution {
   variantId?: string;
 }
 
+export type ReplenishmentUrgency = 'OUT_OF_STOCK' | 'CRITICAL' | 'SOON' | 'OK' | 'OVERSTOCK' | 'NO_MOVEMENT';
+
+export interface ReplenishmentRow {
+  key: string;
+  productId: string;
+  variantId: string | null;
+  productCode: string;
+  productName: string;
+  category: string | null;
+  unit: string;
+  warehouseId: string;
+  warehouseName: string;
+  onHand: number;
+  reserved: number;
+  available: number;
+  incoming: number;
+  draftQty: number;
+  minStock: number;
+  maxStock: number | null;
+  /** Ausente si el usuario no tiene el permiso «Ver costo». */
+  unitCost?: number;
+  estimatedCost?: number;
+  salePrice: number;
+  abcClass: 'A' | 'B' | 'C';
+  supplierId: string | null;
+  supplierName: string | null;
+  dailyDemand: number;
+  demandPattern: 'NONE' | 'SMOOTH' | 'ERRATIC' | 'INTERMITTENT';
+  trend: number;
+  stockoutDaysInPeriod: number;
+  unitsSoldInPeriod: number;
+  leadTimeDays: number;
+  leadTimeSource: 'HISTORY' | 'DEFAULT';
+  safetyStock: number;
+  reorderPoint: number;
+  targetStock: number;
+  position: number;
+  daysOfCover: number | null;
+  suggestedQty: number;
+  urgency: ReplenishmentUrgency;
+  reasons: string[];
+}
+
+export interface ReplenishmentResponse {
+  data: ReplenishmentRow[];
+  meta: { total: number; page: number; pageSize: number; totalPages: number };
+  summary: {
+    total: number;
+    byUrgency: Record<ReplenishmentUrgency, number>;
+    toBuy: number;
+    estimatedInvestment: number | null;
+    overstockValue: number | null;
+  };
+  params: { coverDays: number; serviceLevel: number; defaultLeadTimeDays: number; lookbackDays: number };
+}
+
 export const inventoryService = {
+  getReplenishment: (filters?: Record<string, string | number | boolean | undefined>, signal?: AbortSignal) =>
+    api.get<ReplenishmentResponse>('/inventory/replenishment', { params: filters as any, signal }),
   getIntegrationPolicy: () => api.get<{ accountingEnabled: boolean; accountingRequired: boolean; routes: Record<string, any> }>('/inventory/integration-policy'),
   // ==================== PRODUCTS ====================
   getBrandCustomerMappings: (signal?: AbortSignal) => api.get<{ brands: any[]; customers: Array<{ id: string; name: string; code?: string | null }> }>('/inventory/brands/customer-mappings', { signal }),

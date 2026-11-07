@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   TrendingDown,
   Building2,
+  Sparkles,
   Tags
 } from 'lucide-react';
 import { Button } from './ui/button';
@@ -29,6 +30,7 @@ import { AlmacenesView } from './inventory/AlmacenesView';
 import { TransferenciasView } from './inventory/TransferenciasView';
 import { ControlStockView } from './inventory/ControlStockView';
 import { MovimientosView, type MovementExportOptions } from './inventory/MovimientosView';
+import { ReposicionView } from './inventory/ReposicionView';
 import { MobiliarioEquiposView } from './inventory/MobiliarioEquiposView';
 import { ConfiguracionInventarioView } from './inventory/ConfiguracionInventarioView';
 import { InventoryAuditsView } from './inventory/InventoryAuditsView';
@@ -50,6 +52,7 @@ import { fetchAllReportPages } from '../hooks/useTenantQuery';
 
 const INVENTORY_SECTIONS = [
   { id: 'productos',       label: 'Productos',       icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
+  { id: 'reposicion',      label: 'Reposición',      icon: Sparkles,  requiredModules: ['INVENTORY_PRODUCTS'] },
   { id: 'marcas-clientes', label: 'Marcas por cliente', icon: Tags, requiredModules: ['INVENTORY_PRODUCTS'] },
   { id: 'servicios',       label: 'Servicios',       icon: BriefcaseBusiness, requiredModules: ['INVENTORY_SERVICES'] },
   { id: 'atributos',       label: 'Atributos y Categoría', icon: Tags, requiredModules: ['INVENTORY_ATTRIBUTES'] },
@@ -768,6 +771,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   </TabsContent>
                 </Tabs>
                 )}
+              </TabsContent>
+              <TabsContent value="reposicion" className="m-0">
+                <ReposicionView warehouses={scopedWarehouses} />
               </TabsContent>
               <TabsContent value="marcas-clientes" className="m-0">
                 <motion.div

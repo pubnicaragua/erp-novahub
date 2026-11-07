@@ -356,6 +356,8 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   auditorias: ['INVENTORY_AUDITS'],
   'inventario:perdidas': ['INVENTORY_LOSSES'],
   'mobiliario-equipos': ['INVENTORY_ASSETS'],
+  // La reposición se apoya en el permiso de Productos (misma lectura de existencias y costos).
+  reposicion: ['INVENTORY_PRODUCTS'],
   movimientos: ['INVENTORY_MOVEMENTS'],
   'inventario:configuracion': ['INVENTORY_CONFIG'],
 
