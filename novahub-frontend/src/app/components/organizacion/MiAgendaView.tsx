@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ORGANIZACION_GUIDES } from './guides';
 import { useQueryClient } from '@tanstack/react-query';
 import { format, isSameMonth } from 'date-fns';
@@ -82,7 +82,32 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
   const [completing, setCompleting] = useState<string | null>(null);
 
   const readOnlyView = Boolean(ownerUserId) && ownerUserId !== user?.id;
-  const today = todayCivil(tz);
+  // «Hoy» avanza solo: si la pestaña queda abierta pasada la medianoche, el día seleccionado que seguía
+  // a «hoy» se mueve con él (antes el panel lateral se quedaba en el día anterior).
+  const [today, setToday] = useState<Date>(() => todayCivil(tz));
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
+  const todayRef = useRef(today);
+  useEffect(() => {
+    const sync = () => {
+      setNowTick(Date.now());
+      const current = todayCivil(tz);
+      const previous = todayRef.current;
+      if (civilKey(current) === civilKey(previous)) return;
+      todayRef.current = current;
+      setToday(current);
+      setAnchor((selected) => (civilKey(selected) === civilKey(previous) ? current : selected));
+    };
+    const timer = window.setInterval(sync, 30_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') sync(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', sync);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', sync);
+    };
+  }, [tz]);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const { start, end } = useMemo(() => visibleCivilRange(view, anchor, weekStartsOn), [view, anchor, weekStartsOn]);
   const range = useMemo(() => rangeToInstants(start, end, tz), [start, end, tz]);
@@ -169,6 +194,16 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
     return mins >= sh * 60 + sm && mins < eh * 60 + em;
   };
 
+  // Al abrir la cuadrícula se desplaza a la hora actual (o al inicio de la jornada si hoy no está a la vista).
+  const todayVisible = days.some((d) => civilKey(d) === civilKey(today));
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid || (view !== 'WEEK' && view !== 'DAY')) return;
+    const focusMinutes = todayVisible ? Math.min(Math.max(minutesOfDay(new Date(), tz), HOUR_START * 60), (HOUR_END - 2) * 60) : 8 * 60;
+    grid.scrollTop = Math.max(0, ((focusMinutes - HOUR_START * 60) / 60) * ROW_H - ROW_H * 1.5);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, zoom, todayVisible, civilKey(anchor)]);
+
   const tzLabel = timeZoneLabel(tz);
   const hours = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
 
@@ -189,7 +224,7 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
   );
 
   const renderTimeGrid = () => (
-    <div className="max-h-[640px] overflow-auto rounded-xl border border-border" role="grid" aria-label={`Calendario: ${title}`}>
+    <div ref={gridRef} className="max-h-[640px] overflow-auto rounded-xl border border-border" role="grid" aria-label={`Calendario: ${title}`}>
       <div className="grid min-w-[640px]" style={{ gridTemplateColumns: `56px repeat(${days.length}, minmax(0, 1fr))` }}>
         <div className="sticky top-0 z-20 border-b border-border bg-card" />
         {days.map((day) => {
@@ -205,7 +240,7 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
         <div>
           {hours.map((h) => (
             <div key={h} className="border-b border-border pr-1 text-right text-[10px] text-muted-foreground" style={{ height: ROW_H }}>
-              <span className="relative -top-2">{String(h).padStart(2, '0')}:00</span>
+              <span className={cn('relative', h === HOUR_START ? 'top-0.5' : '-top-2')}>{String(h).padStart(2, '0')}:00</span>
             </div>
           ))}
         </div>
@@ -224,6 +259,16 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
                   style={{ height: ROW_H }}
                 />
               ))}
+              {key === civilKey(today) && (() => {
+                const nowMin = minutesOfDay(new Date(nowTick), tz);
+                if (nowMin < HOUR_START * 60 || nowMin >= HOUR_END * 60) return null;
+                return (
+                  <div className="pointer-events-none absolute inset-x-0 z-10" style={{ top: ((nowMin - HOUR_START * 60) / 60) * ROW_H }} aria-hidden="true">
+                    <div className="h-0.5 bg-rose-500" />
+                    <div className="-mt-1.5 size-2.5 rounded-full bg-rose-500" />
+                  </div>
+                );
+              })()}
               {laid.map(({ item, lane, lanes }) => {
                 const startMin = Math.max(minutesOfDay(item.start, tz), HOUR_START * 60);
                 const rawEnd = instantKey(item.end, tz) === key ? minutesOfDay(item.end, tz) : HOUR_END * 60;
