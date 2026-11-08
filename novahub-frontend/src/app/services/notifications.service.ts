@@ -1,5 +1,6 @@
 import { api, getApiUrl, getAuthHeaders } from './api';
 import type { Notification } from '../types';
+import { streamReconnectDelayMs } from '../utils/stream-reconnect';
 
 export interface NotificationStreamEvent {
   type: 'notifications-invalidated' | 'force-sales-invalidated';
@@ -155,7 +156,7 @@ function ensureNotificationEventStream(identity: string): void {
 
 function scheduleNotificationEventReconnect(identity: string): void {
   if (notificationStreamListeners.size === 0 || notificationStreamIdentity !== identity) return;
-  const delay = Math.min(30_000, 1_000 * (2 ** notificationStreamReconnectAttempt));
+  const delay = streamReconnectDelayMs(notificationStreamReconnectAttempt);
   notificationStreamReconnectAttempt = Math.min(notificationStreamReconnectAttempt + 1, 5);
   if (notificationStreamReconnectTimer) clearTimeout(notificationStreamReconnectTimer);
   notificationStreamReconnectTimer = setTimeout(() => {
@@ -240,7 +241,7 @@ function ensureManagerNotificationEventStream(identity: string, streamPath: stri
 
 function scheduleManagerNotificationEventReconnect(identity: string, streamPath: string): void {
   if (managerNotificationStreamListeners.size === 0 || managerNotificationStreamIdentity !== identity) return;
-  const delay = Math.min(30_000, 1_000 * (2 ** managerNotificationStreamReconnectAttempt));
+  const delay = streamReconnectDelayMs(managerNotificationStreamReconnectAttempt);
   managerNotificationStreamReconnectAttempt = Math.min(managerNotificationStreamReconnectAttempt + 1, 5);
   if (managerNotificationStreamReconnectTimer) clearTimeout(managerNotificationStreamReconnectTimer);
   managerNotificationStreamReconnectTimer = setTimeout(() => {
