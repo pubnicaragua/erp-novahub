@@ -959,6 +959,115 @@ window.NovaForceSalesOfflineIdentity = (()=>{
   return {normalizedIdentity,scopeKey,localPointsStorageKey,queueKey,entryMatchesIdentity,tokenMatchesIdentity,selectOwnedPoints,countPointsWithoutOwner,findLegacyOwner};
 })();
 </script>
+<script id="nova-force-sales-evidence-image">
+// Reduce las fotos de evidencia antes de subirlas. Una foto de teléfono pesa de 3 a 7 MB; a 1920 px y calidad 0.8 se ve
+// igual en pantalla y en PDF y pesa menos de 1 MB: ahorra almacenamiento y datos móviles. Conserva el EXIF (fecha y
+// ubicación de la foto) con la orientación ya aplicada a los píxeles. Si algo falla se sube el original: comprimir
+// nunca debe impedir registrar una evidencia.
+window.NovaForceSalesEvidenceImage=(()=>{
+  const MIN_BYTES_TO_COMPRESS=1024*1024;
+  const TARGET_BYTES=1024*1024;
+  const MAX_DIMENSION=1920;
+  const QUALITIES=[0.8,0.7,0.6];
+  const MIN_SAVING=0.25;
+  const ORIENTATION_TAG=0x0112;
+  /** Devuelve el segmento APP1 "Exif" de un JPEG (con su marcador y longitud) o null. */
+  function exifSegment(bytes){
+    if(!bytes||bytes.length<4||bytes[0]!==0xff||bytes[1]!==0xd8)return null;
+    let offset=2;
+    while(offset+4<=bytes.length){
+      if(bytes[offset]!==0xff)return null;
+      const marker=bytes[offset+1];
+      if(marker===0xff){offset+=1;continue}
+      if(marker===0xda||marker===0xd9)return null;
+      if(marker===0x01||(marker>=0xd0&&marker<=0xd7)){offset+=2;continue}
+      const length=(bytes[offset+2]<<8)|bytes[offset+3];
+      if(length<2||offset+2+length>bytes.length)return null;
+      const isExif=marker===0xe1&&length>=8&&bytes[offset+4]===0x45&&bytes[offset+5]===0x78&&bytes[offset+6]===0x69&&bytes[offset+7]===0x66&&bytes[offset+8]===0&&bytes[offset+9]===0;
+      if(isExif)return bytes.slice(offset,offset+2+length);
+      offset+=2+length;
+    }
+    return null;
+  }
+  /** Copia del segmento con la orientación en 1 (normal): los píxeles ya se giraron al comprimir. */
+  function withNormalOrientation(segment){
+    const copy=segment.slice();
+    const tiff=10;
+    if(copy.length<tiff+8)return copy;
+    const littleEndian=copy[tiff]===0x49&&copy[tiff+1]===0x49;
+    const bigEndian=copy[tiff]===0x4d&&copy[tiff+1]===0x4d;
+    if(!littleEndian&&!bigEndian)return copy;
+    const read16=at=>littleEndian?(copy[at]|(copy[at+1]<<8)):((copy[at]<<8)|copy[at+1]);
+    const read32=at=>littleEndian?((copy[at]|(copy[at+1]<<8)|(copy[at+2]<<16)|(copy[at+3]<<24))>>>0):(((copy[at]<<24)|(copy[at+1]<<16)|(copy[at+2]<<8)|copy[at+3])>>>0);
+    if(read16(tiff+2)!==42)return copy;
+    const ifd=tiff+read32(tiff+4);
+    if(ifd+2>copy.length)return copy;
+    const entries=read16(ifd);
+    for(let index=0;index<entries;index+=1){
+      const entry=ifd+2+index*12;
+      if(entry+12>copy.length)break;
+      if(read16(entry)===ORIENTATION_TAG){
+        if(littleEndian){copy[entry+8]=1;copy[entry+9]=0}else{copy[entry+8]=0;copy[entry+9]=1}
+        break;
+      }
+    }
+    return copy;
+  }
+  /** JPEG nuevo con el segmento EXIF justo después del marcador de inicio. */
+  function insertExif(jpeg,segment){
+    if(!jpeg||jpeg.length<2||jpeg[0]!==0xff||jpeg[1]!==0xd8)return jpeg;
+    const merged=new Uint8Array(jpeg.length+segment.length);
+    merged.set(jpeg.subarray(0,2),0);
+    merged.set(segment,2);
+    merged.set(jpeg.subarray(2),2+segment.length);
+    return merged;
+  }
+  function loadImage(file){
+    return new Promise((resolve,reject)=>{
+      const url=URL.createObjectURL(file);
+      const image=new Image();
+      image.onload=()=>{URL.revokeObjectURL(url);resolve(image)};
+      image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('No se pudo leer la imagen'))};
+      image.src=url;
+    });
+  }
+  const canvasToBlob=(canvas,quality)=>new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));
+  async function prepare(file,options={}){
+    try{
+      const minBytes=options.minBytes??MIN_BYTES_TO_COMPRESS;
+      if(!file||file.type!=='image/jpeg'||!(file.size>minBytes))return file;
+      const image=await loadImage(file);
+      const largest=Math.max(image.naturalWidth,image.naturalHeight);
+      if(!largest)return file;
+      const scale=Math.min(1,MAX_DIMENSION/largest);
+      const width=Math.max(1,Math.round(image.naturalWidth*scale));
+      const height=Math.max(1,Math.round(image.naturalHeight*scale));
+      const canvas=document.createElement('canvas');
+      canvas.width=width;
+      canvas.height=height;
+      const context=canvas.getContext('2d');
+      if(!context)return file;
+      context.imageSmoothingEnabled=true;
+      context.imageSmoothingQuality='high';
+      context.drawImage(image,0,0,width,height);
+      let blob=null;
+      for(const quality of QUALITIES){
+        blob=await canvasToBlob(canvas,quality);
+        if(blob&&blob.size<=TARGET_BYTES)break;
+      }
+      if(!blob||blob.size>file.size*(1-MIN_SAVING))return file;
+      let bytes=new Uint8Array(await blob.arrayBuffer());
+      const segment=exifSegment(new Uint8Array(await file.arrayBuffer()));
+      if(segment)bytes=insertExif(bytes,withNormalOrientation(segment));
+      return new File([bytes],file.name,{type:'image/jpeg',lastModified:file.lastModified});
+    }catch(error){
+      console.warn('No se pudo comprimir la evidencia; se sube la original',error);
+      return file;
+    }
+  }
+  return {prepare,exifSegment,withNormalOrientation,insertExif};
+})();
+</script>
 <script id="nova-force-sales-route-action-queue">
 window.NovaForceSalesRouteActionQueue=(()=>{
   const DATABASE_NAME='nova-force-sales-route-actions-v1';
@@ -2958,6 +3067,8 @@ async function restoreOfflineEvidencePreviews(){
 }
 async function uploadEvidence(file){
   if(!canForceSales('attachEvidence')&&!canForceSales('importProspects'))throw new Error('No tienes permiso para adjuntar evidencia');
+  // La foto de un teléfono pesa de 3 a 7 MB: se reduce antes de subirla (conserva el EXIF; ante cualquier fallo sube la original).
+  if(window.NovaForceSalesEvidenceImage)file=await window.NovaForceSalesEvidenceImage.prepare(file);
   const metadata=await forceSalesRequest('/storage/uploads/force-sales-evidence',{method:'POST',body:JSON.stringify({fileName:file.name,mimeType:file.type || 'application/octet-stream',size:file.size})});
   if(!metadata?.signedUrl || !metadata?.uri) throw new Error('El ERP no autorizó la subida de evidencia');
   const upload=await fetch(metadata.signedUrl,{method:'PUT',headers:{'Content-Type':file.type || 'application/octet-stream'},body:file});
