@@ -11,9 +11,10 @@ import { SOURCE_LABEL, errorMessage } from './organizacion.utils';
 import { EquipoCalendario } from './EquipoCalendario';
 import { EquipoHistorial } from './EquipoHistorial';
 import { EquipoReglas } from './EquipoReglas';
+import { SeguimientoPanel } from '../seguimiento/SeguimientoPanel';
 import type { OrgPreferences } from '../../services/organizacion.service';
 
-type Tab = 'resumen' | 'calendario' | 'historial' | 'reglas';
+type Tab = 'resumen' | 'calendario' | 'historial' | 'seguimiento' | 'reglas';
 
 /** Equipo: lo que hacen las personas que supervisas (solo lectura). Los administradores definen quién supervisa a quién. */
 export function EquipoView({ preferences }: { preferences: OrgPreferences }) {
@@ -23,7 +24,7 @@ export function EquipoView({ preferences }: { preferences: OrgPreferences }) {
   const [historyUser, setHistoryUser] = useState('');
   const team = useTenantQuery(['organizacion', 'team'], (signal) => organizacionService.getTeam(signal), { staleTime: 30_000 });
 
-  const tabs: Array<[Tab, string]> = [['resumen', 'Resumen del equipo'], ['calendario', 'Calendario'], ['historial', 'Historial de tareas'], ...(canManage ? [['reglas', 'Supervisores y avisos'] as [Tab, string]] : [])];
+  const tabs: Array<[Tab, string]> = [['resumen', 'Resumen del equipo'], ['calendario', 'Calendario'], ['historial', 'Historial de tareas'], ['seguimiento', 'Seguimiento por hora'], ...(canManage ? [['reglas', 'Supervisores y avisos'] as [Tab, string]] : [])];
   const openHistory = (userId: string) => { setHistoryUser(userId); setTab('historial'); };
 
   return (
@@ -39,6 +40,7 @@ export function EquipoView({ preferences }: { preferences: OrgPreferences }) {
       {tab === 'resumen' && <Resumen members={team.data} loading={team.isLoading} error={team.isError ? errorMessage(team.error, 'No se pudo cargar el equipo') : ''} onRetry={() => void team.refetch()} onOpen={openHistory} canManage={canManage} onManage={() => setTab('reglas')} />}
       {tab === 'calendario' && <EquipoCalendario members={team.data ?? []} preferences={preferences} />}
       {tab === 'historial' && <EquipoHistorial members={team.data ?? []} initialUser={historyUser} />}
+      {tab === 'seguimiento' && <SeguimientoPanel mode="team" />}
       {tab === 'reglas' && canManage && <EquipoReglas />}
     </div>
   );

@@ -321,6 +321,8 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   asistencia: ['HR_ATTENDANCE'],
   ausencias: ['HR_LEAVES'],
   evaluaciones: ['HR_PERFORMANCE'],
+  seguimiento: ['HR_PERFORMANCE'],
+  'metas-bonos': ['HR_PERFORMANCE'],
   capacitaciones: ['HR_TRAINING'],
   beneficios: ['HR_BENEFITS'],
   'config-nomina': ['HR_PAYROLL_CONFIG'],
@@ -380,6 +382,8 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   reuniones: ['ACTIVITIES_MEETINGS'],
 
   'organizacion:mi-agenda': ['ORGANIZATION_CALENDAR'],
+  'organizacion:mi-dia': ['ORGANIZATION_CALENDAR'],
+  'organizacion:estrategias': ['ORGANIZATION_SHARED'],
   'organizacion:compartido': ['ORGANIZATION_SHARED'],
   'organizacion:configuracion': ['ORGANIZATION_SETTINGS'],
   'organizacion:equipo': ['ORGANIZATION_TEAM'],

@@ -83,6 +83,7 @@ import {
   HelpCircle,
   Sparkles,
   Zap,
+  Lightbulb,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -362,6 +363,8 @@ const menuItems: MenuItem[] = [
       { id: 'asistencia', label: 'Asistencia', icon: <CalendarClock className="size-4" /> },
       { id: 'ausencias', label: 'Vacaciones', icon: <CalendarClock className="size-4" /> },
       { id: 'evaluaciones', label: 'Desempeño', icon: <BarChart3 className="size-4" /> },
+      { id: 'seguimiento', label: 'Seguimiento', icon: <CalendarClock className="size-4" /> },
+      { id: 'metas-bonos', label: 'Metas y bonos', icon: <BadgePercent className="size-4" /> },
       { id: 'capacitaciones', label: 'Capacitación', icon: <FileCheck className="size-4" /> },
       { id: 'beneficios', label: 'Beneficios', icon: <Plus className="size-4" /> },
       { id: 'config-nomina', label: 'Configuración de nómina', icon: <Settings className="size-4" /> },
@@ -388,7 +391,9 @@ const menuItems: MenuItem[] = [
     section: 'Herramientas',
     submenu: [
       { id: 'mi-agenda', label: 'Mi agenda', icon: <CalendarDays className="size-4" /> },
+      { id: 'mi-dia', label: 'Mi día', icon: <CalendarClock className="size-4" /> },
       { id: 'compartido', label: 'Compartido', icon: <Users className="size-4" /> },
+      { id: 'estrategias', label: 'Estrategias', icon: <Lightbulb className="size-4" /> },
       { id: 'equipo', label: 'Equipo', icon: <Eye className="size-4" /> },
       { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-4" /> },
     ]

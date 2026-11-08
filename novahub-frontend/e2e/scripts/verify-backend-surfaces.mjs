@@ -59,6 +59,8 @@ const SURFACE_CLASSIFICATION = {
   'src/pdf-document-designs/pdf-curated-templates.controller.ts': { category: 'ui', uiModule: 'configuracion' },
   'src/pdf-previews/pdf-previews.controller.ts': { category: 'backend-only', reason: 'previsualización PDF' },
   'src/projects/projects.controller.ts': { category: 'ui', uiModule: 'proyectos' },
+  'src/performance/performance.controller.ts': { category: 'ui', uiModule: 'rh' },
+  'src/strategies/strategy.controller.ts': { category: 'ui', uiModule: 'organizacion' },
   'src/public-access/public-access.controller.ts': { category: 'public', reason: 'acceso público controlado' },
   'src/purchases/purchases.controller.ts': { category: 'ui', uiModule: 'compras' },
   'src/qa-console/qa-console.controller.ts': { category: 'ui', uiModule: 'qa-console' },

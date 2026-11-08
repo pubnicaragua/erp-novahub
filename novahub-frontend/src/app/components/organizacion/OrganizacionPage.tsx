@@ -7,9 +7,11 @@ import { MiAgendaView } from './MiAgendaView';
 import { CompartidoView } from './CompartidoView';
 import { ConfiguracionView } from './ConfiguracionView';
 import { EquipoView } from './EquipoView';
+import { EstrategiasView } from './EstrategiasView';
+import { MiDiaView } from './MiDiaView';
 import { ErrorState } from './OrgBits';
 import { errorMessage } from './organizacion.utils';
-import { CalendarDays, Eye, Settings, Users } from 'lucide-react';
+import { CalendarDays, Clock3, Eye, Lightbulb, Settings, Users } from 'lucide-react';
 import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 
 interface Props {
@@ -18,11 +20,13 @@ interface Props {
   isSidebarCollapsed?: boolean;
 }
 
-type View = 'mi-agenda' | 'compartido' | 'equipo' | 'configuracion';
-const PERMISSION: Record<View, string> = { 'mi-agenda': 'ORGANIZATION_CALENDAR', compartido: 'ORGANIZATION_SHARED', equipo: 'ORGANIZATION_TEAM', configuracion: 'ORGANIZATION_SETTINGS' };
+type View = 'mi-agenda' | 'mi-dia' | 'compartido' | 'estrategias' | 'equipo' | 'configuracion';
+const PERMISSION: Record<View, string> = { 'mi-agenda': 'ORGANIZATION_CALENDAR', 'mi-dia': 'ORGANIZATION_CALENDAR', compartido: 'ORGANIZATION_SHARED', estrategias: 'ORGANIZATION_SHARED', equipo: 'ORGANIZATION_TEAM', configuracion: 'ORGANIZATION_SETTINGS' };
 const VIEW_TABS: Array<{ id: View; label: string; icon: ReactNode }> = [
   { id: 'mi-agenda', label: 'Mi agenda', icon: <CalendarDays className="size-4" /> },
+  { id: 'mi-dia', label: 'Mi día', icon: <Clock3 className="size-4" /> },
   { id: 'compartido', label: 'Compartido', icon: <Users className="size-4" /> },
+  { id: 'estrategias', label: 'Estrategias', icon: <Lightbulb className="size-4" /> },
   { id: 'equipo', label: 'Equipo', icon: <Eye className="size-4" /> },
   { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-4" /> },
 ];
@@ -74,6 +78,8 @@ export function OrganizacionPage({ activeSubModule, onSubModuleChange, isSidebar
       {subnavigation}
       {view === 'compartido' && <CompartidoView key={key} preferences={preferences.data} users={userList} onOpenAgenda={() => go('mi-agenda')} onOpenSettings={() => go('configuracion')} />}
       {view === 'equipo' && <EquipoView preferences={preferences.data} />}
+      {view === 'mi-dia' && <MiDiaView preferences={preferences.data} />}
+      {view === 'estrategias' && <EstrategiasView />}
       {view === 'configuracion' && <ConfiguracionView preferences={preferences.data} users={userList} />}
       {view === 'mi-agenda' && <MiAgendaView key={key} preferences={preferences.data} users={userList} onOpenSettings={() => go('configuracion')} />}
     </Frame>

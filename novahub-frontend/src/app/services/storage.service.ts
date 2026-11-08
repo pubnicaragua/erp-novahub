@@ -23,7 +23,8 @@ export type StoragePurpose =
   | 'fiscal-reports'
   | 'project-evidence'
   | 'inventory-audit'
-  | 'marketing-assets';
+  | 'marketing-assets'
+  | 'strategy-attachment';
 
 interface PreparedUpload {
   bucket: string;

@@ -30,6 +30,8 @@ import { AsistenciaView } from './hr/AsistenciaView';
 import { AusenciasView } from './hr/AusenciasView';
 import { AusenciasConfigView } from './hr/AusenciasConfigView';
 import { KpiView } from './hr/KpiView';
+import { MetasBonosView } from './hr/MetasBonosView';
+import { SeguimientoPanel } from './seguimiento/SeguimientoPanel';
 import { EvaluacionesView } from './hr/EvaluacionesView';
 import { CapacitacionesView } from './hr/CapacitacionesView';
 import { BeneficiosView } from './hr/BeneficiosView';
@@ -72,6 +74,9 @@ const exportDate = (value: unknown) => {
 
 const responseRows = (value: any): any[] => Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : [];
 
+/** Pestañas que cargan sus propios datos: no esperan a la consulta general de Recursos Humanos. */
+const SELF_LOADING_TABS = ['comisiones', 'config-nomina', 'ausencias-config', 'seguimiento', 'metas-bonos'];
+
 export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: RecursosHumanosPageProps) {
   const { user, canPerform } = useAuth();
   const canReadHr = canPerform('HR', 'view');
@@ -90,6 +95,8 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     'ausencias-config': 'ausencias-config',
     'evaluaciones': 'evaluaciones',
     'kpi': 'kpi',
+    'seguimiento': 'seguimiento',
+    'metas-bonos': 'metas-bonos',
     'capacitaciones': 'capacitaciones',
     'beneficios': 'beneficios',
   };
@@ -205,7 +212,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           return {};
       }
     },
-    enabled: canReadHr && activeTab !== 'config-nomina' && activeTab !== 'ausencias-config',
+    enabled: canReadHr && !SELF_LOADING_TABS.includes(activeTab),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -227,7 +234,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
   }), [hrQuery.data]);
   // Solo se bloquea la pantalla en la primera carga. Si se bloqueara también al refrescar,
   // los formularios abiertos (p. ej. un empleado a medio llenar) se desmontarían y perderían sus datos.
-  const loading = activeTab !== 'comisiones' && hrQuery.isLoading;
+  const loading = !SELF_LOADING_TABS.includes(activeTab) && hrQuery.isLoading;
   const queryError = hrQuery.error as any;
   const errorMessage = queryError?.response?.data?.message || queryError?.message || 'No se pudieron cargar los datos de Recursos Humanos.';
   const activeExportTarget = HR_EXPORT_TARGETS[activeTab];
@@ -432,6 +439,8 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     { id: 'ausencias-config', submodule: 'ausencias-config', label: 'Tipos Ausencia', icon: Calendar, module: 'HR_LEAVES' },
     { id: 'evaluaciones', submodule: 'evaluaciones', label: 'Desempeño', icon: Award, module: 'HR_PERFORMANCE' },
     { id: 'kpi', submodule: 'kpi', label: 'KPI', icon: BarChart3, module: 'HR_PERFORMANCE' },
+    { id: 'seguimiento', submodule: 'seguimiento', label: 'Seguimiento', icon: Calendar, module: 'HR_PERFORMANCE' },
+    { id: 'metas-bonos', submodule: 'metas-bonos', label: 'Metas y bonos', icon: Award, module: 'HR_PERFORMANCE' },
     { id: 'capacitaciones', submodule: 'capacitaciones', label: 'Formación', icon: GraduationCap, module: 'HR_TRAINING' },
     { id: 'beneficios', submodule: 'beneficios', label: 'Beneficios', icon: HandHeart, module: 'HR_BENEFITS' },
     { id: 'config-nomina', submodule: 'config-nomina', label: 'Config', icon: Settings2, module: 'HR_PAYROLL_CONFIG' },
@@ -579,6 +588,14 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                   departments={data.departments}
                   onRefresh={refreshData}
                 />
+              </TabsContent>
+
+              <TabsContent value="seguimiento" className="m-0">
+                <SeguimientoPanel mode="hr" />
+              </TabsContent>
+
+              <TabsContent value="metas-bonos" className="m-0">
+                <MetasBonosView />
               </TabsContent>
 
               <TabsContent value="capacitaciones" className="m-0">

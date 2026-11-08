@@ -30,6 +30,7 @@ import { PublicSupplierQuotationPage } from './components/public/PublicSupplierQ
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { BrowserNotificationPrompt } from './components/notificaciones/BrowserNotificationPrompt';
+import { CheckinPromptHost } from './components/seguimiento/CheckinPromptHost';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
 import { clearClientCaches, isDynamicImportLoadError, loadModuleWithChunkRecovery } from './utils/chunk-recovery';
 import { currentBuildId, fetchLatestBuildId } from './utils/app-version';
@@ -826,6 +827,7 @@ function AppContent() {
     <>
       <GlobalNotificationAlert />
       <BrowserNotificationPrompt />
+      <CheckinPromptHost />
       {(user?.userType === 'manager' || user?.role === 'manager') && !user.isPlatformAdmin && !isImpersonating ? (
         <Suspense fallback={<PageLoader />}><ManagerPage key={`manager-${sessionStartVersion}-${user.id}-${user.clientTenantId || user.tenantId}`} /></Suspense>
       ) : <DashboardLayout key={`dashboard-${sessionStartVersion}-${user?.id || 'anonymous'}-${user?.clientTenantId || user?.tenantId || ''}`} />}
