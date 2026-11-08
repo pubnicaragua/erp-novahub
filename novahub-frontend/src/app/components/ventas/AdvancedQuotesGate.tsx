@@ -5,6 +5,8 @@ import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { tenantQuotesService } from '../../services/tenant-quotes.service';
 import { PlatformQuotesPanel, type QuoteApi } from '../admin/PlatformQuotesPanel';
 import { ImportQuotesButton } from './ImportQuotesButton';
+import { ClientContractsPanel } from './contratos/ClientContractsPanel';
+import { clientContractsService } from '../../services/client-contracts.service';
 import { cn } from '../ui/utils';
 
 const tenantQuoteApi: QuoteApi = {
@@ -24,14 +26,22 @@ const tenantQuoteApi: QuoteApi = {
 export function AdvancedQuotesGate({ simple }: { simple: ReactNode }) {
   const { canPerform } = useAuth();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<'proposals' | 'simple'>('proposals');
+  const [pickedTab, setTab] = useState<'proposals' | 'simple' | 'contracts' | null>(null);
   const capabilities = useTenantQuery(['sales', 'proposals-capabilities'], (signal) => tenantQuotesService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0 });
+  const contractCapabilities = useTenantQuery(['sales', 'contracts-capabilities'], (signal) => clientContractsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0 });
   const canCreate = canPerform('SALES_QUOTES', 'create');
   const canImport = canCreate && Boolean(capabilities.data?.canManageAll);
   const extraActions = useMemo(() => canImport ? <ImportQuotesButton onImported={() => { void queryClient.invalidateQueries({ queryKey: ['tenant-module'] }); }} /> : null, [canImport, queryClient]);
 
-  if (!capabilities.data?.advancedQuotes) return <>{simple}</>;
-  const tabs: Array<{ id: 'proposals' | 'simple'; label: string }> = [{ id: 'proposals', label: 'Propuestas comerciales' }, { id: 'simple', label: 'Cotizaciones simples' }];
+  const advanced = Boolean(capabilities.data?.advancedQuotes);
+  const contracts = Boolean(contractCapabilities.data?.enabled);
+  if (!advanced && !contracts) return <>{simple}</>;
+  const tabs: Array<{ id: 'proposals' | 'simple' | 'contracts'; label: string }> = [
+    ...(advanced ? [{ id: 'proposals' as const, label: 'Propuestas comerciales' }] : []),
+    { id: 'simple', label: 'Cotizaciones simples' },
+    ...(contracts ? [{ id: 'contracts' as const, label: 'Contratos' }] : []),
+  ];
+  const tab = pickedTab && tabs.some((item) => item.id === pickedTab) ? pickedTab : tabs[0].id;
   return (
     <div className="min-w-0 space-y-4">
       <div className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/30 p-1" role="tablist" aria-label="Tipo de cotización">
@@ -44,7 +54,7 @@ export function AdvancedQuotesGate({ simple }: { simple: ReactNode }) {
       </div>
       {tab === 'proposals'
         ? <PlatformQuotesPanel variant="tenant" api={tenantQuoteApi} canCreate={canCreate} extraActions={extraActions} />
-        : simple}
+        : tab === 'contracts' ? <ClientContractsPanel /> : simple}
     </div>
   );
 }

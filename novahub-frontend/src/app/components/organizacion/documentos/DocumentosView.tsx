@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, Copy, Download, FilePlus2, FileSpreadsheet, FileText, FolderOpen, Loader2, MoreVertical, Pencil, Search, Share2, Upload } from 'lucide-react';
+import { Archive, ArchiveRestore, Copy, Download, FilePlus2, FileSpreadsheet, FileText, Folder, FolderInput, FolderOpen, FolderPlus, Loader2, MoreVertical, Pencil, Search, Share2, Trash2, Upload } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../../ui/dropdown-menu';
@@ -39,11 +39,16 @@ export function DocumentosView({ initialOpenId, onOpenChange }: { initialOpenId?
   const [renaming, setRenaming] = useState<OrgDocumentSummary | null>(null);
   const [sharing, setSharing] = useState<OrgDocumentDetail | null>(null);
   const [busy, setBusy] = useState(false);
+  const [folder, setFolder] = useState<string>(''); // '' = todas, 'none' = sin carpeta, o el id de una carpeta
+  const [newFolder, setNewFolder] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState<{ id: string; name: string } | null>(null);
+  const [moving, setMoving] = useState<OrgDocumentSummary | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
 
   const setOpenId = (id: string | null) => { setOpenIdState(id); onOpenChange?.(id); };
   useEffect(() => { const timer = window.setTimeout(() => setQuery(search.trim()), 350); return () => window.clearTimeout(timer); }, [search]);
-  const params = { scope: scope || undefined, kind: kind || undefined, q: query || undefined, pageSize: 60 };
+  const params = { scope: scope || undefined, kind: kind || undefined, q: query || undefined, folder: folder || undefined, pageSize: 60 };
+  const folders = useTenantQuery(['org-documents', 'folders'], (signal) => orgDocumentsService.listFolders(signal), { staleTime: 15_000 });
   const list = useTenantQuery(['org-documents', 'list', JSON.stringify(params)], (signal) => orgDocumentsService.list(params, signal), { staleTime: 15_000, placeholderData: (previous) => previous });
   const users = useTenantQuery(['organizacion', 'users'], (signal) => organizacionService.getUsers(signal), { staleTime: 5 * 60_000 });
   const refresh = () => void client.invalidateQueries({ queryKey: ['tenant-module'] });
@@ -72,7 +77,7 @@ export function DocumentosView({ initialOpenId, onOpenChange }: { initialOpenId?
     if (file.size > MAX_IMPORT_BYTES) { toast.error('El archivo pesa más de 15 MB.'); return; }
     await run(async () => {
       const readText = async () => (type === 'DOC'
-        ? (await (await import('./docx-convert')).docxToHtml(file)).text.replace(/s+/g, ' ').slice(0, 20_000)
+        ? (await (await import('./docx-convert')).docxToHtml(file)).text.replace(/\s+/g, ' ').slice(0, 20_000)
         : (await (await import('./xlsx-convert')).xlsxToWorkbook(file)).searchText);
       const searchText = await readText().catch(() => { throw new Error('No se pudo leer el archivo. Comprueba que sea un .docx o .xlsx válido y no esté protegido con contraseña.'); });
       const title = file.name.replace(/\.(docx|xlsx)$/i, '').trim().slice(0, 160) || 'Documento importado';
@@ -108,6 +113,24 @@ export function DocumentosView({ initialOpenId, onOpenChange }: { initialOpenId?
         </Field>
         <Field label="Tipo" className="w-44"><NativeSelect value={kind} onChange={(e) => setKind(e.target.value)}><option value="">Todos</option><option value="DOC">Documentos</option><option value="SHEET">Hojas de cálculo</option></NativeSelect></Field>
       </div>
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Carpetas">
+        {[{ id: '', label: 'Todas las carpetas', count: null as number | null }, { id: 'none', label: 'Sin carpeta', count: folders.data?.withoutFolder ?? null }, ...(folders.data?.folders ?? []).map((item) => ({ id: item.id, label: item.name, count: item.count }))].map((item) => (
+          <button key={item.id || 'all'} type="button" aria-pressed={folder === item.id} onClick={() => setFolder(item.id)}
+            className={cn('inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-semibold transition', folder === item.id ? 'border-primary bg-primary/10 text-primary dark:text-accent' : 'border-border hover:bg-muted/50')}>
+            <Folder className="size-3.5" aria-hidden="true" />{item.label}{item.count !== null && <span className="text-[10px] text-muted-foreground">{item.count}</span>}
+          </button>
+        ))}
+        {canEdit && <button type="button" onClick={() => setNewFolder(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted/50"><FolderPlus className="size-3.5" aria-hidden="true" />Nueva carpeta</button>}
+        {(() => {
+          const current = folders.data?.folders.find((item) => item.id === folder);
+          return current?.canManage ? (
+            <span className="ml-1 inline-flex items-center gap-2 text-[11px] font-semibold">
+              <button type="button" className="inline-flex items-center gap-1 text-primary underline dark:text-accent" onClick={() => setRenamingFolder({ id: current.id, name: current.name })}><Pencil className="size-3" aria-hidden="true" />Renombrar</button>
+              <button type="button" className="inline-flex items-center gap-1 text-destructive underline" onClick={() => { if (window.confirm(`¿Borrar la carpeta «${current.name}»? Sus documentos no se borran: pasan a «Sin carpeta».`)) void run(async () => { await orgDocumentsService.deleteFolder(current.id); setFolder(''); }, 'Carpeta borrada'); }}><Trash2 className="size-3" aria-hidden="true" />Borrar</button>
+            </span>
+          ) : null;
+        })()}
+      </div>
       <div role="tablist" aria-label="Filtrar documentos" className="flex flex-wrap gap-2">
         {SCOPES.map((item) => (
           <button key={item.id} type="button" role="tab" aria-selected={scope === item.id} onClick={() => setScope(item.id)}
@@ -117,12 +140,12 @@ export function DocumentosView({ initialOpenId, onOpenChange }: { initialOpenId?
 
       {list.isLoading ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-busy="true">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-32" />)}</div>
         : list.isError ? <ErrorState message={errorMessage(list.error, 'No se pudieron cargar los documentos')} onRetry={() => void list.refetch()} />
-        : !list.data?.items.length ? <EmptyState title={query || scope || kind ? 'No hay documentos con ese filtro' : 'Aún no hay documentos'} description={scope === 'archived' ? 'Los documentos que archives aparecerán aquí.' : 'Crea tu primer documento u hoja de cálculo, o importa un archivo de Word o Excel.'} />
+        : !list.data?.items.length ? <EmptyState title={query || scope || kind || folder ? 'No hay documentos con ese filtro' : 'Aún no hay documentos'} description={scope === 'archived' ? 'Los documentos que archives aparecerán aquí.' : 'Crea tu primer documento u hoja de cálculo, o importa un archivo de Word o Excel.'} />
         : (
           <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {list.data.items.map((item) => (
               <DocCard key={item.id} item={item} canEdit={canEdit} onOpen={() => setOpenId(item.id)}
-                onRename={() => setRenaming(item)} onShare={() => void run(async () => setSharing(await orgDocumentsService.get(item.id)))} onDownload={() => void download(item)}
+                onRename={() => setRenaming(item)} onMove={() => setMoving(item)} onShare={() => void run(async () => setSharing(await orgDocumentsService.get(item.id)))} onDownload={() => void download(item)}
                 onDuplicate={() => void run(async () => { await orgDocumentsService.duplicate(item.id); }, 'Se creó una copia solo para ti')}
                 onArchive={() => void run(() => (item.archived ? orgDocumentsService.restore(item.id) : orgDocumentsService.archive(item.id)), item.archived ? 'Documento restaurado' : 'Documento archivado')} />
             ))}
@@ -131,13 +154,28 @@ export function DocumentosView({ initialOpenId, onOpenChange }: { initialOpenId?
 
       {naming && <PromptDialog open onOpenChange={(open) => !open && setNaming(null)} title={naming === 'DOC' ? 'Nuevo documento' : 'Nueva hoja de cálculo'} description="Podrás cambiar el nombre y con quién lo compartes cuando quieras." label="Nombre" placeholder={naming === 'DOC' ? 'Plan comercial 2027' : 'Presupuesto mensual'} confirmLabel="Crear" loading={busy} onConfirm={(value) => create(value.trim().slice(0, 160), naming)} />}
       {renaming && <PromptDialog open onOpenChange={(open) => !open && setRenaming(null)} title="Cambiar el nombre" label="Nombre" initialValue={renaming.title} confirmLabel="Guardar" loading={busy} onConfirm={(value) => run(async () => { await orgDocumentsService.update(renaming.id, { title: value.trim() }); setRenaming(null); }, 'Nombre actualizado')} />}
+      {newFolder && <PromptDialog open onOpenChange={(open) => !open && setNewFolder(false)} title="Nueva carpeta" description="Sirve para ordenar los documentos; quién ve cada uno sigue dependiendo del documento." label="Nombre" placeholder="Contratos 2027" confirmLabel="Crear" loading={busy} onConfirm={(value) => run(async () => { const created = await orgDocumentsService.createFolder(value.trim()); setNewFolder(false); setFolder(created.id); }, 'Carpeta creada')} />}
+      {renamingFolder && <PromptDialog open onOpenChange={(open) => !open && setRenamingFolder(null)} title="Renombrar la carpeta" label="Nombre" initialValue={renamingFolder.name} confirmLabel="Guardar" loading={busy} onConfirm={(value) => run(async () => { await orgDocumentsService.renameFolder(renamingFolder.id, value.trim()); setRenamingFolder(null); }, 'Carpeta renombrada')} />}
+      {moving && (
+        <div role="dialog" aria-modal="true" aria-label={`Mover ${moving.title} a una carpeta`} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setMoving(null)}>
+          <div className="w-full max-w-sm space-y-3 rounded-2xl border border-border bg-background p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <p className="font-semibold">Mover «{moving.title}»</p>
+            <ul className="max-h-64 space-y-1 overflow-y-auto">
+              {[{ id: '', name: 'Sin carpeta' }, ...(folders.data?.folders ?? [])].map((item) => (
+                <li key={item.id || 'root'}><button type="button" disabled={busy || (moving.folderId ?? '') === item.id} onClick={() => void run(async () => { await orgDocumentsService.update(moving.id, { folderId: item.id || null }); setMoving(null); }, 'Documento movido')} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted/50 disabled:opacity-50"><Folder className="size-4" aria-hidden="true" />{item.name}{(moving.folderId ?? '') === item.id ? ' (actual)' : ''}</button></li>
+              ))}
+            </ul>
+            <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => setMoving(null)}>Cerrar</Button></div>
+          </div>
+        </div>
+      )}
       {sharing && <ShareDialog doc={sharing} users={users.data ?? []} onClose={() => setSharing(null)} onSaved={() => { setSharing(null); refresh(); }} />}
     </div>
   );
 }
 
-function DocCard({ item, canEdit, onOpen, onRename, onShare, onDownload, onDuplicate, onArchive }: {
-  item: OrgDocumentSummary; canEdit: boolean; onOpen: () => void; onRename: () => void; onShare: () => void; onDownload: () => void; onDuplicate: () => void; onArchive: () => void;
+function DocCard({ item, canEdit, onOpen, onRename, onMove, onShare, onDownload, onDuplicate, onArchive }: {
+  item: OrgDocumentSummary; canEdit: boolean; onOpen: () => void; onRename: () => void; onMove: () => void; onShare: () => void; onDownload: () => void; onDuplicate: () => void; onArchive: () => void;
 }) {
   const Icon = item.kind === 'DOC' ? FileText : FileSpreadsheet;
   return (
@@ -170,6 +208,7 @@ function DocCard({ item, canEdit, onOpen, onRename, onShare, onDownload, onDupli
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={onRename}><Pencil className="size-4" />Cambiar el nombre</DropdownMenuItem>
+              <DropdownMenuItem onSelect={onMove}><FolderInput className="size-4" />Mover a una carpeta</DropdownMenuItem>
               <DropdownMenuItem onSelect={onShare}><Share2 className="size-4" />Compartir</DropdownMenuItem>
               <DropdownMenuItem onSelect={onArchive}>{item.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}{item.archived ? 'Restaurar' : 'Archivar'}</DropdownMenuItem>
             </>

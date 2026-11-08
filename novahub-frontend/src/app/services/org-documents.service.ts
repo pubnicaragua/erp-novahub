@@ -11,6 +11,7 @@ export interface OrgDocumentSummary {
   audience: OrgDocAudience;
   audienceUserIds: string[];
   departmentId: string | null;
+  folderId: string | null;
   permission: OrgDocPermission;
   ownerId: string;
   ownerName: string;
@@ -83,7 +84,11 @@ export const orgDocumentsService = {
   departments: (signal?: AbortSignal) => api.get<Array<{ id: string; name: string }>>('/org-documents/lookups/departments', { signal }),
   create: (data: { kind: OrgDocKind; title: string; contentBase64?: string; searchText?: string } & Partial<OrgDocumentSharing>) => api.post<OrgDocumentDetail>('/org-documents', data),
   saveContent: (id: string, data: { baseVersion: number; contentBase64: string; searchText?: string; overwrite?: boolean }) => api.post<OrgDocumentDetail>(`/org-documents/${id}/content`, data),
-  update: (id: string, data: Partial<OrgDocumentSharing> & { title?: string }) => api.patch<OrgDocumentDetail>(`/org-documents/${id}`, data),
+  listFolders: (signal?: AbortSignal) => api.get<OrgDocumentFolders>('/org-documents/folders', { signal }),
+  createFolder: (name: string) => api.post<OrgDocumentFolder>('/org-documents/folders', { name }),
+  renameFolder: (id: string, name: string) => api.patch<{ id: string; name: string }>(`/org-documents/folders/${id}`, { name }),
+  deleteFolder: (id: string) => api.delete<{ id: string; movedToRoot: number }>(`/org-documents/folders/${id}`),
+  update: (id: string, data: Partial<OrgDocumentSharing> & { title?: string; folderId?: string | null }) => api.patch<OrgDocumentDetail>(`/org-documents/${id}`, data),
   duplicate: (id: string) => api.post<OrgDocumentDetail>(`/org-documents/${id}/duplicate`, {}),
   archive: (id: string) => api.post<OrgDocumentDetail>(`/org-documents/${id}/archive`, {}),
   restore: (id: string) => api.post<OrgDocumentDetail>(`/org-documents/${id}/restore`, {}),
@@ -113,3 +118,6 @@ export function saveBlob(blob: Blob, fileName: string) {
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+export interface OrgDocumentFolder { id: string; name: string; count: number; createdById: string | null; canManage: boolean }
+export interface OrgDocumentFolders { withoutFolder: number; folders: OrgDocumentFolder[] }

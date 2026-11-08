@@ -15,6 +15,7 @@
     "test:force-sales-tracking": "node --experimental-strip-types scripts/test-force-sales-tracking-controller.mjs",
     "test:seguimiento-utils": "node --experimental-strip-types --test scripts/test-seguimiento-utils.mjs",
     "test:employee-card-html": "node --experimental-strip-types --test scripts/test-employee-card-html.mjs",
+    "test:employee-order": "node --experimental-strip-types --test scripts/test-employee-order.mjs",
     "test:force-sales-evidence-image": "node scripts/test-force-sales-evidence-image.mjs",
     "test:force-sales-location-queue": "node --experimental-strip-types scripts/test-force-sales-location-queue.mjs",
     "test:force-sales-tracking-focal": "npm run test:force-sales-tracking && npm run test:force-sales-location-queue && npm run test:force-sales-evidence-image && npm run test:force-sales-offline-route && npm run test:force-sales-map-location && npm run test:force-sales-map-offline-identity && npm run test:force-sales-map-layers && npm run test:force-sales-route-history && npm run test:force-sales-route-actions",

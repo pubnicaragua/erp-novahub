@@ -1,4 +1,5 @@
 import React from 'react';
+import { EMPLOYEE_STATUS_SUFFIX, sortEmployees } from './employeeOrder';
 import { useState } from 'react';
 import { DollarSign, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wallet, Receipt, Send, Pencil, CalendarDays } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -99,8 +100,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const [processLoading, setProcessLoading] = useState(false);
   const employeeOptions = [
     { label: 'Todos los empleados', value: 'all' },
-    ...employees.map((emp: any) => ({
-      label: `${emp.firstName} ${emp.lastName}`,
+    // Activos primero y por código de empleado; quien ya no trabaja en la empresa queda al final y marcado.
+    ...sortEmployees<any>(employees).map((emp: any) => ({
+      label: `${emp.firstName} ${emp.lastName}${EMPLOYEE_STATUS_SUFFIX[String(emp.employmentStatus || '').toUpperCase()] ? ` · ${EMPLOYEE_STATUS_SUFFIX[String(emp.employmentStatus).toUpperCase()]}` : ''}`,
       value: emp.id,
       description: emp.employeeNumber,
     })),

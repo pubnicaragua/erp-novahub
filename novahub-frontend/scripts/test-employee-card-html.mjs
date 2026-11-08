@@ -29,3 +29,14 @@ test('la distribución vertical usa el tamaño de tarjeta girado y se puede ocul
   assert.ok(!html.includes('class="photo'));
   assert.ok(!html.includes('class="dept"'));
 });
+
+test('hay seis distribuciones, la tipografía elegida se aplica y el QR queda dentro de la tarjeta', () => {
+  for (const layout of ['CLASSIC', 'MODERN', 'BOLD', 'MINIMAL', 'CORPORATE', 'VERTICAL']) {
+    const html = buildCardsHtml({ design: { ...design, layout, fontFamily: 'SERIF', qrLinkTemplate: null }, company, employees: [employee] }, { qrByEmployee: { e1: 'data:image/png;base64,AAAA' } });
+    assert.match(html, new RegExp(`class="card ${layout.toLowerCase()} front"`));
+    assert.match(html, /font-family:Georgia/);
+    const frontPart = html.split('class="card')[1];
+    if (layout !== 'VERTICAL') assert.ok(!frontPart.includes('class="qrbox"'), `${layout}: el QR no debe ir debajo del cuerpo`);
+    else assert.ok(frontPart.includes('class="qrbox"'));
+  }
+});

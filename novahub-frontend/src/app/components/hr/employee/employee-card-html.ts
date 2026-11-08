@@ -4,6 +4,15 @@ const escape = (value: string | null | undefined) => String(value ?? '').replace
 const safeUrl = (value: string | null | undefined) => (value && /^(https?:|data:image\/)/i.test(value) ? escape(value) : '');
 const initials = (employee: CardEmployee) => `${employee.firstName[0] ?? ''}${employee.lastName[0] ?? ''}`.toUpperCase();
 
+/** Familias tipográficas del carnet: fuentes que existen en cualquier equipo, para que se imprima igual en todos. */
+export const CARD_FONT_STACKS: Record<string, string> = {
+  SANS: "'Segoe UI',Arial,sans-serif",
+  SERIF: "Georgia,'Times New Roman',serif",
+  ROUNDED: "'Trebuchet MS','Verdana',sans-serif",
+  MONO: "'Courier New',monospace",
+  CONDENSED: "'Arial Narrow','Roboto Condensed',Arial,sans-serif",
+};
+
 export interface CardHtmlOptions { qrByEmployee: Record<string, string>; preview?: boolean }
 
 function front(design: CardDesign, company: CardData['company'], employee: CardEmployee, qr: string | undefined) {
@@ -13,7 +22,7 @@ function front(design: CardDesign, company: CardData['company'], employee: CardE
   const qrHtml = design.showQr && qr ? `<img class="qr" src="${qr}" alt="Código QR" />` : '';
   const meta = `<p class="position">${escape(employee.position ?? '')}</p>${design.showDepartment && employee.department ? `<p class="dept">${escape(employee.department)}</p>` : ''}<p class="number">N.º ${escape(employee.number)}</p>`;
   const name = `<p class="name">${escape(employee.firstName)}<br /><strong>${escape(employee.lastName)}</strong></p>`;
-  return `<section class="card ${design.layout.toLowerCase()} front"><header>${logoHtml}</header><div class="body">${photo}<div class="info">${name}${meta}</div>${design.layout === 'CLASSIC' ? qrHtml : ''}</div>${design.layout !== 'CLASSIC' && qrHtml ? `<div class="qrbox">${qrHtml}</div>` : ''}<footer>${escape(design.footerText ?? company.name)}</footer></section>`;
+  return `<section class="card ${design.layout.toLowerCase()} front"><header>${logoHtml}</header><div class="body">${photo}<div class="info">${name}${meta}</div>${design.layout !== 'VERTICAL' ? qrHtml : ''}</div>${design.layout === 'VERTICAL' && qrHtml ? `<div class="qrbox">${qrHtml}</div>` : ''}<footer>${escape(design.footerText ?? company.name)}</footer></section>`;
 }
 
 function back(design: CardDesign, company: CardData['company'], employee: CardEmployee, qr: string | undefined) {
@@ -24,12 +33,13 @@ function back(design: CardDesign, company: CardData['company'], employee: CardEm
 export function buildCardsHtml(data: CardData, options: CardHtmlOptions): string {
   const { design, company, employees } = data;
   const vertical = design.layout === 'VERTICAL';
+  const font = CARD_FONT_STACKS[design.fontFamily] ?? CARD_FONT_STACKS.SANS;
   const [w, h] = vertical ? ['54mm', '85.6mm'] : ['85.6mm', '54mm'];
   const preview = Boolean(options.preview);
   const css = `
     :root{--p:${design.primaryColor};--a:${design.accentColor};--t:${design.textColor};--w:${w};--h:${h}}
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Segoe UI',Arial,sans-serif;background:${preview ? '#e2e8f0' : '#fff'};color:var(--t);${preview ? 'padding:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start' : ''}}
+    body{font-family:${font};background:${preview ? '#e2e8f0' : '#fff'};color:var(--t);${preview ? 'padding:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start' : ''}}
     @page{size:${w} ${h};margin:0}
     .card{width:var(--w);height:var(--h);overflow:hidden;position:relative;background:#fff;display:flex;flex-direction:column;${preview ? 'border-radius:3mm;box-shadow:0 1px 6px #0003' : 'page-break-after:always;break-after:page'}}
     header{background:var(--p);padding:2.2mm 3mm;display:flex;align-items:center;min-height:11mm}
@@ -59,7 +69,23 @@ export function buildCardsHtml(data: CardData, options: CardHtmlOptions): string
     .back .company{font-size:10pt}
     .backtext{font-size:6.5pt;line-height:1.35;opacity:.95}
     .back .qr.big{width:20mm;height:20mm;background:#fff;padding:1mm;border-radius:1mm}
-    .small{font-size:6pt;opacity:.85}`;
+    .small{font-size:6pt;opacity:.85}
+    .bold header{background:#fff;border-bottom:1.2mm solid var(--a)}
+    .bold .company{color:var(--p)}
+    .bold .body{background:var(--p);color:#fff}
+    .bold .name,.bold .position,.bold .dept,.bold .number{color:#fff}
+    .bold .photo{border-color:#fff}
+    .bold footer{background:var(--p);color:#fff}
+    .minimal header{background:#fff;border-bottom:.3mm solid #cbd5e1}
+    .minimal .company{color:var(--p)}
+    .minimal .photo{border-radius:50%;border:.4mm solid var(--p)}
+    .minimal .position{color:var(--a)}
+    .minimal footer{background:#fff;color:#64748b;border-top:.3mm solid #cbd5e1}
+    .corporate header{background:#fff;border-left:2.2mm solid var(--p);padding-left:2.5mm}
+    .corporate .company{color:var(--p)}
+    .corporate .body{background:#f1f5f9}
+    .corporate .photo{border-radius:50%;border:.8mm solid var(--p)}
+    .corporate footer{background:var(--p)}`;
   const cards = employees.map((employee) => {
     const qr = options.qrByEmployee[employee.id];
     return front(design, company, employee, qr) + back(design, company, employee, qr);

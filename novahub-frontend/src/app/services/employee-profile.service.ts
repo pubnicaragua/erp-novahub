@@ -99,7 +99,9 @@ export interface AssignableAsset { id: string; code: string; name: string; categ
 export type FileStatus = 'EXPIRED' | 'EXPIRING' | 'VALID' | 'NO_EXPIRY';
 export interface EmployeeFile { id: string; employeeId: string; title: string; type: string; uploadedAt: string; expiryDate: string | null; status: FileStatus; isStored: boolean }
 export interface Birthday { employeeId: string; name: string; day: number; month: number; turnsAge: number | null; daysUntil: number; isToday: boolean; position: string | null; department: string | null }
-export interface CardDesign { layout: 'CLASSIC' | 'MODERN' | 'VERTICAL'; primaryColor: string; accentColor: string; textColor: string; showQr: boolean; showPhoto: boolean; showDepartment: boolean; footerText: string | null; backText: string | null }
+export type CardLayout = 'CLASSIC' | 'MODERN' | 'VERTICAL' | 'BOLD' | 'MINIMAL' | 'CORPORATE';
+export type CardFont = 'SANS' | 'SERIF' | 'ROUNDED' | 'MONO' | 'CONDENSED';
+export interface CardDesign { layout: CardLayout; primaryColor: string; accentColor: string; textColor: string; showQr: boolean; showPhoto: boolean; showDepartment: boolean; fontFamily: CardFont; qrLinkTemplate: string | null; footerText: string | null; backText: string | null }
 export interface CardEmployee { id: string; number: string; firstName: string; lastName: string; position: string | null; department: string | null; photo: string | null; hireDate: string; active: boolean; nationalIdLast4: string | null; qr: string }
 export interface CardData { design: CardDesign; company: { name: string; logo: string | null }; employees: CardEmployee[] }
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useRef, useState } from 'react';
+import { sortEmployees } from './employeeOrder';
 import { Plus, Search, Filter, Edit2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Send, CheckCircle2, XCircle, History, Ban, Download, Upload, Settings2, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Button } from '../ui/button';
@@ -86,7 +87,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
   }, []);
 
-  const filteredEmployees = employees.filter((emp: any) => {
+  const filteredEmployees = sortEmployees<any>(employees).filter((emp: any) => {
     const term = searchTerm.toLowerCase();
     const matchesSearch = !term ||
       emp.firstName?.toLowerCase().includes(term) ||
@@ -220,10 +221,53 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
 
   const toDateInputValue = (value: any) => value ? String(value).slice(0, 10) : '';
 
-  const handleEdit = (emp: any) => {
+  const editBaselineRef = useRef<Record<string, unknown> | null>(null);
+  const toEmployeePayload = (form: any) => ({
+      employeeNumber: form.employeeNumber.trim(),
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      email: form.email?.trim() || null,
+      phone: form.phone?.trim() || null,
+      dateOfBirth: form.dateOfBirth || null,
+      hireDate: form.hireDate || null,
+      departmentId: form.departmentId || null,
+      positionId: form.positionId || null,
+      managerId: form.managerId || null,
+      contractType: form.contractType || 'FULL_TIME',
+      salary: isNaN(form.salary) ? 0 : Number(form.salary),
+      currency: form.currency || 'NIO',
+      employmentStatus: form.employmentStatus || 'ACTIVE',
+      address: form.address?.trim() || null,
+      city: form.city?.trim() || null,
+      state: form.state?.trim() || null,
+      postalCode: form.postalCode?.trim() || null,
+      country: form.country?.trim() || null,
+      emergencyContact: form.emergencyContact?.trim() || null,
+      emergencyPhone: form.emergencyPhone?.trim() || null,
+      emergencyRelation: form.emergencyRelation?.trim() || null,
+      emergencyContact2Name: form.emergencyContact2Name?.trim() || null,
+      emergencyContact2Relation: form.emergencyContact2Relation?.trim() || null,
+      emergencyContact2Phone: form.emergencyContact2Phone?.trim() || null,
+      nationalId: form.nationalId?.trim() || null,
+      socialSecurityNumber: form.socialSecurityNumber?.trim() || null,
+      probationEndDate: form.probationEndDate || null,
+      notes: form.notes?.trim() || null,
+      payFrequency: form.payFrequency || 'MONTHLY',
+  });
+
+  /** Abre el formulario con el expediente completo: la lista trae solo unas columnas y editarla tal cual borraría el resto. */
+  const handleEdit = async (listRow: any) => {
+    let emp = listRow;
+    try {
+      const full: any = await hrService.getEmployee(listRow.id);
+      emp = full?.data?.data ?? full?.data ?? full ?? listRow;
+    } catch {
+      toast.error('No se pudo cargar el expediente completo del empleado. Intenta de nuevo para no perder datos.');
+      return;
+    }
     setEditingId(emp.id);
     setEditingPendingId(null);
-    setNewEmployeeForm({
+    const loaded = {
       employeeNumber: emp.employeeNumber || '',
       firstName: emp.firstName || '',
       lastName: emp.lastName || '',
@@ -234,6 +278,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       hireDate: toDateInputValue(emp.hireDate),
       departmentId: emp.departmentId || emp.department?.id || '',
       positionId: emp.positionId || emp.position?.id || '',
+      managerId: emp.managerId || emp.manager?.id || '',
       contractType: emp.contractType || 'FULL_TIME',
       salary: emp.salary ?? '',
       currency: emp.currency || 'NIO',
@@ -253,11 +298,13 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       probationEndDate: toDateInputValue(emp.probationEndDate),
       notes: emp.notes || '',
       payFrequency: emp.payFrequency || 'MONTHLY',
-    });
+    };
+    setNewEmployeeForm(loaded);
+    editBaselineRef.current = toEmployeePayload(loaded);
     setIsCreateEmployeeModalOpen(true);
   };
 
-  const handleCardEdit = (emp: any) => handleEdit(emp);
+  const handleCardEdit = (emp: any) => { void handleEdit(emp); };
 
   const openEmployeeDetails = (emp: any) => {
     if (emp?.id) setDetailEmployeeId(emp.id);
@@ -335,40 +382,18 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
 
     const actionToken = beginNotificationAction();
     try {
-      // Sanitizar datos antes de enviar
-      const sanitizedData = {
-        employeeNumber: newEmployeeForm.employeeNumber.trim(),
-        firstName: newEmployeeForm.firstName.trim(),
-        lastName: newEmployeeForm.lastName.trim(),
-        email: newEmployeeForm.email?.trim() || null,
-        phone: newEmployeeForm.phone?.trim() || null,
-        dateOfBirth: newEmployeeForm.dateOfBirth || null,
-        hireDate: newEmployeeForm.hireDate || null,
-        departmentId: newEmployeeForm.departmentId || null,
-        positionId: newEmployeeForm.positionId || null,
-        contractType: newEmployeeForm.contractType || 'FULL_TIME',
-        salary: isNaN(newEmployeeForm.salary) ? 0 : Number(newEmployeeForm.salary),
-        currency: newEmployeeForm.currency || 'NIO',
-        employmentStatus: newEmployeeForm.employmentStatus || 'ACTIVE',
-        address: newEmployeeForm.address?.trim() || null,
-        city: newEmployeeForm.city?.trim() || null,
-        state: newEmployeeForm.state?.trim() || null,
-        postalCode: newEmployeeForm.postalCode?.trim() || null,
-        country: newEmployeeForm.country?.trim() || null,
-        emergencyContact: newEmployeeForm.emergencyContact?.trim() || null,
-        emergencyPhone: newEmployeeForm.emergencyPhone?.trim() || null,
-        emergencyRelation: newEmployeeForm.emergencyRelation?.trim() || null,
-        emergencyContact2Name: newEmployeeForm.emergencyContact2Name?.trim() || null,
-        emergencyContact2Relation: newEmployeeForm.emergencyContact2Relation?.trim() || null,
-        emergencyContact2Phone: newEmployeeForm.emergencyContact2Phone?.trim() || null,
-        nationalId: newEmployeeForm.nationalId?.trim() || null,
-        socialSecurityNumber: newEmployeeForm.socialSecurityNumber?.trim() || null,
-        probationEndDate: newEmployeeForm.probationEndDate || null,
-        notes: newEmployeeForm.notes?.trim() || null,
-        payFrequency: newEmployeeForm.payFrequency || 'MONTHLY',
-      };
+      const sanitizedData = toEmployeePayload(newEmployeeForm);
+      // Al editar solo se envía lo que la persona cambió: así nunca se pisan con vacío los campos que no se cargaron en la lista.
+      const changedData = id && editBaselineRef.current ? Object.fromEntries(Object.entries(sanitizedData).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify((editBaselineRef.current as any)[key]))) : sanitizedData;
+      if (id && editBaselineRef.current && Object.keys(changedData).length === 0) {
+        toast.info('No hay cambios que guardar');
+        completeNotificationAction(actionToken);
+        setEditingId(null);
+        return true;
+      }
 
-      await hrService.updateEmployee(id, sanitizedData);
+      await hrService.updateEmployee(id, changedData);
+      editBaselineRef.current = null;
       toast.success('Empleado actualizado correctamente');
       completeNotificationAction(actionToken);
       setEditingId(null);
@@ -1328,6 +1353,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                 <div className="space-y-2"><Label>Fecha de contratación *</Label><Input data-testid="hr-employee-hire-date" type="date" value={newEmployeeForm.hireDate || ''} onChange={(event) => updateNewEmployeeForm('hireDate', event.target.value)} /></div>
                 <div className="space-y-2"><Label>Departamento</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.departmentId || ''} onValueChange={(value) => updateNewEmployeeForm('departmentId', value === NO_SELECTION ? '' : value)}><SelectTrigger data-testid="hr-employee-department"><SelectValue placeholder="Sin departamento" /></SelectTrigger><SelectContent><SelectItem value={NO_SELECTION}>Sin departamento</SelectItem>{departments.map((department: any) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewDeptName(''); setPendingImportDepartmentRow(null); setShowNewDeptModal(true); }} title="Crear departamento" aria-label="Crear departamento"><Plus className="size-3.5" /></Button></div></div>
                 <div className="space-y-2"><Label>Puesto</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.positionId || ''} onValueChange={(value) => updateNewEmployeeForm('positionId', value === NO_SELECTION ? '' : value)}><SelectTrigger data-testid="hr-employee-position"><SelectValue placeholder="Sin puesto" /></SelectTrigger><SelectContent><SelectItem value={NO_SELECTION}>Sin puesto</SelectItem>{positions.filter((position: any) => !newEmployeeForm.departmentId || position.departmentId === newEmployeeForm.departmentId).map((position: any) => <SelectItem key={position.id} value={position.id}>{position.title}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewPosTitle(''); setNewPosDeptId(newEmployeeForm.departmentId || ''); setPendingImportPositionRow(null); setShowNewPosModal(true); }} title="Crear puesto" aria-label="Crear puesto" disabled={!newEmployeeForm.departmentId}><Plus className="size-3.5" /></Button></div></div>
+                <div className="space-y-2"><Label>Jefe directo</Label><Select value={newEmployeeForm.managerId || NO_SELECTION} onValueChange={(value) => updateNewEmployeeForm('managerId', value === NO_SELECTION ? '' : value)}><SelectTrigger data-testid="hr-employee-manager"><SelectValue placeholder="Sin jefe directo" /></SelectTrigger><SelectContent><SelectItem value={NO_SELECTION}>Sin jefe directo</SelectItem>{(employees || []).filter((candidate: any) => candidate.id !== editingId && candidate.employmentStatus !== 'TERMINATED').map((candidate: any) => <SelectItem key={candidate.id} value={candidate.id}>{candidate.firstName} {candidate.lastName}{candidate.employeeNumber ? ` · ${candidate.employeeNumber}` : ''}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-2"><Label>Tipo de contrato</Label><Select value={newEmployeeForm.contractType || 'FULL_TIME'} onValueChange={(value) => updateNewEmployeeForm('contractType', value)}><SelectTrigger data-testid="hr-employee-contract"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="FULL_TIME">Tiempo completo</SelectItem><SelectItem value="PART_TIME">Medio tiempo</SelectItem><SelectItem value="CONTRACTOR">Contratista</SelectItem><SelectItem value="INTERN">Pasante</SelectItem><SelectItem value="TEMPORARY">Temporal</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2"><Label>Salario *</Label><Input data-testid="hr-employee-salary" type="number" min="0" value={newEmployeeForm.salary ?? ''} onChange={(event) => updateNewEmployeeForm('salary', event.target.value === '' ? '' : Number(event.target.value))} placeholder="0.00" /></div>
                 <div className="space-y-2"><Label>Moneda</Label><Select value={newEmployeeForm.currency || 'NIO'} onValueChange={(value) => updateNewEmployeeForm('currency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO - Córdoba</SelectItem><SelectItem value="USD">USD - Dólar</SelectItem></SelectContent></Select></div>
