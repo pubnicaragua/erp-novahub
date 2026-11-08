@@ -18,7 +18,7 @@ export function GoalProgressBar({ goal }: { goal: Goal }) {
         <div className={cn('h-full rounded-full', level === 'STRETCH' ? 'bg-violet-500' : level === 'TARGET' ? 'bg-emerald-500' : level === 'MIN' ? 'bg-sky-500' : 'bg-amber-500')} style={{ width: at(goal.evaluation.value) }} />
         {marks.map((mark) => (
           <span key={mark.label} className="absolute top-0 h-full w-0.5 bg-foreground/40" style={{ left: at(mark.value) }}>
-            <span className="absolute -top-4 -translate-x-1/2 whitespace-nowrap text-[9px] font-semibold text-muted-foreground">{mark.label}</span>
+            <span className={cn('absolute -top-4 whitespace-nowrap text-[9px] font-semibold text-muted-foreground', mark.value / top > 0.85 ? '-translate-x-full pr-1' : '-translate-x-1/2')}>{mark.label}</span>
           </span>
         ))}
       </div>

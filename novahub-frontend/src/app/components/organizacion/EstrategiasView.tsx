@@ -19,7 +19,7 @@ import { EmptyState, ErrorState, Field, NativeSelect, PageTitle, controlClass } 
 import { errorMessage } from './organizacion.utils';
 import { useVoiceRecorder, type RecordedVoice } from './useVoiceRecorder';
 
-const STATUS_LABEL: Record<StrategyStatus, string> = { IDEA: 'Idea', EVALUATING: 'En evaluación', APPROVED: 'Aprobada', DISCARDED: 'Descartada' };
+const STATUS_LABEL: Record<StrategyStatus, string> = { IDEA: 'Nueva', EVALUATING: 'En evaluación', APPROVED: 'Aprobada', DISCARDED: 'Descartada' };
 const STATUS_TONE: Record<StrategyStatus, string> = { IDEA: 'bg-slate-100 text-slate-800', EVALUATING: 'bg-amber-100 text-amber-900', APPROVED: 'bg-emerald-100 text-emerald-900', DISCARDED: 'bg-red-100 text-red-900' };
 const AUDIENCE_LABEL: Record<StrategyAudience, string> = { PRIVATE: 'Solo yo', USERS: 'Personas elegidas', TEAM: 'Todo el equipo' };
 const KIND_LABEL: Record<StrategyKind, string> = { IDEA: 'Idea', STRATEGY: 'Estrategia' };
@@ -121,6 +121,7 @@ function IdeaDetail({ id, users, onClose, onChanged, onEdit }: { id: string; use
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
+        {detail.isLoading || detail.isError || !idea ? <DialogTitle className="sr-only">Idea</DialogTitle> : null}
         {detail.isLoading ? <Skeleton className="h-64 w-full" aria-busy="true" />
           : detail.isError || !idea ? <ErrorState message={errorMessage(detail.error, 'No se pudo abrir la idea')} onRetry={() => void detail.refetch()} />
           : (
