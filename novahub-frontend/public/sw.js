@@ -167,6 +167,20 @@ async function normalizeLegacyEventIds(database, points) {
   return normalized;
 }
 
+// Mismas reglas que sanitizeLocationPoint de la cola del frontend: solo los campos del contrato; lo que el servidor nunca
+// podría guardar se descarta y una precisión fuera de rango (GPS por IP) solo se omite.
+function sanitizeLocationPoint(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const capturedMs = new Date(String(raw.capturedAt ?? '')).getTime();
+  if (!LOCATION_EVENT_UUID.test(String(raw.eventId ?? '')) || !Number.isFinite(capturedMs)) return null;
+  if (typeof raw.lat !== 'number' || !Number.isFinite(raw.lat) || raw.lat < -90 || raw.lat > 90) return null;
+  if (typeof raw.lng !== 'number' || !Number.isFinite(raw.lng) || raw.lng < -180 || raw.lng > 180) return null;
+  const clean = { eventId: String(raw.eventId), capturedAt: new Date(capturedMs).toISOString(), lat: raw.lat, lng: raw.lng };
+  if (typeof raw.accuracy === 'number' && Number.isFinite(raw.accuracy) && raw.accuracy >= 0 && raw.accuracy <= 10000) clean.accuracy = raw.accuracy;
+  if (typeof raw.heading === 'number' && Number.isFinite(raw.heading) && raw.heading >= 0 && raw.heading <= 360) clean.heading = raw.heading;
+  return clean;
+}
+
 async function replayLocationPoints() {
   const database = await openLocationDatabase();
   try {
@@ -181,12 +195,27 @@ async function replayLocationPoints() {
         .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
       if (!scopedPoints.length) continue;
       let remaining = scopedPoints.length;
+      let progressed = false;
       for (let offset = 0; offset < scopedPoints.length && offset < 1000; offset += 200) {
-        const batch = await normalizeLegacyEventIds(database, scopedPoints.slice(offset, offset + 200));
+        const normalized = await normalizeLegacyEventIds(database, scopedPoints.slice(offset, offset + 200));
+        const batch = [];
+        const impossible = [];
+        for (const record of normalized) {
+          const clean = sanitizeLocationPoint(record);
+          if (clean) batch.push({ ...record, clean }); else impossible.push(record);
+        }
+        if (impossible.length) {
+          const discard = database.transaction('points', 'readwrite');
+          for (const record of impossible) discard.objectStore('points').delete(record.key);
+          await idbTransactionDone(discard);
+          remaining -= impossible.length;
+          progressed = true;
+        }
+        if (!batch.length) continue;
         const response = await fetch(`${session.apiBase}/force-sales/location-points/batch`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.accessToken}` },
-          body: JSON.stringify({ points: batch.map(({ key: _key, scopeKey: _scope, storedAt: _stored, ...point }) => point) }),
+          body: JSON.stringify({ points: batch.map(({ clean }) => clean) }),
           cache: 'no-store',
         });
         if (response.status === 401 || response.status === 403) {
@@ -203,10 +232,12 @@ async function replayLocationPoints() {
         }
         const payload = await response.json();
         const accepted = new Set(Array.isArray(payload.acceptedIds) ? payload.acceptedIds : []);
-        if (!accepted.size) throw new Error('Location server did not confirm the batch');
+        // Lo que el servidor rechazó por inválido tampoco se reintenta: reenviarlo solo repetiría el rechazo.
+        const rejected = new Set(Array.isArray(payload.rejectedIds) ? payload.rejectedIds : []);
+        if (!accepted.size && !rejected.size) throw new Error('Location server did not confirm the batch');
         const write = database.transaction(['points', 'sessions'], 'readwrite');
         const pointStore = write.objectStore('points');
-        for (const point of batch) if (accepted.has(point.eventId)) pointStore.delete(point.key);
+        for (const point of batch) if (accepted.has(point.eventId) || rejected.has(point.eventId)) pointStore.delete(point.key);
         const sessionStore = write.objectStore('sessions');
         const sessionRequest = sessionStore.get(session.scopeKey);
         sessionRequest.onsuccess = () => {
@@ -214,9 +245,11 @@ async function replayLocationPoints() {
           if (current?.active) sessionStore.put({ ...current, lastSyncedAt: new Date().toISOString() });
         };
         await idbTransactionDone(write);
-        remaining -= accepted.size;
+        remaining -= accepted.size + rejected.size;
+        progressed = true;
       }
-      if (remaining > 0 && session.active && session.accessToken) {
+      // Solo se vuelve a registrar si hubo avance: sin él, registrar de nuevo disparaba otra sincronización enseguida.
+      if (progressed && remaining > 0 && session.active && session.accessToken) {
         const registration = self.registration;
         if (registration.sync?.register) await registration.sync.register(LOCATION_SYNC_TAG);
       }

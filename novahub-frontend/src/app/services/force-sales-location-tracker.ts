@@ -189,6 +189,12 @@ export function clearForceSalesLocationTrackingPause(identity: LocationQueueIden
   writePaused(identity, false);
 }
 
+/** Desplazamiento que cuenta como movimiento para guardar un punto de ruta de inmediato. */
+const MOVEMENT_THRESHOLD_METERS = 25;
+/** Cada cuánto se guarda un punto cuando la persona no se mueve (latido de presencia en el recorrido). */
+const STATIONARY_PERSIST_MS = 60_000;
+const PUBLISH_MIN_INTERVAL_MS = 5_000;
+
 export function createForceSalesLocationTracker(options: TrackerOptions): TrackerHandle {
   const { identity, isEligible } = options;
   const browser = options.browser || makeDefaultBrowserAdapter();
@@ -216,6 +222,7 @@ export function createForceSalesLocationTracker(options: TrackerOptions): Tracke
   let intervalId: number | null = null;
   let maintenancePromise: Promise<void> | null = null;
   let lastPersistedAt = 0;
+  let lastPublishedAt = 0;
   let lastPersistedPoint: { lat: number; lng: number } | null = null;
   let latestAcceptedAt: number | null = null;
   let watchStartedAt: number | null = null;
@@ -313,8 +320,14 @@ export function createForceSalesLocationTracker(options: TrackerOptions): Tracke
     const movedMeters = lastPersistedPoint
       ? Math.hypot((lat - lastPersistedPoint.lat) * 111320, (lng - lastPersistedPoint.lng) * 111320 * Math.cos(lat * Math.PI / 180))
       : Number.POSITIVE_INFINITY;
-    const shouldPersist = !lastPersistedPoint || now - lastPersistedAt >= 10_000 || movedMeters >= 25;
-    publish({ lastCapturedAt: capturedAt, gps: 'recent', enabled: true, online: browser.isOnline(), message: '' });
+    // Con movimiento (25 m o más) se guarda de inmediato; quieta, un punto por minuto basta como latido. Antes se
+    // guardaba uno cada 10 s aunque no se moviera: 6 veces más puntos, subidas y consumo de batería y datos.
+    const shouldPersist = !lastPersistedPoint || movedMeters >= MOVEMENT_THRESHOLD_METERS || now - lastPersistedAt >= STATIONARY_PERSIST_MS;
+    // El GPS entrega una lectura por segundo: avisar a la pantalla en cada una la redibujaba sin que cambiara nada visible.
+    if (state.gps !== 'recent' || !state.enabled || state.message || now - lastPublishedAt >= PUBLISH_MIN_INTERVAL_MS) {
+      lastPublishedAt = now;
+      publish({ lastCapturedAt: capturedAt, gps: 'recent', enabled: true, online: browser.isOnline(), message: '' });
+    }
     if (!shouldPersist) return;
     const point: LocationQueuePoint = {
       eventId: createLocationEventId(),

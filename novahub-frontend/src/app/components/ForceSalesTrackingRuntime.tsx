@@ -29,6 +29,10 @@ type RuntimeState = ForceSalesLocationTrackerState & { wakeLock: boolean };
 type WakeLockSentinel = { release: () => Promise<void>; addEventListener: (type: 'release', listener: () => void) => void };
 type WakeLockNavigator = Navigator & { wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinel> } };
 
+const PRESENCE_MOVING_MIN_GAP_MS = 10_000;
+const PRESENCE_HEARTBEAT_MS = 45_000;
+const SYNC_INTERVAL_MS = 60_000;
+const SYNC_INTERVAL_SLOW_MS = 120_000;
 const PRESENCE_KEY = (userId: string) => `novaFuerzaPresenceSharingV1:${userId}`;
 const WAKE_LOCK_KEY = (identity: LocationQueueIdentity) => `novaForceSalesWakeLockV1:${locationScopeKey(identity)}`;
 const API_BASE = (import.meta.env.VITE_API_URL || (import.meta.env.PROD
@@ -170,7 +174,9 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
         const movedMeters = lastPresencePoint
           ? Math.hypot((position.lat - lastPresencePoint.lat) * 111320, (position.lng - lastPresencePoint.lng) * 111320 * Math.cos(position.lat * Math.PI / 180))
           : Number.POSITIVE_INFINITY;
-        if (Date.now() - lastPresenceAt < 30_000 && movedMeters < 25) return;
+        // En movimiento, como máximo una señal cada 10 s (antes podía enviarse en cada lectura del GPS); quieta,
+        // un latido cada 45 s. El servidor da por conectada a la persona hasta 90 s sin señal.
+        if (Date.now() - lastPresenceAt < (movedMeters >= 25 ? PRESENCE_MOVING_MIN_GAP_MS : PRESENCE_HEARTBEAT_MS)) return;
         lastPresenceAt = Date.now();
         lastPresencePoint = { lat: position.lat, lng: position.lng };
         try {
@@ -214,11 +220,11 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
         }));
       }
     };
-    const refreshQueue = async () => {
+    const refreshQueue = async (force = false) => {
       if (syncInFlight || disposed) return;
       syncInFlight = true;
       try {
-        await flushLocationQueue(scope);
+        await flushLocationQueue(scope, { force });
       } catch {
         // La cola conserva los puntos para el siguiente intento.
       } finally {
@@ -268,7 +274,8 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
         releaseWakeLock();
       }
     };
-    const handleOnline = () => { void refreshQueue(); };
+    // Al volver la conexión se intenta enseguida, sin esperar la espera de un fallo anterior.
+    const handleOnline = () => { void refreshQueue(true); };
     const handleAuthReset = () => {
       sessionReset = true;
       sharingRef.current = false;
@@ -315,8 +322,18 @@ export function ForceSalesTrackingRuntime({ activeModule, user, canTrack, canHid
       if (next) void acquireWakeLock();
       else releaseWakeLock();
     };
+    // Cada subida despierta la radio del teléfono: un envío por minuto (cada 2 con ahorro de datos o red lenta) en vez
+    // de cada 30 s. Los puntos ya están a salvo en la cola local; la presencia en vivo viaja aparte.
+    let lastSyncAttemptAt = 0;
+    const syncIntervalMs = () => {
+      const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+      const slow = connection?.saveData === true || connection?.effectiveType === '2g' || connection?.effectiveType === 'slow-2g';
+      return slow ? SYNC_INTERVAL_SLOW_MS : SYNC_INTERVAL_MS;
+    };
     const syncTimer = window.setInterval(() => {
-      if (navigator.onLine) void refreshQueue();
+      if (!navigator.onLine || Date.now() - lastSyncAttemptAt < syncIntervalMs()) return;
+      lastSyncAttemptAt = Date.now();
+      void refreshQueue();
     }, 30_000);
 
     window.addEventListener('online', handleOnline);

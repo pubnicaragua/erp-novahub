@@ -54,6 +54,14 @@ class FakeObjectStore {
         });
         return request;
       },
+      count: (keyRange) => {
+        const request = new FakeRequest();
+        this.transaction.enqueue(() => {
+          request.result = [...this.store.records.values()].filter((value) => value.scopeKey === keyRange.value).length;
+          request.onsuccess?.({ target: request });
+        });
+        return request;
+      },
     };
   }
 }

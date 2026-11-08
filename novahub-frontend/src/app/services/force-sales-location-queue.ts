@@ -49,6 +49,54 @@ const MAX_BATCH_SIZE = 200;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const flushes = new Map<string, Promise<boolean>>();
 const retryAttempts = new Map<string, number>();
+/** Un solo temporizador de reintento por sesión: antes cada fallo agregaba uno nuevo y los anteriores seguían vivos. */
+const retryTimers = new Map<string, number>();
+const nextAttemptAt = new Map<string, number>();
+export const MAX_LOCATION_ACCURACY_METERS = 10_000;
+/** Tope de puntos pendientes por sesión y antigüedad máxima: una cola atascada no puede crecer sin límite en el teléfono. */
+export const MAX_QUEUED_POINTS = 5_000;
+export const MAX_QUEUED_POINT_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const BASE_RETRY_MS = 30_000;
+const MAX_RETRY_MS = 15 * 60 * 1000;
+
+/**
+ * Deja solo los campos que el servidor acepta y descarta el punto si nunca podría guardarse (coordenadas o fecha
+ * inválidas). Una precisión fuera de rango (GPS por IP de decenas de kilómetros) no invalida el punto: solo se omite.
+ */
+export function sanitizeLocationPoint(value: unknown): LocationQueuePoint | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const eventId = String(raw.eventId ?? '');
+  const capturedMs = new Date(String(raw.capturedAt ?? '')).getTime();
+  const lat = typeof raw.lat === 'number' ? raw.lat : Number.NaN;
+  const lng = typeof raw.lng === 'number' ? raw.lng : Number.NaN;
+  if (!UUID_PATTERN.test(eventId) || !Number.isFinite(capturedMs)) return null;
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) return null;
+  const { accuracy, heading } = raw;
+  return {
+    eventId,
+    capturedAt: new Date(capturedMs).toISOString(),
+    lat,
+    lng,
+    ...(typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy >= 0 && accuracy <= MAX_LOCATION_ACCURACY_METERS ? { accuracy } : {}),
+    ...(typeof heading === 'number' && Number.isFinite(heading) && heading >= 0 && heading <= 360 ? { heading } : {}),
+  };
+}
+
+/** Espera antes del siguiente reintento: 30 s, 60 s, 2 min… hasta 15 min, con ±20 % de variación para no sincronizar equipos. */
+export function retryDelayMs(attempt: number, random: () => number = Math.random): number {
+  const base = Math.min(BASE_RETRY_MS * 2 ** (Math.max(1, attempt) - 1), MAX_RETRY_MS);
+  return Math.round(base * (0.8 + random() * 0.4));
+}
+
+/** Qué puntos sobran de una cola: los demasiado viejos y, si aún son demasiados, los más antiguos. */
+export function selectPointsToPrune<T extends { key: string; capturedAt: string }>(points: T[], now = Date.now()): string[] {
+  const sorted = [...points].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
+  const stale = new Set(sorted.filter((point) => now - Date.parse(point.capturedAt) > MAX_QUEUED_POINT_AGE_MS).map((point) => point.key));
+  const fresh = sorted.filter((point) => !stale.has(point.key));
+  const overflow = fresh.slice(0, Math.max(0, fresh.length - MAX_QUEUED_POINTS)).map((point) => point.key);
+  return [...stale, ...overflow];
+}
 
 export function createLocationEventId() {
   const cryptoApi = globalThis.crypto;
@@ -290,10 +338,13 @@ export async function deactivateLocationQueueSession(identity: LocationQueueIden
 
 export async function saveLocationPoint(
   identity: LocationQueueIdentity,
-  point: LocationQueuePoint,
+  rawPoint: LocationQueuePoint,
   leaseOwnerId?: string,
   isCurrent?: () => boolean,
 ) {
+  // Un punto que el servidor nunca podría guardar no entra a la cola (atascaría todos los siguientes).
+  const point = sanitizeLocationPoint(rawPoint);
+  if (!point) return;
   const database = await openDatabase();
   try {
     const scopeKey = locationScopeKey(identity);
@@ -349,17 +400,19 @@ export async function getLocationQueueStatus(identity: LocationQueueIdentity): P
   try {
     const scopeKey = locationScopeKey(identity);
     const transaction = database.transaction([POINTS_STORE, SESSIONS_STORE], 'readonly');
-    const pointsRequest = transaction.objectStore(POINTS_STORE).index('byScope').getAll(IDBKeyRange.only(scopeKey));
+    // Se cuenta con el índice en vez de leer todos los puntos: este estado se consulta tras cada punto guardado.
+    const countRequest = transaction.objectStore(POINTS_STORE).index('byScope').count(IDBKeyRange.only(scopeKey));
     const sessionRequest = transaction.objectStore(SESSIONS_STORE).get(scopeKey);
-    const [records, session] = await Promise.all([
-      requestResult(pointsRequest) as Promise<QueueRecord[]>,
+    const [pending, session] = await Promise.all([
+      requestResult(countRequest) as Promise<number>,
       requestResult(sessionRequest) as Promise<SessionRecord | undefined>,
     ]);
-    return {
-      pending: records.length,
-      lastCapturedAt: session?.lastCapturedAt || records.reduce<string | null>((latest, item) => !latest || item.capturedAt > latest ? item.capturedAt : latest, null),
-      lastSyncedAt: session?.lastSyncedAt || null,
-    };
+    let lastCapturedAt = session?.lastCapturedAt || null;
+    if (!lastCapturedAt && pending > 0) {
+      const records = await requestResult(database.transaction(POINTS_STORE, 'readonly').objectStore(POINTS_STORE).index('byScope').getAll(IDBKeyRange.only(scopeKey))) as QueueRecord[];
+      lastCapturedAt = records.reduce<string | null>((latest, item) => !latest || item.capturedAt > latest ? item.capturedAt : latest, null);
+    }
+    return { pending, lastCapturedAt, lastSyncedAt: session?.lastSyncedAt || null };
   } finally {
     database.close();
   }
@@ -373,25 +426,45 @@ function registerBackgroundSync() {
   }).catch(() => undefined);
 }
 
+async function deleteQueuedPoints(keys: string[]) {
+  if (!keys.length) return;
+  const database = await openDatabase();
+  try {
+    const transaction = database.transaction(POINTS_STORE, 'readwrite');
+    const store = transaction.objectStore(POINTS_STORE);
+    for (const key of keys) store.delete(key);
+    await transactionDone(transaction);
+  } finally {
+    database.close();
+  }
+}
+
 async function sendBatch(session: SessionRecord, points: QueueRecord[]) {
   if (!session.accessToken || !session.active) return false;
   const normalizedPoints = await normalizeLegacyEventIds(points);
+  // Lo que el servidor nunca podría guardar se descarta aquí: un solo punto inválido atascaba la cola para siempre.
+  const sendable: Array<{ record: QueueRecord; clean: LocationQueuePoint }> = [];
+  const impossible: QueueRecord[] = [];
+  for (const record of normalizedPoints) {
+    const clean = sanitizeLocationPoint(record);
+    if (clean) sendable.push({ record, clean });
+    else impossible.push(record);
+  }
+  if (impossible.length) await deleteQueuedPoints(impossible.map((record) => record.key));
+  if (!sendable.length) return true;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(`${session.apiBase}/force-sales/location-points/batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.accessToken}` },
-      body: JSON.stringify({ points: normalizedPoints.map(({ key: _key, scopeKey: _scope, storedAt: _stored, ...point }) => ({
-        ...point,
-        accuracy: typeof point.accuracy === 'number' && Number.isFinite(point.accuracy) ? point.accuracy : undefined,
-        heading: typeof point.heading === 'number' && Number.isFinite(point.heading) ? point.heading : undefined,
-      })) }),
+      body: JSON.stringify({ points: sendable.map(({ clean }) => clean) }),
       signal: controller.signal,
       cache: 'no-store',
     });
     if (response.status === 401 || response.status === 403) {
       await deactivateLocationQueueSession({ userId: session.userId, tenantId: session.tenantId });
+      clearRetry(session.scopeKey);
       return false;
     }
     if (!response.ok) {
@@ -400,15 +473,17 @@ async function sendBatch(session: SessionRecord, points: QueueRecord[]) {
       const safeMessage = typeof serverMessage === 'string' ? serverMessage.slice(0, 240) : '';
       throw new Error(`El servidor rechazó la sincronización (${response.status})${safeMessage ? `: ${safeMessage}` : '.'}`);
     }
-    const result = await response.json() as { acceptedIds?: string[] };
+    const result = await response.json() as { acceptedIds?: string[]; rejectedIds?: string[] };
     const accepted = new Set(Array.isArray(result.acceptedIds) ? result.acceptedIds : []);
-    if (!accepted.size) throw new Error('El servidor no confirmó los puntos guardados.');
+    // Los puntos que el servidor rechazó por inválidos tampoco se reintentan: reenviarlos solo repetiría el rechazo.
+    const rejected = new Set(Array.isArray(result.rejectedIds) ? result.rejectedIds : []);
+    if (!accepted.size && !rejected.size) throw new Error('El servidor no confirmó los puntos guardados.');
 
     const database = await openDatabase();
     try {
       const transaction = database.transaction([POINTS_STORE, SESSIONS_STORE], 'readwrite');
       const pointStore = transaction.objectStore(POINTS_STORE);
-      for (const point of normalizedPoints) if (accepted.has(point.eventId)) pointStore.delete(point.key);
+      for (const { record } of sendable) if (accepted.has(record.eventId) || rejected.has(record.eventId)) pointStore.delete(record.key);
       const sessionStore = transaction.objectStore(SESSIONS_STORE);
       const sessionRequest = sessionStore.get(session.scopeKey);
       sessionRequest.onsuccess = () => {
@@ -448,10 +523,34 @@ async function normalizeLegacyEventIds(points: QueueRecord[]) {
   }
 }
 
-export function flushLocationQueue(identity: LocationQueueIdentity): Promise<boolean> {
+function clearRetry(scopeKey: string) {
+  const timer = retryTimers.get(scopeKey);
+  if (timer !== undefined) window.clearTimeout(timer);
+  retryTimers.delete(scopeKey);
+  nextAttemptAt.delete(scopeKey);
+  retryAttempts.delete(scopeKey);
+}
+
+/** Programa el siguiente reintento reemplazando al anterior: nunca hay más de un temporizador por sesión. */
+function scheduleRetry(identity: LocationQueueIdentity, scopeKey: string, delay: number) {
+  const previous = retryTimers.get(scopeKey);
+  if (previous !== undefined) window.clearTimeout(previous);
+  nextAttemptAt.set(scopeKey, Date.now() + delay);
+  retryTimers.set(scopeKey, window.setTimeout(() => {
+    retryTimers.delete(scopeKey);
+    void flushLocationQueue(identity, { force: true }).catch(() => undefined);
+  }, delay));
+}
+
+/**
+ * Envía los puntos pendientes. Mientras haya una espera por un fallo anterior, los avisos periódicos, de visibilidad o
+ * de punto nuevo no insisten; `force` (el temporizador de reintento o la vuelta de la conexión) sí intenta.
+ */
+export function flushLocationQueue(identity: LocationQueueIdentity, options: { force?: boolean } = {}): Promise<boolean> {
   const scopeKey = locationScopeKey(identity);
   const existingFlush = flushes.get(scopeKey);
   if (existingFlush) return existingFlush;
+  if (!options.force && Date.now() < (nextAttemptAt.get(scopeKey) ?? 0)) return Promise.resolve(false);
   const flush = (async () => {
     const database = await openDatabase();
     let session: SessionRecord | undefined;
@@ -468,17 +567,23 @@ export function flushLocationQueue(identity: LocationQueueIdentity): Promise<boo
       database.close();
     }
     if (!navigator.onLine || !session?.active || !session.accessToken || !points.length) return false;
+    const prune = selectPointsToPrune(points);
+    if (prune.length) {
+      await deleteQueuedPoints(prune);
+      const pruned = new Set(prune);
+      points = points.filter((point) => !pruned.has(point.key));
+      if (!points.length) return false;
+    }
     points.sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
     const sent = await sendBatch(session, points.slice(0, MAX_BATCH_SIZE));
-    if (sent) retryAttempts.delete(scopeKey);
+    if (sent) clearRetry(scopeKey);
     registerBackgroundSync();
     return sent;
   })().catch((error) => {
     registerBackgroundSync();
     const attempt = Math.min((retryAttempts.get(scopeKey) || 0) + 1, 8);
     retryAttempts.set(scopeKey, attempt);
-    const delay = Math.min(30000 * 2 ** (attempt - 1), 15 * 60 * 1000);
-    window.setTimeout(() => { void flushLocationQueue(identity).catch(() => undefined); }, delay);
+    scheduleRetry(identity, scopeKey, retryDelayMs(attempt));
     throw error;
   }).finally(() => flushes.delete(scopeKey));
   flushes.set(scopeKey, flush);
