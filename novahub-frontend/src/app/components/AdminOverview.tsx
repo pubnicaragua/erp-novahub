@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { masterConsoleService } from '../services/master-console.service';
+import { AdminStorageReport } from './AdminStorageReport';
 import { useTenantQuery } from '../hooks/useTenantQuery';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell
@@ -171,6 +172,8 @@ export function AdminOverview() {
           )}
         </CardContent>
       </Card>
+
+      <AdminStorageReport />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Distribución real de la cartera */}

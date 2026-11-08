@@ -18,6 +18,36 @@ export interface MasterConsoleStorageMetrics {
   enforcement: 'informational-only';
 }
 
+export interface MasterConsoleTenantStorage {
+  id: string;
+  name: string;
+  slug: string;
+  objects: number;
+  bytes: number;
+  heavyImageBytes: number;
+  recoverableBytes: number;
+  lastActivityAt: string;
+  idleDays: number | null;
+  inactive: boolean;
+  suspended: boolean;
+}
+
+/** Detalle del consumo para decidir dónde optimizar (solo lectura). */
+export interface MasterConsoleStorageReport {
+  measuredAt: string;
+  inactiveDays: number;
+  heavyImageThresholdBytes: number;
+  totals: { bytes: number; objects: number };
+  byKind: Array<{ kind: string; label: string; objects: number; bytes: number }>;
+  byModule: Array<{ bucket: string; module: string | null; objects: number; bytes: number }>;
+  heavyImages: { objects: number; bytes: number; estimatedRecoverableBytes: number };
+  tenants: MasterConsoleTenantStorage[];
+  inactiveTenants: { count: number; objects: number; bytes: number; top: MasterConsoleTenantStorage[] };
+  withoutOwner: { objects: number; bytes: number };
+  heaviestFiles: Array<{ id: string; tenantName: string | null; bucket: string; fileName: string; mimeType: string | null; bytes: number; module: string | null; createdAt: string }>;
+  largestTables: Array<{ name: string; bytes: number; liveRows: number }>;
+}
+
 export interface MasterConsoleOverview {
   totalTenants: number;
   activeTenants: number;
@@ -83,6 +113,8 @@ export const masterConsoleService = {
     api.get<MasterConsoleOverview>('/master-console/overview', { signal }),
   getStorageMetrics: (signal?: AbortSignal) =>
     api.get<MasterConsoleStorageMetrics>('/master-console/storage-metrics', { signal }),
+  getStorageReport: (inactiveDays: number, signal?: AbortSignal) =>
+    api.get<MasterConsoleStorageReport>(`/master-console/storage-report?inactiveDays=${encodeURIComponent(String(inactiveDays))}&top=15`, { signal }),
   getClientDetail: (tenantId: string, signal?: AbortSignal) =>
     api.get<MasterConsoleClientDetail>('/master-console/client/' + tenantId, { signal }),
 };

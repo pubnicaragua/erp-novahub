@@ -3,10 +3,13 @@ const MB = 1024 * 1024;
 /** Maximum original image accepted before client-side processing. */
 export const MAX_SOURCE_IMAGE_BYTES = 10 * MB;
 
-/** Target size for images stored in Supabase Storage. */
-export const MAX_OPTIMIZED_IMAGE_BYTES = Math.round(1.5 * MB);
+/**
+ * Target size for images stored in Supabase Storage. Una foto de teléfono pesa 3 a 6 MB y una de 1 MB ya se ve bien
+ * en pantalla y en PDF: con 1,5 MB el almacenamiento de los clientes crecía mucho más de lo necesario.
+ */
+export const MAX_OPTIMIZED_IMAGE_BYTES = 1 * MB;
 
-const DEFAULT_MAX_DIMENSION = 2048;
+const DEFAULT_MAX_DIMENSION = 1920;
 const QUALITY_STEPS = [0.84, 0.72, 0.6, 0.5, 0.4];
 
 type ImageOptimizationOptions = {
