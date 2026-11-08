@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  civilToday, clockLabel, complianceTone, formatGoalValue, longCivilDate, minutesUntil, percent, shiftCivilDate, GOAL_METRIC_OPTIONS,
+  civilToday, clockLabel, complianceTone, dueLabel, formatGoalValue, longCivilDate, minutesUntil, percent, shiftCivilDate, GOAL_METRIC_OPTIONS,
 } from '../src/app/components/seguimiento/seguimiento.utils.ts';
 
 test('las fechas civiles se desplazan sin depender de la zona del navegador', () => {
@@ -63,4 +63,10 @@ test('todos los tipos de meta tienen unidad y una pista', () => {
     assert.ok(option.label && option.hint, `${option.key} sin texto`);
     assert.ok(['AMOUNT', 'COUNT', 'HOURS', 'PERCENT'].includes(option.unit));
   }
+});
+
+test('una pregunta sin límite de tiempo no muestra cuenta regresiva ni se marca vencida', () => {
+  const dueAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+  assert.match(dueLabel({ dueAt, noDeadline: true }), /Sin límite de tiempo/);
+  assert.match(dueLabel({ dueAt, noDeadline: false }), /Responde en los próximos/);
 });

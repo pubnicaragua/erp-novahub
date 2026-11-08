@@ -19,7 +19,7 @@ export function MiDiaView({ preferences }: { preferences: OrgPreferences }) {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Organización personal" title="Mi día" subtitle="Responde lo que te pregunten, revisa lo que has trabajado hora por hora y mira cómo vas en tus metas." />
+      <PageTitle eyebrow="Organización" title="Mi día" subtitle="Responde lo que te pregunten, revisa lo que has trabajado hora por hora y mira cómo vas en tus metas." />
 
       <Panel title="Preguntas por responder" icon={<MessageSquareText className="size-4" />}>
         {pending.isLoading ? <Skeleton className="h-24 w-full" aria-busy="true" />

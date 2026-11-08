@@ -31,7 +31,7 @@ const VIEW_TABS: Array<{ id: View; label: string; icon: ReactNode }> = [
   { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-4" /> },
 ];
 
-/** Organización personal: tres vistas (Mi agenda, Compartido, Configuración) sobre el módulo Actividades. */
+/** Organización: tres vistas (Mi agenda, Compartido, Configuración) sobre el módulo Actividades. */
 export function OrganizacionPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: Props) {
   const { canPerform } = useAuth();
   const allowed = (Object.keys(PERMISSION) as View[]).filter((v) => canPerform(PERMISSION[v], 'view'));
@@ -48,19 +48,19 @@ export function OrganizacionPage({ activeSubModule, onSubModuleChange, isSidebar
       if (allowed.includes(sub as View)) onSubModuleChange?.(sub);
     }}
     isSidebarCollapsed={isSidebarCollapsed}
-    ariaLabel="Navegación de Organización personal"
+    ariaLabel="Navegación de Organización"
   /> : null;
 
   if (!view) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center p-6">
-        <div className="text-center"><h1 className="text-2xl font-semibold">Acceso denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para ver Organización personal.</p></div>
+        <div className="text-center"><h1 className="text-2xl font-semibold">Acceso denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para ver Organización.</p></div>
       </div>
     );
   }
 
   if (preferences.isLoading) {
-    return <Frame>{subnavigation}<div className="space-y-3" aria-busy="true" aria-label="Cargando Organización personal"><Skeleton className="h-12 w-64" /><Skeleton className="h-[480px] w-full" /></div></Frame>;
+    return <Frame>{subnavigation}<div className="space-y-3" aria-busy="true" aria-label="Cargando Organización"><Skeleton className="h-12 w-64" /><Skeleton className="h-[480px] w-full" /></div></Frame>;
   }
   if (preferences.isError || !preferences.data) {
     return <Frame>{subnavigation}<ErrorState message={errorMessage(preferences.error, 'No se pudieron cargar tus preferencias de agenda')} onRetry={() => void preferences.refetch()} /></Frame>;

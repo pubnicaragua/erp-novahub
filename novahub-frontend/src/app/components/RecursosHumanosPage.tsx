@@ -546,12 +546,13 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
               </TabsContent>
 
               <TabsContent value="nominas" className="m-0">
-                <PrestacionesSection employees={responseRows(data.employees)} />
-                <NominasView
-                  payrolls={data.payrolls}
-                  employees={data.employees}
-                  onRefresh={refreshData}
-                />
+                <PrestacionesSection employees={responseRows(data.employees)}>
+                  <NominasView
+                    payrolls={data.payrolls}
+                    employees={data.employees}
+                    onRefresh={refreshData}
+                  />
+                </PrestacionesSection>
               </TabsContent>
 
               <TabsContent value="asistencia" className="m-0">

@@ -553,10 +553,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             <option value="PAID">Pagado</option>
           </select>
         </div>
-        <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="hr-payroll-actions">
-          {canPerform('HR_PAYROLL', 'export') && (
-            <ExportMenu onPdf={(paperFormat) => void handleExportPDF(paperFormat)} onExcel={() => void handleExportExcel()} pdfDescription="Nóminas con la estructura configurada" excelDescription="Todas las nóminas filtradas" />
-          )}
+        <div className="erp-list-toolbar flex flex-wrap items-center gap-2 md:justify-end" data-tour="hr-payroll-actions">
           {pendingToRequestCount > 0 && canPerform('HR_PAYROLL', 'requestPayment') && (
             <Button size="sm" onClick={handleRequestAllPayments} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
               <Send className="size-4 mr-2" />
@@ -580,6 +577,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               <Calculator className="size-4 mr-2" />
               Procesar Nómina
             </Button>
+          )}
+          {canPerform('HR_PAYROLL', 'export') && (
+            <ExportMenu onPdf={(paperFormat) => void handleExportPDF(paperFormat)} onExcel={() => void handleExportExcel()} pdfDescription="Nóminas con la estructura configurada" excelDescription="Todas las nóminas filtradas" />
           )}
           <HRViewTutorial label="Cómo procesar nómina" targetPrefix="hr-payroll" stepKeys={['title', 'data', 'actions']} copy={{ data: { title: 'Listado de nóminas', description: 'Consulta empleados, períodos, montos, estados y el desglose de cada nómina.' }, actions: { description: 'Filtra, descarga el reporte, paga pendientes o procesa el período actual incluyendo comisiones.' } }} />
         </div>

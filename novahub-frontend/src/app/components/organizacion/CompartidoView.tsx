@@ -131,7 +131,7 @@ export function CompartidoView({ preferences, users, onOpenAgenda, onOpenSetting
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
       <PageTitle guide={ORGANIZACION_GUIDES.compartido}
-        eyebrow="Organización personal" title="Compartido"
+        eyebrow="Organización" title="Compartido"
         subtitle="Consulta eventos de equipo, invitados y confirmaciones RSVP sin salir de NovaHub."
         actions={(
           <>

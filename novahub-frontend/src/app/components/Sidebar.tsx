@@ -386,7 +386,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'organizacion',
-    label: 'Organización personal',
+    label: 'Organización',
     icon: <CalendarDays className="size-5" />,
     section: 'Herramientas',
     submenu: [

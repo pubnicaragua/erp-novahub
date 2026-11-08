@@ -144,7 +144,8 @@ function AskDialog({ people, onClose, onDone }: { people: PersonOption[]; onClos
   const [minutes, setMinutes] = useState('10');
   const [busy, setBusy] = useState(false);
   const toggle = (id: string) => setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
-  const valid = selected.length > 0 && Number.isInteger(Number(minutes)) && Number(minutes) >= 1 && Number(minutes) <= 240;
+  const valid = selected.length > 0 && Number.isInteger(Number(minutes)) && Number(minutes) >= 0 && Number(minutes) <= 240;
+  const unlimited = minutes === '0';
   const send = async () => {
     setBusy(true);
     try {
@@ -158,10 +159,13 @@ function AskDialog({ people, onClose, onDone }: { people: PersonOption[]; onClos
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Preguntar ahora</DialogTitle>
-          <DialogDescription>Envía «¿En qué estás trabajando?» fuera del horario habitual. Tú decides cuánto tiempo tienen para responder.</DialogDescription>
+          <DialogDescription>Envía «¿En qué estás trabajando?» fuera del horario habitual. Tú decides si tienen un tiempo límite para responder o si la responden cuando puedan.</DialogDescription>
         </DialogHeader>
-        <Field label="Tiempo para responder (minutos)" htmlFor="ask-minutes" hint="Si no responden en ese tiempo se avisa a su supervisor.">
-          <input id="ask-minutes" type="number" min={1} max={240} value={minutes} onChange={(e) => setMinutes(e.target.value)} className={cn(controlClass, 'w-28')} />
+        <Field label="Tiempo para responder (minutos)" htmlFor="ask-minutes" hint={unlimited ? 'Sin límite: la responden cuando puedan durante el día; nunca cuenta como tardía.' : 'Si no responden en ese tiempo se avisa a su supervisor.'}>
+          <div className="flex flex-wrap items-center gap-3">
+            <input id="ask-minutes" type="number" min={1} max={240} value={unlimited ? '' : minutes} disabled={unlimited} onChange={(e) => setMinutes(e.target.value)} className={cn(controlClass, 'w-28')} />
+            <label className="flex cursor-pointer items-center gap-2 text-[13px]"><input type="checkbox" checked={unlimited} onChange={(e) => setMinutes(e.target.checked ? '0' : '10')} />Sin límite de tiempo</label>
+          </div>
         </Field>
         <fieldset className="min-w-0">
           <legend className="mb-1.5 flex w-full items-center justify-between text-[12px] font-semibold">

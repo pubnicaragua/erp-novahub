@@ -25,7 +25,7 @@ export const ENTERPRISE_MODULE_OPTIONS: EnterpriseModuleOption[] = [
   { id: 'HR', label: 'Recursos Humanos', description: 'Empleados, nómina y asistencia' },
   { id: 'HR_TRAINING', label: 'Centro de capacitación', description: 'Cursos y capacitaciones del equipo' },
   { id: 'ACTIVITIES', label: 'Actividades', description: 'Tareas, eventos y bitácora' },
-  { id: 'ORGANIZATION', label: 'Organización personal', description: 'Mi agenda, eventos compartidos y preferencias de calendario' },
+  { id: 'ORGANIZATION', label: 'Organización', description: 'Mi agenda, eventos compartidos y preferencias de calendario' },
   { id: 'MARKETING', label: 'Marketing', description: 'Campañas, contenidos, aprobaciones, activos y resultados de marketing' },
   { id: 'ASANA', label: 'Asana', description: 'Tableros y tareas colaborativas' },
   { id: 'PROJECTS', label: 'Proyectos', description: 'Portafolio, planificación, costos y documentos de proyectos' },

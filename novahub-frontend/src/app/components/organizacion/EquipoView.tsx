@@ -29,7 +29,7 @@ export function EquipoView({ preferences }: { preferences: OrgPreferences }) {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle guide={ORGANIZACION_GUIDES.equipo} eyebrow="Organización personal" title="Equipo" subtitle="Calendarios, tareas pendientes e historial de las personas que supervisas. Solo lectura." />
+      <PageTitle guide={ORGANIZACION_GUIDES.equipo} eyebrow="Organización" title="Equipo" subtitle="Calendarios, tareas pendientes e historial de las personas que supervisas. Solo lectura." />
       <div role="tablist" aria-label="Secciones de Equipo" className="flex flex-wrap gap-2" data-tour="team-tabs">
         {tabs.map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}

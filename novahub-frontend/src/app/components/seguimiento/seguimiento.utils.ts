@@ -75,7 +75,8 @@ export function complianceTone(value: number | null | undefined) {
 }
 
 /** Texto del contador de una pregunta: cuánto falta para que venza o cuánto lleva vencida. */
-export function dueLabel(prompt: Pick<PendingCheckin, 'dueAt'>, now: number = Date.now()): string {
+export function dueLabel(prompt: Pick<PendingCheckin, 'dueAt' | 'noDeadline'>, now: number = Date.now()): string {
+  if (prompt.noDeadline) return 'Sin límite de tiempo: responde cuando puedas hoy';
   const minutes = minutesUntil(prompt.dueAt, now);
   if (minutes > 0) return `Responde en los próximos ${minutes} min`;
   return 'El plazo ya venció: responde ahora y tu supervisor lo verá como tardío';

@@ -29,7 +29,7 @@ const AVAILABLE_MODULES = [
   { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores, órdenes y créditos del proveedor' },
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
-  { id: 'ORGANIZATION', label: 'Organización personal', icon: CalendarDays, description: 'Mi agenda y eventos compartidos' },
+  { id: 'ORGANIZATION', label: 'Organización', icon: CalendarDays, description: 'Mi agenda y eventos compartidos' },
   { id: 'MARKETING', label: 'Marketing', icon: Megaphone, description: 'Campañas, contenidos y resultados' },
   { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
   { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones, description: 'Soporte y Atención' },

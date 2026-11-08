@@ -83,7 +83,7 @@ const AVAILABLE_MODULES = [
   { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Contabilidad General' },
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
-  { id: 'ORGANIZATION', label: 'Organización personal', icon: CalendarDays, description: 'Mi agenda y eventos compartidos' },
+  { id: 'ORGANIZATION', label: 'Organización', icon: CalendarDays, description: 'Mi agenda y eventos compartidos' },
   { id: 'MARKETING', label: 'Marketing', icon: Megaphone, description: 'Campañas, contenidos y resultados' },
   { id: 'ASANA', label: 'Asana', icon: ClipboardPen, description: 'Tableros y tareas colaborativas' },
   { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones, description: 'Soporte y Atención' },

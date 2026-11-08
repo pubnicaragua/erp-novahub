@@ -344,7 +344,7 @@ export function MiAgendaView({ preferences, users, onOpenSettings }: Props) {
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
       <PageTitle guide={ORGANIZACION_GUIDES.agenda}
-        eyebrow="Organización personal"
+        eyebrow="Organización"
         title="Mi agenda"
         subtitle="Organiza tus tareas, eventos y recordatorios en una sola vista de trabajo."
         actions={(

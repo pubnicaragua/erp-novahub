@@ -34,7 +34,7 @@ assert.match(sharedSubnavigation, /getSidebarAwareNavigationClass\(isSidebarColl
 for (const [name, component] of [
   ['Tracking', tracking],
   ['Importaciones Internacionales', intlImports],
-  ['Organización personal', organization],
+  ['Organización', organization],
   ['Marketing', marketing],
 ]) {
   assert.match(component, /<ModuleSubnavigation\b/, `${name} uses the shared subnavigation component`);
@@ -52,7 +52,7 @@ for (const [name, component] of [
   assert.match(component, /isSidebarCollapsed=\{isSidebarCollapsed\}/, `${name} passes the sidebar state to the shared visibility rule`);
 }
 
-for (const [name, component] of [['Organización personal', organization], ['Marketing', marketing]]) {
+for (const [name, component] of [['Organización', organization], ['Marketing', marketing]]) {
   assert.match(component, /items=\{VIEW_TABS\.filter/, `${name} limits navigation choices to permitted views`);
   assert.match(component, /onSubModuleChange\?\.\(/, `${name} synchronizes tab changes with the active submodule`);
 }

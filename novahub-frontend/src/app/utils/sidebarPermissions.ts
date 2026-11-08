@@ -155,7 +155,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'ACTIVITIES_CALENDAR', label: 'Calendario', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_MEETINGS', label: 'Reuniones', parent: 'ACTIVITIES' },
 
-  // Organización personal
+  // Organización
   { id: 'ORGANIZATION_CALENDAR', label: 'Mi agenda', parent: 'ORGANIZATION' },
   { id: 'ORGANIZATION_SHARED', label: 'Compartido', parent: 'ORGANIZATION' },
   { id: 'ORGANIZATION_SETTINGS', label: 'Configuración', parent: 'ORGANIZATION' },

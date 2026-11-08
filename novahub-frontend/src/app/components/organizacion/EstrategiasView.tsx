@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bell, FileText, Image as ImageIcon, Lightbulb, Loader2, MessageSquare, Mic, Paperclip, Plus, Search, Square, ThumbsUp, Trash2, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../ui/button';
@@ -50,7 +50,7 @@ export function EstrategiasView() {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle eyebrow="Organización personal" title="Estrategias" subtitle="Comparte ideas y estrategias comerciales con el equipo: tú decides quién las ve, y pueden llevar texto, archivos, fotos y notas de voz."
+      <PageTitle eyebrow="Organización" title="Estrategias" subtitle="Comparte ideas y estrategias comerciales con el equipo: tú decides quién las ve, y pueden llevar texto, archivos, fotos y notas de voz."
         actions={canEdit ? <Button type="button" onClick={() => setEditing('new')}><Plus className="size-4" />Nueva idea</Button> : undefined} />
 
       <div className="flex flex-wrap items-end gap-3">
@@ -140,7 +140,7 @@ function IdeaDetail({ id, users, onClose, onChanged, onEdit }: { id: string; use
 
               {idea.attachments.length > 0 && (
                 <ul className="grid gap-3 sm:grid-cols-2">
-                  {idea.attachments.map((attachment) => <AttachmentItem key={attachment.id} attachment={attachment} canRemove={idea.canEdit} onRemove={() => void run(() => strategiesService.removeAttachment(id, attachment.id))} />)}
+                  {idea.attachments.map((attachment) => <AttachmentItem key={attachment.id} ideaId={id} attachment={attachment} canRemove={idea.canEdit} onRemove={() => void run(() => strategiesService.removeAttachment(id, attachment.id))} />)}
                 </ul>
               )}
 
@@ -189,14 +189,14 @@ function IdeaDetail({ id, users, onClose, onChanged, onEdit }: { id: string; use
   );
 }
 
-function AttachmentItem({ attachment, canRemove, onRemove }: { attachment: StrategyAttachment; canRemove: boolean; onRemove: () => void }) {
+function AttachmentItem({ ideaId, attachment, canRemove, onRemove }: { ideaId: string; attachment: StrategyAttachment; canRemove: boolean; onRemove: () => void }) {
   const [url, setUrl] = useState('');
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
-    storageService.resolveUrl(attachment.uri).then((value) => { if (active) setUrl(value); }).catch(() => { if (active) setFailed(true); });
+    strategiesService.attachmentUrl(ideaId, attachment.id).then((value) => { if (active) setUrl(value.url); }).catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [attachment.uri]);
+  }, [ideaId, attachment.id]);
   return (
     <li className="min-w-0 rounded-xl border border-border p-2.5">
       <div className="mb-1.5 flex items-start justify-between gap-2">
@@ -213,6 +213,19 @@ function AttachmentItem({ attachment, canRemove, onRemove }: { attachment: Strat
 }
 
 // ───────────── Crear y editar ─────────────
+/** Reproductor de una nota de voz recién grabada, para escucharla antes de guardar. */
+function PendingAudio({ file }: { file: File }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const objectUrl = URL.createObjectURL(file);
+    element.src = objectUrl;
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+  return <audio ref={ref} controls preload="metadata" className="mt-1 h-9 w-full" aria-label="Escuchar la nota antes de guardar" />;
+}
+
 interface PendingFile { key: string; file: File; kind: 'FILE' | 'PHOTO' | 'VOICE'; durationSeconds?: number }
 
 function IdeaEditor({ idea, users, onClose, onSaved }: { idea: StrategyDetail | null; users: Array<{ id: string; name: string }>; onClose: () => void; onSaved: (id: string) => void }) {
@@ -226,6 +239,7 @@ function IdeaEditor({ idea, users, onClose, onSaved }: { idea: StrategyDetail | 
   const [notifyPush, setNotifyPush] = useState(idea?.notifyPush ?? false);
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [busy, setBusy] = useState(false);
+  const [personQuery, setPersonQuery] = useState('');
 
   const addFiles = (list: FileList | null, kindOf: PendingFile['kind']) => {
     if (!list) return;
@@ -243,6 +257,8 @@ function IdeaEditor({ idea, users, onClose, onSaved }: { idea: StrategyDetail | 
   const voice = useVoiceRecorder(addVoice);
   const toggleRecording = async () => { if (voice.recording) addVoice(await voice.stop()); else await voice.start(); };
   const toggleUser = (id: string) => setAudienceUserIds((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+  const others = users.filter((u) => u.id !== user?.id);
+  const shownPeople = others.filter((u) => u.name.toLowerCase().includes(personQuery.trim().toLowerCase()));
   const valid = title.trim() && body.trim() && (audience !== 'USERS' || audienceUserIds.length > 0);
 
   const save = async () => {
@@ -284,9 +300,19 @@ function IdeaEditor({ idea, users, onClose, onSaved }: { idea: StrategyDetail | 
             ))}
           </div>
           {audience === 'USERS' && (
-            <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-              {users.filter((u) => u.id !== user?.id).map((u) => <li key={u.id}><label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[13px] hover:bg-muted/50"><input type="checkbox" checked={audienceUserIds.includes(u.id)} onChange={() => toggleUser(u.id)} />{u.name}</label></li>)}
-            </ul>
+            <div className="mt-3">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                <input aria-label="Buscar persona" value={personQuery} onChange={(e) => setPersonQuery(e.target.value)} placeholder="Buscar persona…" className={cn(controlClass, 'h-8 max-w-[220px] text-[12px]')} />
+                <button type="button" className="text-[12px] font-semibold text-primary underline dark:text-accent" onClick={() => setAudienceUserIds(Array.from(new Set([...audienceUserIds, ...shownPeople.map((u) => u.id)])))}>Elegir {personQuery.trim() ? 'las que se ven' : 'a todas'}</button>
+                <button type="button" className="text-[12px] font-semibold text-muted-foreground underline" onClick={() => setAudienceUserIds([])}>Quitar todas</button>
+                <span className="text-[12px] text-muted-foreground">{audienceUserIds.length} de {others.length} elegidas</span>
+              </div>
+              <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+                {shownPeople.map((u) => <li key={u.id}><label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[13px] hover:bg-muted/50"><input type="checkbox" checked={audienceUserIds.includes(u.id)} onChange={() => toggleUser(u.id)} />{u.name}</label></li>)}
+                {shownPeople.length === 0 && <li className="px-2 py-1 text-[12px] text-muted-foreground">{others.length === 0 ? 'No hay más personas activas en tu empresa.' : 'Nadie coincide con la búsqueda.'}</li>}
+              </ul>
+              <p className="mt-1 text-[11px] text-muted-foreground">Se listan todas las personas activas de tu empresa, menos tú.</p>
+            </div>
           )}
           {audience !== 'PRIVATE' && <label className="mt-3 flex items-center gap-2 text-[13px]"><Switch checked={notifyPush} onCheckedChange={setNotifyPush} />Avisar por notificación a quienes la ven</label>}
         </fieldset>
@@ -302,7 +328,7 @@ function IdeaEditor({ idea, users, onClose, onSaved }: { idea: StrategyDetail | 
           {idea && idea.attachments.length > 0 && <p className="mt-2 text-[11px] text-muted-foreground">Esta idea ya tiene {idea.attachments.length} adjunto{idea.attachments.length === 1 ? '' : 's'}; se quitan desde el detalle.</p>}
           {files.length > 0 && (
             <ul className="mt-2 space-y-1">
-              {files.map((item) => <li key={item.key} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-1 text-[12px]"><span className="min-w-0 break-words">{item.kind === 'VOICE' ? `Nota de voz (${clock(item.durationSeconds ?? 0)})` : item.file.name}</span><button type="button" aria-label={`Quitar ${item.file.name}`} onClick={() => setFiles((current) => current.filter((f) => f.key !== item.key))}><X className="size-4" /></button></li>)}
+              {files.map((item) => <li key={item.key} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-1 text-[12px]"><span className="min-w-0 flex-1 break-words">{item.kind === 'VOICE' ? <><span className="block">{`Nota de voz (${clock(item.durationSeconds ?? 0)})`}</span><PendingAudio file={item.file} /></> : item.file.name}</span><button type="button" aria-label={`Quitar ${item.file.name}`} onClick={() => setFiles((current) => current.filter((f) => f.key !== item.key))}><X className="size-4" /></button></li>)}
             </ul>
           )}
         </fieldset>

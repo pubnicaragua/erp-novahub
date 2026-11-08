@@ -59,7 +59,7 @@ export function InvitadosSheet({ event, users, dateLabel, onClose, onChanged }: 
     <Sheet open={Boolean(event)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <SheetHeader className="space-y-1 border-b border-border px-6 pb-4 pt-6 text-left">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Organización personal</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Organización</p>
           <SheetTitle className="text-3xl text-primary dark:text-foreground" style={serifStyle}>Invitados y RSVP</SheetTitle>
           <SheetDescription>Evento: {event?.title} · {dateLabel}</SheetDescription>
         </SheetHeader>

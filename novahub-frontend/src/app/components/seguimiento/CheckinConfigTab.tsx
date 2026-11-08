@@ -36,7 +36,7 @@ function ConfigForm({ config }: { config: CheckinConfig }) {
   const changed = JSON.stringify(draft) !== JSON.stringify(config);
   const hasBreak = Boolean(draft.breakStart || draft.breakEnd);
   const invalid = draft.weekdays.length === 0 || draft.startTime >= draft.endTime || (hasBreak && (!draft.breakStart || !draft.breakEnd || draft.breakEnd <= draft.breakStart))
-    || !(draft.intervalMinutes >= 5 && draft.intervalMinutes <= 480) || !(draft.responseMinutes >= 1 && draft.responseMinutes <= 240);
+    || !(draft.intervalMinutes >= 5 && draft.intervalMinutes <= 480) || !(draft.responseMinutes >= 0 && draft.responseMinutes <= 240);
 
   const save = async () => {
     setBusy(true);
@@ -59,7 +59,7 @@ function ConfigForm({ config }: { config: CheckinConfig }) {
         <Field label="Primera pregunta" htmlFor="cfg-start"><input id="cfg-start" type="time" value={draft.startTime} onChange={(e) => set('startTime', e.target.value)} disabled={busy} className={controlClass} /></Field>
         <Field label="Última pregunta" htmlFor="cfg-end"><input id="cfg-end" type="time" value={draft.endTime} onChange={(e) => set('endTime', e.target.value)} disabled={busy} className={controlClass} /></Field>
         <Field label="Cada cuántos minutos" htmlFor="cfg-interval" hint="De 5 a 480. Cada hora = 60."><input id="cfg-interval" type="number" min={5} max={480} value={draft.intervalMinutes} onChange={(e) => set('intervalMinutes', Number(e.target.value))} disabled={busy} className={controlClass} /></Field>
-        <Field label="Tiempo para responder (minutos)" htmlFor="cfg-response" hint="De 1 a 240. Puedes cambiarlo por persona."><input id="cfg-response" type="number" min={1} max={240} value={draft.responseMinutes} onChange={(e) => set('responseMinutes', Number(e.target.value))} disabled={busy} className={controlClass} /></Field>
+        <Field label="Tiempo para responder (minutos)" htmlFor="cfg-response" hint="De 1 a 240. Escribe 0 para que no tengan límite de tiempo. Puedes cambiarlo por persona o al preguntar."><input id="cfg-response" type="number" min={0} max={240} value={draft.responseMinutes} onChange={(e) => set('responseMinutes', Number(e.target.value))} disabled={busy} className={controlClass} /></Field>
         <Field label="Pausa: desde (opcional)" htmlFor="cfg-break-start" hint="Sin preguntas durante la pausa."><input id="cfg-break-start" type="time" value={draft.breakStart ?? ''} onChange={(e) => set('breakStart', e.target.value || null)} disabled={busy} className={controlClass} /></Field>
         <Field label="Pausa: hasta" htmlFor="cfg-break-end"><input id="cfg-break-end" type="time" value={draft.breakEnd ?? ''} onChange={(e) => set('breakEnd', e.target.value || null)} disabled={busy} className={controlClass} /></Field>
         <Field label="A quién se pregunta" htmlFor="cfg-audience" className="sm:col-span-2">
@@ -95,7 +95,7 @@ function UserSettings({ users, settings, audience, defaults }: { users: Array<{ 
     <Panel title="Ajustes por persona" icon={<UserCog className="size-4" />}>
       <p className="mb-3 text-[12px] text-muted-foreground">
         {audience === 'SELECTED' ? 'Solo se pregunta a quien esté incluido.' : 'Se pregunta a todas las personas; apaga a quien no deba responder.'} Deja en blanco lo que quieras que siga igual que la empresa
-        (cada {defaults.intervalMinutes} min, {defaults.responseMinutes} min para responder).
+        (cada {defaults.intervalMinutes} min, {defaults.responseMinutes > 0 ? `${defaults.responseMinutes} min para responder` : 'sin límite para responder'}).
       </p>
       <ul className="space-y-2">
         {users.map((user) => {
@@ -139,7 +139,7 @@ function UserSettingRow({ user, setting, audience }: { user: { id: string; name:
         <span className="min-w-0 break-words">{user.name}<span className="block text-[11px] font-normal text-muted-foreground">{user.email}</span></span>
       </label>
       <Field label="Cada (min)" className="w-24"><input type="number" min={5} max={480} placeholder="Igual" value={interval} onChange={(e) => setIntervalValue(e.target.value)} disabled={busy || !enabled} className={controlClass} aria-label={`Intervalo de ${user.name} en minutos`} /></Field>
-      <Field label="Responder en (min)" className="w-32"><input type="number" min={1} max={240} placeholder="Igual" value={response} onChange={(e) => setResponse(e.target.value)} disabled={busy || !enabled} className={controlClass} aria-label={`Minutos para responder de ${user.name}`} /></Field>
+      <Field label="Responder en (min, 0 = sin límite)" className="w-40"><input type="number" min={0} max={240} placeholder="Igual" value={response} onChange={(e) => setResponse(e.target.value)} disabled={busy || !enabled} className={controlClass} aria-label={`Minutos para responder de ${user.name}`} /></Field>
       <Button type="button" size="sm" disabled={!changed || busy} onClick={() => void save()}>{busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}Guardar</Button>
       {setting && <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void reset()}>Quitar ajuste</Button>}
     </li>

@@ -55,6 +55,7 @@ import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 import { ExportMenu } from './ui/ExportMenu';
+import { DashboardGoals } from './dashboard/DashboardGoals';
 import { capturePdfChartSnapshot, yieldToBrowser } from '../utils/pdf-template-renderer';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { getBase64Image } from '../utils/reportExportUtils';
@@ -533,7 +534,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   const groupedIndicators = visibleIndicators.reduce<Record<string, IndicatorDefinition[]>>((groups, definition) => { (groups[definition.group] ||= []).push(definition); return groups; }, {});
 
   if (!canViewPos) {
-    return <div className="executive-empty"><ShieldAlert /><h2>Resumen no disponible</h2><p>Tu usuario no tiene acceso al módulo de ventas y caja que alimenta este resumen.</p></div>;
+    return <div className="space-y-4"><div className="executive-empty"><ShieldAlert /><h2>Resumen no disponible</h2><p>Tu usuario no tiene acceso al módulo de ventas y caja que alimenta este resumen.</p></div><DashboardGoals onOpen={() => navigate('organizacion', { subModule: 'mi-dia' })} /></div>;
   }
 
   return (
@@ -636,6 +637,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         </div>
 
       </>}
+
+      <DashboardGoals onOpen={() => navigate('organizacion', { subModule: 'mi-dia' })} />
 
       <div className="executive-footnote"><CircleHelp className="size-4" /><span>Los importes de ventas y gastos provienen del resumen de Caja. Para utilidad contable, costo de ventas, cuentas por cobrar y cuentas por pagar, utiliza los reportes financieros y contables.</span></div>
 

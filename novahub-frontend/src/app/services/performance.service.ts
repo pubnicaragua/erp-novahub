@@ -38,6 +38,8 @@ export interface PendingCheckin {
   dueAt: string;
   source: 'SCHEDULED' | 'MANUAL';
   overdue: boolean;
+  /** Pregunta sin límite de tiempo: se responde cuando se pueda durante el día. */
+  noDeadline?: boolean;
 }
 
 export interface PendingCheckinsResponse {
@@ -63,6 +65,7 @@ export interface CheckinPromptRow {
   source: 'SCHEDULED' | 'MANUAL';
   status: CheckinStatus;
   overdue: boolean;
+  noDeadline?: boolean;
   answeredAt: string | null;
   workingOn: string | null;
   activityIds: string[];

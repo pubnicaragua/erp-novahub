@@ -60,7 +60,7 @@ function AutorizarAccesoForm({ onOpenChange, users, excludeIds, onSaved }: Props
   return (
     <>
         <SheetHeader className="space-y-1 border-b border-border px-6 pb-4 pt-6 text-left">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Organización personal</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Organización</p>
           <SheetTitle className="text-3xl text-primary dark:text-foreground" style={serifStyle}>Autorizar acceso</SheetTitle>
           <SheetDescription>Comparte únicamente la información permitida de tu agenda.</SheetDescription>
         </SheetHeader>

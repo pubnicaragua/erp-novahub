@@ -91,7 +91,7 @@ export function ConfiguracionView({ preferences, users }: Props) {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <PageTitle guide={ORGANIZACION_GUIDES.configuracion} eyebrow="Organización personal" title="Configuración" subtitle="Ajusta tu calendario, horario laboral y privacidad con los permisos de NovaHub." actions={saveButton} />
+      <PageTitle guide={ORGANIZACION_GUIDES.configuracion} eyebrow="Organización" title="Configuración" subtitle="Ajusta tu calendario, horario laboral y privacidad con los permisos de NovaHub." actions={saveButton} />
       {!canEdit && <p role="status" className="rounded-xl border border-border bg-muted/40 p-3 text-[12px] text-muted-foreground">Tu rol solo puede consultar estas preferencias.</p>}
       {error && <ErrorState message={error} />}
 
@@ -202,7 +202,7 @@ export function ConfiguracionView({ preferences, users }: Props) {
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent/20 text-primary dark:text-accent"><ShieldCheck className="size-5" aria-hidden="true" /></span>
-          <div className="min-w-0"><p className="text-[14px] font-semibold">Preferencias de Organización personal</p><p className="text-[12px] text-muted-foreground">No incluye booking público. Las invitaciones RSVP siguen vinculadas a eventos existentes.</p></div>
+          <div className="min-w-0"><p className="text-[14px] font-semibold">Preferencias de Organización</p><p className="text-[12px] text-muted-foreground">No incluye booking público. Las invitaciones RSVP siguen vinculadas a eventos existentes.</p></div>
         </div>
         <div className="flex gap-2">
           <Button type="button" variant="outline" disabled={!dirty || saving} onClick={() => setDraft(toDraft(preferences))}>Descartar cambios</Button>

@@ -77,6 +77,7 @@ export const strategiesService = {
   removeComment: (id: string, commentId: string) => api.delete<{ id: string }>(`/strategies/${id}/comments/${commentId}`),
   toggleVote: (id: string) => api.post<{ myVote: boolean; voteCount: number }>(`/strategies/${id}/vote`, {}),
   addAttachment: (id: string, data: Omit<StrategyAttachment, 'id' | 'createdAt'>) => api.post<StrategyAttachment>(`/strategies/${id}/attachments`, data),
+  attachmentUrl: (id: string, attachmentId: string) => api.get<{ url: string; expiresIn: number }>(`/strategies/${id}/attachments/${attachmentId}/url`),
   removeAttachment: (id: string, attachmentId: string) => api.delete<{ id: string }>(`/strategies/${id}/attachments/${attachmentId}`),
   convertToTask: (id: string, data: { assigneeId?: string; dueDate?: string }) => api.post<{ taskId: string }>(`/strategies/${id}/convert-to-task`, data),
 };

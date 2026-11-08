@@ -174,7 +174,7 @@ function NuevaActividadForm({ onOpenChange, initialKind, initialDate, timezone, 
   return (
     <>
         <SheetHeader className="space-y-1 border-b border-border px-6 pb-4 pt-6 text-left">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-accent-foreground/70"><span className="text-primary">Organización personal</span></p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-accent-foreground/70"><span className="text-primary">Organización</span></p>
           <SheetTitle className="text-3xl text-primary dark:text-foreground" style={serifStyle}>Nueva actividad</SheetTitle>
           <SheetDescription>Crea tareas, eventos o recordatorios desde un solo lugar. Las horas se interpretan en {timezone}.</SheetDescription>
         </SheetHeader>

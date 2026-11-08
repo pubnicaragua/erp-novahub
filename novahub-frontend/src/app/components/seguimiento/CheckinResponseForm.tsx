@@ -40,7 +40,7 @@ export function CheckinResponseForm({ prompt, tasks, timeZone, onDone }: { promp
 
   return (
     <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-      <p className={cn('text-[12px] font-semibold', minutesUntil(prompt.dueAt, now) > 0 ? 'text-muted-foreground' : 'text-red-700')} role="status">
+      <p className={cn('text-[12px] font-semibold', prompt.noDeadline || minutesUntil(prompt.dueAt, now) > 0 ? 'text-muted-foreground' : 'text-red-700')} role="status">
         Pregunta de las {clockLabel(prompt.scheduledFor, timeZone)}. {dueLabel(prompt, now)}.
       </p>
       {tasks.length > 0 && (
