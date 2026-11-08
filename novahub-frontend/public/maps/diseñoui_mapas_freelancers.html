@@ -1736,8 +1736,11 @@ let lastRemoteRefreshAt = 0;
 let lastOutboxFlushAt = 0;
 let forceSalesRealtimeConnected = false;
 let forceSalesRefreshInFlight = false;
-let forceSalesRefreshRequested = false;
-let forceSalesRefreshNeedsTrail = false;
+let forceSalesRefreshScope = new Set();
+let forceSalesRefreshTimer = 0;
+let forceSalesRefreshImmediate = false;
+let forceSalesLastRefreshAt = 0;
+const FORCE_SALES_REFRESH_MIN_MS = 5000;
 const forceSalesSyncErrors = new Map();
 let currentPopupBusinessId = null;
 let businessDetailPositionFrame = 0;
@@ -2326,24 +2329,45 @@ async function forceSalesRequest(path, options={}){
   }
   return body;
 }
+function forceSalesRefreshScopeFor(event){
+  // Un aviso del servidor dice qué cambió y solo eso se recarga (un aviso de recorrido ya no recarga prospectos ni
+  // rutas). Una llamada interna (reconexión, vuelta de la conexión, acción de la persona) recarga todo.
+  const resource=event&&event.eventId?String(event.resource||''):'';
+  if(resource==='location-trail')return['trail'];
+  if(resource==='presence')return['presence'];
+  if(resource==='route')return['routes','presence'];
+  if(resource==='prospect')return['prospects','routes'];
+  return event&&event.resource==='location-trail'?['prospects','routes','presence','trail']:['prospects','routes','presence'];
+}
+function scheduleForceSalesRefresh(){
+  if(forceSalesRefreshInFlight||forceSalesRefreshTimer||!forceSalesRefreshScope.size)return;
+  const wait=forceSalesRefreshImmediate?0:Math.max(0,forceSalesLastRefreshAt+FORCE_SALES_REFRESH_MIN_MS-Date.now());
+  if(wait>0){forceSalesRefreshTimer=setTimeout(()=>{forceSalesRefreshTimer=0;scheduleForceSalesRefresh()},wait);return}
+  forceSalesRefreshImmediate=false;
+  forceSalesRefreshInFlight=true;
+  const scope=forceSalesRefreshScope;
+  forceSalesRefreshScope=new Set();
+  const work=[];
+  if(scope.has('prospects'))work.push(loadRemoteProspects());
+  if(scope.has('routes'))work.push(loadRemoteRoutes());
+  if(scope.has('presence'))work.push(loadSellerPresence());
+  if(scope.has('trail')&&shouldLoadLocationTrail())work.push(loadLocationTrail({fitCamera:false}));
+  void Promise.all(work).catch(()=>undefined).finally(()=>{
+    forceSalesRefreshInFlight=false;
+    forceSalesLastRefreshAt=Date.now();
+    scheduleForceSalesRefresh();
+  });
+}
 function refreshForceSalesData(event={}){
   if(event.clientTenantId&&CURRENT_TENANT_ID&&event.clientTenantId!==CURRENT_TENANT_ID)return;
-  forceSalesRefreshNeedsTrail ||= event.resource==='location-trail';
-  if(forceSalesRefreshInFlight){forceSalesRefreshRequested=true;return}
-  forceSalesRefreshInFlight=true;
-  void (async()=>{
-    do{
-      forceSalesRefreshRequested=false;
-      const refreshTrail=forceSalesRefreshNeedsTrail;
-      forceSalesRefreshNeedsTrail=false;
-      const work=[loadRemoteProspects(),loadRemoteRoutes(),loadSellerPresence()];
-      if(shouldLoadLocationTrail()&&refreshTrail)work.push(loadLocationTrail({fitCamera:false}));
-      await Promise.all(work);
-    }while(forceSalesRefreshRequested);
-  })().finally(()=>{
-    forceSalesRefreshInFlight=false;
-    if(forceSalesRefreshRequested)refreshForceSalesData();
-  });
+  forceSalesRefreshScopeFor(event).forEach(item=>forceSalesRefreshScope.add(item));
+  // Los avisos del servidor (varios por minuto con muchos vendedores) se agrupan: como máximo un refresco cada 5 s.
+  // Una acción de la persona o una reconexión recarga sin esperar.
+  if(!event.eventId){
+    forceSalesRefreshImmediate=true;
+    if(forceSalesRefreshTimer){clearTimeout(forceSalesRefreshTimer);forceSalesRefreshTimer=0}
+  }
+  scheduleForceSalesRefresh();
 }
 function setForceSalesSyncError(resource,error){
   const message=String(error?.message || error || '').trim();
