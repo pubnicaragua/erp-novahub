@@ -15,6 +15,13 @@
       "continue": true
     },
     {
+      "src": "/version[.]json$",
+      "headers": {
+        "Cache-Control": "no-store, no-cache, must-revalidate"
+      },
+      "continue": true
+    },
+    {
       "src": "/assets/(.*)",
       "headers": {
         "Cache-Control": "public, max-age=31536000, immutable"

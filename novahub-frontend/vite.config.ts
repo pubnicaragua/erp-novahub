@@ -16,6 +16,18 @@ export default defineConfig({
     __NOVAHUB_BUILD_ID__: JSON.stringify(buildId),
   },
   plugins: [
+    {
+      // /version.json permite a la aplicación saber si hay una versión publicada más nueva que la suya.
+      name: 'novahub-version-file',
+      apply: 'build',
+      generateBundle() {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'version.json',
+          source: JSON.stringify({ buildId, builtAt: new Date().toISOString() }),
+        });
+      },
+    },
     react(),
     tailwindcss(),
     sentryVitePlugin({

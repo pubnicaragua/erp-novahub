@@ -31,7 +31,9 @@ import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { BrowserNotificationPrompt } from './components/notificaciones/BrowserNotificationPrompt';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
-import { loadModuleWithChunkRecovery } from './utils/chunk-recovery';
+import { clearClientCaches, isDynamicImportLoadError, loadModuleWithChunkRecovery } from './utils/chunk-recovery';
+import { currentBuildId, fetchLatestBuildId } from './utils/app-version';
+import { AppUpdateBanner } from './components/ui/AppUpdateBanner';
 import { reportChunkLoadIncident } from './utils/chunk-telemetry';
 import { readPersistedDarkMode } from './utils/theme-mode';
 import { useResponsiveNativeTables } from './hooks/useResponsiveNativeTables';
@@ -110,27 +112,7 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error || 'Error desconocido');
 }
 
-async function clearClientCaches() {
-  try {
-    if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.map((registration) => registration.unregister()));
-    }
-  } catch {
-    // La recuperación no debe fallar por una API de Service Worker limitada.
-  }
-
-  try {
-    if ('caches' in window) {
-      const cacheNames = await window.caches.keys();
-      await Promise.all(cacheNames
-        .filter((name) => name.startsWith('novahub-'))
-        .map((name) => window.caches.delete(name)));
-    }
-  } catch {
-    // La caché es opcional; nunca se toca localStorage ni la sesión.
-  }
-}
+const CHUNK_ERROR_POLL_MS = 15_000;
 
 const ErrorBoundaryFallback = ({
   error,
@@ -142,28 +124,54 @@ const ErrorBoundaryFallback = ({
   resetError(): void;
 }) => {
   const message = errorMessage(error);
+  const isStaleVersion = isDynamicImportLoadError(error);
   const [recovering, setRecovering] = React.useState(false);
 
-  const handleRecovery = async () => {
+  const reloadFreshDocument = React.useCallback((unregisterWorkers: boolean) => {
     setRecovering(true);
-    await clearClientCaches();
-    const url = new URL(window.location.href);
-    url.searchParams.set(CLIENT_RECOVERY_QUERY, '1');
-    window.location.replace(url.toString());
-  };
+    void clearClientCaches({ unregisterWorkers }).then(() => {
+      const url = new URL(window.location.href);
+      url.searchParams.set(CLIENT_RECOVERY_QUERY, String(Date.now()));
+      window.location.replace(url.toString());
+    });
+  }, []);
+
+  const handleRecovery = () => reloadFreshDocument(true);
+
+  // Un módulo que no se encuentra casi siempre significa que la pestaña quedó con una versión anterior a un
+  // despliegue. Si ya hay una versión nueva publicada se carga sola, sin esperar a que el usuario pulse el botón.
+  React.useEffect(() => {
+    if (!isStaleVersion) return undefined;
+    let cancelled = false;
+    const check = async () => {
+      const latest = await fetchLatestBuildId();
+      if (cancelled || !latest || latest === currentBuildId()) return;
+      reloadFreshDocument(false);
+    };
+    void check();
+    const timer = window.setInterval(() => { void check(); }, CHUNK_ERROR_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [isStaleVersion, reloadFreshDocument]);
 
   return (
     <div style={{ padding: 32, fontFamily: 'monospace', background: '#0f0f0f', color: '#ff6b6b', minHeight: '100vh' }}>
-      <h2 style={{ color: '#ff6b6b', marginBottom: 16 }}>No pudimos cargar esta pantalla</h2>
+      <h2 style={{ color: '#ff6b6b', marginBottom: 16 }}>
+        {isStaleVersion ? 'NovaHub se actualizó' : 'No pudimos cargar esta pantalla'}
+      </h2>
       <p style={{ color: '#d1d5db', maxWidth: 560, lineHeight: 1.6 }}>
-        El incidente fue registrado automáticamente. Puedes limpiar la caché del dispositivo y cargar la versión actual una sola vez.
+        {isStaleVersion
+          ? 'Esta pestaña tenía una versión anterior. Estamos buscando la versión nueva y se cargará sola; si tarda, pulsa el botón. No pierdes tu sesión.'
+          : 'El incidente fue registrado automáticamente. Puedes limpiar la caché del dispositivo y cargar la versión actual una sola vez.'}
       </p>
       <button
         style={{ marginTop: 16, padding: '8px 20px', background: '#333', color: '#fff', border: 'none', borderRadius: 6, cursor: recovering ? 'wait' : 'pointer' }}
         onClick={handleRecovery}
         disabled={recovering}
       >
-        {recovering ? 'Limpiando caché…' : 'Limpiar caché y recargar'}
+        {recovering ? 'Actualizando…' : 'Limpiar caché y recargar'}
       </button>
       <details style={{ marginTop: 20, color: '#9ca3af', maxWidth: 720 }}>
         <summary style={{ cursor: 'pointer' }}>Detalles para soporte</summary>
@@ -830,6 +838,7 @@ export default function App() {
   return (
     <>
       <Toaster position="top-right" />
+      <AppUpdateBanner />
       <Sentry.ErrorBoundary fallback={ErrorBoundaryFallback}>
         <ThemeProvider>
           <CurrencyProvider>

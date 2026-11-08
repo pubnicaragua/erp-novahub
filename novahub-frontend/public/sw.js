@@ -2,6 +2,9 @@ const CACHE_PREFIX = 'novahub-shell-';
 const BUILD_ID = new URL(self.location.href).searchParams.get('v') || 'unversioned';
 const CACHE_NAME = `${CACHE_PREFIX}${BUILD_ID}`;
 const STATIC_DESTINATIONS = new Set(['script', 'style', 'image', 'font', 'manifest']);
+const RECOVERY_QUERY_PARAM = '__asset_recovery';
+const RECOVERY_FETCH_RETRIES = 2;
+const RECOVERY_FETCH_RETRY_MS = 700;
 const LOCATION_DB_NAME = 'novahub-force-sales-location-v1';
 const LOCATION_SYNC_TAG = 'novahub-force-sales-location-points';
 const LOCATION_EVENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -297,16 +300,39 @@ async function cacheStatic(request) {
   return response;
 }
 
-async function networkFirstNavigation(request) {
-  let response;
+function isRecoveryNavigation(request) {
   try {
-    response = await fetch(request);
+    return new URL(request.url).searchParams.has(RECOVERY_QUERY_PARAM);
   } catch {
+    return false;
+  }
+}
+
+function pause(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function networkFirstNavigation(request) {
+  // La navegación de recuperación la inicia la aplicación al no encontrar un módulo de su versión: el documento
+  // guardado es justamente el que apunta a módulos que ya no existen. Por eso nunca se responde con él; si la red
+  // falla se reintenta y, agotados los reintentos, se devuelve el error de red en vez de repetir la versión vieja.
+  const recovery = isRecoveryNavigation(request);
+  let response;
+  for (let attempt = 0; !response; attempt += 1) {
     try {
-      const cache = await caches.open(CACHE_NAME);
-      return (await cache.match('/index.html')) || Response.error();
+      response = await fetch(request);
     } catch {
-      return Response.error();
+      if (recovery) {
+        if (attempt >= RECOVERY_FETCH_RETRIES) return Response.error();
+        await pause(RECOVERY_FETCH_RETRY_MS * (attempt + 1));
+        continue;
+      }
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        return (await cache.match('/index.html')) || Response.error();
+      } catch {
+        return Response.error();
+      }
     }
   }
 

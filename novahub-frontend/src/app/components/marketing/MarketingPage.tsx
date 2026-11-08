@@ -1,4 +1,6 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { loadModuleWithChunkRecovery } from '../../utils/chunk-recovery';
+import { reportChunkLoadIncident } from '../../utils/chunk-telemetry';
 import { Skeleton } from '../ui/skeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { ResumenView } from './ResumenView';
@@ -11,8 +13,8 @@ import { Activity, CalendarDays, FileCheck, FolderOpen, LayoutDashboard, Megapho
 import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 
 // Las vistas con exportación pesada (Excel/PDF) se cargan bajo demanda.
-const ActivosView = lazy(() => import('./ActivosView').then((m) => ({ default: m.ActivosView })));
-const AnaliticaView = lazy(() => import('./AnaliticaView').then((m) => ({ default: m.AnaliticaView })));
+const ActivosView = lazy(() => loadModuleWithChunkRecovery(() => import('./ActivosView').then((m) => ({ default: m.ActivosView })), 'marketing-activos', reportChunkLoadIncident));
+const AnaliticaView = lazy(() => loadModuleWithChunkRecovery(() => import('./AnaliticaView').then((m) => ({ default: m.AnaliticaView })), 'marketing-analitica', reportChunkLoadIncident));
 
 interface Props { activeSubModule?: string; onSubModuleChange?: (sub: string) => void; isSidebarCollapsed?: boolean }
 

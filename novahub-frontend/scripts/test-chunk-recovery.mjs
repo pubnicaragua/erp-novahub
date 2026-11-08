@@ -5,15 +5,54 @@ import vm from 'node:vm';
 import ts from 'typescript';
 
 const recoverySource = await readFile(new URL('../src/app/utils/chunk-recovery.ts', import.meta.url), 'utf8');
+const versionSource = await readFile(new URL('../src/app/utils/app-version.ts', import.meta.url), 'utf8');
 const serviceWorkerSource = await readFile(new URL('../public/sw.js', import.meta.url), 'utf8');
 const vercelConfig = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
-const recoveryCode = ts.transpileModule(recoverySource, {
+const transpile = (source) => ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
+const recoveryCode = transpile(recoverySource);
+const versionCode = transpile(versionSource);
 
-function createRecoveryRuntime({ storage, online = true } = {}) {
+const settle = () => new Promise((resolve) => setTimeout(resolve, 25));
+
+// Cada módulo se ejecuta dentro de una función para que sus constantes de nivel superior no choquen entre sí.
+function runModule(code, context, requires = {}) {
+  const exports = {};
+  const wrapper = vm.runInContext(['(function (exports, require) {', code, '})'].join(String.fromCharCode(10)), context);
+  wrapper(exports, (name) => {
+    if (!(name in requires)) throw new Error(`Unexpected require: ${name}`);
+    return requires[name];
+  });
+  return exports;
+}
+
+// Simula /version.json: cada llamada devuelve el siguiente identificador de la lista (el último se repite).
+function createVersionFetch(sequence) {
+  const calls = [];
+  const queue = [...sequence];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), init });
+    const buildId = queue.length > 1 ? queue.shift() : queue[0];
+    if (buildId === null) return { ok: false, status: 404, json: async () => ({}) };
+    return { ok: true, status: 200, json: async () => ({ buildId }) };
+  };
+  return { fetchImpl, calls };
+}
+
+function createRecoveryRuntime({
+  storage,
+  online = true,
+  href = 'https://novahub.test/?m=ventas&sm=clientes',
+  buildId = 'test-build-a',
+  fetchImpl,
+  cacheNames = [],
+  registrations = 0,
+} = {}) {
   const listeners = new Map();
   const navigations = [];
+  const cacheDeletions = [];
+  const unregistered = [];
   const windowEvents = new EventTarget();
   const session = storage || new Map();
   const sessionStorage = {
@@ -25,7 +64,7 @@ function createRecoveryRuntime({ storage, online = true } = {}) {
   };
   const window = {
     location: {
-      href: 'https://novahub.test/?m=ventas&sm=clientes',
+      href,
       pathname: '/',
       replace: (url) => {
         navigations.push(url);
@@ -33,15 +72,25 @@ function createRecoveryRuntime({ storage, online = true } = {}) {
       },
     },
     history: { state: null, replaceState() {} },
+    caches: {
+      keys: async () => [...cacheNames],
+      delete: async (name) => { cacheDeletions.push(name); return true; },
+    },
     addEventListener: windowEvents.addEventListener.bind(windowEvents),
     dispatchEvent: windowEvents.dispatchEvent.bind(windowEvents),
   };
-  const exports = {};
+  const navigator = {
+    onLine: online,
+    serviceWorker: {
+      getRegistrations: async () => Array.from({ length: registrations }, (_unused, index) => ({
+        unregister: async () => { unregistered.push(index); },
+      })),
+    },
+  };
   const sandbox = {
-    exports,
-    __NOVAHUB_BUILD_ID__: 'test-build-a',
+    __NOVAHUB_BUILD_ID__: buildId,
     window,
-    navigator: { onLine: online },
+    navigator,
     sessionStorage,
     URL,
     URLSearchParams,
@@ -49,9 +98,20 @@ function createRecoveryRuntime({ storage, online = true } = {}) {
     Error,
     TypeError,
     console,
+    // Las esperas de la recuperación no deben tardar segundos reales en la prueba.
+    setTimeout: (callback) => { setImmediate(callback); },
+    fetch: fetchImpl || (async () => { throw new TypeError('Failed to fetch'); }),
   };
-  vm.runInNewContext(recoveryCode, sandbox);
-  return { api: exports, listeners, navigations, session, sandbox, window };
+  const context = vm.createContext(sandbox);
+  const version = runModule(versionCode, context);
+  const api = runModule(recoveryCode, context, { './app-version': version });
+  return { api, version, listeners, navigations, session, sandbox, window, cacheDeletions, unregistered };
+}
+
+function recoveryMark(runtimeOrUrl) {
+  const url = new URL(typeof runtimeOrUrl === 'string' ? runtimeOrUrl : runtimeOrUrl.navigations[0]);
+  const [attempt, at, ...build] = (url.searchParams.get('__asset_recovery') || '').split(':');
+  return { attempt, at: Number(at), build: build.join(':') };
 }
 
 function createServiceWorkerRuntime({ fetchResponse, onCachePut } = {}) {
@@ -84,6 +144,7 @@ function createServiceWorkerRuntime({ fetchResponse, onCachePut } = {}) {
       return fetchResponse(...args);
     },
     caches,
+    setTimeout: (callback) => { setImmediate(callback); },
     self: {
       location: { href: 'https://novahub.test/sw.js?v=test-build-b', origin: 'https://novahub.test' },
       addEventListener: (type, listener) => listeners.set(type, listener),
@@ -129,12 +190,13 @@ test('Vite preserves the asset failure and recovery leaves its promise pending d
   assert.equal(settlement, 'pending');
 });
 
-test('an unrelated successful import does not reset the build recovery limit', async () => {
+test('concurrent module failures in one document start a single recovery navigation', async () => {
   const runtime = createRecoveryRuntime();
-  runtime.api.recoverFromChunk('ventas');
+  assert.equal(runtime.api.recoverFromChunk('ventas'), true);
   await runtime.api.loadModuleWithChunkRecovery(async () => ({ default: 'clientes' }), 'clientes');
 
-  assert.equal(runtime.api.recoverFromChunk('ventas'), false);
+  // Un segundo módulo que falla mientras la página se reemplaza se queda esperando, no recarga otra vez.
+  assert.equal(runtime.api.recoverFromChunk('clientes'), true);
   assert.equal(runtime.navigations.length, 1);
 });
 
@@ -145,18 +207,121 @@ test('the recovery marker keeps the current module and route intact', () => {
   const target = new URL(runtime.navigations[0]);
   assert.equal(target.searchParams.get('m'), 'ventas');
   assert.equal(target.searchParams.get('sm'), 'clientes');
-  assert.equal(target.searchParams.get('__asset_recovery'), 'test-build-a');
+  const mark = recoveryMark(runtime);
+  assert.equal(mark.attempt, '1');
+  assert.ok(mark.at > 0);
+  assert.equal(mark.build, 'test-build-a');
 });
 
-test('a blocked sessionStorage uses the URL guard without looping', () => {
+test('a blocked sessionStorage still stops after three attempts through the URL marker', async () => {
   const blocked = new Map();
   blocked.get = () => { throw new Error('Storage is blocked'); };
   blocked.set = () => { throw new Error('Storage is blocked'); };
-  const runtime = createRecoveryRuntime({ storage: blocked });
+  const newer = createVersionFetch(['test-build-b']);
+
+  let href = 'https://novahub.test/?m=ventas&sm=clientes';
+  const seen = [];
+  for (let documentIndex = 0; documentIndex < 5; documentIndex += 1) {
+    // Cada vuelta es un documento nuevo (la recarga) que conserva solo la dirección.
+    const runtime = createRecoveryRuntime({ storage: blocked, href, fetchImpl: newer.fetchImpl });
+    const started = runtime.api.recoverFromChunk('ventas');
+    await settle();
+    if (!started) { seen.push('stopped'); break; }
+    href = runtime.navigations[0];
+    seen.push(recoveryMark(runtime).attempt);
+  }
+  assert.deepEqual(seen, ['1', '2', '3', 'stopped']);
+});
+
+test('the attempt count survives in sessionStorage when the URL marker was removed', () => {
+  const session = new Map([[
+    'novahub:chunk-recovery',
+    JSON.stringify({ buildId: 'test-build-a', attempt: 3, at: Date.now() }),
+  ]]);
+  const runtime = createRecoveryRuntime({ storage: session });
+
+  assert.equal(runtime.api.recoverFromChunk('ventas'), false);
+  assert.equal(runtime.navigations.length, 0);
+});
+
+test('a different build starts its own recovery from scratch', () => {
+  const href = `https://novahub.test/?m=ventas&__asset_recovery=3:${Date.now()}:test-build-older`;
+  const runtime = createRecoveryRuntime({ href });
 
   assert.equal(runtime.api.recoverFromChunk('ventas'), true);
-  assert.equal(runtime.api.recoverFromChunk('ventas'), false);
-  assert.equal(new URL(runtime.navigations[0]).searchParams.get('__asset_recovery'), 'test-build-a');
+  assert.equal(recoveryMark(runtime).attempt, '1');
+});
+
+test('an expired marker no longer counts against the build', () => {
+  const longAgo = Date.now() - 6 * 60_000;
+  const runtime = createRecoveryRuntime({ href: `https://novahub.test/?__asset_recovery=3:${longAgo}:test-build-a` });
+
+  assert.equal(runtime.api.recoverFromChunk('ventas'), true);
+  assert.equal(recoveryMark(runtime).attempt, '1');
+});
+
+test('a marker written by the previous version counts as the first attempt', async () => {
+  const runtime = createRecoveryRuntime({ href: 'https://novahub.test/?m=ventas&__asset_recovery=test-build-a' });
+
+  assert.equal(runtime.api.recoverFromChunk('ventas'), true);
+  await settle();
+  assert.equal(recoveryMark(runtime).attempt, '2');
+});
+
+test('the first recovery is an immediate reload that leaves caches and the service worker alone', async () => {
+  const runtime = createRecoveryRuntime({ cacheNames: ['novahub-shell-test-build-a'], registrations: 1 });
+
+  assert.equal(runtime.api.recoverFromChunk('ventas'), true);
+  // La navegación ocurre de forma síncrona: no espera a ninguna promesa.
+  assert.equal(runtime.navigations.length, 1);
+  await settle();
+  assert.deepEqual(runtime.cacheDeletions, []);
+  assert.deepEqual(runtime.unregistered, []);
+});
+
+test('the second recovery clears the NovaHub caches but keeps the service worker and its push subscription', async () => {
+  const href = `https://novahub.test/?m=ventas&__asset_recovery=1:${Date.now()}:test-build-a`;
+  const runtime = createRecoveryRuntime({ href, cacheNames: ['novahub-shell-test-build-a', 'other-site-cache'], registrations: 1 });
+
+  assert.equal(runtime.api.recoverFromChunk('ventas'), true);
+  await settle();
+  assert.deepEqual(runtime.cacheDeletions, ['novahub-shell-test-build-a']);
+  assert.deepEqual(runtime.unregistered, []);
+  assert.equal(runtime.navigations.length, 1);
+  assert.equal(recoveryMark(runtime).attempt, '2');
+});
+
+test('the third recovery unregisters the worker and waits for a newer build before reloading', async () => {
+  const href = `https://novahub.test/?m=ventas&__asset_recovery=2:${Date.now()}:test-build-a`;
+  const version = createVersionFetch(['test-build-a', 'test-build-a', 'test-build-b']);
+  const runtime = createRecoveryRuntime({ href, cacheNames: ['novahub-shell-test-build-a'], registrations: 2, fetchImpl: version.fetchImpl });
+
+  assert.equal(runtime.api.recoverFromChunk('ventas'), true);
+  await settle();
+  assert.equal(version.calls.length, 3);
+  assert.deepEqual(runtime.unregistered, [0, 1]);
+  assert.deepEqual(runtime.cacheDeletions, ['novahub-shell-test-build-a']);
+  assert.equal(runtime.navigations.length, 1);
+  assert.equal(recoveryMark(runtime).attempt, '3');
+});
+
+test('the third recovery still reloads once the wait for a newer build runs out', async () => {
+  const href = `https://novahub.test/?m=ventas&__asset_recovery=2:${Date.now()}:test-build-a`;
+  const version = createVersionFetch(['test-build-a']);
+  const runtime = createRecoveryRuntime({ href, fetchImpl: version.fetchImpl });
+
+  runtime.api.recoverFromChunk('ventas');
+  await settle();
+  assert.equal(version.calls.length, 16);
+  assert.equal(runtime.navigations.length, 1);
+});
+
+test('the incident reports which recovery attempt it started', () => {
+  const runtime = createRecoveryRuntime();
+  runtime.api.recoverFromChunk('ventas', new TypeError('Failed to fetch dynamically imported module: https://novahub.test/assets/VentasPage.js'));
+
+  const stored = JSON.parse(runtime.session.get('novahub:chunk-incident:test-build-a'));
+  assert.equal(stored.attempt, 1);
 });
 
 test('offline lazy imports do not start an automatic navigation', async () => {
@@ -316,4 +481,105 @@ test('installing an updated worker does not call skipWaiting', async () => {
 test('ordinary missing-export errors are not classified as asset-load failures', () => {
   const runtime = createRecoveryRuntime();
   assert.equal(runtime.api.isDynamicImportLoadError(new TypeError("Cannot read properties of undefined (reading 'VentasPage')")), false);
+});
+
+test('a recovery navigation retries the network and never answers with the cached shell', async () => {
+  const freshShell = createBasicResponse('<div id="root">current build</div>', 'text/html');
+  let attempts = 0;
+  const runtime = createServiceWorkerRuntime({
+    fetchResponse: async () => {
+      attempts += 1;
+      if (attempts < 3) throw new TypeError('Failed to fetch');
+      return freshShell;
+    },
+  });
+  const oldShell = createBasicResponse('<div id="root">old build</div>', 'text/html');
+  runtime.cacheContents.set('novahub-shell-test-build-b', new Map([['/index.html', oldShell]]));
+
+  const response = await runtime.sandbox.networkFirstNavigation({
+    url: 'https://novahub.test/?m=ventas&__asset_recovery=1:1700000000000:test-build-a',
+  });
+  assert.equal(response, freshShell);
+  assert.equal(attempts, 3);
+});
+
+test('a recovery navigation fails with a network error instead of repeating the old shell', async () => {
+  const runtime = createServiceWorkerRuntime({
+    fetchResponse: async () => { throw new TypeError('Failed to fetch'); },
+  });
+  const oldShell = createBasicResponse('<div id="root">old build</div>', 'text/html');
+  runtime.cacheContents.set('novahub-shell-test-build-b', new Map([['/index.html', oldShell]]));
+
+  const response = await runtime.sandbox.networkFirstNavigation({
+    url: 'https://novahub.test/?m=ventas&__asset_recovery=2:1700000000000:test-build-a',
+  });
+  assert.equal(response.type, 'error');
+  assert.equal(runtime.calls.network, 3);
+});
+
+test('an ordinary navigation still opens the saved shell while offline', async () => {
+  const runtime = createServiceWorkerRuntime({
+    fetchResponse: async () => { throw new TypeError('Failed to fetch'); },
+  });
+  const savedShell = createBasicResponse('<div id="root">saved</div>', 'text/html');
+  runtime.cacheContents.set('novahub-shell-test-build-b', new Map([['/index.html', savedShell]]));
+
+  const response = await runtime.sandbox.networkFirstNavigation({ url: 'https://novahub.test/?m=ventas' });
+  assert.equal(response, savedShell);
+  assert.equal(runtime.calls.network, 1);
+});
+
+test('version.json is never cached so an open tab can detect a new deployment', () => {
+  const routes = vercelConfig.routes || [];
+  const versionRoute = routes.find((route) => route.src === '/version[.]json$');
+  const filesystemIndex = routes.findIndex((route) => route.handle === 'filesystem');
+
+  assert.ok(versionRoute?.continue);
+  assert.match(versionRoute.headers['Cache-Control'], /no-store/);
+  assert.ok(routes.indexOf(versionRoute) < filesystemIndex);
+  assert.equal(new RegExp(versionRoute.src).test('/version.json'), true);
+  assert.equal(new RegExp(versionRoute.src).test('/versionXjson'), false);
+});
+
+test('the published build id is read without caches and tolerates a missing or broken file', async () => {
+  const ok = createVersionFetch(['test-build-b']);
+  const runtime = createRecoveryRuntime({ fetchImpl: ok.fetchImpl });
+  assert.equal(await runtime.version.fetchLatestBuildId(), 'test-build-b');
+  assert.ok(ok.calls[0].url.startsWith('/version.json?cb='));
+  assert.equal(ok.calls[0].init.cache, 'no-store');
+
+  assert.equal(await runtime.version.fetchLatestBuildId(createVersionFetch([null]).fetchImpl), null);
+  assert.equal(await runtime.version.fetchLatestBuildId(async () => { throw new TypeError('Failed to fetch'); }), null);
+  assert.equal(await runtime.version.fetchLatestBuildId(async () => ({ ok: true, json: async () => { throw new SyntaxError('not json'); } })), null);
+  assert.equal(await runtime.version.fetchLatestBuildId(async () => ({ ok: true, json: async () => ({ buildId: 42 }) })), null);
+});
+
+test('a newer published build is announced once and cleared when the tab catches up', async () => {
+  const runtime = createRecoveryRuntime();
+  let notifications = 0;
+  runtime.version.subscribeAvailableBuild(() => { notifications += 1; });
+
+  assert.equal(await runtime.version.checkForNewBuild(async () => 'test-build-a'), null);
+  assert.equal(notifications, 0);
+
+  assert.equal(await runtime.version.checkForNewBuild(async () => 'test-build-b'), 'test-build-b');
+  assert.equal(await runtime.version.checkForNewBuild(async () => 'test-build-b'), 'test-build-b');
+  assert.equal(runtime.version.getAvailableBuildId(), 'test-build-b');
+  assert.equal(notifications, 1);
+
+  // Un fallo de red no borra un aviso vigente.
+  assert.equal(await runtime.version.checkForNewBuild(async () => null), 'test-build-b');
+  assert.equal(notifications, 1);
+
+  assert.equal(await runtime.version.checkForNewBuild(async () => 'test-build-a'), null);
+  assert.equal(runtime.version.getAvailableBuildId(), null);
+  assert.equal(notifications, 2);
+});
+
+test('local development builds are never compared with a published version', async () => {
+  const runtime = createRecoveryRuntime({ buildId: 'local-1700000000000' });
+  let consulted = false;
+
+  assert.equal(await runtime.version.checkForNewBuild(async () => { consulted = true; return 'dpl_other'; }), null);
+  assert.equal(consulted, false);
 });

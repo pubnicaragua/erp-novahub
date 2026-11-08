@@ -12,6 +12,7 @@ export function reportChunkLoadIncident(incident: ChunkLoadIncident): void {
       online: incident.online,
       route: incident.route,
       occurredAt: incident.occurredAt,
+      recoveryAttempt: incident.attempt ?? null,
     });
     scope.setFingerprint(['asset-load-recovery', incident.buildId, incident.moduleName, incident.errorName]);
     Sentry.captureException(new Error(incident.errorMessage));
