@@ -11,6 +11,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { hrService } from '../../services/hr.service';
 import { HRViewTutorial } from './HRViewTutorial';
 import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
+import { useAuth } from '../../contexts/AuthContext';
+import { EmployeeSummaryPanel } from './employee/EmployeeSummaryPanel';
+import { EmployeeScorecardPanel } from './employee/EmployeeScorecardPanel';
+import { EmployeePaymentsPanel } from './employee/EmployeePaymentsPanel';
+import { EmployeeBonusPanel } from './employee/EmployeeBonusPanel';
+import { EmployeeContractPanel } from './employee/EmployeeContractPanel';
+import { EmployeeAccessAssetsPanel } from './employee/EmployeeAccessAssetsPanel';
+import { EmployeeDocumentsPanel } from './employee/EmployeeDocumentsPanel';
+import { EmployeeCardDialog } from './employee/EmployeeCardDialog';
 
 type EmployeeDetailDrawerProps = {
   employeeId: string | null;
@@ -22,7 +31,7 @@ type EmployeeDetailDrawerProps = {
   canEdit?: boolean;
 };
 
-type DetailTab = 'general' | 'nominas' | 'historial';
+type DetailTab = 'general' | 'resumen' | 'nominas' | 'pagos' | 'bonos' | 'contrato' | 'accesos' | 'documentos' | 'historial';
 
 const unwrapList = (response: any): any[] => {
   const value = response?.data?.data ?? response?.data ?? response;
@@ -102,7 +111,10 @@ function EmptyState({ icon: Icon, title, description }: { icon: any; title: stri
 }
 
 export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChange, onEdit, onManageDepartments, extraActions, canEdit = false }: EmployeeDetailDrawerProps) {
+  const { canPerform } = useAuth();
   const [activeTab, setActiveTab] = useState<DetailTab>('general');
+  const [cardOpen, setCardOpen] = useState(false);
+  const cardIds = useMemo(() => (employeeId ? [employeeId] : []), [employeeId]);
   const [detail, setDetail] = useState<any | null>(employeeSnapshot || null);
   const [payrolls, setPayrolls] = useState<any[]>([]);
   const [changeLog, setChangeLog] = useState<any[]>([]);
@@ -168,12 +180,19 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
             <div className="flex flex-wrap gap-2" data-tour="hr-employee-detail-actions">
               {canEdit && employee && <Button type="button" size="sm" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { onOpenChange(false); onEdit?.(employee); }}><Pencil className="size-3.5" /> Editar</Button>}
               {canEdit && employee && <Button type="button" size="sm" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { onOpenChange(false); onManageDepartments?.(employee); }}><Building2 className="size-3.5" /> Departamentos</Button>}
+              {employee && <Button type="button" size="sm" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => setCardOpen(true)}><CreditCard className="mr-1.5 size-3.5" /> Carnet</Button>}
               {extraActions}
               <HRViewTutorial label="Cómo consultar empleado" targetPrefix="hr-employee-detail" copy={{ data: { description: 'Revisa datos personales, laborales, actividad, nóminas y cambios del expediente.' }, actions: { description: 'Edita el empleado o administra sus departamentos si tienes permisos.' } }} />
             </div>
             <TabsList className="h-9 w-full justify-start gap-1 overflow-x-auto rounded-xl border border-border/40 bg-muted/40 p-1">
               <TabsTrigger value="general" className="shrink-0 rounded-lg px-3 text-xs font-bold"><User className="mr-1.5 size-3.5" /> General</TabsTrigger>
+              <TabsTrigger value="resumen" className="shrink-0 rounded-lg px-3 text-xs font-bold"><Activity className="mr-1.5 size-3.5" /> Resumen laboral</TabsTrigger>
               <TabsTrigger value="nominas" className="shrink-0 rounded-lg px-3 text-xs font-bold"><Banknote className="mr-1.5 size-3.5" /> Nóminas ({payrolls.length})</TabsTrigger>
+              {canPerform('HR_PAYROLL', 'view') && <TabsTrigger value="pagos" className="shrink-0 rounded-lg px-3 text-xs font-bold"><CreditCard className="mr-1.5 size-3.5" /> Pagos</TabsTrigger>}
+              {canPerform('HR_PAYROLL', 'view') && <TabsTrigger value="bonos" className="shrink-0 rounded-lg px-3 text-xs font-bold"><Award className="mr-1.5 size-3.5" /> Bonos</TabsTrigger>}
+              <TabsTrigger value="contrato" className="shrink-0 rounded-lg px-3 text-xs font-bold"><FileText className="mr-1.5 size-3.5" /> Contrato</TabsTrigger>
+              <TabsTrigger value="accesos" className="shrink-0 rounded-lg px-3 text-xs font-bold"><ShieldCheck className="mr-1.5 size-3.5" /> Accesos y equipos</TabsTrigger>
+              <TabsTrigger value="documentos" className="shrink-0 rounded-lg px-3 text-xs font-bold"><FileText className="mr-1.5 size-3.5" /> Documentos</TabsTrigger>
               <TabsTrigger value="historial" className="shrink-0 rounded-lg px-3 text-xs font-bold"><History className="mr-1.5 size-3.5" /> Cambios ({changeLog.length})</TabsTrigger>
             </TabsList>
           </SheetHeader>
@@ -202,6 +221,16 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
                     </Card>
 
                     <Card className="space-y-4 rounded-2xl border-border/60 bg-card p-5 shadow-sm">
+                      <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><Phone className="size-4 text-primary" /> Contactos de emergencia</h3>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <InfoItem label={`Contacto principal${employee?.emergencyRelation ? ` (${employee.emergencyRelation})` : ''}`} value={employee?.emergencyContact} icon={User} />
+                        <InfoItem label="Teléfono del contacto principal" value={employee?.emergencyPhone} icon={Phone} />
+                        <InfoItem label={`Segundo contacto${employee?.emergencyContact2Relation ? ` (${employee.emergencyContact2Relation})` : ''}`} value={employee?.emergencyContact2Name} icon={User} />
+                        <InfoItem label="Teléfono del segundo contacto" value={employee?.emergencyContact2Phone} icon={Phone} />
+                      </div>
+                    </Card>
+
+                    <Card className="space-y-4 rounded-2xl border-border/60 bg-card p-5 shadow-sm">
                       <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><BriefcaseBusiness className="size-4 text-primary" /> Información laboral</h3>
                       <div className="grid gap-3 sm:grid-cols-2"><InfoItem label="Número de empleado" value={employee?.employeeNumber} icon={FileText} mono /><InfoItem label="Fecha de contratación" value={formatDate(employee?.hireDate)} icon={CalendarDays} /><InfoItem label="Tipo de contrato" value={contractLabel(employee?.contractType)} icon={BriefcaseBusiness} /><InfoItem label="Frecuencia de pago" value={payFrequencyLabel(employee?.payFrequency)} icon={Clock3} /><InfoItem label="Fin de prueba" value={formatDate(employee?.probationEndDate)} icon={CalendarDays} /><InfoItem label="Responsable" value={employee?.manager ? `${employee.manager.firstName} ${employee.manager.lastName}` : 'Sin responsable'} icon={User} /><InfoItem label="Estado laboral" value={statusLabel(employee?.employmentStatus)} icon={CheckCircle2} /><InfoItem label="Elegibilidad de vendedor" value={employee?.department?.isSellerDepartment ? 'Por departamento vendedor' : 'No determinada por este departamento'} icon={Award} /></div>
                       {employee?.departmentMemberships?.length > 0 && <div className="border-t border-border/40 pt-4"><p className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Departamentos vinculados</p><div className="flex flex-wrap gap-2">{employee.departmentMemberships.map((membership: any) => <Badge key={membership.id || membership.department?.id} variant="outline" className="gap-1.5 rounded-lg text-xs"><Building2 className="size-3" /> {membership.department?.name || 'Departamento'}{membership.isPrimary && <span className="text-primary">· Principal</span>}</Badge>)}</div></div>}
@@ -213,6 +242,18 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
                     </Card>
                     {employee?.notes && <Card className="rounded-2xl border-border/60 bg-card p-5 shadow-sm"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas del expediente</p><p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{employee.notes}</p></Card>}
                   </TabsContent>
+
+                  <TabsContent value="resumen" className="mt-0 outline-none">{employeeId && <div className="space-y-5"><EmployeeScorecardPanel employeeId={employeeId} canCreateReview={canPerform('HR_PERFORMANCE', 'create')} /><EmployeeSummaryPanel employeeId={employeeId} /></div>}</TabsContent>
+
+                  <TabsContent value="pagos" className="mt-0 outline-none">{employeeId && <EmployeePaymentsPanel employeeId={employeeId} employeeName={`${employee?.firstName ?? ''} ${employee?.lastName ?? ''}`.trim() || 'empleado'} canEditAccounts={canPerform('HR_EMPLOYEES', 'edit')} canRecordPayments={canPerform('HR_PAYROLL', 'process')} canSeePayments={canPerform('HR_PAYROLL', 'view')} />}</TabsContent>
+
+                  <TabsContent value="bonos" className="mt-0 outline-none">{employeeId && <EmployeeBonusPanel employeeId={employeeId} currency={employee?.currency || 'NIO'} canEdit={canPerform('HR_PAYROLL', 'edit')} />}</TabsContent>
+
+                  <TabsContent value="accesos" className="mt-0 outline-none">{employeeId && <EmployeeAccessAssetsPanel employeeId={employeeId} canEdit={canPerform('HR_EMPLOYEES', 'edit')} />}</TabsContent>
+
+                  <TabsContent value="documentos" className="mt-0 outline-none">{employeeId && <EmployeeDocumentsPanel employeeId={employeeId} canCreate={canPerform('HR_EMPLOYEES', 'create')} canDelete={canPerform('HR_EMPLOYEES', 'deleteEmployeeDocument')} />}</TabsContent>
+
+                  <TabsContent value="contrato" className="mt-0 outline-none">{employeeId && <EmployeeContractPanel employeeId={employeeId} canEdit={canPerform('HR_EMPLOYEES', 'edit')} />}</TabsContent>
 
                   <TabsContent value="nominas" className="mt-0 space-y-4 outline-none">
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><InfoItem label="Registros" value={payrolls.length} icon={FileText} /><InfoItem label="Neto acumulado visible" value={formatAmount(totalNet, employee?.currency)} icon={Banknote} /><InfoItem label="Moneda habitual" value={employee?.currency || 'NIO'} icon={CreditCard} /></div>
@@ -233,6 +274,7 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
         <SheetFooter className="flex-row flex-wrap justify-end border-t border-border/50 px-5 py-3 sm:px-6">
           <Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}>Cerrar</Button>
         </SheetFooter>
+        {cardOpen && cardIds.length > 0 && <EmployeeCardDialog employeeIds={cardIds} canEditDesign={canPerform('HR_EMPLOYEES', 'edit')} onClose={() => setCardOpen(false)} />}
       </SheetContent>
     </Sheet>
   );

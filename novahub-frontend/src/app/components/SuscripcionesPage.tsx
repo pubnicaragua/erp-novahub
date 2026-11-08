@@ -11,7 +11,6 @@ import { rolesService } from '../services/roles.service';
 import { toast } from '@/app/services/toast';
 import { api } from '../services/api';
 import { TrialExtensionRequestsPanel } from './suscripciones/TrialExtensionRequestsPanel';
-import { NovaSuiteIcon } from './ui/NovaIcons';
 import { 
   CheckCircle2, 
   Clock, 

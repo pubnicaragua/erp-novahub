@@ -1289,6 +1289,17 @@ export interface Income {
   source?: string;
   sourcePaymentId?: string | null;
   notes?: string;
+  /** OPERATING (por defecto), PARTNER_CONTRIBUTION, LOAN_RECEIVED o FINANCING. */
+  kind?: 'OPERATING' | 'PARTNER_CONTRIBUTION' | 'LOAN_RECEIVED' | 'FINANCING';
+  counterpartyName?: string | null;
+  paymentMethod?: string | null;
+  bankAccountId?: string | null;
+  evidenceFileName?: string | null;
+  evidenceFileType?: string | null;
+  evidenceFileSize?: number | null;
+  evidenceFileUrl?: string | null;
+  interestRate?: number | null;
+  termMonths?: number | null;
   createdAt: string;
   updatedAt: string;
 }

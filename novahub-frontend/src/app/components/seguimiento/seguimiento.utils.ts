@@ -24,6 +24,7 @@ export const GOAL_METRIC_OPTIONS: Array<{ key: GoalMetric; label: string; unit: 
   { key: 'VISITS', label: 'Visitas realizadas', unit: 'COUNT', hint: 'Visitas registradas a prospectos en Fuerza Comercial.' },
   { key: 'MESSAGES_SENT', label: 'Mensajes a clientes', unit: 'COUNT', hint: 'Mensajes enviados desde NovaChat (no incluye WhatsApp personal fuera de la plataforma).' },
   { key: 'TASKS_COMPLETED', label: 'Tareas completadas', unit: 'COUNT', hint: 'Tareas de Actividades marcadas como completadas.' },
+  { key: 'LINKED_TASKS', label: 'Avance de las tareas de la meta', unit: 'PERCENT', hint: 'Porcentaje de las tareas que ligas a la meta que ya están terminadas (cada tarea con su peso).' },
   { key: 'HOURS_LOGGED', label: 'Horas registradas', unit: 'HOURS', hint: 'Horas del cronómetro o registradas a mano en tareas.' },
   { key: 'CHECKIN_COMPLIANCE', label: 'Cumplimiento de preguntas por hora', unit: 'PERCENT', hint: 'Porcentaje que sale de las calificaciones del supervisor.' },
   { key: 'MANUAL', label: 'Otra meta (avance manual)', unit: 'COUNT', hint: 'Tú registras el avance a mano.' },

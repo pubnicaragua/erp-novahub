@@ -58,7 +58,8 @@ test('el contador de una pregunta cuenta minutos hacia arriba y llega a cero o n
 });
 
 test('todos los tipos de meta tienen unidad y una pista', () => {
-  assert.equal(GOAL_METRIC_OPTIONS.length, 8);
+  assert.equal(GOAL_METRIC_OPTIONS.length, 9);
+  assert.ok(GOAL_METRIC_OPTIONS.some((option) => option.key === 'LINKED_TASKS' && option.unit === 'PERCENT'));
   for (const option of GOAL_METRIC_OPTIONS) {
     assert.ok(option.label && option.hint, `${option.key} sin texto`);
     assert.ok(['AMOUNT', 'COUNT', 'HOURS', 'PERCENT'].includes(option.unit));

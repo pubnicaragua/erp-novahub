@@ -37,6 +37,10 @@ export type EmployeeImportRow = {
   postalCode: string;
   emergencyContact: string;
   emergencyPhone: string;
+  emergencyRelation?: string;
+  emergencyContact2Name?: string;
+  emergencyContact2Relation?: string;
+  emergencyContact2Phone?: string;
   nationalId: string;
   socialSecurityNumber: string;
   probationEndDate: string;

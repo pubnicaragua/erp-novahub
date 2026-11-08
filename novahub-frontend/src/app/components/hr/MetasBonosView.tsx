@@ -15,6 +15,7 @@ import { toast } from '../../services/toast';
 import { EmptyState, ErrorState, Field, NativeSelect, Panel, controlClass } from '../organizacion/OrgBits';
 import { errorMessage } from '../organizacion/organizacion.utils';
 import { GoalSummary } from '../seguimiento/GoalProgress';
+import { GoalTasksDialog } from './GoalTasksDialog';
 import { BONUS_STATUS_LABEL, GOAL_LEVEL_LABEL, GOAL_METRIC_OPTIONS, civilToday } from '../seguimiento/seguimiento.utils';
 
 type Tab = 'metas' | 'bonos';
@@ -36,6 +37,7 @@ export function MetasBonosView() {
   const [userId, setUserId] = useState('');
   const [editing, setEditing] = useState<Goal | 'new' | null>(null);
   const [entriesFor, setEntriesFor] = useState<Goal | null>(null);
+  const [tasksFor, setTasksFor] = useState<Goal | null>(null);
 
   const people = useTenantQuery(['performance', 'people-hr'], async (signal) => (await performanceService.getCheckinConfig(signal)).users, { staleTime: 60_000 });
   const departments = useTenantQuery(['performance', 'departments'], async (signal) => {
@@ -94,6 +96,7 @@ export function MetasBonosView() {
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-1">
+                        <Button type="button" size="sm" variant="outline" onClick={() => setTasksFor(goal)}>Tareas</Button>
                         {goal.metric === 'MANUAL' && canEdit && goal.status === 'ACTIVE' && <Button type="button" size="sm" variant="outline" onClick={() => setEntriesFor(goal)}>Registrar avance</Button>}
                         {canEdit && <Button type="button" size="icon" variant="ghost" aria-label={`Editar ${goal.title}`} onClick={() => setEditing(goal)}><Pencil className="size-4" /></Button>}
                         {canEdit && <Button type="button" size="icon" variant="ghost" aria-label={goal.status === 'ACTIVE' ? `Archivar ${goal.title}` : `Restaurar ${goal.title}`} onClick={() => void archive(goal)}>{goal.status === 'ACTIVE' ? <Archive className="size-4" /> : <RotateCcw className="size-4" />}</Button>}
@@ -110,6 +113,7 @@ export function MetasBonosView() {
       {tab === 'bonos' && <BonusesPanel awards={awards.data} loading={awards.isLoading} error={awards.isError ? errorMessage(awards.error, 'No se pudieron cargar los bonos') : ''} onRetry={() => void awards.refetch()} canDecide={canDecide} onChanged={refresh} />}
 
       {editing && <GoalDialog goal={editing === 'new' ? null : editing} people={people.data ?? []} departments={departments.data ?? []} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
+      {tasksFor && <GoalTasksDialog goal={tasksFor} people={people.data ?? []} canEdit={canEdit} onClose={() => setTasksFor(null)} onChanged={refresh} />}
       {entriesFor && <EntriesDialog goal={entriesFor} onClose={() => setEntriesFor(null)} onSaved={refresh} />}
     </div>
   );

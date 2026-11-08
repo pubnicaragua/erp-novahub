@@ -245,6 +245,10 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       country: emp.country ?? '',
       emergencyContact: emp.emergencyContact || '',
       emergencyPhone: emp.emergencyPhone || '',
+      emergencyRelation: emp.emergencyRelation || '',
+      emergencyContact2Name: emp.emergencyContact2Name || '',
+      emergencyContact2Relation: emp.emergencyContact2Relation || '',
+      emergencyContact2Phone: emp.emergencyContact2Phone || '',
       socialSecurityNumber: emp.socialSecurityNumber || '',
       probationEndDate: toDateInputValue(emp.probationEndDate),
       notes: emp.notes || '',
@@ -353,6 +357,10 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         country: newEmployeeForm.country?.trim() || null,
         emergencyContact: newEmployeeForm.emergencyContact?.trim() || null,
         emergencyPhone: newEmployeeForm.emergencyPhone?.trim() || null,
+        emergencyRelation: newEmployeeForm.emergencyRelation?.trim() || null,
+        emergencyContact2Name: newEmployeeForm.emergencyContact2Name?.trim() || null,
+        emergencyContact2Relation: newEmployeeForm.emergencyContact2Relation?.trim() || null,
+        emergencyContact2Phone: newEmployeeForm.emergencyContact2Phone?.trim() || null,
         nationalId: newEmployeeForm.nationalId?.trim() || null,
         socialSecurityNumber: newEmployeeForm.socialSecurityNumber?.trim() || null,
         probationEndDate: newEmployeeForm.probationEndDate || null,
@@ -457,7 +465,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     sourceRow,
     employeeNumber: '', firstName: '', lastName: '', email: '', phone: '', dateOfBirth: '', hireDate: '',
     department: '', position: '', contractType: 'FULL_TIME', salary: '', currency: 'NIO', address: '', city: '',
-    state: '', country: 'Nicaragua', postalCode: '', emergencyContact: '', emergencyPhone: '', nationalId: '',
+    state: '', country: 'Nicaragua', postalCode: '', emergencyContact: '', emergencyPhone: '', emergencyRelation: '', emergencyContact2Name: '', emergencyContact2Relation: '', emergencyContact2Phone: '', nationalId: '',
     socialSecurityNumber: '', probationEndDate: '', payFrequency: 'MONTHLY', employmentStatus: 'ACTIVE', notes: '',
   });
 
@@ -589,7 +597,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         firstName: ['nombres', 'nombre', 'first name', 'firstname'], lastName: ['apellidos', 'apellido', 'last name', 'lastname'],
         email: ['correo', 'correo electronico', 'email'], phone: ['telefono', 'phone'], dateOfBirth: ['fecha de nacimiento', 'nacimiento', 'date of birth'],
         hireDate: ['fecha de contratacion', 'fecha ingreso', 'fecha de ingreso', 'hire date'], department: ['departamento', 'department'], position: ['puesto', 'cargo', 'posicion', 'position'],
-      contractType: ['tipo de contrato', 'contrato', 'contract type'], salary: ['salario', 'sueldo', 'salary'], currency: ['moneda', 'currency'], address: ['direccion', 'address'], city: ['municipio ciudad', 'municipio', 'ciudad', 'city'], state: ['departamento ubicacion', 'estado provincia', 'provincia', 'state'], country: ['pais', 'country'], postalCode: ['codigo postal', 'postal code', 'zip code'], emergencyContact: ['contacto de emergencia', 'emergency contact'], emergencyPhone: ['telefono de emergencia', 'emergency phone'], nationalId: ['cedula', 'identificacion', 'national id'], socialSecurityNumber: ['numero de seguro social', 'seguro social', 'inss', 'social security number'], probationEndDate: ['fin de prueba', 'fecha fin prueba', 'probation end date'], payFrequency: ['frecuencia de pago', 'frecuencia pago', 'pay frequency'], employmentStatus: ['estado laboral', 'estado', 'status'], notes: ['notas', 'observaciones', 'notes'],
+      contractType: ['tipo de contrato', 'contrato', 'contract type'], salary: ['salario', 'sueldo', 'salary'], currency: ['moneda', 'currency'], address: ['direccion', 'address'], city: ['municipio ciudad', 'municipio', 'ciudad', 'city'], state: ['departamento ubicacion', 'estado provincia', 'provincia', 'state'], country: ['pais', 'country'], postalCode: ['codigo postal', 'postal code', 'zip code'], emergencyContact: ['contacto de emergencia', 'emergency contact'], emergencyRelation: ['parentesco', 'parentesco contacto de emergencia', 'relacion contacto'], emergencyContact2Name: ['segundo contacto de emergencia', 'contacto de emergencia 2', 'segundo contacto'], emergencyContact2Relation: ['parentesco segundo contacto', 'parentesco 2'], emergencyContact2Phone: ['telefono segundo contacto', 'telefono de emergencia 2', 'telefono 2 emergencia'], emergencyPhone: ['telefono de emergencia', 'emergency phone'], nationalId: ['cedula', 'identificacion', 'national id'], socialSecurityNumber: ['numero de seguro social', 'seguro social', 'inss', 'social security number'], probationEndDate: ['fin de prueba', 'fecha fin prueba', 'probation end date'], payFrequency: ['frecuencia de pago', 'frecuencia pago', 'pay frequency'], employmentStatus: ['estado laboral', 'estado', 'status'], notes: ['notas', 'observaciones', 'notes'],
       };
       const colMap: Record<string, number> = {};
       Object.entries(aliases).forEach(([key, options]) => { const index = headers.findIndex((header: string) => options.includes(header)); if (index >= 0) colMap[key] = index; });
@@ -597,7 +605,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       const parsed = raw.slice(1).filter((row: any[]) => row.some((cell) => String(cell ?? '').trim())).map((values: any[], index) => {
         const row = emptyEmployeeImportRow(index + 2);
         row.employeeNumber = String(getValue(values, 'employeeNumber')).trim(); row.firstName = String(getValue(values, 'firstName')).trim(); row.lastName = String(getValue(values, 'lastName')).trim(); row.email = String(getValue(values, 'email')).trim(); row.phone = String(getValue(values, 'phone')).trim();
-        row.dateOfBirth = normalizeImportDate(getValue(values, 'dateOfBirth')); row.hireDate = normalizeImportDate(getValue(values, 'hireDate')); row.department = String(getValue(values, 'department')).trim(); row.position = String(getValue(values, 'position')).trim(); row.contractType = normalizeEmployeeImportValue('contractType', getValue(values, 'contractType')) || 'FULL_TIME'; row.salary = getValue(values, 'salary') === '' ? '' : Number(getValue(values, 'salary')); row.currency = String(getValue(values, 'currency') || 'NIO').trim().toUpperCase(); row.address = String(getValue(values, 'address')).trim(); row.city = String(getValue(values, 'city')).trim(); row.state = String(getValue(values, 'state')).trim(); row.country = String(getValue(values, 'country') || 'Nicaragua').trim(); row.postalCode = String(getValue(values, 'postalCode')).trim(); row.emergencyContact = String(getValue(values, 'emergencyContact')).trim(); row.emergencyPhone = String(getValue(values, 'emergencyPhone')).trim(); row.nationalId = String(getValue(values, 'nationalId')).trim(); row.socialSecurityNumber = String(getValue(values, 'socialSecurityNumber')).trim(); row.probationEndDate = normalizeImportDate(getValue(values, 'probationEndDate')); row.payFrequency = normalizeEmployeeImportValue('payFrequency', getValue(values, 'payFrequency')) || 'MONTHLY'; row.employmentStatus = normalizeEmployeeImportValue('employmentStatus', getValue(values, 'employmentStatus')) || 'ACTIVE'; row.notes = String(getValue(values, 'notes')).trim();
+        row.dateOfBirth = normalizeImportDate(getValue(values, 'dateOfBirth')); row.hireDate = normalizeImportDate(getValue(values, 'hireDate')); row.department = String(getValue(values, 'department')).trim(); row.position = String(getValue(values, 'position')).trim(); row.contractType = normalizeEmployeeImportValue('contractType', getValue(values, 'contractType')) || 'FULL_TIME'; row.salary = getValue(values, 'salary') === '' ? '' : Number(getValue(values, 'salary')); row.currency = String(getValue(values, 'currency') || 'NIO').trim().toUpperCase(); row.address = String(getValue(values, 'address')).trim(); row.city = String(getValue(values, 'city')).trim(); row.state = String(getValue(values, 'state')).trim(); row.country = String(getValue(values, 'country') || 'Nicaragua').trim(); row.postalCode = String(getValue(values, 'postalCode')).trim(); row.emergencyContact = String(getValue(values, 'emergencyContact')).trim(); row.emergencyPhone = String(getValue(values, 'emergencyPhone')).trim(); row.emergencyRelation = String(getValue(values, 'emergencyRelation')).trim(); row.emergencyContact2Name = String(getValue(values, 'emergencyContact2Name')).trim(); row.emergencyContact2Relation = String(getValue(values, 'emergencyContact2Relation')).trim(); row.emergencyContact2Phone = String(getValue(values, 'emergencyContact2Phone')).trim(); row.nationalId = String(getValue(values, 'nationalId')).trim(); row.socialSecurityNumber = String(getValue(values, 'socialSecurityNumber')).trim(); row.probationEndDate = normalizeImportDate(getValue(values, 'probationEndDate')); row.payFrequency = normalizeEmployeeImportValue('payFrequency', getValue(values, 'payFrequency')) || 'MONTHLY'; row.employmentStatus = normalizeEmployeeImportValue('employmentStatus', getValue(values, 'employmentStatus')) || 'ACTIVE'; row.notes = String(getValue(values, 'notes')).trim();
         return row;
       });
       setPreviewProgress(94);
@@ -678,7 +686,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     const actionToken = beginNotificationAction();
     try {
       const response: any = await hrService.bulkImportEmployees(validRows.map((row) => ({
-        sourceRow: row.sourceRow, employeeNumber: row.employeeNumber.trim(), firstName: row.firstName.trim(), lastName: row.lastName.trim(), email: row.email?.trim() || undefined, phone: row.phone.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId, department: row.department, positionId: row.positionId, position: row.position, contractType: row.contractType, salary: Number(row.salary), currency: row.currency, address: row.address || undefined, city: row.city || undefined, state: row.state || undefined, country: row.country || undefined, postalCode: row.postalCode || undefined, emergencyContact: row.emergencyContact || undefined, emergencyPhone: row.emergencyPhone || undefined, nationalId: row.nationalId || undefined, socialSecurityNumber: row.socialSecurityNumber || undefined, probationEndDate: row.probationEndDate || undefined, payFrequency: row.payFrequency || 'MONTHLY', employmentStatus: row.employmentStatus || 'ACTIVE', notes: row.notes || undefined,
+        sourceRow: row.sourceRow, employeeNumber: row.employeeNumber.trim(), firstName: row.firstName.trim(), lastName: row.lastName.trim(), email: row.email?.trim() || undefined, phone: row.phone.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId, department: row.department, positionId: row.positionId, position: row.position, contractType: row.contractType, salary: Number(row.salary), currency: row.currency, address: row.address || undefined, city: row.city || undefined, state: row.state || undefined, country: row.country || undefined, postalCode: row.postalCode || undefined, emergencyContact: row.emergencyContact || undefined, emergencyPhone: row.emergencyPhone || undefined, emergencyRelation: row.emergencyRelation || undefined, emergencyContact2Name: row.emergencyContact2Name || undefined, emergencyContact2Relation: row.emergencyContact2Relation || undefined, emergencyContact2Phone: row.emergencyContact2Phone || undefined, nationalId: row.nationalId || undefined, socialSecurityNumber: row.socialSecurityNumber || undefined, probationEndDate: row.probationEndDate || undefined, payFrequency: row.payFrequency || 'MONTHLY', employmentStatus: row.employmentStatus || 'ACTIVE', notes: row.notes || undefined,
       })));
       const result = response?.data || response;
       setImportProgress(90);
@@ -763,7 +771,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       positionId: '',
       contractType: 'FULL_TIME', salary: '', currency: 'NIO', employmentStatus: 'ACTIVE',
       address: '', city: '', state: '', postalCode: '', country: 'Nicaragua',
-      emergencyContact: '', emergencyPhone: '', socialSecurityNumber: '',
+      emergencyContact: '', emergencyPhone: '', emergencyRelation: '', emergencyContact2Name: '', emergencyContact2Relation: '', emergencyContact2Phone: '', socialSecurityNumber: '',
       probationEndDate: '', notes: '', payFrequency: 'MONTHLY',
     };
   };
@@ -848,7 +856,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     phone: row.phone?.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId || undefined, positionId: row.positionId || undefined,
     contractType: row.contractType || 'FULL_TIME', salary: Number(row.salary), currency: row.currency || 'NIO', employmentStatus: row.employmentStatus || 'ACTIVE',
     address: row.address?.trim() || undefined, city: row.city?.trim() || undefined, state: row.state?.trim() || undefined, country: row.country?.trim() || undefined, postalCode: row.postalCode?.trim() || undefined,
-    nationalId: row.nationalId?.trim() || undefined, socialSecurityNumber: row.socialSecurityNumber?.trim() || undefined, emergencyContact: row.emergencyContact?.trim() || undefined, emergencyPhone: row.emergencyPhone?.trim() || undefined,
+    nationalId: row.nationalId?.trim() || undefined, socialSecurityNumber: row.socialSecurityNumber?.trim() || undefined, emergencyContact: row.emergencyContact?.trim() || undefined, emergencyPhone: row.emergencyPhone?.trim() || undefined, emergencyRelation: row.emergencyRelation?.trim() || undefined, emergencyContact2Name: row.emergencyContact2Name?.trim() || undefined, emergencyContact2Relation: row.emergencyContact2Relation?.trim() || undefined, emergencyContact2Phone: row.emergencyContact2Phone?.trim() || undefined,
     probationEndDate: row.probationEndDate || undefined, payFrequency: row.payFrequency || 'MONTHLY', notes: row.notes?.trim() || undefined,
   });
 
@@ -1339,6 +1347,10 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                 <div className="space-y-2"><Label>Número de seguro social</Label><Input value={newEmployeeForm.socialSecurityNumber || ''} onChange={(event) => updateNewEmployeeForm('socialSecurityNumber', event.target.value)} /></div>
                 <div className="space-y-2"><Label>Contacto de emergencia</Label><Input value={newEmployeeForm.emergencyContact || ''} onChange={(event) => updateNewEmployeeForm('emergencyContact', event.target.value)} /></div>
                 <div className="space-y-2"><Label>Teléfono de emergencia</Label><Input value={newEmployeeForm.emergencyPhone || ''} onChange={(event) => updateNewEmployeeForm('emergencyPhone', event.target.value)} /></div>
+                <div className="space-y-2"><Label>Parentesco del contacto</Label><Input value={newEmployeeForm.emergencyRelation || ''} onChange={(event) => updateNewEmployeeForm('emergencyRelation', event.target.value)} placeholder="Madre, esposo, hermana…" /></div>
+                <div className="space-y-2"><Label>Segundo contacto de emergencia</Label><Input value={newEmployeeForm.emergencyContact2Name || ''} onChange={(event) => updateNewEmployeeForm('emergencyContact2Name', event.target.value)} /></div>
+                <div className="space-y-2"><Label>Parentesco del segundo contacto</Label><Input value={newEmployeeForm.emergencyContact2Relation || ''} onChange={(event) => updateNewEmployeeForm('emergencyContact2Relation', event.target.value)} /></div>
+                <div className="space-y-2"><Label>Teléfono del segundo contacto</Label><Input value={newEmployeeForm.emergencyContact2Phone || ''} onChange={(event) => updateNewEmployeeForm('emergencyContact2Phone', event.target.value)} /></div>
                 <div className="space-y-2"><Label>Fin del período de prueba</Label><Input type="date" value={newEmployeeForm.probationEndDate || ''} onChange={(event) => updateNewEmployeeForm('probationEndDate', event.target.value)} /></div>
                 <div className="space-y-2 sm:col-span-2 lg:col-span-4"><Label>Notas</Label><Textarea value={newEmployeeForm.notes || ''} onChange={(event) => updateNewEmployeeForm('notes', event.target.value)} placeholder="Observaciones del expediente" rows={3} /></div>
               </div>

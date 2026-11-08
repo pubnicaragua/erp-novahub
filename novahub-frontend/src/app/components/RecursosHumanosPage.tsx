@@ -29,6 +29,7 @@ import { PrestacionesSection } from './hr/PrestacionesSection';
 import { AsistenciaView } from './hr/AsistenciaView';
 import { AusenciasView } from './hr/AusenciasView';
 import { AusenciasConfigView } from './hr/AusenciasConfigView';
+import { LeavePolicyCard } from './hr/LeavePolicyCard';
 import { KpiView } from './hr/KpiView';
 import { MetasBonosView } from './hr/MetasBonosView';
 import { SeguimientoPanel } from './seguimiento/SeguimientoPanel';
@@ -572,6 +573,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
               </TabsContent>
 
               <TabsContent value="ausencias-config" className="m-0">
+                <LeavePolicyCard />
                 <AusenciasConfigView onRefresh={refreshData} />
               </TabsContent>
 

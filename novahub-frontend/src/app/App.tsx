@@ -26,6 +26,7 @@ import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEc
 import { PublicTrackingPage } from './components/public/PublicTrackingPage';
 import { PoketPaymentCallbackPage } from './components/public/PoketPaymentCallbackPage';
 import { PublicProjectProgressPage } from './components/public/PublicProjectProgressPage';
+import { PublicContractSignPage } from './components/public/PublicContractSignPage';
 import { PublicSupplierQuotationPage } from './components/public/PublicSupplierQuotationPage';
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
@@ -694,7 +695,7 @@ function AppContent() {
   // interfaz "operativa" con un token muerto). Solo aplica fuera de rutas públicas.
   useEffect(() => {
     const handler = (event: Event) => {
-      if (location.pathname === '/register' || location.pathname.startsWith('/public/')) return;
+      if (location.pathname === '/register' || location.pathname.startsWith('/public/') || location.pathname.startsWith('/firmar-contrato/')) return;
       // Al iniciar, /auth/profile valida cualquier token guardado. Un 401 en
       // esa comprobación es normal y debe dejar el login disponible, sin iniciar
       // el flujo de cierre de una sesión que todavía no está autenticada.
@@ -738,6 +739,7 @@ function AppContent() {
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
   if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
   if (location.pathname.startsWith('/public/project/')) return <PublicProjectProgressPage />;
+  if (location.pathname.startsWith('/firmar-contrato/')) return <PublicContractSignPage />;
   if (location.pathname.startsWith('/public/subquotation/')) return <PublicSupplierQuotationPage />;
   if (location.pathname.startsWith('/restaurant/menu/')) {
     const tableToken = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');

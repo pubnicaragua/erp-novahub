@@ -1,3 +1,4 @@
+import { BirthdaysCard } from './BirthdaysCard';
 import { Users, Briefcase, UserCheck, Clock, Award, DollarSign, Activity, Gift } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -76,6 +77,7 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
 
   return (
     <div className="space-y-6">
+      <BirthdaysCard />
       {/* Stats Cards */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between" data-tour="hr-dashboard-title">
         <div>

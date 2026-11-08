@@ -81,6 +81,11 @@ export const recurringExpensesService = {
   cancel: (id: string) => api.post<RecurringExpense>(`/financials/recurring-expenses/${id}/cancel`, {}),
 };
 
+export const loanInstallmentsService = {
+  getAll: (params?: { status?: string; incomeId?: string }) => api.get<any[]>('/financials/loan-installments', { params: params as any }),
+  pay: (id: string, data: { date?: string; paymentMethod?: string; bankAccountId?: string }) => api.post<any>(`/financials/loan-installments/${id}/pay`, data),
+};
+
 export const recurringIncomesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/financials/recurring-incomes', { params: filters as any, signal }),
   create: (data: any) => api.post<any>('/financials/recurring-incomes', data),

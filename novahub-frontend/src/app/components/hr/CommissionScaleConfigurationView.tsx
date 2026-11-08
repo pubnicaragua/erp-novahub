@@ -12,7 +12,8 @@ import { Label } from '../ui/label';
 
 type CommissionScope = 'GLOBAL' | 'SELLER';
 type CommissionRuleRow = { minAmount: number | string; maxAmount: number | string; rate: number | string };
-type CommissionPlan = { sellerEmployeeId?: string | null; currency?: string; isActive?: boolean; rules?: CommissionRuleRow[] };
+type CommissionBasis = 'PER_SALE' | 'MONTHLY_TOTAL';
+type CommissionPlan = { sellerEmployeeId?: string | null; currency?: string; calculationBasis?: CommissionBasis; isActive?: boolean; rules?: CommissionRuleRow[] };
 type CommissionConfiguration = { global?: CommissionPlan | null; sellerPlans?: CommissionPlan[]; sellers?: Array<{ id: string; name: string; employeeNumber?: string | null }> };
 
 const emptyCommissionRule = (): CommissionRuleRow => ({ minAmount: 0, maxAmount: '', rate: 0 });
@@ -24,6 +25,7 @@ export function CommissionScaleConfigurationView({ onBack }: { onBack?: () => vo
   const [commissionScope, setCommissionScope] = useState<CommissionScope>('GLOBAL');
   const [commissionSellerId, setCommissionSellerId] = useState('');
   const [commissionCurrency, setCommissionCurrency] = useState<'NIO' | 'USD'>('NIO');
+  const [commissionBasis, setCommissionBasis] = useState<CommissionBasis>('PER_SALE');
   const [commissionRules, setCommissionRules] = useState<CommissionRuleRow[]>([emptyCommissionRule()]);
   const [commissionPreviewAmount, setCommissionPreviewAmount] = useState('');
   const [saving, setSaving] = useState(false);
@@ -44,6 +46,7 @@ export function CommissionScaleConfigurationView({ onBack }: { onBack?: () => vo
   useEffect(() => {
     const plan = selectedCommissionPlan;
     setCommissionCurrency(plan?.currency === 'USD' ? 'USD' : 'NIO');
+    setCommissionBasis(plan?.calculationBasis === 'MONTHLY_TOTAL' ? 'MONTHLY_TOTAL' : 'PER_SALE');
     setCommissionRules(plan?.rules?.length
       ? plan.rules.map((rule) => ({ minAmount: rule.minAmount, maxAmount: rule.maxAmount ?? '', rate: rule.rate }))
       : [emptyCommissionRule()]);
@@ -66,7 +69,7 @@ export function CommissionScaleConfigurationView({ onBack }: { onBack?: () => vo
       if (isLast && current.maxAmount !== null) return 'El último tramo debe quedar abierto.';
       if (!isLast && current.maxAmount === null) return 'Solo el último tramo puede quedar abierto.';
       const next = parsed[index + 1];
-      if (next && current.maxAmount !== null && Math.round(next.minAmount * 100) !== Math.round(current.maxAmount * 100) + 1) return `Los tramos ${index + 1} y ${index + 2} deben ser consecutivos, sin huecos ni solapamientos.`;
+      if (next && current.maxAmount !== null && Math.round(next.minAmount * 100) !== Math.round(current.maxAmount * 100) + 1 && Math.round(next.minAmount * 100) !== Math.round(current.maxAmount * 100) + 100) return `Los tramos ${index + 1} y ${index + 2} deben ser consecutivos, sin huecos ni solapamientos.`;
     }
     return null;
   };
@@ -88,6 +91,7 @@ export function CommissionScaleConfigurationView({ onBack }: { onBack?: () => vo
         scope: commissionScope,
         sellerEmployeeId: commissionScope === 'SELLER' ? commissionSellerId : null,
         currency: commissionCurrency,
+        calculationBasis: commissionBasis,
         rules: commissionRules.map((rule) => ({ minAmount: Number(rule.minAmount), maxAmount: rule.maxAmount === '' ? null : Number(rule.maxAmount), rate: Number(rule.rate) })),
       });
       await configurationQuery.refetch();
@@ -135,7 +139,7 @@ export function CommissionScaleConfigurationView({ onBack }: { onBack?: () => vo
   const commissionPreview = useMemo(() => {
     const amount = Number(commissionPreviewAmount);
     if (!Number.isFinite(amount) || amount < 0) return null;
-    const row = commissionRules.find((rule) => amount >= Number(rule.minAmount || 0) && (rule.maxAmount === '' || amount <= Number(rule.maxAmount)));
+    const row = [...commissionRules].reverse().find((rule) => amount >= Number(rule.minAmount || 0));
     if (!row) return null;
     const rate = Number(row.rate || 0);
     return { rate, amount: amount * rate / 100 };
@@ -169,11 +173,12 @@ export function CommissionScaleConfigurationView({ onBack }: { onBack?: () => vo
                 <div className="space-y-2"><Label htmlFor="commission-seller">Vendedor</Label><select id="commission-seller" value={commissionSellerId || '__none__'} onChange={(event) => setCommissionSellerId(event.target.value === '__none__' ? '' : event.target.value)} disabled={commissionScope !== 'SELLER'} className="h-10 w-full max-w-full rounded-xl border border-border/60 bg-background px-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-primary"><option value="__none__">Seleccionar vendedor</option>{sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}{seller.employeeNumber ? ` · ${seller.employeeNumber}` : ''}</option>)}</select></div>
                 <div className="space-y-2"><Label htmlFor="commission-currency">Moneda de los tramos</Label><select id="commission-currency" value={commissionCurrency} onChange={(event) => setCommissionCurrency(event.target.value as 'NIO' | 'USD')} disabled={!canEdit} className="h-10 w-full max-w-full rounded-xl border border-border/60 bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"><option value="NIO">Córdobas (NIO)</option><option value="USD">Dólares (USD)</option></select></div>
               </div>
+              <div className="space-y-2"><Label htmlFor="commission-basis">Base de cálculo</Label><select id="commission-basis" value={commissionBasis} onChange={(event) => setCommissionBasis(event.target.value as CommissionBasis)} disabled={!canEdit} className="h-10 w-full max-w-full rounded-xl border border-border/60 bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"><option value="PER_SALE">Por cada venta: el tramo sale del monto de cada factura</option><option value="MONTHLY_TOTAL">Por el total del mes: el tramo sale de lo vendido en el mes y aplica a todas sus ventas</option></select><p className="text-xs text-muted-foreground">{commissionBasis === 'MONTHLY_TOTAL' ? 'Se suman las ventas del vendedor del día 1 al último día de cada mes. El porcentaje del tramo alcanzado se aplica a todas las ventas de ese mes y se recalcula mientras no se pague por nómina; lo ya pagado no cambia.' : 'Cada factura se evalúa sola contra los tramos.'}</p></div>
               {commissionScope === 'SELLER' && !commissionSellerId && <p className="rounded-xl border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">Selecciona un vendedor para consultar su escala. Si no tiene una particular, usará la escala global.</p>}
               {commissionScope === 'SELLER' && commissionSellerId && !selectedCommissionPlan && <p className="rounded-xl border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">Este vendedor todavía no tiene escala particular. Usará la escala global si está activa; una escala particular solo cambiará el cálculo de este vendedor.</p>}
               {!selectedCommissionPlan && !canEdit ? <p className="rounded-xl border border-dashed border-border/60 px-4 py-6 text-sm text-muted-foreground">No hay una escala activa para este alcance.</p> : <><div data-table-content-sized="true" className="overflow-x-auto rounded-xl border border-border/60"><table className="w-full min-w-[620px] text-sm"><thead className="bg-muted/30 text-left text-[10px] font-black uppercase tracking-wider text-muted-foreground"><tr><th className="px-3 py-3">Desde</th><th className="px-3 py-3">Hasta (inclusive)</th><th className="px-3 py-3">Porcentaje</th>{canEdit && <th className="px-3 py-3 text-right">Acción</th>}</tr></thead><tbody>{commissionRules.map((rule, index) => <tr key={`commission-rule-${index}`} className="border-t border-border/50"><td className="p-2"><Input type="number" min="0" step="0.01" value={rule.minAmount} disabled={!canEdit} onChange={(event) => updateCommissionRule(index, 'minAmount', event.target.value)} className="h-9" aria-label={`Mínimo tramo ${index + 1}`} /></td><td className="p-2"><Input type="number" min="0" step="0.01" value={rule.maxAmount} disabled={!canEdit} onChange={(event) => updateCommissionRule(index, 'maxAmount', event.target.value)} placeholder={index === commissionRules.length - 1 ? 'Sin límite' : 'Máximo'} className="h-9" aria-label={`Máximo tramo ${index + 1}`} /></td><td className="p-2"><div className="relative"><Input type="number" min="0" max="100" step="0.01" value={rule.rate} disabled={!canEdit} onChange={(event) => updateCommissionRule(index, 'rate', event.target.value)} className="h-9 pr-8" aria-label={`Porcentaje tramo ${index + 1}`} /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span></div></td>{canEdit && <td className="p-2 text-right"><Button type="button" variant="ghost" size="icon" aria-label={`Eliminar tramo ${index + 1}`} disabled={commissionRules.length === 1 || saving} onClick={() => setCommissionRules((current) => current.filter((_, ruleIndex) => ruleIndex !== index))}><Trash2 className="size-4 text-destructive" /></Button></td>}</tr>)}</tbody></table></div>
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><p className="text-xs text-muted-foreground">El primer tramo inicia en 0, los límites son inclusivos y el último debe quedar abierto.</p>{canEdit && <Button type="button" variant="outline" size="sm" onClick={addCommissionRule} disabled={saving} className="w-fit gap-2"><Plus className="size-4" /> Agregar tramo</Button>}</div>
-              <div className="grid gap-4 rounded-xl border border-border/60 bg-muted/10 p-4 md:grid-cols-[1fr_auto_1fr] md:items-end"><div className="space-y-2"><Label htmlFor="commission-preview-amount">Vista previa en {commissionCurrency}</Label><Input id="commission-preview-amount" type="number" min="0" step="0.01" value={commissionPreviewAmount} onChange={(event) => setCommissionPreviewAmount(event.target.value)} placeholder="Ej. 5000" /></div><div className="text-center text-xs font-black text-muted-foreground md:flex md:h-10 md:items-center md:justify-center">→</div><div className="flex min-h-10 items-center rounded-xl border border-primary/20 bg-primary/[0.05] px-4 py-2 text-sm">{commissionPreview ? <><span className="font-black text-primary">{commissionPreview.rate.toFixed(2)}%</span><span className="mx-2 text-muted-foreground">=</span><span className="font-black">{commissionPreview.amount.toFixed(2)} {commissionCurrency}</span></> : <span className="text-muted-foreground">Ingresa un monto que esté dentro de un tramo válido.</span>}</div></div>
+              <div className="grid gap-4 rounded-xl border border-border/60 bg-muted/10 p-4 md:grid-cols-[1fr_auto_1fr] md:items-end"><div className="space-y-2"><Label htmlFor="commission-preview-amount">{commissionBasis === 'MONTHLY_TOTAL' ? 'Vista previa: total vendido en el mes' : 'Vista previa'} en {commissionCurrency}</Label><Input id="commission-preview-amount" type="number" min="0" step="0.01" value={commissionPreviewAmount} onChange={(event) => setCommissionPreviewAmount(event.target.value)} placeholder="Ej. 5000" /></div><div className="text-center text-xs font-black text-muted-foreground md:flex md:h-10 md:items-center md:justify-center">→</div><div className="flex min-h-10 items-center rounded-xl border border-primary/20 bg-primary/[0.05] px-4 py-2 text-sm">{commissionPreview ? <><span className="font-black text-primary">{commissionPreview.rate.toFixed(2)}%</span><span className="mx-2 text-muted-foreground">=</span><span className="font-black">{commissionPreview.amount.toFixed(2)} {commissionCurrency}</span></> : <span className="text-muted-foreground">Ingresa un monto que esté dentro de un tramo válido.</span>}</div></div>
               {canEdit && <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row"><Button type="button" variant="outline" onClick={() => void resetConfiguration()} disabled={saving || !selectedCommissionPlan} className="gap-2"><RotateCcw className="size-4" /> Restablecer</Button><Button type="button" onClick={() => void saveConfiguration()} disabled={saving || (commissionScope === 'SELLER' && !commissionSellerId)} className="gap-2"><Save className="size-4" /> {saving ? 'Guardando…' : 'Guardar escala'}</Button></div>}
               </>}
             </CardContent>

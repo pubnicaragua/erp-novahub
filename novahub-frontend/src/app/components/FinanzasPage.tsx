@@ -20,6 +20,9 @@ import { FinancePayablesView } from './finanzas/FinancePayablesView';
 import { FinanceCalendarView } from './finanzas/FinanceCalendarView';
 import { FinanceGeneralBalanceView } from './finanzas/FinanceGeneralBalanceView';
 import { FinanceLossesView } from './finanzas/FinanceLossesView';
+import { FinanceFundingModal } from './finanzas/FinanceFundingModal';
+import { LoanInstallmentsPanel } from './finanzas/LoanInstallmentsPanel';
+import { incomeKindLabel, isLoanKind, isOperatingIncome } from './finanzas/incomeKinds';
 import { accountsService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
 import { FinancialJournalView } from './finanzas/FinancialJournalView';
 import { contabilidadService } from '../services/contabilidad.service';
@@ -280,7 +283,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const fRecurringExpenses = filterByDate(filterByBranch(recurringExpenses)).filter((r: any) => Number(r.amount) > 0);
   const fRecurringIncomes = filterByDate(filterByBranch(recurringIncomes)).filter((r: any) => Number(r.amount) > 0);
   const fAccounts = filterByDate(filterByBranch(accounts));
+  // Aportes de socio, préstamos y financiamientos no son ingreso: quedan fuera de totales, resumen y análisis.
+  const operatingIncomes = fIncomes.filter(isOperatingIncome);
   const groupedIncomeRows = groupSalesIncomePayments(fIncomes, baseCurrency, globalRate, toBaseAmount);
+  const [fundingOpen, setFundingOpen] = useState(false);
 
   const normalizeItemResponse = (response: any) => {
     if (response && typeof response === 'object' && 'data' in response && response.data) {
@@ -362,6 +368,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     { key: 'number', label: 'No. Recibo', type: 'text' as const, editable: false },
     { key: 'createdAt', label: 'Fecha Reg.', type: 'datetime' as const, editable: false },
     { key: 'source', label: 'Origen', type: 'source' as const, editable: false },
+    { key: 'kind', label: 'Tipo', type: 'text' as const, editable: false, render: (value: unknown) => incomeKindLabel(typeof value === 'string' ? value : null) },
     { key: 'description', label: 'Descripción', type: 'text' as const, editable: true },
     { key: 'category', label: 'Categoría', type: 'select' as const, editable: true },
     { key: 'amount', label: 'Monto', type: 'currency' as const, editable: true },
@@ -372,6 +379,13 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
       {(item.groupedItems || [item]).map((child: any) => (
         <div key={child.id} className="rounded-xl border border-border/60 bg-muted/20 p-3">
+          {!isOperatingIncome(child) && (
+            <div className="mb-2 space-y-2">
+              <p className="text-[11px] font-bold text-foreground">{incomeKindLabel(child.kind)}{child.counterpartyName ? ` · ${child.counterpartyName}` : ''}{child.account ? ` · ${child.account.code} ${child.account.name}` : ''}</p>
+              {child.evidenceFileUrl && <p className="text-[11px] text-muted-foreground">Soporte: {child.evidenceFileName || 'archivo adjunto'}</p>}
+              {isLoanKind(child.kind) && <LoanInstallmentsPanel incomeId={child.id} currency={child.currency} canPay={canPerform('FINANCIAL_INCOMES', 'edit')} />}
+            </div>
+          )}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="font-mono text-xs font-black text-primary">{child.number || 'Ingreso'}</p>
@@ -516,18 +530,6 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     }
   };
 
-  const handleAddIncome = async () => {
-    const actionToken = beginNotificationAction();
-    try {
-      const defaultAccount = await ensureDefaultAccount('INCOME');
-      const newItem = { source: 'Manual', description: '', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, category: 'OTROS', currency: 'NIO' as any, exchangeRate: globalRate, notes: '' };
-      await incomeService.create(newItem);
-      await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
-      toast.success('Nuevo ingreso añadido');
-      completeNotificationAction(actionToken);
-    } catch (error) { toast.error('Error al crear ingreso'); failNotificationAction(actionToken); }
-  };
-
   const handleAddExpense = async () => {
     const actionToken = beginNotificationAction();
     try {
@@ -600,7 +602,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const totalIncome = fIncomes.reduce((acc, i) => acc + toDisplayAmount(Number(i.amount || i.baseAmount || 0), i.currency, i.exchangeRate), 0);
+  const totalIncome = operatingIncomes.reduce((acc, i) => acc + toDisplayAmount(Number(i.amount || i.baseAmount || 0), i.currency, i.exchangeRate), 0);
   const totalExpense = fExpenses.reduce((acc, e) => acc + toDisplayAmount(Number(e.amount || e.baseAmount || 0), e.currency, e.exchangeRate), 0);
 
   const tabs = [
@@ -685,7 +687,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             <>
               <TabsContent value="resumen" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                  <FinanceDashboardView incomes={fIncomes} expenses={fExpenses} recurringExpenses={fRecurringExpenses} recurringIncomes={fRecurringIncomes} onNavigate={(tab) => handleTabChange(tab)} />
+                  <FinanceDashboardView incomes={operatingIncomes} expenses={fExpenses} recurringExpenses={fRecurringExpenses} recurringIncomes={fRecurringIncomes} onNavigate={(tab) => handleTabChange(tab)} />
                 </motion.div>
               </TabsContent>
 
@@ -723,14 +725,14 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                       label: 'Total',
                       columnIndex: 5,
                       value: formatCurrentAmount(
-                        rows.reduce((sum, row) => sum + toDisplayAmount(Number(row.amount ?? row.baseAmount ?? 0), row.currency, row.exchangeRate), 0),
+                        rows.filter(isOperatingIncome).reduce((sum, row) => sum + toDisplayAmount(Number(row.amount ?? row.baseAmount ?? 0), row.currency, row.exchangeRate), 0),
                         displayCurrency,
                       ),
                     })}
                     onUpdate={handleUpdateIncome}
-                    onAdd={handleAddIncome}
+                    onAdd={async () => setFundingOpen(true)}
                     loading={loading}
-                    canCreate={false}
+                    canCreate={canPerform('FINANCIAL_INCOMES', 'create')}
                     canEdit={false}
                     canDelete={false}
                     canExport={canPerform('FINANCIAL_INCOMES', 'export')}
@@ -738,6 +740,17 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     auditEntity="FINANCIAL_INCOME"
                     targetItemId={targetFinanceId?.tab === 'ingresos' ? targetFinanceId.id : null}
                     onClearTargetItem={() => setTargetFinanceId(null)}
+                  />
+                  <FinanceFundingModal
+                    open={fundingOpen}
+                    onOpenChange={setFundingOpen}
+                    exchangeRate={globalRate}
+                    onSaved={async () => {
+                      await Promise.all([
+                        queryClient.invalidateQueries({ queryKey: ['finance', 'income'] }),
+                        queryClient.invalidateQueries({ queryKey: ['finance', 'loan-installments'] }),
+                      ]);
+                    }}
                   />
                 </motion.div>
               </TabsContent>
@@ -916,13 +929,13 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
               <TabsContent value="analisis" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                  <FinanceBalanceView key={`finance-analysis-${globalDateRangeKey}`} incomes={fIncomes} expenses={fExpenses} recurringIncomes={fRecurringIncomes} recurringExpenses={fRecurringExpenses} globalDateRange={globalDateRange} onClearGlobalDateRange={clearFilters} />
+                  <FinanceBalanceView key={`finance-analysis-${globalDateRangeKey}`} incomes={operatingIncomes} expenses={fExpenses} recurringIncomes={fRecurringIncomes} recurringExpenses={fRecurringExpenses} globalDateRange={globalDateRange} onClearGlobalDateRange={clearFilters} />
                 </motion.div>
               </TabsContent>
 
               <TabsContent value="balance-general" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                  <FinanceGeneralBalanceView incomes={fIncomes} expenses={fExpenses} accounts={fAccounts} />
+                  <FinanceGeneralBalanceView incomes={operatingIncomes} expenses={fExpenses} accounts={fAccounts} />
                 </motion.div>
               </TabsContent>
 

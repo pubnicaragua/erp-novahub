@@ -204,7 +204,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         salesPayments: asList(payR).map(asBaseAmountRecord), salesReturns: [], salesCreditNotes: [],
         purchaseBills: asList(bilR).map(asBaseTotalRecord),
         purchasePayments: asList(ppayR).map(asBaseAmountRecord), purchaseCredits: [],
-        incomes: asList(incR).map(asBaseAmountRecord), expenses: asList(expR).map(asBaseAmountRecord),
+        incomes: asList(incR).filter((row: any) => !row?.kind || String(row.kind).toUpperCase() === 'OPERATING').map(asBaseAmountRecord), expenses: asList(expR).map(asBaseAmountRecord),
         recurringIncomes: asList(rincR).map(asBaseAmountRecord), recurringExpenses: asList(rexpR).map(asBaseAmountRecord), orders: [],
       } as FinancialData,
       profitLoss: plR, profitLossPrev: plPrevR, balanceSheet: bsR, balanceSheetStart: bsStartR,

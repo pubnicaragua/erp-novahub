@@ -164,7 +164,7 @@ export interface TeamHourly {
 }
 
 // ───────────── Metas y bonos ─────────────
-export type GoalMetric = 'SALES_AMOUNT' | 'OPPORTUNITIES' | 'VISITS' | 'MESSAGES_SENT' | 'TASKS_COMPLETED' | 'HOURS_LOGGED' | 'CHECKIN_COMPLIANCE' | 'MANUAL';
+export type GoalMetric = 'SALES_AMOUNT' | 'OPPORTUNITIES' | 'VISITS' | 'MESSAGES_SENT' | 'TASKS_COMPLETED' | 'LINKED_TASKS' | 'HOURS_LOGGED' | 'CHECKIN_COMPLIANCE' | 'MANUAL';
 export type GoalLevel = 'MIN' | 'TARGET' | 'STRETCH';
 export type GoalScope = 'USER' | 'DEPARTMENT' | 'COMPANY';
 export type GoalPeriodType = 'DAY' | 'WEEK' | 'MONTH' | 'CUSTOM';
@@ -267,6 +267,12 @@ export const performanceService = {
   getTeamHourly: (params: { date?: string }, signal?: AbortSignal) => api.get<TeamHourly>('/performance/timeline/team', { params, signal }),
   // Metas y bonos
   getGoalMetrics: (signal?: AbortSignal) => api.get<GoalMetricInfo[]>('/performance/goals/metrics', { signal }),
+  getGoalTasks: (goalId: string, signal?: AbortSignal) => api.get<GoalTasks>(`/performance/goals/${goalId}/tasks`, { signal }),
+  addGoalTask: (goalId: string, data: { title?: string; activityId?: string; assigneeId?: string; dueDate?: string; estimatedMinutes?: number; weight?: number; description?: string }) => api.post<{ activityId: string }>(`/performance/goals/${goalId}/tasks`, data),
+  removeGoalTask: (goalId: string, activityId: string) => api.delete<{ activityId: string }>(`/performance/goals/${goalId}/tasks/${activityId}`),
+  getScorecard: (employeeId: string, params: { from?: string; to?: string } = {}, signal?: AbortSignal) => api.get<Scorecard>('/performance/scorecard', { params: { employeeId, ...params }, signal }),
+  getMyScorecard: (params: { from?: string; to?: string } = {}, signal?: AbortSignal) => api.get<Scorecard>('/performance/scorecard/mine', { params, signal }),
+  createReviewFromScorecard: (data: { employeeId: string; from?: string; to?: string }) => api.post<{ reviewId: string; score: number; rating: number }>('/performance/scorecard/review', data),
   getMyGoals: (signal?: AbortSignal) => api.get<Goal[]>('/performance/goals/mine', { signal }),
   getGoals: (params: { status?: string; userId?: string; metric?: string }, signal?: AbortSignal) => api.get<Goal[]>('/performance/goals', { params, signal }),
   createGoal: (data: GoalInput) => api.post<Goal>('/performance/goals', data),
@@ -280,3 +286,17 @@ export const performanceService = {
   syncBonuses: () => api.post<{ checked: number; created: number; updated: number }>('/performance/bonuses/sync', {}),
   decideBonus: (id: string, decision: 'APPROVE' | 'REJECT', note?: string) => api.post<{ id: string; status: BonusStatus }>(`/performance/bonuses/${id}/decision`, { decision, note }),
 };
+
+export interface GoalTaskItem {
+  activityId: string; title: string; status: string; weight: number; dueDate: string | null; completedAt: string | null; rating: number | null;
+  estimatedMinutes: number | null; assigneeId: string | null; assigneeName: string | null; overdue: boolean;
+}
+export interface GoalTasks { summary: { total: number; done: number; percent: number }; items: GoalTaskItem[] }
+
+export type ScorecardBand = 'EXCELLENT' | 'GOOD' | 'FAIR' | 'LOW' | 'NO_DATA';
+export type ScorecardAction = 'RAISE_OR_BONUS' | 'MAINTAIN' | 'IMPROVEMENT_PLAN' | 'NO_DATA';
+export interface ScorecardComponent { key: 'goals' | 'tasks' | 'checkins' | 'attendance' | 'review'; label: string; score: number; weight: number; effectiveWeight: number; detail: string }
+export interface Scorecard {
+  employeeId: string; userId: string | null; period: { from: string; to: string };
+  score: number | null; rating: number | null; band: ScorecardBand; components: ScorecardComponent[]; weakest: string | null; action: ScorecardAction; recommendation: string;
+}

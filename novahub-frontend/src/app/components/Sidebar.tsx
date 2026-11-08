@@ -89,7 +89,6 @@ import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { BrandLogo } from './BrandLogo';
-import { NovaSuiteIcon } from './ui/NovaIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from '../utils/sidebarPermissions';
 import { canAccessModuleView } from '../utils/moduleViewAccess';
@@ -394,6 +393,7 @@ const menuItems: MenuItem[] = [
       { id: 'mi-dia', label: 'Mi día', icon: <CalendarClock className="size-4" /> },
       { id: 'compartido', label: 'Compartido', icon: <Users className="size-4" /> },
       { id: 'estrategias', label: 'Estrategias', icon: <Lightbulb className="size-4" /> },
+      { id: 'documentos', label: 'Documentos', icon: <FileText className="size-4" /> },
       { id: 'equipo', label: 'Equipo', icon: <Eye className="size-4" /> },
       { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-4" /> },
     ]
@@ -475,7 +475,7 @@ const menuItems: MenuItem[] = [
       { id: 'calculadora-financiamiento', label: 'Calculadora', icon: <Calculator className="size-4" /> },
     ],
   },
-  { id: 'novachat', label: 'Nova Suite', icon: <NovaSuiteIcon className="size-5" /> },
+  { id: 'novachat', label: 'Nova Suite', icon: <MessageCircle className="size-5" /> },
   {
     id: 'documentos',
     label: 'Nova Cloud',

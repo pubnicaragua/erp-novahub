@@ -163,7 +163,8 @@ export type PermissionAction =
   | 'recordProgress' | 'editCurve' | 'createCapture' | 'deleteCapture' | 'managePublicLinks'
   | 'startTicket' | 'returnTicketToOpen' | 'resolveTicket' | 'closeTicket' | 'reopenTicket' | 'commentTicket'
   | 'startCase' | 'requestCaseDocuments' | 'returnCaseToPending' | 'completeCase' | 'cancelCase' | 'assignCase'
-  | 'addCaseNote' | 'attachCaseDocument' | 'sendCaseMessage';
+  | 'addCaseNote' | 'attachCaseDocument' | 'sendCaseMessage'
+  | 'terminateEmployee' | 'deleteEmployeeDocument';
 
 // Las acciones operativas legacy siguen resolviéndose contra "Aprobar" si no
 // existe una decisión específica para conservar roles antiguos.

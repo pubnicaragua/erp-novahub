@@ -6,6 +6,9 @@ import { performanceService } from '../../services/performance.service';
 import { CheckinResponseForm } from '../seguimiento/CheckinResponseForm';
 import { GoalSummary } from '../seguimiento/GoalProgress';
 import { TimelineTab } from '../seguimiento/TimelineTab';
+import { MisVacacionesPanel } from './MisVacacionesPanel';
+import { BirthdaysCard } from '../hr/BirthdaysCard';
+import { EmployeeScorecardPanel } from '../hr/employee/EmployeeScorecardPanel';
 import { EmptyState, ErrorState, PageTitle, Panel } from './OrgBits';
 import { errorMessage } from './organizacion.utils';
 import type { OrgPreferences } from '../../services/organizacion.service';
@@ -33,6 +36,12 @@ export function MiDiaView({ preferences }: { preferences: OrgPreferences }) {
             </div>
           )}
       </Panel>
+
+      <BirthdaysCard />
+
+      <EmployeeScorecardPanel mine />
+
+      <MisVacacionesPanel />
 
       <Panel title="Mis metas" icon={<Target className="size-4" />}>
         {goals.isLoading ? <Skeleton className="h-28 w-full" aria-busy="true" />
