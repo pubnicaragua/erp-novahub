@@ -26,8 +26,8 @@ import { EmpleadosView } from './hr/EmpleadosView';
 import { DepartamentosView } from './hr/DepartamentosView';
 import { NominasView } from './hr/NominasView';
 import { PrestacionesSection } from './hr/PrestacionesSection';
-import { AsistenciaView } from './hr/AsistenciaView';
-import { AusenciasView } from './hr/AusenciasView';
+import { AsistenciaHub } from './hr/AsistenciaHub';
+import { AusenciasHub } from './hr/AusenciasHub';
 import { AusenciasConfigView } from './hr/AusenciasConfigView';
 import { LeavePolicyCard } from './hr/LeavePolicyCard';
 import { KpiView } from './hr/KpiView';
@@ -557,7 +557,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
               </TabsContent>
 
               <TabsContent value="asistencia" className="m-0">
-                <AsistenciaView
+                <AsistenciaHub
                   attendance={data.attendance}
                   employees={data.employees}
                   onRefresh={refreshData}
@@ -565,7 +565,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
               </TabsContent>
 
               <TabsContent value="ausencias" className="m-0">
-                <AusenciasView
+                <AusenciasHub
                   leaveRequests={data.leaveRequests}
                   employees={data.employees}
                   onRefresh={refreshData}
