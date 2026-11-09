@@ -2793,7 +2793,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Orden de Compra' : `Orden ${localDoc.number}`}</h2>
+              <h2 className="nh-module-title">{isNew ? 'Nueva Orden de Compra' : `Orden ${localDoc.number}`}</h2>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle del registro</p>
                 {(() => {
@@ -3421,7 +3421,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Órdenes de Compra</h2></div>
+          <div><h2 className="nh-module-title" data-tour="purchases-list-title">Órdenes de Compra</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             {canPerform('PURCHASES_ORDERS', 'export') && <PdfDownloadButton
               label="Exportar"

@@ -90,7 +90,7 @@ export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange
             <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10"><FolderKanban className="size-6 text-primary" /></div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-xl font-black tracking-tight">{project.name}</h2>
+                <h2 className="break-words text-xl font-black tracking-tight">{project.name}</h2>
                 <span className="font-mono text-xs font-bold text-primary">{project.code}</span>
               </div>
               <p className="text-xs text-muted-foreground">

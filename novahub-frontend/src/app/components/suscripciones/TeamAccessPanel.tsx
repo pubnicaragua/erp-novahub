@@ -913,7 +913,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <Button variant="outline" size="icon" onClick={onBack} aria-label="Volver a Mi Equipo"><ArrowLeft className="size-4" /></Button>
-            <div className="min-w-0"><h2 className="truncate text-2xl font-black uppercase italic tracking-tight">Roles y permisos</h2><p className="text-xs text-muted-foreground">Crea grupos de acceso para controlar los módulos y vistas de {tenantName}.</p></div>
+            <div className="min-w-0"><h2 className="break-words text-2xl font-black uppercase italic tracking-tight">Roles y permisos</h2><p className="text-xs text-muted-foreground">Crea grupos de acceso para controlar los módulos y vistas de {tenantName}.</p></div>
           </div>
           <Badge variant="outline" className="w-fit gap-1.5 border-primary/20 text-primary"><UserCog className="size-3.5" /> {roles.length} {roles.length === 1 ? 'rol' : 'roles'}</Badge>
         </div>
@@ -963,7 +963,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
 
       {roleView === 'preview' && viewingRole && <>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3"><Button variant="outline" size="icon" onClick={closeRoleView} aria-label="Volver a Roles y permisos"><ArrowLeft className="size-4" /></Button><div className="min-w-0"><h2 className="truncate text-2xl font-black uppercase italic tracking-tight">Permisos del rol</h2><p className="truncate text-xs text-muted-foreground">{viewingRole.name} · {viewingRole.description || 'Sin descripción'}</p></div></div>
+          <div className="flex min-w-0 items-center gap-3"><Button variant="outline" size="icon" onClick={closeRoleView} aria-label="Volver a Roles y permisos"><ArrowLeft className="size-4" /></Button><div className="min-w-0"><h2 className="break-words text-2xl font-black uppercase italic tracking-tight">Permisos del rol</h2><p className="truncate text-xs text-muted-foreground">{viewingRole.name} · {viewingRole.description || 'Sin descripción'}</p></div></div>
           {canEditRoles && <Button className="w-fit gap-2" onClick={() => openEditRole(viewingRole)}><Edit2 className="size-4" /> Editar rol</Button>}
         </div>
         <Card className="min-w-0 border-border/50">
@@ -985,7 +985,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
 
       {roleView === 'editor' && editingRole && <>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3"><Button variant="outline" size="icon" onClick={closeRoleView} disabled={roleSaving} aria-label="Volver a Roles y permisos"><ArrowLeft className="size-4" /></Button><div className="min-w-0"><h2 className="truncate text-2xl font-black uppercase italic tracking-tight">{editingRole.id ? 'Editar rol' : 'Nuevo rol'}</h2><p className="truncate text-xs text-muted-foreground">Define el acceso de este rol dentro de {tenantName}.</p></div></div>
+          <div className="flex min-w-0 items-center gap-3"><Button variant="outline" size="icon" onClick={closeRoleView} disabled={roleSaving} aria-label="Volver a Roles y permisos"><ArrowLeft className="size-4" /></Button><div className="min-w-0"><h2 className="break-words text-2xl font-black uppercase italic tracking-tight">{editingRole.id ? 'Editar rol' : 'Nuevo rol'}</h2><p className="truncate text-xs text-muted-foreground">Define el acceso de este rol dentro de {tenantName}.</p></div></div>
           <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={closeRoleView} disabled={roleSaving || roleLoading}>Cancelar</Button>{(editingRole.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving || roleLoading || warehouseCatalogLoading}>{roleLoading ? 'Cargando...' : roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</div>
         </div>
 

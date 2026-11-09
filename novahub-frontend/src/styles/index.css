@@ -1263,7 +1263,7 @@ th .column-filter-menu .column-filter-icon,
 .accounting-module [data-slot="table-cell"],
 .accounting-module th,
 .accounting-module td {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .sales-module [data-slot="table"],
@@ -1286,7 +1286,7 @@ th .column-filter-menu .column-filter-icon,
   min-width: 0 !important;
   max-width: 100%;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Encabezados persistentes para todas las tablas del ERP. El encabezado y
@@ -1434,7 +1434,7 @@ th .column-filter-menu .column-filter-icon,
 .finance-module [data-slot="table-cell"] p {
   min-width: 0;
   max-width: 100%;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .sales-module .sales-data-table,
@@ -1692,7 +1692,7 @@ th .column-filter-menu .column-filter-icon,
   .inventory-products-composite-toolbar .erp-toolbar-primary-group > button {
     max-width: 100%;
     white-space: normal;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     text-align: center;
     line-height: 1.1;
   }
@@ -2017,7 +2017,7 @@ th .column-filter-menu .column-filter-icon,
   min-width: 0;
   max-width: 100%;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .sales-module table:not([data-slot]),
@@ -2035,7 +2035,7 @@ th .column-filter-menu .column-filter-icon,
   min-width: 0;
   max-width: 100%;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .sales-responsive-table table {
@@ -2050,7 +2050,7 @@ th .column-filter-menu .column-filter-icon,
   min-width: 0;
   max-width: 100%;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Native sales tables need to be allowed to grow horizontally when their
@@ -2130,7 +2130,7 @@ th .column-filter-menu .column-filter-icon,
     min-width: 0;
     max-width: 100%;
     white-space: normal;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
 }
 
@@ -2779,7 +2779,7 @@ th .column-filter-menu .column-filter-icon,
     min-width: 0 !important;
     max-width: none !important;
     padding: 0.7rem 0.85rem !important;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     white-space: normal !important;
     border: 0 !important;
     border-bottom: 1px solid hsl(var(--border) / 0.35) !important;
@@ -2795,7 +2795,7 @@ th .column-filter-menu .column-filter-icon,
     line-height: 1rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
 
   table[data-responsive-cards="true"] > tbody > tr > td[data-label=""] {
@@ -2835,7 +2835,7 @@ th .column-filter-menu .column-filter-icon,
     grid-column: 2;
     min-width: 0;
     max-width: 100%;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
 
   table[data-responsive-cards="true"] > tbody > tr > td[data-label=""] > *,
@@ -3262,4 +3262,16 @@ th .column-filter-menu .column-filter-icon,
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, hsl(var(--primary)) 40%, transparent) transparent;
+}
+
+/* Título de módulo operativo: misma voz editorial que el dashboard (Playfair en cursiva, sin mayúsculas forzadas). */
+.nh-module-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.5rem;
+  font-style: italic;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  overflow-wrap: break-word;
 }

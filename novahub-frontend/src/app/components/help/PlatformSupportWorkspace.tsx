@@ -243,7 +243,7 @@ export function PlatformSupportWorkspace() {
       <header className="flex flex-col gap-4 border-b border-border/70 bg-card/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><ShieldCheck className="size-5" /></div>
-          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">NovaHub · Soporte externo</p><h1 className="truncate text-xl font-black sm:text-2xl">Bandeja de soporte</h1><p className="text-xs text-muted-foreground">{conversations.length} conversaciones · {unreadTotal} sin leer</p></div>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">NovaHub · Soporte externo</p><h1 className="break-words text-xl font-black sm:text-2xl">Bandeja de soporte</h1><p className="text-xs text-muted-foreground">{conversations.length} conversaciones · {unreadTotal} sin leer</p></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={openComposer} className="h-10 gap-2 rounded-xl"><MailPlus className="size-4" /> Nuevo envío</Button>
@@ -276,7 +276,7 @@ export function PlatformSupportWorkspace() {
             <div className="flex min-w-0 items-center gap-3 border-b border-border/60 px-4 py-3 sm:px-6">
               <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={() => setMobileThreadOpen(false)} aria-label="Volver a conversaciones"><ArrowLeft className="size-4" /></Button>
               <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Building2 className="size-4" /></div>
-              <div className="min-w-0 flex-1"><h2 className="truncate font-black">{selected.participant.name}</h2><p className="truncate text-xs text-muted-foreground">{selected.title}</p></div>
+              <div className="min-w-0 flex-1"><h2 className="break-words font-black">{selected.participant.name}</h2><p className="truncate text-xs text-muted-foreground">{selected.title}</p></div>
               <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">Sucursal</Badge>
             </div>
             <div

@@ -15,7 +15,7 @@ interface SalesKpiCardProps {
 }
 
 /** KPI consistente para Ventas: deja claro qué tarjetas filtran y cuáles solo informan. */
-export function SalesKpiCard({ title, value, icon: Icon, color, bg, onClick, active = false }: SalesKpiCardProps) {
+export function SalesKpiCard({ title, value, icon: Icon, onClick, active = false }: SalesKpiCardProps) {
   const interactive = Boolean(onClick);
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (interactive && (event.key === 'Enter' || event.key === ' ')) {
@@ -39,11 +39,12 @@ export function SalesKpiCard({ title, value, icon: Icon, color, bg, onClick, act
     >
       <CardContent className="p-3.5">
         <div className="flex items-center gap-3">
-          <div className={cn('rounded-md p-2', bg, color)}>
+          {/* Misma identidad que el dashboard: fondo verde Nova suave y ícono verde bosque, sin importar el color que pida cada vista. */}
+          <div className="shrink-0 rounded-[10px] bg-[color-mix(in_srgb,var(--accent)_22%,var(--card))] p-2 text-primary">
             <Icon className="size-4" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-muted-foreground">{title}</p>
+            <p className="break-words text-[13px] font-semibold italic leading-tight text-muted-foreground" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>{title}</p>
             <p className="text-xl font-bold text-foreground tabular-nums">{value}</p>
           </div>
         </div>

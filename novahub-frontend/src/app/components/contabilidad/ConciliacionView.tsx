@@ -299,7 +299,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">Conciliación {detail.account?.code || ''}</h2>
+              <h2 className="nh-module-title">Conciliación {detail.account?.code || ''}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">
                 {detail.account?.name}
                 {detail.bank ? ` · ${detail.bank.bankName} ${detail.bank.accountNumber}` : ''} · {detail.period}
@@ -556,7 +556,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
       <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div>
-          <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Conciliación Bancaria</h2>
+          <h2 className="nh-module-title text-foreground">Conciliación Bancaria</h2>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:gap-3">
           <div className="relative col-span-2 sm:col-span-1">

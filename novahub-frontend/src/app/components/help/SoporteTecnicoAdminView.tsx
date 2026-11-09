@@ -181,7 +181,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
                           <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest", priorityInfo.color)}>{priorityInfo.label}</Badge>
                           <Badge variant="outline" className="text-[9px] font-bold bg-indigo-500/10 text-indigo-500 border-indigo-500/20"><Building2 className="size-3 mr-1" />{ticket.clientTenant?.name || 'N/A'}</Badge>
                         </div>
-                        <h3 className="font-bold text-sm truncate group-hover:text-primary transition-colors">{ticket.subject}</h3>
+                        <h3 className="font-bold text-sm break-words group-hover:text-primary transition-colors">{ticket.subject}</h3>
                         <p className="text-xs text-muted-foreground truncate mt-0.5">De: {ticket.createdByName} ({ticket.createdByEmail})</p>
                       </div>
                     </div>

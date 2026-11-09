@@ -39,7 +39,7 @@ export function SalesPaymentReceiptDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto rounded-3xl sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+          <DialogTitle className="flex items-center gap-2 nh-module-title">
             <CheckCircle2 className="size-5 text-emerald-600" />
             {title}
           </DialogTitle>

@@ -970,7 +970,7 @@ export function DiarioView() {
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Asiento contable · #{viewJournal.number}</p>
-                        <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={accountingDescriptionLabel(viewJournal.description)}>{accountingDescriptionLabel(viewJournal.description)}</h3>
+                        <h3 className="mt-1 break-words text-lg font-black tracking-tight" title={accountingDescriptionLabel(viewJournal.description)}>{accountingDescriptionLabel(viewJournal.description)}</h3>
                       </div>
                       <Badge variant={STATUS_COLORS[viewJournal.status?.toLowerCase()] || 'outline'} className="shrink-0">
                         {journalStatusLabel(viewJournal.status)}
@@ -1051,7 +1051,7 @@ export function DiarioView() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <ArrowDownLeft className="size-4 text-primary" />
-                          <h3 className="truncate text-sm font-black uppercase tracking-tight">Asientos del Diario</h3>
+                          <h3 className="break-words text-sm font-black uppercase tracking-tight">Asientos del Diario</h3>
                         </div>
                         <p className="mt-1 text-[11px] text-muted-foreground">
                           {customerLoanDisbursementAmounts

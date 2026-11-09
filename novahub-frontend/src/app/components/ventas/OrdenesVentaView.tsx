@@ -858,7 +858,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
               <ChevronLeft className="size-5" />
             </Button>
             <div className="min-w-0">
-              <h2 className="text-xl font-black uppercase tracking-tight">{String(localDoc?.id).startsWith('local-') ? 'Nueva Orden' : `Orden ${localDoc?.number}`}</h2>
+              <h2 className="nh-module-title">{String(localDoc?.id).startsWith('local-') ? 'Nueva Orden' : `Orden ${localDoc?.number}`}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de la orden de venta</p>
             </div>
           </div>
@@ -1471,7 +1471,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Órdenes de Venta</h2>
+            <h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Órdenes de Venta</h2>
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="orders" />

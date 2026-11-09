@@ -288,7 +288,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nuevo Gasto Recurrente' : 'Editar Recurrencia'}</h2>
+              <h2 className="nh-module-title">{isNew ? 'Nuevo Gasto Recurrente' : 'Editar Recurrencia'}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Suscripciones y automatizaciones</p>
             </div>
           </div>
@@ -465,7 +465,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos Recurrentes</h2></div>
+          <div><h2 className="nh-module-title" data-tour="purchases-list-title">Gastos Recurrentes</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-expenses" />
             {canPerform('PURCHASES_EXPENSES_REC', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}

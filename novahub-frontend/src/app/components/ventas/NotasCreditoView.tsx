@@ -877,7 +877,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4"><Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button><div><h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nuevo Crédito' : `Crédito ${localDoc.number}`}</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Productos y servicios entregados a crédito</p></div></div>
+          <div className="flex items-center gap-4"><Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button><div><h2 className="nh-module-title">{isCreating ? 'Nuevo Crédito' : `Crédito ${localDoc.number}`}</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Productos y servicios entregados a crédito</p></div></div>
           <div className="flex flex-wrap items-center gap-3">{canEditDocument && canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest" onClick={handleSave}>Guardar Borrador</Button>{canIssue && canPerform('SALES_CREDIT_NOTES', 'issue') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest" onClick={() => handleIssue(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Emitir Crédito</Button>}</>}</div>
         </div>
         {!canEditDocument && <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">Este crédito ya fue emitido o aplicado. Se muestra en modo consulta para proteger el saldo y la trazabilidad.</div>}
@@ -1106,7 +1106,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       <div className="flex flex-col gap-4">
         <div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Créditos</h2>
+            <h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Créditos</h2>
             <p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">Productos y servicios entregados con límite y fecha de pago.</p>
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
@@ -1198,7 +1198,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       <Dialog open={Boolean(paymentCredit)} onOpenChange={(open) => !open && !paymentLoading && setPaymentCredit(null)}>
         <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight"><CircleDollarSign className="size-5 text-primary" /> {paymentCredit?.kind === 'CUSTOMER_LOAN' ? 'Registrar abono del préstamo' : 'Registrar pago del crédito'}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 nh-module-title"><CircleDollarSign className="size-5 text-primary" /> {paymentCredit?.kind === 'CUSTOMER_LOAN' ? 'Registrar abono del préstamo' : 'Registrar pago del crédito'}</DialogTitle>
             <DialogDescription>{paymentCredit?.kind === 'CUSTOMER_LOAN' ? 'El abono se aplicará a la factura del préstamo y quedará registrado en Pagos Recibidos.' : 'El pago quedará guardado también en Pagos Recibidos y actualizará el saldo del crédito.'}</DialogDescription>
           </DialogHeader>
           {paymentCredit && (

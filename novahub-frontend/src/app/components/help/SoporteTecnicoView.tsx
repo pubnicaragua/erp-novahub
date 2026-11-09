@@ -208,7 +208,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange, isSideb
                           <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest", statusInfo.color)}><StatusIcon className="size-3 mr-1" />{statusInfo.label}</Badge>
                           {getPriorityBadge(ticket.priority)}
                         </div>
-                        <h3 className="font-bold text-sm truncate group-hover:text-primary transition-colors">{ticket.subject}</h3>
+                        <h3 className="font-bold text-sm break-words group-hover:text-primary transition-colors">{ticket.subject}</h3>
                         <p className="text-xs text-muted-foreground truncate mt-0.5">{ticket.description}</p>
                       </div>
                     </div>

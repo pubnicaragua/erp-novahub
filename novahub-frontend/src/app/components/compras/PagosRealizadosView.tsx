@@ -724,7 +724,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Registrar Pago' : `Pago ${localDoc.reference}`}</h2>
+              <h2 className="nh-module-title">{isNew ? 'Registrar Pago' : `Pago ${localDoc.reference}`}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos y Abonos</p>
             </div>
           </div>
@@ -1027,7 +1027,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Pagos Realizados</h2></div>
+          <div><h2 className="nh-module-title" data-tour="purchases-list-title">Pagos Realizados</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="payments" />
             {canPerform('PURCHASES_PAYMENTS', 'export') && <PdfDownloadButton

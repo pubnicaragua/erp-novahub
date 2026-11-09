@@ -340,7 +340,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   };
 
   const categoryOptions = Array.from(new Set(filtered.map((g) => String(g.category || '').toUpperCase()).filter(Boolean)))
-    .map((value) => ({ value, label: value === 'OTRO' ? 'Otro' : value, count: filtered.filter((g) => String(g.category || '').toUpperCase() === value).length }));
+    .map((value) => ({ value, label: expenseCategoryLabel(value), count: filtered.filter((g) => String(g.category || '').toUpperCase() === value).length }));
 
   const normalizeImportHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_/-]+/g, '');
   const getImportCell = (row: Record<string, any>, aliases: string[]) => {
@@ -361,6 +361,16 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       });
       return row;
     }).filter((row) => Object.entries(row).some(([key, value]) => key !== 'sourceRowNumber' && String(value ?? '').trim()));
+  };
+
+  /** Nombre legible de una categoría guardada (OPERACIONAL, OPERATIVO, VENTAS…); nunca muestra el código tal cual. */
+  const expenseCategoryLabel = (raw?: string | null, custom?: string | null) => {
+    const code = String(raw || '').trim().toUpperCase();
+    if (!code) return '—';
+    if (code === 'OTRO') return String(custom || '').trim() || 'Otro';
+    if (code === 'OPERACIONAL' || code === 'OPERATIVO') return 'Operacional';
+    const lower = code.toLowerCase().replace(/_/g, ' ');
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
   };
 
   const normalizeExpenseCategory = (raw: string) => {
@@ -730,7 +740,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         {label: 'Operacional', value: 'OPERATIVO'}, {label: 'Administrativo', value: 'ADMINISTRATIVO'}, {label: 'Ventas', value: 'VENTAS'}, {label: 'Financiero', value: 'FINANCIERO'}, {label: 'Otro', value: 'OTRO'}
       ],
       headerExtra: <ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} />,
-      render: (val, row) => <Badge variant="outline" className="text-[9px] uppercase bg-primary/5 text-primary border-none">{String(val || '').toUpperCase() === 'OTRO' ? (row.categoryCustom || 'OTRO') : (val || '-')}</Badge> },
+      render: (val, row) => <Badge variant="outline" className="text-[9px] uppercase bg-primary/5 text-primary border-none">{expenseCategoryLabel(val, row.categoryCustom)}</Badge> },
     { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES', 'edit') || canPerform('FINANCIAL_EXPENSES', 'edit') },
     { key: 'paidTo',      header: 'Pagado a', width: '170px',
       render: (val) => <span className="text-xs font-medium text-foreground">{val || '-'}</span> },
@@ -941,7 +951,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           status: statusOpts.find((option) => option.value === String(expense.status || '').toUpperCase())?.label || expense.status,
           supplier: expense.supplier?.name || expense.paidTo || 'Sin proveedor',
           fields: [
-            { label: 'Categoría', value: String(expense.category || '').toUpperCase() === 'OTRO' ? expense.categoryCustom || 'Otro' : expense.category || '—' },
+            { label: 'Categoría', value: expenseCategoryLabel(expense.category, expense.categoryCustom) },
             { label: 'Fuente de pago', value: paymentSourceLabel(expense.paymentSource) },
             { label: 'Referencia', value: expense.reference || '—' },
           ],
@@ -984,7 +994,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Registrar Gasto' : 'Editar Gasto'}</h2>
+              <h2 className="nh-module-title">{isNew ? 'Registrar Gasto' : 'Editar Gasto'}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de transacción</p>
             </div>
           </div>
@@ -1225,7 +1235,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     sourceCurrency: expense.currency,
     sourceExchangeRate: expense.exchangeRate,
     summaryDetails: [
-      { label: 'Categoría', value: String(expense.category || '').toUpperCase() === 'OTRO' ? expense.categoryCustom || 'Otro' : expense.category || '—' },
+      { label: 'Categoría', value: expenseCategoryLabel(expense.category, expense.categoryCustom) },
       { label: 'Método', value: paymentSourceLabel(expense.paymentSource) },
     ],
     metadata: [
@@ -1286,7 +1296,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2></div>
+          <div><h2 className="nh-module-title" data-tour="purchases-list-title">Gastos</h2></div>
           <div className="erp-list-toolbar grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" />
             {canExportExpenseList && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
@@ -1473,7 +1483,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         <Dialog open={Boolean(paymentExpense && canExpensePerform(paymentExpense, 'pay'))} onOpenChange={(open) => !open && !paymentLoading && setPaymentExpense(null)}>
           <DialogContent className="w-[calc(100%-2rem)] !max-w-xl rounded-3xl">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+              <DialogTitle className="flex items-center gap-2 nh-module-title">
                 <CircleDollarSign className="size-5 text-primary" /> Registrar pago del gasto
               </DialogTitle>
               <DialogDescription>

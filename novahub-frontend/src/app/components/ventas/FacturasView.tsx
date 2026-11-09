@@ -1796,7 +1796,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             </Button>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nueva Factura' : `Factura ${localDoc?.number}`}</h2>
+                <h2 className="nh-module-title">{isCreating ? 'Nueva Factura' : `Factura ${localDoc?.number}`}</h2>
                 {!isCreating && (() => {
                   const source = getSalesInvoiceOriginBadge(localDoc);
                   return source ? <Badge className={cn('border-none px-2 py-0.5 text-[8px] font-black', source.className)}>{source.label}</Badge> : null;
@@ -1935,17 +1935,19 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                     options={(employees || []).map(e => ({ label: `${e.firstName} ${e.lastName}`, value: e.id, description: e.position?.title }))}
                     value={localDoc?.sellerEmployeeId || ''}
                     onChange={(val) => { setLocalDoc({ ...localDoc, sellerEmployeeId: val }); if (!isCreating) handleUpdate(localDoc!.id, { sellerEmployeeId: val }); }}
-                    placeholder="Seleccionar Vendedor"
+                    placeholder={(employees || []).length === 0 ? 'Sin vendedores configurados' : 'Seleccionar Vendedor'}
+                    emptyMessage="No hay vendedores. En Recursos Humanos, marca un departamento como «de vendedores» y asigna al empleado."
                     disabled={isInvoiceLocked}
                   />
+                  {(employees || []).length === 0 && <p className="mt-1 text-[9px] text-amber-700">Solo pueden venderse a nombre de empleados activos de un departamento marcado como de vendedores.</p>}
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Comisión configurada</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Porcentaje</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? `${Number(localDoc?.commissionRate || 0).toFixed(2)}%` : '—'} className="h-8 bg-muted/20 text-xs" /></div>
-                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? Number(localDoc?.commissionAmount || 0).toFixed(2) : '—'} className="h-8 bg-muted/20 text-xs" /></div>
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Porcentaje</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : isCreating ? 'Se calcula al guardar' : `${Number(localDoc?.commissionRate || 0).toFixed(2)}%`} className="h-8 bg-muted/20 text-xs" /></div>
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : isCreating ? 'Se calcula al guardar' : Number(localDoc?.commissionAmount || 0).toFixed(2)} className="h-8 bg-muted/20 text-xs" /></div>
                   </div>
-                  <p className="text-[9px] text-muted-foreground">Se aplica automáticamente al subtotal neto; no se puede editar en la venta.</p>
+                  <p className="text-[9px] text-muted-foreground">Se toma del plan de comisiones del vendedor (Ventas → Comisiones) sobre el subtotal neto; si el vendedor no tiene plan ni regla global, queda en 0%.</p>
                 </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Moneda de la transacción</p>
@@ -2438,7 +2440,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Control de Facturación</h2>
+            <h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Control de Facturación</h2>
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="invoices" />
@@ -2717,7 +2719,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       <Dialog open={!!creditInvoice} onOpenChange={(open) => { if (!open && !creditLoading) setCreditInvoice(null); }}>
         <DialogContent className="w-[calc(100%-2rem)] !max-w-lg rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+            <DialogTitle className="flex items-center gap-2 nh-module-title">
               <Send className="size-5 text-primary" /> Enviar factura a crédito
             </DialogTitle>
             <DialogDescription>
@@ -2750,7 +2752,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       <Dialog open={paymentDialogOpen} onOpenChange={(open) => { if (!open) closeInvoicePayment(); }}>
         <DialogContent className="!flex !flex-col !max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] !max-w-xl !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-2rem)] sm:p-6">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+            <DialogTitle className="flex items-center gap-2 nh-module-title">
               <CreditCard className="size-5 text-primary" /> Registrar pago de factura
             </DialogTitle>
           </DialogHeader>
@@ -2970,7 +2972,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       <Dialog open={Boolean(paymentVoucher)} onOpenChange={(open) => { if (!open) setPaymentVoucher(null); }}>
         <DialogContent className="w-[calc(100%-2rem)] !max-w-lg rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+            <DialogTitle className="flex items-center gap-2 nh-module-title">
               <CheckCircle2 className="size-5 text-primary" />
               {(paymentVoucher?.payment.creditNoteId || paymentVoucher?.payment.creditNote) && paymentVoucher.remaining <= 0.01
                 ? 'Crédito cancelado'

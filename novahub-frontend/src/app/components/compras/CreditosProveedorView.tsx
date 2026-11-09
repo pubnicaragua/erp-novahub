@@ -709,7 +709,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nuevo Crédito de Proveedor' : `Crédito ${localDoc.number || ''}`}</h2>
+              <h2 className="nh-module-title">{isNew ? 'Nuevo Crédito de Proveedor' : `Crédito ${localDoc.number || ''}`}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Crédito otorgado por el proveedor a favor de la empresa</p>
             </div>
           </div>
@@ -1226,7 +1226,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos del proveedor</h2></div>
+          <div><h2 className="nh-module-title" data-tour="purchases-list-title">Créditos del proveedor</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="credits" />
             {canPerform('PURCHASES_RETURNS', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}

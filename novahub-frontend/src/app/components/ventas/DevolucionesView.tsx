@@ -523,7 +523,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nueva Nota de Crédito' : `Nota ${localDoc?.number}`}</h2>
+              <h2 className="nh-module-title">{isCreating ? 'Nueva Nota de Crédito' : `Nota ${localDoc?.number}`}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Aplicar saldo a favor desde una factura' : 'Detalle de la nota de crédito'}</p>
             </div>
           </div>
@@ -683,7 +683,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
-          <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Notas de Crédito</h2>
+          <div><h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Notas de Crédito</h2>
             </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="returns" />

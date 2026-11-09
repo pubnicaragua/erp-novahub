@@ -449,7 +449,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
     <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !saving && !invoiceSaving) onClose(); }}>
       <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1rem)] !max-w-3xl flex-col overflow-hidden rounded-3xl border-primary/20 bg-background p-0 shadow-2xl">
         <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.12] via-background to-primary/[0.05] px-6 py-6 pr-12" data-tour="purchases-payment-title">
-          <DialogTitle className="flex items-center gap-3 text-xl font-black uppercase tracking-tight">
+          <DialogTitle className="flex items-center gap-3 nh-module-title">
             <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">{draft?.invoiceOnly ? <FileText className="size-5" /> : <CircleDollarSign className="size-5" />}</span>
             {draft?.invoiceOnly ? 'Registrar compra a crédito' : 'Registrar pago de la recepción'}
           </DialogTitle>
@@ -1345,7 +1345,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
     <Dialog open={Boolean(creditDraft)} onOpenChange={(open) => { if (!open && !creditLoading) { setCreditDraft(null); setCreditReason(''); setCreditQuantities({}); } }}>
       <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+          <DialogTitle className="flex items-center gap-2 nh-module-title">
             <Send className="size-5 text-primary" /> Crear nota de crédito por devolución
           </DialogTitle>
           <DialogDescription>
@@ -1453,7 +1453,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
             </Button>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Recepción' : `Recepción ${localDoc.number||''}`}</h2>
+                <h2 className="nh-module-title">{isNew ? 'Nueva Recepción' : `Recepción ${localDoc.number||''}`}</h2>
                 <Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', currentStatus?.color||'bg-muted/20 text-muted-foreground')}>{currentStatus?.label||'Pendiente'}</Badge>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">
@@ -1983,7 +1983,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Recepciones</h2></div>
+          <div><h2 className="nh-module-title" data-tour="purchases-list-title">Recepciones</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="receipts" />
             {canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} filterSelector={{ label: 'Estado de recepciones', defaultValue: 'all', options: [{ value: 'all', label: 'Todas las recepciones', description: 'Incluye todos los estados' }, { value: 'paid', label: 'Solo pagadas', description: 'Incluye únicamente estado Pagada' }] }} onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)} onExcel={() => void handleExportExcel()} />}
@@ -2185,7 +2185,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       <Dialog open={inventoryCostOperations !== null} onOpenChange={(open) => { if (!open) setInventoryCostOperations(null); }}>
         <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(96vw,1400px)] overflow-hidden rounded-3xl border-primary/20 bg-background/95 p-0 shadow-2xl backdrop-blur-xl">
           <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.10] via-background to-emerald-500/[0.06] px-6 py-6 pr-12">
-            <DialogTitle className="flex items-center gap-3 text-xl font-black uppercase tracking-tight">
+            <DialogTitle className="flex items-center gap-3 nh-module-title">
               <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
                 <Calculator className="size-5" />
               </span>

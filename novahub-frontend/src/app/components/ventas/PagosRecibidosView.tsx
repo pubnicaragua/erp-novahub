@@ -861,7 +861,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setIsCreating(false); commitLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); setPartialPaymentEnabled(false); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">Registrar Pago</h2>
+              <h2 className="nh-module-title">Registrar Pago</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Completar datos del pago recibido</p>
             </div>
           </div>
@@ -1036,7 +1036,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
-          <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Pagos Recibidos</h2>
+          <div><h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Pagos Recibidos</h2>
             </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="payments" />

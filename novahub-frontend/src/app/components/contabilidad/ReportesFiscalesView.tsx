@@ -216,7 +216,7 @@ export function ReportesFiscalesView() {
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div>
-          <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Reportes Fiscales</h2>
+          <h2 className="nh-module-title text-foreground">Reportes Fiscales</h2>
         </div>
         <Button
           variant="outline"

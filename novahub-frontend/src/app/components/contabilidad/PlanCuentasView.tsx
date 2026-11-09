@@ -1040,7 +1040,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Cuenta seleccionada · {selectedAccount.code}</p>
-                      <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={selectedAccount.name}>{selectedAccount.name}</h3>
+                      <h3 className="mt-1 break-words text-lg font-black tracking-tight" title={selectedAccount.name}>{selectedAccount.name}</h3>
                     </div>
                     <Badge variant={selectedAccount.isActive ? 'default' : 'secondary'} className="shrink-0">
                       {selectedAccount.isActive ? 'Activo' : 'Inactivo'}
@@ -1114,7 +1114,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <Activity className="size-4 text-primary" />
-                        <h3 id="account-transactions-title" className="truncate text-sm font-black uppercase tracking-tight">Transacciones de la cuenta</h3>
+                        <h3 id="account-transactions-title" className="break-words text-sm font-black uppercase tracking-tight">Transacciones de la cuenta</h3>
                       </div>
                       <p className="mt-1 text-[11px] text-muted-foreground">Últimos movimientos registrados, actualizados automáticamente.</p>
                     </div>

@@ -646,7 +646,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Proveedores</h2>
+            <h2 className="nh-module-title" data-tour="purchases-list-title">Proveedores</h2>
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="suppliers" />
@@ -786,7 +786,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !saving) setCreateOpen(false); }}>
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,1400px)] !flex-col overflow-hidden rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7" data-tour="purchases-form-title">
-          <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo proveedor</DialogTitle>
+          <DialogTitle className="nh-module-title">Nuevo proveedor</DialogTitle>
             <DialogDescription>Completa los datos del proveedor y sus condiciones de contacto.</DialogDescription>
             <PurchaseViewTutorial view="suppliers" context="form" />
           </DialogHeader>
@@ -827,7 +827,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       <Dialog open={editOpen} onOpenChange={(open) => { if (!open && !saving) { setEditOpen(false); setEditingSupplier(null); } }}>
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,720px)] !flex-col overflow-hidden rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7" data-tour="purchases-form-title">
-            <DialogTitle className="text-xl font-black uppercase tracking-tight">Editar proveedor</DialogTitle>
+            <DialogTitle className="nh-module-title">Editar proveedor</DialogTitle>
             <DialogDescription>Actualiza la información del proveedor.</DialogDescription>
             <PurchaseViewTutorial view="suppliers" context="form" />
           </DialogHeader>

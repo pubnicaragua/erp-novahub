@@ -1353,7 +1353,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         <Collapsible defaultOpen={false} className="min-w-0 space-y-3">
         <div className="grid min-w-0 gap-3 py-2 lg:grid-cols-[minmax(220px,1fr)_minmax(300px,1.1fr)_auto] lg:items-center lg:gap-4" data-tour="sales-list-actions">
           <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-xl font-black uppercase tracking-tight text-foreground" data-tour="customers-title">Directorio de clientes</h2>
+            <h2 className="nh-module-title text-foreground" data-tour="customers-title">Directorio de clientes</h2>
             <Button
               variant="ghost"
               size="icon"
@@ -1645,7 +1645,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !creating) setCreateOpen(false); }}>
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,1400px)] !flex-col overflow-hidden rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7" data-tour="sales-form-title">
-            <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo cliente</DialogTitle>
+            <DialogTitle className="nh-module-title">Nuevo cliente</DialogTitle>
           <DialogDescription>Completa los datos del cliente y usa “Agregar a la lista” para preparar varios registros antes de guardarlos juntos.</DialogDescription>
             <SalesViewTutorial view="customers" context="form" />
           </DialogHeader>
@@ -1713,7 +1713,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       <Dialog open={editOpen} onOpenChange={(open) => { if (!open && !savingEdit) { setEditOpen(false); setEditingCustomer(null); } }}>
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,1200px)] !flex-col overflow-hidden rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
-            <DialogTitle className="text-xl font-black uppercase tracking-tight">Editar cliente</DialogTitle>
+            <DialogTitle className="nh-module-title">Editar cliente</DialogTitle>
             <DialogDescription>Actualiza la información del cliente. La cédula y el RUC deben ser únicos en el sistema.</DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">

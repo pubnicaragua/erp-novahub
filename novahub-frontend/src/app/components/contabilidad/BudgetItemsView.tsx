@@ -128,7 +128,7 @@ export function BudgetItemsView() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Wallet className="size-5 text-primary" />
-          <h2 className="text-xl font-black uppercase tracking-tight">Partidas Presupuestarias</h2>
+          <h2 className="nh-module-title">Partidas Presupuestarias</h2>
           <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-black">{items.length}</Badge>
         </div>
         {canCreate && <Button onClick={openCreate} className="gap-2 text-xs font-black uppercase tracking-widest rounded-xl">

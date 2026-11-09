@@ -78,7 +78,7 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, error
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Archivos</h2></div>
+          <div><h2 className="nh-module-title">Archivos</h2></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />

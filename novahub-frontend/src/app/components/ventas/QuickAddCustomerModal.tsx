@@ -148,7 +148,7 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Facturación rápida</span>
                   <Badge variant="outline" className="rounded-full border-primary/25 bg-primary/5 text-[9px] font-black uppercase tracking-wider text-primary">Nuevo registro</Badge>
                 </div>
-                <DialogTitle className="mt-1 text-xl font-black uppercase tracking-tight sm:text-2xl">Agregar cliente</DialogTitle>
+                <DialogTitle className="mt-1 nh-module-title sm:text-2xl">Agregar cliente</DialogTitle>
                 <DialogDescription className="mt-2 max-w-3xl text-sm leading-5 text-muted-foreground">
                   Registra los datos esenciales del cliente sin salir de la facturación. Solo el nombre es obligatorio.
                 </DialogDescription>

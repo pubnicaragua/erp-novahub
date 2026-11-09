@@ -35,7 +35,7 @@ export function HRCreateViewShell({ title, description, onBack, children, classN
             <p className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-primary">
               <Plus className="size-3.5" /> Recursos Humanos
             </p>
-            <h2 id="hr-create-view-title" className="truncate text-2xl font-black tracking-tight sm:text-3xl">{title}</h2>
+            <h2 id="hr-create-view-title" className="break-words text-2xl font-black tracking-tight sm:text-3xl">{title}</h2>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{description}</p>
           </div>
         </div>

@@ -54,7 +54,7 @@ function TransferDetail({ data }: { data: any }) {
     <div className="space-y-5">
       <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Transferencia seleccionada</p>
-        <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={data.number}>{data.number}</h3>
+        <h3 className="mt-1 break-words text-lg font-black tracking-tight" title={data.number}>{data.number}</h3>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Unidades</p>
@@ -96,7 +96,7 @@ function TransferDetail({ data }: { data: any }) {
       <section className="min-w-0">
         <div className="mb-3 flex items-center gap-2">
           <Package className="size-4 text-primary" />
-          <h3 className="truncate text-sm font-black uppercase tracking-tight">Artículos transferidos</h3>
+          <h3 className="break-words text-sm font-black uppercase tracking-tight">Artículos transferidos</h3>
         </div>
         <div className="overflow-hidden rounded-xl border border-border/60">
           <div className="divide-y divide-border/60">
@@ -147,7 +147,7 @@ function AdjustmentDetail({ data, canViewInventoryCost }: { data: any; canViewIn
     <div className="space-y-5">
       <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Ajuste seleccionado</p>
-        <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={data.number}>{data.number}</h3>
+        <h3 className="mt-1 break-words text-lg font-black tracking-tight" title={data.number}>{data.number}</h3>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cantidad neta</p>
@@ -193,7 +193,7 @@ function AdjustmentDetail({ data, canViewInventoryCost }: { data: any; canViewIn
       <section className="min-w-0">
         <div className="mb-3 flex items-center gap-2">
           <Scale className="size-4 text-primary" />
-          <h3 className="truncate text-sm font-black uppercase tracking-tight">Artículos ajustados</h3>
+          <h3 className="break-words text-sm font-black uppercase tracking-tight">Artículos ajustados</h3>
         </div>
         <div className="overflow-hidden rounded-xl border border-border/60">
           <div className="divide-y divide-border/60">
@@ -244,7 +244,7 @@ export function InventoryDetailPanel({ kind, data, onClose, extraActions }: Inve
           <div className="flex min-w-0 items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <Info className="w-4 h-4 text-muted-foreground" />
-              <CardTitle className="truncate text-sm font-medium">{isTransfer ? 'Detalle de Transferencia' : 'Detalle de Ajuste'}</CardTitle>
+              <CardTitle className="break-words text-sm font-medium">{isTransfer ? 'Detalle de Transferencia' : 'Detalle de Ajuste'}</CardTitle>
             </div>
             <div className="flex items-center gap-1" data-tour="inventory-detail-actions">
             <InventoryViewTutorial label={isTransfer ? 'Cómo consultar transferencia' : 'Cómo consultar ajuste'} targetPrefix="inventory-detail" stepKeys={['title', 'data']} copy={{ data: { description: isTransfer ? 'Revisa origen, destino, unidades y artículos transferidos.' : 'Revisa almacén, razón, cantidades, costos y diferencias del ajuste.' } }} />

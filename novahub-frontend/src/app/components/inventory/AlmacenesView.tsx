@@ -601,7 +601,7 @@ export function AlmacenesView({ warehouses, onRefresh, accountingConnectionEnabl
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Bodega seleccionada</p>
-                      <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={detailWarehouse.name}>{detailWarehouse.name}</h3>
+                      <h3 className="mt-1 break-words text-lg font-black tracking-tight" title={detailWarehouse.name}>{detailWarehouse.name}</h3>
                     </div>
                     <Badge variant="outline" className="shrink-0">{WAREHOUSE_TYPES.find((t) => t.value === detailWarehouse.type)?.label || detailWarehouse.type || 'Bodega'}</Badge>
                   </div>

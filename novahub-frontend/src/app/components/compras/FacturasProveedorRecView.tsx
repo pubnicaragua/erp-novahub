@@ -576,7 +576,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Agregar Compra Recurrente' : 'Editar Compra Recurrente'}</h2>
+              <h2 className="nh-module-title">{isNew ? 'Agregar Compra Recurrente' : 'Editar Compra Recurrente'}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Generación periódica de órdenes y recepciones</p>
             </div>
           </div>
@@ -786,7 +786,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Compras Recurrentes</h2>
+            <h2 className="nh-module-title" data-tour="purchases-list-title">Compras Recurrentes</h2>
             <p className="mt-1 text-xs text-muted-foreground">Cada programación crea una orden y una recepción pendiente por ciclo.</p>
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">

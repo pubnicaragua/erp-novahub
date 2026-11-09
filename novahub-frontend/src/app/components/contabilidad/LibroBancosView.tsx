@@ -147,7 +147,7 @@ export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId:
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div>
-          <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Libro Diario de Bancos</h2>
+          <h2 className="nh-module-title text-foreground">Libro Diario de Bancos</h2>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:gap-3">
           <Combobox

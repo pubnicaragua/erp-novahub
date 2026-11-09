@@ -165,7 +165,7 @@ export function InventoryLossDetailSheet({ row, canViewInventoryCost, formatCurr
             <section className="min-w-0">
               <div className="mb-3 flex items-center gap-2">
                 <Package className="size-4 text-destructive" />
-                <h3 className="truncate text-sm font-black uppercase tracking-tight">Productos afectados</h3>
+                <h3 className="break-words text-sm font-black uppercase tracking-tight">Productos afectados</h3>
               </div>
 
               <div className="space-y-3 sm:hidden">

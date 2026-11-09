@@ -623,7 +623,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <ClipboardList className="size-6 text-primary" />
-          <h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Solicitudes de Compra</h2>
+          <h2 className="nh-module-title" data-tour="purchases-list-title">Solicitudes de Compra</h2>
           <Badge variant="secondary" className="text-xs">{data.length}</Badge>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">

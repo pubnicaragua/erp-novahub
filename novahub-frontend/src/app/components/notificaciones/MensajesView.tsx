@@ -502,7 +502,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                 </Button>
                 <ParticipantAvatar participant={selected.participant} system={selected.kind === 'SYSTEM'} />
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-sm font-bold sm:text-base">{selected.title}</h3>
+                  <h3 className="break-words text-sm font-bold sm:text-base">{selected.title}</h3>
                   <p className="truncate text-xs text-muted-foreground">
                     {selected.kind === 'SYSTEM' ? 'Aviso automático de NovaHub' : participantName(selected.participant, 'Participante')}
                   </p>

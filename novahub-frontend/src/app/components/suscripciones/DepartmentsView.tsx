@@ -155,7 +155,7 @@ export function DepartmentsView({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <Button variant="outline" size="icon" onClick={onBack} aria-label="Volver a Mi Equipo"><ArrowLeft className="size-4" /></Button>
-          <div className="min-w-0"><h2 className="truncate text-2xl font-black uppercase italic tracking-tight">Departamentos</h2><p className="text-xs text-muted-foreground">Agrupa usuarios para organizar el equipo. No modifica sus permisos ni accesos.</p></div>
+          <div className="min-w-0"><h2 className="break-words text-2xl font-black uppercase italic tracking-tight">Departamentos</h2><p className="text-xs text-muted-foreground">Agrupa usuarios para organizar el equipo. No modifica sus permisos ni accesos.</p></div>
         </div>
         <Badge variant="outline" className="w-fit gap-1.5 border-primary/20 text-primary"><Users className="size-3.5" /> {departments.length} {departments.length === 1 ? 'departamento' : 'departamentos'}</Badge>
       </div>
@@ -184,7 +184,7 @@ export function DepartmentsView({
 
         <Card className="min-w-0 border-border/50">
           {!selectedDepartment ? <CardContent className="flex min-h-[300px] items-center justify-center p-6 text-center text-sm text-muted-foreground">Selecciona un departamento para administrar sus usuarios.</CardContent> : <>
-            <CardHeader className="flex flex-col gap-3 border-b border-border/40 pb-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="truncate text-lg font-black">{selectedDepartment.name}</CardTitle><CardDescription className="text-xs">Agrupador de usuarios; no modifica permisos ni accesos</CardDescription></div>{canDeactivate && <Button variant="outline" size="sm" className="w-fit shrink-0 gap-1.5 border-rose-500/25 text-rose-600 hover:bg-rose-500/10" onClick={() => setDeleteDialogOpen(true)}><Ban className="size-3.5" /> Desactivar</Button>}</CardHeader>
+            <CardHeader className="flex flex-col gap-3 border-b border-border/40 pb-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="break-words text-lg font-black">{selectedDepartment.name}</CardTitle><CardDescription className="text-xs">Agrupador de usuarios; no modifica permisos ni accesos</CardDescription></div>{canDeactivate && <Button variant="outline" size="sm" className="w-fit shrink-0 gap-1.5 border-rose-500/25 text-rose-600 hover:bg-rose-500/10" onClick={() => setDeleteDialogOpen(true)}><Ban className="size-3.5" /> Desactivar</Button>}</CardHeader>
             <CardContent className="space-y-4 p-4 sm:p-6">
               <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Buscar usuario por nombre o correo..." className="h-10 pl-9" aria-label="Buscar usuario del grupo" /></div>
               <div className="grid min-w-0 gap-4 lg:grid-cols-2">{[
