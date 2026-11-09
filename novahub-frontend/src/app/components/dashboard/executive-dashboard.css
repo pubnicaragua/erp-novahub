@@ -583,3 +583,40 @@
   .executive-kpi, .executive-product-row, .executive-register-row, .executive-attention-row { transition: none; }
   .executive-kpi:hover, .executive-product-row:hover, .executive-register-row:hover, .executive-attention-row:hover { transform: none; }
 }
+
+/* ── Cobertura de pagos (Finanzas) ───────────────────────────── */
+.executive-outlook { margin-bottom: 16px; font-style: normal; }
+.executive-outlook b, .executive-outlook em { font-style: normal; }
+.executive-outlook-range { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid var(--executive-line); border-radius: 10px; background: var(--muted); }
+.executive-outlook-range button { padding: 5px 10px; border-radius: 8px; color: var(--muted-foreground); font-size: 11px; font-weight: 700; }
+.executive-outlook-range button[aria-pressed="true"] { color: var(--primary); background: var(--card); box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 10%, transparent); }
+.executive-outlook-status { display: flex; align-items: flex-start; gap: 12px; margin: 0 20px 14px; padding: 12px 14px; border: 1px solid var(--executive-line); border-left-width: 4px; border-radius: 12px; background: var(--card); }
+.executive-outlook-status > svg { flex: none; width: 20px; height: 20px; margin-top: 1px; }
+.executive-outlook-status strong { display: block; font-family: Montserrat, sans-serif; font-size: 13px; font-style: normal; font-weight: 800; }
+.executive-outlook-status p { margin: 3px 0 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
+.executive-outlook-status p b { color: var(--foreground); }
+.executive-outlook-status.is-covered { border-left-color: #129a68; } .executive-outlook-status.is-covered > svg { color: #129a68; }
+.executive-outlook-status.is-tight { border-left-color: #d97706; } .executive-outlook-status.is-tight > svg { color: #d97706; }
+.executive-outlook-status.is-short { border-left-color: #df5e61; } .executive-outlook-status.is-short > svg { color: #df5e61; }
+.executive-outlook-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 0 20px 14px; }
+.executive-outlook-kpi { min-height: 78px; }
+.executive-outlook-kpi:hover { transform: none; }
+.executive-outlook-kpi .executive-kpi-label { display: flex; align-items: center; gap: 4px; }
+.executive-outlook-kpi .executive-kpi-label svg { width: 13px; height: 13px; color: var(--muted-foreground); }
+.executive-outlook-mix { padding: 0 20px 6px; }
+.executive-outlook-bar { display: flex; height: 8px; overflow: hidden; border-radius: 999px; background: var(--muted); }
+.executive-outlook-bar i.is-payroll { background: var(--primary); }
+.executive-outlook-bar i.is-recurring { background: var(--accent); }
+.executive-outlook-bar i.is-suppliers { background: #94a3b8; }
+.executive-outlook-mix .executive-legend { padding: 8px 0 6px; margin: 0; list-style: none; }
+.legend-dot.outlook-payroll { background: var(--primary); } .legend-dot.outlook-recurring { background: var(--accent); } .legend-dot.outlook-suppliers { background: #94a3b8; }
+.executive-outlook-table { margin: 4px 20px 14px; overflow-x: auto; border: 1px solid var(--executive-line); border-radius: 12px; }
+.executive-outlook-table table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 12px; }
+.executive-outlook-table th { padding: 8px 12px; color: var(--muted-foreground); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-align: left; text-transform: uppercase; background: var(--muted); }
+.executive-outlook-table th:nth-child(n+3), .executive-outlook-table td:nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.executive-outlook-table td { padding: 8px 12px; border-top: 1px solid var(--executive-line); }
+.executive-outlook-table td small { display: block; color: var(--muted-foreground); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.executive-outlook-table .is-in { color: #129a68; }
+.executive-outlook-table .is-negative, .executive-outlook-table .is-overdue { color: #df5e61; font-weight: 700; }
+@media (max-width: 900px) { .executive-outlook-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .executive-outlook-kpis { grid-template-columns: minmax(0, 1fr); } .executive-outlook-status, .executive-outlook-table { margin-inline: 14px; } .executive-outlook-kpis, .executive-outlook-mix { padding-inline: 14px; } }
