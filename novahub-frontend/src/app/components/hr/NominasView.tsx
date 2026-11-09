@@ -19,6 +19,8 @@ import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper 
 import { buildDatedDownloadFileName, buildHumanPdfFileName } from '../../utils/exportFileNames';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
+import { HistoricalPayrollDialog } from './HistoricalPayrollDialog';
+import { History } from 'lucide-react';
 import { formatDateEs } from '../../utils/dateFormat';
 import { HRViewTutorial } from './HRViewTutorial';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
@@ -97,6 +99,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const [includeCommissions, setIncludeCommissions] = useState(true);
   const [processFrequency, setProcessFrequency] = useState<PayrollFrequency>('ALL');
   const [processDialogOpen, setProcessDialogOpen] = useState(false);
+  const [historicalOpen, setHistoricalOpen] = useState(false);
   const [processLoading, setProcessLoading] = useState(false);
   const employeeOptions = [
     { label: 'Todos los empleados', value: 'all' },
@@ -575,6 +578,12 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             </label>
           </div>
           {canPerform('HR_PAYROLL', 'process') && (
+            <Button size="sm" variant="outline" onClick={() => setHistoricalOpen(true)} data-testid="payroll-historical-open">
+              <History className="size-4 mr-2" />
+              Cargar nóminas pagadas
+            </Button>
+          )}
+          {canPerform('HR_PAYROLL', 'process') && (
             <Button size="sm" onClick={handleOpenProcessPayroll} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="nominas-process">
               <Calculator className="size-4 mr-2" />
               Procesar Nómina
@@ -650,8 +659,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                         effectiveStatus === 'PENDING' || effectiveStatus === 'REQUESTED' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
                         'bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground'
                       }`}>
-                        {effectiveStatus === 'PAID' ? 'Pagado' : effectiveStatus === 'PARTIAL' ? 'Pago parcial' : effectiveStatus === 'APPROVED' ? 'Aprobada' : isOverdue(payroll) ? 'Vencida' : effectiveStatus === 'REQUESTED' ? 'Solicitada' : effectiveStatus === 'PENDING' ? 'Pendiente' : pdfStatusLabel(effectiveStatus)}
+                        {effectiveStatus === 'PAID' ? 'Pagado' : effectiveStatus === 'PARTIAL' ? 'Pago parcial' : effectiveStatus === 'APPROVED' ? 'Aprobada' : isOverdue(payroll) ? 'Vencida' : effectiveStatus === 'REQUESTED' ? 'Solicitada' : effectiveStatus === 'PENDING' ? 'Vigente' : pdfStatusLabel(effectiveStatus)}
                       </span>
+                      {payroll.isHistorical && <p className="mt-1 text-[10px] text-muted-foreground">Histórica{payroll.paymentReference ? ` · ${payroll.paymentReference}` : ''}</p>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -900,6 +910,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <p className="text-muted-foreground">No se encontraron registros de nómina</p>
         </div>
       )}
+
+      {historicalOpen && <HistoricalPayrollDialog employees={employees} onClose={() => setHistoricalOpen(false)} onDone={onRefresh} />}
 
       <Dialog open={processDialogOpen} onOpenChange={(open) => { if (!open && !processLoading) setProcessDialogOpen(false); }}>
         <DialogContent className="sm:max-w-[520px]">

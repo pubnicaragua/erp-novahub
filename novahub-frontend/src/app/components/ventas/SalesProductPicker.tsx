@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { inventoryService } from '../../services/inventario.service';
+import { toast } from '../../services/toast';
 import { ArrowLeft, BriefcaseBusiness, Check, ChevronLeft, ChevronRight, Grid2X2, List, MapPin, Package, Search, Warehouse } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -43,7 +46,8 @@ const PICKER_PAGE_SIZE = 200;
 type SalesProductPickerProps = {
   products: SalesCatalogItem[];
   value?: string | null;
-  onChange: (productId: string, variant?: SalesCatalogVariant) => void;
+  /** El tercer dato llega solo cuando el servicio se acaba de crear desde el selector (aún no está en el catálogo cargado). */
+  onChange: (productId: string, variant?: SalesCatalogVariant, createdItem?: SalesCatalogItem) => void;
   warehouseId?: string | null;
   variantId?: string | null;
   itemType: 'PRODUCT' | 'SERVICE';
@@ -127,6 +131,12 @@ export function SalesProductPicker({
   className,
 }: SalesProductPickerProps) {
   const { canPerform } = useAuth();
+  const queryClient = useQueryClient();
+  const canCreateService = canPerform('INVENTORY_SERVICES', 'create') || canPerform('SALES_INVOICES', 'create') || canPerform('SALES_QUOTES', 'create') || canPerform('SALES_ORDERS', 'create');
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickName, setQuickName] = useState('');
+  const [quickPrice, setQuickPrice] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
   const canViewOtherLocations = canPerform(otherLocationsPermissionModule, 'viewOtherLocations');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -231,6 +241,21 @@ export function SalesProductPicker({
     if (!allowOutOfStockSelection && availability === 0) return;
     onChange(product.id, onlyVariant);
     closeAndReset(false);
+  };
+  const createQuickService = async () => {
+    setQuickBusy(true);
+    try {
+      const created: any = await inventoryService.createQuickService({ name: quickName.trim(), salePrice: Number(quickPrice) });
+      const item = (created?.data?.data ?? created?.data ?? created) as SalesCatalogItem;
+      void queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
+      toast.success('Servicio creado y agregado a la factura');
+      onChange(item.id, undefined, item);
+      closeAndReset(false);
+    } catch (error) {
+      const failure = error as { response?: { data?: { message?: unknown } }; message?: string };
+      const message = failure?.response?.data?.message || failure?.message || 'No se pudo crear el servicio';
+      toast.error(String(Array.isArray(message) ? message[0] : message));
+    } finally { setQuickBusy(false); }
   };
   const chooseVariant = (variant: SalesCatalogVariant) => {
     if (!variantProductSelection) return;
@@ -385,6 +410,25 @@ export function SalesProductPicker({
                 : `Busca por código, nombre, marca o SKU de variante y revisa la disponibilidad en ${warehouseName(warehouseId) || 'la bodega seleccionada'}.`}
             </DialogDescription>
           </DialogHeader>
+
+          {!variantProductSelection && itemType === 'SERVICE' && canCreateService && (
+            <div className="min-w-0 rounded-xl border border-dashed border-border bg-muted/20 p-3" data-testid="quick-service">
+              {!quickOpen ? (
+                <button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setQuickName(search.trim()); setQuickOpen(true); }}>
+                  ¿No está el servicio? Crearlo aquí, sin ir a Inventario
+                </button>
+              ) : (
+                <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_auto]">
+                  <Input aria-label="Nombre del servicio" autoFocus value={quickName} maxLength={160} onChange={(event) => setQuickName(event.target.value)} placeholder="Nombre del servicio" />
+                  <Input aria-label="Precio del servicio" type="number" min="0" step="0.01" value={quickPrice} onChange={(event) => setQuickPrice(event.target.value)} placeholder="Precio" />
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" disabled={quickBusy || !quickName.trim() || quickPrice === '' || !(Number(quickPrice) >= 0)} onClick={() => void createQuickService()}>{quickBusy ? 'Creando…' : 'Crear y usar'}</Button>
+                    <Button type="button" size="sm" variant="outline" disabled={quickBusy} onClick={() => setQuickOpen(false)}>Cancelar</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {!variantProductSelection && <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)]">
             <div className="relative min-w-0">

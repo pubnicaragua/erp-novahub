@@ -153,6 +153,7 @@ export const inventoryService = {
     const product = await api.get<Product>(`/inventory/products/${id}`, { signal });
     return resolveStorageReferences(product);
   },
+  createQuickService: (data: { name: string; salePrice: number; commercialNote?: string }) => api.post<Product>('/inventory/services/quick', data),
   createProduct: (data: Partial<Product> & {
     initialStock?: number;
     allowSimilarProductCreate?: boolean;

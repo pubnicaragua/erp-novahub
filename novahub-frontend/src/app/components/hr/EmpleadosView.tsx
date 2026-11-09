@@ -253,6 +253,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       probationEndDate: form.probationEndDate || null,
       notes: form.notes?.trim() || null,
       payFrequency: form.payFrequency || 'MONTHLY',
+      paysSocialSecurity: form.paysSocialSecurity ?? null,
+      paysProvisions: form.paysProvisions ?? null,
   });
 
   /** Abre el formulario con el expediente completo: la lista trae solo unas columnas y editarla tal cual borraría el resto. */
@@ -298,6 +300,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       probationEndDate: toDateInputValue(emp.probationEndDate),
       notes: emp.notes || '',
       payFrequency: emp.payFrequency || 'MONTHLY',
+      paysSocialSecurity: emp.paysSocialSecurity ?? null,
+      paysProvisions: emp.paysProvisions ?? null,
     };
     setNewEmployeeForm(loaded);
     editBaselineRef.current = toEmployeePayload(loaded);
@@ -797,7 +801,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       contractType: 'FULL_TIME', salary: '', currency: 'NIO', employmentStatus: 'ACTIVE',
       address: '', city: '', state: '', postalCode: '', country: 'Nicaragua',
       emergencyContact: '', emergencyPhone: '', emergencyRelation: '', emergencyContact2Name: '', emergencyContact2Relation: '', emergencyContact2Phone: '', socialSecurityNumber: '',
-      probationEndDate: '', notes: '', payFrequency: 'MONTHLY',
+      probationEndDate: '', notes: '', payFrequency: 'MONTHLY', paysSocialSecurity: null, paysProvisions: null,
     };
   };
 
@@ -1357,7 +1361,9 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                 <div className="space-y-2"><Label>Tipo de contrato</Label><Select value={newEmployeeForm.contractType || 'FULL_TIME'} onValueChange={(value) => updateNewEmployeeForm('contractType', value)}><SelectTrigger data-testid="hr-employee-contract"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="FULL_TIME">Tiempo completo</SelectItem><SelectItem value="PART_TIME">Medio tiempo</SelectItem><SelectItem value="CONTRACTOR">Contratista</SelectItem><SelectItem value="INTERN">Pasante</SelectItem><SelectItem value="TEMPORARY">Temporal</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2"><Label>Salario *</Label><Input data-testid="hr-employee-salary" type="number" min="0" value={newEmployeeForm.salary ?? ''} onChange={(event) => updateNewEmployeeForm('salary', event.target.value === '' ? '' : Number(event.target.value))} placeholder="0.00" /></div>
                 <div className="space-y-2"><Label>Moneda</Label><Select value={newEmployeeForm.currency || 'NIO'} onValueChange={(value) => updateNewEmployeeForm('currency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO - Córdoba</SelectItem><SelectItem value="USD">USD - Dólar</SelectItem></SelectContent></Select></div>
-                <div className="space-y-2"><Label>Frecuencia de pago</Label><Select value={newEmployeeForm.payFrequency || 'MONTHLY'} onValueChange={(value) => updateNewEmployeeForm('payFrequency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label>Frecuencia de pago</Label><Select value={newEmployeeForm.payFrequency || 'MONTHLY'} onValueChange={(value) => updateNewEmployeeForm('payFrequency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select>{(() => { const monthly = Number(newEmployeeForm.salary); if (!(monthly > 0)) return null; const freq = newEmployeeForm.payFrequency || "MONTHLY"; const each = freq === "BIWEEKLY" ? monthly / 2 : freq === "WEEKLY" ? (monthly * 12) / 52 : monthly; const label = freq === "BIWEEKLY" ? "cada quincena" : freq === "WEEKLY" ? "cada semana" : "cada mes"; return <p className="text-[11px] text-muted-foreground">El salario es mensual ({new Intl.NumberFormat("es-NI", { maximumFractionDigits: 2 }).format(monthly)}); se paga {label}: {new Intl.NumberFormat("es-NI", { maximumFractionDigits: 2 }).format(each)} por pago, más los bonos que le toquen.</p>; })()}</div>
+                <div className="space-y-2"><Label>Aportes INSS e INATEC</Label><Select value={newEmployeeForm.paysSocialSecurity === false ? "no" : "default"} onValueChange={(value) => updateNewEmployeeForm('paysSocialSecurity', value === "no" ? false : null)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="default">Sí, como indica la empresa</SelectItem><SelectItem value="no">No se le calculan</SelectItem></SelectContent></Select><p className="text-[11px] text-muted-foreground">Si eliges «No», no se le deduce INSS laboral ni se acumula INSS patronal e INATEC (ni en la contabilidad).</p></div>
+                <div className="space-y-2"><Label>Provisiones</Label><Select value={newEmployeeForm.paysProvisions === false ? "no" : "default"} onValueChange={(value) => updateNewEmployeeForm('paysProvisions', value === "no" ? false : null)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="default">Sí, como indica la empresa</SelectItem><SelectItem value="no">No se le calculan</SelectItem></SelectContent></Select><p className="text-[11px] text-muted-foreground">Si eliges «No», no se le provisionan treceavo mes, vacaciones ni indemnización.</p></div>
                 <div className="space-y-2"><Label>Estado</Label><Select value={newEmployeeForm.employmentStatus || 'ACTIVE'} onValueChange={(value) => updateNewEmployeeForm('employmentStatus', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem><SelectItem value="ON_LEAVE">En ausencia</SelectItem><SelectItem value="TERMINATED">Terminado</SelectItem></SelectContent></Select></div>
               </div>
             </section>

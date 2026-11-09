@@ -2080,9 +2080,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           className="h-8 rounded-md border border-input bg-background px-2"
                           open={salesProductPickerItemId === String(item.id || idx)}
                           onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || idx) : null)}
-                          onChange={(val, pickedVariant) => {
+                          onChange={(val, pickedVariant, createdItem) => {
                         const newItems = [...(localDoc.items || [])];
-                        const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => String(p.id) === String(val));
+                        const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => String(p.id) === String(val)) ?? createdItem;
                         const selectedItemType = selectedProd ? getCatalogItemType(selectedProd) : resolveItemType(item);
                         const selectedVariant = selectedItemType === 'SERVICE' ? null : pickedVariant || getSingleSalesVariant(selectedProd);
                         const effectivePriceListId = newItems[idx].priceListId || localDoc.priceListId || getCustomerPriceListId(localDoc.customerId);

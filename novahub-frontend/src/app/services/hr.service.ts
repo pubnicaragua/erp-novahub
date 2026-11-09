@@ -58,6 +58,8 @@ export const hrService = {
   updatePayroll: (id: string, data: any) => api.patch(`/hr/payroll/${id}`, data),
   recalculatePayroll: (id: string) => api.post(`/hr/payroll/${id}/recalculate`, {}),
   bulkProcessPayroll: (data: any) => api.post('/hr/payroll/bulk-process', data),
+  registerHistoricalPayrolls: (data: { from: string; to: string; employeeIds?: string[]; paymentReference?: string; paymentDate?: string; periodSalary?: number }) => api.post('/hr/payroll/historical', data),
+  updateHistoricalPayrollPayment: (id: string, data: { paymentReference?: string; paymentDate?: string }) => api.patch(`/hr/payroll/${id}/historical-payment`, data),
   calculatePayroll: (data: any) => api.post('/hr/payroll/calculate', data),
   getPayrollPeriods: (signal?: AbortSignal) => api.get('/hr/payroll/periods', withSignal(undefined, signal)),
   getPayrollReports: (period?: string, signal?: AbortSignal) => api.get('/hr/payroll/reports', withSignal({ period }, signal)),
@@ -157,3 +159,12 @@ export const hrService = {
   createKpiResult: (data: any) => api.post('/hr/kpi-results', data),
   getKpiResults: (employeeId?: string, kpiDefinitionId?: string, signal?: AbortSignal, filters: Record<string, any> = {}) => api.get('/hr/kpi-results', withSignal({ ...filters, employeeId, kpiDefinitionId }, signal)),
 };
+
+export interface CashOutlookEvent { date: string; kind: 'PAYROLL' | 'PAYROLL_PROJECTED' | 'RECURRING' | 'SUPPLIER' | 'RECEIVABLE'; direction: 'IN' | 'OUT'; label: string; amount: number; overdue?: boolean; balanceAfter: number }
+export interface CashOutlook {
+  currency: string; windowDays: number; today: string; until: string; status: 'COVERED' | 'TIGHT' | 'SHORT';
+  cash: number; runRate: number; collectedLast30Days: number; outflow: number; inflowDue: number; minBalance: number; gap: number;
+  shortfall: { date: string; amount: number } | null; receivablesOverdue: number; overdueOutflow: number;
+  breakdown: { payroll: number; recurring: number; suppliers: number }; nextPayroll: { date: string; amount: number } | null; timeline: CashOutlookEvent[];
+}
+export const getCashOutlook = (days: number, signal?: AbortSignal) => api.get<CashOutlook>('/hr/cash-outlook', { params: { days }, signal });

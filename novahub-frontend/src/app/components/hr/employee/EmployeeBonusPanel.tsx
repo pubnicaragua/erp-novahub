@@ -18,6 +18,7 @@ const failure = (error: unknown) => (error as any)?.response?.data?.message?.toS
 function describe(plan: BonusPlan) {
   if (plan.frequency === 'WEEKLY') return `Todos los ${WEEKDAY_LABEL[plan.weekday ?? 6]}`;
   if (plan.frequency === 'BIWEEKLY') return `Cada dos ${WEEKDAY_LABEL[plan.weekday ?? 6]}`;
+  if (plan.frequency === 'MONTHLY_SPREAD') return 'Mensual, repartido en cada pago (quincenal: la mitad en cada quincena)';
   if (plan.frequency === 'MONTHLY') return plan.dayOfMonth ? `El día ${plan.dayOfMonth} de cada mes` : 'Al final de cada mes';
   return `El ${new Date(plan.startDate).toLocaleDateString('es-NI', { dateStyle: 'medium', timeZone: 'UTC' })}`;
 }

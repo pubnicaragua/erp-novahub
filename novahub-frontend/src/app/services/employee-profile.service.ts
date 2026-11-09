@@ -24,7 +24,7 @@ export interface EmployeePayment {
   id: string; kind: PaymentKind; amount: number; currency: string; paidAt: string; reference: string | null; bankName: string | null; accountLast4: string | null; notes: string | null; executedById: string | null;
 }
 export interface PaymentHistory { total: number; page: number; pageSize: number; totals: Array<{ currency: string; amount: number }>; items: EmployeePayment[] }
-export type BonusFrequency = 'ONCE' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+export type BonusFrequency = 'ONCE' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'MONTHLY_SPREAD';
 export interface BonusPlan {
   id: string; name: string; bonusType: string; amount: number; currency: string; frequency: BonusFrequency; weekday: number | null; dayOfMonth: number | null;
   startDate: string; endDate: string | null; isActive: boolean; notes: string | null; minScore: number | null;
@@ -85,7 +85,7 @@ export const employeeProfileService = {
 export const LEAVE_TYPE_LABEL: Record<string, string> = { VACATION: 'Vacaciones', SICK: 'Enfermedad', PERSONAL: 'Permiso personal', MATERNITY: 'Maternidad', PATERNITY: 'Paternidad', UNPAID: 'Sin goce de salario', BEREAVEMENT: 'Duelo', OTHER: 'Otro' };
 export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = { PAYROLL: 'Nómina', BONUS: 'Bono', COMMISSION: 'Comisión', AGUINALDO: 'Aguinaldo', SETTLEMENT: 'Liquidación', OTHER: 'Otro' };
 export const BONUS_TYPE_LABEL: Record<string, string> = { ATTENDANCE: 'Asistencia', PUNCTUALITY: 'Puntualidad', PRODUCTIVITY: 'Producción', PERFORMANCE: 'Desempeño', TRANSPORT: 'Transporte', FOOD: 'Alimentación', SEASONAL: 'Temporada', OTHER: 'Otro' };
-export const BONUS_FREQUENCY_LABEL: Record<BonusFrequency, string> = { ONCE: 'Una sola vez', WEEKLY: 'Cada semana', BIWEEKLY: 'Cada dos semanas', MONTHLY: 'Cada mes' };
+export const BONUS_FREQUENCY_LABEL: Record<BonusFrequency, string> = { ONCE: 'Una sola vez', WEEKLY: 'Cada semana', BIWEEKLY: 'Cada dos semanas', MONTHLY: 'Cada mes', MONTHLY_SPREAD: 'Cada mes, repartido en cada pago' };
 export const WEEKDAY_LABEL = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
 export const ACCOUNT_TYPE_LABEL: Record<string, string> = { SAVINGS: 'Ahorro', CHECKING: 'Corriente', WALLET: 'Billetera móvil', OTHER: 'Otra' };
 export const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = { DRAFT: 'Borrador', SENT: 'Enviado a firmar', SIGNED: 'Firmado', EXPIRED: 'Enlace vencido', CANCELLED: 'Cancelado' };

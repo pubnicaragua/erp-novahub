@@ -56,6 +56,7 @@ import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 import { ExportMenu } from './ui/ExportMenu';
 import { DashboardGoals } from './dashboard/DashboardGoals';
+import { CashOutlookCard } from './dashboard/CashOutlookCard';
 import { capturePdfChartSnapshot, yieldToBrowser } from '../utils/pdf-template-renderer';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { getBase64Image } from '../utils/reportExportUtils';
@@ -637,6 +638,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         </div>
 
       </>}
+
+      <CashOutlookCard />
 
       <DashboardGoals onOpen={() => navigate('organizacion', { subModule: 'mi-dia' })} />
 
