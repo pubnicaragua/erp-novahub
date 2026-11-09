@@ -138,9 +138,14 @@ const ALIASES: Record<string, string> = {
   REDONDEAR: 'ROUND', ABS: 'ABS', RAIZ: 'SQRT', POTENCIA: 'POWER', RESIDUO: 'MOD', ENTERO: 'INT', LARGO: 'LEN', MAYUSC: 'UPPER', MINUSC: 'LOWER',
   CONCATENAR: 'CONCAT', CONCATENATE: 'CONCAT', HOY: 'TODAY', 'SUMAR.SI': 'SUMIF', 'CONTAR.SI': 'COUNTIF', PRODUCTO: 'PRODUCT', MEDIANA: 'MEDIAN',
   AHORA: 'NOW', 'REDONDEAR.MAS': 'ROUNDUP', 'REDONDEAR.MENOS': 'ROUNDDOWN', TEXTO: 'TEXT', IZQUIERDA: 'LEFT', DERECHA: 'RIGHT', ESBLANCO: 'ISBLANK',
+  BUSCARV: 'VLOOKUP', BUSCARH: 'HLOOKUP', INDICE: 'INDEX', COINCIDIR: 'MATCH', 'SUMAR.SI.CONJUNTO': 'SUMIFS', 'CONTAR.SI.CONJUNTO': 'COUNTIFS',
+  'PROMEDIO.SI': 'AVERAGEIF', 'AÑO': 'YEAR', MES: 'MONTH', DIA: 'DAY', DIAS: 'DAYS', FECHA: 'DATE', EXTRAE: 'MID', ESPACIOS: 'TRIM', SUSTITUIR: 'SUBSTITUTE',
+  VALOR: 'VALUE', 'K.ESIMO.MAYOR': 'LARGE', 'K.ESIMO.MENOR': 'SMALL', 'CONTAR.BLANCO': 'COUNTBLANK', ESNUMERO: 'ISNUMBER', ESTEXTO: 'ISTEXT',
+  'UNIR.CADENAS': 'TEXTJOIN', TRUNCAR: 'TRUNC', SUMAPRODUCTO: 'SUMPRODUCT', PAGO: 'PMT', 'SI.ND': 'IFNA', ENCONTRAR: 'FIND', NOMPROPIO: 'PROPER',
+  SIGNO: 'SIGN', 'MES.FIN': 'EOMONTH', 'DIAS.LAB': 'NETWORKDAYS', 'O.EXCLUSIVO': 'XOR', REPETIR: 'REPT',
 };
 
-interface Range { values: Evaluated[] }
+interface Range { values: Evaluated[]; cols: number }
 const isRange = (v: unknown): v is Range => typeof v === 'object' && v !== null && 'values' in (v as object);
 
 export interface EvalContext {
@@ -197,7 +202,7 @@ export class Evaluator {
     const c0 = Math.min(a.col, b.col); const c1 = Math.max(a.col, b.col); const r0 = Math.min(a.row, b.row); const r1 = Math.max(a.row, b.row);
     if ((c1 - c0 + 1) * (r1 - r0 + 1) > 200_000) throw new FormulaError('#VALUE!');
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) values.push(this.value(target, c, r));
-    return { values };
+    return { values, cols: c1 - c0 + 1 };
   }
 
   private eval(node: Node, sheet: string): Evaluated | Range {
@@ -299,16 +304,156 @@ export class Evaluator {
         });
         return name === 'COUNTIF' ? count : total;
       }
+      default: return this.callMore(name, args, sheet);
+    }
+  }
+
+  private table(node: Node, sheet: string): { cells: Evaluated[]; cols: number; rows: number } {
+    const v = this.eval(node, sheet);
+    if (!isRange(v)) return { cells: [v], cols: 1, rows: 1 };
+    return { cells: v.values, cols: v.cols, rows: Math.ceil(v.values.length / Math.max(1, v.cols)) };
+  }
+
+  private pairs(args: Node[], sheet: string, from: number): Array<{ cells: Evaluated[]; criteria: CellValue }> {
+    const out: Array<{ cells: Evaluated[]; criteria: CellValue }> = [];
+    for (let i = from; i + 1 < args.length; i += 2) out.push({ cells: this.table(args[i], sheet).cells, criteria: this.scalar(args[i + 1], sheet) });
+    return out;
+  }
+
+  private callMore(name: string, args: Node[], sheet: string): Evaluated | Range {
+    const need = (min: number, max = min) => { if (args.length < min || args.length > max) throw new FormulaError('#ERROR!'); };
+    const s = (i: number) => this.scalar(args[i], sheet);
+    const values = (i: number): Evaluated[] => this.table(args[i], sheet).cells;
+    switch (name) {
+      case 'VLOOKUP': case 'HLOOKUP': {
+        need(3, 4);
+        const key = s(0); const t = this.table(args[1], sheet); const idx = Math.trunc(num(s(2)));
+        const exact = args[3] ? !truthy(s(3)) : false;
+        const horizontal = name === 'HLOOKUP';
+        const lines = horizontal ? t.cols : t.rows; const width = horizontal ? t.rows : t.cols;
+        if (idx < 1 || idx > width) throw new FormulaError('#REF!');
+        const at = (line: number, k: number) => (horizontal ? t.cells[k * t.cols + line] : t.cells[line * t.cols + k]);
+        let found = -1;
+        for (let line = 0; line < lines; line++) {
+          const cell = at(line, 0);
+          if (cell instanceof FormulaError) continue;
+          if (exact) { if (cell !== null && key !== null && compare('=', cell, key)) { found = line; break; } } else if (cell !== null && key !== null && typeof cell === typeof key && compare('<=', cell, key)) found = line;
+        }
+        if (found < 0) throw new FormulaError('#N/A');
+        const out = at(found, idx - 1); if (out instanceof FormulaError) throw out;
+        return out ?? null;
+      }
+      case 'INDEX': {
+        need(2, 3);
+        const t = this.table(args[0], sheet); const a = Math.trunc(num(s(1)));
+        const oneRow = t.rows === 1 && !args[2];
+        const row = oneRow ? 1 : a; const col = oneRow ? a : (args[2] ? Math.trunc(num(s(2))) || 1 : 1);
+        if (row < 1 || row > t.rows || col < 1 || col > t.cols) throw new FormulaError('#REF!');
+        const out = t.cells[(row - 1) * t.cols + (col - 1)]; if (out instanceof FormulaError) throw out;
+        return out ?? null;
+      }
+      case 'MATCH': {
+        need(2, 3);
+        const key = s(0); const cells = values(1); const mode = args[2] ? num(s(2)) : 1;
+        let found = -1;
+        cells.forEach((cell, i) => {
+          if (cell instanceof FormulaError || cell === null || key === null) return;
+          if (mode === 0) { if (found < 0 && compare('=', cell, key)) found = i; } else if (typeof cell === typeof key && compare('<=', cell, key)) found = i;
+        });
+        if (found < 0) throw new FormulaError('#N/A');
+        return found + 1;
+      }
+      case 'SUMIFS': case 'COUNTIFS': {
+        const isSum = name === 'SUMIFS';
+        const sums = isSum ? values(0) : [];
+        const conds = this.pairs(args, sheet, isSum ? 1 : 0);
+        if (!conds.length) throw new FormulaError('#ERROR!');
+        const size = isSum ? sums.length : conds[0].cells.length;
+        let total = 0; let count = 0;
+        for (let i = 0; i < size; i++) {
+          if (!conds.every((c) => { const v = c.cells[i]; return v !== undefined && !(v instanceof FormulaError) && matches(v, c.criteria); })) continue;
+          count++; const add = sums[i]; if (typeof add === 'number') total += add;
+        }
+        return isSum ? total : count;
+      }
+      case 'AVERAGEIF': {
+        need(2, 3);
+        const crit = s(1); const test = values(0); const avg = args[2] ? values(2) : test;
+        let total = 0; let count = 0;
+        test.forEach((v, i) => { const x = avg[i]; if (!(v instanceof FormulaError) && matches(v, crit) && typeof x === 'number') { total += x; count++; } });
+        if (!count) throw new FormulaError('#DIV/0!');
+        return total / count;
+      }
+      case 'SUMPRODUCT': {
+        const lists = args.map((_, i) => values(i));
+        const n = lists[0]?.length ?? 0;
+        if (!lists.length || lists.some((l) => l.length !== n)) throw new FormulaError('#VALUE!');
+        let total = 0;
+        for (let i = 0; i < n; i++) total += lists.reduce((acc, l) => { const x = l[i]; return acc * (typeof x === 'number' ? x : 0); }, 1);
+        return total;
+      }
+      case 'LARGE': case 'SMALL': {
+        need(2); const k = Math.trunc(num(s(1)));
+        const v = values(0).filter((x): x is number => typeof x === 'number').sort((a, b) => (name === 'LARGE' ? b - a : a - b));
+        if (k < 1 || k > v.length) throw new FormulaError('#NUM!');
+        return v[k - 1];
+      }
+      case 'COUNTBLANK': return values(0).filter((v) => v === null || v === '').length;
+      case 'ISNUMBER': need(1); return typeof s(0) === 'number';
+      case 'ISTEXT': { need(1); const v = s(0); return typeof v === 'string' && v !== ''; }
+      case 'IFNA': { need(2); try { const v = this.eval(args[0], sheet); const one = isRange(v) ? v.values[0] : v; if (one instanceof FormulaError) throw one; return v; } catch { return this.eval(args[1], sheet); } }
+      case 'XOR': return args.filter((_, i) => truthy(s(i))).length % 2 === 1;
+      case 'PI': return Math.PI;
+      case 'SIGN': need(1); return Math.sign(num(s(0)));
+      case 'TRUNC': { need(1, 2); const f = 10 ** Math.trunc(args[1] ? num(s(1)) : 0); return Math.trunc(num(s(0)) * f) / f; }
+      case 'MID': { need(3); const start = Math.trunc(num(s(1))); const len = Math.trunc(num(s(2))); if (start < 1 || len < 0) throw new FormulaError('#VALUE!'); return text(s(0)).slice(start - 1, start - 1 + len); }
+      case 'TRIM': need(1); return text(s(0)).trim().replace(/\s+/g, ' ');
+      case 'PROPER': need(1); return text(s(0)).toLowerCase().replace(/(^|[^\p{L}])(\p{L})/gu, (_a, p: string, c: string) => p + c.toUpperCase());
+      case 'REPT': { need(2); const n = Math.trunc(num(s(1))); if (n < 0 || n > 1000) throw new FormulaError('#VALUE!'); return text(s(0)).repeat(n); }
+      case 'FIND': { need(2, 3); const at = text(s(1)).indexOf(text(s(0)), args[2] ? Math.trunc(num(s(2))) - 1 : 0); if (at < 0) throw new FormulaError('#VALUE!'); return at + 1; }
+      case 'SUBSTITUTE': { need(3); const from = text(s(1)); return from === '' ? text(s(0)) : text(s(0)).split(from).join(text(s(2))); }
+      case 'VALUE': { need(1); const v = s(0); if (typeof v === 'number') return v; const t = text(v).trim(); const n = Number(t.replace(/%$/, '')); if (Number.isNaN(n)) throw new FormulaError('#VALUE!'); return t.endsWith('%') ? n / 100 : n; }
+      case 'TEXTJOIN': {
+        need(3, 255); const sep = text(s(0)); const skip = truthy(s(1)); const parts: string[] = [];
+        for (let i = 2; i < args.length; i++) for (const v of values(i)) { if (v instanceof FormulaError) throw v; if (skip && (v === null || v === '')) continue; parts.push(text(v)); }
+        return parts.join(sep);
+      }
+      case 'YEAR': case 'MONTH': case 'DAY': {
+        need(1); const d = serialToUtc(num(s(0)));
+        return name === 'YEAR' ? d.getUTCFullYear() : name === 'MONTH' ? d.getUTCMonth() + 1 : d.getUTCDate();
+      }
+      case 'DATE': { need(3); return Date.UTC(Math.trunc(num(s(0))), Math.trunc(num(s(1))) - 1, Math.trunc(num(s(2)))) / 86_400_000 + 25_569; }
+      case 'DAYS': need(2); return Math.trunc(num(s(0))) - Math.trunc(num(s(1)));
+      case 'EOMONTH': { need(2); const d = serialToUtc(num(s(0))); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + Math.trunc(num(s(1))) + 1, 0) / 86_400_000 + 25_569; }
+      case 'NETWORKDAYS': {
+        need(2); let a = Math.trunc(num(s(0))); const b = Math.trunc(num(s(1))); const step = a <= b ? 1 : -1; let n = 0;
+        if (Math.abs(b - a) > 36_600) throw new FormulaError('#NUM!');
+        for (;;) { const wd = serialToUtc(a).getUTCDay(); if (wd !== 0 && wd !== 6) n++; if (a === b) break; a += step; }
+        return step === 1 ? n : -n;
+      }
+      case 'PMT': {
+        need(3, 5); const rate = num(s(0)); const n = num(s(1)); const pv = num(s(2)); const fv = args[3] ? num(s(3)) : 0; const type = args[4] ? num(s(4)) : 0;
+        if (n === 0) throw new FormulaError('#NUM!');
+        if (rate === 0) return -(pv + fv) / n;
+        const f = (1 + rate) ** n;
+        return -(rate * (pv * f + fv)) / ((1 + rate * type) * (f - 1));
+      }
       default: throw new FormulaError('#NAME?');
     }
   }
 }
+
+const serialToUtc = (serial: number) => new Date(Math.round((serial - 25_569) * 86_400_000));
 
 function literal(raw: string): Evaluated {
   if (raw === '') return null;
   const t = raw.trim();
   if (/^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return Number(t);
   if (/^-?(\d+\.?\d*|\.\d+)%$/.test(t)) return Number(t.slice(0, -1)) / 100;
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
+  if (iso) return Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])) / 86_400_000 + 25_569;
+  const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  if (dmy) return Date.UTC(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1])) / 86_400_000 + 25_569;
   if (t.toUpperCase() === 'TRUE' || t.toUpperCase() === 'VERDADERO') return true;
   if (t.toUpperCase() === 'FALSE' || t.toUpperCase() === 'FALSO') return false;
   return raw;
@@ -344,7 +489,10 @@ function matches(value: Evaluated, criteria: CellValue): boolean {
 }
 
 // ───────────── Presentación ─────────────
-export type NumberFormat = 'general' | 'number' | 'currency' | 'percent' | 'date';
+export type NumberFormat = 'general' | 'integer' | 'number' | 'currency' | 'usd' | 'percent' | 'date';
+
+/** ¿El texto escrito es una fecha (para aplicar el formato de fecha automáticamente)? */
+export const looksLikeDate = (text: string) => /^(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}\/\d{4})$/.test(text.trim());
 
 export function formatValue(value: Evaluated, format: NumberFormat = 'general'): string {
   if (value instanceof FormulaError) return value.code;
@@ -353,6 +501,8 @@ export function formatValue(value: Evaluated, format: NumberFormat = 'general'):
   if (typeof value === 'string') return value;
   if (!Number.isFinite(value)) return '#NUM!';
   switch (format) {
+    case 'integer': return new Intl.NumberFormat('es-NI', { maximumFractionDigits: 0 }).format(value);
+    case 'usd': return new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' }).format(value);
     case 'number': return new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
     case 'currency': return new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO', currencyDisplay: 'narrowSymbol' }).format(value);
     case 'percent': return new Intl.NumberFormat('es-NI', { style: 'percent', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
@@ -381,5 +531,42 @@ export function toExcelFormula(src: string): string {
     if (!fn) return ',';
     const upper = fn.toUpperCase();
     return ALIASES[upper] ?? upper;
+  });
+}
+
+/**
+ * Ajusta las referencias de una fórmula cuando se insertan (count > 0) o borran (count < 0) filas o columnas.
+ * `target` es la hoja donde ocurre el cambio y `home` la hoja que contiene la fórmula
+ * (las referencias sin hoja apuntan a `home`).
+ */
+export function rewriteRefs(formula: string, home: string, target: string, axis: 'row' | 'col', at: number, count: number): string {
+  if (!formula.startsWith('=')) return formula;
+  const re = /("[^"]*")|('(?:[^']|'')+'!|[A-Za-z_][A-Za-z0-9_.]*!)?(\$?[A-Za-z]{1,3}\$?\d{1,6})(?::(\$?[A-Za-z]{1,3}\$?\d{1,6}))?(?![A-Za-z0-9_(])/g;
+  const move = (ref: string, isEnd: boolean, ranged: boolean): string => {
+    const m = /^(\$?)([A-Za-z]{1,3})(\$?)(\d{1,6})$/.exec(ref);
+    if (!m) return ref;
+    let col = lettersToCol(m[2]); let row = Number(m[4]) - 1;
+    const v = axis === 'row' ? row : col;
+    let nv = v;
+    if (count > 0) { if (v >= at) nv = v + count; } else {
+      const n = -count;
+      if (v >= at + n) nv = v - n;
+      else if (v >= at) { if (!ranged) return '#REF!'; nv = isEnd ? at - 1 : at; }
+    }
+    if (nv < 0) return '#REF!';
+    if (axis === 'row') row = nv; else col = nv;
+    return m[1] + colToLetters(col) + m[3] + String(row + 1);
+  };
+  return formula.replace(re, (all: string, str: string | undefined, sheet: string | undefined, a: string, b: string | undefined) => {
+    if (str) return str;
+    const name = sheet ? sheet.slice(0, -1).replace(/^'|'$/g, '').replace(/''/g, "'") : home;
+    if (name !== target) return all;
+    const first = move(a, false, Boolean(b)); const second = b ? move(b, true, true) : undefined;
+    if (first === '#REF!' || second === '#REF!') return '#REF!';
+    if (second !== undefined) {
+      const pa = parseCellKey(first); const pb = parseCellKey(second);
+      if (pa && pb && (pb.row < pa.row || pb.col < pa.col)) return '#REF!';
+    }
+    return (sheet ?? '') + first + (second ? ':' + second : '');
   });
 }

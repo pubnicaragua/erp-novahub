@@ -17,6 +17,7 @@ import { EmptyState, ErrorState, Field, NativeSelect, PageTitle, controlClass } 
 import { errorMessage } from '../organizacion.utils';
 import { DocumentWorkspace } from './DocumentWorkspace';
 import { AUDIENCE_LABEL, PERMISSION_LABEL } from './labels';
+import { NewDocumentDialog } from './NewDocumentDialog';
 import { ShareDialog } from './ShareDialog';
 
 const when = (iso: string) => new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
@@ -59,12 +60,20 @@ export function DocumentosView({ initialOpenId, onOpenChange }: { initialOpenId?
   };
 
   /** Crea el documento con su archivo vacío ya generado, para que se pueda descargar desde el primer momento. */
-  const create = async (title: string, type: OrgDocKind) => {
+  const create = async (title: string, type: OrgDocKind, templateId = 'blank') => {
     await run(async () => {
-      let blob: Blob;
-      if (type === 'DOC') { const { editorJsonToDocx } = await import('./docx-convert'); blob = await editorJsonToDocx({ type: 'doc', content: [{ type: 'paragraph' }] }, title); }
-      else { const { emptyWorkbook, workbookToXlsx } = await import('./xlsx-convert'); blob = await workbookToXlsx(emptyWorkbook(), title); }
-      const created = await orgDocumentsService.create({ kind: type, title, contentBase64: await blobToBase64(blob) });
+      let blob: Blob; let searchText: string;
+      const templates = await import('./doc-templates');
+      if (type === 'DOC') {
+        const { editorJsonToDocx } = await import('./docx-convert');
+        const json = (templates.DOC_TEMPLATES.find((t) => t.id === templateId) ?? templates.DOC_TEMPLATES[0]).build();
+        blob = await editorJsonToDocx(json, title); searchText = templates.docText(json).slice(0, 20_000);
+      } else {
+        const { workbookToXlsx, workbookSearchText } = await import('./xlsx-convert');
+        const workbook = (templates.SHEET_TEMPLATES.find((t) => t.id === templateId) ?? templates.SHEET_TEMPLATES[0]).build();
+        blob = await workbookToXlsx(workbook, title); searchText = workbookSearchText(workbook);
+      }
+      const created = await orgDocumentsService.create({ kind: type, title, contentBase64: await blobToBase64(blob), ...(searchText ? { searchText } : {}) });
       setNaming(null); setOpenId(created.id);
     });
   };
@@ -152,7 +161,7 @@ export function DocumentosView({ initialOpenId, onOpenChange }: { initialOpenId?
           </ul>
         )}
 
-      {naming && <PromptDialog open onOpenChange={(open) => !open && setNaming(null)} title={naming === 'DOC' ? 'Nuevo documento' : 'Nueva hoja de cálculo'} description="Podrás cambiar el nombre y con quién lo compartes cuando quieras." label="Nombre" placeholder={naming === 'DOC' ? 'Plan comercial 2027' : 'Presupuesto mensual'} confirmLabel="Crear" loading={busy} onConfirm={(value) => create(value.trim().slice(0, 160), naming)} />}
+      {naming && <NewDocumentDialog kind={naming} busy={busy} onClose={() => setNaming(null)} onCreate={(name, templateId) => void create(name, naming, templateId)} />}
       {renaming && <PromptDialog open onOpenChange={(open) => !open && setRenaming(null)} title="Cambiar el nombre" label="Nombre" initialValue={renaming.title} confirmLabel="Guardar" loading={busy} onConfirm={(value) => run(async () => { await orgDocumentsService.update(renaming.id, { title: value.trim() }); setRenaming(null); }, 'Nombre actualizado')} />}
       {newFolder && <PromptDialog open onOpenChange={(open) => !open && setNewFolder(false)} title="Nueva carpeta" description="Sirve para ordenar los documentos; quién ve cada uno sigue dependiendo del documento." label="Nombre" placeholder="Contratos 2027" confirmLabel="Crear" loading={busy} onConfirm={(value) => run(async () => { const created = await orgDocumentsService.createFolder(value.trim()); setNewFolder(false); setFolder(created.id); }, 'Carpeta creada')} />}
       {renamingFolder && <PromptDialog open onOpenChange={(open) => !open && setRenamingFolder(null)} title="Renombrar la carpeta" label="Nombre" initialValue={renamingFolder.name} confirmLabel="Guardar" loading={busy} onConfirm={(value) => run(async () => { await orgDocumentsService.renameFolder(renamingFolder.id, value.trim()); setRenamingFolder(null); }, 'Carpeta renombrada')} />}
