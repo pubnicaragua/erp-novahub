@@ -68,6 +68,7 @@ import {
   TicketIcon,
   BriefcaseBusiness,
   Tags,
+  Target,
   ClipboardCheck,
   TrendingDown,
   ChefHat,
@@ -90,6 +91,8 @@ import { useAuth, type Module } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { BrandLogo } from './BrandLogo';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { useTenantQuery } from '../hooks/useTenantQuery';
+import { businessLeadsService } from '../services/business-leads.service';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from '../utils/sidebarPermissions';
 import { canAccessModuleView } from '../utils/moduleViewAccess';
 
@@ -172,6 +175,7 @@ const menuItems: MenuItem[] = [
     section: 'Operaciones',
     submenu: [
       { id: 'clientes', label: 'Clientes', icon: <UserCircle className="size-4" /> },
+      { id: 'leads', label: 'Leads y red', icon: <Target className="size-4" /> },
       { id: 'estimaciones', label: 'Cotizaciones', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'ordenes-venta', label: 'Órdenes de venta', icon: <ClipboardList className="size-4" />, hasAdd: true },
       { id: 'facturas', label: 'Facturas', icon: <FileText className="size-4" /> },
@@ -639,6 +643,9 @@ export const PLATFORM_SIDEBAR_MODULE_ORDER: Array<Module | 'overview'> = platfor
 export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview }: SidebarProps) {
   const { hasAccess, canPerform, user } = useAuth();
   const { themeConfig } = useTheme();
+  // «Leads y red» es una función por empresa: el acceso del sidebar la respeta.
+  const leadCapabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0, enabled: canPerform('SALES_QUOTES', 'view') });
+  const leadsEnabled = Boolean(leadCapabilities.data?.enabled);
   const workspaceName = user?.isPlatformAdmin
     ? 'NovaHub Platform'
     : (user?.sessionBranding?.name || user?.clientTenant?.name || themeConfig.tenantName || 'ERP Platform');
@@ -864,7 +871,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       : SUPPORT_CUSTOMER_SUBMODULE_IDS.has(subId);
   };
 
-  const canShowSubmenuItem = (parentId: Module | 'overview', subItem: SubMenuItem) => (
+  const canShowSubmenuItem = (parentId: Module | 'overview', subItem: SubMenuItem) => (parentId === 'ventas' && subItem.id === 'leads' ? leadsEnabled : true) && (
     !subItem.hidden
     && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subItem.id)
     && isSubmenuVisibleForCurrentRole(parentId, subItem.id)

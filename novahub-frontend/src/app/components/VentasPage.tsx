@@ -4,7 +4,7 @@ import { cn } from './ui/utils';
 import {
   Users, FileSpreadsheet, ClipboardList, FileText,
   RotateCcw, CreditCard, FileOutput, FileMinus,
-  Calculator, Coins, Tags
+  Calculator, Coins, Tags, Target
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -37,7 +37,9 @@ import { inventoryService } from '../services/inventario.service';
 import { hrService } from '../services/hr.service';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS } from '../utils/sidebarPermissions';
 import { getLoggedInSellerEmployeeId } from '../utils/salesSeller';
-import { fetchAllReportPages } from '../hooks/useTenantQuery';
+import { fetchAllReportPages, useTenantQuery } from '../hooks/useTenantQuery';
+import { businessLeadsService } from '../services/business-leads.service';
+import { LeadsPanel } from './ventas/leads/LeadsPanel';
 
 // Sub-Views
 import { ClientesView } from './ventas/ClientesView';
@@ -55,6 +57,7 @@ import { PriceListsView } from './ventas/PriceListsView';
 
 const SALES_SECTIONS = [
   { id: 'clientes', label: 'Clientes', icon: Users, description: 'Directorio y datos comerciales', requiredModules: ['SALES_CLIENTS'] },
+  { id: 'leads', label: 'Leads y red', icon: Target, description: 'Prospectos, embudo y red de contactos', requiredModules: ['SALES_QUOTES'] },
   { id: 'estimaciones', label: 'Cotizaciones', icon: FileSpreadsheet, description: 'Cotizaciones comerciales', requiredModules: ['SALES_QUOTES'] },
   { id: 'ordenes-venta', label: 'Órdenes de Venta', icon: ClipboardList, description: 'Pedidos por procesar', requiredModules: ['SALES_ORDERS'] },
   { id: 'facturas', label: 'Facturas', icon: FileText, description: 'Control de cobros', requiredModules: ['SALES_INVOICES'] },
@@ -78,10 +81,13 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const { user, canPerform } = useAuth();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const canReadHr = canPerform('HR', 'view');
+  const leadCapabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0, enabled: canPerform('SALES_QUOTES', 'view') });
+  const leadsEnabled = Boolean(leadCapabilities.data?.enabled);
   const canViewSalesSection = useCallback((sectionId: string) => {
     const section = SALES_SECTIONS.find((candidate) => candidate.id === sectionId);
+    if (sectionId === 'leads' && !leadsEnabled) return false;
     return Boolean(section?.requiredModules.some((module) => canPerform(module, 'view')));
-  }, [canPerform]);
+  }, [canPerform, leadsEnabled]);
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
@@ -678,6 +684,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               {activeSection === 'notas-credito' && (
                 <NotasCreditoView data={filteredData.documentosCredito} summaryData={creditNotesSummaryQuery.data} summaryLoading={creditNotesSummaryQuery.isPending || creditNotesSummaryQuery.isFetching} summaryError={creditNotesSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} dateFrom={creditNotesDates.dateFrom} dateTo={creditNotesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('notas-credito', from, to)} salesAlert={salesAlert || undefined} />
               )}
+              {activeSection === 'leads' && <LeadsPanel />}
               {activeSection === 'listas-precios' && (
                 <PriceListsView products={data.productos} onRefresh={fetchData} isSidebarCollapsed={isSidebarCollapsed} />
               )}

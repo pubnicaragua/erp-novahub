@@ -10,7 +10,7 @@ export type ActivityKind = 'NOTE' | 'CALL' | 'VISIT' | 'WHATSAPP' | 'EMAIL' | 'M
 export type MoneyByCurrency = Record<string, number>;
 
 export interface LeadRow {
-  id: string; company: string; contactName: string | null; contactRole: string | null; phone: string | null; email: string | null; businessLine: string | null;
+  id: string; company: string; contactName: string | null; contactRole: string | null; phone: string | null; email: string | null; businessLine: string | null; country: string | null; website: string | null;
   source: LeadSource; stage: LeadStage; stageLabel: string; estimatedValue: number | null; currency: string; probability: number; weighted: number; expectedCloseDate: string | null;
   nextAction: string | null; nextActionAt: string | null; lostReason: string | null; ownerUserId: string | null; ownerName: string | null; createdById: string | null;
   introducedByContactId: string | null; introducedBy?: { id: string; name: string } | null; health: LeadHealth; lastActivityAt: string; createdAt: string; closedAt: string | null;
@@ -22,10 +22,11 @@ export interface LeadsSummary {
   byStage: Record<LeadStage, { count: number; value: MoneyByCurrency }>;
   followUps: { overdue: number; today: number; noAction: number; stale: number };
   businessLines: Array<{ name: string; count: number }>;
+  countries: Array<{ name: string; count: number; pipeline: MoneyByCurrency }>;
   team?: Array<{ userId: string; name: string; open: number; addedToday: number; added7d: number; overdue: number }>;
 }
 export interface LeadInput {
-  company?: string; contactName?: string | null; contactRole?: string | null; phone?: string | null; email?: string | null; businessLine?: string | null; source?: LeadSource;
+  company?: string; contactName?: string | null; contactRole?: string | null; phone?: string | null; email?: string | null; businessLine?: string | null; country?: string | null; website?: string | null; source?: LeadSource;
   estimatedValue?: number | null; currency?: string; probability?: number; expectedCloseDate?: string | null; nextAction?: string | null; nextActionAt?: string | null;
   strategy?: string | null; ownerUserId?: string | null; introducedByContactId?: string | null; stage?: LeadStage;
 }
@@ -45,7 +46,8 @@ export interface NetworkOverview {
 
 export const businessLeadsService = {
   getCapabilities: (signal?: AbortSignal) => api.get<{ enabled: boolean; canManageAll: boolean }>('/sales/leads/capabilities', { signal }),
-  list: (params: { stage?: string; health?: string; search?: string; owner?: string; businessLine?: string } = {}, signal?: AbortSignal) => api.get<{ summary: LeadsSummary; items: LeadRow[] }>('/sales/leads', { params, signal }),
+  list: (params: { stage?: string; health?: string; search?: string; owner?: string; businessLine?: string; country?: string } = {}, signal?: AbortSignal) => api.get<{ summary: LeadsSummary; items: LeadRow[] }>('/sales/leads', { params, signal }),
+  bulkCreate: (leads: LeadInput[]) => api.post<{ created: number; errors: Array<{ row: number; message: string }> }>('/sales/leads/bulk', { leads }),
   get: (id: string, signal?: AbortSignal) => api.get<LeadDetail>(`/sales/leads/${id}`, { signal }),
   create: (data: LeadInput) => api.post<LeadDetail>('/sales/leads', data),
   update: (id: string, data: LeadInput) => api.patch<LeadDetail>(`/sales/leads/${id}`, data),

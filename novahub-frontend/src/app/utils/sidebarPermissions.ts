@@ -263,6 +263,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'configuracion:proyectos': ['PROJECTS', 'CONFIG_COMPANY'],
   clientes: ['SALES_CLIENTS'],
   estimaciones: ['SALES_QUOTES'],
+  leads: ['SALES_QUOTES'],
   'ordenes-venta': ['SALES_ORDERS'],
   facturas: ['SALES_INVOICES'],
   'facturas-recurrentes': ['SALES_RECURRING'],

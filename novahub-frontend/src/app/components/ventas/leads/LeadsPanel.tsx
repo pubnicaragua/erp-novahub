@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarCheck, Network, Plus, Search, Target } from 'lucide-react';
+import { CalendarCheck, Network, Plus, Search, Table2, Target } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../ui/button';
 import { Card } from '../../ui/card';
@@ -11,10 +11,11 @@ import { useTenantQuery } from '../../../hooks/useTenantQuery';
 import { toast } from '../../../services/toast';
 import { HEALTH_LABEL, OPEN_STAGE_IDS, STAGES, businessLeadsService, formatMoney, formatMoneyMap, type LeadRow, type LeadStage } from '../../../services/business-leads.service';
 import { LeadDialog } from './LeadDialog';
+import { LeadsTable } from './LeadsTable';
 import { failure } from './leadUtils';
 import { NetworkView } from './NetworkView';
 
-type View = 'today' | 'pipeline' | 'network';
+type View = 'table' | 'today' | 'pipeline' | 'network';
 const dayLabel = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-NI', { day: 'numeric', month: 'short' }) : 'Sin fecha');
 
 function LeadCard({ lead, canEdit, onOpen, onMove, compact }: { lead: LeadRow; canEdit: boolean; onOpen: () => void; onMove?: (stage: LeadStage) => void; compact?: boolean }) {
@@ -46,17 +47,20 @@ export function LeadsPanel() {
   const { canPerform } = useAuth();
   const canCreate = canPerform('SALES_QUOTES', 'create');
   const canEdit = canPerform('SALES_QUOTES', 'edit');
-  const [view, setView] = useState<View>('today');
+  const [view, setView] = useState<View>('table');
   const [search, setSearch] = useState('');
   const [line, setLine] = useState('');
+  const [country, setCountry] = useState('');
   const [mine, setMine] = useState(false);
   const [dialog, setDialog] = useState<{ id: string | null; stage?: LeadStage } | null>(null);
-  const list = useTenantQuery(['sales', 'business-leads', search, line, mine], (signal) => businessLeadsService.list({ search: search || undefined, businessLine: line || undefined, owner: mine ? 'me' : undefined }, signal), { staleTime: 15_000 });
+  const list = useTenantQuery(['sales', 'business-leads', search, line, country, mine], (signal) => businessLeadsService.list({ search: search || undefined, businessLine: line || undefined, country: country || undefined, owner: mine ? 'me' : undefined }, signal), { staleTime: 15_000 });
   const capabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000 });
   const refresh = () => { void client.invalidateQueries({ queryKey: ['tenant-module'] }); };
   const summary = list.data?.summary;
   const items = list.data?.items ?? [];
   const lines = summary?.businessLines.map((row) => row.name) ?? [];
+  const countryRows = summary?.countries ?? [];
+  const countryNames = countryRows.map((row) => row.name).filter((name) => name !== 'Sin país');
 
   const move = async (lead: LeadRow, stage: LeadStage) => {
     if (stage === lead.stage) return;
@@ -81,7 +85,7 @@ export function LeadsPanel() {
   return (
     <div className="min-w-0 space-y-4" data-testid="business-leads">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div><h2 className="flex items-center gap-2 text-lg font-black"><Target className="size-5 text-primary" aria-hidden /> Leads y red de contactos</h2><p className="text-xs text-muted-foreground">Registra cada día a quién le podemos vender, cuánto podría representar y cómo entrarle.</p></div>
+        <div><h2 className="nh-module-title flex items-center gap-2"><Target className="size-5 text-primary" aria-hidden /> Leads y red de contactos</h2><p className="text-xs text-muted-foreground">Registra cada día a quién le podemos vender, cuánto podría representar y cómo entrarle.</p></div>
         {canCreate && <Button type="button" onClick={() => setDialog({ id: null })}><Plus className="mr-1.5 size-4" /> Nuevo lead</Button>}
       </div>
 
@@ -95,9 +99,16 @@ export function LeadsPanel() {
         </details>
       )}
 
+      {countryRows.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5" aria-label="Leads por país">
+          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Por país</span>
+          {countryRows.map((row) => <button key={row.name} type="button" disabled={row.name === 'Sin país'} onClick={() => setCountry(country === row.name ? '' : row.name)} className={cn('rounded-full border px-2.5 py-1 text-xs font-semibold', country === row.name ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 text-muted-foreground hover:text-foreground')}>{row.name} · {row.count}{Object.keys(row.pipeline).length ? ' · ' + formatMoneyMap(row.pipeline) : ''}</button>)}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Vista de leads" className="flex gap-1 rounded-xl border border-border bg-muted/30 p-1">
-          {([['today', 'Hoy', CalendarCheck], ['pipeline', 'Embudo', Target], ['network', 'Red de contactos', Network]] as const).map(([id, label, Icon]) => (
+          {([['table', 'Tabla', Table2], ['today', 'Hoy', CalendarCheck], ['pipeline', 'Embudo', Target], ['network', 'Red de contactos', Network]] as const).map(([id, label, Icon]) => (
             <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)} className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold', view === id ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground')}><Icon className="size-3.5" aria-hidden />{label}</button>
           ))}
         </div>
@@ -105,6 +116,7 @@ export function LeadsPanel() {
           <>
             <div className="relative min-w-[180px] flex-1 sm:max-w-xs"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input aria-label="Buscar lead" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Empresa, contacto o línea" /></div>
             {lines.length > 0 && <select aria-label="Línea de negocio" className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm" value={line} onChange={(e) => setLine(e.target.value)}><option value="">Todas las líneas</option>{lines.map((name) => <option key={name} value={name}>{name}</option>)}</select>}
+            {countryNames.length > 0 && <select aria-label="País" className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm" value={country} onChange={(e) => setCountry(e.target.value)}><option value="">Todos los países</option>{countryNames.map((name) => <option key={name} value={name}>{name}</option>)}</select>}
             {capabilities.data?.canManageAll && <label className="inline-flex items-center gap-1.5 text-xs font-semibold"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />Solo los míos</label>}
           </>
         )}
@@ -113,6 +125,7 @@ export function LeadsPanel() {
       {view === 'network' ? <NetworkView onOpenLead={(id) => setDialog({ id })} />
         : list.isLoading ? <Skeleton className="h-48 w-full rounded-2xl" aria-busy="true" />
         : list.isError ? <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive" role="alert">No se pudieron cargar los leads.</p>
+        : view === 'table' ? <LeadsTable items={items} canCreate={canCreate} canEdit={canEdit} countries={countryNames} businessLines={lines} onStageChange={move} onOpen={(id) => setDialog({ id })} onChanged={refresh} />
         : view === 'today' ? (
           <div className="space-y-5">
             {groups.every((group) => group.rows.length === 0) ? <Card className="rounded-2xl border-dashed p-8 text-center text-sm text-muted-foreground">{summary?.total ? 'Todo al día: no hay leads atrasados, para hoy ni sin siguiente paso.' : 'Todavía no hay leads. Registra el primero apenas encuentres a alguien a quien venderle.'}</Card>
