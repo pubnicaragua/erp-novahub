@@ -644,7 +644,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
   const { hasAccess, canPerform, user } = useAuth();
   const { themeConfig } = useTheme();
   // «Leads y red» es una función por empresa: el acceso del sidebar la respeta.
-  const leadCapabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0, enabled: canPerform('SALES_QUOTES', 'view') });
+  const leadCapabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0, enabled: canPerform('SALES_LEADS', 'view') });
   const leadsEnabled = Boolean(leadCapabilities.data?.enabled);
   const workspaceName = user?.isPlatformAdmin
     ? 'NovaHub Platform'

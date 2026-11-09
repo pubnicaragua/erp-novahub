@@ -982,7 +982,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const moduleGroupMap: Record<string, string[]> = {
       ventas: [
         'SALES', 'CLIENTS',
-        'SALES_CLIENTS', 'SALES_QUOTES', 'SALES_ORDERS', 'SALES_INVOICES',
+        'SALES_CLIENTS', 'SALES_QUOTES', 'SALES_LEADS', 'SALES_ORDERS', 'SALES_INVOICES',
         'SALES_RECURRING', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS', 'RETAIL_POS', 'SALES_POS',
         'SALES_PRICE_LISTS', 'RETAIL_CASH_CONTROL',
       ],

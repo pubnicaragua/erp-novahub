@@ -327,6 +327,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
 
   SALES_CLIENTS: ['read', 'create', 'edit', 'delete', 'deactivate', 'import', 'export'],
   SALES_QUOTES: ['read', 'create', 'edit', 'submit', 'convert', 'cancel', 'export', 'viewOtherLocations'],
+  SALES_LEADS: ['read', 'create', 'edit'],
   SALES_ORDERS: ['read', 'create', 'edit', 'submit', 'approve', 'convert', 'cancel', 'export', 'viewOtherLocations'],
   SALES_INVOICES: ['read', 'create', 'edit', 'delete', 'submit', 'import', 'pay', 'sendToCredit', 'sendToCash', 'createPaymentLink', 'reconcilePaymentLink', 'cancelPaymentLink', 'createAppToAppPayment', 'reconcileAppToAppPayment', 'cancel', 'export', 'viewOtherLocations'],
   SALES_RECURRING: ['read', 'create', 'edit', 'pause', 'resume', 'cancel', 'export', 'viewOtherLocations'],

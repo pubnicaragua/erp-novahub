@@ -3275,3 +3275,14 @@ th .column-filter-menu .column-filter-icon,
   text-transform: none;
   overflow-wrap: break-word;
 }
+
+/* Subtítulo de sección dentro de un módulo: Playfair cursiva como las etiquetas del dashboard. */
+.nh-section-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1rem;
+  font-style: italic;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: none;
+  overflow-wrap: break-word;
+}

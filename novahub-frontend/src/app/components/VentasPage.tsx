@@ -57,7 +57,7 @@ import { PriceListsView } from './ventas/PriceListsView';
 
 const SALES_SECTIONS = [
   { id: 'clientes', label: 'Clientes', icon: Users, description: 'Directorio y datos comerciales', requiredModules: ['SALES_CLIENTS'] },
-  { id: 'leads', label: 'Leads y red', icon: Target, description: 'Prospectos, embudo y red de contactos', requiredModules: ['SALES_QUOTES'] },
+  { id: 'leads', label: 'Leads y red', icon: Target, description: 'Prospectos, embudo y red de contactos', requiredModules: ['SALES_LEADS'] },
   { id: 'estimaciones', label: 'Cotizaciones', icon: FileSpreadsheet, description: 'Cotizaciones comerciales', requiredModules: ['SALES_QUOTES'] },
   { id: 'ordenes-venta', label: 'Órdenes de Venta', icon: ClipboardList, description: 'Pedidos por procesar', requiredModules: ['SALES_ORDERS'] },
   { id: 'facturas', label: 'Facturas', icon: FileText, description: 'Control de cobros', requiredModules: ['SALES_INVOICES'] },
@@ -81,7 +81,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const { user, canPerform } = useAuth();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const canReadHr = canPerform('HR', 'view');
-  const leadCapabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0, enabled: canPerform('SALES_QUOTES', 'view') });
+  const leadCapabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0, enabled: canPerform('SALES_LEADS', 'view') });
   const leadsEnabled = Boolean(leadCapabilities.data?.enabled);
   const canViewSalesSection = useCallback((sectionId: string) => {
     const section = SALES_SECTIONS.find((candidate) => candidate.id === sectionId);

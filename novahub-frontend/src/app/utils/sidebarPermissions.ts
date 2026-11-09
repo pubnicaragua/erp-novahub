@@ -49,6 +49,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   // Ventas
   { id: 'SALES_CLIENTS', label: 'Clientes', parent: 'SALES' },
   { id: 'SALES_QUOTES', label: 'Cotizaciones', parent: 'SALES' },
+  { id: 'SALES_LEADS', label: 'Leads y red', parent: 'SALES' },
   { id: 'SALES_ORDERS', label: 'Órdenes de venta', parent: 'SALES' },
   { id: 'SALES_INVOICES', label: 'Facturas', parent: 'SALES' },
   { id: 'SALES_RECURRING', label: 'Facturas recurrentes', parent: 'SALES' },
@@ -263,7 +264,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'configuracion:proyectos': ['PROJECTS', 'CONFIG_COMPANY'],
   clientes: ['SALES_CLIENTS'],
   estimaciones: ['SALES_QUOTES'],
-  leads: ['SALES_QUOTES'],
+  leads: ['SALES_LEADS'],
   'ordenes-venta': ['SALES_ORDERS'],
   facturas: ['SALES_INVOICES'],
   'facturas-recurrentes': ['SALES_RECURRING'],

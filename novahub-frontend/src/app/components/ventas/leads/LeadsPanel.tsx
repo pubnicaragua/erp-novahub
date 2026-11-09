@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarCheck, Network, Plus, Search, Table2, Target } from 'lucide-react';
+import { Bot, CalendarCheck, Compass, Gauge, Inbox, Network, Plug, Plus, Search, Table2, Tags, Target } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../ui/button';
 import { Card } from '../../ui/card';
@@ -14,8 +14,15 @@ import { LeadDialog } from './LeadDialog';
 import { LeadsTable } from './LeadsTable';
 import { failure } from './leadUtils';
 import { NetworkView } from './NetworkView';
+import { AssistantChat } from './AssistantChat';
+import { AutomationPanel } from './AutomationPanel';
+import { GoalsPanel } from './GoalsPanel';
+import { OffersPanel } from './OffersPanel';
+import { ProspectPanel } from './ProspectPanel';
+import { ReviewInbox } from './ReviewInbox';
 
-type View = 'table' | 'today' | 'pipeline' | 'network';
+type View = 'table' | 'today' | 'pipeline' | 'network' | 'review' | 'offers' | 'goals' | 'connect' | 'prospect' | 'assistant';
+const LIST_VIEWS: View[] = ['table', 'today', 'pipeline'];
 const dayLabel = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-NI', { day: 'numeric', month: 'short' }) : 'Sin fecha');
 
 function LeadCard({ lead, canEdit, onOpen, onMove, compact }: { lead: LeadRow; canEdit: boolean; onOpen: () => void; onMove?: (stage: LeadStage) => void; compact?: boolean }) {
@@ -45,8 +52,8 @@ function LeadCard({ lead, canEdit, onOpen, onMove, compact }: { lead: LeadRow; c
 export function LeadsPanel() {
   const client = useQueryClient();
   const { canPerform } = useAuth();
-  const canCreate = canPerform('SALES_QUOTES', 'create');
-  const canEdit = canPerform('SALES_QUOTES', 'edit');
+  const canCreate = canPerform('SALES_LEADS', 'create');
+  const canEdit = canPerform('SALES_LEADS', 'edit');
   const [view, setView] = useState<View>('table');
   const [search, setSearch] = useState('');
   const [line, setLine] = useState('');
@@ -55,6 +62,9 @@ export function LeadsPanel() {
   const [dialog, setDialog] = useState<{ id: string | null; stage?: LeadStage } | null>(null);
   const list = useTenantQuery(['sales', 'business-leads', search, line, country, mine], (signal) => businessLeadsService.list({ search: search || undefined, businessLine: line || undefined, country: country || undefined, owner: mine ? 'me' : undefined }, signal), { staleTime: 15_000 });
   const capabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000 });
+  const review = useTenantQuery(['sales', 'business-leads-review'], (signal) => businessLeadsService.listReview(signal), { staleTime: 30_000 });
+  const isAdmin = Boolean(capabilities.data?.canManageAll);
+  const reviewCount = review.data?.total ?? 0;
   const refresh = () => { void client.invalidateQueries({ queryKey: ['tenant-module'] }); };
   const summary = list.data?.summary;
   const items = list.data?.items ?? [];
@@ -89,9 +99,9 @@ export function LeadsPanel() {
         {canCreate && <Button type="button" onClick={() => setDialog({ id: null })}><Plus className="mr-1.5 size-4" /> Nuevo lead</Button>}
       </div>
 
-      {summary && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{kpis.map((card) => <div key={card.label} className="min-w-0 rounded-xl border border-border/60 bg-card p-3 shadow-sm"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className={cn('mt-1 break-words text-xl font-black tabular-nums', card.tone)}>{card.value}</p>{card.hint && <p className="text-[10px] text-muted-foreground">{card.hint}</p>}</div>)}</div>}
+      {summary && LIST_VIEWS.includes(view) && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{kpis.map((card) => <div key={card.label} className="min-w-0 rounded-xl border border-border/60 bg-card p-3 shadow-sm"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className={cn('mt-1 break-words text-xl font-black tabular-nums', card.tone)}>{card.value}</p>{card.hint && <p className="text-[10px] text-muted-foreground">{card.hint}</p>}</div>)}</div>}
 
-      {summary?.team && summary.team.length > 0 && (
+      {LIST_VIEWS.includes(view) && summary?.team && summary.team.length > 0 && (
         <details className="rounded-xl border border-border/60 bg-card p-3 text-sm">
           <summary className="cursor-pointer text-xs font-black uppercase tracking-widest text-muted-foreground">Actividad del equipo</summary>
           <div className="mt-2 overflow-x-auto"><table className="w-full min-w-[480px] text-sm"><thead className="text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground"><tr><th className="py-1">Persona</th><th className="py-1 text-right">Hoy</th><th className="py-1 text-right">7 días</th><th className="py-1 text-right">Abiertos</th><th className="py-1 text-right">Atrasados</th></tr></thead>
@@ -99,7 +109,7 @@ export function LeadsPanel() {
         </details>
       )}
 
-      {countryRows.length > 1 && (
+      {LIST_VIEWS.includes(view) && countryRows.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5" aria-label="Leads por país">
           <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Por país</span>
           {countryRows.map((row) => <button key={row.name} type="button" disabled={row.name === 'Sin país'} onClick={() => setCountry(country === row.name ? '' : row.name)} className={cn('rounded-full border px-2.5 py-1 text-xs font-semibold', country === row.name ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 text-muted-foreground hover:text-foreground')}>{row.name} · {row.count}{Object.keys(row.pipeline).length ? ' · ' + formatMoneyMap(row.pipeline) : ''}</button>)}
@@ -107,12 +117,12 @@ export function LeadsPanel() {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <div role="tablist" aria-label="Vista de leads" className="flex gap-1 rounded-xl border border-border bg-muted/30 p-1">
-          {([['table', 'Tabla', Table2], ['today', 'Hoy', CalendarCheck], ['pipeline', 'Embudo', Target], ['network', 'Red de contactos', Network]] as const).map(([id, label, Icon]) => (
-            <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)} className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold', view === id ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground')}><Icon className="size-3.5" aria-hidden />{label}</button>
+        <div role="tablist" aria-label="Vista de leads" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-muted/30 p-1">
+          {([['table', 'Tabla', Table2], ['today', 'Hoy', CalendarCheck], ['pipeline', 'Embudo', Target], ['prospect', 'Prospectar', Compass], ['review', 'Por revisar', Inbox], ['assistant', 'Asistente', Bot], ['network', 'Red de contactos', Network], ['offers', 'Ofertas', Tags], ['goals', 'Metas', Gauge], ['connect', 'Conexiones', Plug]] as const).map(([id, label, Icon]) => (
+            <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)} className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold', view === id ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground')}><Icon className="size-3.5" aria-hidden />{label}{id === 'review' && reviewCount > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] font-black text-primary-foreground">{reviewCount}</span>}</button>
           ))}
         </div>
-        {view !== 'network' && (
+        {LIST_VIEWS.includes(view) && (
           <>
             <div className="relative min-w-[180px] flex-1 sm:max-w-xs"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input aria-label="Buscar lead" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Empresa, contacto o línea" /></div>
             {lines.length > 0 && <select aria-label="Línea de negocio" className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm" value={line} onChange={(e) => setLine(e.target.value)}><option value="">Todas las líneas</option>{lines.map((name) => <option key={name} value={name}>{name}</option>)}</select>}
@@ -122,7 +132,13 @@ export function LeadsPanel() {
         )}
       </div>
 
-      {view === 'network' ? <NetworkView onOpenLead={(id) => setDialog({ id })} />
+      {view === 'prospect' ? <ProspectPanel isAdmin={isAdmin} onNavigate={(next) => setView(next)} />
+        : view === 'assistant' ? <AssistantChat />
+        : view === 'review' ? <ReviewInbox canEdit={canEdit} onOpen={(id) => setDialog({ id })} />
+        : view === 'offers' ? <OffersPanel isAdmin={isAdmin} />
+        : view === 'goals' ? <GoalsPanel isAdmin={isAdmin} />
+        : view === 'connect' ? <AutomationPanel isAdmin={isAdmin} />
+        : view === 'network' ? <NetworkView onOpenLead={(id) => setDialog({ id })} />
         : list.isLoading ? <Skeleton className="h-48 w-full rounded-2xl" aria-busy="true" />
         : list.isError ? <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive" role="alert">No se pudieron cargar los leads.</p>
         : view === 'table' ? <LeadsTable items={items} canCreate={canCreate} canEdit={canEdit} countries={countryNames} businessLines={lines} onStageChange={move} onOpen={(id) => setDialog({ id })} onChanged={refresh} />

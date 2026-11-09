@@ -12,9 +12,11 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useTenantQuery } from '../../../hooks/useTenantQuery';
 import { toast } from '../../../services/toast';
 import {
-  ACTIVITY_LABEL, HEALTH_LABEL, SOURCE_LABEL, STAGES, businessLeadsService, formatMoney, type ActivityKind, type LeadDetail, type LeadInput, type LeadSource, type LeadStage,
+  ACTIVITY_LABEL, HEALTH_LABEL, SIGNAL_LABEL, SOURCE_LABEL, STAGES, businessLeadsService, formatMoney, type ActivityKind, type LeadDetail, type LeadInput, type LeadSource, type LeadStage,
 } from '../../../services/business-leads.service';
 
+import { AssistantChat } from './AssistantChat';
+import { OfferAdvisor } from './OfferAdvisor';
 import { failure } from './leadUtils';
 const field = 'h-10 w-full rounded-xl border border-border/60 bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary';
 const dateOnly = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : '');
@@ -23,21 +25,27 @@ const when = (iso: string) => new Date(iso).toLocaleString('es-NI', { dateStyle:
 interface FormState {
   company: string; contactName: string; contactRole: string; phone: string; email: string; businessLine: string; source: LeadSource; estimatedValue: string; currency: string;
   probability: string; expectedCloseDate: string; nextAction: string; nextActionAt: string; strategy: string; introducedByContactId: string;
+  country: string; website: string; industry: string; audienceSize: string; budgetEstimate: string; signals: string[];
 }
 const blank: FormState = {
   company: '', contactName: '', contactRole: '', phone: '', email: '', businessLine: '', source: 'OTHER', estimatedValue: '', currency: 'USD', probability: '', expectedCloseDate: '',
   nextAction: '', nextActionAt: '', strategy: '', introducedByContactId: '',
+  country: '', website: '', industry: '', audienceSize: '', budgetEstimate: '', signals: [],
 };
 const fromLead = (lead: LeadDetail): FormState => ({
   company: lead.company, contactName: lead.contactName ?? '', contactRole: lead.contactRole ?? '', phone: lead.phone ?? '', email: lead.email ?? '', businessLine: lead.businessLine ?? '',
   source: lead.source, estimatedValue: lead.estimatedValue === null ? '' : String(lead.estimatedValue), currency: lead.currency, probability: String(lead.probability),
   expectedCloseDate: dateOnly(lead.expectedCloseDate), nextAction: lead.nextAction ?? '', nextActionAt: dateOnly(lead.nextActionAt), strategy: lead.strategy ?? '', introducedByContactId: lead.introducedByContactId ?? '',
+  country: lead.country ?? '', website: lead.website ?? '', industry: lead.industry ?? '', audienceSize: lead.audienceSize === null ? '' : String(lead.audienceSize),
+  budgetEstimate: lead.budgetSource === 'MANUAL' && lead.budgetEstimate !== null ? String(lead.budgetEstimate) : '', signals: lead.signals ?? [],
 });
 const toInput = (form: FormState, withStage?: LeadStage): LeadInput => ({
   company: form.company.trim(), contactName: form.contactName.trim() || null, contactRole: form.contactRole.trim() || null, phone: form.phone.trim() || null, email: form.email.trim() || null,
   businessLine: form.businessLine.trim() || null, source: form.source, estimatedValue: form.estimatedValue === '' ? null : Number(form.estimatedValue), currency: form.currency,
   ...(form.probability !== '' ? { probability: Number(form.probability) } : {}), expectedCloseDate: form.expectedCloseDate || null, nextAction: form.nextAction.trim() || null,
   nextActionAt: form.nextActionAt || null, strategy: form.strategy.trim() || null, introducedByContactId: form.introducedByContactId || null, ...(withStage ? { stage: withStage } : {}),
+  country: form.country.trim() || null, website: form.website.trim() || null, industry: form.industry.trim() || null, audienceSize: form.audienceSize === '' ? null : Number(form.audienceSize),
+  budgetEstimate: form.budgetEstimate === '' ? null : Number(form.budgetEstimate), signals: form.signals,
 });
 
 /** Crear un lead (rápido, pensado para cargar varios al día) o abrir uno para trabajarlo: datos, estrategia, bitácora y etapa. */
@@ -55,7 +63,7 @@ export function LeadDialog({ leadId, businessLines, initial, onClose }: { leadId
 function LeadForm({ lead, businessLines, initial, onClose }: { lead: LeadDetail | null; businessLines: string[]; initial?: Partial<LeadInput>; onClose: () => void }) {
   const client = useQueryClient();
   const { canPerform } = useAuth();
-  const canEdit = canPerform('SALES_QUOTES', lead ? 'edit' : 'create');
+  const canEdit = canPerform('SALES_LEADS', lead ? 'edit' : 'create');
   const contacts = useTenantQuery(['sales', 'business-leads-network'], (signal) => businessLeadsService.network(signal), { staleTime: 30_000 });
   const [form, setForm] = useState<FormState>(() => (lead ? fromLead(lead) : { ...blank, ...Object.fromEntries(Object.entries(initial ?? {}).map(([key, value]) => [key, value === null || value === undefined ? '' : String(value)])) }));
   const [busy, setBusy] = useState(false);
@@ -107,6 +115,8 @@ function LeadForm({ lead, businessLines, initial, onClose }: { lead: LeadDetail 
           </div>
         )}
 
+        {lead && lead.reviewStatus === 'APPROVED' && <OfferAdvisor leadId={lead.id} canEdit={canEdit} />}
+        {lead && <AssistantChat leadId={lead.id} className="border-t border-border pt-4" />}
         <fieldset disabled={!canEdit || busy} className="grid min-w-0 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="ld-company">Empresa o prospecto</Label><Input id="ld-company" value={form.company} maxLength={160} onChange={(e) => set('company', e.target.value)} placeholder="Starcell" /></div>
           <div className="space-y-1.5"><Label htmlFor="ld-contact">Contacto</Label><Input id="ld-contact" value={form.contactName} maxLength={120} onChange={(e) => set('contactName', e.target.value)} /></div>
@@ -115,20 +125,27 @@ function LeadForm({ lead, businessLines, initial, onClose }: { lead: LeadDetail 
           <div className="space-y-1.5"><Label htmlFor="ld-email">Correo</Label><Input id="ld-email" type="email" value={form.email} maxLength={160} onChange={(e) => set('email', e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="ld-line">Línea de negocio</Label><Input id="ld-line" list="ld-lines" value={form.businessLine} maxLength={80} onChange={(e) => set('businessLine', e.target.value)} placeholder="Páginas web" /><datalist id="ld-lines">{businessLines.map((name) => <option key={name} value={name} />)}</datalist></div>
           <div className="space-y-1.5"><Label htmlFor="ld-source">¿Cómo lo encontramos?</Label><select id="ld-source" className={field} value={form.source} onChange={(e) => set('source', e.target.value as LeadSource)}>{(Object.keys(SOURCE_LABEL) as LeadSource[]).map((key) => <option key={key} value={key}>{SOURCE_LABEL[key]}</option>)}</select></div>
+          <div className="space-y-1.5"><Label htmlFor="ld-country">País</Label><Input id="ld-country" value={form.country} maxLength={80} onChange={(e) => set('country', e.target.value)} placeholder="Nicaragua" /></div>
+          <div className="space-y-1.5"><Label htmlFor="ld-website">Sitio web o red social</Label><Input id="ld-website" value={form.website} maxLength={200} onChange={(e) => set('website', e.target.value)} placeholder="instagram.com/negocio" /></div>
+          <div className="space-y-1.5"><Label htmlFor="ld-industry">Giro del negocio</Label><Input id="ld-industry" value={form.industry} maxLength={80} onChange={(e) => set('industry', e.target.value)} placeholder="Restaurante, clínica, tienda…" /></div>
+          <div className="space-y-1.5"><Label htmlFor="ld-audience">Seguidores o audiencia</Label><Input id="ld-audience" type="number" min="0" value={form.audienceSize} onChange={(e) => set('audienceSize', e.target.value)} placeholder="50000" /></div>
           <div className="space-y-1.5"><Label htmlFor="ld-value">¿Cuánto podría representar?</Label><div className="flex gap-2"><Input id="ld-value" type="number" min="0" step="0.01" value={form.estimatedValue} onChange={(e) => set('estimatedValue', e.target.value)} placeholder="1500" /><select aria-label="Moneda" className={`${field} w-24`} value={form.currency} onChange={(e) => set('currency', e.target.value)}><option>USD</option><option>NIO</option></select></div></div>
           <div className="space-y-1.5"><Label htmlFor="ld-prob">Probabilidad de cierre (%)</Label><Input id="ld-prob" type="number" min="0" max="100" value={form.probability} onChange={(e) => set('probability', e.target.value)} placeholder={lead ? undefined : 'Según la etapa'} /></div>
           <div className="space-y-1.5"><Label htmlFor="ld-close">Cierre estimado</Label><Input id="ld-close" type="date" value={form.expectedCloseDate} onChange={(e) => set('expectedCloseDate', e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="ld-intro">Nos acercó…</Label><select id="ld-intro" className={field} value={form.introducedByContactId} onChange={(e) => set('introducedByContactId', e.target.value)}><option value="">Nadie / no aplica</option>{contacts.data?.contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}{contact.company ? ` · ${contact.company}` : ''}</option>)}</select></div>
           <div className="space-y-1.5"><Label htmlFor="ld-next">Siguiente paso</Label><Input id="ld-next" value={form.nextAction} maxLength={200} onChange={(e) => set('nextAction', e.target.value)} placeholder="Llamar para agendar reunión" /></div>
           <div className="space-y-1.5"><Label htmlFor="ld-nextat">¿Para cuándo?</Label><Input id="ld-nextat" type="date" value={form.nextActionAt} onChange={(e) => set('nextActionAt', e.target.value)} /></div>
+          <div className="space-y-1.5"><Label htmlFor="ld-budget">Presupuesto que tiene (si lo sabes)</Label><Input id="ld-budget" type="number" min="0" step="0.01" value={form.budgetEstimate} onChange={(e) => set('budgetEstimate', e.target.value)} placeholder={lead?.budgetEstimate != null ? `Estimado: ${lead.budgetEstimate}` : 'Se estima por las señales'} /></div>
+          <fieldset className="space-y-1.5 sm:col-span-2"><legend className="text-sm font-medium">¿Qué sabemos de este prospecto?</legend><div className="flex flex-wrap gap-1.5">{Object.entries(SIGNAL_LABEL).map(([key, label]) => <label key={key} className={cn('cursor-pointer rounded-full border px-2.5 py-1 text-xs font-semibold', form.signals.includes(key) ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 text-muted-foreground')}><input type="checkbox" className="sr-only" checked={form.signals.includes(key)} onChange={() => set('signals', form.signals.includes(key) ? form.signals.filter((item) => item !== key) : [...form.signals, key])} />{label}</label>)}</div></fieldset>
           <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="ld-strategy">Estrategia: ¿cómo le entramos?</Label><Textarea id="ld-strategy" rows={3} value={form.strategy} maxLength={4000} onChange={(e) => set('strategy', e.target.value)} placeholder="Quién lo conoce, qué le duele, con qué ejemplo entrarle, si hay que activar un contacto…" /></div>
         </fieldset>
 
         {canEdit && <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cerrar</Button><Button type="button" onClick={() => void save()} disabled={busy || !form.company.trim()}>{busy && <Loader2 className="mr-2 size-4 animate-spin" />}{lead ? 'Guardar cambios' : 'Registrar lead'}</Button></div>}
 
+
         {lead && (
           <section className="space-y-3 border-t border-border pt-4" aria-label="Bitácora del lead">
-            <h3 className="text-sm font-black">Bitácora</h3>
+            <h3 className="nh-section-title">Bitácora</h3>
             {canEdit && (
               <div className="grid gap-2 rounded-xl border border-border/60 bg-muted/20 p-3 sm:grid-cols-[130px_1fr]">
                 <select aria-label="Tipo de actividad" className={field} value={logKind} onChange={(e) => setLogKind(e.target.value as ActivityKind)}>{(['CALL', 'WHATSAPP', 'VISIT', 'MEETING', 'EMAIL', 'NOTE'] as ActivityKind[]).map((kind) => <option key={kind} value={kind}>{ACTIVITY_LABEL[kind]}</option>)}</select>

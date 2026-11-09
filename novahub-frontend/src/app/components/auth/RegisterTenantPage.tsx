@@ -118,6 +118,7 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
   LEGAL_REMINDERS: 'Recordatorios',
   SALES_CLIENTS: 'Clientes',
   SALES_QUOTES: 'Cotizaciones',
+  SALES_LEADS: 'Leads y red',
   SALES_ORDERS: 'Pedidos',
   SALES_INVOICES: 'Facturación',
   SALES_RECURRING: 'Ventas Recurrentes',

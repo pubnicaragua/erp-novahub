@@ -161,8 +161,8 @@ function ContactDetail({ contact, canEdit, canCreate, onEdit, onOpenLead }: { co
 /** Red de contactos estratégica: mapa visual, lista de contactos y, para cada uno, a quién nos puede acercar. */
 export function NetworkView({ onOpenLead }: { onOpenLead: (id: string) => void }) {
   const { canPerform } = useAuth();
-  const canCreate = canPerform('SALES_QUOTES', 'create');
-  const canEdit = canPerform('SALES_QUOTES', 'edit');
+  const canCreate = canPerform('SALES_LEADS', 'create');
+  const canEdit = canPerform('SALES_LEADS', 'edit');
   const network = useTenantQuery(['sales', 'business-leads-network'], (signal) => businessLeadsService.network(signal), { staleTime: 15_000 });
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<'new' | 'edit' | null>(null);

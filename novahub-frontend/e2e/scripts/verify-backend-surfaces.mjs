@@ -58,6 +58,8 @@ const SURFACE_CLASSIFICATION = {
   'src/pdf-document-designs/pdf-document-designs.controller.ts': { category: 'backend-only', reason: 'plantillas PDF' },
   'src/pdf-document-designs/pdf-curated-templates.controller.ts': { category: 'ui', uiModule: 'configuracion' },
   'src/pdf-previews/pdf-previews.controller.ts': { category: 'backend-only', reason: 'previsualización PDF' },
+  'src/business-leads/business-leads.controller.ts': { category: 'ui', uiModule: 'ventas' },
+  'src/business-leads/lead-ingest.controller.ts': { category: 'public', reason: 'entrada de leads con llave por empresa (extensión, webhook)' },
   'src/projects/projects.controller.ts': { category: 'ui', uiModule: 'proyectos' },
   'src/performance/performance.controller.ts': { category: 'ui', uiModule: 'rh' },
   'src/strategies/strategy.controller.ts': { category: 'ui', uiModule: 'organizacion' },
