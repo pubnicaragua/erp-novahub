@@ -116,7 +116,7 @@ export function FinanceTableView({
   detailsRenderer,
   auditEntity,
 }: FinanceTableViewProps) {
-  const { displayCurrency, formatConvertedAmount } = useCurrency();
+  const { displayCurrency, displayMode, displayCurrencyLabel, convertDisplayAmount, formatConvertedAmount } = useCurrency();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
   const { user } = useAuth();
   const { themeConfig } = useTheme();
@@ -316,8 +316,17 @@ export function FinanceTableView({
     if (!canExport) return;
     try {
       toast.info("Generando Excel, por favor espere...");
-      const reportColumns = exportColumns || columns;
-      const summary = exportSummary?.(filteredData);
+      const sourceColumns = exportColumns || columns;
+      const reportColumns = sourceColumns.map((column) => column.type === 'currency'
+        ? { ...column, label: `${column.label} (${displayMode === 'ORIGINAL' ? 'original' : displayCurrency})` }
+        : column);
+      if (!reportColumns.some((column) => column.key === 'currency')) {
+        reportColumns.push({ key: '__reportCurrency', label: 'Moneda', type: 'text' });
+      }
+      const rawSummary = exportSummary?.(filteredData);
+      const summary = rawSummary && displayMode === 'ORIGINAL'
+        ? { ...rawSummary, label: `${rawSummary.label} (${displayCurrency})` }
+        : rawSummary;
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Reporte');
       const primaryColor = themeConfig.colors.primary || '#10b981';
@@ -373,7 +382,7 @@ export function FinanceTableView({
       ws.mergeCells(`A${currentRow}:${lastColChar}${currentRow}`);
       const cellCurrency = ws.getCell(`A${currentRow}`);
       const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
-      cellCurrency.value = `Moneda del Reporte: ${currencyLabel} (${sym})`;
+      cellCurrency.value = `Moneda del Reporte: ${displayMode === 'ORIGINAL' ? `Original por operación · totales en ${displayCurrency}` : `${currencyLabel} (${sym})`}`;
       cellCurrency.font = { size: 10, bold: true, color: { argb: 'FF333333' } };
       cellCurrency.alignment = { horizontal: 'center' };
       currentRow += 2;
@@ -392,7 +401,8 @@ export function FinanceTableView({
       // Data Rows
       filteredData.forEach(item => {
         const rowData = reportColumns.map(col => {
-          if (col.type === 'currency') return col.key === 'total' ? '' : Number(item[col.key] || 0);
+          if (col.key === '__reportCurrency') return displayMode === 'ORIGINAL' ? (item.currency || '—') : displayCurrency;
+          if (col.type === 'currency') return col.key === 'total' ? '' : convertDisplayAmount(Number(item[col.key] || 0), item.currency, item.exchangeRate);
           if (col.type === 'date' || col.type === 'datetime') return item[col.key] ? new Date(item[col.key]) : null;
           if (col.type === 'select') return getLabelForValue(col, item[col.key]);
           if (col.key === 'description' || col.key === 'notes') return translatePaymentMethodText(item[col.key]);
@@ -405,7 +415,7 @@ export function FinanceTableView({
           const cell = r.getCell(idx + 1);
           cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
           if (col.type === 'currency') {
-            cell.numFmt = '"' + sym + '" #,##0.00';
+            cell.numFmt = displayMode === 'ORIGINAL' ? '#,##0.00' : '"' + sym + '" #,##0.00';
             cell.alignment = { horizontal: 'right' };
           }
           if (col.type === 'date' || col.type === 'datetime') {
@@ -457,11 +467,25 @@ export function FinanceTableView({
     if (!canExport) return;
     try {
       toast.info("Generando PDF, por favor espere...");
-      const reportColumns = exportColumns || columns;
-      const summary = exportSummary?.(filteredData);
+      const sourceColumns = exportColumns || columns;
+      const reportColumns = sourceColumns.map((column) => column.type === 'currency'
+        ? { ...column, label: `${column.label} (${displayMode === 'ORIGINAL' ? 'original' : displayCurrency})` }
+        : column);
+      if (!reportColumns.some((column) => column.key === 'currency')) {
+        reportColumns.push({ key: '__reportCurrency', label: 'Moneda', type: 'text' });
+      }
+      const rawSummary = exportSummary?.(filteredData);
+      const summary = rawSummary && displayMode === 'ORIGINAL'
+        ? { ...rawSummary, label: `${rawSummary.label} (${displayCurrency})` }
+        : rawSummary;
       const pdfSettings = await getPdfDesignSettings('finanzas.transactions');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'finanzas.transactions', paperFormat));
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: filteredData, columns: reportColumns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), tableSummary: summary, fileName: buildDateFilteredLabeledPdfFileName(title, 'pdf', dateRange.start, dateRange.end), format: paperFormat });
+      const configuredRows = filteredData.map((item) => ({
+        ...item,
+        __reportCurrency: displayMode === 'ORIGINAL' ? (item.currency || '—') : displayCurrency,
+        ...Object.fromEntries(sourceColumns.filter((column) => column.type === 'currency' && column.key !== 'total').map((column) => [column.key, formatConvertedAmount(Number(item[column.key] || 0), item.currency, item.exchangeRate)])),
+      }));
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: configuredRows, columns: reportColumns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), tableSummary: summary, fileName: buildDateFilteredLabeledPdfFileName(title, 'pdf', dateRange.start, dateRange.end), format: paperFormat });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const pageWidth = doc.internal.pageSize.getWidth();
       const primaryColor = pdfSettings.primaryColor || '#01422c';
@@ -496,7 +520,7 @@ export function FinanceTableView({
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(120, 120, 120);
-      doc.text(`Generado: ${reportTimestamp}`, pageWidth / 2, currentY, { align: 'center' });
+      doc.text(`Generado: ${reportTimestamp} · Moneda: ${displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel}`, pageWidth / 2, currentY, { align: 'center' });
       currentY += 4;
 
       // Separator line
@@ -509,6 +533,7 @@ export function FinanceTableView({
 
       const head = [reportColumns.map(c => c.label)];
       const body = filteredData.map(item => reportColumns.map(col => {
+        if (col.key === '__reportCurrency') return displayMode === 'ORIGINAL' ? (item.currency || '—') : displayCurrency;
         if (col.type === 'currency') return col.key === 'total' ? '' : formatConvertedAmount(Number(item[col.key] || 0), item.currency, item.exchangeRate);
         if (col.type === 'date' || col.type === 'datetime') return item[col.key] ? new Date(item[col.key]).toLocaleString('es-NI') : '-';
         if (col.type === 'select') return col.key.toLowerCase().includes('status') || col.key.toLowerCase().includes('estado') ? pdfStatusLabel(getLabelForValue(col, item[col.key])) : getLabelForValue(col, item[col.key]);

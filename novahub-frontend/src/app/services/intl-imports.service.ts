@@ -1,4 +1,5 @@
 import { api } from './api';
+import { getCurrencyDecimalPlaces, roundCurrencyNumber } from '../utils/currency';
 
 export type IntlImportPackageStatus =
   | 'RECEIVED_AT_WAREHOUSE'
@@ -390,7 +391,7 @@ function normalizeContainer(raw: RawContainer): IntlImportContainer {
   const expenses = Array.isArray(raw.expenses) ? raw.expenses : [];
   const totalVolumeCbm = raw.totalVolumeCbm ?? Number((packages.reduce((sum, p) => sum + (Number(p.volumeCbm) || 0), 0)).toFixed(4));
   const totalActualWeightKg = raw.totalActualWeightKg ?? Number((packages.reduce((sum, p) => sum + (Number(p.actualWeightKg) || 0), 0)).toFixed(2));
-  const totalExpensesUsd = raw.totalExpensesUsd ?? raw.totalExpenses ?? Number((expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)).toFixed(2));
+  const totalExpensesUsd = raw.totalExpensesUsd ?? raw.totalExpenses ?? Number((expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)).toFixed(getCurrencyDecimalPlaces()));
   const maxCapacityCbm = raw.capacityCbm ?? raw.maxCapacityCbm ?? 20;
   const maxWeightKg = raw.maxWeightKg ?? 5000;
   const packagesCount = raw.packagesCount ?? raw.packageCount ?? packages.length;
@@ -429,7 +430,7 @@ function normalizeProrationPreview(raw: RawProrationPreview): ProrationPreviewRe
   // realidad viene del facturable (p. ej. 0.004 CBM fisicos con 0.41% porque su
   // facturable es 0.08).
   const totalBillableCbm = raw.totalBillableCbm ?? totalVolumeCbm;
-  const costPerCbm = raw.costPerCbm ?? (totalBillableCbm > 0 ? Number((totalExpensesUsd / totalBillableCbm).toFixed(2)) : 0);
+  const costPerCbm = raw.costPerCbm ?? (totalBillableCbm > 0 ? roundCurrencyNumber(totalExpensesUsd / totalBillableCbm) : 0);
 
   const packages: ProrationPackageItem[] = rawList.map((p: RawProrationItem) => {
     let percentage = p.percentage;

@@ -666,12 +666,23 @@ function PreviewPanel({
   const [tableScroll, setTableScroll] = useState({ canScrollLeft: false, canScrollRight: false });
   const [collapsedParentKeys, setCollapsedParentKeys] = useState<Set<string>>(() => new Set());
   const hasErrors = preview.errors.length > 0;
-  const locationOptions = Array.from(new Map(preview.locations.map((location) => {
+  const locationOptions = useMemo(() => Array.from(new Map(preview.locations.map((location) => {
     const label = displayLocationLabel(location);
     return [`${location.warehouseId}:${label}`, { value: label, type: location.type }];
-  })).values());
-  const categoryOptions = Array.from(new Map(categories.map((category) => [category.name.trim().toLowerCase(), category])).values());
-  const draftFor = (row: ManagerInventoryImportPreview['rows'][number]) => draftRows.find((draft) => Number(draft.__importRowNumber || 0) === Number(row.rowNumber));
+  })).values()), [preview.locations]);
+  const locationOptionByKey = useMemo(() => new Map(locationOptions.map((option) => [normalizeImportKey(option.value), option])), [locationOptions]);
+  const categoryOptions = useMemo(() => Array.from(new Map(categories.map((category) => [category.name.trim().toLowerCase(), category])).values()), [categories]);
+  const categoryNames = useMemo(() => new Set(categoryOptions.map((category) => category.name.trim().toLowerCase())), [categoryOptions]);
+  const preparedCategoryNameSet = useMemo(() => new Set(preparedCategoryNames.map((name) => name.toLowerCase())), [preparedCategoryNames]);
+  const draftRowsByNumber = useMemo(() => {
+    const indexed = new Map<number, Record<string, unknown>>();
+    for (const draft of draftRows) {
+      const rowNumber = Number(draft.__importRowNumber || 0);
+      if (!indexed.has(rowNumber)) indexed.set(rowNumber, draft);
+    }
+    return indexed;
+  }, [draftRows]);
+  const draftFor = (row: ManagerInventoryImportPreview['rows'][number]) => draftRowsByNumber.get(Number(row.rowNumber));
   const valueFor = (row: ManagerInventoryImportPreview['rows'][number], field: string, fallback: unknown = '') => {
     const value = draftFor(row)?.[field];
     return value === undefined || value === null ? fallback : value;
@@ -782,24 +793,24 @@ function PreviewPanel({
   const inputClass = 'h-9 w-full min-w-0 rounded-lg border-border/70 bg-background/70 text-xs';
   const currentLocationOptions = (row: ManagerInventoryImportPreview['rows'][number]) => {
     const current = String(valueFor(row, 'warehouseSelection', row.locationLabel || '') || '');
-    return current && !locationOptions.some((option) => normalizeImportKey(option.value) === normalizeImportKey(current))
+    return current && !locationOptionByKey.has(normalizeImportKey(current))
       ? [{ value: current, type: 'INVALID' }, ...locationOptions]
       : locationOptions;
   };
   const selectedLocationValue = (row: ManagerInventoryImportPreview['rows'][number]) => {
     const current = String(valueFor(row, 'warehouseSelection', row.locationLabel || '') || '');
-    return locationOptions.find((option) => normalizeImportKey(option.value) === normalizeImportKey(current))?.value || current;
+    return locationOptionByKey.get(normalizeImportKey(current))?.value || current;
   };
   const locationContext = (row: ManagerInventoryImportPreview['rows'][number]) => row.locationType === 'ALMACEN'
     ? 'Stock independiente del almacén corporativo'
     : undefined;
   const categoryIsNew = (row: ManagerInventoryImportPreview['rows'][number]) => {
     const category = String(valueFor(row, 'category', '') || '').trim();
-    return Boolean(category) && !categoryOptions.some((option) => option.name.trim().toLowerCase() === category.toLowerCase());
+    return Boolean(category) && !categoryNames.has(category.toLowerCase());
   };
   const categoryIsPrepared = (row: ManagerInventoryImportPreview['rows'][number]) => {
     const category = String(valueFor(row, 'category', '') || '').trim().toLowerCase();
-    return Boolean(category) && preparedCategoryNames.some((name) => name.toLowerCase() === category);
+    return Boolean(category) && preparedCategoryNameSet.has(category);
   };
   const locationIssue = (row: ManagerInventoryImportPreview['rows'][number]) => row.issues.find((issue) => /ubicación|sucursal/i.test(issue));
   const renderStatus = (row: ManagerInventoryImportPreview['rows'][number]) => (
@@ -832,7 +843,7 @@ function PreviewPanel({
       <div className="p-1"><Input value={String(valueFor(row, 'name', row.name) || '')} onChange={(event) => onRowUpdate(row, 'name', event.target.value)} className={inputClass} /></div>
       <div className="p-1"><div className="flex min-w-0 items-center gap-1"><Input list="manager-import-categories" value={category} onChange={(event) => onRowUpdate(row, 'category', event.target.value)} className={`${inputClass} ${categoryIsNew(row) ? 'border-warning/60' : ''}`} />{categoryIsNew(row) && <Button type="button" variant="ghost" size="icon" className={`size-8 shrink-0 rounded-lg ${categoryIsPrepared(row) ? 'text-success' : 'text-warning'}`} onClick={() => onPrepareCategory(category)} aria-label={categoryIsPrepared(row) ? `Categoría ${category} preparada` : `Agregar categoría ${category}`} title={categoryIsPrepared(row) ? 'Categoría preparada para crear al confirmar' : 'Agregar categoría al importador'}>{categoryIsPrepared(row) ? <CheckCircle2 className="size-4" /> : <Plus className="size-4" />}</Button>}</div></div>
       <div className="p-1"><Input value={String(valueFor(row, 'unit', 'unidad') || '')} onChange={(event) => onRowUpdate(row, 'unit', event.target.value)} className={inputClass} /></div>
-      <div className="p-1"><Input type="number" min={0} value={String(valueFor(row, 'costPrice', row.costPrice ?? '') ?? '')} onChange={(event) => onRowUpdate(row, 'costPrice', parseImportNumber(event.target.value))} className={`${inputClass} text-right`} /></div>
+      <div className="p-1"><Input type="number" min={0} value={String(valueFor(row, 'costPrice', row.costPrice ?? '') ?? '')} onChange={(event) => onRowUpdate(row, 'costPrice', parseImportNumber(event.target.value))} className={`${inputClass} text-right`} currencyPrecision /></div>
       <div className="p-1"><select value={selectedLocationValue(row)} onChange={(event) => onRowUpdate(row, 'warehouseSelection', event.target.value)} className={`${inputClass} ${locationIssue(row) ? 'border-destructive/60 text-destructive' : ''}`}><option value="">Seleccionar ubicación activa</option>{currentLocationOptions(row).map((option) => <option key={`${option.value}-${option.type}`} value={option.value}>{option.value}{option.type === 'INVALID' ? ' · no disponible' : ''}</option>)}</select>{locationContext(row) && <p className="max-w-56 px-1 pt-1 text-[10px] leading-4 text-muted-foreground">{locationContext(row)}</p>}{locationIssue(row) && <p className="max-w-56 px-1 pt-1 text-[10px] leading-4 text-destructive">{locationIssue(row)}</p>}</div>
       <div className="p-1"><Input type="number" min={0} value={String(valueFor(row, 'stock', row.stock) ?? 0)} onChange={(event) => onRowUpdate(row, 'stock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></div>
       <div className="p-1"><Input type="number" min={0} value={String(valueFor(row, 'minStock', 0) ?? 0)} onChange={(event) => onRowUpdate(row, 'minStock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></div>
@@ -868,7 +879,7 @@ function PreviewPanel({
         <label className="space-y-1 sm:col-span-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Nombre</span><Input value={String(valueFor(row, 'name', row.name) || '')} onChange={(event) => onRowUpdate(row, 'name', event.target.value)} className={inputClass} /></label>
         <label className="space-y-1 sm:col-span-2"><span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Categoría {categoryIsNew(row) && <>{categoryIsPrepared(row) ? <span className="font-normal text-success">· preparada</span> : <span className="font-normal text-warning">· pulsa + para agregar</span>}<Button type="button" variant="ghost" size="icon" className={`size-6 rounded-md ${categoryIsPrepared(row) ? 'text-success' : 'text-warning'}`} onClick={() => onPrepareCategory(category)} aria-label={categoryIsPrepared(row) ? `Categoría ${category} preparada` : `Agregar categoría ${category}`} title={categoryIsPrepared(row) ? 'Categoría preparada para crear al confirmar' : 'Agregar categoría al importador'}>{categoryIsPrepared(row) ? <CheckCircle2 className="size-3.5" /> : <Plus className="size-3.5" />}</Button></>}</span><Input list="manager-import-categories" value={category} onChange={(event) => onRowUpdate(row, 'category', event.target.value)} className={inputClass} /></label>
         <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Unidad</span><Input value={String(valueFor(row, 'unit', 'unidad') || '')} onChange={(event) => onRowUpdate(row, 'unit', event.target.value)} className={inputClass} /></label>
-        <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo</span><Input type="number" min={0} value={String(valueFor(row, 'costPrice', row.costPrice ?? '') ?? '')} onChange={(event) => onRowUpdate(row, 'costPrice', parseImportNumber(event.target.value))} className={`${inputClass} text-right`} /></label>
+        <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo</span><Input type="number" min={0} value={String(valueFor(row, 'costPrice', row.costPrice ?? '') ?? '')} onChange={(event) => onRowUpdate(row, 'costPrice', parseImportNumber(event.target.value))} className={`${inputClass} text-right`} currencyPrecision /></label>
         <label className="space-y-1 sm:col-span-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Ubicación destino</span><select value={selectedLocationValue(row)} onChange={(event) => onRowUpdate(row, 'warehouseSelection', event.target.value)} className={`${inputClass} ${locationIssue(row) ? 'border-destructive/60 text-destructive' : ''}`}><option value="">Seleccionar ubicación activa</option>{currentLocationOptions(row).map((option) => <option key={`${option.value}-${option.type}`} value={option.value}>{option.value}{option.type === 'INVALID' ? ' · no disponible' : ''}</option>)}</select>{locationContext(row) && <p className="text-[10px] leading-4 text-muted-foreground">{locationContext(row)}</p>}{locationIssue(row) && <p className="text-[10px] leading-4 text-destructive">{locationIssue(row)}</p>}</label>
         <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Stock inicial</span><Input type="number" min={0} value={String(valueFor(row, 'stock', row.stock) ?? 0)} onChange={(event) => onRowUpdate(row, 'stock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></label>
         <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Stock mínimo</span><Input type="number" min={0} value={String(valueFor(row, 'minStock', 0) ?? 0)} onChange={(event) => onRowUpdate(row, 'minStock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></label>

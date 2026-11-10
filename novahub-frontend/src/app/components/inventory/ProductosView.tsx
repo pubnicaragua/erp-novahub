@@ -60,6 +60,7 @@ import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { ExportMenu } from '../ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { ServicePriceListsDialog } from './ServicePriceListsDialog';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -113,7 +114,7 @@ const getImportCurrencySymbol = (currency: string) => String(currency || '').toU
 const formatImportAmount = (value: unknown) => {
   const amount = Number(value);
   return Number.isFinite(amount)
-    ? amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? amount.toLocaleString('en-US', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })
     : '—';
 };
 
@@ -313,8 +314,26 @@ const hasProductVariants = (product: any) => {
 interface ProductosViewProps {
   products: any[];
   summaryProducts?: any[];
+  summaryProductsLoaded?: boolean;
+  summaryAggregate?: {
+    total: number;
+    available: number;
+    low: number;
+    out: number;
+    serviceCategories: number;
+    serviceWeeklyAverage: number;
+    serviceAveragePrice: number;
+    brands: Array<{ value: string; label: string; count: number }>;
+  };
   summaryLoading?: boolean;
   summaryError?: boolean;
+  onLoadFullCatalog?: () => Promise<any[]>;
+  onSummaryFiltersChange?: (filters: {
+    unit: string;
+    taxRate: string;
+    availability: 'all' | 'available' | 'unavailable';
+    showAllWarehouseProducts: boolean;
+  }) => void;
   categories: any[];
   warehouses?: any[];
   productWarehouseOptions?: any[];
@@ -704,17 +723,24 @@ function ImportPreviewPage({
     ...(isService ? ['130px'] : ['96px', '96px', '220px']),
     '160px',
   ].join(' ');
-  const previewEntries = useMemo<Extract<ProductImportPreviewEntry, { kind: 'parent' | 'row' }>[]>(() => importData.map((row, rowIndex) => {
-    const hasVariants = Boolean(advancedCatalog && !isService && row._advanced && (row._hasVariants === true || Number(row._variantCount || 0) > 0));
-    if (!hasVariants) return { kind: 'row', key: `row:${rowIndex}`, rowIndex };
-    const parentCode = String(row._sourceCode || row.code || '').trim().toLowerCase();
-    return {
-      kind: 'parent',
-      key: `parent:${parentCode || rowIndex}`,
-      rowIndex,
-      variants: (advancedCatalog?.variants || []).filter((variant) => String(variant.productCode || '').trim().toLowerCase() === parentCode),
-    };
-  }), [advancedCatalog, importData, isService]);
+  const previewEntries = useMemo<Extract<ProductImportPreviewEntry, { kind: 'parent' | 'row' }>[]>(() => {
+    const variantsByProductCode = new Map<string, NonNullable<typeof advancedCatalog>['variants']>();
+    for (const variant of advancedCatalog?.variants || []) {
+      const key = String(variant.productCode || '').trim().toLowerCase();
+      variantsByProductCode.set(key, [...(variantsByProductCode.get(key) || []), variant]);
+    }
+    return importData.map((row, rowIndex) => {
+      const hasVariants = Boolean(advancedCatalog && !isService && row._advanced && (row._hasVariants === true || Number(row._variantCount || 0) > 0));
+      if (!hasVariants) return { kind: 'row', key: `row:${rowIndex}`, rowIndex };
+      const parentCode = String(row._sourceCode || row.code || '').trim().toLowerCase();
+      return {
+        kind: 'parent',
+        key: `parent:${parentCode || rowIndex}`,
+        rowIndex,
+        variants: variantsByProductCode.get(parentCode) || [],
+      };
+    });
+  }, [advancedCatalog, importData, isService]);
   const [collapsedParentKeys, setCollapsedParentKeys] = useState<Set<string>>(() => new Set(previewEntries.filter((entry) => entry.kind === 'parent').map((entry) => entry.key)));
   const parentExpansionInitializedRef = useRef(previewEntries.some((entry) => entry.kind === 'parent'));
   const groupedParents = previewEntries.filter((entry): entry is Extract<ProductImportPreviewEntry, { kind: 'parent' }> => entry.kind === 'parent');
@@ -1072,7 +1098,7 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, summaryProducts, summaryLoading = false, summaryError = false, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, onExport, isRefreshing = false, onCreateProduct, pagination, onSearchChange, onCategoryChange, onBrandChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, brandFilter: controlledBrandFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
+export function ProductosView({ products, summaryProducts, summaryProductsLoaded = false, summaryAggregate, summaryLoading = false, summaryError = false, onLoadFullCatalog, onSummaryFiltersChange, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, onExport, isRefreshing = false, onCreateProduct, pagination, onSearchChange, onCategoryChange, onBrandChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, brandFilter: controlledBrandFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
   const { openingId, startOpening } = useDetailOpeningFeedback();
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
@@ -1201,6 +1227,18 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
       .forEach((warehouse: any) => unique.set(warehouse.id || warehouse.name, warehouse));
     return Array.from(unique.values());
   }, [warehouses, productWarehouseOptions]);
+  const importCategoryByName = useMemo(() => new Map(
+    importCategoryOptions.map((category: any) => [String(category.name || '').trim().toLowerCase(), category]),
+  ), [importCategoryOptions]);
+  const importWarehouseByName = useMemo(() => new Map(
+    importWarehouseOptions.map((warehouse: any) => [String(warehouse.name || '').trim().toLowerCase(), warehouse]),
+  ), [importWarehouseOptions]);
+  const importCategoryNames = useMemo(() => new Set(
+    importCategoryOptions.map((category: any) => String(category.name || '').trim().toLowerCase()),
+  ), [importCategoryOptions]);
+  const importWarehouseNames = useMemo(() => new Set(
+    importWarehouseOptions.map((warehouse: any) => String(warehouse.name || '').trim().toLowerCase()),
+  ), [importWarehouseOptions]);
   const displayWarehouseOptions = productWarehouseOptions.length > 0 ? productWarehouseOptions : warehouses;
   const warehouseNamesForProduct = useCallback((product: any) => {
     const names = new Set<string>();
@@ -1244,6 +1282,14 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   const effectiveBrandFilter = controlledBrandFilter ?? localBrandFilter;
   const [localTaxRateFilter, setLocalTaxRateFilter] = useState('');
   const effectiveTaxRateFilter = controlledTaxRateFilter ?? localTaxRateFilter;
+  useEffect(() => {
+    onSummaryFiltersChange?.({
+      unit: effectiveUnitFilter,
+      taxRate: effectiveTaxRateFilter,
+      availability: availabilityFilter,
+      showAllWarehouseProducts,
+    });
+  }, [availabilityFilter, effectiveTaxRateFilter, effectiveUnitFilter, onSummaryFiltersChange, showAllWarehouseProducts]);
   const [localStockStatusFilter, setLocalStockStatusFilter] = useState('');
   const effectiveStockStatusFilter = controlledStockStatusFilter ?? localStockStatusFilter;
   const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out' | 'expiring'>(initialStockFilter || (effectiveStockStatusFilter as any) || 'all');
@@ -1268,6 +1314,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   const [previewMounting, setPreviewMounting] = useState(false);
   const [importing, setImporting] = useState(false);
   const importValidationTimerRef = useRef<number | null>(null);
+  const importValidationAffectedCodesRef = useRef<Set<string>>(new Set());
   const previewMountTimerRef = useRef<number | null>(null);
   const previewFinishTimerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1440,7 +1487,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
       const summaryCatalog = (summaryProducts || []).filter((product: any) =>
         String(product.itemType || product.type || 'PRODUCT').toUpperCase() === 'PRODUCT',
       );
-      if (summaryCatalog.length > 0) {
+      if (summaryProductsLoaded) {
         startTransition(() => {
           setSolicitudCatalogProducts(summaryCatalog);
           setSolicitudCatalogLoading(false);
@@ -1476,7 +1523,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [products, summaryProducts, solicitudOpen]);
+  }, [products, summaryProducts, summaryProductsLoaded, solicitudOpen]);
 
   const getSolicitudProductSnapshot = (product: any, warehouseIdOverride?: string) => {
     // El stock de una solicitud siempre es el de una bodega concreta. El
@@ -1624,20 +1671,28 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
     setSolicitudCategoryFilter('ALL');
     setSolicitudStockFilter('ALL');
     setSolicitudOpen(true);
-    solicitudPreparationTimerRef.current = window.setTimeout(() => {
+    solicitudPreparationTimerRef.current = window.setTimeout(async () => {
       solicitudPreparationTimerRef.current = null;
-      const catalog = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
-      const lowStock = catalog.filter((p: any) => {
-        if (String(p.itemType || p.type || 'PRODUCT').toUpperCase() !== 'PRODUCT') return false;
-        const stockLevels = Array.isArray(p?.stockLevels) ? p.stockLevels : [];
-        const levels = stockLevels.length > 0 ? stockLevels : (Array.isArray(p?.allocations) ? p.allocations : []);
-        return levels.some((level: any) => {
-          const quantity = Number(level?.quantity || 0);
-          const minimum = Number(level?.minStock || 0);
-          return quantity <= (minimum > 0 ? minimum : 2);
+      try {
+        const catalog = summaryProductsLoaded ? (summaryProducts || []) : await onLoadFullCatalog?.();
+        if (!summaryProductsLoaded && !onLoadFullCatalog) throw new Error('No está disponible la carga completa del catálogo.');
+        const lowStock = (catalog || []).filter((p: any) => {
+          if (String(p.itemType || p.type || 'PRODUCT').toUpperCase() !== 'PRODUCT') return false;
+          const stockLevels = Array.isArray(p?.stockLevels) ? p.stockLevels : [];
+          const levels = stockLevels.length > 0 ? stockLevels : (Array.isArray(p?.allocations) ? p.allocations : []);
+          return levels.some((level: any) => {
+            const quantity = Number(level?.quantity || 0);
+            const minimum = Number(level?.minStock || 0);
+            return quantity <= (minimum > 0 ? minimum : 2);
+          });
         });
-      });
-      startTransition(() => setSolicitudProducts(buildSolicitudItems(lowStock)));
+        startTransition(() => setSolicitudProducts(buildSolicitudItems(lowStock)));
+      } catch (error: any) {
+        setSolicitudProducts([]);
+        toast.error(error?.response?.data?.message || error?.message || 'No se pudo cargar el catálogo completo para buscar productos con stock bajo.');
+      } finally {
+        setSolicitudCatalogLoading(false);
+      }
     }, 0);
   };
 
@@ -1753,7 +1808,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
         setSolicitudCreating(false);
         return;
       }
-      const catalog = summaryProducts && summaryProducts.length > 0 ? summaryProducts : solicitudCatalogProducts;
+      const catalog = summaryProductsLoaded ? (summaryProducts || []) : solicitudCatalogProducts;
       const items = solicitudProducts.flatMap(item => {
         const product = catalog.find((candidate: any) => String(candidate.id) === String(item.productId));
         const snapshot = product
@@ -1892,6 +1947,13 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   const getProductInventoryValuation = (product: any) => resolveInventoryValuation(product, stockWarehouseIdSet);
 
   const colFilters = useColumnFilters();
+  const hasColumnValueFilters = Object.values(colFilters.state).some((filter) => Boolean(filter.values?.length));
+  useEffect(() => {
+    if (!hasColumnValueFilters || summaryProductsLoaded || summaryLoading || !onLoadFullCatalog) return;
+    void onLoadFullCatalog().catch((error: any) => {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo cargar el catálogo completo para aplicar los filtros de columna.');
+    });
+  }, [hasColumnValueFilters, onLoadFullCatalog, summaryLoading, summaryProductsLoaded]);
   const filterGetters = {
     code: (p: any) => p.code || '',
     name: (p: any) => {
@@ -1997,13 +2059,15 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
     .filter(matchesProductFilters)
     .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
 
-  const resolvedSummaryProducts = getKpiSummaryRows({ data: summaryProducts, isLoading: summaryLoading, isError: summaryError });
+  const resolvedSummaryProducts = summaryProductsLoaded
+    ? (Array.isArray(summaryProducts) ? summaryProducts : [])
+    : getKpiSummaryRows({ data: summaryProducts, isLoading: summaryLoading, isError: summaryError });
   const summarySource = resolvedSummaryProducts || [];
   const filteredSummaryProducts = colFilters.applyTo(summarySource.filter(matchesSummaryProductFilters), filterGetters);
   const filteredData = colFilters.applyTo(filteredProducts, filterGetters);
-  const totalProductsForExport = summaryProducts && summaryProducts.length > 0
+  const totalProductsForExport = summaryProductsLoaded
     ? filteredSummaryProducts.length
-    : (pagination?.total ?? filteredProducts.length);
+    : (summaryAggregate ? Number(summaryAggregate.total || 0) : (pagination?.total ?? filteredProducts.length));
   const openProductExportDialog = () => {
     const pageAmount = Math.max(1, Math.min(pagination?.pageSize || filteredData.length || 50, totalProductsForExport || pagination?.pageSize || filteredData.length || 50));
     setProductExportScope('page');
@@ -2033,7 +2097,9 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
     try {
       const sourceRows = productExportScope === 'page'
         ? filteredData
-        : (summaryProducts && summaryProducts.length > 0 ? filteredSummaryProducts : filteredProducts);
+        : summaryProductsLoaded
+          ? filteredSummaryProducts
+          : colFilters.applyTo((await onLoadFullCatalog?.() || []).filter(matchesSummaryProductFilters), filterGetters);
       await onExport({
         amount: productExportScope === 'all' ? 'all' : requestedAmount,
         sortOrder: productExportSortOrder,
@@ -2050,7 +2116,16 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   };
   const handleProductPdfExport = async (paperFormat: PdfPaperFormat = 'letter') => {
     if (!canPerform(catalogPermissionModule, 'export')) return;
-    const sourceRows = summaryProducts && summaryProducts.length > 0 ? filteredSummaryProducts : filteredProducts;
+    let sourceRows = summaryProductsLoaded ? filteredSummaryProducts : [];
+    if (!summaryProductsLoaded) {
+      try {
+        const catalog = await onLoadFullCatalog?.();
+        sourceRows = colFilters.applyTo((catalog || []).filter(matchesSummaryProductFilters), filterGetters);
+      } catch (error: any) {
+        toast.error(error?.response?.data?.message || error?.message || 'No se pudo cargar el catálogo para generar el PDF.');
+        return;
+      }
+    }
     const rows = sourceRows.map((item: any) => isServiceView
       ? [item.code || '', item.name || '', item.category?.name || item.categoryName || '', item.unit || item.details?.unit || 'servicio', item.salePrice ?? item.price ?? '', item.isActive === false ? 'Inactivo' : 'Activo']
       : [item.code || '', item.name || '', item.category?.name || item.categoryName || '', item.unit || item.details?.unit || 'unidad', Number(item.stock || 0), item.salePrice ?? item.salePriceOriginal ?? '', item.isActive === false ? 'Inactivo' : 'Activo']);
@@ -2082,7 +2157,10 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   const categoryOptions = [...new Map(filteredProducts.map((p: any) => [p.category?.name || 'Sin categoría', p.category?.name || 'Sin categoría'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filteredProducts.filter((p: any) => (p.category?.name || 'Sin categoría') === label).length }));
   const brandOptions = useMemo(() => {
-    const source = ((summaryProducts && summaryProducts.length > 0) ? summaryProducts : products)
+    if (!summaryProductsLoaded && Array.isArray(summaryAggregate?.brands)) {
+      return summaryAggregate.brands.map((brand) => ({ value: brand.value, label: brand.label, count: brand.count }));
+    }
+    const source = (summaryProductsLoaded ? (summaryProducts || []) : products)
       .filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
     const grouped = new Map<string, { label: string; count: number }>();
     source.forEach((product: any) => {
@@ -2095,7 +2173,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
     return [...grouped.entries()]
       .sort(([, left], [, right]) => left.label.localeCompare(right.label, 'es', { sensitivity: 'base' }))
       .map(([value, option]) => ({ value, ...option }));
-  }, [catalogItemType, products, summaryProducts]);
+  }, [catalogItemType, products, summaryAggregate?.brands, summaryProducts, summaryProductsLoaded]);
 
   const paginatedProducts = useMemo(() => {
     if (pagination) return filteredData;
@@ -2119,6 +2197,14 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
   const totalPages = pagination?.totalPages || Math.max(1, Math.ceil(filteredProducts.length / pageSize));
 
   const inventorySummary = useMemo(() => {
+    if (!summaryProductsLoaded && summaryAggregate) {
+      return {
+        total: Number(summaryAggregate.total || 0),
+        available: Number(summaryAggregate.available || 0),
+        low: Number(summaryAggregate.low || 0),
+        out: Number(summaryAggregate.out || 0),
+      };
+    }
     // Los KPIs usan el catálogo completo, pero aplicando exactamente los
     // mismos filtros de la tabla; nunca se limitan a la página visible.
     const stockProducts = filteredSummaryProducts.filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
@@ -2138,9 +2224,16 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
       low: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter(isLow).length,
       out: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter((p: any) => getProductStock(p) <= 0).length,
     };
-  }, [filteredSummaryProducts, catalogItemType, stockByProduct, selectedBranchId, branchWarehouseIdSet, stockWarehouseIdSet]);
+  }, [filteredSummaryProducts, catalogItemType, stockByProduct, selectedBranchId, branchWarehouseIdSet, stockWarehouseIdSet, summaryAggregate, summaryProductsLoaded]);
 
   const serviceSummary = useMemo(() => {
+    if (!summaryProductsLoaded && summaryAggregate) {
+      return {
+        categories: Number(summaryAggregate.serviceCategories || 0),
+        weeklyAverage: Number(summaryAggregate.serviceWeeklyAverage || 0),
+        averagePrice: Number(summaryAggregate.serviceAveragePrice || 0),
+      };
+    }
     const services = filteredSummaryProducts.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
     const categories = new Set(services.map((service: any) => service.categoryId || service.category?.id).filter(Boolean));
     const now = Date.now();
@@ -2155,7 +2248,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
       weeklyAverage: createdInLastTwelveWeeks / 12,
       averagePrice: prices.length ? prices.reduce((sum, price) => sum + price, 0) / prices.length : 0,
     };
-  }, [filteredSummaryProducts]);
+  }, [filteredSummaryProducts, summaryAggregate, summaryProductsLoaded]);
 
   const inventoryKpis = isServiceView
     ? [
@@ -2897,8 +2990,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                 onChange={(e) => handleUpdateField(product.id, 'salePrice', e.target.value)}
                 onKeyDown={(e) => handleKeyDown(e, product.id)}
                 className="h-8 min-w-0 flex-1 text-right text-xs"
-                disabled={isSaving}
-              />
+                disabled={isSaving} currencyPrecision />
             </div>
             <span className="block text-[9px] text-muted-foreground">Tasa: {formatExchangeRate(product.priceCurrency === baseCurrency ? 1 : exchangeRate)}</span>
           </div>
@@ -2912,8 +3004,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
             onChange={(e) => handleUpdateField(product.id, 'costPrice', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
             className="h-8 min-w-0 w-full text-right text-xs"
-            disabled={isSaving}
-          />
+            disabled={isSaving} currencyPrecision />
         </TableCell>}
         {!isServiceView && canViewInventoryCost && visibleColumns.cost !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>
           <Input
@@ -2924,8 +3015,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
             onChange={(e) => handleUpdateField(product.id, 'costPrice', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
             className="h-8 min-w-0 w-full text-right text-xs"
-            disabled={isSaving}
-          />
+            disabled={isSaving} currencyPrecision />
         </TableCell>}
         {visibleColumns.priceUpdatedAt !== false && <TableCell className="align-top pt-3 text-xs text-muted-foreground" style={{ width: PRODUCT_TABLE_WIDTHS.priceUpdatedAt, minWidth: PRODUCT_TABLE_WIDTHS.priceUpdatedAt }}>—</TableCell>}
         {visibleColumns.priceStatus !== false && <TableCell className="align-top pt-3 text-xs text-muted-foreground" style={{ width: PRODUCT_TABLE_WIDTHS.priceStatus, minWidth: PRODUCT_TABLE_WIDTHS.priceStatus }}>—</TableCell>}
@@ -3219,15 +3309,20 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
     toast.success('Reporte de incidencias descargado');
   }, [importData, canViewInventoryCost, isServiceView, importPriceListsForView]);
 
-  const validateImportRows = useCallback((rows: any[], entries = imageArchiveEntries, archiveName = imageArchiveFileName, categoryOptions = importCategoryOptions, warehouseOptions = importWarehouseOptions) => {
+  const validateImportRows = useCallback((rows: any[], entries = imageArchiveEntries, archiveName = imageArchiveFileName, categoryOptions = importCategoryOptions, warehouseOptions = importWarehouseOptions, indexesToValidate?: ReadonlySet<number>) => {
     const codeCounts = new Map<string, number>();
-    const categoryNames = new Set(categoryOptions.map((category: any) => String(category.name || '').trim().toLowerCase()));
-    const warehouseNames = new Set(warehouseOptions.map((warehouse: any) => String(warehouse.name || '').trim().toLowerCase()));
+    const categoryNames = categoryOptions === importCategoryOptions
+      ? importCategoryNames
+      : new Set(categoryOptions.map((category: any) => String(category.name || '').trim().toLowerCase()));
+    const warehouseNames = warehouseOptions === importWarehouseOptions
+      ? importWarehouseNames
+      : new Set(warehouseOptions.map((warehouse: any) => String(warehouse.name || '').trim().toLowerCase()));
     rows.forEach((row) => {
       const code = String(row.code || '').trim().toLowerCase();
       if (code) codeCounts.set(code, (codeCounts.get(code) || 0) + 1);
     });
-    return rows.map((row) => {
+    return rows.map((row, rowIndex) => {
+      if (indexesToValidate && !indexesToValidate.has(rowIndex)) return row;
       const code = String(row.code || '').trim();
       const commercialNote = String(row.commercialNote || '').trim();
       const categoryOk = categoryNames.has(String(row.category || '').trim().toLowerCase());
@@ -3324,7 +3419,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
         _imageStatus: imageStatus,
       };
     });
-  }, [importCategoryOptions, importWarehouseOptions, imageArchiveEntries, imageArchiveFileName, canViewInventoryCost, isServiceView, importPriceListsForView, getPrimaryImportPrice]);
+  }, [importCategoryOptions, importWarehouseOptions, importCategoryNames, importWarehouseNames, imageArchiveEntries, imageArchiveFileName, canViewInventoryCost, isServiceView, importPriceListsForView, getPrimaryImportPrice]);
 
   const handleFileSelected = useCallback(async (file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
@@ -3540,6 +3635,12 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
 
   const handleImportRowUpdate = (index: number, field: string, value: any) => {
     const currentRow = importData[index];
+    if (field === 'code') {
+      const previousCode = String(currentRow?.code || '').trim().toLowerCase();
+      const nextCode = String(value || '').trim().toLowerCase();
+      if (previousCode) importValidationAffectedCodesRef.current.add(previousCode);
+      if (nextCode) importValidationAffectedCodesRef.current.add(nextCode);
+    }
     const isAdvancedProduct = Boolean(advancedImportCatalog && !isServiceView && currentRow?._advanced);
     const isSimpleAdvancedProduct = Boolean(
       isAdvancedProduct
@@ -3592,11 +3693,11 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
         row._stockRows = (row._stockRows || []).map((stockRow: any) => ({ ...stockRow, warehouse: String(value || '').trim() }));
       }
       if (field === 'category') {
-        const category = importCategoryOptions.find((c: any) => c.name?.toLowerCase() === String(value).trim().toLowerCase());
+        const category = importCategoryByName.get(String(value).trim().toLowerCase());
         row.categoryId = category?.id;
       }
       if (field === 'warehouse') {
-        const warehouse = importWarehouseOptions.find((w: any) => w.name?.toLowerCase() === String(value).trim().toLowerCase());
+        const warehouse = importWarehouseByName.get(String(value).trim().toLowerCase());
         row.warehouseId = warehouse?.id;
       }
       next[index] = row;
@@ -3604,7 +3705,17 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
     });
     if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
     importValidationTimerRef.current = window.setTimeout(() => {
-      setImportData((current) => validateImportRows(current));
+      setImportData((current) => {
+        const indexesToValidate = new Set([index]);
+        const changedCodeKeys = importValidationAffectedCodesRef.current;
+        if (changedCodeKeys.size) {
+          current.forEach((candidate, candidateIndex) => {
+            if (changedCodeKeys.has(String(candidate.code || '').trim().toLowerCase())) indexesToValidate.add(candidateIndex);
+          });
+          changedCodeKeys.clear();
+        }
+        return validateImportRows(current, imageArchiveEntries, imageArchiveFileName, importCategoryOptions, importWarehouseOptions, indexesToValidate);
+      });
       importValidationTimerRef.current = null;
     }, 260);
   };
@@ -5347,7 +5458,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                             {isServiceView && <TableCell className="p-1"><Input value={row.description || ''} title={row.description || ''} onChange={(e) => handleImportRowUpdate(i, 'description', e.target.value)} className="h-8 text-xs" /></TableCell>}
                             <TableCell className="p-1"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(e) => handleImportRowUpdate(i, 'commercialNote', e.target.value)} className="h-8 text-xs" /><span className="text-[10px] text-muted-foreground">{Array.from(String(row.commercialNote || '')).length}/100</span></TableCell>
                             <TableCell className="p-1">
-                              {importCategoryOptions.some((category: any) => category.name?.toLowerCase() === String(row.category || '').trim().toLowerCase()) ? (
+                              {importCategoryByName.has(String(row.category || '').trim().toLowerCase()) ? (
                                 <Input
                                   value={row.category}
                                   onChange={(e) => handleImportRowUpdate(i, 'category', e.target.value)}
@@ -5381,16 +5492,16 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                                 className="h-8 text-xs"
                               />
                             </TableCell>
-                            {isServiceView ? <><TableCell className="p-1"><Input type="number" min={0} value={row.estimatedDuration ?? ''} onChange={(e) => handleImportRowUpdate(i, 'estimatedDuration', e.target.value === '' ? undefined : Number(e.target.value))} className="h-8 text-xs text-right" /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.salePrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'servicePrice', e.target.value)} className="h-8 text-xs text-right" /></TableCell></> : <><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.RETAIL', e.target.value)} className="h-8 text-xs text-right" /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.WHOLESALE', e.target.value)} className="h-8 text-xs text-right" /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.DISTRIBUTOR', e.target.value)} className="h-8 text-xs text-right" /></TableCell></>}
+                            {isServiceView ? <><TableCell className="p-1"><Input type="number" min={0} value={row.estimatedDuration ?? ''} onChange={(e) => handleImportRowUpdate(i, 'estimatedDuration', e.target.value === '' ? undefined : Number(e.target.value))} className="h-8 text-xs text-right" /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.salePrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'servicePrice', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell></> : <><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.RETAIL', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.WHOLESALE', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.DISTRIBUTOR', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell></>}
                             {canViewInventoryCost && <TableCell className="p-1">
-                              <Input type="number" min={0} value={row.costPrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'costPrice', e.target.value)} className="h-8 text-xs text-right" />
+                              <Input type="number" min={0} value={row.costPrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'costPrice', e.target.value)} className="h-8 text-xs text-right" currencyPrecision />
                             </TableCell>}
                             {isServiceView ? <TableCell className="p-1"><Select value={row.isActive === false ? 'false' : 'true'} onValueChange={(value) => handleImportRowUpdate(i, 'isActive', value === 'true')}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="true">Disponible</SelectItem><SelectItem value="false">No disponible</SelectItem></SelectContent></Select></TableCell> : row._advanced && (row._hasVariants === true || Number(row._variantCount || 0) > 0) ? <>
                               <TableCell className="p-1 text-center"><span className="text-[10px] font-semibold text-muted-foreground">Por variante</span></TableCell>
                               <TableCell className="p-1 text-center"><span className="text-[10px] text-muted-foreground">—</span></TableCell>
                               <TableCell className="p-1 text-center">
                                 {Array.isArray(row._stockRows) && row._stockRows.length > 0 && row.warehouse !== 'Varias bodegas' ? (() => {
-                                  const warehouseExists = importWarehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === String(row.warehouse || '').trim().toLowerCase());
+                                  const warehouseExists = importWarehouseByName.has(String(row.warehouse || '').trim().toLowerCase());
                                   const selectValue = warehouseExists ? row.warehouse : '__invalid__';
                                   return <Select value={selectValue || '__none__'} onValueChange={(value) => handleImportRowUpdate(i, 'warehouse', value === '__none__' || value === '__invalid__' ? '' : value)}>
                                     <SelectTrigger className={`h-8 text-xs ${!warehouseExists ? 'border-warning/60 text-warning' : ''}`} title="Aplica la bodega seleccionada a las filas de inventario de este producto"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
@@ -5418,7 +5529,7 @@ export function ProductosView({ products, summaryProducts, summaryLoading = fals
                                 <Input type="number" min={0} value={row.minStock} onChange={(e) => handleImportRowUpdate(i, 'minStock', Number(e.target.value) || 0)} className="h-8 text-xs text-right" />
                               </TableCell>
                               <TableCell className="p-1 text-center">
-                                {!row.warehouse || importWarehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === String(row.warehouse || '').trim().toLowerCase()) ? (
+                                {!row.warehouse || importWarehouseByName.has(String(row.warehouse || '').trim().toLowerCase()) ? (
                                   <Select value={row.warehouse || '__none__'} onValueChange={(value) => handleImportRowUpdate(i, 'warehouse', value === '__none__' ? '' : value)}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger><SelectContent><SelectItem value="__none__">Sin bodega</SelectItem>{importWarehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{importWarehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent></Select>
                                 ) : (
                                   <div className="flex items-center gap-1">

@@ -486,7 +486,7 @@ export function RHPage({ activeSubModule }: RHPageProps) {
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right">Salario</Label>
-              <Input className="col-span-3" type="number" value={empForm.salary || 0} onChange={e => setEmpForm({ ...empForm, salary: Number(e.target.value) })} />
+              <Input className="col-span-3" type="number" value={empForm.salary || 0} onChange={e => setEmpForm({ ...empForm, salary: Number(e.target.value) })} currencyPrecision />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right">Estado</Label>
@@ -531,11 +531,11 @@ export function RHPage({ activeSubModule }: RHPageProps) {
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right">Monto Bruto</Label>
-              <Input className="col-span-3" type="number" value={planillaForm.totalGross || 0} onChange={e => setPlanillaForm({ ...planillaForm, totalGross: Number(e.target.value) })} />
+              <Input className="col-span-3" type="number" value={planillaForm.totalGross || 0} onChange={e => setPlanillaForm({ ...planillaForm, totalGross: Number(e.target.value) })} currencyPrecision />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right">Deducciones</Label>
-              <Input className="col-span-3" type="number" value={planillaForm.totalDeductions || 0} onChange={e => setPlanillaForm({ ...planillaForm, totalDeductions: Number(e.target.value) })} />
+              <Input className="col-span-3" type="number" value={planillaForm.totalDeductions || 0} onChange={e => setPlanillaForm({ ...planillaForm, totalDeductions: Number(e.target.value) })} currencyPrecision />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right">Estado</Label>

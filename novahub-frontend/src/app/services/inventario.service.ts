@@ -121,6 +121,16 @@ export const inventoryService = {
     const products = await api.get<PaginatedResponse<Product>>('/inventory/products', { params: filters as any, signal });
     return resolveStorageReferences(products);
   },
+  getProductSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<{
+    total: number;
+    available: number;
+    low: number;
+    out: number;
+    serviceCategories: number;
+    serviceWeeklyAverage: number;
+    serviceAveragePrice: number;
+    brands: Array<{ value: string; label: string; count: number }>;
+  }>('/inventory/products/summary', { params: filters as any, signal }),
   getProductLookup: async (filters?: ApiFilters, signal?: AbortSignal) => {
     const products = await api.get<PaginatedResponse<any>>('/inventory/products/lookup', { params: filters as any, signal });
     return resolveStorageReferences(products);

@@ -20,6 +20,7 @@ import { storageService } from '../../services/storage.service';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 // Tipos para el nuevo log
 type LogFormData = {
@@ -159,7 +160,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, summa
   const filtered = data.filter(l => l.entity?.toLowerCase().includes(searchTerm.toLowerCase()) || l.details?.toLowerCase().includes(searchTerm.toLowerCase()) || l.action?.toLowerCase().includes(searchTerm.toLowerCase()));
   const kpiRows = loading || summaryError ? [] : filtered;
   const totalSizeBytes = kpiRows.reduce((acc, log) => acc + (Number(log.fileSize) || 0), 0);
-  const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(2);
+  const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(getCurrencyDecimalPlaces());
 
   const kpis = [
     { title: 'Almacenamiento (1GB)', value: `${totalSizeMB} MB`, icon: Database, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },

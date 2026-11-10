@@ -47,7 +47,6 @@ import { BranchScopeFilter } from './ui/BranchScopeFilter';
 import { useBranchScope } from '../hooks/useBranchScope';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import type { SalesPageSize, SalesPaginationControls } from '../types';
-import { cn } from './ui/utils';
 import { fetchAllReportPages } from '../hooks/useTenantQuery';
 
 const INVENTORY_SECTIONS = [
@@ -128,11 +127,16 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const [productFilters, setProductFilters] = useState<Record<string, { categoryIds: string[]; warehouseIds: string[] }>>({});
   const [productBrandFilters, setProductBrandFilters] = useState<Record<string, string>>({});
   const [productStockStatusFilters, setProductStockStatusFilters] = useState<Record<string, string>>({});
+  const [productSummaryLocalFilters, setProductSummaryLocalFilters] = useState<Record<string, {
+    unit?: string;
+    taxRate?: string;
+    availability?: 'all' | 'available' | 'unavailable';
+    showAllWarehouseProducts?: boolean;
+  }>>({});
   const [productScope, setProductScope] = useState<'branch' | 'linkedWarehouses'>('branch');
   const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
   const [productTarget, setProductTarget] = useState<{ id?: string; code?: string; stockFilter?: 'all' | 'available' | 'low' | 'out' | 'expiring' } | null>(null);
   const productListIsActive = ['productos', 'servicios'].includes(activeTab);
-  const [summaryLoadAllowed, setSummaryLoadAllowed] = useState(false);
 
   const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
   const updatePage = (section: string, page: number) => setPaginationState((current) => ({ ...current, [section]: { ...pageFor(section), page: Math.max(1, page) } }));
@@ -170,15 +174,71 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     return status === 'ACTIVE' || status === 'INACTIVE' ? status : 'ALL';
   };
 
+  const updateProductSummaryLocalFilters = useCallback((section: string, filters: {
+    unit?: string;
+    taxRate?: string;
+    availability?: 'all' | 'available' | 'unavailable';
+    showAllWarehouseProducts?: boolean;
+  }) => {
+    setProductSummaryLocalFilters((current) => {
+      const previous = current[section] || {};
+      if (Object.keys(filters).every((key) => previous[key as keyof typeof filters] === filters[key as keyof typeof filters])) return current;
+      return { ...current, [section]: { ...previous, ...filters } };
+    });
+    setPaginationState((current) => ({
+      ...current,
+      [section]: { ...(current[section] || { page: 1, pageSize: 50 as SalesPageSize }), page: 1 },
+    }));
+  }, []);
+  const onProductSummaryFiltersChange = useCallback((filters: Parameters<typeof updateProductSummaryLocalFilters>[1]) => {
+    updateProductSummaryLocalFilters('productos', filters);
+  }, [updateProductSummaryLocalFilters]);
+  const onServiceSummaryFiltersChange = useCallback((filters: Parameters<typeof updateProductSummaryLocalFilters>[1]) => {
+    updateProductSummaryLocalFilters('servicios', filters);
+  }, [updateProductSummaryLocalFilters]);
+
+  const productSummaryFilters = useMemo(() => {
+    const section = activeTab === 'servicios' ? 'servicios' : 'productos';
+    const local = productSummaryLocalFilters[section] || {};
+    const filters = productFilters[section] || { categoryIds: [], warehouseIds: [] };
+    const selectedWarehouseIds = filters.warehouseIds.filter((id) => productScopeWarehouseIdSet.has(id));
+    const selectedLinkedWarehouse = selectedWarehouseIds.some((id) => linkedWarehouseIdSet.has(id));
+    const localWarehouseFallbackIds = branchScopeEnabled ? branchWarehouseIds : allBranchWarehouseIds;
+    const requestedWarehouseIds = branchScopeEnabled
+      ? (selectedWarehouseIds.length > 0
+        ? [...new Set([...selectedWarehouseIds, ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : [])])]
+        : [...productScopeWarehouseIdSet])
+      : (selectedWarehouseIds.length > 0
+        ? [...new Set([...selectedWarehouseIds, ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : [])])]
+        : []);
+    const requestedStatus = String(statusState[section] || 'ALL').toUpperCase();
+    const productStatus = requestedStatus === 'ACTIVE' || requestedStatus === 'INACTIVE' ? requestedStatus : undefined;
+    const serviceStatus = activeTab === 'servicios'
+      ? local.availability === 'available' ? 'ACTIVE' : local.availability === 'unavailable' ? 'INACTIVE' : undefined
+      : productStatus;
+    return {
+      type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT',
+      light: true,
+      search: debouncedSearchState[section]?.trim() || undefined,
+      status: serviceStatus,
+      categoryId: filters.categoryIds.join(',') || undefined,
+      brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined,
+      unit: local.unit || undefined,
+      taxRate: local.taxRate || undefined,
+      warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined),
+      linkedWarehouseIds: !selectedBranchId && local.showAllWarehouseProducts === false
+        ? (allBranchWarehouseIds.length > 0 ? allBranchWarehouseIds.join(',') : '__none__')
+        : undefined,
+      includeInactive: true,
+    };
+  }, [activeTab, allBranchWarehouseIds, branchScopeEnabled, branchWarehouseIds, debouncedSearchState, linkedWarehouseIdSet, productBrandFilters, productFilters, productScopeWarehouseIdSet, productSummaryLocalFilters, selectedBranchId, statusState]);
+
   // ─── Scope por sucursal ───────────────────────────────────────────────────
   // El filtro del servidor recibe la lista de almacenes de la sucursal; el
   // filtro cliente es un respaldo que garantiza el resultado sobre la página
   // cargada (idempotente: no altera nada cuando el servidor ya filtró).
   const scopeWarehouseParam = branchScopeEnabled && branchWarehouseIdSet.size > 0
     ? [...branchWarehouseIdSet].join(',')
-    : undefined;
-  const productScopeWarehouseParam = branchScopeEnabled && productScopeWarehouseIdSet.size > 0
-    ? [...productScopeWarehouseIdSet].join(',')
     : undefined;
   const scopeNoWarehouseParam = branchScopeEnabled ? '__none__' : undefined;
 
@@ -215,7 +275,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   }, [setSelectedBranchId]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearchState(searchState), 350);
+    const timer = window.setTimeout(() => setDebouncedSearchState(searchState), 300);
     return () => window.clearTimeout(timer);
   }, [searchState]);
 
@@ -253,11 +313,15 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   } as const;
   const productsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], productBrandFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], stockStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), selectedBranchId, productScopeWarehouseIds.join(',')],
+    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], productBrandFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], productStockStatusFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], productSummaryLocalFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], selectedBranchId, productScopeWarehouseIds.join(',')],
     queryFn: ({ signal }) => {
       const section = activeTab === 'servicios' ? 'servicios' : 'productos';
       const page = pageFor(section);
       const filters = productFilters[section] || { categoryIds: [], warehouseIds: [] };
+      const localFilters = productSummaryLocalFilters[section] || {};
+      const status = activeTab === 'servicios'
+        ? localFilters.availability === 'available' ? 'ACTIVE' : localFilters.availability === 'unavailable' ? 'INACTIVE' : undefined
+        : productStatusFor(section);
       const selectedWarehouseIds = filters.warehouseIds.filter((id) => productScopeWarehouseIdSet.has(id));
       const selectedLinkedWarehouse = selectedWarehouseIds.some((id) => linkedWarehouseIdSet.has(id));
       const localWarehouseFallbackIds = branchScopeEnabled ? branchWarehouseIds : allBranchWarehouseIds;
@@ -274,60 +338,53 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : []),
           ])]
           : []);
-      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', light: true, page: page.page, pageSize: page.pageSize, search: searchFor(section), status: activeTab === 'servicios' ? undefined : productStatusFor(section), stockStatus: stockStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined, warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined), includeInactive: true }, signal);
+      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', light: true, page: page.page, pageSize: page.pageSize, search: searchFor(section), status, unit: localFilters.unit || undefined, taxRate: localFilters.taxRate || undefined, stockStatus: stockStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined, warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined), includeInactive: true }, signal);
     },
     // Espera a que el alcance de sucursal y sus bodegas vinculadas estén
     // resueltos. Así evita pintar una página sin alcance y volver a pedirla
     // cuando llegan /sucursales o /warehouse-supply-requests/options.
     enabled: Boolean(user) && !branchScopeLoading && !linkedWarehousesQuery.isPending && canViewInventorySection(activeTab) && productListIsActive,
   });
-  useEffect(() => {
-    if (!productListIsActive || !productsQuery.data || summaryLoadAllowed) return;
-    const timer = window.setTimeout(() => setSummaryLoadAllowed(true), 450);
-    return () => window.clearTimeout(timer);
-  }, [productListIsActive, productsQuery.data, summaryLoadAllowed]);
   const productCatalogQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'products-catalog', tenantKey, selectedBranchId],
     queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam }, signal),
     enabled: Boolean(user) && canViewInventorySection(activeTab) && ['transferencias', 'ajustes', 'auditorias'].includes(activeTab),
   });
-  // Catálogo completo (sin paginar) para los KPIs de Productos/Servicios: el
-  // listado principal es paginado (50/página) y no debe limitar los totales.
+  // El resumen obtiene los KPIs con agregados de base de datos. El catálogo
+  // completo se reserva para exportaciones y filtros por columna que requieren
+  // inspeccionar cada registro.
   const productsSummaryQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'products-summary', tenantKey, activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', selectedBranchId, productScopeWarehouseIds.join(','), searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productBrandFilters[activeTab === 'servicios' ? 'servicios' : 'productos']],
-    queryFn: ({ signal }) => {
-      const section = activeTab === 'servicios' ? 'servicios' : 'productos';
-      const filters = productFilters[section] || { categoryIds: [], warehouseIds: [] };
-      const selectedWarehouseIds = filters.warehouseIds.filter((id) => productScopeWarehouseIdSet.has(id));
-      const selectedLinkedWarehouse = selectedWarehouseIds.some((id) => linkedWarehouseIdSet.has(id));
-      const localWarehouseFallbackIds = branchScopeEnabled ? branchWarehouseIds : allBranchWarehouseIds;
-      const requestedWarehouseIds = branchScopeEnabled
-        ? (selectedWarehouseIds.length > 0
-          ? [...new Set([...selectedWarehouseIds, ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : [])])]
-          : [...productScopeWarehouseIdSet])
-        : (selectedWarehouseIds.length > 0
-          ? [...new Set([...selectedWarehouseIds, ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : [])])]
-          : []);
-      const summaryFilters = {
-        pageSize: 5000,
-        report: true,
-        type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT',
-        light: true,
-        search: searchFor(section),
-        status: activeTab === 'servicios' ? undefined : productStatusFor(section),
-        categoryId: filters.categoryIds.join(',') || undefined,
-        brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined,
-        warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined),
-        includeInactive: true,
-      };
-      return fetchAllReportPages((pageFilters) => inventoryService.getProducts({ ...summaryFilters, ...pageFilters }, signal), summaryFilters, signal);
-    },
-    // El resumen puede ser grande; primero se pinta la página visible y luego
-    // se resuelven KPIs, marcas y exportación sin bloquear la primera vista.
-    enabled: Boolean(user) && Boolean(productsQuery.data) && summaryLoadAllowed && canViewInventorySection(activeTab) && productListIsActive,
+    placeholderData: undefined,
+    queryKey: ['inventory', 'products-summary', tenantKey, selectedBranchId, productSummaryFilters],
+    queryFn: ({ signal }) => inventoryService.getProductSummary(productSummaryFilters, signal),
+    enabled: Boolean(user) && !branchScopeLoading && !linkedWarehousesQuery.isPending && canViewInventorySection(activeTab) && productListIsActive,
   });
+  const fullProductCatalogQuery = useQuery({
+    ...commonQueryOptions,
+    placeholderData: undefined,
+    queryKey: ['inventory', 'products-full-catalog', tenantKey, selectedBranchId, productSummaryFilters],
+    queryFn: ({ signal }) => {
+      const reportFilters = { ...productSummaryFilters, report: true, page: 1, pageSize: 5000 };
+      return fetchAllReportPages(
+        (pageFilters) => inventoryService.getProducts({ ...reportFilters, ...pageFilters }, signal),
+        reportFilters,
+        signal,
+      );
+    },
+    enabled: false,
+  });
+  const loadFullProductCatalog = useCallback(async () => {
+    const normalizeCatalog = (rows: any[]) => rows.map((product: any) => ({
+      ...product,
+      itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
+    })).filter((product: any) => isProductInScope(product));
+    if (fullProductCatalogQuery.isSuccess) return normalizeCatalog(toList(fullProductCatalogQuery.data));
+    const result = await fullProductCatalogQuery.refetch();
+    if (result.error) throw result.error;
+    return normalizeCatalog(toList(result.data));
+  }, [fullProductCatalogQuery.data, fullProductCatalogQuery.isSuccess, fullProductCatalogQuery.refetch, isProductInScope]);
   const warehousesQuery = useQuery({
     ...commonQueryOptions,
     staleTime: 0,
@@ -482,6 +539,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     refreshBranches();
     if (scope === 'products') {
       await queryClient.invalidateQueries({ queryKey: ['inventory', 'products', tenantKey] });
+      await queryClient.invalidateQueries({ queryKey: ['inventory', 'products-summary', tenantKey] });
+      await queryClient.invalidateQueries({ queryKey: ['inventory', 'products-full-catalog', tenantKey] });
       return;
     }
     await queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -502,20 +561,22 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const productItems = data.products.filter((product: any) => product.itemType !== 'SERVICE');
   const serviceItems = data.products.filter((product: any) => product.itemType === 'SERVICE');
   // Lista completa para KPIs (independiente de la paginación de la tabla).
-  const summaryProducts = toList(productsSummaryQuery.data).map((product: any) => ({
+  const summaryProducts = toList(fullProductCatalogQuery.data).map((product: any) => ({
     ...product,
     itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
   })).filter((product: any) => isProductInScope(product));
   const availableProductBrands = useMemo(() => {
     const uniqueBrands = new Map<string, string>();
-    summaryProducts.forEach((product: any) => {
-      const brand = String(product.brand || product.details?.brand || '').trim();
+    const catalogBrands = fullProductCatalogQuery.isSuccess
+      ? summaryProducts.map((product: any) => String(product.brand || product.details?.brand || '').trim())
+      : (productsSummaryQuery.data?.brands || []).map((brand: any) => String(brand.label || '').trim());
+    catalogBrands.forEach((brand: string) => {
       if (!brand) return;
       const normalized = brand.toLocaleLowerCase();
       if (!uniqueBrands.has(normalized)) uniqueBrands.set(normalized, brand);
     });
     return Array.from(uniqueBrands.values()).sort((left, right) => left.localeCompare(right, 'es', { sensitivity: 'base' }));
-  }, [summaryProducts]);
+  }, [fullProductCatalogQuery.isSuccess, productsSummaryQuery.data?.brands, summaryProducts]);
 
   useEffect(() => {
     const nextTab = activeSubModule === 'dashboard' ? 'productos' : activeSubModule;
@@ -728,8 +789,12 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                       <ProductosView
                         products={productItems}
                         summaryProducts={summaryProducts}
-                        summaryLoading={productsSummaryQuery.isPending || productsSummaryQuery.isFetching}
-                        summaryError={productsSummaryQuery.isError}
+                        summaryProductsLoaded={fullProductCatalogQuery.isSuccess}
+                        summaryAggregate={productsSummaryQuery.data}
+                        summaryLoading={productsSummaryQuery.isPending || productsSummaryQuery.isFetching || fullProductCatalogQuery.isFetching}
+                        summaryError={productsSummaryQuery.isError || fullProductCatalogQuery.isError}
+                        onLoadFullCatalog={loadFullProductCatalog}
+                        onSummaryFiltersChange={onProductSummaryFiltersChange}
                         branches={allBranches}
                         categories={data.categories}
                         warehouses={scopedWarehouses}
@@ -793,6 +858,12 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   <ServiciosView
                     products={serviceItems}
                     summaryProducts={summaryProducts}
+                    summaryProductsLoaded={fullProductCatalogQuery.isSuccess}
+                    summaryAggregate={productsSummaryQuery.data}
+                    summaryLoading={productsSummaryQuery.isPending || productsSummaryQuery.isFetching || fullProductCatalogQuery.isFetching}
+                    summaryError={productsSummaryQuery.isError || fullProductCatalogQuery.isError}
+                    onLoadFullCatalog={loadFullProductCatalog}
+                    onSummaryFiltersChange={onServiceSummaryFiltersChange}
                     branches={allBranches}
                     categories={data.serviceCategories}
                     warehouses={scopedWarehouses}

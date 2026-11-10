@@ -10,6 +10,7 @@ import { generateNovaHubFormatReport } from './novaHubFormatPdf';
 import { buildDateFilteredLabeledPdfFileName, buildDateFilteredPdfFileName, buildHumanPdfFileName, buildLabeledPdfFileName, buildPdfFileName, buildSalesPdfFileName } from './exportFileNames';
 import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
+import { formatCurrencyNumber } from './currency';
 import { getPurchasePriorityOption } from './purchasePriority';
 import { preparePdfDocumentFonts, renderPdfTemplateToPdf, type PdfTemplateRenderProgress } from './pdf-template-renderer';
 import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
@@ -3415,6 +3416,7 @@ export async function generateTrialBalancePDF({
   dateFrom,
   dateTo,
   totals,
+  currencyLabel,
   format = 'configured',
 }: {
   rows: Array<{ codigo: string; cuenta: string; tipo: string; debitos: number; creditos: number; saldo: number }>;
@@ -3423,10 +3425,12 @@ export async function generateTrialBalancePDF({
   dateFrom?: string;
   dateTo?: string;
   totals?: Record<string, unknown>;
+  currencyLabel?: string;
   format?: PdfDownloadFormat;
 }) {
   const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
-  const formatAmount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const currencySuffix = currencyLabel ? ` · Moneda: ${currencyLabel}` : '';
+  const formatAmount = (value: unknown) => formatCurrencyNumber(value);
   const accountTypeLabel = (value: unknown) => ({
     ASSET: 'ACTIVOS',
     LIABILITY: 'PASIVOS',
@@ -3436,7 +3440,7 @@ export async function generateTrialBalancePDF({
   } as Record<string, string>)[String(value || '')] || String(value || '');
   const doc = await generateConfiguredReportTemplate({
     targetKey: 'contabilidad.trial-balance',
-    title: period ? `Balance de comprobación · ${period}` : 'Balance de comprobación',
+    title: `${period ? `Balance de comprobación · ${period}` : 'Balance de comprobación'}${currencySuffix}`,
     tenantName,
     tenantLogo,
     rows,
@@ -3444,9 +3448,9 @@ export async function generateTrialBalancePDF({
       { header: 'Código', value: row => row.codigo },
       { header: 'Cuenta', value: row => row.cuenta },
       { header: 'Tipo', value: row => accountTypeLabel(row.tipo) },
-      { header: 'Débitos', value: row => formatAmount(row.debitos), align: 'right' },
-      { header: 'Créditos', value: row => formatAmount(row.creditos), align: 'right' },
-      { header: 'Saldo', value: row => formatAmount(row.saldo), align: 'right' },
+      { header: `Débitos${currencyLabel ? ` (${currencyLabel})` : ''}`, value: row => formatAmount(row.debitos), align: 'right' },
+      { header: `Créditos${currencyLabel ? ` (${currencyLabel})` : ''}`, value: row => formatAmount(row.creditos), align: 'right' },
+      { header: `Saldo${currencyLabel ? ` (${currencyLabel})` : ''}`, value: row => formatAmount(row.saldo), align: 'right' },
     ],
     totals,
     format,
@@ -3464,6 +3468,7 @@ export async function generateJournalPDF({
   dateTo,
   filterStatus,
   totals,
+  currencyLabel,
   format = 'configured',
 }: {
   rows: Array<{
@@ -3482,12 +3487,13 @@ export async function generateJournalPDF({
   dateTo?: string;
   filterStatus?: string;
   totals?: Record<string, unknown>;
+  currencyLabel?: string;
   format?: PdfDownloadFormat;
 }) {
   const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
   const statusLabel = filterStatus && filterStatus !== 'ALL' ? ` · Estado: ${pdfStatusLabel(filterStatus)}` : '';
-  const title = `Libro Diario${period ? ` · ${period}` : ''}${statusLabel}`;
-  const formatAmount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const title = `Libro Diario${period ? ` · ${period}` : ''}${statusLabel}${currencyLabel ? ` · Moneda: ${currencyLabel}` : ''}`;
+  const formatAmount = (value: unknown) => formatCurrencyNumber(value);
   const formatStatus = (value: unknown) => pdfStatusLabel(value).toUpperCase();
   const doc = await generateConfiguredReportTemplate({
     targetKey: 'contabilidad.journal',
@@ -3500,8 +3506,8 @@ export async function generateJournalPDF({
       { header: 'Fecha', value: row => row.date },
       { header: 'Descripción', value: row => row.description },
       { header: 'Estado', value: row => formatStatus(row.status) },
-      { header: 'Debe', value: row => formatAmount(row.debit), align: 'right' },
-      { header: 'Haber', value: row => formatAmount(row.credit), align: 'right' },
+      { header: `Debe${currencyLabel ? ` (${currencyLabel})` : ''}`, value: row => formatAmount(row.debit), align: 'right' },
+      { header: `Haber${currencyLabel ? ` (${currencyLabel})` : ''}`, value: row => formatAmount(row.credit), align: 'right' },
       { header: 'Ref. Tipo', value: row => row.referenceType || '-' },
       { header: 'Referencia', value: row => row.referenceNumber || '-' },
     ],
@@ -3521,6 +3527,7 @@ export async function generateLedgerPDF({
   dateTo,
   accountName,
   totals,
+  currencyLabel,
   format = 'configured',
 }: {
   rows: Array<{
@@ -3540,12 +3547,13 @@ export async function generateLedgerPDF({
   dateTo?: string;
   accountName?: string;
   totals?: Record<string, unknown>;
+  currencyLabel?: string;
   format?: PdfDownloadFormat;
 }) {
   const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
   const filterAcc = accountName ? ` · Cuenta: ${accountName}` : '';
-  const title = `Libro Mayor${period ? ` · ${period}` : ''}${filterAcc}`;
-  const formatAmount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const title = `Libro Mayor${period ? ` · ${period}` : ''}${filterAcc}${currencyLabel ? ` · Moneda: ${currencyLabel}` : ''}`;
+  const formatAmount = (value: unknown) => formatCurrencyNumber(value);
   const doc = await generateConfiguredReportTemplate({
     targetKey: 'contabilidad.ledger',
     title,
@@ -3559,9 +3567,9 @@ export async function generateLedgerPDF({
       { header: 'Tipo', value: row => row.accountType || '-' },
       { header: 'Descripción', value: row => row.description },
       { header: 'Referencia', value: row => row.reference || '-' },
-      { header: 'Débito', value: row => formatAmount(row.debit), align: 'right' },
-      { header: 'Crédito', value: row => formatAmount(row.credit), align: 'right' },
-      { header: 'Saldo', value: row => formatAmount(row.balance), align: 'right' },
+      { header: `Débito${currencyLabel ? ` (${currencyLabel})` : ''}`, value: row => formatAmount(row.debit), align: 'right' },
+      { header: `Crédito${currencyLabel ? ` (${currencyLabel})` : ''}`, value: row => formatAmount(row.credit), align: 'right' },
+      { header: `Saldo${currencyLabel ? ` (${currencyLabel})` : ''}`, value: row => formatAmount(row.balance), align: 'right' },
     ],
     totals,
     format,
@@ -3592,7 +3600,7 @@ export async function generateProductLabelsPDF({ products, configs, tenantName, 
       barcode,
       name: config.showName ? product.name || 'Producto' : '',
       variation: config.showVariation ? product.variant?.name || product.variantName || product.variation?.name || product.variationName || '' : '',
-      price: config.showPrice && product.salePrice != null ? `C$ ${Number(product.salePrice).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '',
+      price: config.showPrice && product.salePrice != null ? `C$ ${formatCurrencyNumber(product.salePrice)}` : '',
       company: config.showCompany ? tenantName : '',
       date: config.showDate ? new Date().toLocaleDateString('es-NI') : '',
       code: product.code || '',
@@ -4528,19 +4536,19 @@ export const generateSessionSummaryPDF = async ({
     type: log.type === 'SALE' ? 'Venta' : log.type === 'EXIT' ? 'Gasto' : log.type === 'ENTRY' ? 'Entrada' : log.type === 'OPEN' ? 'Apertura' : log.type || 'Movimiento',
     description: log.description || 'Sin descripción',
     time: log.createdAt ? new Date(log.createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '—',
-    amount: `${log.type === 'EXIT' ? '-' : '+'}${isUSD ? '$' : 'C$'} ${Number(isUSD ? (Number(log.amountUSD || 0) + Number(log.amountNIO || 0) / sessionRate) : (Number(log.amountNIO || 0) + Number(log.amountUSD || 0) * sessionRate)).toFixed(2)}`,
+    amount: `${log.type === 'EXIT' ? '-' : '+'}${isUSD ? '$' : 'C$'} ${formatCurrencyNumber(isUSD ? (Number(log.amountUSD || 0) + Number(log.amountNIO || 0) / sessionRate) : (Number(log.amountNIO || 0) + Number(log.amountUSD || 0) * sessionRate))}`,
   }));
   const symbol = isUSD ? '$' : 'C$';
   const renderFormat: PdfDownloadFormat = format === 'novahub-format' ? 'configured' : format;
   const summaryRows = hideSystemAmounts
-    ? [['Efectivo contado', `${symbol} ${totals.contado.toFixed(2)}`]]
+    ? [['Efectivo contado', `${symbol} ${formatCurrencyNumber(totals.contado)}`]]
     : [
-      ['Fondo inicial', `${symbol} ${totals.fondoInicial.toFixed(2)}`],
-      ['Ventas', `${symbol} ${totals.ventas.toFixed(2)}`],
-      ['Gastos', `${symbol} ${totals.gastos.toFixed(2)}`],
-      ['Saldo esperado', `${symbol} ${totals.esperado.toFixed(2)}`],
-      ['Efectivo contado', `${symbol} ${totals.contado.toFixed(2)}`],
-      ['Diferencia', `${symbol} ${totals.diferencia.toFixed(2)}`],
+      ['Fondo inicial', `${symbol} ${formatCurrencyNumber(totals.fondoInicial)}`],
+      ['Ventas', `${symbol} ${formatCurrencyNumber(totals.ventas)}`],
+      ['Gastos', `${symbol} ${formatCurrencyNumber(totals.gastos)}`],
+      ['Saldo esperado', `${symbol} ${formatCurrencyNumber(totals.esperado)}`],
+      ['Efectivo contado', `${symbol} ${formatCurrencyNumber(totals.contado)}`],
+      ['Diferencia', `${symbol} ${formatCurrencyNumber(totals.diferencia)}`],
     ];
   const cashReportSections: PdfTemplateReportSection[] = [
     {
@@ -4625,14 +4633,14 @@ export const generateSessionSummaryPDF = async ({
     startY: 60,
     head: [['Concepto', `Monto (${displayCurrency})`]],
     body: hideSystemAmounts ? [
-      ['Efectivo Contado', `${symbol} ${totals.contado.toFixed(2)}`],
+      ['Efectivo Contado', `${symbol} ${formatCurrencyNumber(totals.contado)}`],
     ] : [
-      ['Fondo Inicial', `${symbol} ${totals.fondoInicial.toFixed(2)}`],
-      ['Ventas Totales', `${symbol} ${totals.ventas.toFixed(2)}`],
-      ['Gastos Registrados', `${symbol} ${totals.gastos.toFixed(2)}`],
-      ['Saldo Esperado', `${symbol} ${totals.esperado.toFixed(2)}`],
-      ['Efectivo Contado', `${symbol} ${totals.contado.toFixed(2)}`],
-      ['Diferencia', `${symbol} ${totals.diferencia.toFixed(2)}`],
+      ['Fondo Inicial', `${symbol} ${formatCurrencyNumber(totals.fondoInicial)}`],
+      ['Ventas Totales', `${symbol} ${formatCurrencyNumber(totals.ventas)}`],
+      ['Gastos Registrados', `${symbol} ${formatCurrencyNumber(totals.gastos)}`],
+      ['Saldo Esperado', `${symbol} ${formatCurrencyNumber(totals.esperado)}`],
+      ['Efectivo Contado', `${symbol} ${formatCurrencyNumber(totals.contado)}`],
+      ['Diferencia', `${symbol} ${formatCurrencyNumber(totals.diferencia)}`],
     ],
     theme: 'grid',
     headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 9, fontStyle: 'bold' },
@@ -4659,7 +4667,7 @@ export const generateSessionSummaryPDF = async ({
       log.type === 'SALE' ? 'VENTA' : log.type === 'EXIT' ? 'GASTO' : log.type === 'ENTRY' ? 'ENTRADA' : log.type === 'OPEN' ? 'APERTURA' : log.type,
       log.description || 'N/A',
       new Date(log.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-      `${sign}${symbol} ${logConverted.toFixed(2)}`
+      `${sign}${symbol} ${formatCurrencyNumber(logConverted)}`
     ];
     return hideSystemAmounts ? row.slice(0, 4) : row;
   });
@@ -4702,7 +4710,7 @@ export const generateHistoricalCashReportPDF = async ({
   format?: PdfDownloadFormat;
 }) => {
   const summary = report.summary || {};
-  const money = (value: any) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money = (value: any) => formatCurrencyNumber(value);
   const configuredRows = (report.items || []).map((item: any) => ({
     date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '—',
     register: item.register?.name || 'Sin caja',
@@ -4920,7 +4928,7 @@ export const generateCashClosureReportPDF = async ({
   const invoices = detail.invoices || { rows: [], totals: {} };
   const payments = detail.payments || { rows: [], summary: {} };
   const cash = detail.cash || {};
-  const moneyFmt = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const moneyFmt = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${formatCurrencyNumber(value)}`;
   const closureRows = [...(invoices.rows || []), ...(payments.rows || [])].slice(0, 50).map((row: any) => ({
     reference: row.number || row.reference || '—',
     type: row.type || (row.number ? 'Factura' : 'Pago'),
@@ -4966,7 +4974,7 @@ export const generateCashClosureReportPDF = async ({
   const dark: PdfRgb = [15, 55, 48];
   const text = pdfDesignColor(settings.textColor, [51, 65, 85]);
   const line: PdfRgb = [218, 231, 225];
-  const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${formatCurrencyNumber(value)}`;
   const date = (value: unknown) => value ? new Date(String(value)).toLocaleDateString('es-NI') : 'No aplica';
   const time = (value: unknown) => value ? new Date(String(value)).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : 'No aplica';
   const label = (value: unknown) => String(value || 'No aplica').replace(/_/g, ' ');

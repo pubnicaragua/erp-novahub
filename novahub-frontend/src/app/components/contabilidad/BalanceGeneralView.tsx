@@ -77,7 +77,9 @@ export function BalanceGeneralView() {
   const { canPerform, user } = useAuth();
   const today = todayIso(user?.clientTenant?.timeZone);
   const canExportBalanceSheet = canPerform('ACCOUNTING_BALANCE_SHEET', 'export') || canPerform('ACCOUNTING_BALANCE_SHEET', 'view');
-  const { baseCurrency, formatCurrentAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, displayMode, convertCurrentAmount, formatCurrentAmount } = useCurrency();
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const toReportAmount = (amount: number) => displayMode === 'ORIGINAL' ? Number(amount || 0) : convertCurrentAmount(Number(amount || 0), baseCurrency);
   const [dateFrom, setDateFrom] = useState('');
   const [date, setDate] = useState(today);
   const [searchTerm, setSearchTerm] = useState('');
@@ -170,10 +172,10 @@ export function BalanceGeneralView() {
         Sección: section.label,
         Código: account.codigo,
         Cuenta: account.cuenta,
-        ...(showOpening ? { 'Saldo inicial': account.openingAmount != null ? account.openingAmount : 0 } : {}),
-        'Saldo': account.currentAmount,
+        ...(showOpening ? { [`Saldo inicial (${reportCurrency})`]: toReportAmount(account.openingAmount != null ? account.openingAmount : 0) } : {}),
+        [`Saldo (${reportCurrency})`]: toReportAmount(account.currentAmount),
       })),
-      { Sección: `Total ${section.label}`, Código: '', Cuenta: '', ...(showOpening ? { 'Saldo inicial': '' } : {}), 'Saldo': section.total },
+      { Sección: `Total ${section.label}`, Código: '', Cuenta: '', ...(showOpening ? { [`Saldo inicial (${reportCurrency})`]: '' } : {}), [`Saldo (${reportCurrency})`]: toReportAmount(section.total) },
     ]);
     const workbook = XLSX.utils.book_new();
     const detailSheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]);
@@ -183,11 +185,11 @@ export function BalanceGeneralView() {
       ['Reporte', 'Balance General'],
       ['Corte', date],
       ...(dateFrom ? [['Desde', dateFrom]] : []),
-      ['Moneda', baseCurrency],
-      ['Total activos', data.totalAssets],
-      ['Total pasivos', data.totalLiabilities],
-      ['Total patrimonio', data.totalEquity],
-      ['Total pasivo y patrimonio', totalPasivoPatrimonio],
+      ['Moneda', displayMode === 'ORIGINAL' ? `${baseCurrency} (moneda base de saldos agregados)` : reportCurrency],
+      ['Total activos', toReportAmount(data.totalAssets)],
+      ['Total pasivos', toReportAmount(data.totalLiabilities)],
+      ['Total patrimonio', toReportAmount(data.totalEquity)],
+      ['Total pasivo y patrimonio', toReportAmount(totalPasivoPatrimonio)],
       ['Estado', isBalanced ? 'Balanceado' : 'No balanceado'],
     ]), 'Resumen');
     XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['balance_general'], 'xlsx', dateFrom, date));
@@ -221,7 +223,7 @@ export function BalanceGeneralView() {
     ];
     await generateConfiguredReportTemplate({
       targetKey: 'contabilidad.balance-sheet',
-      title: `Balance General · Al ${date}`,
+      title: `Balance General · Al ${date} · Moneda: ${displayMode === 'ORIGINAL' ? `${baseCurrency} (base)` : reportCurrency}`,
       tenantName: user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub ERP',
       tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
       rows,

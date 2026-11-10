@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Banknote, CalendarDays, Clock3, FileText, Loader2, Plus, Save, Settings2 } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -15,6 +15,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from '@/app/services/toast';
 import { getCustomerLoanMoraActions } from '../../utils/customer-loan-permissions';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 type MoraType = { id: string; name: string; description: string; isActive: boolean };
 type LoanFrequency = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
@@ -47,7 +48,7 @@ const unwrapList = (response: any): any[] => {
   return [];
 };
 const money = (value: unknown, currency: string) => new Intl.NumberFormat('es-NI', {
-  style: 'currency', currency: String(currency || 'NIO').toUpperCase(), maximumFractionDigits: 2,
+  style: 'currency', currency: String(currency || 'NIO').toUpperCase(), maximumFractionDigits: getCurrencyDecimalPlaces(),
 }).format(Number(value || 0));
 const localDate = (value?: string | null) => {
   if (!value) return 'Sin fecha';
@@ -69,29 +70,35 @@ interface CustomerLoansPanelProps {
   canEditMora: boolean;
   onUpdated?: () => void;
   onMoraTypeUpdated?: (moraType: MoraType | null) => void;
+  onReady?: () => void;
 }
 
-export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraType, enabled, canCreateLoan, canCreateMora, canEditMora, onUpdated, onMoraTypeUpdated }: CustomerLoansPanelProps) {
+export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraType, enabled, canCreateLoan, canCreateMora, canEditMora, onUpdated, onMoraTypeUpdated, onReady }: CustomerLoansPanelProps) {
   const { baseCurrency } = useCurrency();
-  const { user } = useAuth();
+  const { user, selectedBranchId } = useAuth();
   const queryClient = useQueryClient();
   const tenantId = String(user?.clientTenantId || user?.tenantId || '');
-  const loansQueryKey = useMemo(() => ['sales', 'customer-loans', tenantId, customerId] as const, [tenantId, customerId]);
-  const loansQuery = useQuery({
+  const loansQueryKey = useMemo(() => ['sales', 'customer-loans', tenantId, selectedBranchId || 'all-branches', customerId] as const, [tenantId, selectedBranchId, customerId]);
+  const loansQuery = useInfiniteQuery({
     queryKey: loansQueryKey,
-    queryFn: async () => {
-      const [loanResponse, moraResponse] = await Promise.all([
-        customersService.getCustomerLoans(customerId),
-        customersService.getLoanMoraTypes(),
-      ]);
-      return { loans: unwrapList(loanResponse) as CustomerLoan[], moraTypes: unwrapList(moraResponse) as MoraType[] };
-    },
-    enabled: Boolean(tenantId && customerId),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => customersService.getCustomerLoansPage(customerId, { limit: 50, cursor: pageParam || undefined }, signal),
+    getNextPageParam: (page) => page.hasMore ? page.nextCursor || undefined : undefined,
+    enabled: Boolean(enabled && tenantId && customerId),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
-  const loans = loansQuery.data?.loans ?? [];
-  const moraTypes = loansQuery.data?.moraTypes ?? [];
+  const moraTypesQuery = useQuery({
+    queryKey: ['sales', 'customer-loan-mora-types', tenantId],
+    queryFn: customersService.getLoanMoraTypes,
+    enabled: Boolean(enabled && tenantId && customerId),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const loans = loansQuery.data?.pages.flatMap((page) => page.data) as CustomerLoan[] | undefined || [];
+  const moraTypes = unwrapList(moraTypesQuery.data) as MoraType[];
   const moraActions = getCustomerLoanMoraActions(canCreateMora, canEditMora);
-  const loading = loansQuery.isPending;
+  const loading = loansQuery.isPending || moraTypesQuery.isPending;
   const [saving, setSaving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [moraOpen, setMoraOpen] = useState(false);
@@ -101,6 +108,7 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
   const [moraDescription, setMoraDescription] = useState('');
   const [assignedMoraTypeId, setAssignedMoraTypeId] = useState(moraTypeId || '');
   const [moraTypeSelection, setMoraTypeSelection] = useState(moraTypeId || '');
+  const readyReported = useRef(false);
   const [form, setForm] = useState<{
     principal: string; interest: string; frequency: LoanFrequency; dueDate: string;
     currency: LoanCurrency; disbursementSource: 'CASH' | 'BANK';
@@ -118,6 +126,20 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
   useEffect(() => {
     if (loansQuery.error) toast.error((loansQuery.error as any)?.message || 'No se pudo cargar el historial de préstamos.');
   }, [loansQuery.error]);
+
+  useEffect(() => {
+    if (moraTypesQuery.error) toast.error((moraTypesQuery.error as any)?.message || 'No se pudieron cargar los tipos de mora.');
+  }, [moraTypesQuery.error]);
+
+  useEffect(() => {
+    readyReported.current = false;
+  }, [customerId, enabled]);
+
+  useEffect(() => {
+    if (!enabled || readyReported.current || !loansQuery.isSuccess || !moraTypesQuery.isSuccess) return;
+    readyReported.current = true;
+    onReady?.();
+  }, [enabled, loansQuery.isSuccess, moraTypesQuery.isSuccess, loansQuery.dataUpdatedAt, moraTypesQuery.dataUpdatedAt, onReady]);
 
   useEffect(() => {
     const currentId = moraTypeId || '';
@@ -152,7 +174,11 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
     if (cashSessionsQuery.error) toast.error((cashSessionsQuery.error as any)?.message || 'No se pudieron cargar las sesiones de Caja.');
   }, [cashSessionsQuery.error]);
 
-  const outstandingByCurrency = loans.reduce<Record<string, number>>((totals, loan) => {
+  const pageSummary = loansQuery.data?.pages[0]?.summary;
+  const outstandingByCurrency = pageSummary?.outstandingByCurrency.reduce<Record<string, number>>((totals, item) => {
+    totals[item.currency] = Number(item.amount || 0);
+    return totals;
+  }, {}) ?? loans.reduce<Record<string, number>>((totals, loan) => {
     const currency = String(loan.invoice?.currency || loan.currency || baseCurrency).toUpperCase();
     totals[currency] = (totals[currency] || 0) + Math.max(0, Number(loan.invoice?.balance || 0));
     return totals;
@@ -272,7 +298,7 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
 
       <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm sm:p-5">
         <div className="mt-0 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Préstamos vigentes</p><p className="mt-1 text-lg font-black tabular-nums text-foreground">{loans.filter((item) => Number(item.invoice?.balance || 0) > 0.01).length}</p></div>
+          <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Préstamos vigentes</p><p className="mt-1 text-lg font-black tabular-nums text-foreground">{pageSummary?.activeCount ?? loans.filter((item) => Number(item.invoice?.balance || 0) > 0.01).length}</p></div>
           <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente por moneda</p><div className="mt-1 space-y-1">{Object.entries(outstandingByCurrency).length ? Object.entries(outstandingByCurrency).map(([currency, amount]) => <p key={currency} className="break-words text-lg font-black tabular-nums text-rose-600 dark:text-rose-400">{money(amount, currency)}</p>) : <p className="text-lg font-black tabular-nums text-rose-600 dark:text-rose-400">{money(0, baseCurrency)}</p>}</div></div>
         </div>
       </Card>
@@ -306,13 +332,14 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
           })}
         </div>
       )}
+      {loansQuery.hasNextPage && <div className="flex justify-center"><Button type="button" variant="outline" onClick={() => loansQuery.fetchNextPage()} disabled={loansQuery.isFetchingNextPage} className="gap-2 rounded-xl">{loansQuery.isFetchingNextPage && <Loader2 className="size-4 animate-spin" />} Cargar más préstamos</Button></div>}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[90dvh] w-[calc(100%-1rem)] overflow-y-auto rounded-2xl sm:max-w-xl">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Banknote className="size-5 text-primary" /> Crear préstamo</DialogTitle><DialogDescription>Se emitirá una factura de servicio por el principal y el interés fijo, y se registrará el desembolso. El sistema valida el límite de crédito disponible.</DialogDescription></DialogHeader>
           <form id="customer-loan-form" onSubmit={submitLoan} className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5"><Label htmlFor="loan-principal">Principal a prestar *</Label><Input id="loan-principal" type="number" min="0.01" step="0.01" required value={form.principal} onChange={(event) => setForm({ ...form, principal: event.target.value })} /></div>
-            <div className="space-y-1.5"><Label htmlFor="loan-interest">Interés fijo *</Label><Input id="loan-interest" type="number" min="0" step="0.01" required value={form.interest} onChange={(event) => setForm({ ...form, interest: event.target.value })} /></div>
+            <div className="space-y-1.5"><Label htmlFor="loan-principal">Principal a prestar *</Label><Input id="loan-principal" type="number" min="0.01" step="0.01" required value={form.principal} onChange={(event) => setForm({ ...form, principal: event.target.value })} currencyPrecision /></div>
+            <div className="space-y-1.5"><Label htmlFor="loan-interest">Interés fijo *</Label><Input id="loan-interest" type="number" min="0" step="0.01" required value={form.interest} onChange={(event) => setForm({ ...form, interest: event.target.value })} currencyPrecision /></div>
             <div className="space-y-1.5"><Label>Frecuencia de pago *</Label><Select value={form.frequency} onValueChange={(value) => setForm({ ...form, frequency: value as LoanFrequency })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select></div>
             <div className="space-y-1.5"><Label htmlFor="loan-due-date">Fecha de vencimiento *</Label><Input id="loan-due-date" type="date" required value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></div>
             <div className="space-y-1.5"><Label>Moneda *</Label><Select value={form.currency} onValueChange={(value) => setForm({ ...form, currency: value as LoanCurrency, bankAccountId: '' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>

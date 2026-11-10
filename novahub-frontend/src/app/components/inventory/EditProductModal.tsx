@@ -347,8 +347,7 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
                     onChange={(event) => handleUpdate('salePrice', event.target.value)}
                     className="mt-1 h-8 text-xs text-right tabular-nums"
                     aria-label={`Precio del servicio en ${draft.priceCurrency || tenantBaseCurrency}`}
-                    disabled={isSaving}
-                  />
+                    disabled={isSaving} currencyPrecision />
                 </div>
               )}
 

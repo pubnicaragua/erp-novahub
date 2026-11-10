@@ -13,6 +13,7 @@ import { getApiErrorMessage } from '../../services/api';
 import { accountsService, incomeService } from '../../services/finanzas.service';
 import { storageService } from '../../services/storage.service';
 import { INCOME_KIND_OPTIONS, isLoanKind, previewLoanSchedule, type IncomeKind } from './incomeKinds';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
 const today = () => {
@@ -170,7 +171,7 @@ function FundingForm({ onClose, onSaved, exchangeRate }: { onClose: () => void; 
           </div>
           <div>
             <p className={fieldLabel}>Monto *</p>
-            <Input type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} aria-label="Monto" className="h-8 text-xs" />
+            <Input type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} aria-label="Monto" className="h-8 text-xs" currencyPrecision />
           </div>
           <div>
             <p className={fieldLabel}>Moneda</p>
@@ -247,15 +248,15 @@ function FundingForm({ onClose, onSaved, exchangeRate }: { onClose: () => void; 
                     {preview.map((row) => (
                       <tr key={row.sequence} className="border-t border-border/40">
                         <td className="p-2">{row.sequence}</td><td className="p-2">{row.dueDate}</td>
-                        <td className="p-2 text-right">{row.principal.toFixed(2)}</td><td className="p-2 text-right">{row.interest.toFixed(2)}</td>
-                        <td className="p-2 text-right font-bold">{(row.principal + row.interest).toFixed(2)}</td>
+                        <td className="p-2 text-right">{row.principal.toFixed(getCurrencyDecimalPlaces())}</td><td className="p-2 text-right">{row.interest.toFixed(getCurrencyDecimalPlaces())}</td>
+                        <td className="p-2 text-right font-bold">{(row.principal + row.interest).toFixed(getCurrencyDecimalPlaces())}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-            {preview.length > 0 && <p className="text-[11px] text-muted-foreground">Intereses totales estimados: {totalInterest.toFixed(2)} {currency}. El interés se registra como gasto financiero al pagar cada cuota.</p>}
+            {preview.length > 0 && <p className="text-[11px] text-muted-foreground">Intereses totales estimados: {totalInterest.toFixed(getCurrencyDecimalPlaces())} {currency}. El interés se registra como gasto financiero al pagar cada cuota.</p>}
           </div>
         )}
 

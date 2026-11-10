@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, ChevronLeft, Trash2
 } from 'lucide-react';
@@ -8,7 +9,7 @@ import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { paymentsService } from '../../services/ventas.service';
+import { paymentsService, type PaymentKpiSummary } from '../../services/ventas.service';
 import { useSalesIntegrationPolicy } from '../../hooks/useSalesIntegrationPolicy';
 import { toast } from '@/app/services/toast';
 import type { PaymentReceived, Customer, Invoice, CreditNote, SalesPaginationControls } from '../../types';
@@ -28,7 +29,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { hasPaymentReferenceField, isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, paymentMethodLabel, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
@@ -42,10 +43,11 @@ import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentTotalBase, getPaymentTotalBaseForSettlement } from '../../utils/paymentSettlement';
 import { SalesPaymentReceiptDialog } from './SalesPaymentReceiptDialog';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
-  summaryData?: PaymentReceived[];
+  summaryData?: PaymentKpiSummary;
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading: boolean;
@@ -57,6 +59,7 @@ interface PagosRecibidosViewProps {
   onSearchChange?: (value: string) => void;
   dateFrom?: string;
   dateTo?: string;
+  selectedBranchId?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
   salesAlert?: PurchaseAlertDetail;
 }
@@ -126,10 +129,10 @@ function groupReceivedPayments(
     const currencies = new Set(effective.map((row) => row.currency));
     const baseAmount = Number(effective.reduce((sum, row) => sum + (row.baseAmount !== undefined && row.baseAmount !== null
       ? Number(row.baseAmount)
-      : toBaseAmount(Number(row.amount || 0), row.currency, Number(row.exchangeRate || globalRate))), 0).toFixed(2));
+      : toBaseAmount(Number(row.amount || 0), row.currency, Number(row.exchangeRate || globalRate))), 0).toFixed(getCurrencyDecimalPlaces()));
     const sameCurrency = currencies.size <= 1;
     const amount = sameCurrency
-      ? Number(effective.reduce((sum, row) => sum + Number(row.amount || 0), 0).toFixed(2))
+      ? Number(effective.reduce((sum, row) => sum + Number(row.amount || 0), 0).toFixed(getCurrencyDecimalPlaces()))
       : baseAmount;
     const methods = new Set(effective.map((row) => String(row.method || '').toUpperCase()));
     const isMixed = methods.size > 1 || effective.some((row) => /pago mixto/i.test(String(row.notes || '')));
@@ -157,7 +160,7 @@ function groupReceivedPayments(
   });
 }
 
-export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {
+export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', selectedBranchId, onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const salesIntegrationQuery = useSalesIntegrationPolicy();
@@ -353,7 +356,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
         limitCurrency === baseCurrency ? 1 : Number(globalRate || 1),
       );
       const debtWithoutInvoice = Math.max(0, getCustomerDebtAmount(customer) - linkedDocumentBalanceBase);
-      return Math.max(0, Number((creditLimitBase - debtWithoutInvoice).toFixed(2)));
+      return Math.max(0, Number((creditLimitBase - debtWithoutInvoice).toFixed(getCurrencyDecimalPlaces())));
     })()
     : 0;
   const paymentPartialCreditFits = !linkedPaymentDocument
@@ -396,12 +399,6 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     () => groupReceivedPayments(data, baseCurrency, globalRate, toBaseAmount),
     [data, baseCurrency, globalRate, toBaseAmount],
   );
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summaryGroupedPayments = useMemo(
-    () => groupReceivedPayments(resolvedSummaryRows || [], baseCurrency, globalRate, toBaseAmount),
-    [resolvedSummaryRows, baseCurrency, globalRate, toBaseAmount],
-  );
-
   useEffect(() => {
     if (!highlightedAlertId) return;
     const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
@@ -422,15 +419,38 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     amount: (row: PaymentReceived) => Number(row.amount || 0),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const hasColumnValueFilters = Object.values(colFilters.state).some((filter) => Boolean(filter.values?.length));
+  const columnFilterSummaryQuery = useQuery({
+    queryKey: ['sales', 'payments-kpi-filtered-rows', user?.tenantId, searchTerm, dateFrom, dateTo, selectedBranchId],
+    queryFn: ({ signal }) => fetchAllReportPages<PaymentReceived>(
+      (filters) => paymentsService.getAll(filters, signal),
+      { pageSize: 5000, report: true, search: searchTerm, dateFrom, dateTo, branchId: selectedBranchId || undefined },
+      signal,
+    ),
+    enabled: hasColumnValueFilters,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const fallbackSummaryRows = hasColumnValueFilters ? columnFilterSummaryQuery.data : undefined;
+  const summaryGroupedPayments = useMemo(
+    () => groupReceivedPayments(fallbackSummaryRows || [], baseCurrency, globalRate, toBaseAmount),
+    [fallbackSummaryRows, baseCurrency, globalRate, toBaseAmount],
+  );
   const summaryRowsWithoutInvoiceFilter = colFilters.applyTo(summaryGroupedPayments.filter((payment) => {
     const search = searchTerm.toLowerCase();
     return String(payment.number || '').toLowerCase().includes(search)
       || (payment.customer?.name || '').toLowerCase().includes(search)
       || (payment.invoice?.number || '').toLowerCase().includes(search);
   }), filterGetters);
-  const summaryFilteredData = colFilters.applyTo(summaryRowsWithoutInvoiceFilter.filter((payment) =>
+  const fallbackFilteredSummaryRows = colFilters.applyTo(summaryRowsWithoutInvoiceFilter.filter((payment) =>
     invoiceFilter === 'ALL' || Boolean(payment.invoice?.number || payment.creditNote?.number),
   ), filterGetters);
+  const isKpiSummaryLoading = hasColumnValueFilters
+    ? columnFilterSummaryQuery.isPending || columnFilterSummaryQuery.isFetching
+    : summaryLoading;
+  const isKpiSummaryError = hasColumnValueFilters ? columnFilterSummaryQuery.isError : summaryError;
+  const summaryAvailable = hasColumnValueFilters ? fallbackSummaryRows !== undefined : summaryData !== undefined;
+  const activeSummary = invoiceFilter === 'WITH_INVOICE' ? summaryData?.documented : summaryData?.all;
   const distinctCustomers = [...new Map(filtered.map((p) => [p.customer?.name || 'Cliente', p.customer?.name || 'Cliente'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((p) => (p.customer?.name || 'Cliente') === label).length }));
 
@@ -492,7 +512,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
         getPaymentLineBase,
         (appliedBase, line) => {
           const lineRate = line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate);
-          return Number(convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(2));
+          return Number(convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(getCurrencyDecimalPlaces()));
         },
       )
       : effectiveLines;
@@ -547,7 +567,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
         invoiceId: localDoc.invoiceId || undefined,
         creditNoteId: localDoc.creditNoteId || undefined,
         date: new Date(localDoc.date).toISOString(),
-        amount: Number(submittedLines.reduce((sum, line) => sum + line.amount, 0).toFixed(2)),
+        amount: Number(submittedLines.reduce((sum, line) => sum + line.amount, 0).toFixed(getCurrencyDecimalPlaces())),
         currency: firstLine.currency,
         exchangeRate: firstLine.exchangeRate,
         method: firstLine.method,
@@ -708,7 +728,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
         currentLine.currency,
         Number((document as any).exchangeRate || globalRate),
         currentLine.exchangeRate,
-      ).toFixed(2))
+      ).toFixed(getCurrencyDecimalPlaces()))
       : 0;
     const nextLines = paymentLines.length
       ? paymentLines.map((line, index) => index === 0 ? { ...line, amount } : line)
@@ -733,7 +753,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     const currentLine = paymentLines[0] || paymentLine('TRANSFER');
     const nextMethod = currentLine.method === 'CUSTOMER_BALANCE' ? 'TRANSFER' : currentLine.method;
     const targetAmount = nextIsGeneral
-      ? Number(convertBetweenCurrencies(paymentOpeningBalanceDue, baseCurrency, currentLine.currency, 1, Number(currentLine.exchangeRate || globalRate)).toFixed(2))
+      ? Number(convertBetweenCurrencies(paymentOpeningBalanceDue, baseCurrency, currentLine.currency, 1, Number(currentLine.exchangeRate || globalRate)).toFixed(getCurrencyDecimalPlaces()))
       : 0;
     const nextLine: ReceivedPaymentLine = {
       ...currentLine,
@@ -804,36 +824,45 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     },
   ];
 
-  const paymentMethodCounts = summaryFilteredData.reduce((acc, payment) => {
-    // Un pago mixto se representa como una fila agrupada en la tabla, pero sus
-    // métodos reales viven en `payments`. El KPI debe contar esas líneas y no
-    // la etiqueta sintética MIXED del grupo.
-    const movements = payment.payments?.length ? payment.payments : [payment];
-    movements
-      .filter((movement) => movement.isActive !== false)
-      .forEach((movement) => {
-        const method = String(movement.method || '').trim().toUpperCase();
-        if (method) acc[method] = (acc[method] || 0) + 1;
-      });
-    return acc;
-  }, {} as Record<string, number>);
+  const paymentMethodCounts = hasColumnValueFilters
+    ? fallbackFilteredSummaryRows.reduce((acc, payment) => {
+      // Un pago mixto se representa como una fila agrupada en la tabla, pero sus
+      // métodos reales viven en `payments`. El KPI debe contar esas líneas y no
+      // la etiqueta sintética MIXED del grupo.
+      const movements = payment.payments?.length ? payment.payments : [payment];
+      movements
+        .filter((movement) => movement.isActive !== false)
+        .forEach((movement) => {
+          const method = String(movement.method || '').trim().toUpperCase();
+          if (method) acc[method] = (acc[method] || 0) + 1;
+        });
+      return acc;
+    }, {} as Record<string, number>)
+    : (activeSummary?.methodCounts || []).reduce((acc, method) => {
+      if (method.method) acc[method.method] = method.count;
+      return acc;
+    }, {} as Record<string, number>);
 
   const rawMainMethod = Object.entries(paymentMethodCounts)
     .sort(([methodA, countA], [methodB, countB]) => countB - countA || methodA.localeCompare(methodB))[0]?.[0] || 'SIN_DATOS';
   const mainMethod = rawMainMethod === 'SIN_DATOS' ? 'Sin datos' : paymentMethodLabel(rawMainMethod);
 
-  const totalCollectedInDisplayCurrency = summaryFilteredData.reduce(
-    (acc, payment) => acc + (payment.baseAmount !== null && payment.baseAmount !== undefined
-      ? Number(payment.baseAmount)
-      : toBaseAmount(payment.amount || 0, payment.currency, payment.exchangeRate || globalRate)),
-    0,
-  );
-  const originalCollectedAmounts = summarizeAmountsByCurrency(
-    summaryFilteredData.flatMap((payment) => payment.payments?.length ? payment.payments.filter((movement) => movement.isActive !== false) : payment.isActive === false ? [] : [payment]),
-    (payment) => Number(payment.amount || 0),
-    (payment) => payment.currency,
-    baseCurrency,
-  );
+  const totalCollectedInDisplayCurrency = hasColumnValueFilters
+    ? fallbackFilteredSummaryRows.reduce(
+      (acc, payment) => acc + (payment.baseAmount !== null && payment.baseAmount !== undefined
+        ? Number(payment.baseAmount)
+        : toBaseAmount(payment.amount || 0, payment.currency, payment.exchangeRate || globalRate)),
+      0,
+    )
+    : Number(activeSummary?.baseTotal || 0);
+  const originalCollectedAmounts = hasColumnValueFilters
+    ? summarizeAmountsByCurrency(
+      fallbackFilteredSummaryRows.flatMap((payment) => payment.payments?.length ? payment.payments.filter((movement) => movement.isActive !== false) : payment.isActive === false ? [] : [payment]),
+      (payment) => Number(payment.amount || 0),
+      (payment) => payment.currency,
+      baseCurrency,
+    )
+    : activeSummary?.currencyBreakdown || [];
 
   const detailDocument = detailPayment?.invoice || detailPayment?.creditNote?.invoice || detailPayment?.creditNote;
   const detailCharges = getSalesAdditionalCharges(detailDocument).filter((charge) => charge.amount > 0.001);
@@ -968,7 +997,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
                           const nextRate = paymentLineRate(nextCurrency);
-                          return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined };
+                          return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined };
                         }))} />
                         <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="number" min="0" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} className="h-9 text-xs tabular-nums" /></div>
                         <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar medio de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
@@ -1021,17 +1050,17 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
-        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
+        <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {!resolvedSummaryRows
+        {!summaryAvailable
           ? <SalesKpiCard title="Total Recaudado" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
           : displayMode === 'ORIGINAL'
           ? originalCollectedAmounts.map((summary) => <SalesKpiCard key={`collected-${summary.currency}`} title={`Total Recaudado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Pagos" value={resolvedSummaryRows ? summaryFilteredData.length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title="Con documento" value={resolvedSummaryRows ? summaryRowsWithoutInvoiceFilter.filter(p => p.invoice?.number || p.creditNote?.number).length : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
-        <SalesKpiCard title="Método Principal" value={resolvedSummaryRows ? mainMethod : '—'} icon={Wallet} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Pagos" value={summaryAvailable ? hasColumnValueFilters ? fallbackFilteredSummaryRows.length : Number(activeSummary?.count || 0) : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Con documento" value={summaryAvailable ? hasColumnValueFilters ? summaryRowsWithoutInvoiceFilter.filter(p => p.invoice?.number || p.creditNote?.number).length : Number(summaryData?.documented.count || 0) : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
+        <SalesKpiCard title="Método Principal" value={summaryAvailable ? mainMethod : '—'} icon={Wallet} color="text-primary" bg="bg-primary/10" />
         </div>
       </div>
       <div className="flex flex-col gap-4">

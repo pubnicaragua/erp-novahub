@@ -161,8 +161,7 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
                         value={draft.price}
                         onChange={(event) => updateDraft(list.id, { ...draft, price: event.target.value })}
                         className="h-9 min-w-0 text-right tabular-nums"
-                        aria-label={`Precio ${list.name} para ${service?.name || 'servicio'}`}
-                      />
+                        aria-label={`Precio ${list.name} para ${service?.name || 'servicio'}`} currencyPrecision />
                     </div>
                     <div className="min-w-0 space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Moneda</Label>

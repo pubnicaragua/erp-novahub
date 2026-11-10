@@ -20,6 +20,7 @@ import { EmployeeContractPanel } from './employee/EmployeeContractPanel';
 import { EmployeeAccessAssetsPanel } from './employee/EmployeeAccessAssetsPanel';
 import { EmployeeDocumentsPanel } from './employee/EmployeeDocumentsPanel';
 import { EmployeeCardDialog } from './employee/EmployeeCardDialog';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 type EmployeeDetailDrawerProps = {
   employeeId: string | null;
@@ -52,9 +53,9 @@ const formatDate = (value: any) => {
 const formatAmount = (value: any, currency = 'NIO') => {
   const amount = Number(value || 0);
   try {
-    return new Intl.NumberFormat('es-NI', { style: 'currency', currency: currency || 'NIO', maximumFractionDigits: 2 }).format(amount);
+    return new Intl.NumberFormat('es-NI', { style: 'currency', currency: currency || 'NIO', maximumFractionDigits: getCurrencyDecimalPlaces() }).format(amount);
   } catch {
-    return `${currency || 'NIO'} ${amount.toFixed(2)}`;
+    return `${currency || 'NIO'} ${amount.toFixed(getCurrencyDecimalPlaces())}`;
   }
 };
 
@@ -91,7 +92,7 @@ const changeValueLabel = (field?: string, value?: string) => {
   if (field === 'contractType') return contractLabel(value);
   if (field === 'salary') {
     const amount = Number(value);
-    if (!Number.isNaN(amount)) return `C$ ${amount.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`;
+    if (!Number.isNaN(amount)) return `C$ ${amount.toLocaleString('es-NI', { maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
   }
   if (field === 'isSeller') return value === 'true' ? 'Sí' : value === 'false' ? 'No' : value;
   return value;

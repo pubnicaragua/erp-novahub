@@ -48,7 +48,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function ActivosFijosDepreciationTab() {
   const queryClient = useQueryClient();
-  const { displayCurrency, formatConvertedAmount, convertAmount, toBaseAmount, baseCurrency } = useCurrency();
+  const { displayCurrency, displayMode, formatConvertedAmount, convertAmount, convertDisplayAmount } = useCurrency();
   const { canPerform } = useAuth();
   const canExportAssets = canPerform('ACCOUNTING_ASSETS', 'export');
   const canGenerateProjection = canPerform('ACCOUNTING_ASSETS', 'generateProjection');
@@ -130,7 +130,7 @@ export function ActivosFijosDepreciationTab() {
     setExporting(true);
     try {
       const details = await fetchFixedAssetDetails(ids);
-      exportFixedAssetsExcel(details, { toBase: toBaseAmount, baseCurrency });
+      exportFixedAssetsExcel(details, { convertAmount: convertDisplayAmount, currencyLabel: displayMode === 'ORIGINAL' ? 'original' : displayCurrency });
       toast.success(`Exportados ${details.length} activo${details.length !== 1 ? 's' : ''}`);
     } catch (err: any) {
       toast.error(err.message || 'Error al exportar activos');

@@ -37,6 +37,7 @@ import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const formatDate = (value?: string | Date) => (value ? format(new Date(value), 'dd/MM/yyyy', { locale: es }) : '');
 const today = () => format(new Date(), 'yyyy-MM-dd');
@@ -490,8 +491,7 @@ export function Billing() {
                         type="number" min={0} step="0.01"
                         value={rates[p.id] ?? (p.salePrice ?? 0)}
                         onChange={(e) => setRates((prev) => ({ ...prev, [p.id]: Number(e.target.value) }))}
-                        className="h-8 w-24 rounded-lg text-right text-xs"
-                      />
+                        className="h-8 w-24 rounded-lg text-right text-xs" currencyPrecision />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -511,7 +511,7 @@ export function Billing() {
 
           <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm" data-tour="log-billing-form">
             <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
-              <FileText className="size-4 text-primary" /> Nueva factura · {selectedPackages.length} paquete(s) · {selectedWeight.toFixed(2)} lb · ${selectedAmount.toFixed(2)}
+              <FileText className="size-4 text-primary" /> Nueva factura · {selectedPackages.length} paquete(s) · {selectedWeight.toFixed(2)} lb · ${selectedAmount.toFixed(getCurrencyDecimalPlaces())}
             </h3>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
@@ -534,7 +534,7 @@ export function Billing() {
               <div>
                 <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tarifa por libra</label>
                 <div className="flex gap-1">
-                  <Input type="number" min={0} step="0.01" value={defaultRate} onChange={(e) => setDefaultRate(e.target.value)} className="rounded-xl text-xs" />
+                  <Input type="number" min={0} step="0.01" value={defaultRate} onChange={(e) => setDefaultRate(e.target.value)} className="rounded-xl text-xs" currencyPrecision />
                   <Button variant="outline" size="sm" className="rounded-lg text-xs" onClick={applyDefaultRate} disabled={selectedPackages.length === 0}>Aplicar</Button>
                 </div>
               </div>
@@ -558,12 +558,12 @@ export function Billing() {
                   <div key={l.packageId} className="flex items-center justify-between gap-2 rounded-lg bg-background/60 px-2 py-1">
                     <span className="font-mono font-bold text-primary">{l.trackingCode}</span>
                     <span className="text-muted-foreground">{l.billableWeight} lb × ${l.rate.toFixed(2)}</span>
-                    <span className="font-black">${l.amount.toFixed(2)}</span>
+                    <span className="font-black">${l.amount.toFixed(getCurrencyDecimalPlaces())}</span>
                   </div>
                 ))}
                 <div className="flex items-center justify-between border-t border-border/50 pt-2 font-black">
                   <span>Total</span>
-                  <span className="text-primary">${preview.totalAmount.toFixed(2)}</span>
+                  <span className="text-primary">${preview.totalAmount.toFixed(getCurrencyDecimalPlaces())}</span>
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -579,7 +579,7 @@ export function Billing() {
             <Card className="rounded-2xl border-emerald-300 bg-emerald-50 p-4 shadow-sm dark:bg-emerald-950/20">
               <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-600"><CheckCircle2 className="size-4" /> Factura emitida</h3>
               <p className="mt-2 text-sm">
-                Factura <b>{result.invoice.number}</b> por <b>${Number(result.invoice.total || 0).toFixed(2)}</b> con <b>{result.billedPackages}</b> paquete(s). Usa la pestaña <b>Entrega</b> para registrar la salida.
+                Factura <b>{result.invoice.number}</b> por <b>${Number(result.invoice.total || 0).toFixed(getCurrencyDecimalPlaces())}</b> con <b>{result.billedPackages}</b> paquete(s). Usa la pestaña <b>Entrega</b> para registrar la salida.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {canSendInvoice && <Button className="rounded-xl text-xs" onClick={() => void sendWhatsApp()} disabled={!lastCustomerId}>
@@ -620,7 +620,7 @@ export function Billing() {
                         </TableCell>}
                         <TableCell className="font-mono text-xs font-bold text-primary">{p.trackingCode}</TableCell>
                         <TableCell className="text-xs font-semibold">{p.customerName || '—'}</TableCell>
-                        <TableCell className="text-right text-xs font-black">${(p.saleAmount ?? 0).toFixed(2)}</TableCell>
+                        <TableCell className="text-right text-xs font-black">${(p.saleAmount ?? 0).toFixed(getCurrencyDecimalPlaces())}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{p.saleInvoiceNumber || '—'}</TableCell>
                       </TableRow>
                     ))}
@@ -663,7 +663,7 @@ export function Billing() {
                         <span className="font-mono font-bold text-primary">{p.trackingCode}</span>
                         <span className="text-muted-foreground"> · {p.saleInvoiceNumber || '—'}</span>
                         <div className="text-[10px] text-muted-foreground">
-                          {p.billableWeight} lb{p.saleAmount != null ? ` · $${p.saleAmount.toFixed(2)}` : ''}{p.deliveredAt ? ` · ${formatDate(p.deliveredAt)}` : ''}
+                          {p.billableWeight} lb{p.saleAmount != null ? ` · $${p.saleAmount.toFixed(getCurrencyDecimalPlaces())}` : ''}{p.deliveredAt ? ` · ${formatDate(p.deliveredAt)}` : ''}
                         </div>
                       </div>
                     ))}
@@ -683,7 +683,7 @@ export function Billing() {
                   return (
                     <div key={invoiceId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background/70 px-2 py-1.5 text-[11px]">
                       <span className="font-black text-primary">{pkgs[0]?.saleInvoiceNumber || invoiceId}</span>
-                      <span className="text-muted-foreground">{pkgs.length} paquete(s) · ${pkgs.reduce((s, p) => s + (p.saleAmount ?? 0), 0).toFixed(2)}</span>
+                      <span className="text-muted-foreground">{pkgs.length} paquete(s) · ${pkgs.reduce((s, p) => s + (p.saleAmount ?? 0), 0).toFixed(getCurrencyDecimalPlaces())}</span>
                       <div className="flex gap-1">
                         {canCancelBilling && <Button variant="outline" size="sm" className="h-7 rounded-lg text-[10px]" onClick={() => openReversal(invoiceId)}>
                           <RotateCcw className="size-3" /> Anular / Reversar
@@ -733,15 +733,15 @@ export function Billing() {
                       <Badge variant="outline" className="rounded-lg text-[10px]">{reversalPreview.invoice.status}</Badge>
                     </div>
                     <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                      <div><p className="text-[10px] font-black uppercase text-muted-foreground">Total</p><p className="font-black">${reversalPreview.invoice.total.toFixed(2)}</p></div>
-                      <div><p className="text-[10px] font-black uppercase text-muted-foreground">Pagado</p><p className="font-black">${reversalPreview.invoice.amountPaid.toFixed(2)}</p></div>
-                      <div><p className="text-[10px] font-black uppercase text-muted-foreground">Saldo CxC</p><p className="font-black">${reversalPreview.invoice.balance.toFixed(2)}</p></div>
+                      <div><p className="text-[10px] font-black uppercase text-muted-foreground">Total</p><p className="font-black">${reversalPreview.invoice.total.toFixed(getCurrencyDecimalPlaces())}</p></div>
+                      <div><p className="text-[10px] font-black uppercase text-muted-foreground">Pagado</p><p className="font-black">${reversalPreview.invoice.amountPaid.toFixed(getCurrencyDecimalPlaces())}</p></div>
+                      <div><p className="text-[10px] font-black uppercase text-muted-foreground">Saldo CxC</p><p className="font-black">${reversalPreview.invoice.balance.toFixed(getCurrencyDecimalPlaces())}</p></div>
                     </div>
                     <div className="mt-2 space-y-1">
                       {reversalPreview.packages.map((p) => (
                         <div key={p.id} className="flex items-center justify-between rounded-lg bg-background/60 px-2 py-1 text-[11px]">
                           <span className="font-mono font-bold text-primary">{p.trackingCode}</span>
-                          <span className="text-muted-foreground">{p.billableWeight} lb · ${(p.saleAmount ?? 0).toFixed(2)}</span>
+                          <span className="text-muted-foreground">{p.billableWeight} lb · ${(p.saleAmount ?? 0).toFixed(getCurrencyDecimalPlaces())}</span>
                         </div>
                       ))}
                     </div>

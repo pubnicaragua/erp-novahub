@@ -18,6 +18,7 @@ import { cn } from '../ui/utils';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
 import { formatDateOnly, formatInstant } from '../../utils/dateFormat';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const ACCOUNT_TYPES = [
   { value: 'CHECKING', label: 'Cuenta Corriente' },
@@ -382,15 +383,15 @@ export function BankAccountsView() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo neto vinculado (base NIO)</p>
-              <p className={cn('mt-1 text-xl font-black', Number(movementPayload.totalBaseAmount || 0) < 0 ? 'text-rose-600' : 'text-primary')}>C$ {Number(movementPayload.totalBaseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className={cn('mt-1 text-xl font-black', Number(movementPayload.totalBaseAmount || 0) < 0 ? 'text-rose-600' : 'text-primary')}>C$ {Number(movementPayload.totalBaseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}</p>
             </div>
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Entradas vinculadas (base NIO)</p>
-              <p className="mt-1 text-xl font-black text-emerald-600">C$ {Number(movementPayload.incomingBaseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="mt-1 text-xl font-black text-emerald-600">C$ {Number(movementPayload.incomingBaseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}</p>
             </div>
             <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Salidas vinculadas (base NIO)</p>
-              <p className="mt-1 text-xl font-black text-rose-600">C$ {Number(movementPayload.outgoingBaseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="mt-1 text-xl font-black text-rose-600">C$ {Number(movementPayload.outgoingBaseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}</p>
             </div>
             <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Movimientos consultados</p>
@@ -409,7 +410,7 @@ export function BankAccountsView() {
                       <TableCell className="text-xs font-medium">{movement.sourceNumber || movement.paymentReceived?.number || movement.paymentMade?.number || movement.sourceType || '—'}</TableCell>
                       <TableCell className="text-xs">{paymentMethodLabel(movement.method)}</TableCell>
                       <TableCell className="max-w-40 truncate text-xs text-muted-foreground">{movement.reference || '—'}</TableCell>
-                      <TableCell className={cn('text-right text-xs font-black', movement.direction === 'OUT' ? 'text-rose-600' : 'text-emerald-600')}>{movement.direction === 'OUT' ? '-' : '+'}C$ {Number(movement.baseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                      <TableCell className={cn('text-right text-xs font-black', movement.direction === 'OUT' ? 'text-rose-600' : 'text-emerald-600')}>{movement.direction === 'OUT' ? '-' : '+'}C$ {Number(movement.baseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}</TableCell>
                       <TableCell><Badge variant={movement.status === 'POSTED' ? 'default' : 'secondary'} className="text-[9px]">{movement.status === 'POSTED' ? 'Activo' : 'Cancelado'}</Badge></TableCell>
                     </TableRow>)}
               </TableBody>

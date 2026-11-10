@@ -40,6 +40,7 @@ import { Input } from './ui/input';
 import { useBranchScope } from '../hooks/useBranchScope';
 import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 import { useAuth } from '../contexts/AuthContext';
+import { useCurrency } from '../contexts/CurrencyContext';
 import { createIdempotencyKey, getApiErrorMessage } from '../services/api';
 import { beginNotificationAction, completeNotificationAction } from '../services/notification-action-coordinator';
 import type { NotificationDomainRefreshDetail } from '../services/notification-domain-refresh';
@@ -61,6 +62,7 @@ import {
   type RestaurantSummary,
   type RestaurantTable,
 } from '../services/restaurant.service';
+import { getCurrencyDecimalPlaces } from '../utils/currency';
 
 type RestaurantTab = 'pos' | 'salon' | 'comandas' | 'cocina' | 'delivery' | 'carta' | 'reportes' | 'configuracion';
 type RestaurantSelectedOptions = Record<string, string | string[]>;
@@ -183,7 +185,7 @@ const kitchenStatus: Record<string, { label: string; className: string }> = {
   CANCELLED: { label: 'Cancelado', className: 'bg-rose-50 text-rose-700' },
 };
 
-const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
 
 function restaurantOrderPreparationIsOpen(order: RestaurantOrder) {
   const preparationStatus = String(order.preparationStatus || '').toUpperCase();
@@ -247,6 +249,7 @@ const restaurantTabToSubmodule: Record<RestaurantTab, string> = {
 
 export function RestaurantePage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: RestaurantePageProps) {
   const { user, canPerform } = useAuth();
+  const { baseCurrency, displayCurrency, displayMode, convertDisplayAmount } = useCurrency();
   const { accessibleBranches, selectedBranchId } = useBranchScope();
   const canViewTables = canPerform('RESTAURANT_SALON', 'view');
   const canViewOrders = canPerform('RESTAURANT_ORDERS', 'view');
@@ -545,25 +548,55 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange, isSidebarC
   const exportRestaurantReport = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter') => {
     if (!canPerform('RESTAURANT_REPORTS', 'export')) return;
     if (!summary) { toast.error('No hay datos de restaurante para exportar.'); return; }
-    const topItems = (summary.topItems || []).map((item) => ({ Platillo: item.description, Total: Number(item._sum.total || 0) }));
-    const rows = [
-      { Indicador: 'Ventas operativas', Valor: money(summary.total) },
-      { Indicador: 'Comandas no canceladas', Valor: summary.orders },
-      { Indicador: 'Subtotal', Valor: money(summary.subtotal) },
-      { Indicador: 'Impuestos', Valor: money(summary.tax) },
-    ];
+    const reportCurrency = displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrency;
+    const totalsByCurrency = summary.totalsByCurrency?.length
+      ? summary.totalsByCurrency
+      : [{ currency: baseCurrency, orders: summary.orders, subtotal: summary.subtotal, tax: summary.tax, total: summary.total }];
+    const topItemsByCurrency = summary.topItemsByCurrency?.length
+      ? summary.topItemsByCurrency
+      : (summary.topItems || []).map((item) => ({ currency: baseCurrency, ...item }));
+    const formatSingleCurrencyTotals = (field: 'subtotal' | 'tax' | 'total') => totalsByCurrency.reduce(
+      (sum, item) => sum + convertDisplayAmount(item[field], item.currency),
+      0,
+    );
+    const rows = displayMode === 'ORIGINAL'
+      ? [
+        { Indicador: 'Comandas no canceladas', Moneda: '—', Valor: summary.orders },
+        ...totalsByCurrency.flatMap((item) => [
+          { Indicador: 'Ventas operativas', Moneda: item.currency, Valor: item.total },
+          { Indicador: 'Subtotal', Moneda: item.currency, Valor: item.subtotal },
+          { Indicador: 'Impuestos', Moneda: item.currency, Valor: item.tax },
+        ]),
+      ]
+      : [
+        { Indicador: 'Comandas no canceladas', Moneda: '—', Valor: summary.orders },
+        { Indicador: 'Ventas operativas', Moneda: reportCurrency, Valor: formatSingleCurrencyTotals('total') },
+        { Indicador: 'Subtotal', Moneda: reportCurrency, Valor: formatSingleCurrencyTotals('subtotal') },
+        { Indicador: 'Impuestos', Moneda: reportCurrency, Valor: formatSingleCurrencyTotals('tax') },
+      ];
+    const topItems = displayMode === 'ORIGINAL'
+      ? topItemsByCurrency.map((item) => ({
+        Platillo: item.description,
+        Moneda: item.currency,
+        Total: Number(item._sum.total || 0),
+      }))
+      : [...topItemsByCurrency.reduce((items, item) => {
+        const current = items.get(item.description) || 0;
+        items.set(item.description, current + convertDisplayAmount(Number(item._sum.total || 0), item.currency));
+        return items;
+      }, new Map<string, number>())].map(([Platillo, Total]) => ({ Platillo, Moneda: reportCurrency, Total }));
     try {
       if (format === 'xlsx') {
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Resumen');
-        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(topItems.length ? topItems : [{ Platillo: 'Sin datos', Total: 0 }]), 'Platillos');
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(topItems.length ? topItems : [{ Platillo: 'Sin datos', Moneda: reportCurrency, Total: 0 }]), 'Platillos');
         XLSX.writeFile(workbook, buildDatedDownloadFileName(['reporte_restaurante'], 'xlsx'));
       } else {
         await generateConfiguredReportSectionsPDF({
-          targetKey: 'restaurante.reports', title: 'Reporte operativo de restaurante', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
+          targetKey: 'restaurante.reports', title: `Reporte operativo de restaurante · ${displayMode === 'ORIGINAL' ? `detalle por moneda; resumen por moneda de origen` : reportCurrency}`, tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
           sections: [
-            { id: 'restaurant-summary', title: 'Resumen operativo', headers: ['Indicador', 'Valor'], rows: rows.map((row) => [row.Indicador, row.Valor]) },
-            { id: 'restaurant-top-items', title: 'Platillos destacados', headers: ['Platillo', 'Total'], rows: topItems.map((row) => [row.Platillo, money(row.Total)]) },
+            { id: 'restaurant-summary', title: 'Resumen operativo', headers: ['Indicador', 'Moneda', 'Valor'], rows: rows.map((row) => [row.Indicador, row.Moneda, row.Valor]) },
+            { id: 'restaurant-top-items', title: 'Platillos destacados', headers: ['Platillo', 'Moneda', 'Total'], rows: topItems.map((row) => [row.Platillo, row.Moneda, row.Total]) },
           ],
           fileName: buildDatedDownloadFileName(['reporte_restaurante'], 'pdf'),
           forceNative: true,
@@ -1497,7 +1530,7 @@ function RestaurantCheckoutDialog({ order, balance, registers, customers, custom
   const paid = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
   const remainder = total - paid;
   const updatePayment = (index: number, patch: Partial<RestaurantPaymentLine>) => onPaymentsChange(payments.map((payment, paymentIndex) => paymentIndex === index ? { ...payment, ...patch } : payment));
-  return <div className="nh-modal-root fixed inset-0 z-[60] flex items-center justify-center bg-foreground/60 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-checkout-title"><div className="nh-modal-surface my-auto max-h-[min(92vh,calc(100dvh-2rem))] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Caja global · cobro contextual</p><h2 id="restaurant-checkout-title" className="mt-1 font-serif text-2xl font-medium italic">Pedido {order.number}</h2><p className="mt-1 text-sm text-muted-foreground">La factura, inventario y contabilidad se procesan en Caja.</p></div><button type="button" onClick={onClose} className="size-9 rounded-xl p-2 text-muted-foreground hover:bg-muted" aria-label="Cerrar cobro"><X className="size-5" /></button></div><div className="mt-5 flex items-end justify-between rounded-2xl bg-primary p-5 text-primary-foreground"><div><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Total de la cuenta</p><p className="mt-1 text-3xl font-black">{money(total, order.currency)}</p></div><CreditCard className="size-8 opacity-80" /></div><label className="mt-5 block text-sm font-bold">Caja registradora<select value={registerId} onChange={(event) => onRegisterChange(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">{registers.length === 0 && <option value="">No hay cajas disponibles</option>}{registers.map((register) => <option key={register.id} value={register.id}>{register.name}</option>)}</select></label>{allowPartialPayments && <div className="mt-4 grid gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 sm:grid-cols-2"><label className="text-sm font-bold text-amber-950">Cliente para saldo<select value={customerId} onChange={(event) => onCustomerChange(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm font-normal"><option value="">Seleccionar cliente solo si dejas saldo</option>{customers.filter((customer) => customer.status !== 'INACTIVE').map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.code ? ` · ${customer.code}` : ''}</option>)}</select></label><label className="text-sm font-bold text-amber-950">Vencimiento<input type="date" value={dueDate} onChange={(event) => onDueDateChange(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm font-normal" /></label><p className="sm:col-span-2 text-xs font-medium text-amber-900">Solo se utiliza cuando el monto abonado es menor al total. El saldo queda en Ventas para su seguimiento.</p></div>}<div className="mt-5"><div className="flex items-center justify-between"><h3 className="font-black">Dividir el cobro</h3><Button variant="outline" size="sm" onClick={() => onPaymentsChange([...payments, { method: 'CARD', amount: '', reference: '' }])}><Plus className="size-3.5" />Medio de pago</Button></div><div className="mt-3 space-y-2">{payments.map((payment, index) => <div key={`${payment.method}-${index}`} className="grid gap-2 rounded-2xl border border-border/60 p-3 sm:grid-cols-[1fr_125px_auto]"><select aria-label={`Medio de pago ${index + 1}`} value={payment.method} onChange={(event) => updatePayment(index, { method: event.target.value as RestaurantPaymentLine['method'] })} className="h-10 rounded-xl border border-border bg-background px-3 text-sm"><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="TRANSFER">Transferencia</option><option value="CHECK">Cheque</option><option value="QR">Pago QR</option><option value="VOUCHER">Vale / consumo interno</option></select><Input aria-label={`Monto de pago ${index + 1}`} type="number" min="0" step="0.01" value={payment.amount} onChange={(event) => updatePayment(index, { amount: event.target.value })} placeholder="Monto" />{payments.length > 1 ? <Button variant="ghost" size="icon" onClick={() => onPaymentsChange(payments.filter((_, paymentIndex) => paymentIndex !== index))} aria-label="Quitar medio de pago"><X className="size-4" /></Button> : <span />}{['CARD', 'TRANSFER', 'CHECK', 'QR', 'VOUCHER'].includes(payment.method) && <Input aria-label={`Referencia de pago ${index + 1}`} className="sm:col-span-3" value={payment.reference} onChange={(event) => updatePayment(index, { reference: event.target.value })} placeholder="Referencia (opcional)" />}</div>)}</div></div><div className={`mt-4 flex items-center justify-between rounded-xl px-3 py-3 text-sm font-bold ${Math.abs(remainder) < 0.01 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}><span>{Math.abs(remainder) < 0.01 ? 'Distribución completa' : remainder > 0 ? 'Pendiente por distribuir' : 'El pago supera el total'}</span><span>{money(Math.abs(remainder), order.currency)}</span></div><div className="mt-5 flex flex-col-reverse gap-2 border-t border-border/60 pt-4 sm:flex-row sm:justify-end"><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={!registerId || remainder < -0.01 || (remainder > 0.01 && (!customerId || !dueDate))} onClick={() => void onConfirm()}><CreditCard className="size-4" />{remainder > 0.01 ? 'Registrar abono' : 'Emitir factura y cobrar'}</Button></div></div></div>;
+  return <div className="nh-modal-root fixed inset-0 z-[60] flex items-center justify-center bg-foreground/60 p-4" role="dialog" aria-modal="true" aria-labelledby="restaurant-checkout-title"><div className="nh-modal-surface my-auto max-h-[min(92vh,calc(100dvh-2rem))] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Caja global · cobro contextual</p><h2 id="restaurant-checkout-title" className="mt-1 font-serif text-2xl font-medium italic">Pedido {order.number}</h2><p className="mt-1 text-sm text-muted-foreground">La factura, inventario y contabilidad se procesan en Caja.</p></div><button type="button" onClick={onClose} className="size-9 rounded-xl p-2 text-muted-foreground hover:bg-muted" aria-label="Cerrar cobro"><X className="size-5" /></button></div><div className="mt-5 flex items-end justify-between rounded-2xl bg-primary p-5 text-primary-foreground"><div><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Total de la cuenta</p><p className="mt-1 text-3xl font-black">{money(total, order.currency)}</p></div><CreditCard className="size-8 opacity-80" /></div><label className="mt-5 block text-sm font-bold">Caja registradora<select value={registerId} onChange={(event) => onRegisterChange(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">{registers.length === 0 && <option value="">No hay cajas disponibles</option>}{registers.map((register) => <option key={register.id} value={register.id}>{register.name}</option>)}</select></label>{allowPartialPayments && <div className="mt-4 grid gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 sm:grid-cols-2"><label className="text-sm font-bold text-amber-950">Cliente para saldo<select value={customerId} onChange={(event) => onCustomerChange(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm font-normal"><option value="">Seleccionar cliente solo si dejas saldo</option>{customers.filter((customer) => customer.status !== 'INACTIVE').map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.code ? ` · ${customer.code}` : ''}</option>)}</select></label><label className="text-sm font-bold text-amber-950">Vencimiento<input type="date" value={dueDate} onChange={(event) => onDueDateChange(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm font-normal" /></label><p className="sm:col-span-2 text-xs font-medium text-amber-900">Solo se utiliza cuando el monto abonado es menor al total. El saldo queda en Ventas para su seguimiento.</p></div>}<div className="mt-5"><div className="flex items-center justify-between"><h3 className="font-black">Dividir el cobro</h3><Button variant="outline" size="sm" onClick={() => onPaymentsChange([...payments, { method: 'CARD', amount: '', reference: '' }])}><Plus className="size-3.5" />Medio de pago</Button></div><div className="mt-3 space-y-2">{payments.map((payment, index) => <div key={`${payment.method}-${index}`} className="grid gap-2 rounded-2xl border border-border/60 p-3 sm:grid-cols-[1fr_125px_auto]"><select aria-label={`Medio de pago ${index + 1}`} value={payment.method} onChange={(event) => updatePayment(index, { method: event.target.value as RestaurantPaymentLine['method'] })} className="h-10 rounded-xl border border-border bg-background px-3 text-sm"><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="TRANSFER">Transferencia</option><option value="CHECK">Cheque</option><option value="QR">Pago QR</option><option value="VOUCHER">Vale / consumo interno</option></select><Input aria-label={`Monto de pago ${index + 1}`} type="number" min="0" step="0.01" value={payment.amount} onChange={(event) => updatePayment(index, { amount: event.target.value })} placeholder="Monto" currencyPrecision />{payments.length > 1 ? <Button variant="ghost" size="icon" onClick={() => onPaymentsChange(payments.filter((_, paymentIndex) => paymentIndex !== index))} aria-label="Quitar medio de pago"><X className="size-4" /></Button> : <span />}{['CARD', 'TRANSFER', 'CHECK', 'QR', 'VOUCHER'].includes(payment.method) && <Input aria-label={`Referencia de pago ${index + 1}`} className="sm:col-span-3" value={payment.reference} onChange={(event) => updatePayment(index, { reference: event.target.value })} placeholder="Referencia (opcional)" />}</div>)}</div></div><div className={`mt-4 flex items-center justify-between rounded-xl px-3 py-3 text-sm font-bold ${Math.abs(remainder) < 0.01 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}><span>{Math.abs(remainder) < 0.01 ? 'Distribución completa' : remainder > 0 ? 'Pendiente por distribuir' : 'El pago supera el total'}</span><span>{money(Math.abs(remainder), order.currency)}</span></div><div className="mt-5 flex flex-col-reverse gap-2 border-t border-border/60 pt-4 sm:flex-row sm:justify-end"><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={!registerId || remainder < -0.01 || (remainder > 0.01 && (!customerId || !dueDate))} onClick={() => void onConfirm()}><CreditCard className="size-4" />{remainder > 0.01 ? 'Registrar abono' : 'Emitir factura y cobrar'}</Button></div></div></div>;
 }
 
 type DeliveryBoardProps = {

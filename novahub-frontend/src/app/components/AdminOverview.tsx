@@ -22,6 +22,7 @@ import { useTenantQuery } from '../hooks/useTenantQuery';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell
 } from 'recharts';
+import { getCurrencyDecimalPlaces } from '../utils/currency';
 
 function formatStorageBytes(bytes: number | undefined) {
   const value = Number(bytes || 0);
@@ -29,7 +30,7 @@ function formatStorageBytes(bytes: number | undefined) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
   const unitIndex = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
   const amount = value / (1024 ** unitIndex);
-  return `${amount >= 100 || unitIndex === 0 ? amount.toFixed(0) : amount.toFixed(2)} ${units[unitIndex]}`;
+  return `${amount >= 100 || unitIndex === 0 ? amount.toFixed(0) : amount.toFixed(getCurrencyDecimalPlaces())} ${units[unitIndex]}`;
 }
 
 export function AdminOverview() {

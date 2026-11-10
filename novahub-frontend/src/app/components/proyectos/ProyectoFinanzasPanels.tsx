@@ -213,7 +213,7 @@ function BudgetLineDialog({ editing, baseCurrency, onClose, onSubmit }: { editin
           <div><Label>Tipo</Label><Select value={form.type} onValueChange={(v) => setForm((f: any) => ({ ...f, type: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="COST">Costo</SelectItem><SelectItem value="INCOME">Ingreso</SelectItem></SelectContent></Select></div>
           <div><Label>Categoría</Label><Input value={form.category} onChange={(e) => setForm((f: any) => ({ ...f, category: e.target.value }))} placeholder="OPERATIVO" /></div>
           <div className="sm:col-span-2"><Label>Concepto *</Label><Input value={form.concept} onChange={(e) => setForm((f: any) => ({ ...f, concept: e.target.value }))} placeholder="Ej. Mano de obra directa" /></div>
-          <div><Label>Monto</Label><Input type="number" min={0} value={form.amount} onChange={(e) => setForm((f: any) => ({ ...f, amount: e.target.value }))} placeholder="0.00" /></div>
+          <div><Label>Monto</Label><Input type="number" min={0} value={form.amount} onChange={(e) => setForm((f: any) => ({ ...f, amount: e.target.value }))} placeholder="0.00" currencyPrecision /></div>
           <div><Label>Moneda</Label><Select value={form.currency} onValueChange={(v) => setForm((f: any) => ({ ...f, currency: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div>
           <div className="sm:col-span-2"><Label>Tasa de cambio (si no es NIO)</Label><Input type="number" min={0} step="0.01" value={form.exchangeRate} onChange={(e) => setForm((f: any) => ({ ...f, exchangeRate: e.target.value }))} placeholder="36.50" /></div>
           <div className="sm:col-span-2"><Label>Notas</Label><Input value={form.notes} onChange={(e) => setForm((f: any) => ({ ...f, notes: e.target.value }))} /></div>
@@ -508,7 +508,7 @@ function CostDialog({ projectId, editing, suppliers, canViewQuotations, onClose,
           </div>}
           <div className="sm:col-span-2"><Label>Concepto *</Label><Input value={form.concept} onChange={(e) => setForm((f: any) => ({ ...f, concept: e.target.value }))} placeholder="Ej. Materiales de construcción" /></div>
           <div><Label>Categoría</Label><Input value={form.category} onChange={(e) => setForm((f: any) => ({ ...f, category: e.target.value }))} placeholder="OPERATIVO" /></div>
-          <div><Label>Monto</Label><Input type="number" min={0} value={form.amount} onChange={(e) => setForm((f: any) => ({ ...f, amount: e.target.value }))} placeholder="0.00" /></div>
+          <div><Label>Monto</Label><Input type="number" min={0} value={form.amount} onChange={(e) => setForm((f: any) => ({ ...f, amount: e.target.value }))} placeholder="0.00" currencyPrecision /></div>
           <div><Label>Moneda</Label><Select value={form.currency} onValueChange={(v) => setForm((f: any) => ({ ...f, currency: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div>
           <div><Label>Fecha</Label><DateField value={form.costDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, costDate: v }))} /></div>
           <div>

@@ -351,8 +351,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                   value={formPriceModifier}
                   onChange={(e) => setFormPriceModifier(e.target.value)}
                   className="h-9 text-xs"
-                  step="0.01"
-                />
+                  step="0.01" currencyPrecision />
               </div>
               {canViewInventoryCost && <div className="space-y-1.5">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Ajuste de costo heredado</label>
@@ -361,13 +360,12 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                   value={formCostModifier}
                   onChange={(e) => setFormCostModifier(e.target.value)}
                   className="h-9 text-xs"
-                  step="0.01"
-                />
+                  step="0.01" currencyPrecision />
               </div>}
             </div>
             {canViewInventoryCost && <div className="space-y-1.5">
               <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo propio (opcional)</label>
-              <Input type="number" min={0} value={formCostPrice} onChange={(e) => setFormCostPrice(e.target.value)} className="h-9 text-xs" step="0.01" placeholder="Vacío = hereda el costo base" />
+              <Input type="number" min={0} value={formCostPrice} onChange={(e) => setFormCostPrice(e.target.value)} className="h-9 text-xs" step="0.01" placeholder="Vacío = hereda el costo base" currencyPrecision />
               <p className="text-[10px] text-muted-foreground">Se expresa en la moneda funcional. Si se informa, tiene prioridad sobre el ajuste heredado.</p>
             </div>}
           </div>

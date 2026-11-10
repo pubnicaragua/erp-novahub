@@ -1,3 +1,5 @@
+import { getCurrencyDecimalPlaces } from './currency';
+
 export function shouldSubmitExistingDraftBeforePayment(
   invoiceId: string | null | undefined,
   originalStatus: string | null | undefined,
@@ -21,7 +23,7 @@ export function getInvoicePaymentBalance(
     const total = Number(invoice.total || 0);
     const amountPaid = Number(invoice.amountPaid || 0);
     return Number.isFinite(total) && Number.isFinite(amountPaid)
-      ? Math.max(0, Number((total - amountPaid).toFixed(2)))
+      ? Math.max(0, Number((total - amountPaid).toFixed(getCurrencyDecimalPlaces())))
       : 0;
   }
   const balance = Number(currentBalance ?? invoice.balance ?? 0);

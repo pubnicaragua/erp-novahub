@@ -11,8 +11,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export interface FixedAssetExportOptions {
-  toBase?: (amount: number, sourceCurrency?: string, sourceRate?: number) => number;
-  baseCurrency?: string;
+  convertAmount?: (amount: number, sourceCurrency?: string, sourceRate?: number) => number;
+  currencyLabel?: string;
 }
 
 function formatExportDate(value: any): string {
@@ -43,11 +43,11 @@ export async function fetchFixedAssetDetails(ids: string[]): Promise<any[]> {
 }
 
 export function exportFixedAssetsExcel(details: any[], options: FixedAssetExportOptions = {}): void {
-  const { toBase, baseCurrency } = options;
-  const suffix = baseCurrency ? ` (${baseCurrency})` : '';
+  const { convertAmount, currencyLabel } = options;
+  const suffix = currencyLabel ? ` (${currencyLabel})` : '';
   const converted = (value: any, currency: string | undefined, rate: number | undefined): number | undefined => {
-    if (!toBase) return undefined;
-    return round2(toBase(Number(value ?? 0), currency, rate));
+    if (!convertAmount) return undefined;
+    return round2(convertAmount(Number(value ?? 0), currency, rate));
   };
 
   const assetRows = details.map((d) => {
@@ -76,7 +76,7 @@ export function exportFixedAssetsExcel(details: any[], options: FixedAssetExport
       'Valor en libros': d.derived?.bookValue ?? 0,
       'Dep. mensual': d.derived?.monthly ?? 0,
     };
-    if (toBase) {
+    if (convertAmount) {
       row[`Costo${suffix}`] = converted(d.cost, d.currency, d.exchangeRate);
       row[`Valor residual${suffix}`] = converted(d.residualValue, d.currency, d.exchangeRate);
       row[`Dep. acumulada inicial${suffix}`] = converted(d.initialAccumDepreciation, d.currency, d.exchangeRate);
@@ -100,9 +100,10 @@ export function exportFixedAssetsExcel(details: any[], options: FixedAssetExport
           'Depreciación': p.depreciationAmount,
           'Acumulada': p.accumulatedDepreciation,
           'Valor en libros': p.bookValue,
+          'Moneda': d.currency ?? '',
           'Estado': p.status === 'PROCESSED' ? 'Procesado' : 'Pendiente',
         };
-        if (toBase) {
+        if (convertAmount) {
           row[`Depreciación${suffix}`] = converted(p.depreciationAmount, d.currency, d.exchangeRate);
           row[`Acumulada${suffix}`] = converted(p.accumulatedDepreciation, d.currency, d.exchangeRate);
           row[`Valor en libros${suffix}`] = converted(p.bookValue, d.currency, d.exchangeRate);
@@ -114,10 +115,10 @@ export function exportFixedAssetsExcel(details: any[], options: FixedAssetExport
 
   const workbook = XLSX.utils.book_new();
   const wsAssets = XLSX.utils.json_to_sheet(assetRows);
-  wsAssets['!cols'] = [{ wch: 12 }, { wch: 32 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 26 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, ...(toBase ? [{ wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 }] : [])];
+  wsAssets['!cols'] = [{ wch: 12 }, { wch: 32 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 26 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, ...(convertAmount ? [{ wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 }] : [])];
   XLSX.utils.book_append_sheet(workbook, wsAssets, 'Activos');
   const wsProjection = XLSX.utils.json_to_sheet(projectionRows);
-  wsProjection['!cols'] = [{ wch: 12 }, { wch: 32 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, ...(toBase ? [{ wch: 14 }, { wch: 14 }, { wch: 14 }] : [])];
+  wsProjection['!cols'] = [{ wch: 12 }, { wch: 32 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, ...(convertAmount ? [{ wch: 14 }, { wch: 14 }, { wch: 14 }] : [])];
   XLSX.utils.book_append_sheet(workbook, wsProjection, 'Proyección de Depreciación');
   XLSX.writeFile(workbook, buildDatedDownloadFileName(['reporte_activos_fijos'], 'xlsx'));
 }

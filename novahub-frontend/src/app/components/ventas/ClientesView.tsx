@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import * as XLSX from 'xlsx';
 import { 
@@ -9,7 +10,7 @@ import { Button } from '../ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
-import { customersService } from '../../services/ventas.service';
+import { customersService, type CustomerKpiSummary } from '../../services/ventas.service';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
@@ -17,7 +18,6 @@ import { SalesKpiCard } from './SalesKpiCard';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { formatDateEs } from '../../utils/dateFormat';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Customer, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
@@ -37,6 +37,7 @@ import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/custo
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { normalizeCustomerImportDate } from '../../utils/customer-import-date';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerImportPhoneValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
 import { resolveMissingRucCreditDecision } from '../../utils/customer-credit-confirmation';
@@ -49,7 +50,7 @@ interface ClientesViewProps {
   error?: unknown;
   onRefresh: () => Promise<void> | void;
   pagination?: SalesPaginationControls;
-  summaryData?: Customer[];
+  summaryData?: CustomerKpiSummary;
   summaryLoading?: boolean;
   summaryError?: boolean;
   onSearchChange?: (value: string) => void;
@@ -535,7 +536,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   };
 
   const downloadTemplate = async () => {
-    if (historyProfileLoading) {
+    const includeHistory = importMode === 'HISTORICAL';
+    if (includeHistory && historyProfileLoading) {
       toast.error('Espera a que cargue el perfil de historial antes de descargar la plantilla.');
       return;
     }
@@ -554,12 +556,12 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     const example = ['Cliente Ejemplo', '', 'PARTICULAR', '', defaultCountryCode === 'NI' ? '001-010190-1000A' : '', '', 'cliente@correo.com', defaultCountryCode === 'NI' ? '88888888' : '', '', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', countryNameForForm(defaultCountryCode, countries), defaultCountryCode, 'Régimen general', 0, displayCurrency, importablePriceLists[0]?.code || '', '', '', baseCurrency, 'ACTIVO', ''];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
-    const historyHeaders = buildCustomerHistoryTemplateHeaders(historyProfile);
-    const historySheet = XLSX.utils.aoa_to_sheet([historyHeaders]);
-    historySheet['!cols'] = historyHeaders.map((header) => ({ wch: Math.max(16, Math.min(28, header.length + 5)) }));
+    const historyHeaders = includeHistory ? buildCustomerHistoryTemplateHeaders(historyProfile) : [];
+    const historySheet = includeHistory ? XLSX.utils.aoa_to_sheet([historyHeaders]) : null;
+    if (historySheet) historySheet['!cols'] = historyHeaders.map((header) => ({ wch: Math.max(16, Math.min(28, header.length + 5)) }));
     const guideRows: any[][] = [
-      ['GUÍA DE LLENADO · CLIENTES E HISTORIAL'],
-      ['La importación puede ejecutarse una sola vez con las hojas Clientes e Historial. Cada cliente válido recibirá un número automático del sistema.'],
+      [`GUÍA DE LLENADO · CLIENTES${includeHistory ? ' E HISTORIAL' : ''}`],
+      [includeHistory ? 'La importación puede ejecutarse una sola vez con las hojas Clientes e Historial. Cada cliente válido recibirá un número automático del sistema.' : 'Completa la hoja Clientes. Cada cliente válido recibirá un número automático del sistema.'],
       ['Campo', 'Regla'],
       ['Nombre', 'Obligatorio. Identifica a la persona natural o jurídica.'],
       ['Fecha de ingreso', 'Opcional. Si se deja vacía, se usa la fecha actual del sistema. Acepta fechas de Excel, aaaa-mm-dd o dd/mm/aaaa.'],
@@ -572,17 +574,19 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       ['Correo, dirección y ubicación', 'Completa correo, dirección, ciudad y departamento cuando aplique.'],
       ['Régimen fiscal', 'Opcional. Ejemplo: Régimen general, cuota fija o exento.'],
       ['Lista de precios', 'Opcional. Usa el código o nombre de una lista existente. Si no existe, se mostrará un aviso y se importará sin asignación.'],
-      ['Hoja Historial', `Opcional. Agrega una fila por ${historyProfile.activityType.toLocaleLowerCase()} u otro antecedente. El sistema calcula “${historyProfile.recordCountLabel}” contando filas o documentos únicos si completas Número de documento. Los clientes sin filas en esta hoja también se importan.`],
-      ['Identificación del historial', 'Debe coincidir con la cédula o RUC de la hoja Clientes. No se vincula por nombre; un historial sin coincidencia queda para revisión.'],
-      ['Total, medida y moneda', `Indica el importe total y la moneda en cada registro. La medida ${historyProfile.measureLabel ? `“${historyProfile.measureLabel}”` : 'es opcional'}; un símbolo “$” necesita que selecciones USD o NIO en la vista previa.`],
-      ['Número de documento', 'Opcional. Si el mismo documento aparece más de una vez con el mismo importe, se cuenta una sola vez y el importe no se duplica.'],
-      ['TipoActividad', `Opcional. Puedes separar los antecedentes por tipo y moneda. Si dejas la celda vacía, se usa “${historyProfile.activityType}”.`],
+      ...(includeHistory ? [
+        ['Hoja Historial', `Opcional. Agrega una fila por ${historyProfile.activityType.toLocaleLowerCase()} u otro antecedente. El sistema calcula “${historyProfile.recordCountLabel}” contando filas o documentos únicos si completas Número de documento. Los clientes sin filas en esta hoja también se importan.`],
+        ['Identificación del historial', 'Debe coincidir con la cédula o RUC de la hoja Clientes. No se vincula por nombre; un historial sin coincidencia queda para revisión.'],
+        ['Total, medida y moneda', `Indica el importe total y la moneda en cada registro. La medida ${historyProfile.measureLabel ? `“${historyProfile.measureLabel}”` : 'es opcional'}; un símbolo “$” necesita que selecciones USD o NIO en la vista previa.`],
+        ['Número de documento', 'Opcional. Si el mismo documento aparece más de una vez con el mismo importe, se cuenta una sola vez y el importe no se duplica.'],
+        ['TipoActividad', `Opcional. Puedes separar los antecedentes por tipo y moneda. Si dejas la celda vacía, se usa “${historyProfile.activityType}”.`],
+      ] : []),
       ['Límite de crédito', 'Opcional. Usa un número mayor o igual a cero. El importe se guarda en la moneda indicada en la columna Moneda límite de crédito.'],
       ['Moneda límite de crédito', `Obligatoria si capturas un límite. Usa NIO o USD. Si el archivo no trae esta columna, se usará ${displayCurrency}, la moneda seleccionada arriba al preparar la importación.`],
       ['Tipo saldo inicial y saldo inicial', 'Opcional. Indica PENDIENTE para una deuda general que el cliente tiene con tu empresa o A FAVOR para un saldo disponible. Deja el importe vacío si no hay saldo inicial.'],
       ['Moneda saldo inicial', `Usa NIO o USD; si no se indica, se usará ${baseCurrency}, la moneda base de la empresa. La tasa vigente se conservará al importar.`],
       ['Estado', 'Usa ACTIVO o INACTIVO. Los clientes inactivos no podrán utilizarse en nuevas operaciones.'],
-      ['Previsualización', 'Selecciona “Clientes + historial (un solo archivo)”. Revisa listas de precios, identificación, moneda y resumen antes de importar. Los avisos no bloquean la importación.'],
+      ['Previsualización', includeHistory ? 'Selecciona “Clientes + historial (un solo archivo)”. Revisa listas de precios, identificación, moneda y resumen antes de importar. Los avisos no bloquean la importación.' : 'Selecciona “Solo clientes” para revisar los datos antes de importar. Los avisos no bloquean las filas válidas.'],
       [],
       ['LISTAS DE PRECIOS DISPONIBLES', 'Estas son las listas activas al momento de descargar esta plantilla. Puedes usar el código o el nombre en la columna Lista de precios.'],
       ['Código', 'Nombre'],
@@ -592,9 +596,9 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     guide['!cols'] = [{ wch: 28 }, { wch: 110 }];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, 'Clientes');
-    XLSX.utils.book_append_sheet(workbook, historySheet, 'Historial');
+    if (historySheet) XLSX.utils.book_append_sheet(workbook, historySheet, 'Historial');
     XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
-    XLSX.writeFile(workbook, 'plantilla_clientes.xlsx');
+    XLSX.writeFile(workbook, includeHistory ? 'plantilla_clientes_con_historial.xlsx' : 'plantilla_clientes.xlsx');
     toast.success('Plantilla descargada');
   };
 
@@ -817,10 +821,20 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     type: (row: Customer) => String(row.type || '').toUpperCase(),
   };
   const filteredData = colFilters.applyTo(filteredAndSorted, filterGetters);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError
-    ? data
-    : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((customer) => {
+  const hasColumnValueFilters = Object.values(colFilters.state).some((filter) => Boolean(filter.values?.length));
+  const columnFilterSummaryQuery = useQuery({
+    queryKey: ['sales', 'customers-kpi-filtered-rows', tenantKey, searchTerm, dateFrom, dateTo],
+    queryFn: ({ signal }) => fetchAllReportPages<Customer>(
+      (filters) => customersService.getAll(filters, signal),
+      { pageSize: 5000, report: true, search: searchTerm, dateFrom, dateTo },
+      signal,
+    ),
+    enabled: hasColumnValueFilters,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const fallbackSummaryRows = hasColumnValueFilters ? columnFilterSummaryQuery.data : undefined;
+  const summarySearchRows = (fallbackSummaryRows || []).filter((customer) => {
     const search = searchTerm.toLowerCase();
     return String(customer.name || '').toLowerCase().includes(search)
       || String(customer.companyName || '').toLowerCase().includes(search)
@@ -838,6 +852,14 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     return (statusFilter === 'ALL' || customerStatus === statusFilter)
       && (customerTypeFilter === 'ALL' || String(customer.type || '').toUpperCase() === customerTypeFilter);
   }).sort(compareCustomerCodes), filterGetters);
+  const isKpiSummaryLoading = hasColumnValueFilters
+    ? columnFilterSummaryQuery.isPending || columnFilterSummaryQuery.isFetching
+    : summaryLoading;
+  const isKpiSummaryError = hasColumnValueFilters ? columnFilterSummaryQuery.isError : summaryError;
+  const summaryAvailable = hasColumnValueFilters ? fallbackSummaryRows !== undefined : summaryData !== undefined;
+  const summaryGroups = summaryData?.groups || [];
+  const summaryGroupsWithoutStatusFilter = summaryGroups.filter((group) => statusFilter === 'ALL' || group.status === statusFilter);
+  const summaryGroupsForDebt = summaryGroupsWithoutStatusFilter.filter((group) => customerTypeFilter === 'ALL' || group.type === customerTypeFilter);
   const loadError = error instanceof Error ? error.message : error ? 'No se pudo cargar la información de clientes.' : '';
   const typeOptions = [
     { value: 'INDIVIDUAL', label: 'Particular', count: filtered.filter((c) => String(c.type || '').toUpperCase() === 'INDIVIDUAL').length },
@@ -1269,9 +1291,13 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   ];
 
   const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(String(column.key)));
-  const totalDue = summaryFilteredData.reduce((acc, customer) => acc + getCustomerDebtAmount(customer), 0);
+  const totalDue = hasColumnValueFilters
+    ? summaryFilteredData.reduce((acc, customer) => acc + getCustomerDebtAmount(customer), 0)
+    : summaryGroupsForDebt.reduce((acc, group) => acc + Number(group.balanceDue || 0), 0);
   const totalDueBreakdown = summarizeAmountsByCurrency(
-    summaryFilteredData.flatMap((customer) => customer.balanceDueOriginalCurrencyBreakdown || []),
+    hasColumnValueFilters
+      ? summaryFilteredData.flatMap((customer) => customer.balanceDueOriginalCurrencyBreakdown || [])
+      : summaryGroupsForDebt.flatMap((group) => group.balanceDueOriginalCurrencyBreakdown || []),
     (item) => Number(item.amount || 0),
     (item) => item.currency,
   );
@@ -1332,13 +1358,13 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* KPIs Section */}
-      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
-        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
+        <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <SalesKpiCard title="Total Clientes" value={resolvedSummaryRows ? summaryRowsWithoutQuickFilters.length : '—'} icon={Users} color="text-primary" bg="bg-primary/10" kind="filter" active={customerTypeFilter === 'ALL' && statusFilter === 'ALL'} onClick={() => { setCustomerTypeFilter('ALL'); setStatusFilter('ALL'); }} />
-          <SalesKpiCard title="Particulares" value={resolvedSummaryRows ? summaryRowsWithoutTypeFilter.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length : '—'} icon={Users} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
-          <SalesKpiCard title="Empresas" value={resolvedSummaryRows ? summaryRowsWithoutTypeFilter.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
-          {(resolvedSummaryRows ? dueKpis : [{ title: 'Cartera pendiente', value: '—' }]).map((kpi) => <SalesKpiCard key={kpi.title} title={kpi.title} value={kpi.value} icon={CreditCard} color="text-primary" bg="bg-primary/10" />)}
+          <SalesKpiCard title="Total Clientes" value={summaryAvailable ? (hasColumnValueFilters ? summaryRowsWithoutQuickFilters.length : Number(summaryData?.total || 0)) : '—'} icon={Users} color="text-primary" bg="bg-primary/10" kind="filter" active={customerTypeFilter === 'ALL' && statusFilter === 'ALL'} onClick={() => { setCustomerTypeFilter('ALL'); setStatusFilter('ALL'); }} />
+          <SalesKpiCard title="Particulares" value={summaryAvailable ? (hasColumnValueFilters ? summaryRowsWithoutTypeFilter.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length : summaryGroupsWithoutStatusFilter.filter((group) => group.type === 'INDIVIDUAL').reduce((total, group) => total + group.count, 0)) : '—'} icon={Users} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
+          <SalesKpiCard title="Empresas" value={summaryAvailable ? (hasColumnValueFilters ? summaryRowsWithoutTypeFilter.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length : summaryGroupsWithoutStatusFilter.filter((group) => group.type === 'COMPANY').reduce((total, group) => total + group.count, 0)) : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
+          {(summaryAvailable ? dueKpis : [{ title: 'Cartera pendiente', value: '—' }]).map((kpi) => <SalesKpiCard key={kpi.title} title={kpi.title} value={kpi.value} icon={CreditCard} color="text-primary" bg="bg-primary/10" />)}
         </div>
       </div>
 
@@ -1678,7 +1704,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
                 <div><h3 className="text-sm font-black uppercase tracking-widest">Condiciones comerciales</h3><p className="text-xs text-muted-foreground">Estos cambios quedan registrados en el historial del cliente.</p></div>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Régimen fiscal</label><Select value={newCustomer.fiscalRegime} onValueChange={(v) => setNewCustomer({ ...newCustomer, fiscalRegime: v })}><SelectTrigger className="h-11 rounded-xl text-sm"><SelectValue placeholder="Seleccionar régimen" /></SelectTrigger><SelectContent>{FISCAL_REGIMES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito ({newCustomer.creditLimitCurrency})</label><Input type="number" min="0" value={newCustomer.creditLimit} onChange={(e) => setNewCustomer({ ...newCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" /><p className="text-[10px] text-muted-foreground">Se guarda en la moneda seleccionada arriba.</p></div>
+                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito ({newCustomer.creditLimitCurrency})</label><Input type="number" min="0" value={newCustomer.creditLimit} onChange={(e) => setNewCustomer({ ...newCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" currencyPrecision /><p className="text-[10px] text-muted-foreground">Se guarda en la moneda seleccionada arriba.</p></div>
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Plazo de crédito (días)</label><Input type="number" min="0" value={newCustomer.creditDays} onChange={(e) => setNewCustomer({ ...newCustomer, creditDays: e.target.value })} placeholder="0 = contado" className="h-11 rounded-xl" /></div>
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><Select value={newCustomer.priceListId || '__no_price_list__'} onValueChange={(value) => setNewCustomer({ ...newCustomer, priceListId: value === '__no_price_list__' ? '' : value })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent></Select></div>
                 </div>
@@ -1745,7 +1771,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               <div><h3 className="text-sm font-black uppercase tracking-widest">Condiciones comerciales</h3><p className="text-xs text-muted-foreground">Estos cambios quedan registrados en el historial del cliente.</p></div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Régimen fiscal</label><Select value={editCustomer.fiscalRegime} onValueChange={(v) => setEditCustomer({ ...editCustomer, fiscalRegime: v })}><SelectTrigger className="h-11 rounded-xl text-sm"><SelectValue placeholder="Seleccionar régimen" /></SelectTrigger><SelectContent>{FISCAL_REGIMES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito ({editCustomer.creditLimitCurrency})</label><Input type="number" min="0" value={editCustomer.creditLimit} onChange={(e) => setEditCustomer({ ...editCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" /><p className="text-[10px] text-muted-foreground">Moneda guardada para este cliente.</p></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito ({editCustomer.creditLimitCurrency})</label><Input type="number" min="0" value={editCustomer.creditLimit} onChange={(e) => setEditCustomer({ ...editCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" currencyPrecision /><p className="text-[10px] text-muted-foreground">Moneda guardada para este cliente.</p></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Plazo de crédito (días)</label><Input type="number" min="0" value={editCustomer.creditDays} onChange={(e) => setEditCustomer({ ...editCustomer, creditDays: e.target.value })} placeholder="0 = contado" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><Select value={editCustomer.priceListId || '__no_price_list__'} onValueChange={(value) => setEditCustomer({ ...editCustomer, priceListId: value === '__no_price_list__' ? '' : value })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent></Select></div>
               </div>

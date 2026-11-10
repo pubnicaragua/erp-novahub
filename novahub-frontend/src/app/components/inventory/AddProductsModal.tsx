@@ -1256,8 +1256,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   value={draftProduct.salePrice}
                   onChange={e => handleUpdateDraft('salePrice', e.target.value)}
                   className="h-8 text-xs text-right mt-1 tabular-nums"
-                  placeholder="0.00"
-                />
+                  placeholder="0.00" currencyPrecision />
               </div>}
               {catalogItemType !== 'SERVICE' && effectivePriceLists.map((list) => (
                 <div key={list.code} className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
@@ -1270,8 +1269,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     value={draftProduct.prices?.[list.code] ?? ''}
                     onChange={e => updatePrice(list.code, e.target.value)}
                     className="h-8 text-xs text-right mt-1 tabular-nums"
-                    placeholder="0.00"
-                  />
+                    placeholder="0.00" currencyPrecision />
                 </div>
               ))}
               
@@ -1283,8 +1281,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   value={draftProduct.costPrice} 
                   onChange={e => handleUpdateDraft('costPrice', e.target.value)} 
                   className="h-8 text-xs text-right mt-1 tabular-nums" 
-                  placeholder="0.00" 
-                />
+                  placeholder="0.00" currencyPrecision />
               </div>}
               {canViewInventoryCost && <MarginPriceSuggestion cost={draftProduct.costPrice} onApply={applySuggestedPrice} />}
                {catalogItemType !== 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
@@ -1625,11 +1622,11 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                                 </div>
                                 {canViewInventoryCost && <div className="min-w-0">
                                   <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Costo propio</span>
-                                  <Input type="number" min={0} step="any" value={draftProduct.variantCostPrices?.[key] ?? ''} onChange={(e) => updateVariantCostPrice(combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" placeholder="Hereda base" aria-label={`Costo propio para ${combinationLabel}`} />
+                                  <Input type="number" min={0} step="any" value={draftProduct.variantCostPrices?.[key] ?? ''} onChange={(e) => updateVariantCostPrice(combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" placeholder="Hereda base" aria-label={`Costo propio para ${combinationLabel}`} currencyPrecision />
                                 </div>}
                                 {effectivePriceLists.map((list) => <div key={list.code} className="min-w-0">
                                   <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Precio {list.name}</span>
-                                  <Input type="number" min={0} step="any" value={draftProduct.variantPrices?.[key]?.[list.code] ?? ''} onChange={(e) => updateVariantPrice(combination, list.code, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" placeholder="Hereda base" aria-label={`Precio ${list.name} para ${combinationLabel}`} />
+                                  <Input type="number" min={0} step="any" value={draftProduct.variantPrices?.[key]?.[list.code] ?? ''} onChange={(e) => updateVariantPrice(combination, list.code, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" placeholder="Hereda base" aria-label={`Precio ${list.name} para ${combinationLabel}`} currencyPrecision />
                                 </div>)}
                               </div>
                             </div>

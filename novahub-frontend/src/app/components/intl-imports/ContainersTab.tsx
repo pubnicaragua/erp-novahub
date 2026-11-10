@@ -26,6 +26,7 @@ import {
 import { NewContainerModal } from './modals/NewContainerModal';
 import { AssignPackagesModal } from './modals/AssignPackagesModal';
 import { IntlContainerDetailSheet } from './modals/IntlContainerDetailSheet';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface ContainersTabProps {
   canCreate?: boolean;
@@ -330,7 +331,7 @@ export function ContainersTab({
                     <div className="bg-background p-2 rounded border border-border/50 col-span-2 flex justify-between items-center gap-2">
                       <span className="text-muted-foreground text-[11px]">Gastos Acumulados:</span>
                       <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                        ${totalExpenses.toFixed(2)} USD
+                        ${totalExpenses.toFixed(getCurrencyDecimalPlaces())} USD
                       </span>
                     </div>
                   </div>

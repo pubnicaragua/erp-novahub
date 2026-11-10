@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import * as Sentry from '@sentry/react';
 import {
   Activity,
   AlertTriangle,
@@ -52,14 +53,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from '@/app/services/toast';
 import { BLOCKS, changeLabel, chartRows, dashboardRange, DEFAULT_PREFERENCES, INDICATORS, normalizePreferences, type DashboardBlock, type DashboardPeriod, type DashboardPreferences, type IndicatorDefinition } from './dashboard/executive-model';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
-import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 import { ExportMenu } from './ui/ExportMenu';
 import { DashboardGoals } from './dashboard/DashboardGoals';
 import { CashOutlookCard } from './dashboard/CashOutlookCard';
-import { capturePdfChartSnapshot, yieldToBrowser } from '../utils/pdf-template-renderer';
-import { createReportWorkbook } from '../utils/reportWorkbook';
-import { getBase64Image } from '../utils/reportExportUtils';
 import { reportChunkLoadIncident } from '../utils/chunk-telemetry';
 import salesKpiAsset from '../../assets/dashboard/VentasPagadas.png';
 import expensesKpiAsset from '../../assets/dashboard/GastosRegistrados.png';
@@ -202,7 +199,7 @@ function KpiIcon({ id }: { id: string }) {
 
 export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewProps) {
   const { user, canPerform } = useAuth();
-  const { baseCurrency, valuationMode, formatConvertedAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, displayMode, displayCurrencyLabel, valuationMode, formatConvertedAmount, convertDisplayAmount } = useCurrency();
   const { themeConfig } = useTheme();
   const canViewPos = canPerform('RETAIL_POS', 'view') || canPerform('SALES', 'view');
   const canViewInventory = canPerform('INVENTORY_PRODUCTS', 'view') || canPerform('INVENTORY', 'view');
@@ -224,6 +221,9 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   const [productDrawerId, setProductDrawerId] = useState<string | null>(null);
   const [productSnapshot, setProductSnapshot] = useState<any>(null);
   const [formulaProduct, setFormulaProduct] = useState<any>(null);
+  const dashboardStartedAt = useRef<number | null>(null);
+  const dashboardLoadSpan = useRef<ReturnType<typeof Sentry.startInactiveSpan> | null>(null);
+  const dashboardLoadMeasured = useRef(false);
 
   const range = useMemo(() => dashboardRange(period, dateFrom, dateTo), [period, dateFrom, dateTo]);
   const openRangeEditor = () => {
@@ -246,6 +246,28 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   const previousQuery = useTenantQuery<any>(['executive-dashboard-previous', period, range?.previousStart, range?.previousEnd, valuationMode], (signal) => fetchDashboard(range!.previousStart, range!.previousEnd, signal), { enabled: canViewPos && Boolean(range) });
   const inventoryQuery = useTenantQuery<any>(['executive-inventory-insights', tenantKey], (signal) => inventoryService.getDashboardInsights(signal).then((response: any) => response?.data ?? response), { enabled: canViewInventory });
   const registersQuery = useTenantQuery<any[]>(['executive-dashboard-registers', tenantKey], (signal) => cajaService.getRegisters(true, signal).then((response: any) => response?.data ?? response), { enabled: canViewPos });
+  useEffect(() => {
+    if (!canViewPos || !range || dashboardLoadMeasured.current) return;
+    if (dashboardStartedAt.current === null) {
+      dashboardStartedAt.current = window.performance.now();
+      dashboardLoadSpan.current = Sentry.startInactiveSpan({ op: 'ui.load', name: 'Executive dashboard usable' });
+    }
+    if (currentQuery.isSuccess) {
+      window.performance.measure('novahub.executive-dashboard.ready', {
+        start: dashboardStartedAt.current,
+        end: window.performance.now(),
+      });
+      dashboardLoadSpan.current?.end();
+      dashboardLoadSpan.current = null;
+      dashboardStartedAt.current = null;
+      dashboardLoadMeasured.current = true;
+    } else if (currentQuery.isError) {
+      dashboardLoadSpan.current?.end();
+      dashboardLoadSpan.current = null;
+      dashboardStartedAt.current = null;
+      dashboardLoadMeasured.current = true;
+    }
+  }, [canViewPos, currentQuery.isError, currentQuery.isSuccess, range]);
   const data = currentQuery.data && typeof currentQuery.data === 'object' ? currentQuery.data : null;
   const kpis = data?.kpis || {};
   const performance = useMemo(() => data?.productPerformance || {}, [data]);
@@ -282,7 +304,13 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
     return () => window.clearTimeout(timer);
   }, [storageKey]);
 
-  const money = (amount: number) => formatConvertedAmount(safeNumber(amount), data?.baseCurrency || baseCurrency);
+  const sourceCurrency = data?.baseCurrency || baseCurrency;
+  const reportCurrency = displayMode === 'ORIGINAL' ? sourceCurrency : displayCurrency;
+  const reportCurrencyLabel = displayMode === 'ORIGINAL'
+    ? `Original por operación · totales agregados en ${sourceCurrency}`
+    : displayCurrencyLabel;
+  const reportAmount = (amount: number) => convertDisplayAmount(safeNumber(amount), sourceCurrency);
+  const money = (amount: number) => formatConvertedAmount(safeNumber(amount), sourceCurrency);
   const compactAxis = (value: number) => {
     const label = money(value).replace(/\s/g, '');
     const symbol = label.replace(/[\d.,-]/g, '');
@@ -370,7 +398,11 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
     setIsExporting(true);
     const exportToastId = toast.loading('Preparando el PDF del resumen…');
     try {
-      await yieldToBrowser();
+      const [pdfGenerator, pdfRenderer] = await Promise.all([
+        import('../utils/pdfGenerator'),
+        import('../utils/pdf-template-renderer'),
+      ]);
+      await pdfRenderer.yieldToBrowser();
       const selectedKpis = preferences.indicators.map((id) => {
         const definition = INDICATORS.find((item) => item.id === id);
         const value = indicatorValue(id, kpis, performance, data);
@@ -387,11 +419,11 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       ];
       const charts: PdfTemplateChart[] = [];
       if (preferences.blocks.includes('trend')) {
-        charts.push({ id: 'dashboard.trend', title: 'Ventas y gastos', type: 'area', labels: trend.map(item => item.date.length > 7 ? item.date.slice(5) : formatDate(item.date)), valueFormat: 'currency', unitLabel: data?.baseCurrency || baseCurrency, series: [{ label: 'Ventas', values: trend.map(item => safeNumber(item.revenue)), color: CHART_COLORS[0] }, { label: 'Gastos', values: trend.map(item => safeNumber(item.expenses)), color: '#ef3340' }] });
+        charts.push({ id: 'dashboard.trend', title: 'Ventas y gastos', type: 'area', labels: trend.map(item => item.date.length > 7 ? item.date.slice(5) : formatDate(item.date)), valueFormat: 'currency', unitLabel: reportCurrency, series: [{ label: 'Ventas', values: trend.map(item => reportAmount(safeNumber(item.revenue))), color: CHART_COLORS[0] }, { label: 'Gastos', values: trend.map(item => reportAmount(safeNumber(item.expenses))), color: '#ef3340' }] });
       }
       if (preferences.blocks.includes('products') && canViewInventory) {
-        charts.push({ id: 'dashboard.products-sales', title: 'Ventas por producto', type: 'bar', labels: productSalesChart.map((item: { name: string; value: number }) => item.name), values: productSalesChart.map((item: { name: string; value: number }) => safeNumber(item.value)), valueFormat: productMetric === 'revenue' ? 'currency' : 'count', unitLabel: productMetric === 'revenue' ? (data?.baseCurrency || baseCurrency) : 'unidades', colors: CHART_COLORS });
-        charts.push({ id: 'dashboard.products-margin', title: 'Utilidad de referencia', type: 'bar', labels: productMarginChart.map((item: { name: string; value: number }) => item.name), values: productMarginChart.map((item: { name: string; value: number }) => safeNumber(item.value)), valueFormat: 'currency', unitLabel: data?.baseCurrency || baseCurrency, colors: CHART_COLORS });
+        charts.push({ id: 'dashboard.products-sales', title: 'Ventas por producto', type: 'bar', labels: productSalesChart.map((item: { name: string; value: number }) => item.name), values: productSalesChart.map((item: { name: string; value: number }) => productMetric === 'revenue' ? reportAmount(safeNumber(item.value)) : safeNumber(item.value)), valueFormat: productMetric === 'revenue' ? 'currency' : 'count', unitLabel: productMetric === 'revenue' ? reportCurrency : 'unidades', colors: CHART_COLORS });
+        charts.push({ id: 'dashboard.products-margin', title: 'Utilidad de referencia', type: 'bar', labels: productMarginChart.map((item: { name: string; value: number }) => item.name), values: productMarginChart.map((item: { name: string; value: number }) => reportAmount(safeNumber(item.value))), valueFormat: 'currency', unitLabel: reportCurrency, colors: CHART_COLORS });
         const productsById = new Map<string, any>();
         [...(performance.topSelling || []), ...(performance.topMargin || [])].forEach((item: any) => {
           const key = getProductId(item) || getProductName(item);
@@ -417,19 +449,19 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         const panel = chartPanels.get(chart.id);
         if (!panel) throw new Error(`No se encontró la gráfica visible «${chart.title}» para exportarla.`);
         toast.loading(`Preparando gráfica ${index + 1} de ${charts.length}: ${chart.title}…`, { id: exportToastId });
-        await yieldToBrowser();
-        exportCharts.push({ ...chart, ...await capturePdfChartSnapshot(panel) });
+        await pdfRenderer.yieldToBrowser();
+        exportCharts.push({ ...chart, ...await pdfRenderer.capturePdfChartSnapshot(panel) });
       }
       const fileName = buildDatedDownloadFileName(['resumen_gestion'], 'pdf');
       toast.loading('Organizando las páginas del PDF…', { id: exportToastId });
-      await yieldToBrowser();
-      const configured = await generateConfiguredReportSectionsPDF({
+      await pdfRenderer.yieldToBrowser();
+      const configured = await pdfGenerator.generateConfiguredReportSectionsPDF({
         targetKey: 'dashboard.tenant-overview',
         title: 'Resumen de gestión',
         tenantName: user?.sessionBranding?.kind === 'branch' ? (user.sessionBranding.name || user.tenantName || 'Mi Empresa') : (user?.tenantName || user?.clientTenant?.name || 'Mi Empresa'),
         tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || '',
         branchName: user?.sessionBranding?.kind === 'branch' ? user.sessionBranding.name : undefined,
-        periodLabel: rangeLabel,
+        periodLabel: `${rangeLabel} · Moneda: ${reportCurrencyLabel}`,
         kpis: selectedKpis,
         charts: exportCharts,
         dashboardPreferences: { indicators: [...preferences.indicators], blocks: [...preferences.blocks] },
@@ -451,25 +483,29 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
 
   const exportDashboardExcel = async () => {
     try {
+      const [{ createReportWorkbook }, { getBase64Image }] = await Promise.all([
+        import('../utils/reportWorkbook'),
+        import('../utils/reportExportUtils'),
+      ]);
       const companyName = user?.sessionBranding?.kind === 'branch'
         ? (user.sessionBranding.name || user.tenantName || user.clientTenant?.name || 'Nova Hub ERP')
         : (themeConfig.tenantName || user?.tenantName || user?.clientTenant?.name || 'Nova Hub ERP');
       const logoUrl = user?.sessionBranding?.logo || themeConfig.logo || user?.clientTenant?.logo || '';
       const logoBase64 = logoUrl ? await getBase64Image(logoUrl) : null;
-      const reportCurrency = data?.baseCurrency || baseCurrency;
-      const currencyLabel = reportCurrency === 'USD' ? 'Dólares (USD) ($)' : 'Córdobas (NIO) (C$)';
+      const currencyLabel = reportCurrencyLabel;
       const selectedKpis = preferences.indicators.map((id) => {
         const definition = INDICATORS.find((item) => item.id === id);
         const value = indicatorValue(id, kpis, performance, data);
-        return { Indicador: definition?.label || id, Valor: typeof value === 'number' ? value : String(value), Detalle: definition?.description || '' };
+        const isMonetaryIndicator = ['totalRevenue', 'totalExpenses', 'averagePaidInvoice', 'operatingResult', 'netProfit'].includes(id);
+        return { Indicador: definition?.label || id, Valor: typeof value === 'number' ? (isMonetaryIndicator ? reportAmount(value) : value) : String(value), Detalle: definition?.description || '' };
       });
       const productsById = new Map<string, any>();
       [...(performance.topSelling || []), ...(performance.topMargin || [])].forEach((item: any) => {
         const key = getProductId(item) || getProductName(item);
         const current = productsById.get(key) || { Producto: getProductName(item), Unidades: 0, Venta: 0, Utilidad: 0 };
         current.Unidades = Math.max(current.Unidades, safeNumber(item.totalQty));
-        current.Venta = Math.max(current.Venta, safeNumber(item.totalRevenue));
-        current.Utilidad = Math.max(current.Utilidad, safeNumber(item.profit));
+        current.Venta = Math.max(current.Venta, reportAmount(safeNumber(item.totalRevenue)));
+        current.Utilidad = Math.max(current.Utilidad, reportAmount(safeNumber(item.profit)));
         productsById.set(key, current);
       });
       const productRows = [...productsById.values()];
@@ -484,8 +520,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         },
         sheets: [
           { name: 'Indicadores', rows: selectedKpis },
-          { name: 'Finanzas', rows: trend.map((item) => ({ Fecha: item.date, Ventas: safeNumber(item.revenue), Gastos: safeNumber(item.expenses) })) },
-          { name: 'Ventas por caja', rows: registerSummary.map((item: any) => ({ Caja: item.registerName || item.registerCode || 'Caja', Operaciones: safeNumber(item.count), Ventas: safeNumber(item.total) })) },
+          { name: 'Finanzas', rows: trend.map((item) => ({ Fecha: item.date, Ventas: reportAmount(safeNumber(item.revenue)), Gastos: reportAmount(safeNumber(item.expenses)) })) },
+          { name: 'Ventas por caja', rows: registerSummary.map((item: any) => ({ Caja: item.registerName || item.registerCode || 'Caja', Operaciones: safeNumber(item.count), Ventas: reportAmount(safeNumber(item.total)) })) },
           { name: 'Productos', rows: productRows },
         ],
         filters: { Periodo: rangeLabel, Alcance: hasData ? 'Datos disponibles' : 'Sin datos para el periodo' },

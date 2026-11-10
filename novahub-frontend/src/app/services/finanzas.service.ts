@@ -34,9 +34,25 @@ export interface FinanceAccountLookup {
   acceptsPostings: boolean;
 }
 
+export interface FinanceOperationalDashboardSummary {
+  incomeGroups: Array<{ month: string; currency: string; exchangeRate: number; amount: number }>;
+  expenseGroups: Array<{ month: string; category: string; currency: string; exchangeRate: number; amount: number }>;
+  recurringExpenseGroups: Array<{ frequency: string; currency: string; exchangeRate: number; amount: number }>;
+  recurringIncomeGroups: Array<{ frequency: string; currency: string; exchangeRate: number; amount: number }>;
+}
+
+export const financeDashboardService = {
+  getOperationalSummary: (filters?: ApiFilters, signal?: AbortSignal) =>
+    api.get<FinanceOperationalDashboardSummary>('/financials/dashboard-summary', { params: filters as any, signal }),
+};
+
 export const sourceDocumentsService = {
   getLookup: (filters?: ApiFilters & { origin: 'SALES' | 'PURCHASES'; branchId?: string; warehouseId?: string }, signal?: AbortSignal) =>
     api.get<PaginatedResponse<FinanceSourceDocumentLookup>>('/financials/source-documents/lookup', { params: filters as any, signal }),
+  getDashboardSummary: (origin: 'SALES' | 'PURCHASES', signal?: AbortSignal) =>
+    api.get<Array<{ currency: string; exchangeRate: number; agingBucket: string; amount: number }>>(
+      '/financials/source-documents/dashboard-summary', { params: { origin }, signal },
+    ),
   /** Todos los documentos origen (páginas de 200); una sola página dejaba fuera los más antiguos. */
   getAllLookup: (filters: ApiFilters & { origin: 'SALES' | 'PURCHASES'; branchId?: string; warehouseId?: string }, signal?: AbortSignal) =>
     fetchAllReportPages<FinanceSourceDocumentLookup>(
@@ -48,6 +64,7 @@ export const sourceDocumentsService = {
 
 export const accountsService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Account>>('/financials/accounts', { params: filters as any, signal }),
+  getCashBankSummary: (signal?: AbortSignal) => api.get<Array<{ currency: string; amount: number }>>('/financials/accounts/cash-bank-summary', { signal }),
   getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<FinanceAccountLookup>>('/financials/accounts/lookup', { params: filters as any, signal }),
   getById: (id: string) => api.get<Account>(`/financials/accounts/${id}`),
   create: (data: Partial<Account>) => api.post<Account>('/financials/accounts', data),

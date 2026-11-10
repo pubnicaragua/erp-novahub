@@ -1,4 +1,5 @@
 /** Etiquetas y colores de Marketing en un solo lugar (reutilizables por todas las vistas). */
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 export const CAMPAIGN_TYPE_LABEL: Record<string, string> = { DIGITAL: 'Digital', SPORTS: 'Deportivo', BTL: 'BTL', EVENT: 'Evento', INTERNAL: 'Interna' };
 export const CAMPAIGN_STATUS_LABEL: Record<string, string> = { DRAFT: 'Borrador', PLANNING: 'Planificación', APPROVED: 'Aprobada', RUNNING: 'En ejecución', PAUSED: 'En pausa', COMPLETED: 'Completada', CANCELLED: 'Cancelada' };
 export const CONTENT_STATUS_LABEL: Record<string, string> = { IDEA: 'Idea', DRAFT: 'Borrador', IN_REVIEW: 'En revisión', CHANGES_REQUESTED: 'Cambios solicitados', APPROVED: 'Aprobado', SCHEDULED: 'Programado', PUBLISHED: 'Publicado', REJECTED: 'Rechazado', ARCHIVED: 'Archivado' };
@@ -33,7 +34,7 @@ export const CAMPAIGN_NEXT: Record<string, string[]> = {
 
 export const money = (value: unknown, currency = 'NIO') => {
   const n = Number(value ?? 0);
-  return `${currency === 'NIO' ? 'C$' : currency} ${(Number.isFinite(n) ? n : 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${currency === 'NIO' ? 'C$' : currency} ${(Number.isFinite(n) ? n : 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
 };
 export const compact = (value: unknown) => Number(value ?? 0).toLocaleString('es-NI', { notation: 'compact', maximumFractionDigits: 1 });
 export const fmtDate = (value?: string | null, withTime = false) => {

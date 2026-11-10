@@ -19,7 +19,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
+import type { RecurringSupplierInvoiceSummary } from '../../services/compras.service';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
@@ -34,8 +34,9 @@ import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { PurchaseVariantPickerModal } from './PurchaseVariantPickerModal';
 import { buildVariantDisplayName } from '../../types/variants';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
-interface Props { data: RecurringSupplierInvoice[]; summaryData?: RecurringSupplierInvoice[]; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; productCatalog?: any[]; warehouseCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface Props { data: RecurringSupplierInvoice[]; summaryData?: RecurringSupplierInvoiceSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; productCatalog?: any[]; warehouseCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
 const freqOpts = [
   { label: 'Semanal',    value: 'weekly' },  
@@ -93,10 +94,10 @@ const calculateRecurringLine = (item: any) => {
   const lineTotal = quantity * unitPrice;
   const taxRate = isRecurringTaxExempt(item.taxType) ? 0 : Number(item.taxRate || 15);
   const taxBase = isRecurringTaxExempt(item.taxType) ? 0 : lineTotal;
-  const taxAmount = isRecurringTaxExempt(item.taxType) ? 0 : Number((taxBase * taxRate / 100).toFixed(2));
+  const taxAmount = isRecurringTaxExempt(item.taxType) ? 0 : Number((taxBase * taxRate / 100).toFixed(getCurrencyDecimalPlaces()));
   const withholdingRate = item.withholdingType && String(item.withholdingType).toUpperCase() !== 'NONE' ? Number(item.withholdingRate || 0) : 0;
   const withholdingBase = withholdingRate > 0 ? lineTotal : 0;
-  const withholdingTotal = withholdingRate > 0 ? Number((withholdingBase * withholdingRate / 100).toFixed(2)) : 0;
+  const withholdingTotal = withholdingRate > 0 ? Number((withholdingBase * withholdingRate / 100).toFixed(getCurrencyDecimalPlaces())) : 0;
   return {
     quantity,
     unitPrice,
@@ -133,7 +134,7 @@ function calculateRecurringInvoiceTotals(items: any[]) {
 
 export function FacturasProveedorRecView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], productCatalog = [], warehouseCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertDisplayAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED'>('ALL');
@@ -194,12 +195,12 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
     return `${(r as any).description || ''} ${(r as any).id || ''} ${(r as any).supplier?.name || ''}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       ((r as any).supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase());
   });
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((recurring) => {
-    const search = searchTerm.toLowerCase();
-    return `${recurring.description || ''} ${recurring.id || ''} ${recurring.supplier?.name || ''}`.toLowerCase().includes(search);
-  });
-  const summaryFilteredRows = summarySearchRows.filter((recurring) => statusFilter === 'ALL' || String(recurring.status || '').toUpperCase() === statusFilter);
+  const hasRecurringSummary = Boolean(summaryData && !summaryLoading && !summaryError);
+  const recurringSummaryGroups = summaryData?.groups || [];
+  const filteredRecurringSummaryGroups = recurringSummaryGroups.filter((group) => statusFilter === 'ALL' || group.status === statusFilter);
+  const recurringStatusCounts = Object.fromEntries(
+    Object.entries(summaryData?.statusCounts || {}).map(([status, count]) => [status.toUpperCase(), Number(count || 0)]),
+  );
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     const exportToastId = toast.loading('Generando reporte de compras recurrentes...');
@@ -225,7 +226,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
         columns: [
           { label: 'Descripción', value: (row) => row.description || 'Compra automática' },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
-          { label: 'Monto', align: 'right', value: (row) => formatCurrentAmount(Number(row.total || row.amount || 0), row.currency || displayCurrency) },
+          { label: 'Monto', align: 'right', value: (row) => formatConvertedAmount(Number(row.total || row.amount || 0), row.currency || displayCurrency, row.exchangeRate) },
           { label: 'Frecuencia', align: 'center', value: (row) => freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—' },
           { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === String(row.status || '').toUpperCase())?.label || row.status || '—' },
         ],
@@ -248,8 +249,8 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
       });
       createReportWorkbook({
         fileName: 'compras_recurrentes.xlsx',
-        sheets: [{ name: 'Registros', rows: exportRows.map(row => ({ Descripcion: row.description || 'Compra automática', Proveedor: row.supplier?.name || 'Sin proveedor', Monto: Number(row.total || row.amount || 0), Moneda: row.currency || displayCurrency, Frecuencia: freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—', Estado: row.status || '—' })) }],
-        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter },
+        sheets: [{ name: 'Registros', rows: exportRows.map(row => ({ Descripcion: row.description || 'Compra automática', Proveedor: row.supplier?.name || 'Sin proveedor', Monto: convertDisplayAmount(Number(row.total || row.amount || 0), row.currency || displayCurrency, row.exchangeRate), Moneda: displayMode === 'ORIGINAL' ? (row.currency || displayCurrency) : displayCurrency, Frecuencia: freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—', Estado: row.status || '—' })) }],
+        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter, Moneda: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
       });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el Excel de compras recurrentes');
@@ -553,7 +554,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
     const currencySymbol = String(localDoc.currency || displayCurrency).toUpperCase() === 'USD' ? '$' : 'C$';
     const items = ((localDoc as any).items || []) as any[];
     const totals = calculateRecurringInvoiceTotals(items);
-    const formatMoney = (value: number) => `${currencySymbol} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const formatMoney = (value: number) => `${currencySymbol} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
     const productSnapshot = (item: any) => {
       const product = productCatalog.find((candidate: any) => String(candidate?.id) === String(item?.productId));
       const variant = product?.variants?.find((candidate: any) => String(candidate?.id) === String(item?.variantId));
@@ -721,7 +722,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
                       <div className="min-w-0 xl:col-span-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Categoría</p><Input disabled value={snapshot.category} className="h-8 bg-muted/30 text-xs" placeholder="Sin categoría" /></div>
                       <div className="min-w-0 xl:col-span-1"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Stock actual</p><div className="flex h-8 items-center text-xs font-black tabular-nums text-primary">{snapshot.stock == null ? '—' : Number(snapshot.stock).toLocaleString()}</div></div>
                       <div className="min-w-0 xl:col-span-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Cant.</p><Input disabled={!canEditRecurrence} type="number" min="1" step="1" value={item.quantity ?? 1} onChange={(event) => handleItemChange(idx, 'quantity', event.target.value)} className="h-8 text-xs text-right" /></div>
-                      <div className="min-w-0 xl:col-span-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Precio</p><Input disabled={!canEditRecurrence} type="text" inputMode="decimal" min="0" value={item.unitPrice === 0 ? '' : formatDecimalInput(item.unitPrice)} onChange={(event) => handleItemChange(idx, 'unitPrice', event.target.value)} className="h-8 text-xs text-right" /></div>
+                      <div className="min-w-0 xl:col-span-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Precio</p><Input disabled={!canEditRecurrence} type="text" inputMode="decimal" min="0" value={item.unitPrice === 0 ? '' : formatDecimalInput(item.unitPrice)} onChange={(event) => handleItemChange(idx, 'unitPrice', event.target.value)} className="h-8 text-xs text-right" currencyPrecision /></div>
                     </div>
                     <div className="mt-3 grid min-w-0 gap-3 border-t border-border/30 pt-3 lg:grid-cols-[10rem_minmax(0,1fr)] lg:items-start"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-foreground">Impuestos y retenciones</p><p className="mt-1 text-[10px] text-foreground/70">IVA y retención aplicables a esta línea.</p></div><TaxDetail item={{ ...item, currency: localDoc.currency }} onItemChange={(field, value) => handleItemChange(idx, field, value)} lineTotal={line.lineTotal} currency={localDoc.currency} disabled={!canEditRecurrence} calculatedFieldsReadOnly /></div>
                     <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-border/50 pt-2"><span className="text-[9px] font-black uppercase tracking-widest text-foreground">Subtotal costo</span><span className="text-sm font-black tabular-nums">{formatMoney(line.lineTotal)}</span><span className="text-[9px] font-black uppercase tracking-widest text-rose-500/70">IVA</span><span className="text-xs font-black tabular-nums text-rose-500">{formatMoney(line.taxAmount)}</span><span className="text-[9px] font-black uppercase tracking-widest text-amber-500/70">Retención</span><span className="text-xs font-black tabular-nums text-amber-500">-{formatMoney(line.withholdingTotal)}</span><span className="border-l border-border/70 pl-4 text-[9px] font-black uppercase tracking-widest text-primary">Total</span><span className="text-sm font-black tabular-nums text-primary">{formatMoney(line.total)}</span></div>
@@ -752,22 +753,19 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const monthly = summaryFilteredRows
-    .filter(r => ((r as any).frequency || '').toLowerCase() === 'monthly')
-    .reduce((acc, recurring) => {
-      const sourceAmount = (recurring as any).total ?? (recurring as any).amount ?? 0;
-      return acc + toDisplayAmount(Number(sourceAmount), recurring.currency, recurring.exchangeRate);
-    }, 0);
+  const monthlyGroups = filteredRecurringSummaryGroups.filter((group) => group.frequency === 'MONTHLY');
+  const monthly = monthlyGroups.reduce((acc, group) =>
+    acc + toDisplayAmount(group.amount, group.currency, group.exchangeRate), 0);
   const originalMonthlyAmounts = summarizeAmountsByCurrency(
-    summaryFilteredRows.filter(r => ((r as any).frequency || '').toLowerCase() === 'monthly'),
-    (recurring) => Number((recurring as any).total ?? (recurring as any).amount ?? 0),
-    (recurring) => recurring.currency,
+    monthlyGroups,
+    (group) => group.amount,
+    (group) => group.currency,
     baseCurrency,
   );
   const kpis = [
-    { title: 'Activas', value: resolvedSummaryRows ? summarySearchRows.filter(r => String(r.status || '').toUpperCase() === 'ACTIVE').length : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
-    { title: 'Total Recurrentes', value: resolvedSummaryRows ? summaryFilteredRows.length : '—', icon: RotateCcw, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Pausadas', value: resolvedSummaryRows ? summarySearchRows.filter(r => String(r.status || '').toUpperCase() === 'PAUSED').length : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PAUSED' as const },
+    { title: 'Activas', value: hasRecurringSummary ? recurringStatusCounts.ACTIVE || 0 : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
+    { title: 'Total Recurrentes', value: hasRecurringSummary ? filteredRecurringSummaryGroups.reduce((total, group) => total + group.count, 0) : '—', icon: RotateCcw, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Pausadas', value: hasRecurringSummary ? recurringStatusCounts.PAUSED || 0 : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PAUSED' as const },
   ];
 
   return (
@@ -775,7 +773,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {!resolvedSummaryRows ? <PurchaseKpiCard title="Est. Mensual" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" /> : displayMode === 'ORIGINAL'
+        {!hasRecurringSummary ? <PurchaseKpiCard title="Est. Mensual" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" /> : displayMode === 'ORIGINAL'
           ? originalMonthlyAmounts.map((summary) => <PurchaseKpiCard key={`monthly-${summary.currency}`} title={`Est. Mensual (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />)
           : <PurchaseKpiCard title={`Est. Mensual (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(monthly, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />}
         {kpis.map((k, i) => (

@@ -12,6 +12,7 @@ import { Combobox } from '../ui/Combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { expensesService } from '../../services/compras.service';
+import type { ExpenseSummary } from '../../services/compras.service';
 import type { Expense, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -26,7 +27,6 @@ import { usePurchasesIntegrationPolicy } from '../../hooks/usePurchasesIntegrati
 import { storageService } from '../../services/storage.service';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -52,7 +52,7 @@ import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { VoiceExpenseComposer } from './VoiceExpenseComposer';
 import type { VoiceExpenseDraft } from '../../utils/voice-expense-parser';
 
-interface Props { data: Expense[]; summaryData?: Expense[]; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; isSidebarCollapsed?: boolean; }
+interface Props { data: Expense[]; summaryData?: ExpenseSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; isSidebarCollapsed?: boolean; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
 type DateFilterPreset = 'all' | 'month' | 'year' | 'range';
 type ExpensePermissionAction = Extract<PermissionAction, 'edit' | 'delete' | 'cancel' | 'export' | 'submit' | 'pay'>;
@@ -103,7 +103,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const accountingConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingRequired === true;
   const accountingRouteEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingEnabled === true;
   const financeConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.financeEnabled === true;
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, convertDisplayAmount, formatExplicitAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
   useEffect(() => { setExpenseCategories(expenseCategoryCatalog); }, [expenseCategoryCatalog]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -212,7 +212,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     return () => clearTimeout(timer);
   }, [editingId, data, globalRate, displayCurrency]);
 
-  const uniqueCategories = Array.from(new Set((summaryData ?? data).map(g => String(g.category || '').toUpperCase()).filter(Boolean)));
+  const uniqueCategories = summaryData?.categories ?? Array.from(new Set(data.map(g => String(g.category || '').toUpperCase()).filter(Boolean)));
 
   const filtered = data.filter(g => {
     const matchesSearch =
@@ -234,18 +234,22 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     amount: (row: Expense) => Number(row.amount || 0),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((expense) =>
-    (expense.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-    || (expense.category || '').toLowerCase().includes(searchTerm.toLowerCase()),
+  const hasExpenseSummary = Boolean(summaryData && !summaryLoading && !summaryError);
+  const selectedSummaryCategories = colFilters.state.category?.values || [];
+  const summaryCountGroups = (summaryData?.countGroups || []).filter((group) =>
+    selectedSummaryCategories.length === 0 || selectedSummaryCategories.includes(group.category),
   );
-  const summaryRowsWithoutQuickFilter = colFilters.applyTo(summarySearchRows, filterGetters);
-  const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((expense) => {
-    if (activeKpiFilter.type === 'draft') return String(expense.status || '').toUpperCase() === 'DRAFT';
-    if (activeKpiFilter.type === 'pending') return String(expense.status || '').toUpperCase() === 'PENDING';
-    if (activeKpiFilter.type === 'category') return String(expense.category || '').toUpperCase() === activeKpiFilter.category;
+  const summaryMonthlyGroups = (summaryData?.monthlyGroups || []).filter((group) => {
+    if (selectedSummaryCategories.length > 0 && !selectedSummaryCategories.includes(group.category)) return false;
+    if (activeKpiFilter.type === 'draft' && group.status !== 'DRAFT') return false;
+    if (activeKpiFilter.type === 'pending' && group.status !== 'PENDING') return false;
+    if (activeKpiFilter.type === 'category' && group.category !== activeKpiFilter.category) return false;
     return true;
-  }), filterGetters);
+  });
+  const countSummaryRows = (status?: string) => summaryCountGroups
+    .filter((group) => !status || group.status === status)
+    .reduce((total, group) => total + group.count, 0);
+  const categoryCount = new Set(summaryCountGroups.map((group) => group.category).filter(Boolean)).size;
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     if (!canExportExpenseList) return;
@@ -331,8 +335,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       }
       createReportWorkbook({
         fileName: 'gastos.xlsx',
-        sheets: [{ name: 'Gastos', rows: exportRows.map(row => ({ Fecha: row.date || '—', Categoria: row.category || '—', Descripcion: row.description || '—', Monto: Number(row.amount || 0), Moneda: row.currency || '—', Estado: row.status || '—' })) }],
-        filters: { Búsqueda: searchTerm || 'Todas', Desde: appliedRange?.from || '—', Hasta: appliedRange?.to || '—', Filtro: activeKpiFilter.type === 'none' ? 'Todos' : activeKpiFilter.type === 'category' ? activeKpiFilter.category : activeKpiFilter.type },
+        sheets: [{ name: 'Gastos', rows: exportRows.map(row => ({ Fecha: row.date || '—', Categoria: row.category || '—', Descripcion: row.description || '—', Monto: convertDisplayAmount(Number(row.amount || 0), row.currency || baseCurrency, row.exchangeRate), Moneda: displayMode === 'ORIGINAL' ? (row.currency || baseCurrency) : displayCurrency, Estado: row.status || '—' })) }],
+        filters: { Búsqueda: searchTerm || 'Todas', Desde: appliedRange?.from || '—', Hasta: appliedRange?.to || '—', Filtro: activeKpiFilter.type === 'none' ? 'Todos' : activeKpiFilter.type === 'category' ? activeKpiFilter.category : activeKpiFilter.type, Moneda: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
       });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el Excel de gastos');
@@ -822,7 +826,6 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const handleDeleteConfirm = async () => {
     if (!pendingDeleteId) return;
     const pendingExpense = data.find((expense) => expense.id === pendingDeleteId)
-      || summaryData?.find((expense) => expense.id === pendingDeleteId)
       || (localDoc?.id === pendingDeleteId ? localDoc : null)
       || (selectedExpenseDetail?.id === pendingDeleteId ? selectedExpenseDetail : null);
     if (!canDeleteExpense(pendingExpense)) return;
@@ -844,7 +847,6 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const handleCancelConfirm = async () => {
     if (!pendingCancelId) return;
     const pendingExpense = data.find((expense) => expense.id === pendingCancelId)
-      || summaryData?.find((expense) => expense.id === pendingCancelId)
       || (localDoc?.id === pendingCancelId ? localDoc : null)
       || (selectedExpenseDetail?.id === pendingCancelId ? selectedExpenseDetail : null);
     const status = String(pendingExpense?.status || '').toUpperCase();
@@ -1182,8 +1184,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                         value={Number(localDoc.amount || 0) === 0 ? '' : formatDecimalInput(localDoc.amount)}
                         onChange={(e) => setLocalDoc({ ...localDoc, amount: normalizeDecimalInput(e.target.value) as any })}
                         className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" 
-                        placeholder="0.00" 
-                      />
+                        placeholder="0.00" currencyPrecision />
                    </div>
                 </div>
 
@@ -1206,21 +1207,20 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const monthlyTotalInDisplayCurrency = summaryFilteredData
-    .filter(g => new Date(g.date).getMonth() === new Date().getMonth())
-    .reduce((acc, g) => acc + toDisplayAmount(Number(g.amount ?? g.baseAmount ?? 0), g.currency, g.exchangeRate), 0);
+  const monthlyTotalInDisplayCurrency = summaryMonthlyGroups
+    .reduce((acc, group) => acc + toDisplayAmount(group.amount, group.currency, group.exchangeRate), 0);
   const originalMonthlyAmounts = summarizeAmountsByCurrency(
-    summaryFilteredData.filter(g => new Date(g.date).getMonth() === new Date().getMonth()),
-    (expense) => Number(expense.amount ?? expense.baseAmount ?? 0),
-    (expense) => expense.currency,
+    summaryMonthlyGroups,
+    (group) => group.amount,
+    (group) => group.currency,
     baseCurrency,
   );
 
   const kpis = [
-    { key: 'all', title: 'Gastos Operativos', value: resolvedSummaryRows ? summaryRowsWithoutQuickFilter.length : '—', icon: Wallet, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { key: 'draft', title: 'Borradores', value: resolvedSummaryRows ? summaryRowsWithoutQuickFilter.filter(g => (g.status || '').toUpperCase() === 'DRAFT').length : '—', icon: FileText, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
-    { key: 'pending', title: 'Pendientes', value: resolvedSummaryRows ? summaryRowsWithoutQuickFilter.filter(g => (g.status || '').toUpperCase() === 'PENDING').length : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
-    { key: 'category', title: 'Por Categoría', value: resolvedSummaryRows ? Array.from(new Set(summaryRowsWithoutQuickFilter.map(g => String(g.category || '').toUpperCase()).filter(Boolean))).length : '—', icon: Tag, color: 'text-purple-500', bg: 'bg-purple-500/10', interactive: true },
+    { key: 'all', title: 'Gastos Operativos', value: hasExpenseSummary ? countSummaryRows() : '—', icon: Wallet, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { key: 'draft', title: 'Borradores', value: hasExpenseSummary ? countSummaryRows('DRAFT') : '—', icon: FileText, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
+    { key: 'pending', title: 'Pendientes', value: hasExpenseSummary ? countSummaryRows('PENDING') : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
+    { key: 'category', title: 'Por Categoría', value: hasExpenseSummary ? categoryCount : '—', icon: Tag, color: 'text-purple-500', bg: 'bg-purple-500/10', interactive: true },
   ];
 
   const detailExpense = selectedExpenseDetail ? data.find((x) => x.id === selectedExpenseDetail.id) || selectedExpenseDetail : null;

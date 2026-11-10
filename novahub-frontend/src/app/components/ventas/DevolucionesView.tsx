@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { 
   FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, ChevronLeft, ShieldCheck
 } from 'lucide-react';
@@ -26,7 +27,8 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
+import type { SalesReturnKpiSummary } from '../../services/ventas.service';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -34,7 +36,7 @@ import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/s
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
-import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { normalizeCurrency, roundCurrencyNumber, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
 
 const toWholeQuantity = (value: string | number, max?: number) => {
@@ -44,7 +46,7 @@ const toWholeQuantity = (value: string | number, max?: number) => {
   return max === undefined ? whole : Math.min(Math.floor(max), whole);
 };
 
-const roundMoney = (value: number) => Number((Number.isFinite(value) ? value : 0).toFixed(2));
+const roundMoney = (value: number) => roundCurrencyNumber(value);
 
 const allocateInvoiceAmount = (target: number, rows: any[], valueKey: string, basisKey: string) => {
   if (!rows.length) return [];
@@ -140,8 +142,9 @@ const returnTotalsFor = (items: any[], invoice?: Invoice | null, selectedCharges
     irAmount: 0,
     total: roundMoney(acc.total + Number(item.total || 0)),
   }), { subtotal: 0, discountAmount: 0, taxAmount: 0, irAmount: 0, total: 0 });
-  const isFull = Boolean(invoice?.items?.length)
-    && invoice.items.length === items.length
+  const invoiceItems = invoice?.items || [];
+  const isFull = invoiceItems.length > 0
+    && invoiceItems.length === items.length
     && items.every((item) => Number(item.quantity || 0) >= Number(item.originalQuantity || item.quantity || 0));
   const lineTotals = isFull && invoice
     ? { subtotal: Number(invoice.subtotal || rows.subtotal), discountAmount: Number(invoice.discountAmount || 0), taxAmount: Number(invoice.taxAmount || 0), irAmount: 0, total: rows.total }
@@ -154,7 +157,7 @@ const returnTotalsFor = (items: any[], invoice?: Invoice | null, selectedCharges
 
 interface DevolucionesViewProps {
   data: SalesReturn[];
-  summaryData?: SalesReturn[];
+  summaryData?: SalesReturnKpiSummary;
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading: boolean;
@@ -167,6 +170,7 @@ interface DevolucionesViewProps {
   onSearchChange?: (value: string) => void;
   dateFrom?: string;
   dateTo?: string;
+  selectedBranchId?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
   salesAlert?: PurchaseAlertDetail;
 }
@@ -178,7 +182,7 @@ const statusOptions = [
   { label: 'Rechazada',  value: 'REJECTED',  color: SALES_STATUS_COLORS.REJECTED },
 ];
 
-export function DevolucionesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], invoices = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: DevolucionesViewProps) {
+export function DevolucionesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], invoices = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', selectedBranchId, onDateRangeChange, salesAlert }: DevolucionesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -282,13 +286,32 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
     status: (row: SalesReturn) => String(row.status || '').toUpperCase(),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((salesReturn) => {
+  const hasColumnValueFilters = Object.values(colFilters.state).some((filter) => Boolean(filter.values?.length));
+  const columnFilterSummaryQuery = useQuery({
+    queryKey: ['sales', 'returns-kpi-filtered-rows', user?.tenantId, searchTerm, dateFrom, dateTo, selectedBranchId],
+    queryFn: ({ signal }) => fetchAllReportPages<SalesReturn>(
+      (filters) => salesReturnsService.getAll(filters, signal),
+      { pageSize: 5000, report: true, search: searchTerm, dateFrom, dateTo, branchId: selectedBranchId || undefined },
+      signal,
+    ),
+    enabled: hasColumnValueFilters,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const fallbackSummaryRows = hasColumnValueFilters ? columnFilterSummaryQuery.data : undefined;
+  const summarySearchRows = (fallbackSummaryRows || []).filter((salesReturn) => {
     const search = searchTerm.toLowerCase();
     return String(salesReturn.number || '').toLowerCase().includes(search) || (salesReturn.customer?.name || '').toLowerCase().includes(search);
   });
   const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
   const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((salesReturn) => statusFilter === 'ALL' || String(salesReturn.status || '').toUpperCase() === statusFilter), filterGetters);
+  const isKpiSummaryLoading = hasColumnValueFilters
+    ? columnFilterSummaryQuery.isPending || columnFilterSummaryQuery.isFetching
+    : summaryLoading;
+  const isKpiSummaryError = hasColumnValueFilters ? columnFilterSummaryQuery.isError : summaryError;
+  const summaryAvailable = hasColumnValueFilters ? fallbackSummaryRows !== undefined : summaryData !== undefined;
+  const summaryGroups = summaryData?.groups || [];
+  const selectedSummaryGroups = hasColumnValueFilters ? [] : summaryGroups.filter((group) => statusFilter === 'ALL' || group.status === statusFilter);
   const distinctCustomers = [...new Map(filtered.map((r) => [r.customer?.name || 'Cliente', r.customer?.name || 'Cliente'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((r) => (r.customer?.name || 'Cliente') === label).length }));
   const statusOptionsForFilter = statusOptions.map((option) => ({ value: option.value, label: option.label, count: filtered.filter((r) => String(r.status || '').toUpperCase() === option.value).length }));
@@ -494,13 +517,24 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
     { key: 'isPartial', header: 'Tipo', width: '95px', render: (_, row) => <Badge variant="outline" className={cn('border-none text-[9px] font-black uppercase', isReturnPartial(row) ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary')}>{isReturnPartial(row) ? 'Parcial' : 'Total'}</Badge> },
   ];
 
-  const totalReturnedInDisplayCurrency = summaryFilteredData.reduce(
+  const totalReturnedInDisplayCurrency = hasColumnValueFilters ? summaryFilteredData.reduce(
     (acc, salesReturn) => acc + ((salesReturn as any).baseTotal !== null && (salesReturn as any).baseTotal !== undefined
       ? Number((salesReturn as any).baseTotal)
       : toBaseAmount(salesReturn.total || 0, (salesReturn as any).currency, (salesReturn as any).exchangeRate || globalRate)),
     0,
-  );
-  const originalReturnedAmounts = summarizeAmountsByCurrency(summaryFilteredData, (salesReturn) => Number((salesReturn as any).total || 0), (salesReturn) => (salesReturn as any).currency, baseCurrency);
+  ) : selectedSummaryGroups.reduce((sum, group) => sum + (group.baseTotalCount === group.count && group.baseTotal !== null
+    ? group.baseTotal
+    : toBaseAmount(group.total, group.currency, group.exchangeRate)), 0);
+  const originalReturnedAmounts = hasColumnValueFilters
+    ? summarizeAmountsByCurrency(summaryFilteredData, (salesReturn) => Number((salesReturn as any).total || 0), (salesReturn) => (salesReturn as any).currency, baseCurrency)
+    : Object.values(summaryGroups.filter((group) => statusFilter === 'ALL' || group.status === statusFilter).reduce((acc, group) => {
+      const currency = normalizeCurrency(group.currency, baseCurrency) as SupportedCurrency;
+      const current = acc[currency] || { currency, amount: 0, count: 0 };
+      current.amount += group.total;
+      current.count += group.count;
+      acc[currency] = current;
+      return acc;
+    }, {} as Record<SupportedCurrency, { currency: SupportedCurrency; amount: number; count: number }>));
 
   // ─── INLINE FORM ────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
@@ -668,17 +702,17 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
-        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
+        <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {!resolvedSummaryRows
+        {!summaryAvailable
           ? <SalesKpiCard title="Saldo a favor generado" value="—" icon={FileOutput} color="text-primary" bg="bg-primary/10" />
           : displayMode === 'ORIGINAL'
           ? originalReturnedAmounts.map((summary) => <SalesKpiCard key={`returned-${summary.currency}`} title={`Saldo a favor generado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileOutput} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Saldo a favor generado (${displayCurrency})`} value={formatConvertedAmount(totalReturnedInDisplayCurrency, baseCurrency)} icon={FileOutput} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Pendientes" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'PENDING').length : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PENDING'} onClick={() => setStatusFilter(statusFilter === 'PENDING' ? 'ALL' : 'PENDING')} />
-        <SalesKpiCard title="Aprobadas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
-        <SalesKpiCard title="Rechazadas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length : '—'} icon={XCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'REJECTED'} onClick={() => setStatusFilter(statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED')} />
+        <SalesKpiCard title="Pendientes" value={summaryAvailable ? hasColumnValueFilters ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'PENDING').length : summaryGroups.filter((group) => group.status === 'PENDING').reduce((sum, group) => sum + group.count, 0) : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PENDING'} onClick={() => setStatusFilter(statusFilter === 'PENDING' ? 'ALL' : 'PENDING')} />
+        <SalesKpiCard title="Aprobadas" value={summaryAvailable ? hasColumnValueFilters ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length : summaryGroups.filter((group) => group.status === 'APPROVED').reduce((sum, group) => sum + group.count, 0) : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="Rechazadas" value={summaryAvailable ? hasColumnValueFilters ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length : summaryGroups.filter((group) => group.status === 'REJECTED').reduce((sum, group) => sum + group.count, 0) : '—'} icon={XCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'REJECTED'} onClick={() => setStatusFilter(statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED')} />
         </div>
       </div>
       <div className="flex flex-col gap-4">

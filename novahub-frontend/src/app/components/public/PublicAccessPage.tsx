@@ -6,6 +6,7 @@ import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { formatPdfVariantAttributes } from '../../utils/pdf-line-details';
 import { safeGetItem, safeSetItem, safeRemoveItem } from '../../services/safe-storage';
 import { formatCustomerPhoneForDisplay } from '../../utils/customer-data';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 async function publicRequest(path: string, init: RequestInit = {}) { const response = await fetch(`${API}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...(init.headers || {}) } }); const body = await response.json().catch(() => ({})); if (!response.ok) { const raw = body?.message; const message = typeof raw === 'string' ? raw : raw?.message || raw?.error || body?.error || 'No se pudo abrir el enlace.'; throw new Error(message); } return body; }
@@ -22,7 +23,7 @@ const labelFor = (value: unknown, labels: Record<string, string>, fallback = 'â€
   return labels[raw] || labels[normalized] || labels[raw.toUpperCase()] || fallback;
 };
 const formatDate = (value: unknown) => value ? new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium' }).format(new Date(String(value))) : 'â€”';
-const formatAmount = (value: unknown, currency = 'NIO') => `${new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} ${currency}`;
+const formatAmount = (value: unknown, currency = 'NIO') => `${new Intl.NumberFormat('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() }).format(Number(value || 0))} ${currency}`;
 const readableCustomer = (customer: any) => customer?.phone
   ? { ...customer, phone: formatCustomerPhoneForDisplay(String(customer.phone), customer.countryCode || 'NI') }
   : customer;

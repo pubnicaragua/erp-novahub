@@ -18,10 +18,155 @@ export interface CustomerPortalAdminAccess {
 
 export type CustomerPortalAdminAccessResponse = PaginatedResponse<CustomerPortalAdminAccess>;
 
+export interface CustomerOverviewResponse {
+  customer: Customer;
+  baseCurrency: string;
+  exchangeRate: number;
+  totals: {
+    cashTotal: number;
+    creditOutstanding: number;
+  };
+}
+
+export interface CustomerKpiSummary {
+  total: number;
+  groups: Array<{
+    type: string;
+    status: string;
+    count: number;
+    balanceDue: number;
+    balanceDueOriginalCurrencyBreakdown: Array<{ currency: string; amount: number; count: number }>;
+  }>;
+}
+
+export interface InvoiceKpiSummary {
+  total: number;
+  groups: Array<{
+    status: string;
+    currency: string;
+    exchangeRate: number;
+    count: number;
+    total: number;
+    amountPaid: number;
+  }>;
+}
+
+export interface EstimateKpiSummary {
+  total: number;
+  groups: Array<{
+    status: string;
+    currency: string;
+    exchangeRate: number;
+    count: number;
+    total: number;
+    baseTotal: number | null;
+    baseTotalCount: number;
+  }>;
+}
+
+export interface SalesOrderKpiSummary {
+  total: number;
+  groups: Array<{
+    status: string;
+    currency: string;
+    exchangeRate: number;
+    count: number;
+    total: number;
+  }>;
+}
+
+export interface SalesReturnKpiSummary {
+  total: number;
+  groups: Array<{
+    status: string;
+    currency: string;
+    exchangeRate: number;
+    count: number;
+    total: number;
+    baseTotal: number | null;
+    baseTotalCount: number;
+  }>;
+}
+
+export interface RecurringInvoiceKpiSummary {
+  total: number;
+  upcomingCount: number;
+  groups: Array<{
+    status: string;
+    currency: string;
+    exchangeRate: number;
+    count: number;
+    total: number;
+    baseTotal: number | null;
+    baseTotalCount: number;
+  }>;
+}
+
+export interface PaymentKpiSummaryGroup {
+  count: number;
+  baseTotal: number;
+  currencyBreakdown: Array<{ currency: string; amount: number; count: number }>;
+  methodCounts: Array<{ method: string; count: number }>;
+}
+
+export interface PaymentKpiSummary {
+  all: PaymentKpiSummaryGroup;
+  documented: PaymentKpiSummaryGroup;
+}
+
+export interface CustomerMovement {
+  id: string;
+  kind: string;
+  number: string;
+  date: string;
+  status?: string;
+  amount: number;
+  currency: string;
+  exchangeRate: number;
+  description?: string;
+}
+
+export interface CustomerMovementPage {
+  data: CustomerMovement[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  total: number;
+}
+
+export interface CustomerHistoricalSummary {
+  id: string;
+  activityType: string;
+  recordCount: number;
+  recordCountLabel?: string | null;
+  measureLabel?: string | null;
+  measureValue?: number | null;
+  measureUnit?: string | null;
+  amount: number;
+  currency: string;
+  sourceFileName?: string | null;
+  importedAt?: string | null;
+}
+
+export interface CustomerAuditPage {
+  data: any[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  createdEvent?: any | null;
+  updatedEvent?: any | null;
+}
+
+export interface CustomerLoanPage extends CustomerAuditPage {
+  summary?: {
+    activeCount: number;
+    outstandingByCurrency: Array<{ currency: string; amount: number }>;
+  };
+}
+
 // ---- Customers ----
 export const customersService = {
   getFormOptions: () => api.get<{ defaultCountryCode: string; countries: Array<{ code: string; name: string; phoneCode: string; taxIdLabel: string; rucLabel: string; strictIdentifiers: boolean; phoneNationalDigits?: number }> }>('/sales/customers/formats'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Customer>>('/sales/customers', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<CustomerKpiSummary>('/sales/customers/summary', { params: filters as any, signal }),
   getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Pick<Customer, 'id' | 'code' | 'name' | 'companyName' | 'status' | 'phone' | 'contactPhone' | 'openingBalanceDue' | 'openingBalanceFavor'>>>('/sales/customers/lookup', { params: filters as any, signal }),
   /**
    * Todos los clientes del lookup, recorriendo las páginas. El lookup entrega como máximo 200 por
@@ -34,11 +179,17 @@ export const customersService = {
   ),
   getLookupById: (id: string, signal?: AbortSignal, purpose?: string) => api.get<Pick<Customer, 'id' | 'code' | 'name' | 'companyName' | 'status' | 'phone' | 'contactPhone'>>(`/sales/customers/lookup/${id}`, { params: purpose ? { purpose } : undefined, signal }),
   getById: (id: string) => api.get<Customer>(`/sales/customers/${id}`),
+  getOverview: (id: string, signal?: AbortSignal) => api.get<CustomerOverviewResponse>(`/sales/customers/${id}/overview`, { signal }),
+  getHistoricalSummaries: (id: string, signal?: AbortSignal) => api.get<CustomerHistoricalSummary[]>(`/sales/customers/${id}/historical-summaries`, { signal }),
+  getMovements: (id: string, filters: { limit?: number; cursor?: string; kind?: string } = {}, signal?: AbortSignal) =>
+    api.get<CustomerMovementPage>(`/sales/customers/${id}/movements`, { params: filters, signal }),
   getCustomerHistoryProfile: () => api.get<CustomerHistoryProfile>('/sales/customers/history-profile'),
   saveCustomerHistoryProfile: (profile: Pick<CustomerHistoryProfile, 'activityType' | 'recordCountLabel' | 'measureLabel' | 'measureUnit'>) =>
     api.put<CustomerHistoryProfile>('/sales/customers/history-profile', profile),
   getCustomerLoansConfig: () => api.get<{ enabled: boolean }>('/sales/customer-loans/config'),
   getCustomerLoans: (customerId: string) => api.get<any[]>(`/sales/customers/${customerId}/loans`),
+  getCustomerLoansPage: (customerId: string, filters: { limit?: number; cursor?: string }, signal?: AbortSignal) =>
+    api.get<CustomerLoanPage>(`/sales/customers/${customerId}/loans`, { params: filters, signal }),
   getLoanMoraTypes: () => api.get<any[]>('/sales/customer-loans/mora-types'),
   createLoanMoraType: (data: { name: string; description: string }) => api.post<any>('/sales/customer-loans/mora-types', data),
   updateLoanMoraType: (id: string, data: { name?: string; description?: string; isActive?: boolean }) => api.patch<any>(`/sales/customer-loans/mora-types/${id}`, data),
@@ -74,6 +225,8 @@ export const customersService = {
 
 export const auditService = {
   getEntityHistory: (entity: string, entityId: string) => api.get<any[]>(`/audit/entity/${entity}/${entityId}`),
+  getEntityHistoryPage: (entity: string, entityId: string, filters: { limit?: number; cursor?: string }, signal?: AbortSignal) =>
+    api.get<CustomerAuditPage>(`/audit/entity/${entity}/${entityId}`, { params: filters, signal }),
 };
 
 export const sellersService = {
@@ -83,7 +236,8 @@ export const sellersService = {
 // ---- Estimates ----
 export const estimatesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Estimate>>('/sales/estimates', { params: filters as any, signal }),
-  getById: (id: string) => api.get<Estimate>(`/sales/estimates/${id}`),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<EstimateKpiSummary>('/sales/estimates/summary', { params: filters as any, signal }),
+  getById: (id: string, signal?: AbortSignal) => api.get<Estimate>(`/sales/estimates/${id}`, signal ? { signal } : undefined),
   create: (data: Partial<Estimate>, idempotencyKey?: string) => api.idempotentPost<Estimate>('/sales/estimates', data, idempotencyKey),
   update: (id: string, data: Partial<Estimate>) => api.patch<Estimate>(`/sales/estimates/${id}`, data),
   cancel: (id: string) => api.idempotentPatch<Estimate>(`/sales/estimates/${id}/cancel`, {}),
@@ -94,7 +248,8 @@ export const estimatesService = {
 // ---- Sales Orders ----
 export const salesOrdersService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<SalesOrder>>('/sales/orders', { params: filters as any, signal }),
-  getById: (id: string) => api.get<SalesOrder>(`/sales/orders/${id}`),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<SalesOrderKpiSummary>('/sales/orders/summary', { params: filters as any, signal }),
+  getById: (id: string, signal?: AbortSignal) => api.get<SalesOrder>(`/sales/orders/${id}`, signal ? { signal } : undefined),
   create: (data: Partial<SalesOrder>, idempotencyKey?: string) => api.idempotentPost<SalesOrder>('/sales/orders', data, idempotencyKey),
   update: (id: string, data: Partial<SalesOrder>) => api.patch<SalesOrder>(`/sales/orders/${id}`, data),
   delete: (id: string) => api.delete<void>(`/sales/orders/${id}`),
@@ -107,13 +262,14 @@ export const salesOrdersService = {
 // ---- Invoices ----
 export const invoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Invoice>>('/sales/invoices', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<InvoiceKpiSummary>('/sales/invoices/summary', { params: filters as any, signal }),
   getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/sales/invoices/lookup', { params: filters as any, signal }),
   getLookupById: (id: string, signal?: AbortSignal) => api.get<any>(`/sales/invoices/lookup/${id}`, { signal }),
   getNextNumber: () => api.get<string>('/sales/invoices/next-number'),
   getSeriesConfiguration: () => api.get<InvoiceSeriesConfiguration>('/sales/invoice-series'),
   saveSeriesConfiguration: (data: { documentType: 'SALES_INVOICE' | 'POS_INVOICE'; prefix?: string | null; shareWithOtherType?: boolean }) =>
     api.put<any>('/sales/invoice-series', data),
-  getById: (id: string) => api.get<Invoice>(`/sales/invoices/${id}`),
+  getById: (id: string, signal?: AbortSignal) => api.get<Invoice>(`/sales/invoices/${id}`, signal ? { signal } : undefined),
   accountingPreflight: (data: { warehouseId?: string; items?: Array<{ productId?: string; warehouseId?: string }> }) =>
     api.post<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[]; warehouses?: any[] }>('/sales/invoices/accounting-preflight', data),
   create: (data: Partial<Invoice>, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
@@ -163,7 +319,8 @@ export interface InvoiceSeriesConfiguration {
 // ---- Recurring Invoices ----
 export const recurringInvoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<RecurringInvoice>>('/sales/recurring-invoices', { params: filters as any, signal }),
-  getById: (id: string) => api.get<RecurringInvoice>(`/sales/recurring-invoices/${id}`),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<RecurringInvoiceKpiSummary>('/sales/recurring-invoices/summary', { params: filters as any, signal }),
+  getById: (id: string, signal?: AbortSignal) => api.get<RecurringInvoice>(`/sales/recurring-invoices/${id}`, signal ? { signal } : undefined),
   create: (data: Partial<RecurringInvoice>) => api.post<RecurringInvoice>('/sales/recurring-invoices', data),
   update: (id: string, data: Partial<RecurringInvoice>) => api.patch<RecurringInvoice>(`/sales/recurring-invoices/${id}`, data),
   pause: (id: string) => api.patch<RecurringInvoice>(`/sales/recurring-invoices/${id}/pause`, {}),
@@ -176,7 +333,8 @@ export const recurringInvoicesService = {
 export const paymentsService = {
   getIntegrationPolicy: () => api.get<{ financeEnabled: boolean; accountingEnabled: boolean; accountingRequired: boolean }>('/sales/integration-policy'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentReceived>>('/sales/payments', { params: filters as any, signal }),
-  getById: (id: string) => api.get<PaymentReceived>(`/sales/payments/${id}`),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaymentKpiSummary>('/sales/payments/summary', { params: filters as any, signal }),
+  getById: (id: string, signal?: AbortSignal) => api.get<PaymentReceived>(`/sales/payments/${id}`, signal ? { signal } : undefined),
   create: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string }, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),
   createMixed: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string; payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; cardCommissionPercent?: number; reference?: string; notes?: string }> }, idempotencyKey?: string) =>
     api.idempotentPost<PaymentReceived & { payments?: PaymentReceived[] }>('/sales/payments/mixed', data, idempotencyKey),
@@ -190,7 +348,8 @@ export const paymentsService = {
 // ---- Sales Returns ----
 export const salesReturnsService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<SalesReturn>>('/sales/returns', { params: filters as any, signal }),
-  getById: (id: string) => api.get<SalesReturn>(`/sales/returns/${id}`),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<SalesReturnKpiSummary>('/sales/returns/summary', { params: filters as any, signal }),
+  getById: (id: string, signal?: AbortSignal) => api.get<SalesReturn>(`/sales/returns/${id}`, signal ? { signal } : undefined),
   create: (data: Partial<SalesReturn>, idempotencyKey?: string) => api.idempotentPost<SalesReturn>('/sales/returns', data, idempotencyKey),
   update: (id: string, data: Partial<SalesReturn>) => api.patch<SalesReturn>(`/sales/returns/${id}`, data),
   approve: (id: string, idempotencyKey?: string) => api.idempotentPatch<SalesReturn>(`/sales/returns/${id}/approve`, {}, idempotencyKey),
@@ -202,7 +361,7 @@ export const salesReturnsService = {
 // ---- Credit Notes ----
 export const creditNotesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<CreditNote>>('/sales/credit-notes', { params: filters as any, signal }),
-  getById: (id: string) => api.get<CreditNote>(`/sales/credit-notes/${id}`),
+  getById: (id: string, signal?: AbortSignal) => api.get<CreditNote>(`/sales/credit-notes/${id}`, signal ? { signal } : undefined),
   create: (data: Partial<CreditNote>, idempotencyKey?: string) => api.idempotentPost<CreditNote>('/sales/credit-notes', data, idempotencyKey),
   update: (id: string, data: Partial<CreditNote>) => api.patch<CreditNote>(`/sales/credit-notes/${id}`, data),
   issue: (id: string, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}, idempotencyKey),

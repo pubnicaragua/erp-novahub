@@ -1,3 +1,5 @@
+import { getCurrencyDecimalPlaces } from './currency';
+
 /**
  * Normaliza valores decimales usados en inputs financieros sin permitir más
  * precisión de la que puede presentar el formulario.
@@ -5,7 +7,7 @@
  * Se conserva el punto final durante la edición (por ejemplo, `12.`), pero
  * se recorta cualquier dígito posterior al límite configurado.
  */
-export function normalizeDecimalInput(value: unknown, decimals = 2): string {
+export function normalizeDecimalInput(value: unknown, decimals = getCurrencyDecimalPlaces()): string {
   const raw = String(value ?? '').replace(',', '.');
   const cleaned = raw.replace(/[^\d.]/g, '');
   const dotIndex = cleaned.indexOf('.');
@@ -21,7 +23,7 @@ export function normalizeDecimalInput(value: unknown, decimals = 2): string {
   return `${integerPart}.${fractionPart}`;
 }
 
-export function formatDecimalInput(value: unknown, decimals = 2): string {
+export function formatDecimalInput(value: unknown, decimals = getCurrencyDecimalPlaces()): string {
   if (value === '' || value === null || value === undefined) return '';
   return normalizeDecimalInput(value, decimals);
 }

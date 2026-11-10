@@ -19,6 +19,7 @@ import { useQuery } from '@tanstack/react-query';
 import { HRViewTutorial } from './HRViewTutorial';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface PayrollConfigData {
   id?: string;
@@ -192,7 +193,7 @@ export function ConfigNominaView() {
 
   const sim = calculateSimulation();
 
-  const formatC = (v: number) => `C$ ${v.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formatC = (v: number) => `C$ ${v.toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
 
   if (loading) {
     return (
@@ -431,7 +432,7 @@ export function ConfigNominaView() {
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Salario Bruto Mensual (C$)</Label>
                   <Input type="number" value={simSalaryBruto}
                     onChange={e => setSimSalaryBruto(Number(e.target.value))}
-                    className="rounded-xl h-12 text-lg font-bold" placeholder="13,000" />
+                    className="rounded-xl h-12 text-lg font-bold" placeholder="13,000" currencyPrecision />
                 </div>
 
                 <Separator />

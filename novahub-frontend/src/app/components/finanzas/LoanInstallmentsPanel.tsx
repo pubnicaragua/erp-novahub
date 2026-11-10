@@ -7,10 +7,11 @@ import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { getApiErrorMessage } from '../../services/api';
 import { loanInstallmentsService } from '../../services/finanzas.service';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface InstallmentRow { id: string; sequence: number; dueDate: string; principal: number | string; interest: number | string; total: number; status: string; paidAt?: string | null }
 
-const money = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() });
 const shortDate = (value: unknown) => (value ? new Date(String(value)).toLocaleDateString('es-NI', { timeZone: 'UTC' }) : '—');
 const STATUS_LABEL: Record<string, string> = { PENDING: 'Pendiente', PAID: 'Pagada', CANCELLED: 'Cancelada' };
 

@@ -69,7 +69,7 @@ export function OfferAdvisor({ leadId, canEdit }: { leadId: string; canEdit: boo
                 {canEdit && current && (
                   <>
                     <label className="space-y-1 text-xs font-semibold">Precio
-                      <Input type="number" min="0" step="0.01" value={price} placeholder={String(current.suggestedPrice)} onChange={(e) => setPrice(e.target.value)} />
+                      <Input type="number" min="0" step="0.01" value={price} placeholder={String(current.suggestedPrice)} onChange={(e) => setPrice(e.target.value)} currencyPrecision />
                     </label>
                     <label className="space-y-1 text-xs font-semibold">Nota {belowMinimum ? '(obligatoria para pedir permiso)' : '(opcional)'}
                       <Input value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder={belowMinimum ? 'Por qué hace falta bajar el precio' : 'Ej.: lo quiere para el mes que viene'} />

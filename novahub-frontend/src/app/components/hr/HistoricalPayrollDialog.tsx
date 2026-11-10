@@ -59,7 +59,7 @@ export function HistoricalPayrollDialog({ employees, onClose, onDone }: { employ
           <div className="space-y-1.5"><Label htmlFor="hp-to">Hasta el mes</Label><Input id="hp-to" type="month" value={to} max={lastMonth} onChange={(e) => setTo(e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="hp-ref">Referencia o transferencia</Label><Input id="hp-ref" value={reference} maxLength={120} onChange={(e) => setReference(e.target.value)} placeholder="Opcional" /></div>
           <div className="space-y-1.5"><Label htmlFor="hp-date">Fecha de pago</Label><Input id="hp-date" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} /><p className="text-[11px] text-muted-foreground">Si la dejas vacía se usa el último día de cada período.</p></div>
-          {employeeId !== 'all' && <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="hp-salary">Monto del período (si el salario era otro)</Label><Input id="hp-salary" type="number" min="0" step="0.01" value={periodSalary} onChange={(e) => setPeriodSalary(e.target.value)} placeholder="Vacío = el salario actual del empleado" /></div>}
+          {employeeId !== 'all' && <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="hp-salary">Monto del período (si el salario era otro)</Label><Input id="hp-salary" type="number" min="0" step="0.01" value={periodSalary} onChange={(e) => setPeriodSalary(e.target.value)} placeholder="Vacío = el salario actual del empleado" currencyPrecision /></div>}
         </div>
         {result && (
           <div className="space-y-1 rounded-xl border border-border/60 bg-muted/20 p-3 text-sm" role="status">

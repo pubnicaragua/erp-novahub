@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from '../../ui/dialog';
 import { intlImportsService, type IntlImportExpense } from '../../../services/intl-imports.service';
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
 interface AddExpenseModalProps {
   containerId: string | null;
@@ -63,7 +64,7 @@ export function AddExpenseModal({
         description: form.description.trim() || undefined,
       });
 
-      toast.success(`Gasto registrado por $${form.amount.toFixed(2)} USD`);
+      toast.success(`Gasto registrado por $${form.amount.toFixed(getCurrencyDecimalPlaces())} USD`);
       onSuccess(created);
       onOpenChange(false);
       setForm({
@@ -122,8 +123,7 @@ export function AddExpenseModal({
               required
               placeholder="0.00"
               value={form.amount || ''}
-              onChange={(e) => setForm((prev) => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
-            />
+              onChange={(e) => setForm((prev) => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))} currencyPrecision />
           </div>
 
           <div>

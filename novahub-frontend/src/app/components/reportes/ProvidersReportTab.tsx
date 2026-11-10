@@ -67,11 +67,12 @@ function getRangeDates(range: string) {
 }
 
 export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, convertDisplayAmount, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user, canPerform } = useAuth();
   const canViewPurchases = canPerform('REPORTS_PROVIDERS', 'view');
-  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const currencySymbol = reportCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
   
@@ -95,7 +96,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const fmtShort = (v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return 'C$0';
-    const converted = toBaseAmount(v, baseCurrency);
+    const converted = convertDisplayAmount(v, baseCurrency);
     if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -228,7 +229,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(120, 120, 120);
-        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        const currencyLabel = displayMode === 'ORIGINAL' ? `Original por operación · totales en ${baseCurrency}` : (reportCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)');
         doc.text(`Generado: ${now.toLocaleDateString('es-NI')} ${now.toLocaleTimeString('es-NI')}  |  Moneda: ${currencyLabel}`,
           pageWidth / 2,
           currentY,
@@ -304,7 +305,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const primaryColor = themeConfig.colors.primary || '#10b981';
         const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
-        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        const currencyLabel = displayMode === 'ORIGINAL' ? `${baseCurrency} · totales agregados en moneda base` : (reportCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)');
 
         ws.getColumn(1).width = 30;
         ws.getColumn(2).width = 22;
@@ -413,13 +414,13 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           idx + 1,
           item.name,
           'Clasificación Tier 1',
-          Number(item.value),
+          convertDisplayAmount(Number(item.value), baseCurrency),
         ]));
         appendDashboardExcelTable(ws, 'Insumos con Mayor Gasto', ['#', 'Insumo', 'Detalle', 'Suma Total'], topProducts.map((item: any, idx) => [
           idx + 1,
           item.name,
           `${item.qty} unidades recibidas`,
-          Number(item.value),
+          convertDisplayAmount(Number(item.value), baseCurrency),
         ]));
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_proveedores'], 'xlsx', dateRange));

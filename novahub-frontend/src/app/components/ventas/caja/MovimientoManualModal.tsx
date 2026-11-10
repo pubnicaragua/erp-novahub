@@ -97,11 +97,11 @@ export function MovimientoManualModal({ open, onOpenChange, onAddMovement }: Mov
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Monto Córdobas (C$)</Label>
-              <Input type="number" min="0" step="0.01" value={amountNIO} onChange={e => setAmountNIO(e.target.value)} placeholder="0.00" />
+              <Input type="number" min="0" step="0.01" value={amountNIO} onChange={e => setAmountNIO(e.target.value)} placeholder="0.00" currencyPrecision />
             </div>
             <div className="space-y-2">
               <Label>Monto Dólares ($)</Label>
-              <Input type="number" min="0" step="0.01" value={amountUSD} onChange={e => setAmountUSD(e.target.value)} placeholder="0.00" />
+              <Input type="number" min="0" step="0.01" value={amountUSD} onChange={e => setAmountUSD(e.target.value)} placeholder="0.00" currencyPrecision />
             </div>
           </div>
 

@@ -432,8 +432,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                   type="number"
                   value={newTraining.cost}
                   onChange={(e) => setNewTraining({ ...newTraining, cost: parseFloat(e.target.value) })}
-                  className="bg-background pl-7"
-                />
+                  className="bg-background pl-7" currencyPrecision />
               </div>
             </div>
             <div>

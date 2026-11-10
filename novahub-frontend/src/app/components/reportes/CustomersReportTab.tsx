@@ -71,7 +71,7 @@ function getRangeDates(range: string) {
 }
 
 export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, convertDisplayAmount, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { canPerform } = useAuth();
   const canViewSales = canPerform('REPORTS_CLIENTS', 'view');
@@ -79,7 +79,8 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const [acquisitionTo, setAcquisitionTo] = useState('');
   const [acquisitionGrouping, setAcquisitionGrouping] = useState<AcquisitionGrouping>('year');
   const acquisitionRangeInvalid = Boolean(acquisitionFrom && acquisitionTo && acquisitionFrom > acquisitionTo);
-  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const currencySymbol = reportCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
   
@@ -249,7 +250,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         
         const now = new Date();
         doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 120);
-        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        const currencyLabel = displayMode === 'ORIGINAL' ? `Original por operación · totales en ${baseCurrency}` : (reportCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)');
         doc.text(`Generado: ${now.toLocaleDateString('es-NI')} ${now.toLocaleTimeString('es-NI')}  |  Moneda: ${currencyLabel}`, pageWidth / 2, currentY, { align: 'center' });
         currentY += 5;
         currentY = drawReportBrandMeta({ doc, settings: pdfSettings, pageWidth, contentWidth, currentY });
@@ -319,7 +320,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.customers');
         const primaryHex = (themeConfig.colors.primary || '#10b981').replace('#', '');
-        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        const currencyLabel = displayMode === 'ORIGINAL' ? `${baseCurrency} · totales agregados en moneda base` : (reportCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)');
 
         const ws = wb.addWorksheet('Reporte de Clientes');
         ws.getColumn(1).width = 8; ws.getColumn(2).width = 35; ws.getColumn(3).width = 25; ws.getColumn(4).width = 15;
@@ -399,7 +400,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           appendDashboardExcelTable(ws, title, headers, data.map((item, idx) => [
             idx + 1,
             item.name || 'Sin nombre',
-            Number(item.value || 0),
+            convertDisplayAmount(Number(item.value || 0), baseCurrency),
             ...(includeQty ? [Number(item.qty || 0)] : []),
           ]));
         };

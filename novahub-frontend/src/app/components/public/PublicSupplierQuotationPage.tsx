@@ -16,6 +16,7 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Skeleton } from '../ui/skeleton';
 import { projectsService } from '../../services/projects.service';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface MaterialOfferRow {
   materialId: string;
@@ -411,8 +412,7 @@ export function PublicSupplierQuotationPage() {
                               onChange={(e) => handlePriceChange(row.materialId, e.target.value)}
                               placeholder="0.00"
                               className="h-8 text-right font-mono font-bold text-xs"
-                              required
-                            />
+                              required currencyPrecision />
                           </td>
                           <td className="p-3 text-right">
                             <Input
@@ -426,7 +426,7 @@ export function PublicSupplierQuotationPage() {
                             />
                           </td>
                           <td className="p-3 text-right pr-5 font-mono font-bold">
-                            {subQuotation.currency} {itemSubtotal.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {subQuotation.currency} {itemSubtotal.toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}
                           </td>
                         </tr>
                       );
@@ -462,7 +462,7 @@ export function PublicSupplierQuotationPage() {
                 <div className="flex justify-between items-center text-muted-foreground">
                   <span>Subtotal Ítems:</span>
                   <span className="font-mono font-bold text-foreground">
-                    {subQuotation.currency} {calculatedSubtotal.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {subQuotation.currency} {calculatedSubtotal.toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center gap-4">
@@ -475,13 +475,12 @@ export function PublicSupplierQuotationPage() {
                     value={taxAmount === 0 ? '' : taxAmount}
                     onChange={(e) => setTaxAmount(parseFloat(e.target.value) || 0)}
                     placeholder="0.00"
-                    className="h-7 w-28 text-right font-mono text-xs font-semibold"
-                  />
+                    className="h-7 w-28 text-right font-mono text-xs font-semibold" currencyPrecision />
                 </div>
                 <div className="border-t border-border/50 pt-2 flex justify-between items-center text-sm font-bold">
                   <span>Total Ofertado:</span>
                   <span className="font-mono text-lg text-primary">
-                    {subQuotation.currency} {calculatedTotal.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {subQuotation.currency} {calculatedTotal.toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}
                   </span>
                 </div>
 

@@ -59,6 +59,7 @@ import {
   paymentMethodLabel,
   requiresPaymentReference,
 } from "../../../utils/paymentMethods";
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
 const NO_REGISTER = "__no_cash_session__";
 const BATCH_STORAGE_PREFIX = "novahub-sales-import-batch:";
@@ -334,7 +335,7 @@ function InvoiceImportDocumentCard({
         <span className="text-[11px] text-muted-foreground">{document.lineCount} línea(s)</span>
         <Badge variant="outline" className={statusClass(ready ? "READY" : document.status)}>{statusLabel(ready && document.status === "BLOCKED" ? "READY" : document.status)}</Badge>
         {document.result?.invoiceNumber && <Badge variant="outline" className="font-mono text-[10px]">{document.result.invoiceNumber}</Badge>}
-        {data?.totals?.total !== undefined && <span className="w-full text-right text-sm font-black text-primary sm:w-auto">{currencyLabel(data.currency)} {Number(data.totals.total).toLocaleString("es-NI", { minimumFractionDigits: 2 })}</span>}
+        {data?.totals?.total !== undefined && <span className="w-full text-right text-sm font-black text-primary sm:w-auto">{currencyLabel(data.currency)} {Number(data.totals.total).toLocaleString("es-NI", { minimumFractionDigits: getCurrencyDecimalPlaces() })}</span>}
       </summary>
       <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(240px,0.55fr)]">
         <div className="min-w-0 space-y-3">
@@ -414,7 +415,7 @@ function InvoiceImportDocumentCard({
                         )}
                       </td>
                       <td className="p-2">{sourceItem.quantity}</td>
-                      <td className="p-2">{item?.priceMissing ? "Sin precio" : `${currencyLabel(data?.currency)} ${Number(item?.unitPrice || 0).toLocaleString("es-NI", { minimumFractionDigits: 2 })}`}</td>
+                      <td className="p-2">{item?.priceMissing ? "Sin precio" : `${currencyLabel(data?.currency)} ${Number(item?.unitPrice || 0).toLocaleString("es-NI", { minimumFractionDigits: getCurrencyDecimalPlaces() })}`}</td>
                       <td className="p-2">{Number(sourceItem.discount || 0)}%</td>
                       <td className="p-2">{Number(item?.taxRate || 0)}%</td>
                       <td className="min-w-[190px] p-2">
@@ -445,7 +446,7 @@ function InvoiceImportDocumentCard({
                 <p className="text-[10px] text-muted-foreground">Se suman al total y al pago; heredan la moneda y no mueven inventario ni llevan IVA propio.</p>
               </div>
               {Number(data?.chargeTotals?.total || 0) > 0 && (
-                <span className="text-xs font-semibold">Total cargos: {currencyLabel(data?.currency)} {Number(data?.chargeTotals?.total).toLocaleString("es-NI", { minimumFractionDigits: 2 })}</span>
+                <span className="text-xs font-semibold">Total cargos: {currencyLabel(data?.currency)} {Number(data?.chargeTotals?.total).toLocaleString("es-NI", { minimumFractionDigits: getCurrencyDecimalPlaces() })}</span>
               )}
             </div>
             {(document.source.charges || []).length === 0 ? (
@@ -477,7 +478,7 @@ function InvoiceImportDocumentCard({
                       </label>
                       <label className="min-w-0 space-y-1">
                         <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Monto ({currencyLabel(data?.currency)})</span>
-                        <Input aria-label={`Monto del cargo fila ${charge.sourceRowNumber} de ${document.reference}`} type="number" min="0.01" step="0.01" value={charge.amount ?? ""} onChange={(event) => onSourceUpdate(document.sourceRowNumber, { field: "chargeAmount", chargeSourceRowNumber: charge.sourceRowNumber, value: event.target.value === "" ? null : Number(event.target.value) })} disabled={!canEditPayment} className="h-9 text-xs" />
+                        <Input aria-label={`Monto del cargo fila ${charge.sourceRowNumber} de ${document.reference}`} type="number" min="0.01" step="0.01" value={charge.amount ?? ""} onChange={(event) => onSourceUpdate(document.sourceRowNumber, { field: "chargeAmount", chargeSourceRowNumber: charge.sourceRowNumber, value: event.target.value === "" ? null : Number(event.target.value) })} disabled={!canEditPayment} className="h-9 text-xs" currencyPrecision />
                       </label>
                     </div>
                   );
@@ -1438,7 +1439,7 @@ export function SalesImportWizard({
                             {currencyLabel(preview.currency)}{" "}
                             {Number(preview.totals.total).toLocaleString(
                               "es-NI",
-                              { minimumFractionDigits: 2 },
+                              { minimumFractionDigits: getCurrencyDecimalPlaces() },
                             )}
                           </span>
                         )}
@@ -1504,7 +1505,7 @@ export function SalesImportWizard({
                                       {Number(
                                         item.unitPrice || 0,
                                       ).toLocaleString("es-NI", {
-                                        minimumFractionDigits: 2,
+                                        minimumFractionDigits: getCurrencyDecimalPlaces(),
                                       })}
                                     </td>
                                     <td className="p-2">
@@ -1601,7 +1602,7 @@ export function SalesImportWizard({
                                   {match.number} ·{" "}
                                   {currencyLabel(match.currency)}{" "}
                                   {Number(match.total).toLocaleString("es-NI", {
-                                    minimumFractionDigits: 2,
+                                    minimumFractionDigits: getCurrencyDecimalPlaces(),
                                   })}
                                 </p>
                               ))}

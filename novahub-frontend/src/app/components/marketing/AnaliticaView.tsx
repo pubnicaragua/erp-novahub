@@ -13,6 +13,8 @@ import { errorMessage } from '../organizacion/organizacion.utils';
 import { CAMPAIGN_STATUS_LABEL, METRIC_LABEL, SOURCE_LABEL, compact, fmtDate, money } from './marketing.constants';
 import { FormSheet, Kpi, ResourceTable, StatusBadge, type Column } from './MktBits';
 import { exportMarketingReportExcel, options, toInitial, useMktConfig, useMktRefresh, type FieldDef } from './mkt.helpers';
+import { useCurrency } from '../../contexts/CurrencyContext';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 type Tab = 'kpi' | 'competition' | 'reports';
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -147,13 +149,15 @@ function CompetitionTab() {
 function ReportsTab() {
   const config = useMktConfig();
   const currency = config.data?.currency ?? 'NIO';
+  const { displayCurrency, displayMode, convertDisplayAmount } = useCurrency();
+  const reportCurrency = displayMode === 'ORIGINAL' ? currency : displayCurrency;
   const [to, setTo] = useState(() => iso(new Date()));
   const [from, setFrom] = useState(() => iso(new Date(Date.now() - 30 * 86_400_000)));
   const range = useMemo(() => ({ from: new Date(`${from}T00:00:00`).toISOString(), to: new Date(`${to}T23:59:59`).toISOString() }), [from, to]);
   const q = useTenantQuery(['marketing', 'report', range.from, range.to], (s) => marketingApi.report(range, s), { staleTime: 30_000 });
   const d = q.data;
 
-  const exportExcel = () => { if (d) void exportMarketingReportExcel(d, { from, to, currency }); };
+  const exportExcel = () => { if (d) void exportMarketingReportExcel(d, { from, to, currency, reportCurrency, convertAmount: (amount, source) => convertDisplayAmount(amount, source) }); };
 
   return (
     <div className="space-y-4">
@@ -167,9 +171,9 @@ function ReportsTab() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <Kpi label="Inversión" value={money(d.totals.SPEND ?? 0, currency)} />
             <Kpi label="Alcance" value={compact(d.totals.REACH ?? 0)} />
-            <Kpi label="Clics" value={compact(d.totals.CLICKS ?? 0)} hint={typeof d.totals.ctr === 'number' ? `CTR ${d.totals.ctr.toFixed(2)}%` : undefined} />
+            <Kpi label="Clics" value={compact(d.totals.CLICKS ?? 0)} hint={typeof d.totals.ctr === 'number' ? `CTR ${d.totals.ctr.toFixed(getCurrencyDecimalPlaces())}%` : undefined} />
             <Kpi label="Conversiones" value={compact(d.totals.CONVERSIONS ?? 0)} />
-            <Kpi label="ROAS" value={typeof d.totals.roas === 'number' ? `${d.totals.roas.toFixed(2)}×` : '—'} />
+            <Kpi label="ROAS" value={typeof d.totals.roas === 'number' ? `${d.totals.roas.toFixed(getCurrencyDecimalPlaces())}×` : '—'} />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel title="Estado de contenidos"><ul className="space-y-1 text-[13px]">{Object.entries(d.contentByStatus).map(([s, n]) => <li key={s} className="flex justify-between"><span>{s}</span><strong>{n}</strong></li>)}{Object.keys(d.contentByStatus).length === 0 && <li className="text-muted-foreground">Sin contenidos.</li>}</ul></Panel>

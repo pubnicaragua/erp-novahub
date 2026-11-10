@@ -76,6 +76,7 @@ import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 import { VoiceSaleComposer } from './VoiceSaleComposer';
 import { SalesImportWizard } from './importacion/SalesImportWizard';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -2939,8 +2940,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                                   onChange={(event) => updateCartItemCharges(item.productId, { discount: Number(event.target.value) || 0 }, item.variantId, item.warehouseId)}
                                   disabled={isRegisterDisabled}
                                   className="ml-auto h-7 w-16 rounded-lg text-right text-xs font-mono"
-                                  placeholder="0"
-                                />
+                                  placeholder="0" currencyPrecision />
                               ) : <span className="text-[10px] text-muted-foreground">Global</span>}
                             </td>
                             <td data-actions-column="compact" className="px-3.5 py-3 text-center">
@@ -3014,7 +3014,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                             </div>
                             <div className="min-w-0 space-y-1.5">
                               <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Descuento (%)</Label>
-                              {pricingMode === 'individual' ? <Input type="number" min={0} max={100} value={item.discount || ''} onChange={(event) => updateCartItemCharges(item.productId, { discount: Number(event.target.value) || 0 }, item.variantId, item.warehouseId)} disabled={isRegisterDisabled} className="h-9 w-full rounded-lg text-right text-xs font-mono" placeholder="0" /> : <span className="flex h-9 items-center text-xs text-muted-foreground">Global</span>}
+                              {pricingMode === 'individual' ? <Input type="number" min={0} max={100} value={item.discount || ''} onChange={(event) => updateCartItemCharges(item.productId, { discount: Number(event.target.value) || 0 }, item.variantId, item.warehouseId)} disabled={isRegisterDisabled} className="h-9 w-full rounded-lg text-right text-xs font-mono" placeholder="0" currencyPrecision /> : <span className="flex h-9 items-center text-xs text-muted-foreground">Global</span>}
                             </div>
                             <div className="min-w-0 space-y-1.5">
                               <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Cantidad</Label>
@@ -3060,8 +3060,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                             onChange={(event) => setExtraCharges((current) => current.map((item) => item.id === charge.id ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))}
                             placeholder="Monto"
                             className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0"
-                            disabled={isRegisterDisabled}
-                          />
+                            disabled={isRegisterDisabled} currencyPrecision />
                         </div>
                         <Button
                           type="button"
@@ -3096,8 +3095,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                             onChange={(event) => setDeliveryAmount(Math.max(0, Number(event.target.value) || 0))}
                             placeholder="Monto"
                             className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0"
-                            disabled={isRegisterDisabled}
-                          />
+                            disabled={isRegisterDisabled} currencyPrecision />
                         </div>
                         <Button
                           type="button"
@@ -3454,7 +3452,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                             const previousCurrency = item.currency || paymentCurrency;
                             const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1);
                             const nextRate = paymentLineRate(nextCurrency);
-                            return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined };
+                            return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined };
                           }))} />
                           <Input type="number" min="0" step="0.01" placeholder={`Monto (${payment.currency || paymentCurrency})`} value={payment.amount || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} />
                           <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
@@ -3560,8 +3558,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                     <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => handleQueuePaymentMethodChange(index, value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Efectivo</SelectItem><SelectItem value="CARD">Tarjeta</SelectItem><SelectItem value="TRANSFER">Transferencia</SelectItem><SelectItem value="CHECK">Cheque</SelectItem>{getCustomerFavorBase(document.customerId) > 0.01 && <SelectItem value="CUSTOMER_BALANCE">Saldo a favor</SelectItem>}</SelectContent>
                     </Select>
-                    <CurrencySelector value={payment.currency || document.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" hideLabel rateDecimals={2} disabled={payment.method === 'CUSTOMER_BALANCE' || queueSubmitting} onChange={(nextCurrency) => setQueuePayments((current) => current.map((item, itemIndex) => { if (itemIndex !== index) return item; const previousCurrency = item.currency || document.currency; const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1); const nextRate = nextCurrency === baseCurrency ? 1 : Number(activeSession?.exchangeRateUSD || globalRate || 1); return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined }; }))} />
-                  <Input type="number" min="0" step="0.01" value={payment.amount || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} placeholder="Monto" />
+                    <CurrencySelector value={payment.currency || document.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" hideLabel rateDecimals={2} disabled={payment.method === 'CUSTOMER_BALANCE' || queueSubmitting} onChange={(nextCurrency) => setQueuePayments((current) => current.map((item, itemIndex) => { if (itemIndex !== index) return item; const previousCurrency = item.currency || document.currency; const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1); const nextRate = nextCurrency === baseCurrency ? 1 : Number(activeSession?.exchangeRateUSD || globalRate || 1); return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined }; }))} />
+                  <Input type="number" min="0" step="0.01" value={payment.amount || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} placeholder="Monto" currencyPrecision />
                     <Button type="button" variant="ghost" disabled={queuePayments.length === 1} onClick={() => setQueuePayments((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</Button>
                   </div>
                   {payment.currency && payment.currency !== document.currency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente pendiente: {formatExplicitAmount(convertBetweenCurrencies(getQueuePaymentSummary().missingBase, baseCurrency, payment.currency, 1, Number(payment.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1)), payment.currency)}</p>}

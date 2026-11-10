@@ -9,6 +9,48 @@ export const CURRENCY_METADATA: Record<SupportedCurrency, {
   USD: { code: 'USD', name: 'Dólar estadounidense', symbol: '$' },
 };
 
+const DEFAULT_CURRENCY_DECIMAL_PLACES = 2;
+let activeCurrencyDecimalPlaces = DEFAULT_CURRENCY_DECIMAL_PLACES;
+
+function normalizeCurrencyDecimalPlaces(value: unknown): number {
+  const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  return typeof parsed === 'number' && Number.isInteger(parsed) && parsed >= 2 && parsed <= 6
+    ? parsed
+    : DEFAULT_CURRENCY_DECIMAL_PLACES;
+}
+
+export function getCurrencyDecimalPlaces() {
+  return activeCurrencyDecimalPlaces;
+}
+
+export function getCurrencyInputStep() {
+  return 10 ** -activeCurrencyDecimalPlaces;
+}
+
+export function roundCurrencyNumber(value: unknown, decimalPlaces = getCurrencyDecimalPlaces()) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return 0;
+
+  const digits = normalizeCurrencyDecimalPlaces(decimalPlaces);
+  const factor = 10 ** digits;
+  return Math.round((amount + Number.EPSILON * Math.sign(amount)) * factor) / factor;
+}
+
+export function setCurrencyDecimalPlaces(value: unknown) {
+  activeCurrencyDecimalPlaces = normalizeCurrencyDecimalPlaces(value);
+  return activeCurrencyDecimalPlaces;
+}
+
+export function formatCurrencyNumber(value: unknown, decimalPlaces = getCurrencyDecimalPlaces()) {
+  const amount = Number(value || 0);
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+  const digits = normalizeCurrencyDecimalPlaces(decimalPlaces);
+  return new Intl.NumberFormat('es-NI', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(safeAmount);
+}
+
 export function normalizeCurrency(value: unknown, fallback: SupportedCurrency = 'NIO'): SupportedCurrency {
   const normalized = String(value || '').trim().toUpperCase();
   return normalized === 'USD' || normalized === 'NIO' ? normalized : fallback;
@@ -18,13 +60,14 @@ export function getCurrencyMetadata(value: unknown, fallback: SupportedCurrency 
   return CURRENCY_METADATA[normalizeCurrency(value, fallback)];
 }
 
-export function formatCurrencyAmount(value: unknown, currency: unknown = 'NIO', includeCode = false) {
+export function formatCurrencyAmount(
+  value: unknown,
+  currency: unknown = 'NIO',
+  includeCode = false,
+  decimalPlaces = getCurrencyDecimalPlaces(),
+) {
   const metadata = getCurrencyMetadata(currency);
-  const amount = Number(value || 0);
-  const formatted = new Intl.NumberFormat('es-NI', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(amount) ? amount : 0);
+  const formatted = formatCurrencyNumber(value, decimalPlaces);
   return includeCode
     ? `${metadata.symbol} ${formatted} ${metadata.code}`
     : `${metadata.symbol} ${formatted}`;

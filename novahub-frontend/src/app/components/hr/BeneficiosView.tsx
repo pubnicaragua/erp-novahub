@@ -508,7 +508,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                 <span className="absolute left-2.5 top-2.5 text-xs text-muted-foreground font-medium">
                   {form.currency === 'USD' ? '$' : 'C$'}
                 </span>
-                <Input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })} placeholder="0.00" className="rounded-xl h-10 pl-7" />
+                <Input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })} placeholder="0.00" className="rounded-xl h-10 pl-7" currencyPrecision />
               </div>
             </div>
             <div className="space-y-1">

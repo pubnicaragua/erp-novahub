@@ -9,6 +9,7 @@ import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type PlatformQuote, type PlatformQuoteBillingOption, type PlatformQuoteItem } from '../../services/enterprise-groups.service';
 import { calculatePlatformQuoteTotals, downloadPlatformQuoteCommercialReport, downloadPlatformQuotePdf, type CommercialReportOptions } from '../../utils/platformQuotePdf';
 import { NovaHubLogoFull } from '../NovaHubLogo';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 /** Origen de datos del constructor: cotizaciones de plataforma (SuperAdmin) o de una empresa con datos propios. */
 export type QuoteApi = {
@@ -127,7 +128,7 @@ const saveCommercialReport = (quoteId: string, report: CommercialReport) => {
 const conditionLabel = (report: CommercialReport) => [report.pricePreferential && 'Precio preferencial', report.specialPrice && 'Condición especial'].filter(Boolean).join(' · ');
 
 const safeTrim = (value: unknown) => String(value ?? '').trim();
-const money = (value: number, currency: string) => new Intl.NumberFormat('es-NI', { style: 'currency', currency, minimumFractionDigits: 2 }).format(Number(value || 0));
+const money = (value: number, currency: string) => new Intl.NumberFormat('es-NI', { style: 'currency', currency, minimumFractionDigits: getCurrencyDecimalPlaces() }).format(Number(value || 0));
 const isIncludedDetail = (detail: unknown) => /incluido|valor agregado|sin costo/i.test(safeTrim(detail));
 const cleanDetailLine = (line: string) => line.replace(/^\s*[•·▪◦*-]\s*/, '').trim();
 const editableDetailValue = (value: unknown) => String(value ?? '').split(/\r?\n/).map((line) => line ? cleanDetailLine(line) : '').join('\n');

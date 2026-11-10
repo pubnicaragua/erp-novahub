@@ -990,15 +990,15 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             </div>
             <div className="space-y-2">
               <label htmlFor="payroll-bonuses" className="text-sm font-medium">Bono</label>
-              <Input id="payroll-bonuses" type="number" min="0" step="0.01" value={payrollForm.bonuses} onChange={(e) => setPayrollForm((current) => ({ ...current, bonuses: e.target.value }))} placeholder="0.00" />
+              <Input id="payroll-bonuses" type="number" min="0" step="0.01" value={payrollForm.bonuses} onChange={(e) => setPayrollForm((current) => ({ ...current, bonuses: e.target.value }))} placeholder="0.00" currencyPrecision />
             </div>
             <div className="space-y-2">
               <label htmlFor="payroll-overtime" className="text-sm font-medium">Horas extra</label>
-              <Input id="payroll-overtime" type="number" min="0" step="0.01" value={payrollForm.overtime} onChange={(e) => setPayrollForm((current) => ({ ...current, overtime: e.target.value }))} placeholder="0.00" />
+              <Input id="payroll-overtime" type="number" min="0" step="0.01" value={payrollForm.overtime} onChange={(e) => setPayrollForm((current) => ({ ...current, overtime: e.target.value }))} placeholder="0.00" currencyPrecision />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <label htmlFor="payroll-deductions" className="text-sm font-medium">Otras deducciones</label>
-              <Input id="payroll-deductions" type="number" min="0" step="0.01" value={payrollForm.deductions} onChange={(e) => setPayrollForm((current) => ({ ...current, deductions: e.target.value }))} placeholder="0.00" />
+              <Input id="payroll-deductions" type="number" min="0" step="0.01" value={payrollForm.deductions} onChange={(e) => setPayrollForm((current) => ({ ...current, deductions: e.target.value }))} placeholder="0.00" currencyPrecision />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <label htmlFor="payroll-notes" className="text-sm font-medium">Notas</label>

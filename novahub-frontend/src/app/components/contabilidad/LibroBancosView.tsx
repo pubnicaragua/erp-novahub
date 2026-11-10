@@ -19,6 +19,7 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { ViewConnectionsDialog, type ViewConnection } from './ViewConnectionsDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { todayIso } from '../../utils/dateFormat';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   CHECKING: 'Cuenta corriente',
@@ -82,7 +83,7 @@ const BOOK_CONNECTIONS: ViewConnection[] = [
 
 const formatAmount = (value: any, currency?: string) => {
   const symbol = currency === 'USD' ? 'US$' : 'C$';
-  return `${symbol} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  return `${symbol} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces() })}`;
 };
 
 export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId: string) => void }) {

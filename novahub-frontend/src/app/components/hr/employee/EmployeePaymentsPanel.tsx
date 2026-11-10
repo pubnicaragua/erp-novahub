@@ -13,9 +13,10 @@ import { toast } from '../../../services/toast';
 import {
   ACCOUNT_TYPE_LABEL, PAYMENT_KIND_LABEL, employeeProfileService, type PaymentAccount, type PaymentKind,
 } from '../../../services/employee-profile.service';
+import { formatCurrencyNumber } from '../../../utils/currency';
 
 const select = 'h-10 w-full rounded-xl border border-border/60 bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary';
-const fmt = (value: number, currency: string) => `${currency} ${new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2 }).format(value)}`;
+const fmt = (value: number, currency: string) => `${currency} ${formatCurrencyNumber(value)}`;
 const failure = (error: unknown) => (error as any)?.response?.data?.message?.toString?.() || (error as Error)?.message || 'No se pudo guardar.';
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -83,7 +84,7 @@ function PaymentDialog({ employeeId, accounts, onClose, onSaved }: { employeeId:
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5"><Label htmlFor="pay-kind">Tipo</Label><select id="pay-kind" className={select} value={kind} onChange={(e) => setKind(e.target.value as PaymentKind)}>{Object.entries(PAYMENT_KIND_LABEL).filter(([value]) => value !== 'PAYROLL').map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
           <div className="space-y-1.5"><Label htmlFor="pay-date">Fecha de pago</Label><Input id="pay-date" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} /></div>
-          <div className="space-y-1.5"><Label htmlFor="pay-amount">Monto</Label><Input id="pay-amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+          <div className="space-y-1.5"><Label htmlFor="pay-amount">Monto</Label><Input id="pay-amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} currencyPrecision /></div>
           <div className="space-y-1.5"><Label htmlFor="pay-cur">Moneda</Label><select id="pay-cur" className={select} value={currency} onChange={(e) => setCurrency(e.target.value)}><option value="NIO">NIO</option><option value="USD">USD</option></select></div>
           <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="pay-acc">Cuenta donde se pagó</Label><select id="pay-acc" className={select} value={accountId} onChange={(e) => setAccountId(e.target.value)}><option value="">Sin cuenta (efectivo u otra)</option>{accounts.filter((account) => account.isActive).map((account) => <option key={account.id} value={account.id}>{account.bankName} · ****{account.last4} ({account.currency})</option>)}</select></div>
           <div className="space-y-1.5"><Label htmlFor="pay-ref">Referencia</Label><Input id="pay-ref" value={reference} maxLength={120} onChange={(e) => setReference(e.target.value)} placeholder="N.º de transferencia" /></div>

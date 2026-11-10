@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from '@/app/services/toast';
 import { contabilidadService, type CostCenter, type CostCenterReport } from '../../services/contabilidad.service';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const COST_CENTER_TYPES: Record<string, string> = {
   DEPARTMENT: 'Área / departamento',
@@ -19,7 +20,7 @@ const COST_CENTER_TYPES: Record<string, string> = {
   OTHER: 'Otro',
 };
 
-const money = (value: number) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (value: number) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() });
 const errorMessage = (error: unknown, fallback: string) => {
   const e = error as { response?: { data?: { message?: string } }; message?: string } | undefined;
   return e?.response?.data?.message || e?.message || fallback;

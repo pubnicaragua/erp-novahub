@@ -38,7 +38,15 @@ import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
 import { updateMessageThread, upsertMessageThread } from './message-thread-cache';
-import { MessageAttachmentComposer } from './MessageAttachmentComposer';
+import {
+  allowMessageAttachmentDrop,
+  dropMessageAttachmentFiles,
+  pasteMessageAttachmentFiles,
+} from './message-attachment-input';
+import {
+  MessageAttachmentComposer,
+  type MessageAttachmentComposerHandle,
+} from './MessageAttachmentComposer';
 import { MessageAttachments } from './MessageAttachments';
 
 interface MensajesViewProps {
@@ -119,6 +127,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   const onComposeAttachmentsChange = useCallback((state: AttachmentComposerState) => setComposeAttachmentState(state), []);
   const messageBodyRef = useRef<HTMLDivElement>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
+  const replyAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
+  const composeAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
   const shouldAutoScrollRef = useRef(true);
   const lastSelectedIdRef = useRef<string | null>(null);
   const supportCreateAttemptRef = useRef<{ signature: string; key: string } | null>(null);
@@ -590,6 +600,9 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                         id="message-reply"
                         value={reply}
                         onChange={(event) => setReply(event.target.value.slice(0, 4000))}
+                        onPaste={(event) => pasteMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files))}
+                        onDragOver={allowMessageAttachmentDrop}
+                        onDrop={(event) => dropMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files))}
                         onKeyDown={(event) => {
                           if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') void sendReply();
                         }}
@@ -612,6 +625,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                     {selected.kind !== 'SYSTEM' && (
                       <div className="mt-2">
                         <MessageAttachmentComposer
+                          ref={replyAttachmentComposerRef}
                           key={`branch-reply-${selected.id}-${replyAttachmentResetKey}`}
                           conversationId={selected.id}
                           kind={selected.kind}
@@ -703,6 +717,9 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                 id="message-content"
                 value={content}
                 onChange={(event) => setContent(event.target.value.slice(0, 4000))}
+                onPaste={(event) => pasteMessageAttachmentFiles(event, (files) => composeAttachmentComposerRef.current?.addFiles(files))}
+                onDragOver={allowMessageAttachmentDrop}
+                onDrop={(event) => dropMessageAttachmentFiles(event, (files) => composeAttachmentComposerRef.current?.addFiles(files))}
                 placeholder={composeMode === 'SUPPORT' ? 'Describe el problema o la ayuda que necesitas…' : 'Escribí el mensaje con el contexto necesario…'}
                 className="min-h-36"
                 disabled={sending}
@@ -712,6 +729,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
             </div>
 
             <MessageAttachmentComposer
+              ref={composeAttachmentComposerRef}
               key={`new-message-${composeMode}-${composeAttachmentResetKey}`}
               kind={composeMode === 'SUPPORT' ? 'SUPPORT' : 'DIRECT'}
               disabled={sending}

@@ -49,7 +49,7 @@ const STATUS_LABELS: Record<string, string> = {
 export function ActivosFijosView() {
   const { canPerform, user } = useAuth();
   const canExportAssets = canPerform('ACCOUNTING_ASSETS', 'export');
-  const { displayCurrency, formatConvertedAmount, convertAmount, toBaseAmount, baseCurrency } = useCurrency();
+  const { displayCurrency, displayMode, displayCurrencyLabel, formatConvertedAmount, convertAmount, convertDisplayAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -108,11 +108,11 @@ export function ActivosFijosView() {
     try {
       const details = ids.length ? await fetchFixedAssetDetails(ids) : [];
       if (format === 'xlsx') {
-        exportFixedAssetsExcel(details, { toBase: toBaseAmount, baseCurrency });
+        exportFixedAssetsExcel(details, { convertAmount: convertDisplayAmount, currencyLabel: displayMode === 'ORIGINAL' ? 'original' : displayCurrency });
       } else {
         await generateConfiguredReportTemplate({
           targetKey: 'contabilidad.fixed-assets',
-          title: 'Reporte de activos fijos',
+          title: `Reporte de activos fijos · Moneda: ${displayMode === 'ORIGINAL' ? `original por activo · totales en ${displayCurrency}` : displayCurrencyLabel}`,
           tenantName: user?.tenantName || 'Mi Empresa',
           rows: details,
           columns: [

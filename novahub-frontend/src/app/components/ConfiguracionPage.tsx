@@ -775,6 +775,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
   const [baseCurrencySetting, setBaseCurrencySetting] = useState<'NIO' | 'USD'>('NIO');
   const [displayCurrencySetting, setDisplayCurrencySetting] = useState<'NIO' | 'USD'>('NIO');
   const [allowCurrencySwitch, setAllowCurrencySwitch] = useState(true);
+  const [decimalPlacesSetting, setDecimalPlacesSetting] = useState(2);
   const [isSavingCurrency, setIsSavingCurrency] = useState(false);
 
   // New role dialog state (removed unused)
@@ -979,18 +980,21 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
         baseCurrency?: 'NIO' | 'USD';
         displayCurrency?: 'NIO' | 'USD';
         allowCurrencySwitch?: boolean;
+        decimalPlaces?: number;
       }>('/tools/exchange-rate', {
         auto: exchangeRateAuto,
         rate: exchangeRateAuto ? undefined : parseFloat(manualRate),
         baseCurrency: baseCurrencySetting,
         displayCurrency: displayCurrencySetting,
         allowCurrencySwitch,
+        decimalPlaces: decimalPlacesSetting,
       });
       if (resp) {
       setCurrentBackendRate(resp.rate);
         setBaseCurrencySetting(resp.baseCurrency === 'USD' ? 'USD' : 'NIO');
         setDisplayCurrencySetting(resp.displayCurrency === 'USD' ? 'USD' : 'NIO');
         setAllowCurrencySwitch(resp.allowCurrencySwitch !== false);
+        setDecimalPlacesSetting(Number.isInteger(resp.decimalPlaces) && resp.decimalPlaces >= 2 && resp.decimalPlaces <= 6 ? resp.decimalPlaces : 2);
         await refreshCurrencyContext();
         toast.success('Configuración de moneda actualizada');
       }
@@ -1109,6 +1113,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
       if (currency.auto === false && currency.rate !== undefined) setManualRate(String(currency.rate));
       setDisplayCurrencySetting(currency.displayCurrency === 'USD' ? 'USD' : (currency.baseCurrency === 'USD' ? 'USD' : 'NIO'));
       setAllowCurrencySwitch(currency.allowCurrencySwitch !== false);
+      setDecimalPlacesSetting(Number.isInteger(currency.decimalPlaces) && currency.decimalPlaces >= 2 && currency.decimalPlaces <= 6 ? currency.decimalPlaces : 2);
     }
     setIndustryOptions(industries);
     setRoles(rolesList);
@@ -2109,6 +2114,29 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
                       >
                         <option value="NIO">NIO (Córdoba)</option>
                         <option value="USD">USD (Dólar)</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <Label htmlFor="currency-decimal-places" className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                          Precisión decimal de importes
+                        </Label>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Se aplica a los importes monetarios de esta empresa y sus sucursales.
+                        </p>
+                      </div>
+                      <select
+                        id="currency-decimal-places"
+                        value={decimalPlacesSetting}
+                        onChange={(event) => setDecimalPlacesSetting(Number(event.target.value))}
+                        disabled={!canEditCurrency}
+                        className="h-11 w-full max-w-full rounded-xl border border-input bg-background px-3 text-sm font-bold sm:w-32"
+                        aria-label="Cantidad de decimales para importes monetarios"
+                      >
+                        {[2, 3, 4, 5, 6].map((places) => (
+                          <option key={places} value={places}>{places} decimales</option>
+                        ))}
                       </select>
                     </div>
                   </div>

@@ -12,6 +12,7 @@ import { getApiErrorMessage } from '../../../services/api';
 import { generateHistoricalCashReportPDF } from '../../../utils/pdfGenerator';
 import { PdfDownloadButton } from '../../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../../utils/pdfDownloadFormats';
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
 const today = new Date();
 const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -27,7 +28,7 @@ const emptyReport: HistoricalCashReportData = {
   options: { registers: [], cashiers: [], branches: [] },
 };
 
-const amount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const amount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() });
 const signedAmount = (value: unknown) => `${Number(value || 0) >= 0 ? '+' : ''}${amount(value)}`;
 
 export function HistoricalCashReport({ initialRegisterId, canExport = true }: { initialRegisterId?: string; canExport?: boolean }) {

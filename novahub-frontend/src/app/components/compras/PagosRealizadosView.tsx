@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, Eye, Pencil, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Ban } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -8,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
 import { paymentsService, supplierInvoicesService } from '../../services/compras.service';
+import type { PaymentMadeSummary } from '../../services/compras.service';
+import { fetchAllReportPages } from '../../utils/reportPagination';
 import { storageService } from '../../services/storage.service';
 import type { PaymentMade, Supplier, SupplierInvoice } from '../../types';
 import type { SalesPaginationControls } from '../../types';
@@ -21,7 +24,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePurchasesIntegrationPolicy } from '../../hooks/usePurchasesIntegrationPolicy';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
@@ -40,10 +42,11 @@ import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalIn
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface Props {
   data: PaymentMade[];
-  summaryData?: PaymentMade[];
+  summaryData?: PaymentMadeSummary;
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading: boolean;
@@ -118,12 +121,12 @@ function groupMadePayments(rows: PaymentMade[], baseCurrency: string, globalRate
     const currencies = new Set(effective.map((row) => row.currency));
     const baseAmount = Number(effective.reduce((sum, row) => sum + (row.baseAmount !== undefined && row.baseAmount !== null
       ? Number(row.baseAmount)
-      : toBaseAmount(Number(row.amount || 0), row.currency, Number(row.exchangeRate || globalRate))), 0).toFixed(2));
+      : toBaseAmount(Number(row.amount || 0), row.currency, Number(row.exchangeRate || globalRate))), 0).toFixed(getCurrencyDecimalPlaces()));
     const sameCurrency = currencies.size <= 1;
     const isMixed = effective.length > 1 && (new Set(effective.map((row) => String(row.method || '').toUpperCase())).size > 1 || effective.some((row) => /pago mixto/i.test(String(row.notes || ''))));
     return {
       ...first,
-      amount: sameCurrency ? Number(effective.reduce((sum, row) => sum + Number(row.amount || 0), 0).toFixed(2)) : baseAmount,
+      amount: sameCurrency ? Number(effective.reduce((sum, row) => sum + Number(row.amount || 0), 0).toFixed(getCurrencyDecimalPlaces())) : baseAmount,
       currency: sameCurrency ? first.currency : baseCurrency as any,
       exchangeRate: sameCurrency ? Number(first.exchangeRate || 1) : 1,
       baseAmount,
@@ -143,7 +146,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
   const integrationPolicyReady = !integrationPolicyQuery.isFetching && !integrationPolicyQuery.isError && Boolean(integrationPolicyQuery.data);
   const accountingConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingRequired === true;
   const financeConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.financeEnabled === true;
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertDisplayAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-payments-layout', 'table', 24 * 365);
   const [highlightedTargetId, setHighlightedTargetId] = useState<string | null>(null);
@@ -163,8 +166,6 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
   const [paymentEvidenceFiles, setPaymentEvidenceFiles] = useState<File[]>([]);
   const consumedInvoiceDraftRef = useRef<Partial<PaymentMade> | null>(null);
   const groupedPayments = useMemo(() => groupMadePayments(data, baseCurrency, globalRate, toBaseAmount), [data, baseCurrency, globalRate, toBaseAmount]);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summaryGroupedPayments = useMemo(() => groupMadePayments(resolvedSummaryRows || [], baseCurrency, globalRate, toBaseAmount), [resolvedSummaryRows, baseCurrency, globalRate, toBaseAmount]);
 
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
   const paymentLine = (method: PurchasePaymentMethod, amount = 0, currency: 'NIO' | 'USD' = displayCurrency): PurchasePaymentLine => ({
@@ -225,7 +226,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
            initialCurrency,
            Number(prefilled.exchangeRate || 1),
            paymentLineRate(initialCurrency),
-         ).toFixed(2));
+         ).toFixed(getCurrencyDecimalPlaces()));
          setLocalDoc({
             supplierId: prefilled.supplierId || '',
            supplierInvoiceId: prefilled.supplierInvoiceId || '',
@@ -304,18 +305,33 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
   });
 
   const colFilters = useColumnFilters();
+  const hasValueColumnFilters = Object.values(colFilters.state).some((filter) => (filter.values || []).length > 0);
+  const tenantQueryKey = String((user as any)?.clientTenantId || (user as any)?.tenantId || 'current');
+  const filteredSummaryReportQuery = useQuery({
+    queryKey: ['purchases', 'payments-kpi-filtered-report', tenantQueryKey, searchTerm.trim(), selectedBranchId],
+    queryFn: ({ signal }) => fetchAllReportPages<PaymentMade>(
+      (filters) => paymentsService.getAll(filters as any, signal),
+      { pageSize: 5000, report: true, search: searchTerm.trim(), branchId: selectedBranchId || undefined },
+      signal,
+    ),
+    enabled: hasValueColumnFilters,
+    staleTime: 0,
+  });
   const filterGetters = {
     supplier: (row: PaymentMade) => row.supplier?.name || '-',
     date: (row: PaymentMade) => (row.date ? new Date(row.date).getTime() : null),
     amount: (row: PaymentMade) => Number(row.amount || 0),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
-  const summaryFilteredData = colFilters.applyTo(summaryGroupedPayments.filter((payment) => {
-    if (!normalizedSearchTerm) return true;
-    const linkedBill = bills.find((bill) => bill.id === payment.supplierInvoiceId);
-    const haystack = [payment.reference, payment.number, payment.supplier?.name, payment.supplier?.code, payment.notes, payment.displayReference, payment.date ? formatDateEs(payment.date) : '', payment.amount, Number(payment.amount || 0).toLocaleString(), getMethodLabel(payment.method), linkedBill?.number, linkedBill?.status].filter(Boolean).join(' ').toLowerCase();
-    return haystack.includes(normalizedSearchTerm);
-  }), filterGetters);
+  const summaryGroupedPayments = useMemo(
+    () => groupMadePayments(filteredSummaryReportQuery.data || [], baseCurrency, globalRate, toBaseAmount),
+    [filteredSummaryReportQuery.data, baseCurrency, globalRate, toBaseAmount],
+  );
+  const summaryFilteredData = hasValueColumnFilters ? colFilters.applyTo(summaryGroupedPayments, filterGetters) : [];
+  const kpiSummaryLoading = Boolean(summaryLoading || (hasValueColumnFilters && filteredSummaryReportQuery.isPending));
+  const kpiSummaryError = Boolean(summaryError || (hasValueColumnFilters && filteredSummaryReportQuery.isError));
+  const kpiSummaryAvailable = !kpiSummaryLoading && !kpiSummaryError
+    && (hasValueColumnFilters ? Array.isArray(filteredSummaryReportQuery.data) : Boolean(summaryData));
 
   const linkedInvoiceForPayment = (payment: PaymentMade) =>
     payment.supplierInvoice || bills.find((bill) => bill.id === payment.supplierInvoiceId) || null;
@@ -459,8 +475,13 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
       const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
       createReportWorkbook({
         fileName: 'pagos_realizados.xlsx',
-        sheets: [{ name: 'Pagos', rows: exportRows.map(row => ({ Referencia: row.displayReference || paymentReferenceLabel(row), Proveedor: row.supplier?.name || 'Sin proveedor', Fecha: row.date || '—', Comprometido: Number(expectedPaymentAmount(row) || 0), Pagado: Number(paidPaymentAmount(row) || 0), Moneda: linkedInvoiceForPayment(row)?.currency || row.currency || '—', Metodo: getMethodLabel(row.method) })) }],
-        filters: { Búsqueda: searchTerm || 'Todas', Sucursal: selectedBranchId || 'Todas', Método: 'Todos' },
+        sheets: [{ name: 'Pagos', rows: exportRows.map(row => {
+          const expectedCurrency = paymentExpectedCurrency(row);
+          const paidCurrency = linkedInvoiceForPayment(row)?.currency || row.currency || displayCurrency;
+          const paidRate = linkedInvoiceForPayment(row)?.exchangeRate || row.exchangeRate;
+          return { Referencia: row.displayReference || paymentReferenceLabel(row), Proveedor: row.supplier?.name || 'Sin proveedor', Fecha: row.date || '—', Comprometido: convertDisplayAmount(Number(expectedPaymentAmount(row) || 0), expectedCurrency, paymentExpectedRate(row)), Pagado: convertDisplayAmount(Number(paidPaymentAmount(row) || 0), paidCurrency, paidRate), Moneda: displayMode === 'ORIGINAL' ? paidCurrency : displayCurrency, Metodo: getMethodLabel(row.method) };
+        }) }],
+        filters: { Búsqueda: searchTerm || 'Todas', Sucursal: selectedBranchId || 'Todas', Método: 'Todos', Moneda: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
       });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el Excel de pagos realizados');
@@ -606,13 +627,13 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
       const lineCurrency = (value: unknown) => String(value || displayCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
       const currency = lineCurrency(firstLine.currency);
       const exchangeRate = currency === baseCurrency ? 1 : Number(firstLine.exchangeRate || globalRate);
-      const amount = Number(effectiveLines.reduce((sum, line) => sum + line.amount, 0).toFixed(2));
+      const amount = Number(effectiveLines.reduce((sum, line) => sum + line.amount, 0).toFixed(getCurrencyDecimalPlaces()));
       const isMixedPayment = effectiveLines.length > 1;
       const baseAmount = Number(effectiveLines.reduce((sum, line) => sum + toBaseAmount(
         line.amount,
         lineCurrency(line.currency),
         lineCurrency(line.currency) === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
-      ), 0).toFixed(2));
+      ), 0).toFixed(getCurrencyDecimalPlaces()));
       const payload = {
         ...localDoc,
         balanceApplicationType: paymentApplicationTarget === 'GENERAL_BALANCE' ? 'GENERAL_BALANCE' : null,
@@ -634,7 +655,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
               amount: line.amount,
               currency: lineCurrency(line.currency),
               exchangeRate: lineCurrency(line.currency) === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
-              baseAmount: Number(toBaseAmount(line.amount, lineCurrency(line.currency), lineCurrency(line.currency) === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)).toFixed(2)),
+              baseAmount: Number(toBaseAmount(line.amount, lineCurrency(line.currency), lineCurrency(line.currency) === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)).toFixed(getCurrencyDecimalPlaces())),
               bankAccountId: line.bankAccountId,
               reference: hasPaymentReferenceField(line.method) ? line.reference : undefined,
               notes: payload.notes,
@@ -669,8 +690,8 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
   const currentBills = bills.filter((b) => {
     if (!localDoc?.supplierId) return false;
     const sameSupplier = String(b.supplierId || '') === String(localDoc.supplierId || '');
-    const isOpen = ['PENDING', 'PARTIAL'].includes(String(b.status || '').toUpperCase());
-    return sameSupplier && isOpen;
+    const isOpen = ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(String(b.status || '').toUpperCase());
+    return sameSupplier && isOpen && Number(b.balance ?? b.total ?? 0) > 0.01;
   });
 
   const handleDownloadPaymentPdf = async (payment: PaymentMade, format: PdfDownloadFormat = 'configured') => {
@@ -796,8 +817,8 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                           const nextCurrency = displayCurrency;
                           const nextAmount = Number(b ? (b.balance ?? b.total) : (localDoc.amount || 0));
                           const nextAmountInPaymentCurrency = b
-                            ? Number(convertBetweenCurrencies(nextAmount, b.currency || baseCurrency, nextCurrency, Number(b.exchangeRate || 1), paymentLineRate(nextCurrency)).toFixed(2))
-                            : Number(convertBetweenCurrencies(nextAmount, localDoc.currency || displayCurrency, nextCurrency, Number(localDoc.exchangeRate || globalRate), paymentLineRate(nextCurrency)).toFixed(2));
+                            ? Number(convertBetweenCurrencies(nextAmount, b.currency || baseCurrency, nextCurrency, Number(b.exchangeRate || 1), paymentLineRate(nextCurrency)).toFixed(getCurrencyDecimalPlaces()))
+                            : Number(convertBetweenCurrencies(nextAmount, localDoc.currency || displayCurrency, nextCurrency, Number(localDoc.exchangeRate || globalRate), paymentLineRate(nextCurrency)).toFixed(getCurrencyDecimalPlaces()));
                           setLocalDoc({
                           ...localDoc,
                           supplierInvoiceId: val,
@@ -809,7 +830,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                           setPartialPaymentEnabled(false);
                           setPaymentLines((current) => current.map((line, index) => index === 0 ? {
                             ...line,
-                            amount: b ? Number(convertBetweenCurrencies(nextAmount, b.currency || baseCurrency, line.currency, Number(b.exchangeRate || 1), Number(line.exchangeRate || paymentLineRate(line.currency))).toFixed(2)) : nextAmountInPaymentCurrency,
+                            amount: b ? Number(convertBetweenCurrencies(nextAmount, b.currency || baseCurrency, line.currency, Number(b.exchangeRate || 1), Number(line.exchangeRate || paymentLineRate(line.currency))).toFixed(getCurrencyDecimalPlaces())) : nextAmountInPaymentCurrency,
                           } : line));
                       }}
                       placeholder={localDoc.supplierId ? "Seleccionar factura abierta" : "Primero seleccione un proveedor"}
@@ -879,7 +900,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                                 const nextRate = paymentLineRate(newCurrency);
                                   return {
                                     ...item,
-                                    amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, newCurrency, previousRate, nextRate).toFixed(2)),
+                                    amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, newCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())),
                                     currency: newCurrency,
                                     exchangeRate: nextRate,
                                     bankAccountId: undefined,
@@ -897,8 +918,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                                 inputMode="decimal"
                                 min="0"
                                 value={Number(line.amount || 0) === 0 ? '' : formatDecimalInput(line.amount)}
-                                onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeDecimalInput(event.target.value) } : item))}
-                              />
+                                onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeDecimalInput(event.target.value) } : item))} currencyPrecision />
                             </div>
                             <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                           </div>
@@ -996,28 +1016,38 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const paidTotalInDisplayCurrency = summaryFilteredData.reduce(
-    (acc, payment) => acc + toDisplayAmount(Number(payment.amount ?? payment.baseAmount ?? 0), payment.currency, payment.exchangeRate),
-    0,
-  );
-  const originalPaidAmounts = summarizeAmountsByCurrency(
-    summaryFilteredData,
-    (payment) => Number(payment.amount ?? payment.baseAmount ?? 0),
-    (payment) => payment.currency,
-    baseCurrency,
-  );
+  const paidTotalInDisplayCurrency = hasValueColumnFilters
+    ? summaryFilteredData.reduce(
+      (acc, payment) => acc + toDisplayAmount(Number(payment.amount ?? payment.baseAmount ?? 0), payment.currency, payment.exchangeRate),
+      0,
+    )
+    : (summaryData?.valuationGroups || []).reduce(
+      (acc, group) => acc + toDisplayAmount(Number(group.amount || 0), group.currency, group.exchangeRate),
+      0,
+    );
+  const originalPaidAmounts = hasValueColumnFilters
+    ? summarizeAmountsByCurrency(
+      summaryFilteredData,
+      (payment) => Number(payment.amount ?? payment.baseAmount ?? 0),
+      (payment) => payment.currency,
+      baseCurrency,
+    )
+    : summaryData?.currencyTotals || [];
+  const summaryTransactionCount = hasValueColumnFilters
+    ? summaryFilteredData.length
+    : Number(summaryData?.transactionCount || 0);
 
   const kpis = [
-    { title: 'Transacciones', value: resolvedSummaryRows ? summaryFilteredData.length : '—', icon: Hash, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Conciliados', value: resolvedSummaryRows ? summaryFilteredData.length : '—', icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Transacciones', value: kpiSummaryAvailable ? summaryTransactionCount : '—', icon: Hash, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: 'Conciliados', value: kpiSummaryAvailable ? summaryTransactionCount : '—', icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
-        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={kpiSummaryLoading}>
+        <KpiSummaryNotice loading={kpiSummaryLoading} error={kpiSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {!resolvedSummaryRows ? <PurchaseKpiCard title="Pagos Realizados" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" /> : displayMode === 'ORIGINAL'
+        {!kpiSummaryAvailable ? <PurchaseKpiCard title="Pagos Realizados" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" /> : displayMode === 'ORIGINAL'
           ? originalPaidAmounts.map((summary) => <PurchaseKpiCard key={`paid-${summary.currency}`} title={`Pagos Realizados (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />)
           : <PurchaseKpiCard title={`Pagos Realizados (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(paidTotalInDisplayCurrency, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />}
         {kpis.map((k, i) => (

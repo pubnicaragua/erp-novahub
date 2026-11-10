@@ -24,6 +24,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { formatCurrencyNumber } from '../../utils/currency';
 import { AccountMovementsDetail } from './AccountMovementsDetail';
 import { AccountChecklistDialog } from './AccountChecklistDialog';
 import { DateField } from '../ui/DateField';
@@ -32,6 +33,8 @@ import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { ExportMenu } from '../ui/ExportMenu';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { todayIso } from '../../utils/dateFormat';
+import { useCurrency } from '../../contexts/CurrencyContext';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -322,6 +325,10 @@ function buildTrialBalanceTree(
 
 export function BalanceComprobacionView() {
   const { user, canPerform } = useAuth();
+  const { baseCurrency, displayCurrency, displayMode, convertCurrentAmount } = useCurrency();
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const toReportAmount = (amount: number) => displayMode === 'ORIGINAL' ? Number(amount || 0) : convertCurrentAmount(Number(amount || 0), baseCurrency);
+  const formatReportAmount = (amount: number) => toReportAmount(amount).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() });
   const today = todayIso(user?.clientTenant?.timeZone);
   const canExportTrialBalance = canPerform('ACCOUNTING_TRIAL_BALANCE', 'export');
   const [dateFrom, setDateFrom] = useState(`${today.slice(0, 4)}-01-01`);
@@ -496,7 +503,7 @@ export function BalanceComprobacionView() {
   const differenceAbs = Math.abs(difference);
   const higherSide = difference > 0 ? 'los débitos superan a los créditos' : 'los créditos superan a los débitos';
 
-  const fmt = (n: number) => n.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (n: number) => formatCurrencyNumber(n);
 
   const balanceStatusLabel = isBalanced
     ? '✓ BALANCEADO — Débitos = Créditos'
@@ -511,9 +518,9 @@ export function BalanceComprobacionView() {
           codigo: n.codigo,
           cuenta: '   '.repeat(n.level) + n.cuenta,
           tipo: n.tipo,
-          debitos: n.debitos,
-          creditos: n.creditos,
-          saldo: n.saldo,
+          debitos: toReportAmount(n.debitos),
+          creditos: toReportAmount(n.creditos),
+          saldo: toReportAmount(n.saldo),
         });
         if (n.children.length > 0) {
           out.push(...flattenForPdf(n.children));
@@ -529,10 +536,11 @@ export function BalanceComprobacionView() {
         tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
         dateFrom,
         dateTo,
+        currencyLabel: displayMode === 'ORIGINAL' ? `${baseCurrency} (base)` : reportCurrency,
         format: format || 'configured',
         totals: {
-          debitos: fmt(totalDebitos),
-          creditos: fmt(totalCreditos),
+          debitos: formatReportAmount(totalDebitos),
+          creditos: formatReportAmount(totalCreditos),
         },
       });
       toast.success(format === 'novahub-format' ? 'Balance de comprobación exportado con NovaHubFormat' : 'Balance de comprobación generado con la plantilla de esta vista');
@@ -552,9 +560,9 @@ export function BalanceComprobacionView() {
           Tipo: accountTypeLabel(n.tipo),
           Nivel: n.level + 1,
           'Tipo de cuenta': n.isLeaf ? 'Detalle' : 'Agrupadora',
-          Débitos: n.debitos,
-          Créditos: n.creditos,
-          Saldo: n.saldo,
+          [`Débitos (${reportCurrency})`]: toReportAmount(n.debitos),
+          [`Créditos (${reportCurrency})`]: toReportAmount(n.creditos),
+          [`Saldo (${reportCurrency})`]: toReportAmount(n.saldo),
         });
         if (n.children.length > 0) {
           out.push(...flattenForExcel(n.children));
@@ -571,9 +579,10 @@ export function BalanceComprobacionView() {
       ['Reporte', 'Balance de comprobación'],
       ['Desde', dateFrom || ''],
       ['Hasta', dateTo || ''],
-      ['Total débitos', totalDebitos],
-      ['Total créditos', totalCreditos],
-      ['Diferencia', difference],
+      ['Moneda', displayMode === 'ORIGINAL' ? `${baseCurrency} (moneda base de saldos agregados)` : reportCurrency],
+      ['Total débitos', toReportAmount(totalDebitos)],
+      ['Total créditos', toReportAmount(totalCreditos)],
+      ['Diferencia', toReportAmount(difference)],
       ['Estado', isBalanced ? 'Balanceado' : 'No balanceado'],
     ]), 'Resumen');
     XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['balance_comprobacion'], 'xlsx', dateFrom, dateTo));

@@ -65,13 +65,22 @@ export function useMktConfig() {
 }
 
 /** Exporta el reporte de Marketing a Excel; lo comparten Analítica y la pestaña Marketing de Reportes. */
-export function exportMarketingReportExcel(d: MktReport, filters: { from: string; to: string; currency: string }) {
+export function exportMarketingReportExcel(d: MktReport, filters: {
+  from: string;
+  to: string;
+  currency: string;
+  reportCurrency?: string;
+  convertAmount?: (amount: number, sourceCurrency: string) => number;
+}) {
+  const amount = (value: unknown) => filters.convertAmount
+    ? filters.convertAmount(Number(value || 0), filters.currency)
+    : Number(value || 0);
   return createReportWorkbook({
     fileName: buildDatedDownloadFileName(['reporte_marketing'], 'xlsx'),
-    filters: { Desde: filters.from, Hasta: filters.to, Moneda: filters.currency },
+    filters: { Desde: filters.from, Hasta: filters.to, Moneda: filters.reportCurrency || filters.currency },
     sheets: [
-      { name: 'Campañas', rows: d.campaigns.map((c) => ({ Código: c.code, Campaña: c.name, Estado: CAMPAIGN_STATUS_LABEL[c.status], Presupuesto: c.budget, Ejecutado: c.spent, Alcance: c.metrics.REACH ?? 0, Leads: c.metrics.LEADS ?? 0, Inversión: c.metrics.SPEND ?? 0, Ingresos: c.metrics.REVENUE ?? 0, ROAS: c.roas === null ? '' : Number(c.roas.toFixed(2)) })) },
-      { name: 'Canales', rows: d.channels.map((c) => ({ Canal: c.channel, Alcance: c.metrics.REACH ?? 0, Clics: c.metrics.CLICKS ?? 0, Leads: c.metrics.LEADS ?? 0, Inversión: c.metrics.SPEND ?? 0, Ingresos: c.metrics.REVENUE ?? 0, ROAS: c.roas === null ? '' : Number(c.roas.toFixed(2)) })) },
+      { name: 'Campañas', rows: d.campaigns.map((c) => ({ Código: c.code, Campaña: c.name, Estado: CAMPAIGN_STATUS_LABEL[c.status], [`Presupuesto (${filters.reportCurrency || filters.currency})`]: amount(c.budget), [`Ejecutado (${filters.reportCurrency || filters.currency})`]: amount(c.spent), Alcance: c.metrics.REACH ?? 0, Leads: c.metrics.LEADS ?? 0, [`Inversión (${filters.reportCurrency || filters.currency})`]: amount(c.metrics.SPEND), [`Ingresos (${filters.reportCurrency || filters.currency})`]: amount(c.metrics.REVENUE), ROAS: c.roas === null ? '' : Number(c.roas.toFixed(2)) })) },
+      { name: 'Canales', rows: d.channels.map((c) => ({ Canal: c.channel, Alcance: c.metrics.REACH ?? 0, Clics: c.metrics.CLICKS ?? 0, Leads: c.metrics.LEADS ?? 0, [`Inversión (${filters.reportCurrency || filters.currency})`]: amount(c.metrics.SPEND), [`Ingresos (${filters.reportCurrency || filters.currency})`]: amount(c.metrics.REVENUE), ROAS: c.roas === null ? '' : Number(c.roas.toFixed(2)) })) },
       { name: 'Historial', rows: d.history.map((h) => ({ Fecha: fmtDate(h.createdAt, true), Tipo: h.entityType, Acción: h.action, Detalle: h.summary })) },
     ],
   });

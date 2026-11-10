@@ -8,8 +8,9 @@ import { performanceService } from '../../services/performance.service';
 import { EmptyState, ErrorState, Panel, controlClass } from '../organizacion/OrgBits';
 import { errorMessage, formatMinutes } from '../organizacion/organizacion.utils';
 import { longCivilDate, shiftCivilDate } from './seguimiento.utils';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
-const money = (value: number) => new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 }).format(value);
+const money = (value: number) => new Intl.NumberFormat('es-NI', { maximumFractionDigits: getCurrencyDecimalPlaces() }).format(value);
 
 /** Cuánto genera el equipo en cada hora del día: oportunidades, visitas, mensajes, facturas y respuestas. */
 export function TeamHourlyTab() {

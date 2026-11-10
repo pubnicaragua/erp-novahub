@@ -659,11 +659,11 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
           </div>
           {canManageFinancials && <div>
             <Label>Presupuesto proyectado</Label>
-            <Input disabled={Boolean(editing) && !canEditCosts} data-testid="projects-form-planned-budget" type="number" min={0} value={form.plannedBudget} onChange={(e) => setForm((f: any) => ({ ...f, plannedBudget: e.target.value }))} placeholder="0.00" />
+            <Input disabled={Boolean(editing) && !canEditCosts} data-testid="projects-form-planned-budget" type="number" min={0} value={form.plannedBudget} onChange={(e) => setForm((f: any) => ({ ...f, plannedBudget: e.target.value }))} placeholder="0.00" currencyPrecision />
           </div>}
           {canManageFinancials && <div>
             <Label>Ingresos proyectados</Label>
-            <Input disabled={Boolean(editing) && !canEditCosts} type="number" min={0} value={form.plannedIncome} onChange={(e) => setForm((f: any) => ({ ...f, plannedIncome: e.target.value }))} placeholder="0.00" />
+            <Input disabled={Boolean(editing) && !canEditCosts} type="number" min={0} value={form.plannedIncome} onChange={(e) => setForm((f: any) => ({ ...f, plannedIncome: e.target.value }))} placeholder="0.00" currencyPrecision />
           </div>}
           {canManageFinancials && <div>
             <Label>Moneda</Label>

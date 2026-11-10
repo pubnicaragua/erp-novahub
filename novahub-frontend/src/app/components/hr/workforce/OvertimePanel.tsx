@@ -75,7 +75,7 @@ function CostsEditor() {
             <div className="flex flex-wrap items-end gap-2">
               <div className="space-y-1"><Label htmlFor="oc-kind">Tipo</Label><select id="oc-kind" className={`${field} w-40`} value={kind} onChange={(e) => { setKind(e.target.value); setLabel({ ELECTRICITY: 'Luz', WATER: 'Agua', INTERNET: 'Internet', RENT: 'Alquiler', OTHER: '' }[e.target.value] ?? ''); }}><option value="ELECTRICITY">Luz</option><option value="WATER">Agua</option><option value="INTERNET">Internet</option><option value="RENT">Alquiler</option><option value="OTHER">Otro</option></select></div>
               <div className="space-y-1"><Label htmlFor="oc-label">Nombre</Label><Input id="oc-label" className="w-40" value={label} maxLength={80} onChange={(e) => setLabel(e.target.value)} /></div>
-              <div className="space-y-1"><Label htmlFor="oc-amount">Monto mensual</Label><Input id="oc-amount" className="w-36" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+              <div className="space-y-1"><Label htmlFor="oc-amount">Monto mensual</Label><Input id="oc-amount" className="w-36" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} currencyPrecision /></div>
               <Button type="button" disabled={busy || !label.trim() || amount === ''} onClick={() => void run(async () => { await workforceService.saveCost({ label: label.trim(), kind, monthlyAmount: Number(amount), currency: data.currency }); setAmount(''); }, 'Costo agregado')}>Agregar</Button>
             </div>
           )}
@@ -129,9 +129,9 @@ export function OvertimePanel({ employees }: { employees: EmployeeOption[] }) {
             <div className="space-y-1.5"><Label htmlFor="ot-date">Fecha</Label><Input id="ot-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
             {scenario === 'OVERTIME' && <><div className="space-y-1.5"><Label htmlFor="ot-start">Desde las</Label><Input id="ot-start" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} /></div>
               <div className="space-y-1.5"><Label htmlFor="ot-hours">Horas</Label><Input id="ot-hours" type="number" min="1" max="12" step="0.5" value={hours} onChange={(e) => setHours(e.target.value)} /></div></>}
-            <div className="space-y-1.5"><Label htmlFor="ot-transport">Transporte</Label><Input id="ot-transport" type="number" min="0" step="0.01" value={transport} onChange={(e) => setTransport(e.target.value)} placeholder="0" /></div>
-            <div className="space-y-1.5"><Label htmlFor="ot-meal">Cena o comida</Label><Input id="ot-meal" type="number" min="0" step="0.01" value={meal} onChange={(e) => setMeal(e.target.value)} placeholder="0" /></div>
-            <div className="space-y-1.5"><Label htmlFor="ot-other">Otros</Label><Input id="ot-other" type="number" min="0" step="0.01" value={other} onChange={(e) => setOther(e.target.value)} placeholder="0" /></div>
+            <div className="space-y-1.5"><Label htmlFor="ot-transport">Transporte</Label><Input id="ot-transport" type="number" min="0" step="0.01" value={transport} onChange={(e) => setTransport(e.target.value)} placeholder="0" currencyPrecision /></div>
+            <div className="space-y-1.5"><Label htmlFor="ot-meal">Cena o comida</Label><Input id="ot-meal" type="number" min="0" step="0.01" value={meal} onChange={(e) => setMeal(e.target.value)} placeholder="0" currencyPrecision /></div>
+            <div className="space-y-1.5"><Label htmlFor="ot-other">Otros</Label><Input id="ot-other" type="number" min="0" step="0.01" value={other} onChange={(e) => setOther(e.target.value)} placeholder="0" currencyPrecision /></div>
             <div className="space-y-1.5"><Label htmlFor="ot-margin">Margen sobre la venta (%)</Label><Input id="ot-margin" type="number" min="1" max="100" value={margin} onChange={(e) => setMargin(e.target.value)} /></div>
           </div>
           <div className="space-y-2">

@@ -36,6 +36,7 @@ import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface GridRow extends BatchPackageRow {
   id: string;
@@ -418,7 +419,7 @@ export function BatchReception() {
           </Card>
           <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total compra</p>
-            <p className="mt-1 text-2xl font-black text-primary">${Number(batch.totalAmount || 0).toFixed(2)}</p>
+            <p className="mt-1 text-2xl font-black text-primary">${Number(batch.totalAmount || 0).toFixed(getCurrencyDecimalPlaces())}</p>
           </Card>
           <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Peso real</p>
@@ -440,7 +441,7 @@ export function BatchReception() {
             <p className="mt-2 text-sm">
               {confirmResult.invoiceSkipped
                 ? `Se omitió la factura de compra (la referencia no tiene proveedor). ${confirmResult.linkedPackages} paquete(s) marcados como comprados.`
-                : `Factura de proveedor <b>${confirmResult.invoice?.number}</b> (${Number(confirmResult.invoice?.total || 0).toFixed(2)}) con <b>${confirmResult.linkedPackages}</b> paquete(s).`}
+                : `Factura de proveedor <b>${confirmResult.invoice?.number}</b> (${Number(confirmResult.invoice?.total || 0).toFixed(getCurrencyDecimalPlaces())}) con <b>${confirmResult.linkedPackages}</b> paquete(s).`}
             </p>
           </Card>
         )}
@@ -513,9 +514,9 @@ export function BatchReception() {
                           <TableCell><Input value={r.item || ''} onChange={(e) => updateRow(r.id, { item: e.target.value })} placeholder="Ej. PAQUETERIA AEREA" className="h-8 rounded-lg text-xs" /></TableCell>
                           <TableCell><Input type="number" min={0} step="0.01" value={r.physicalWeight ?? ''} onChange={(e) => updateRow(r.id, { physicalWeight: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" /></TableCell>
                           <TableCell><Input type="number" min={1} step="1" value={r.quantity ?? 1} onChange={(e) => updateRow(r.id, { quantity: e.target.value === '' ? 1 : Number(e.target.value) })} className="h-8 rounded-lg text-xs" /></TableCell>
-                          <TableCell><Input type="number" min={0} step="0.01" value={r.unitPrice ?? ''} onChange={(e) => updateRow(r.id, { unitPrice: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" /></TableCell>
+                          <TableCell><Input type="number" min={0} step="0.01" value={r.unitPrice ?? ''} onChange={(e) => updateRow(r.id, { unitPrice: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" currencyPrecision /></TableCell>
                           <TableCell><Input type="number" min={0} step="0.01" value={r.discount ?? ''} onChange={(e) => updateRow(r.id, { discount: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" /></TableCell>
-                          <TableCell><Input type="number" min={0} step="0.01" value={r.subtotal ?? ''} onChange={(e) => updateRow(r.id, { subtotal: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" /></TableCell>
+                          <TableCell><Input type="number" min={0} step="0.01" value={r.subtotal ?? ''} onChange={(e) => updateRow(r.id, { subtotal: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" currencyPrecision /></TableCell>
                           {!batch.warehouseId && <TableCell><Input value={r.warehouseValue || ''} onChange={(e) => updateRow(r.id, { warehouseValue: e.target.value })} placeholder="Bodega" className="h-8 rounded-lg text-xs" /></TableCell>}
                           <TableCell><Input value={r.trackingCode || ''} onChange={(e) => updateRow(r.id, { trackingCode: e.target.value })} placeholder="Código (puede ir vacío)" className="h-8 rounded-lg font-mono text-xs" /></TableCell>
                           <TableCell><Button variant="ghost" size="sm" className="rounded-lg" onClick={() => removeRow(r.id)}><Trash2 className="size-4 text-destructive" /></Button></TableCell>
@@ -526,7 +527,7 @@ export function BatchReception() {
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[11px] text-muted-foreground">
-                    {rows.length} fila(s) · {totals.weight.toFixed(2)} lb · ${totals.amount.toFixed(2)}
+                    {rows.length} fila(s) · {totals.weight.toFixed(2)} lb · ${totals.amount.toFixed(getCurrencyDecimalPlaces())}
                   </p>
                   <div className="flex gap-2">
                     <Button variant="outline" className="rounded-xl text-xs" onClick={() => setRows([])}>Limpiar</Button>
@@ -569,7 +570,7 @@ export function BatchReception() {
                 <TableRow key={p.id}>
                   <TableCell className="font-mono text-xs font-bold text-primary">{p.trackingCode || '—'}</TableCell>
                   <TableCell className="text-xs">{p.skuName || '—'}</TableCell>
-                  <TableCell className="text-right text-xs font-black">${Number(p.costPrice ?? p.purchasePrice ?? 0).toFixed(2)}</TableCell>
+                  <TableCell className="text-right text-xs font-black">${Number(p.costPrice ?? p.purchasePrice ?? 0).toFixed(getCurrencyDecimalPlaces())}</TableCell>
                   <TableCell className="text-right text-xs">{p.supplierWeight ?? '—'} {p.supplierWeight != null ? p.weightUnit : ''}</TableCell>
                   <TableCell className="text-right text-xs">{p.physicalWeight} {p.weightUnit}</TableCell>
                   <TableCell className="text-right text-xs font-black">{p.billableWeight} {p.weightUnit}</TableCell>
@@ -593,7 +594,7 @@ export function BatchReception() {
             </SheetHeader>
             <div className="space-y-3 px-4 py-4">
               <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-xs">
-                <p><b>{detail.packages.length}</b> paquete(s) · total <b>${Number(batch.totalAmount || 0).toFixed(2)}</b></p>
+                <p><b>{detail.packages.length}</b> paquete(s) · total <b>${Number(batch.totalAmount || 0).toFixed(getCurrencyDecimalPlaces())}</b></p>
                 <p className="mt-1 text-muted-foreground">Proveedor: {batch.provider || 'Sin proveedor (se omite la factura)'}</p>
               </div>
               <div>
@@ -693,7 +694,7 @@ export function BatchReception() {
                 <TableCell className="py-3 text-right text-xs font-black">{b.packageCount}</TableCell>
                 <TableCell className="py-3 text-right text-xs">{Number(b.totalPhysicalWeight || 0).toFixed(2)} lb</TableCell>
                 <TableCell className="py-3 text-right text-xs">{Number(b.totalSupplierWeight || 0).toFixed(2)} lb</TableCell>
-                <TableCell className="py-3 text-right text-xs font-black">${Number(b.totalAmount || 0).toFixed(2)}</TableCell>
+                <TableCell className="py-3 text-right text-xs font-black">${Number(b.totalAmount || 0).toFixed(getCurrencyDecimalPlaces())}</TableCell>
                 <TableCell className="py-3 text-xs">{b.invoiceNumber || '—'}</TableCell>
                 <TableCell className="py-3">
                   <Badge variant="outline" className={`rounded-lg text-[10px] ring-1 ${b.status === 'OPEN' ? 'ring-amber-300 text-amber-600' : 'ring-emerald-300 text-emerald-600'}`}>

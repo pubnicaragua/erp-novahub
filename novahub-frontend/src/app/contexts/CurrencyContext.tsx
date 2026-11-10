@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { safeSetItem } from '../services/safe-storage';
+import { resolveDisplayCurrencyAmount } from '../utils/currency-display';
+import { formatCurrencyNumber, roundCurrencyNumber, setCurrencyDecimalPlaces as setGlobalCurrencyDecimalPlaces } from '../utils/currency';
 import { useAuth } from './AuthContext';
 
 export type Currency = 'USD' | 'NIO';
@@ -35,6 +37,7 @@ interface CurrencyContextType {
   baseCurrency: DisplayCurrency;
   lockedDisplayCurrency: DisplayCurrency;
   currencyInteractionEnabled: boolean;
+  decimalPlaces: number;
   formatAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => string;
   formatHistoricalAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => string;
   formatCurrentAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency) => string;
@@ -43,6 +46,7 @@ interface CurrencyContextType {
   formatExplicitAmount: (amount: number, targetCurrency: Currency) => string;
   convertAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => number;
   convertCurrentAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency) => number;
+  convertDisplayAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => number;
   convertBetweenCurrencies: (amount: number, sourceCurrency: MonetarySourceCurrency, targetCurrency: MonetarySourceCurrency, sourceExchangeRate?: number, targetExchangeRate?: number) => number;
   toBaseAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => number;
   toCurrentBaseAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency) => number;
@@ -66,6 +70,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     return saved === 'USD' ? 'USD' : 'NIO';
   });
   const [exchangeRate, setExchangeRate] = useState<number>(36.5);
+  const [decimalPlaces, setDecimalPlaces] = useState(2);
   const [baseCurrency, setBaseCurrency] = useState<DisplayCurrency>(() => {
     const saved = (localStorage.getItem(STORAGE_BASE_CURRENCY_KEY) || '').toUpperCase();
     return saved === 'USD' ? 'USD' : 'NIO';
@@ -105,6 +110,8 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       setDisplayModeState(savedDisplayMode === 'USD' || savedDisplayMode === 'NIO' || savedDisplayMode === 'ORIGINAL' ? savedDisplayMode : 'DEFAULT');
       setShowValuationLegendState(localStorage.getItem(STORAGE_VALUATION_LEGEND_KEY) === 'true');
       setExchangeRate(36.5);
+      setDecimalPlaces(2);
+      setGlobalCurrencyDecimalPlaces(2);
     };
     const timer = window.setTimeout(syncSessionCurrency, 0);
     return () => window.clearTimeout(timer);
@@ -127,6 +134,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
         displayCurrency?: DisplayCurrency;
         baseCurrency?: DisplayCurrency;
         allowCurrencySwitch?: boolean;
+        decimalPlaces?: number;
       }>('/tools/exchange-rate');
 
       if (data) {
@@ -145,6 +153,9 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
         const allowCurrencySwitch = data.allowCurrencySwitch !== false;
         setCurrencyInteractionEnabled(allowCurrencySwitch);
         safeSetItem(STORAGE_CURRENCY_SWITCH_ENABLED_KEY, allowCurrencySwitch ? 'true' : 'false');
+
+        const nextDecimalPlaces = setGlobalCurrencyDecimalPlaces(data.decimalPlaces);
+        setDecimalPlaces(nextDecimalPlaces);
 
         // La moneda configurada del tenant es el valor operativo por defecto,
         // pero no debe sobrescribir una selección de presentación persistida.
@@ -222,10 +233,10 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     const from = normalizeCurrency(sourceCurrency);
     const to = displayCurrency;
 
-    if (from === to) return safeAmount;
+    if (from === to) return roundCurrencyNumber(safeAmount);
 
     const rate = resolveRate(from, sourceExchangeRate);
-    return from === 'USD' ? safeAmount * rate : safeAmount / rate;
+    return roundCurrencyNumber(from === 'USD' ? safeAmount * rate : safeAmount / rate);
   };
 
   const convertCurrentAmount = (
@@ -235,10 +246,10 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     const parsedAmount = Number(amount);
     const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
     const from = normalizeCurrency(sourceCurrency);
-    if (from === displayCurrency) return safeAmount;
+    if (from === displayCurrency) return roundCurrencyNumber(safeAmount);
 
     const rate = exchangeRate > 0 ? exchangeRate : 36.5;
-    return from === 'USD' ? safeAmount * rate : safeAmount / rate;
+    return roundCurrencyNumber(from === 'USD' ? safeAmount * rate : safeAmount / rate);
   };
 
   const toBaseAmount = (
@@ -249,10 +260,10 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     const parsedAmount = Number(amount);
     const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
     const from = normalizeCurrency(sourceCurrency);
-    if (from === baseCurrency) return safeAmount;
+    if (from === baseCurrency) return roundCurrencyNumber(safeAmount);
 
     const rate = resolveRate(from, sourceExchangeRate);
-    return from === 'USD' ? safeAmount * rate : safeAmount / rate;
+    return roundCurrencyNumber(from === 'USD' ? safeAmount * rate : safeAmount / rate);
   };
 
   const toCurrentBaseAmount = (
@@ -262,10 +273,10 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     const parsedAmount = Number(amount);
     const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
     const from = normalizeCurrency(sourceCurrency);
-    if (from === baseCurrency) return safeAmount;
+    if (from === baseCurrency) return roundCurrencyNumber(safeAmount);
 
     const rate = exchangeRate > 0 ? exchangeRate : 36.5;
-    return from === 'USD' ? safeAmount * rate : safeAmount / rate;
+    return roundCurrencyNumber(from === 'USD' ? safeAmount * rate : safeAmount / rate);
   };
 
   const convertBetweenCurrencies = (
@@ -279,17 +290,22 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
     const source = normalizeCurrency(sourceCurrency);
     const target = normalizeCurrency(targetCurrency);
-    if (source === target) return safeAmount;
+    if (source === target) return roundCurrencyNumber(safeAmount);
 
-    const baseAmount = toBaseAmount(safeAmount, source, sourceExchangeRate);
-    if (target === baseCurrency) return baseAmount;
+    const baseAmount = source === baseCurrency
+      ? safeAmount
+      : (() => {
+          const sourceRate = resolveRate(source, sourceExchangeRate);
+          return source === 'USD' ? safeAmount * sourceRate : safeAmount / sourceRate;
+        })();
+    if (target === baseCurrency) return roundCurrencyNumber(baseAmount);
 
     const targetRate = resolveRate(target, targetExchangeRate);
     const baseRate = baseCurrency === 'USD' ? 1 / targetRate : targetRate;
-    return baseRate > 0 ? baseAmount / baseRate : baseAmount;
+    return roundCurrencyNumber(baseRate > 0 ? baseAmount / baseRate : baseAmount);
   };
 
-  const formatNumber = (value: number) => value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatNumber = (value: number) => formatCurrencyNumber(value, decimalPlaces);
   const currencySymbol = (value: DisplayCurrency) => value === 'USD' ? '$' : 'C$';
   const formatInCurrency = (amount: number, targetCurrency: DisplayCurrency): string => (
     `${currencySymbol(targetCurrency)} ${formatNumber(amount)}`
@@ -400,6 +416,22 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       ? formatDefaultAmount(amount, sourceCurrency, sourceExchangeRate, valuationMode)
       : formatSelectedAmount(amount, sourceCurrency, sourceExchangeRate);
 
+  const convertDisplayAmount = (
+    amount: number,
+    sourceCurrency?: MonetarySourceCurrency,
+    sourceExchangeRate?: number,
+  ): number => resolveDisplayCurrencyAmount({
+    amount,
+    sourceCurrency: normalizeCurrency(sourceCurrency),
+    sourceExchangeRate,
+    displayMode,
+    valuationMode,
+    displayCurrency,
+    lockedDisplayCurrency,
+    convertBetweenCurrencies,
+    convertCurrentAmount,
+  });
+
   const formatAmount = (
     amount: number,
     sourceCurrency?: MonetarySourceCurrency,
@@ -438,6 +470,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
         baseCurrency,
         lockedDisplayCurrency,
         currencyInteractionEnabled,
+        decimalPlaces,
         formatAmount,
         formatHistoricalAmount,
         formatCurrentAmount,
@@ -446,6 +479,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
         formatExplicitAmount,
         convertAmount,
         convertCurrentAmount,
+        convertDisplayAmount,
         convertBetweenCurrencies,
         toBaseAmount,
         toCurrentBaseAmount,

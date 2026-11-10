@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import * as Sentry from '@sentry/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/button';
 import { Tabs, TabsContent } from './ui/tabs';
@@ -131,15 +132,11 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
       const reportFilters = { pageSize: 5000, report: true };
       switch (activeTab) {
         case 'dashboard': {
-          const reportFilters = { pageSize: 5000, report: true };
-          const [stats, employees, departments, leaveRequests, reviews] = await Promise.all([
+          const [stats, departments] = await Promise.all([
             hrService.getDashboardStats(signal),
-            fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
             hrService.getDepartments(signal),
-            fetchAllReportPages((filters) => hrService.getLeaveRequests({ ...filters, status: 'PENDING' }, signal), reportFilters, signal),
-            fetchAllReportPages((filters) => hrService.getPerformanceReviews(undefined, signal, filters), reportFilters, signal),
           ]);
-          return { stats, employees, departments, leaveRequests, reviews };
+          return { stats, employees: [], departments, leaveRequests: stats.pendingLeavePreview || [], reviews: [] };
         }
         case 'empleados': {
           const [employees, departments, positions] = await Promise.all([
@@ -204,7 +201,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
         case 'kpi':
           {
             const [employees, departments] = await Promise.all([
-              fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
+              hrService.getKpiEmployeeLookup(signal),
               hrService.getDepartments(signal),
             ]);
             return { employees, departments };
@@ -238,6 +235,34 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
   const loading = !SELF_LOADING_TABS.includes(activeTab) && hrQuery.isLoading;
   const queryError = hrQuery.error as any;
   const errorMessage = queryError?.response?.data?.message || queryError?.message || 'No se pudieron cargar los datos de Recursos Humanos.';
+  const dashboardStartedAt = useRef<number | null>(null);
+  const dashboardLoadSpan = useRef<ReturnType<typeof Sentry.startInactiveSpan> | null>(null);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard') return undefined;
+    dashboardStartedAt.current = performance.now();
+    dashboardLoadSpan.current = Sentry.startInactiveSpan({ op: 'ui.load', name: 'HR dashboard usable' });
+    return () => {
+      dashboardStartedAt.current = null;
+      dashboardLoadSpan.current?.end();
+      dashboardLoadSpan.current = null;
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard' || dashboardStartedAt.current === null) return;
+    if (loading || (!hrQuery.isSuccess && !hrQuery.isError)) return;
+    if (hrQuery.isSuccess) {
+      performance.measure('novahub.hr.dashboard-ready', {
+        start: dashboardStartedAt.current,
+        end: performance.now(),
+      });
+    }
+    dashboardLoadSpan.current?.end();
+    dashboardLoadSpan.current = null;
+    dashboardStartedAt.current = null;
+  }, [activeTab, loading, hrQuery.isSuccess, hrQuery.isError, hrQuery.dataUpdatedAt]);
+
   const activeExportTarget = HR_EXPORT_TARGETS[activeTab];
   const canExportActiveHr = Boolean(activeExportTarget && canPerform(activeExportTarget.permission, 'export'));
 

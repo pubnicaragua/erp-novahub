@@ -117,7 +117,8 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   const canViewFinancial = canPerform('REPORTS_FINANCIAL', 'view');
   const canViewAccounting = canPerform('ACCOUNTING', 'view');
   const canViewPos = canPerform('RETAIL_POS', 'view');
-  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const currencySymbol = reportCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
@@ -554,7 +555,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(120, 120, 120);
-        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        const currencyLabel = displayMode === 'ORIGINAL' ? `Moneda base de saldos agregados (${baseCurrency})` : (reportCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)');
         doc.text(`Generado: ${now.toLocaleDateString('es-NI')} ${now.toLocaleTimeString('es-NI')}  |  Moneda: ${currencyLabel}  |  Período: ${rangeLabel}`, pageWidth / 2, currentY, { align: 'center' });
         currentY += 5;
         currentY = drawReportBrandMeta({ doc, settings: pdfSettings, pageWidth, contentWidth, currentY });
@@ -678,7 +679,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         const primaryColor = themeConfig.colors.primary || '#3b82f6';
         const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '3b82f6';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#3b82f6';
-        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        const currencyLabel = displayMode === 'ORIGINAL' ? `${baseCurrency} · totales agregados en moneda base` : (reportCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)');
         const fmt = (v: number) => formatConvertedAmount(Number(v || 0), 'NIO');
 
         const ws = wb.addWorksheet('Reporte Financiero');

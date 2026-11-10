@@ -420,7 +420,7 @@ export function SalesProductPicker({
               ) : (
                 <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_auto]">
                   <Input aria-label="Nombre del servicio" autoFocus value={quickName} maxLength={160} onChange={(event) => setQuickName(event.target.value)} placeholder="Nombre del servicio" />
-                  <Input aria-label="Precio del servicio" type="number" min="0" step="0.01" value={quickPrice} onChange={(event) => setQuickPrice(event.target.value)} placeholder="Precio" />
+                  <Input aria-label="Precio del servicio" type="number" min="0" step="0.01" value={quickPrice} onChange={(event) => setQuickPrice(event.target.value)} placeholder="Precio" currencyPrecision />
                   <div className="flex gap-2">
                     <Button type="button" size="sm" disabled={quickBusy || !quickName.trim() || quickPrice === '' || !(Number(quickPrice) >= 0)} onClick={() => void createQuickService()}>{quickBusy ? 'Creando…' : 'Crear y usar'}</Button>
                     <Button type="button" size="sm" variant="outline" disabled={quickBusy} onClick={() => setQuickOpen(false)}>Cancelar</Button>

@@ -202,11 +202,12 @@ const DARK_TOOLTIP = {
 } as const;
 
 export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, convertDisplayAmount, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user, canPerform } = useAuth();
   const canViewPurchases = canPerform('REPORTS_PURCHASES', 'view');
-  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const currencySymbol = reportCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
   const [comparison, setComparison] = useState<'anterior' | 'anio-anterior'>('anterior');
@@ -247,7 +248,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const fmtShort = (v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return `${currencySymbol}0`;
-    const converted = toBaseAmount(num, baseCurrency, 1);
+    const converted = convertDisplayAmount(num, baseCurrency);
     if (!Number.isFinite(converted)) return `${currencySymbol}0`;
     const abs = Math.abs(converted);
     if (abs >= 1_000_000) return `${currencySymbol}${(converted / 1_000_000).toLocaleString('es-NI', { maximumFractionDigits: 1 })} millones`;
@@ -983,7 +984,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(120, 120, 120);
-        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        const currencyLabel = displayMode === 'ORIGINAL' ? `Original por operación · totales en ${baseCurrency}` : (reportCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)');
         doc.text(`Generado: ${now.toLocaleDateString('es-NI')} ${now.toLocaleTimeString('es-NI')}  |  Moneda: ${currencyLabel}  |  Período: ${rangeLabel}`,
           pageWidth / 2,
           currentY,
@@ -1117,7 +1118,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const primaryColor = themeConfig.colors.primary || '#f97316';
         const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : 'f97316';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#f97316';
-        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        const currencyLabel = displayMode === 'ORIGINAL' ? `${baseCurrency} · totales agregados en moneda base` : (reportCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)');
 
         ws.getColumn(1).width = 30;
         ws.getColumn(2).width = 22;
@@ -1225,9 +1226,9 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           appendDashboardExcelTable(ws, title, header, rows);
         };
 
-        renderTable('Top Proveedores', ['#', 'Proveedor', 'Detalle', 'Monto'], suppliersPerf.list.slice(0, 5).map((s, i) => [i + 1, s.name, `${s.facturas} facturas · ${s.pct.toFixed(1)}% participación`, Number(s.compras)]));
-        renderTable('Productos con Mayor Inversión', ['#', 'Producto', 'Detalle', 'Monto'], visibleProducts.filter(p => p.monto > 0).slice(0, 5).map((p, i) => [i + 1, p.name, `${p.qty} unidades · precio prom. ${fmtShort(p.priceAvg)}`, Number(p.monto)]));
-        renderTable('Retenciones Registradas', ['#', 'Proveedor', 'Detalle', 'Monto'], retenciones.list.slice(0, 5).map((r, i) => [i + 1, r.proveedor, `${r.factura} · ${r.tipo} · ${pdfStatusLabel(r.estado, '-')}`, Number(r.monto)]));
+        renderTable('Top Proveedores', ['#', 'Proveedor', 'Detalle', `Monto (${reportCurrency})`], suppliersPerf.list.slice(0, 5).map((s, i) => [i + 1, s.name, `${s.facturas} facturas · ${s.pct.toFixed(1)}% participación`, convertDisplayAmount(Number(s.compras), baseCurrency)]));
+        renderTable('Productos con Mayor Inversión', ['#', 'Producto', 'Detalle', `Monto (${reportCurrency})`], visibleProducts.filter(p => p.monto > 0).slice(0, 5).map((p, i) => [i + 1, p.name, `${p.qty} unidades · precio prom. ${fmtShort(p.priceAvg)}`, convertDisplayAmount(Number(p.monto), baseCurrency)]));
+        renderTable('Retenciones Registradas', ['#', 'Proveedor', 'Detalle', `Monto (${reportCurrency})`], retenciones.list.slice(0, 5).map((r, i) => [i + 1, r.proveedor, `${r.factura} · ${r.tipo} · ${pdfStatusLabel(r.estado, '-')}`, convertDisplayAmount(Number(r.monto), baseCurrency)]));
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_compras'], 'xlsx', dateRange));
         toast.success('Excel exportado exitosamente');

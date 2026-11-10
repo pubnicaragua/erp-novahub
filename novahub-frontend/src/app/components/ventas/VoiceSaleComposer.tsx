@@ -7,6 +7,7 @@ import { Textarea } from '../ui/textarea';
 import { toast } from '@/app/services/toast';
 import { parseSpanishSalesDictation, type VoiceSaleCatalogProduct, type VoiceSaleLine, type VoiceSaleMetadata, type VoiceSaleSuggestion } from '../../utils/voice-sale-parser';
 import { NovaHubLogo } from '../NovaHubLogo';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface RecognitionResultLike {
   0?: { transcript?: string };
@@ -293,8 +294,8 @@ export function VoiceSaleComposer<TProduct extends VoiceSaleCatalogProduct>({
           </div>}
           {(metadata.customerText || metadata.total !== null || metadata.unitPrice !== null || metadata.paymentMethod || metadata.notes) && <div className="grid gap-2 rounded-xl border border-sky-200/50 bg-sky-50/60 p-3 text-xs text-sky-950 sm:grid-cols-2">
             <p><span className="font-bold">Cliente:</span> {metadata.customerText || 'No detectado'}</p>
-            <p><span className="font-bold">Total dictado:</span> {metadata.total === null ? 'No detectado' : metadata.total.toLocaleString('es-NI', { minimumFractionDigits: 2 })}</p>
-            {metadata.unitPrice !== null && <p><span className="font-bold">Precio dictado:</span> {metadata.unitPriceCurrency === 'USD' ? 'US$' : 'C$'}{metadata.unitPrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })} <span className="text-[10px] text-amber-700">(revisar)</span></p>}
+            <p><span className="font-bold">Total dictado:</span> {metadata.total === null ? 'No detectado' : metadata.total.toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}</p>
+            {metadata.unitPrice !== null && <p><span className="font-bold">Precio dictado:</span> {metadata.unitPriceCurrency === 'USD' ? 'US$' : 'C$'}{metadata.unitPrice.toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })} <span className="text-[10px] text-amber-700">(revisar)</span></p>}
             <p><span className="font-bold">Pago:</span> {metadata.paymentMethod === 'CASH' ? 'Efectivo' : metadata.paymentMethod === 'CARD' ? 'Tarjeta' : metadata.paymentMethod === 'TRANSFER' ? 'Transferencia' : metadata.paymentMethod === 'CREDIT' ? 'Crédito' : 'No detectado'}</p>
             {metadata.notes && <p className="sm:col-span-2"><span className="font-bold">Nota:</span> {metadata.notes}</p>}
           </div>}

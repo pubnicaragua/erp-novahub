@@ -15,6 +15,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { api } from '../../services/api';
 import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface ActivoFormDialogProps {
   open: boolean;
@@ -107,7 +108,7 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
     const rawResidual = Number(form.residualValue) || 0;
     const residualVal = form.currency === 'USD' && residualInBase ? rawResidual / (Number(form.exchangeRate) || 1) : rawResidual;
     const calculated = usefulLifeMonths > 0 ? (costVal - residualVal) / usefulLifeMonths : 0;
-    setForm((prev) => ({ ...prev, initialAccumDepreciation: calculated.toFixed(2) }));
+    setForm((prev) => ({ ...prev, initialAccumDepreciation: calculated.toFixed(getCurrencyDecimalPlaces()) }));
   }, [form.cost, form.residualValue, form.categoryId, form.currency, form.exchangeRate, residualInBase, categories]);
 
   function setField(field: keyof ActivoForm, value: string) {
@@ -265,7 +266,7 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-cost">Costo *</Label>
-              <Input id="af-cost" type="number" step="0.01" min="0" value={form.cost} onChange={(e) => setField('cost', e.target.value)} />
+              <Input id="af-cost" type="number" step="0.01" min="0" value={form.cost} onChange={(e) => setField('cost', e.target.value)} currencyPrecision />
               {form.currency === 'USD' && (
                 <p className="text-[10px] text-muted-foreground">
                   Costo en USD. Al registrarse se mostrará convertido a la moneda base con el tipo de cambio digitado.
@@ -274,7 +275,7 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-resid">Valor residual</Label>
-              <Input id="af-resid" type="number" step="0.01" min="0" value={form.residualValue} onChange={(e) => setField('residualValue', e.target.value)} />
+              <Input id="af-resid" type="number" step="0.01" min="0" value={form.residualValue} onChange={(e) => setField('residualValue', e.target.value)} currencyPrecision />
               {form.currency === 'USD' && (
                 <div className="space-y-1">
                   <label className="flex w-fit cursor-pointer select-none items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -289,7 +290,7 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-init">Dep. acumulada inicial</Label>
-              <Input id="af-init" type="number" step="0.01" min="0" value={form.initialAccumDepreciation} readOnly disabled className="bg-muted" />
+              <Input id="af-init" type="number" step="0.01" min="0" value={form.initialAccumDepreciation} readOnly disabled className="bg-muted" currencyPrecision />
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-ccut" title="Opcional. Solo para activos migrados con depreciación acumulada previa. Indica hasta qué fecha se acumuló dicha depreciación.">Inicio depreciación</Label>

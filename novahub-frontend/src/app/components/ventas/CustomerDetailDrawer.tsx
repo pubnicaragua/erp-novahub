@@ -1,6 +1,8 @@
 'use client';
 
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import * as Sentry from '@sentry/react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -75,11 +77,11 @@ import {
 } from '../../services/ventas.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { useTheme } from '../../contexts/ThemeContext';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
-import { formatPdfVariantDetails } from '../../utils/pdf-line-details';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { getInvoicePaymentPresentation } from '../../utils/paymentMethods';
@@ -93,6 +95,7 @@ import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
 import { CustomerLoansPanel } from './CustomerLoansPanel';
 import { countryCodeFromLegacy, formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 import { getAuditOperationMethodLabel } from '../ui/audit-operation-method';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface CustomerDetailDrawerProps {
   customerId: string | null;
@@ -123,20 +126,6 @@ type RelatedTransaction = {
   exchangeRate?: number;
   description?: string;
   document?: any;
-};
-
-const unwrapList = (response: any): any[] => {
-  const value = response?.data?.data ?? response?.data ?? response;
-  return Array.isArray(value) ? value : [];
-};
-
-const fetchAllCustomerRecords = async (fetcher: (filters: any, signal?: AbortSignal) => Promise<any>, customerId: string, signal?: AbortSignal) => {
-  const first = await runWithReportRequestLimit(() => fetcher({ customerId, page: 1, pageSize: 5000, report: true }, signal), signal);
-  const totalPages = Math.max(1, Number(first?.meta?.totalPages || 1));
-  const remaining = totalPages > 1
-    ? await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) => runWithReportRequestLimit(() => fetcher({ customerId, page: index + 2, pageSize: 5000, report: true }, signal), signal)))
-    : [];
-  return [first, ...remaining].flatMap(unwrapList);
 };
 
 const getInvoiceStatusInfo = (status?: string) => {
@@ -200,13 +189,6 @@ const getTypeBadge = (type?: string) => {
   }
 };
 
-const customerHistoryVariantDetails = (document: any) => formatPdfVariantDetails(document?.items, 'Detalle de variantes');
-
-const customerHistoryDescription = (document: any, fallback?: string) => {
-  const variants = customerHistoryVariantDetails(document);
-  return [fallback, variants].filter(Boolean).join('\n') || undefined;
-};
-
 export function CustomerDetailDrawer({
   customerId,
   onOpenChange,
@@ -220,145 +202,116 @@ export function CustomerDetailDrawer({
   onLoansUpdated,
 }: CustomerDetailDrawerProps) {
   const { baseCurrency, formatConvertedAmount, formatExplicitAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
-  const { user } = useAuth();
+  const { user, selectedBranchId } = useAuth();
   const { themeConfig } = useTheme();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<Customer | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [relatedTransactions, setRelatedTransactions] = useState<RelatedTransaction[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingRelated, setLoadingRelated] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [exportRows, setExportRows] = useState<RelatedTransaction[]>([]);
+  const [loadingExportRows, setLoadingExportRows] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [selectedMovement, setSelectedMovement] = useState<RelatedTransaction | null>(null);
   const [movementFilter, setMovementFilter] = useState<MovementFilter>('ALL');
   const [publicLinks, setPublicLinks] = useState<any[]>([]);
   const [publicLinksLoading, setPublicLinksLoading] = useState(false);
+  const [publicLinksExpanded, setPublicLinksExpanded] = useState(false);
+  const [publicLinksLoaded, setPublicLinksLoaded] = useState(false);
   const [creatingPortalLink, setCreatingPortalLink] = useState(false);
   const [exportingHistory, setExportingHistory] = useState(false);
   const [historyExportDialogOpen, setHistoryExportDialogOpen] = useState(false);
   const [historyExportScope, setHistoryExportScope] = useState<HistoryExportScope>('ALL');
   const [historyExportFilter, setHistoryExportFilter] = useState<string>('ALL');
   const [historyExportCurrency, setHistoryExportCurrency] = useState<HistoryExportCurrency>(baseCurrency);
+  const drawerStartedAt = useRef<number | null>(null);
+  const profileReadyMeasured = useRef(false);
+  const tabStartedAt = useRef<Partial<Record<TabKey, number>>>({});
+  const profileSpan = useRef<ReturnType<typeof Sentry.startInactiveSpan> | null>(null);
+  const generalSpan = useRef<ReturnType<typeof Sentry.startInactiveSpan> | null>(null);
+  const tabSpans = useRef<Partial<Record<TabKey, ReturnType<typeof Sentry.startInactiveSpan>>>>({});
+
+  const measureReady = (name: string, startedAt: number | null | undefined) => {
+    if (startedAt == null || typeof performance === 'undefined') return;
+    performance.measure(name, { start: startedAt, end: performance.now() });
+  };
+
+  const scopeKey = selectedBranchId || 'all-branches';
+  const overviewQuery = useTenantQuery(
+    ['sales', 'customer-overview', customerId || 'none', scopeKey],
+    (signal) => customersService.getOverview(customerId!, signal),
+    { enabled: Boolean(customerId), staleTime: 30_000 },
+  );
+  const movementQuery = useInfiniteQuery({
+    queryKey: ['sales', 'customer-movements', user?.clientTenantId || user?.tenantId || 'current', scopeKey, customerId, movementFilter],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => customersService.getMovements(customerId!, { limit: 50, cursor: pageParam || undefined, kind: movementFilter === 'ALL' ? undefined : movementFilter }, signal),
+    getNextPageParam: (page) => page.hasMore ? page.nextCursor || undefined : undefined,
+    enabled: Boolean(customerId && activeTab === 'movimientos'),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const historyQuery = useInfiniteQuery({
+    queryKey: ['sales', 'customer-audit', user?.clientTenantId || user?.tenantId || 'current', scopeKey, customerId],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => auditService.getEntityHistoryPage('CUSTOMER', customerId!, { limit: 50, cursor: pageParam || undefined }, signal),
+    getNextPageParam: (page) => page.hasMore ? page.nextCursor || undefined : undefined,
+    enabled: Boolean(customerId && activeTab === 'historial'),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const historicalSummaryQuery = useTenantQuery(
+    ['sales', 'customer-historical-summaries', customerId || 'none', scopeKey],
+    (signal) => customersService.getHistoricalSummaries(customerId!, signal),
+    { enabled: Boolean(customerId && ['movimientos', 'resumen-historico'].includes(activeTab)), staleTime: 5 * 60_000 },
+  );
+  const relatedTransactions: RelatedTransaction[] = movementQuery.data?.pages.flatMap((page) => page.data) || [];
+  const history = historyQuery.data?.pages.flatMap((page) => page.data) || [];
+  const historicalSummaries = historicalSummaryQuery.data || [];
+  const historyLoading = historyQuery.isPending;
+  const loading = overviewQuery.isPending;
+  const loadingRelated = movementQuery.isPending;
+  const selectedDocumentKind = selectedInvoiceId ? 'Factura' : selectedMovement?.kind;
+  const selectedDocumentId = selectedInvoiceId || selectedMovement?.id;
+  const selectedDocumentQuery = useTenantQuery(
+    ['sales', 'customer-movement-document', customerId || 'none', scopeKey, selectedDocumentKind || 'none', selectedDocumentId || 'none'],
+    (signal) => {
+      const id = selectedDocumentId!;
+      switch (selectedDocumentKind) {
+        case 'Factura': return invoicesService.getById(id, signal);
+        case 'Cotización': return estimatesService.getById(id, signal);
+        case 'Orden de venta': return salesOrdersService.getById(id, signal);
+        case 'Pago recibido': return paymentsService.getById(id, signal);
+        case 'Factura recurrente': return recurringInvoicesService.getById(id, signal);
+        case 'Devolución': return salesReturnsService.getById(id, signal);
+        case 'Nota de crédito': return salesReturnsService.getById(id, signal);
+        case 'Crédito': return creditNotesService.getById(id, signal);
+        default: return Promise.reject(new Error('Tipo de movimiento no reconocido.'));
+      }
+    },
+    { enabled: Boolean(customerId && selectedDocumentId && selectedDocumentKind), staleTime: 30_000 },
+  );
 
   useEffect(() => {
-    if (!customerId) {
-      setDetail(null);
-      setInvoices([]);
-      setHistory([]);
-      setHistoryLoading(false);
-      setRelatedTransactions([]);
-      setLoadingRelated(false);
-      setSelectedInvoiceId(null);
-      setSelectedMovement(null);
-      setMovementFilter('ALL');
-      setError(null);
-      return;
-    }
-
-    let cancelled = false;
-    const controller = new AbortController();
+    if (customerId && typeof performance !== 'undefined') drawerStartedAt.current = performance.now();
+    else drawerStartedAt.current = null;
+    profileReadyMeasured.current = false;
+    tabStartedAt.current = {};
+    profileSpan.current = customerId ? Sentry.startInactiveSpan({ op: 'ui.load', name: 'Customer drawer profile ready' }) : null;
+    generalSpan.current = customerId ? Sentry.startInactiveSpan({ op: 'ui.load', name: 'Customer drawer general ready' }) : null;
+    setDetail(null);
+    setExportRows([]);
+    setPublicLinks([]);
+    setPublicLinksLoaded(false);
+    setPublicLinksExpanded(false);
     setSelectedInvoiceId(null);
     setSelectedMovement(null);
     setMovementFilter('ALL');
-    setHistory([]);
-    setHistoryLoading(true);
-    setRelatedTransactions([]);
-    setLoading(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const resp: any = await customersService.getById(customerId);
-        const cust = resp?.data?.data || resp?.data || resp;
-        if (cancelled) return;
-        if (cust && typeof cust === 'object' && cust.id) {
-          setDetail(cust);
-        }
-      } catch (e: any) {
-        if (!cancelled && !customerSnapshot) {
-          setError(e?.message || 'No se pudo cargar la información del cliente');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    // Fetch facturas asociadas
-    (async () => {
-      try {
-        const resp: any = await invoicesService.getAll({ customerId, pageSize: 50 } as any);
-        const list = unwrapList(resp);
-        if (!cancelled) {
-          setInvoices(Array.isArray(list) ? list : []);
-        }
-      } catch {
-        if (!cancelled) setInvoices([]);
-      }
-    })();
-
-    (async () => {
-      try {
-        const response: any = await auditService.getEntityHistory('CUSTOMER', customerId);
-        const list = response?.data?.data || response?.data || response;
-        if (!cancelled) setHistory(Array.isArray(list) ? list : []);
-      } catch {
-        if (!cancelled) setHistory([]);
-      } finally {
-        if (!cancelled) setHistoryLoading(false);
-      }
-    })();
-
-    setLoadingRelated(true);
-    (async () => {
-      const results = await Promise.allSettled([
-        fetchAllCustomerRecords((filter, signal) => estimatesService.getAll(filter, signal), customerId, controller.signal),
-        fetchAllCustomerRecords((filter, signal) => salesOrdersService.getAll(filter, signal), customerId, controller.signal),
-        fetchAllCustomerRecords((filter, signal) => invoicesService.getAll(filter, signal), customerId, controller.signal),
-        fetchAllCustomerRecords((filter, signal) => paymentsService.getAll(filter, signal), customerId, controller.signal),
-        fetchAllCustomerRecords((filter, signal) => recurringInvoicesService.getAll(filter, signal), customerId, controller.signal),
-        fetchAllCustomerRecords((filter, signal) => salesReturnsService.getAll(filter, signal), customerId, controller.signal),
-        fetchAllCustomerRecords((filter, signal) => creditNotesService.getAll(filter, signal), customerId, controller.signal),
-      ]);
-      if (cancelled) return;
-
-      const [estimates, orders, invoiceRecords, payments, recurring, returns, creditNotes] = results.map((result) =>
-        result.status === 'fulfilled' ? unwrapList(result.value) : [],
-      );
-      const transactions: RelatedTransaction[] = [
-        ...estimates.map((item: any) => ({ id: item.id, kind: 'Cotización', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item), document: item })),
-        ...orders.map((item: any) => ({ id: item.id, kind: 'Orden de venta', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item), document: item })),
-        ...invoiceRecords.map((item: any) => ({ id: item.id, kind: 'Factura', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item), document: item })),
-        ...payments.map((item: any) => ({ id: item.id, kind: 'Pago recibido', number: item.number, date: item.date, status: item.isActive === false ? 'CANCELLED' : 'PAID', amount: Number(item.amount || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item.invoice || item.creditNote, item.invoice?.number ? `Aplicado a ${item.invoice.number}` : item.reference), document: item })),
-        ...recurring.map((item: any) => ({ id: item.id, kind: 'Factura recurrente', number: item.number || item.id.slice(0, 8), date: item.nextInvoiceDate || item.createdAt, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item, 'Programación de facturación'), document: item })),
-        ...returns.map((item: any) => ({ id: item.id, kind: 'Nota de crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item, item.reason), document: item })),
-        ...creditNotes.map((item: any) => ({ id: item.id, kind: 'Crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item, item.reason), document: item })),
-      ].sort((a, b) => {
-        const aDate = a.date ? new Date(a.date).getTime() : 0;
-        const bDate = b.date ? new Date(b.date).getTime() : 0;
-        if (bDate !== aDate) return bDate - aDate;
-        const number = (value: string) => {
-          const match = String(value || '').match(/(\d+)(?!.*\d)/);
-          return match ? Number(match[1]) : Number.NEGATIVE_INFINITY;
-        };
-        return number(b.number) - number(a.number);
-      });
-      setRelatedTransactions(transactions);
-      setLoadingRelated(false);
-    })();
-
-    (async () => {
-      setPublicLinksLoading(true);
-      try { const links = await publicAccessService.list(customerId); if (!cancelled) setPublicLinks(links || []); }
-      catch { if (!cancelled) setPublicLinks([]); }
-      finally { if (!cancelled) setPublicLinksLoading(false); }
-    })();
-
+    setHistoryExportDialogOpen(false);
     return () => {
-      cancelled = true;
-      controller.abort();
+      [profileSpan.current, generalSpan.current, ...Object.values(tabSpans.current)].forEach((span) => {
+        if (span) { span.setAttribute('outcome', 'cancelled'); span.end(); }
+      });
+      profileSpan.current = null;
+      generalSpan.current = null;
+      tabSpans.current = {};
     };
   }, [customerId]);
 
@@ -366,26 +319,111 @@ export function CustomerDetailDrawer({
     setActiveTab('general');
   }, [customerId]);
 
-  const customer = detail ?? customerSnapshot ?? null;
+  useEffect(() => {
+    if (customerId && customerSnapshot && !profileReadyMeasured.current) {
+      measureReady('novahub.customer.drawer.profile-ready', drawerStartedAt.current);
+      profileReadyMeasured.current = true;
+      profileSpan.current?.setAttribute('outcome', 'success');
+      profileSpan.current?.end();
+      profileSpan.current = null;
+    }
+  }, [customerId, customerSnapshot]);
+
+  useEffect(() => {
+    if (customerId && overviewQuery.isSuccess) {
+      measureReady('novahub.customer.drawer.general-ready', drawerStartedAt.current);
+      drawerStartedAt.current = null;
+      if (profileSpan.current) {
+        profileSpan.current.setAttribute('outcome', 'success');
+        profileSpan.current.end();
+        profileSpan.current = null;
+      }
+      generalSpan.current?.setAttribute('outcome', 'success');
+      generalSpan.current?.end();
+      generalSpan.current = null;
+    }
+  }, [customerId, overviewQuery.isSuccess, overviewQuery.isError, overviewQuery.dataUpdatedAt]);
+
+  useEffect(() => {
+    if (overviewQuery.isError) {
+      generalSpan.current?.setAttribute('outcome', 'error');
+      generalSpan.current?.end();
+      generalSpan.current = null;
+    }
+  }, [overviewQuery.isError]);
+
+  useEffect(() => {
+    if (!customerId || activeTab === 'general') return;
+    return () => {
+      const span = tabSpans.current[activeTab];
+      if (span) { span.setAttribute('outcome', 'cancelled'); span.end(); delete tabSpans.current[activeTab]; }
+    };
+  }, [customerId, activeTab]);
+
+  const activateTab = (value: string) => {
+    const nextTab = value as TabKey;
+    if (nextTab !== activeTab && nextTab !== 'general' && customerId) {
+      const spanNames: Record<Exclude<TabKey, 'general'>, string> = {
+        movimientos: 'Customer movements ready',
+        'resumen-historico': 'Customer historical summary ready',
+        historial: 'Customer audit history ready',
+        prestamos: 'Customer loans ready',
+      };
+      if (typeof performance !== 'undefined') tabStartedAt.current[nextTab] = performance.now();
+      tabSpans.current[nextTab] = Sentry.startInactiveSpan({ op: 'ui.load', name: spanNames[nextTab] });
+    }
+    setActiveTab(nextTab);
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'movimientos' || !movementQuery.isSuccess) return;
+    measureReady('novahub.customer.movements-ready', tabStartedAt.current.movimientos);
+    delete tabStartedAt.current.movimientos;
+    tabSpans.current.movimientos?.setAttribute('outcome', 'success');
+    tabSpans.current.movimientos?.end();
+    delete tabSpans.current.movimientos;
+  }, [activeTab, movementQuery.isSuccess, movementQuery.dataUpdatedAt]);
+
+  useEffect(() => {
+    if (activeTab !== 'historial' || !historyQuery.isSuccess) return;
+    measureReady('novahub.customer.audit-ready', tabStartedAt.current.historial);
+    delete tabStartedAt.current.historial;
+    tabSpans.current.historial?.setAttribute('outcome', 'success');
+    tabSpans.current.historial?.end();
+    delete tabSpans.current.historial;
+  }, [activeTab, historyQuery.isSuccess, historyQuery.dataUpdatedAt]);
+
+  useEffect(() => {
+    if (activeTab !== 'resumen-historico' || !historicalSummaryQuery.isSuccess) return;
+    measureReady('novahub.customer.historical-summary-ready', tabStartedAt.current['resumen-historico']);
+    delete tabStartedAt.current['resumen-historico'];
+    tabSpans.current['resumen-historico']?.setAttribute('outcome', 'success');
+    tabSpans.current['resumen-historico']?.end();
+    delete tabSpans.current['resumen-historico'];
+  }, [activeTab, historicalSummaryQuery.isSuccess, historicalSummaryQuery.dataUpdatedAt]);
+
+  const customer = detail ?? overviewQuery.data?.customer ?? customerSnapshot ?? null;
   const showCustomerLoans = customerLoansEnabled;
   const customerCountryCode = String(customer?.countryCode || countryCodeFromLegacy(customer?.country) || 'NI');
   const customerTaxLabel = customerCountryCode === 'NI' ? 'Cédula' : customerCountryCode === 'CL' ? 'RUT' : 'Identificación fiscal';
   const customerRucLabel = customerCountryCode === 'CL' ? 'RUT / identificación' : customerCountryCode === 'PE' ? 'RUC' : 'RUC';
   const isOpen = Boolean(customerId);
-  const selectedInvoice = invoices.find((invoice) => invoice.id === selectedInvoiceId) || null;
+  const selectedInvoice = selectedInvoiceId && selectedDocumentQuery.data
+    ? selectedDocumentQuery.data as Invoice
+    : null;
+  const selectedMovementDetail = selectedMovement
+    ? { ...selectedMovement, document: selectedDocumentQuery.data }
+    : null;
 
   const openMovementDetail = (transaction: RelatedTransaction) => {
     if (transaction.kind === 'Factura') {
-      const invoice = (transaction.document as Invoice | undefined) || invoices.find((item) => item.id === transaction.id);
-      if (invoice) {
-        if (selectedInvoiceId === invoice.id) {
-          setSelectedInvoiceId(null);
-          return;
-        }
-        setSelectedInvoiceId(invoice.id);
-        setSelectedMovement(null);
+      if (selectedInvoiceId === transaction.id) {
+        setSelectedInvoiceId(null);
         return;
       }
+      setSelectedInvoiceId(transaction.id);
+      setSelectedMovement(null);
+      return;
     }
     if (selectedMovement?.id === transaction.id) {
       setSelectedMovement(null);
@@ -416,31 +454,27 @@ export function CustomerDetailDrawer({
         ? amount * rate
         : amount / Math.max(rate, 0.000001);
   };
-  const cashTotal = invoices
-    .filter((inv) => String(inv.status || '').toUpperCase() === 'PAID')
-    .reduce((sum, inv) => sum + toBaseValue(inv.total, inv.currency, inv.exchangeRate), 0);
-  const creditOutstanding = invoices
-    .filter((inv) => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(String(inv.status || '').toUpperCase()))
-    .reduce((sum, inv) => sum + toBaseValue(inv.balance, inv.currency, inv.exchangeRate), 0);
+  const cashTotal = overviewQuery.data?.totals.cashTotal ?? null;
+  const creditOutstanding = overviewQuery.data?.totals.creditOutstanding ?? null;
   const creditLimitBase = toBaseValue(creditLimit, creditLimitCurrency, exchangeRate);
   const creditUsagePct = creditLimitBase > 0 ? Math.min(100, (customerDebt / creditLimitBase) * 100) : 0;
-  const visibleMovements = movementFilter === 'ALL'
-    ? relatedTransactions
-    : relatedTransactions.filter((transaction) => transaction.kind === movementFilter);
+  const visibleMovements = relatedTransactions;
   const historyExportTypeOptions = Array.from(
-    new Set(relatedTransactions.map((transaction) => transaction.kind).filter(Boolean)),
+    new Set(exportRows.map((transaction) => transaction.kind).filter(Boolean)),
   );
   const selectedHistoryRows = historyExportScope === 'FILTERED' && historyExportFilter !== 'ALL'
-    ? relatedTransactions.filter((transaction) => transaction.kind === historyExportFilter)
-    : relatedTransactions;
+    ? exportRows.filter((transaction) => transaction.kind === historyExportFilter)
+    : exportRows;
 
   const auditEventsByNewest = [...history].sort((left, right) => {
     const leftTime = left?.createdAt ? new Date(left.createdAt).getTime() : 0;
     const rightTime = right?.createdAt ? new Date(right.createdAt).getTime() : 0;
     return rightTime - leftTime;
   });
-  const createdAuditEvent = auditEventsByNewest.find((event) => String(event?.action || '').toUpperCase() === 'CREATE');
-  const updatedAuditEvent = auditEventsByNewest.find((event) => ['UPDATE', 'STATUS_CHANGE'].includes(String(event?.action || '').toUpperCase()));
+  const createdAuditEvent = auditEventsByNewest.find((event) => String(event?.action || '').toUpperCase() === 'CREATE')
+    || historyQuery.data?.pages[0]?.createdEvent;
+  const updatedAuditEvent = auditEventsByNewest.find((event) => ['UPDATE', 'STATUS_CHANGE'].includes(String(event?.action || '').toUpperCase()))
+    || historyQuery.data?.pages[0]?.updatedEvent;
   const auditActor = (event: any) => event?.user?.name || event?.user?.email || (event?.userId ? `Usuario ${String(event.userId).slice(0, 8)}` : 'No disponible');
   const auditDate = (event: any) => event?.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : 'Fecha no disponible';
 
@@ -449,8 +483,8 @@ export function CustomerDetailDrawer({
     setExportingHistory(true);
     try {
       const rowsToExport = scope === 'FILTERED' && historyExportFilter !== 'ALL'
-        ? relatedTransactions.filter((transaction) => transaction.kind === historyExportFilter)
-        : relatedTransactions;
+        ? exportRows.filter((transaction) => transaction.kind === historyExportFilter)
+        : exportRows;
       if (!rowsToExport.length) {
         toast.info('Este cliente todavía no tiene transacciones para descargar.');
         return;
@@ -464,7 +498,7 @@ export function CustomerDetailDrawer({
             historyExportCurrency,
             row.exchangeRate,
             exchangeRate,
-          ).toFixed(2)),
+          ).toFixed(getCurrencyDecimalPlaces())),
           currency: historyExportCurrency,
         })),
         customerName: customer.name || '',
@@ -487,7 +521,32 @@ export function CustomerDetailDrawer({
     }
   };
 
-  const openHistoryExportDialog = () => {
+  const openHistoryExportDialog = async () => {
+    if (!customerId || loadingExportRows) return;
+    setLoadingExportRows(true);
+    try {
+      const rows: RelatedTransaction[] = [];
+      let cursor: string | undefined;
+      let hasMore = true;
+      while (hasMore) {
+        const page = await runWithReportRequestLimit(
+          () => customersService.getMovements(customerId, { limit: 200, cursor }),
+        );
+        rows.push(...page.data);
+        cursor = page.nextCursor || undefined;
+        hasMore = Boolean(page.hasMore && cursor);
+      }
+      setExportRows(rows);
+      if (!rows.length) {
+        toast.info('Este cliente todavía no tiene transacciones para descargar.');
+        return;
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo cargar el historial completo del cliente.');
+      return;
+    } finally {
+      setLoadingExportRows(false);
+    }
     setHistoryExportScope('ALL');
     setHistoryExportFilter('ALL');
     setHistoryExportCurrency(baseCurrency);
@@ -506,14 +565,29 @@ export function CustomerDetailDrawer({
       const created = await publicAccessService.createPortalLink({ customerId: customer.id });
       const url = publicLinkUrl(created.path);
       await navigator.clipboard?.writeText(url);
+      setPublicLinks(await publicAccessService.list(customer.id));
+      setPublicLinksLoaded(true);
       toast.success('Portal generado y enlace copiado');
       setPublicLinks(await publicAccessService.list(customer.id));
     } catch (e: any) { toast.error(e?.message || 'No se pudo generar el portal'); }
     finally { setCreatingPortalLink(false); }
   };
 
+  const loadPublicLinks = async () => {
+    if (!customer?.id || publicLinksLoading) return;
+    setPublicLinksLoading(true);
+    try {
+      setPublicLinks(await publicAccessService.list(customer.id));
+      setPublicLinksLoaded(true);
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudieron cargar los enlaces públicos.');
+    } finally {
+      setPublicLinksLoading(false);
+    }
+  };
+
   const revokePublicLink = async (id: string) => {
-    try { await publicAccessService.revoke(id); setPublicLinks(await publicAccessService.list(customer?.id)); toast.success('Enlace revocado'); }
+    try { await publicAccessService.revoke(id); if (customer?.id) setPublicLinks(await publicAccessService.list(customer.id)); toast.success('Enlace revocado'); }
     catch (e: any) { toast.error(e?.message || 'No se pudo revocar el enlace'); }
   };
 
@@ -526,7 +600,7 @@ export function CustomerDetailDrawer({
       >
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as TabKey)}
+          onValueChange={activateTab}
           className="flex flex-col flex-1 min-h-0 gap-0"
         >
           {/* Header Sticky */}
@@ -580,10 +654,10 @@ export function CustomerDetailDrawer({
                   type="button"
                   variant="outline"
                   onClick={openHistoryExportDialog}
-                  disabled={!customer || loadingRelated || exportingHistory || relatedTransactions.length === 0}
+                  disabled={!customer || loadingExportRows || exportingHistory}
                   className="max-w-full gap-1.5 rounded-xl text-xs font-bold"
                 >
-                  <Download className="size-4 shrink-0 text-primary" />
+                  {loadingExportRows ? <Loader2 className="size-4 shrink-0 animate-spin text-primary" /> : <Download className="size-4 shrink-0 text-primary" />}
                   <span className="truncate">Exportar historial del cliente</span>
                 </Button>
               )}
@@ -594,7 +668,7 @@ export function CustomerDetailDrawer({
                 <User className="size-3.5" /> General
               </TabsTrigger>
               <TabsTrigger value="movimientos" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
-                <Activity className="size-3.5" /> Movimientos ({relatedTransactions.length})
+                <Activity className="size-3.5" /> Movimientos ({movementQuery.data?.pages[0]?.total ?? '…'})
               </TabsTrigger>
               <TabsTrigger value="resumen-historico" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
                 <Database className="size-3.5" /> Resumen importado
@@ -610,17 +684,20 @@ export function CustomerDetailDrawer({
 
           <ScrollArea className="customer-detail-scroll min-h-0 flex-1 overflow-hidden">
             <div className="min-w-0 space-y-6 p-6">
-              {error && (
-                <Card className="p-4 bg-destructive/10 border-destructive/20 text-destructive flex items-center gap-3">
-                  <AlertCircle className="size-5 shrink-0" />
-                  <p className="text-xs font-bold">{error}</p>
+              {overviewQuery.isError && (
+                <Card className="flex items-center justify-between gap-3 border-destructive/20 bg-destructive/10 p-4 text-destructive">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <AlertCircle className="size-5 shrink-0" />
+                    <p className="text-xs font-bold">No se pudo cargar el resumen completo del cliente. Reintenta para mostrar los totales exactos.</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={() => overviewQuery.refetch()} disabled={overviewQuery.isFetching}>Reintentar</Button>
                 </Card>
               )}
 
               {/* Tab General */}
               <TabsContent value="general" className="mt-0 space-y-6 outline-none">
                 <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-                  <MetricCard label="Saldo pendiente" value={formatConvertedAmount(customerDebt, baseCurrency)} icon={DollarSign} accent="text-rose-600 dark:text-rose-400" loading={loading} />
+                <MetricCard label="Saldo pendiente" value={formatConvertedAmount(customerDebt, baseCurrency)} icon={DollarSign} accent="text-rose-600 dark:text-rose-400" loading={loading} />
                   <MetricCard label="Saldo a favor" value={formatConvertedAmount(customerFavor, baseCurrency)} icon={Banknote} accent="text-emerald-600 dark:text-emerald-400" loading={loading} />
                   <MetricCard label={`Límite Crédito (${creditLimitCurrency})`} value={formatConvertedAmount(creditLimit, creditLimitCurrency, exchangeRate)} icon={CreditCard} accent="text-primary" loading={loading} />
                   <MetricCard label="Tipo Cliente" value={typeInfo.label} icon={TypeIcon} accent="text-primary" loading={loading} />
@@ -660,12 +737,12 @@ export function CustomerDetailDrawer({
                     </div>
                     <div className="flex min-w-0 min-h-[100px] flex-col rounded-xl border border-border/50 bg-muted/10 p-2.5">
                       <p className="min-h-[2rem] text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">De contado (pagado)</p>
-                      <p className="mt-1 min-h-[1.25rem] text-sm font-black tabular-nums text-foreground">{formatConvertedAmount(cashTotal, baseCurrency)}</p>
+                      <p className="mt-1 min-h-[1.25rem] text-sm font-black tabular-nums text-foreground">{cashTotal === null ? '—' : formatConvertedAmount(cashTotal, baseCurrency)}</p>
                       <div className="mt-1 min-h-[1.5rem]" aria-hidden="true" />
                     </div>
                     <div className="flex min-w-0 min-h-[100px] flex-col rounded-xl border border-border/50 bg-muted/10 p-2.5">
                       <p className="min-h-[2rem] text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">En crédito (pendiente)</p>
-                      <p className={`mt-1 min-h-[1.25rem] text-sm font-black tabular-nums ${creditOutstanding > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{formatConvertedAmount(creditOutstanding, baseCurrency)}</p>
+                      <p className={`mt-1 min-h-[1.25rem] text-sm font-black tabular-nums ${Number(creditOutstanding || 0) > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{creditOutstanding === null ? '—' : formatConvertedAmount(creditOutstanding, baseCurrency)}</p>
                       <div className="mt-1 min-h-[1.5rem]" aria-hidden="true" />
                     </div>
                     <div className="flex min-w-0 min-h-[100px] flex-col rounded-xl border border-border/50 bg-muted/10 p-2.5">
@@ -718,9 +795,12 @@ export function CustomerDetailDrawer({
                       <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2"><Link2 className="size-4 text-primary" /> Accesos públicos seguros</h3>
                       <p className="mt-1 text-[11px] text-muted-foreground">Genera enlaces temporales para que el cliente consulte documentos o su portal sin tener una cuenta interna.</p>
                     </div>
-                    <Button size="sm" onClick={createPortalLink} disabled={creatingPortalLink || !customer?.id} className="shrink-0 gap-1.5 rounded-xl text-xs font-bold"><RefreshCcw className={`size-3.5 ${creatingPortalLink ? 'animate-spin' : ''}`} /> Portal</Button>
+                    <div className="flex shrink-0 gap-2">
+                      <Button size="sm" variant="outline" onClick={() => { const next = !publicLinksExpanded; setPublicLinksExpanded(next); if (next && !publicLinksLoaded) void loadPublicLinks(); }} disabled={!customer?.id} className="rounded-xl text-xs font-bold">{publicLinksExpanded ? 'Ocultar enlaces' : 'Ver enlaces'}</Button>
+                      <Button size="sm" onClick={createPortalLink} disabled={creatingPortalLink || !customer?.id} className="gap-1.5 rounded-xl text-xs font-bold"><RefreshCcw className={`size-3.5 ${creatingPortalLink ? 'animate-spin' : ''}`} /> Portal</Button>
+                    </div>
                   </div>
-                  {publicLinksLoading ? <Skeleton className="h-12 w-full rounded-xl" /> : publicLinks.length === 0 ? <p className="rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Todavía no hay enlaces activos para este cliente.</p> : <div className="space-y-2">{publicLinks.filter(link => link.isActive).slice(0, 8).map(link => <div key={link.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/10 p-3"><div className="min-w-0"><p className="text-xs font-bold">{link.accessType === 'PORTAL' ? 'Portal del cliente' : `Documento · ${link.documentType || 'PDF'}`}</p><p className="text-[10px] text-muted-foreground">{link.expiresAt ? `Expira ${format(new Date(link.expiresAt), 'dd/MM/yyyy')}` : 'Sin fecha de expiración'}</p></div><div className="flex shrink-0 gap-1"><Button variant="ghost" size="icon" className="size-8" title="Copiar enlace" onClick={() => toast.info('Para copiar un enlace existente, genéralo nuevamente desde Portal')}><Copy className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-8 text-primary" title="Revocar enlace" onClick={() => revokePublicLink(link.id)}><ShieldAlert className="size-3.5" /></Button></div></div>)}</div>}
+                  {publicLinksExpanded && (publicLinksLoading ? <Skeleton className="h-12 w-full rounded-xl" /> : !publicLinksLoaded ? null : publicLinks.filter(link => link.isActive).length === 0 ? <p className="rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Todavía no hay enlaces activos para este cliente.</p> : <div className="space-y-2">{publicLinks.filter(link => link.isActive).slice(0, 8).map(link => <div key={link.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/10 p-3"><div className="min-w-0"><p className="text-xs font-bold">{link.accessType === 'PORTAL' ? 'Portal del cliente' : `Documento · ${link.documentType || 'PDF'}`}</p><p className="text-[10px] text-muted-foreground">{link.expiresAt ? `Expira ${format(new Date(link.expiresAt), 'dd/MM/yyyy')}` : 'Sin fecha de expiración'}</p></div><div className="flex shrink-0 gap-1"><Button variant="ghost" size="icon" className="size-8" title="Copiar enlace" onClick={() => toast.info('Para copiar un enlace existente, genéralo nuevamente desde Portal')}><Copy className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-8 text-primary" title="Revocar enlace" onClick={() => revokePublicLink(link.id)}><ShieldAlert className="size-3.5" /></Button></div></div>)}</div>)}
                 </Card>
 
                 <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">
@@ -780,7 +860,9 @@ export function CustomerDetailDrawer({
                         </Select>
                       </div>
                     </div>
-                  {loading ? <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2"><Skeleton className="h-20 rounded-xl" /><Skeleton className="h-20 rounded-xl" /></div> : (customer?.historicalSummaries || []).length > 0 ? (
+                  {historicalSummaryQuery.isPending ? <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2"><Skeleton className="h-20 rounded-xl" /><Skeleton className="h-20 rounded-xl" /></div> : historicalSummaryQuery.isError ? (
+                    <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-destructive"><span>No se pudo cargar el historial importado.</span><Button type="button" variant="outline" size="sm" onClick={() => historicalSummaryQuery.refetch()}>Reintentar</Button></div>
+                  ) : historicalSummaries.length > 0 ? (
                     <section aria-labelledby="customer-imported-history-movements-title" className="mt-4 min-w-0 space-y-3 rounded-xl border border-primary/15 bg-primary/[0.025] p-3 sm:p-4">
                       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
@@ -792,7 +874,7 @@ export function CustomerDetailDrawer({
                         <Badge variant="outline" className="w-fit shrink-0 text-[9px]">Informativo</Badge>
                       </div>
                       <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                        {(customer?.historicalSummaries || []).map((summary) => (
+                        {historicalSummaries.map((summary) => (
                           <article key={`movement-history-${summary.id}`} className="flex min-w-0 flex-col justify-between gap-3 rounded-lg border border-border/40 bg-background/70 p-3">
                             <div className="min-w-0">
                               <p className="break-words text-xs font-black text-foreground">{summary.activityType}</p>
@@ -810,7 +892,12 @@ export function CustomerDetailDrawer({
                       </div>
                     </section>
                   ) : null}
-                  {loadingRelated ? (
+                  {movementQuery.isError ? (
+                    <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-destructive">
+                      <span>No se pudieron cargar los movimientos.</span>
+                      <Button type="button" variant="outline" size="sm" onClick={() => movementQuery.refetch()}>Reintentar</Button>
+                    </div>
+                  ) : loadingRelated ? (
                     <div className="mt-4 space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div>
                   ) : visibleMovements.length === 0 ? (
                     <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">No hay movimientos operativos para este filtro.</p>
@@ -818,17 +905,24 @@ export function CustomerDetailDrawer({
                     <div className="mt-4 min-w-0 divide-y divide-border/40 rounded-xl border border-border/50">
                       {visibleMovements.slice(0, 100).map((transaction) => (
                         <Fragment key={`${transaction.kind}-${transaction.id}`}>
-                          <button type="button" aria-expanded={selectedInvoice?.id === transaction.id || selectedMovement?.id === transaction.id} className="flex w-full min-w-0 items-start justify-between gap-3 p-3 text-left transition-colors hover:bg-primary/[0.04] focus-visible:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50" onClick={() => openMovementDetail(transaction)}>
+                          <button type="button" aria-expanded={selectedInvoiceId === transaction.id || selectedMovement?.id === transaction.id} className="flex w-full min-w-0 items-start justify-between gap-3 p-3 text-left transition-colors hover:bg-primary/[0.04] focus-visible:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50" onClick={() => openMovementDetail(transaction)}>
                             <div className="flex min-w-0 flex-1 items-start gap-3">
                               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div>
                               <div className="min-w-0 flex-1"><p className="break-words text-xs font-bold text-foreground">{transaction.kind}</p><p className="whitespace-normal break-words font-mono text-[10px] leading-relaxed text-muted-foreground">{transaction.number || 'Sin número'}{transaction.description ? ` · ${transaction.description}` : ''}</p></div>
                             </div>
-                            <div className="flex shrink-0 items-start gap-2 pl-2 text-right"><div className="whitespace-nowrap"><p className="text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'}</p><p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p></div><ChevronRight className={`mt-0.5 size-4 text-primary transition-transform ${selectedInvoice?.id === transaction.id || selectedMovement?.id === transaction.id ? 'rotate-90' : ''}`} /></div>
+                            <div className="flex shrink-0 items-start gap-2 pl-2 text-right"><div className="whitespace-nowrap"><p className="text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'}</p><p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p></div><ChevronRight className={`mt-0.5 size-4 text-primary transition-transform ${selectedInvoiceId === transaction.id || selectedMovement?.id === transaction.id ? 'rotate-90' : ''}`} /></div>
                           </button>
-                          {selectedInvoice?.id === transaction.id && transaction.kind === 'Factura' && <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} />}
-                          {selectedMovement?.id === transaction.id && <MovementInlineDetail transaction={selectedMovement} onClose={() => setSelectedMovement(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} />}
+                          {selectedInvoiceId === transaction.id && (selectedDocumentQuery.isFetching ? <div className="flex items-center gap-2 p-4 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Cargando factura…</div> : selectedDocumentQuery.isError ? <div className="flex items-center justify-between gap-3 p-4 text-xs text-destructive"><span>No se pudo cargar la factura.</span><Button type="button" variant="outline" size="sm" onClick={() => selectedDocumentQuery.refetch()}>Reintentar</Button></div> : selectedInvoice ? <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} /> : null)}
+                          {selectedMovement?.id === transaction.id && (selectedDocumentQuery.isFetching ? <div className="flex items-center gap-2 p-4 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Cargando documento…</div> : selectedDocumentQuery.isError ? <div className="flex items-center justify-between gap-3 p-4 text-xs text-destructive"><span>No se pudo cargar el documento.</span><Button type="button" variant="outline" size="sm" onClick={() => selectedDocumentQuery.refetch()}>Reintentar</Button></div> : <MovementInlineDetail transaction={selectedMovementDetail!} onClose={() => setSelectedMovement(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} />)}
                         </Fragment>
                       ))}
+                    </div>
+                  )}
+                  {movementQuery.hasNextPage && (
+                    <div className="mt-4 flex justify-center">
+                      <Button type="button" variant="outline" onClick={() => movementQuery.fetchNextPage()} disabled={movementQuery.isFetchingNextPage} className="gap-2 rounded-xl">
+                        {movementQuery.isFetchingNextPage && <Loader2 className="size-4 animate-spin" />} Cargar más movimientos
+                      </Button>
                     </div>
                   )}
                 </Card>
@@ -843,9 +937,11 @@ export function CustomerDetailDrawer({
                     </h3>
                     <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Antecedentes acumulados que llegaron con el alta inicial del cliente. Son informativos y no representan movimientos ni saldos de NovaHub.</p>
                   </div>
-                  {loading ? <div className="grid gap-3 sm:grid-cols-2"><Skeleton className="h-28 rounded-xl" /><Skeleton className="h-28 rounded-xl" /></div> : (customer?.historicalSummaries || []).length ? (
+                  {historicalSummaryQuery.isPending ? <div className="grid gap-3 sm:grid-cols-2"><Skeleton className="h-28 rounded-xl" /><Skeleton className="h-28 rounded-xl" /></div> : historicalSummaryQuery.isError ? (
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-destructive"><span>No se pudo cargar el resumen histórico.</span><Button type="button" variant="outline" size="sm" onClick={() => historicalSummaryQuery.refetch()}>Reintentar</Button></div>
+                  ) : historicalSummaries.length ? (
                     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {(customer?.historicalSummaries || []).map((summary) => (
+                      {historicalSummaries.map((summary) => (
                         <article key={summary.id} className="min-w-0 space-y-3 rounded-xl border border-primary/15 bg-primary/[0.025] p-4">
                           <div className="flex min-w-0 items-start justify-between gap-2">
                             <h4 className="min-w-0 break-words text-sm font-black text-foreground">{summary.activityType}</h4>
@@ -882,11 +978,18 @@ export function CustomerDetailDrawer({
                   customerName={customer.name}
                   moraTypeId={customer.moraTypeId}
                   moraType={customer.moraType}
-                  enabled={customerLoansEnabled}
+                  enabled={customerLoansEnabled && activeTab === 'prestamos'}
                   canCreateLoan={canCreateLoan}
                   canCreateMora={canCreateMora}
                   canEditMora={canEditMora}
                   onUpdated={onLoansUpdated}
+                  onReady={() => {
+                    measureReady('novahub.customer.loans-ready', tabStartedAt.current.prestamos);
+                    delete tabStartedAt.current.prestamos;
+                    tabSpans.current.prestamos?.setAttribute('outcome', 'success');
+                    tabSpans.current.prestamos?.end();
+                    delete tabSpans.current.prestamos;
+                  }}
                   onMoraTypeUpdated={(nextMoraType) => setDetail((current) => ({
                     ...(current?.id === customer.id ? current : customer),
                     moraTypeId: nextMoraType?.id ?? null,
@@ -916,7 +1019,7 @@ export function CustomerDetailDrawer({
                     </div>
                   </div>
                   <div className="space-y-4 pl-2 border-l-2 border-border/40 ml-2 pt-1">
-                    {historyLoading ? <div className="space-y-3"><Skeleton className="h-14 w-full rounded-xl" /><Skeleton className="h-14 w-full rounded-xl" /></div> : history.length > 0 ? history.slice(0, 30).map((event: any) => {
+                    {historyQuery.isError ? <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-destructive"><span>No se pudo cargar la auditoría.</span><Button type="button" variant="outline" size="sm" onClick={() => historyQuery.refetch()}>Reintentar</Button></div> : historyLoading ? <div className="space-y-3"><Skeleton className="h-14 w-full rounded-xl" /><Skeleton className="h-14 w-full rounded-xl" /></div> : history.length > 0 ? history.map((event: any) => {
                       let details: any = {};
                       try { details = event.details ? JSON.parse(event.details) : {}; } catch { details = {}; }
                       const changes = details.commercial_changes ? Object.entries(details.commercial_changes).map(([field, values]: any) => `${field}: ${values.before ?? '—'} → ${values.after ?? '—'}`).join(' · ') : '';
@@ -949,6 +1052,7 @@ export function CustomerDetailDrawer({
                     )}
                     </>}
                   </div>
+                  {historyQuery.hasNextPage && <div className="flex justify-center"><Button type="button" variant="outline" onClick={() => historyQuery.fetchNextPage()} disabled={historyQuery.isFetchingNextPage} className="gap-2 rounded-xl">{historyQuery.isFetchingNextPage && <Loader2 className="size-4 animate-spin" />} Cargar más historial</Button></div>}
                 </Card>
               </TabsContent>
             </div>
@@ -986,7 +1090,7 @@ export function CustomerDetailDrawer({
                 <span className="block text-sm font-bold text-foreground">Todas las transacciones</span>
                 <span className="block text-[11px] text-muted-foreground">Incluye todos los registros relacionados con este cliente.</span>
               </span>
-              <span className="shrink-0 text-xs font-black text-primary">{relatedTransactions.length}</span>
+              <span className="shrink-0 text-xs font-black text-primary">{exportRows.length}</span>
             </button>
             <button
               type="button"
@@ -1006,7 +1110,7 @@ export function CustomerDetailDrawer({
                   {historyExportFilter === 'ALL' ? 'Selecciona el tipo de transacción que deseas incluir.' : `Tipo: ${historyExportFilter}.`}
                 </span>
               </span>
-              <span className="shrink-0 text-xs font-black text-primary">{historyExportScope === 'FILTERED' ? selectedHistoryRows.length : relatedTransactions.length}</span>
+              <span className="shrink-0 text-xs font-black text-primary">{historyExportScope === 'FILTERED' ? selectedHistoryRows.length : exportRows.length}</span>
             </button>
           </div>
           {historyExportScope === 'FILTERED' && (

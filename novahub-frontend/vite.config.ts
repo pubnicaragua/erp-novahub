@@ -51,8 +51,7 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router'],
           ui: ['@radix-ui/react-dialog', '@radix-ui/react-select', '@radix-ui/react-tabs', '@radix-ui/react-popover', '@radix-ui/react-dropdown-menu'],
-          charts: ['recharts', 'lucide-react'],
-          pdf: ['jspdf', 'jspdf-autotable'],
+          charts: ['recharts'],
           excel: ['xlsx'],
         },
       },

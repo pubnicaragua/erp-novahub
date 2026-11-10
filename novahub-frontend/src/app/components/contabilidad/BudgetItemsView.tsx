@@ -300,7 +300,7 @@ export function BudgetItemsView() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-xs font-bold">Monto Asignado</Label>
-                <Input type="number" step="0.01" value={form.assignedAmount} onChange={e => setForm(p => ({ ...p, assignedAmount: Number(e.target.value) }))} className="rounded-xl text-sm" />
+                <Input type="number" step="0.01" value={form.assignedAmount} onChange={e => setForm(p => ({ ...p, assignedAmount: Number(e.target.value) }))} className="rounded-xl text-sm" currencyPrecision />
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold">Período</Label>

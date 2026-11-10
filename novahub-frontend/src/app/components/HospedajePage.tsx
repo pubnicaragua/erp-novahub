@@ -17,12 +17,13 @@ import { HotelCalendarView } from './hospedaje/HotelCalendarView';
 import { HotelReservationsView } from './hospedaje/HotelReservationsView';
 import { HotelRoomsView } from './hospedaje/HotelRoomsView';
 import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
+import { getCurrencyDecimalPlaces } from '../utils/currency';
 
 type HotelTab = 'calendario' | 'habitaciones' | 'reservas';
 const tabToSubmodule: Record<HotelTab, string> = { calendario: 'calendario-hospedaje', habitaciones: 'habitaciones', reservas: 'reservas' };
 const submoduleToTab: Record<string, HotelTab> = { 'calendario-hospedaje': 'calendario', habitaciones: 'habitaciones', reservas: 'reservas' };
 const statusLabel: Record<string, string> = { CONFIRMED: 'Confirmada', CHECKED_IN: 'En curso', CHECKED_OUT: 'Finalizada', CANCELLED: 'Cancelada', NO_SHOW: 'No llegó' };
-const money = (value: number, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (value: number, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
 const dateOnly = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const addCalendarDays = (value: string, days: number) => { const date = new Date(`${value}T00:00:00.000Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); };
 const stayNights = (reservation: HotelReservation) => Math.max(1, Math.round((new Date(`${reservation.checkOut.slice(0, 10)}T00:00:00Z`).getTime() - new Date(`${reservation.checkIn.slice(0, 10)}T00:00:00Z`).getTime()) / 86_400_000));

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { useAuth } from '../../contexts/AuthContext';
 import { journalEntriesService, transactionsService } from '../../services/finanzas.service';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface FinancialJournalViewProps {
   kind: 'journal' | 'ledger';
@@ -50,7 +51,7 @@ export function FinancialJournalView({ kind }: FinancialJournalViewProps) {
                   <td className="px-5 py-3 text-muted-foreground">{row.date || row.createdAt ? new Date(row.date || row.createdAt).toLocaleDateString('es-NI') : '—'}</td>
                   <td className="px-5 py-3 font-mono font-semibold">{row.number || row.reference || row.id || '—'}</td>
                   <td className="px-5 py-3">{row.description || row.memo || row.source || 'Sin descripción'}</td>
-                  <td className="px-5 py-3 text-right font-black">{Number(row.amount || row.total || row.debit || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}</td>
+                  <td className="px-5 py-3 text-right font-black">{Number(row.amount || row.total || row.debit || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}</td>
                 </tr>
               ))}</tbody>
             </table>

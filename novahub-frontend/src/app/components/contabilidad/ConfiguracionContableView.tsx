@@ -1051,7 +1051,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     const actionToken = beginNotificationAction()
     setSaving(true)
     try {
-      const payload = { autoGenEnabled, defaultCurrency, taxRate, industry, accountMappings: accountMappingsRef.current, customModules }
+      const payload = { autoGenEnabled, defaultCurrency, taxRate, industry, customModules }
       await contabilidadService.updateConfig(payload)
       toast.success('Configuración guardada. El motor usará estas cuentas en adelante.')
       completeNotificationAction(actionToken)

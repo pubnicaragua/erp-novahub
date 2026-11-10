@@ -7,7 +7,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { billsService } from '../../services/compras.service';
+import { billsService, type SupplierInvoiceSummary } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
 import { TaxDetail } from '../ui/TaxSelector';
 import { isTaxExempt } from '../../utils/taxUtils';
@@ -29,16 +29,16 @@ import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { getPurchaseInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface Props {
   data: SupplierInvoice[];
-  summaryData?: SupplierInvoice[];
+  summaryData?: SupplierInvoiceSummary;
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading: boolean;
@@ -120,7 +120,6 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierInvoice> | null>(null);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
-  const [nowMs] = useState(() => Date.now());
   const generateSupplierInvoiceNumber = () => `INV-${Date.now().toString().slice(-6)}`;
 
   useEffect(() => {
@@ -179,20 +178,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
       .toLowerCase();
     return haystack.includes(normalizedSearchTerm);
   });
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((invoice) => {
-    if (!normalizedSearchTerm) return true;
-    const haystack = [invoice.number, invoice.supplier?.name, invoice.supplier?.code, invoice.supplier?.email, invoice.supplier?.phone, invoice.notes, invoice.status, invoice.date ? new Date(invoice.date).toLocaleDateString() : '', invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : '', String(invoice.total ?? ''), String(invoice.amountPaid ?? ''), String(invoice.balance ?? ''), ...(invoice.items || []).map((item: any) => item.description)].filter(Boolean).join(' ').toLowerCase();
-    return haystack.includes(normalizedSearchTerm);
-  });
-  const summaryFilteredRows = summarySearchRows.filter((invoice) => {
-    const status = String(invoice.status || '').toUpperCase();
-    if (statusFilter === 'PENDING') return ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(status);
-    if (statusFilter === 'CREDIT') return status === 'CREDIT';
-    if (statusFilter === 'OVERDUE') return status === 'OVERDUE';
-    if (statusFilter === 'PAID') return status === 'PAID';
-    return true;
-  });
+  const summaryReady = summaryData !== undefined && !summaryError;
 
   const isSupplierActive = (supplierId?: string) =>
     !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
@@ -619,7 +605,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
                     const sourceCurrency = localDoc.currency || baseCurrency;
                     const sourceRate = Number(localDoc.exchangeRate || (sourceCurrency === baseCurrency ? 1 : globalRate));
                     const nextRate = nextCurrency === baseCurrency ? 1 : globalRate;
-                    const convert = (value: any) => Number(convertBetweenCurrencies(Number(value || 0), sourceCurrency, nextCurrency, sourceRate, nextRate).toFixed(2));
+                    const convert = (value: any) => Number(convertBetweenCurrencies(Number(value || 0), sourceCurrency, nextCurrency, sourceRate, nextRate).toFixed(getCurrencyDecimalPlaces()));
                     const nextItems = (localDoc.items || []).map((item: any) => ({
                       ...item,
                       unitPrice: convert(item.unitPrice),
@@ -737,8 +723,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
                         type="text" inputMode="decimal" min="0"
                         value={item.unitPrice === 0 ? '' : formatDecimalInput(item.unitPrice)}
                         onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
-                        className="h-8 text-xs text-right" placeholder="0" 
-                      />
+                        className="h-8 text-xs text-right" placeholder="0" currencyPrecision />
                     </div>
                     <div className="col-span-4">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Impuestos y Retenciones</p>
@@ -824,26 +809,26 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
     );
   }
 
-  const pendingInvoices = summarySearchRows.filter(invoice => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes((invoice.status || '').toUpperCase()));
-  const pendingTotalInDisplayCurrency = pendingInvoices
-    .reduce((acc, invoice) => {
-      const amount = Number(invoice.balance ?? invoice.total ?? invoice.baseTotal ?? 0);
+  const pendingGroups = summaryData?.pendingGroups || [];
+  const pendingTotalInDisplayCurrency = pendingGroups
+    .reduce((acc, group) => {
+      const amount = Number(group.amount || 0);
       const converted = valuationMode === 'CURRENT'
-        ? convertCurrentAmount(amount, invoice.currency)
-        : convertAmount(amount, invoice.currency, invoice.exchangeRate || globalRate);
+        ? convertCurrentAmount(amount, group.currency)
+        : convertAmount(amount, group.currency, group.exchangeRate || globalRate);
       return acc + converted;
     }, 0);
   const originalPendingAmounts = summarizeAmountsByCurrency(
-    pendingInvoices,
-    (invoice) => Number(invoice.balance ?? invoice.total ?? invoice.baseTotal ?? 0),
-    (invoice) => invoice.currency,
+    pendingGroups,
+    (group) => Number(group.amount || 0),
+    (group) => group.currency,
     baseCurrency,
   );
 
   const kpis = [
-     { title: 'Facturas', value: resolvedSummaryRows ? summarySearchRows.length : '—', icon: FileStack, color: 'text-blue-500', bg: 'bg-blue-500/10', filter: 'ALL' },
-     { title: 'Vencidas', value: resolvedSummaryRows ? summarySearchRows.filter(b => new Date(b.dueDate).getTime() < nowMs && (b.status||'').toUpperCase() !== 'PAID').length : '—', icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', filter: 'OVERDUE' },
-     { title: 'Pagadas (Mes)', value: resolvedSummaryRows ? summarySearchRows.filter(b => (b.status||'').toUpperCase() === 'PAID').length : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'PAID' },
+     { title: 'Facturas', value: summaryReady ? summaryData.total : '—', icon: FileStack, color: 'text-blue-500', bg: 'bg-blue-500/10', filter: 'ALL' },
+     { title: 'Vencidas', value: summaryReady ? summaryData.overdueCount : '—', icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', filter: 'OVERDUE' },
+     { title: 'Pagadas (Mes)', value: summaryReady ? summaryData.paidCount : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'PAID' },
   ];
 
   return (
@@ -851,7 +836,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {!resolvedSummaryRows ? <PurchaseKpiCard title="Por Pagar" value="—" icon={Clock} color="text-primary" bg="bg-primary/10" kind="filter" /> : displayMode === 'ORIGINAL'
+        {!summaryReady ? <PurchaseKpiCard title="Por Pagar" value="—" icon={Clock} color="text-primary" bg="bg-primary/10" kind="filter" /> : displayMode === 'ORIGINAL'
           ? originalPendingAmounts.map((summary) => <PurchaseKpiCard key={`pending-${summary.currency}`} title={`Por Pagar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={Clock} color="text-primary" bg="bg-primary/10" kind="filter" active={statusFilter === 'PENDING'} onClick={() => { const next = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'; setStatusFilter(next); onStatusChange?.(next); }} />)
           : <PurchaseKpiCard title={`Por Pagar (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(pendingTotalInDisplayCurrency, displayCurrency)} icon={Clock} color="text-primary" bg="bg-primary/10" kind="filter" active={statusFilter === 'PENDING'} onClick={() => { const next = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'; setStatusFilter(next); onStatusChange?.(next); }} />}
         {kpis.map((k, i) => (

@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '../../ui/dropdown-menu';
 import { cajaService, type CashQueueDocument, type InvoiceCashQueue } from '../../../services/caja.service';
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
 const MAX_VISIBLE_QUEUE_ITEMS = 50;
 
@@ -30,7 +31,7 @@ const formatQueueAmount = (queue: InvoiceCashQueue) => {
   const document = queue.invoice || queue.creditNote;
   if (!document) return '—';
   const symbol = document.currency === 'USD' ? '$' : 'C$';
-  return `${symbol} ${Number(document.balance || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${symbol} ${Number(document.balance || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
 };
 
 interface InvoiceCashQueueBellProps {

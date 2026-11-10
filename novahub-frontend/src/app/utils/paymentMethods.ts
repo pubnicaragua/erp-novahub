@@ -1,4 +1,5 @@
 const BANK_PAYMENT_METHODS = new Set(['CARD', 'TRANSFER']);
+import { getCurrencyDecimalPlaces, roundCurrencyNumber } from './currency';
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   CASH: 'Efectivo',
@@ -106,7 +107,7 @@ export function isCardPaymentMethod(method?: string | null): boolean {
 /** Calcula el monto de comisión por tarjeta. */
 export function calculateCardCommission(amount: number, commissionPercent: number): number {
   if (!commissionPercent || commissionPercent <= 0 || !amount || amount <= 0) return 0;
-  return Number((amount * commissionPercent / 100).toFixed(2));
+  return roundCurrencyNumber(amount * commissionPercent / 100);
 }
 
 /** Formatea el porcentaje de comisión para mostrar. */

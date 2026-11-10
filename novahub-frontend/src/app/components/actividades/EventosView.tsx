@@ -1199,8 +1199,8 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
                   </p>
                 )}
               </div>}
-              {canCreateFinancialExpense && <div className="space-y-2"><Label className="text-xs font-bold">Costo ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.cost} onChange={e => { const value = e.target.value; setNewEvent(current => ({ ...current, cost: value, ...(value.trim() === '' ? { expenseAccountId: '' } : {}) })); if (value.trim() === '') setCostReason(''); }} className="h-11 rounded-xl bg-background" /></div>}
-              {canCreateFinancialIncome && <div className="space-y-2"><Label className="text-xs font-bold">Ingreso ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.income} onChange={e => { const value = e.target.value; setNewEvent(current => ({ ...current, income: value, ...(value.trim() === '' ? { incomeAccountId: '' } : {}) })); }} className="h-11 rounded-xl bg-background" /></div>}
+              {canCreateFinancialExpense && <div className="space-y-2"><Label className="text-xs font-bold">Costo ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.cost} onChange={e => { const value = e.target.value; setNewEvent(current => ({ ...current, cost: value, ...(value.trim() === '' ? { expenseAccountId: '' } : {}) })); if (value.trim() === '') setCostReason(''); }} className="h-11 rounded-xl bg-background" currencyPrecision /></div>}
+              {canCreateFinancialIncome && <div className="space-y-2"><Label className="text-xs font-bold">Ingreso ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.income} onChange={e => { const value = e.target.value; setNewEvent(current => ({ ...current, income: value, ...(value.trim() === '' ? { incomeAccountId: '' } : {}) })); }} className="h-11 rounded-xl bg-background" currencyPrecision /></div>}
               {hasCostAmount && (
                 <>
                   <div className="space-y-2 sm:col-span-2">

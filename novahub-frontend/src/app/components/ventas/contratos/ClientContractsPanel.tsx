@@ -13,9 +13,10 @@ import { useTenantQuery } from '../../../hooks/useTenantQuery';
 import { toast } from '../../../services/toast';
 import { BILLING_LABEL, CONTRACT_HEALTH_LABEL, CONTRACT_STATUS_LABEL, clientContractsService, type BillingFrequency, type ContractStatus } from '../../../services/client-contracts.service';
 import { ClientContractDialog } from './ClientContractDialog';
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
 const failure = (error: unknown) => (error as any)?.response?.data?.message?.toString?.() || (error as Error)?.message || 'No se pudo completar la acción.';
-const money = (amount: number, currency: string) => `${currency} ${new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2 }).format(amount)}`;
+const money = (amount: number, currency: string) => `${currency} ${new Intl.NumberFormat('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() }).format(amount)}`;
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-NI', { dateStyle: 'medium', timeZone: 'UTC' }) : '—');
 const field = 'h-10 w-full rounded-xl border border-border/60 bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary';
 
@@ -57,7 +58,7 @@ function NewContractDialog({ onClose, onCreated }: { onClose: () => void; onCrea
             <>
               <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="nc-client">Cliente</Label><Input id="nc-client" value={clientName} maxLength={160} onChange={(e) => setClientName(e.target.value)} /></div>
               <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="nc-title">Título</Label><Input id="nc-title" value={title} maxLength={160} onChange={(e) => setTitle(e.target.value)} placeholder="Servicios de implementación" /></div>
-              <div className="space-y-1.5"><Label htmlFor="nc-amount">Monto</Label><Input id="nc-amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label htmlFor="nc-amount">Monto</Label><Input id="nc-amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} currencyPrecision /></div>
               <div className="space-y-1.5"><Label htmlFor="nc-cur">Moneda</Label><select id="nc-cur" className={field} value={currency} onChange={(e) => setCurrency(e.target.value)}><option value="USD">USD</option><option value="NIO">NIO</option></select></div>
             </>
           ) : (

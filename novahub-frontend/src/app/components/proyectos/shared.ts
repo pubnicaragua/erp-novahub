@@ -1,4 +1,5 @@
 import type { Priority, ProjectCostSource, ProjectCostStatus, ProjectStatus, TaskStatus } from '../../services/projects.service';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 export const PROJECT_STATUS_META: Record<ProjectStatus, { label: string; badge: string }> = {
   DRAFT: { label: 'Borrador', badge: 'bg-slate-500/10 text-slate-600 border-slate-200' },
@@ -81,7 +82,7 @@ export const COST_STATUS_OPTIONS: { value: ProjectCostStatus; label: string }[] 
 export const money = (value?: number | string | null, currency = 'NIO'): string => {
   const n = Number(value || 0);
   const symbol = currency === 'USD' ? '$' : 'C$';
-  return `${symbol}${n.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${symbol}${n.toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
 };
 
 export const formatDate = (value?: string | null): string => {

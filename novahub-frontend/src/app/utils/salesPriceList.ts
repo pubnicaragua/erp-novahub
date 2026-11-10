@@ -1,4 +1,5 @@
 import type { ProductVariant } from '../types/variants';
+import { getCurrencyDecimalPlaces } from './currency';
 
 export interface SalesPriceListMatrix {
   lists: any[];
@@ -71,8 +72,8 @@ export function hasSalesProductPriceListConflicts(
 export function formatSalesAmount(value: unknown): string {
   const amount = Number(value || 0);
   return (Number.isFinite(amount) ? amount : 0).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: getCurrencyDecimalPlaces(),
+    maximumFractionDigits: getCurrencyDecimalPlaces(),
   });
 }
 

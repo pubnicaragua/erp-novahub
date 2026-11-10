@@ -112,18 +112,11 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
 
-  const kpiQuery = useQuery({
-    queryKey: ['hr', 'kpi-data'],
+  const definitionsQuery = useQuery({
+    queryKey: ['hr', 'kpi', 'definitions'],
     queryFn: async ({ signal }) => {
-      const [defRes, results] = await Promise.all([
-        hrService.getKpiDefinitions(undefined, signal) as any,
-        fetchAllReportPages<KpiResult>(
-          (filters) => hrService.getKpiResults(undefined, undefined, signal, filters),
-          { pageSize: 5000, report: true },
-          signal,
-        ),
-      ]);
-      return { definitions: Array.isArray(defRes) ? defRes : defRes?.data || [], results };
+      const response = await hrService.getKpiDefinitions(undefined, signal) as any;
+      return (Array.isArray(response) ? response : response?.data || []) as KpiDefinition[];
     },
     staleTime: 30_000,
     gcTime: 5 * 60_000,
@@ -132,11 +125,34 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
     enabled: canViewHr,
     placeholderData: keepPreviousData,
   });
-  const loading = kpiQuery.isLoading; // no desmontar formularios abiertos al refrescar
-  const definitions = (kpiQuery.data?.definitions || []) as KpiDefinition[];
-  const results = (kpiQuery.data?.results || []) as KpiResult[];
+  const resultsSummaryQuery = useQuery({
+    queryKey: ['hr', 'kpi', 'results', 'summary'],
+    queryFn: ({ signal }) => hrService.getKpiResultsSummary(signal),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    enabled: canViewHr,
+  });
+  const resultsQuery = useQuery({
+    queryKey: ['hr', 'kpi', 'results', 'list'],
+    queryFn: ({ signal }) => fetchAllReportPages<KpiResult>(
+      (filters) => hrService.getKpiResults(undefined, undefined, signal, filters),
+      { pageSize: 5000, report: true },
+      signal,
+    ),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    enabled: canViewHr && activeTab === 'results',
+    placeholderData: keepPreviousData,
+  });
+  const loading = definitionsQuery.isLoading || resultsSummaryQuery.isLoading; // no desmontar formularios abiertos al refrescar
+  const definitions = definitionsQuery.data || [];
+  const results = resultsQuery.data || [];
   const fetchAll = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ['hr', 'kpi-data'], refetchType: 'active' }),
+    () => queryClient.invalidateQueries({ queryKey: ['hr', 'kpi'], refetchType: 'active' }),
     [queryClient],
   );
   useNotificationDomainRefresh({
@@ -273,6 +289,10 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
   const pctValues = filteredResults.map(resultPct).filter((p): p is number => p !== null);
   const avgCompliance = pctValues.length > 0 ? Math.round(pctValues.reduce((a, b) => a + b, 0) / pctValues.length) : 0;
   const atRisk = resultSummaryRows.filter(r => ['RISK', 'UNDER'].includes(resultCompliance(r))).length;
+  const hasLoadedResults = resultsQuery.data !== undefined;
+  const displayedResultCount = hasLoadedResults ? filteredResults.length : (resultsSummaryQuery.data?.total || 0);
+  const displayedAverage = hasLoadedResults ? (pctValues.length > 0 ? avgCompliance : null) : resultsSummaryQuery.data?.averageCompliance;
+  const displayedAtRisk = hasLoadedResults ? atRisk : (resultsSummaryQuery.data?.atRisk || 0);
 
   const goToResults = (compliance?: string[]) => {
     setActiveTab('results');
@@ -296,10 +316,10 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
     );
   }
 
-  if (kpiQuery.isError) {
+  if (definitionsQuery.isError || resultsSummaryQuery.isError) {
     return <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-border/50 bg-card p-6">
       <KpiSummaryNotice error />
-      <Button variant="outline" onClick={() => void kpiQuery.refetch()}>Reintentar</Button>
+      <Button variant="outline" onClick={() => { void definitionsQuery.refetch(); void resultsSummaryQuery.refetch(); }}>Reintentar</Button>
     </div>;
   }
 
@@ -330,7 +350,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
         />
         <StatCard
           label="Resultados registrados"
-          value={filteredResults.length}
+          value={displayedResultCount}
           icon={BarChart3}
           tone="blue"
           sub="Mediciones de desempeño"
@@ -339,7 +359,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
         />
         <StatCard
           label="Cumplimiento promedio"
-          value={pctValues.length > 0 ? `${avgCompliance}%` : '—'}
+          value={displayedAverage != null ? `${displayedAverage}%` : '—'}
           icon={TrendingUp}
           tone="green"
           sub="Promedio de metas alcanzadas"
@@ -348,7 +368,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
         />
         <StatCard
           label="En riesgo"
-          value={atRisk}
+          value={displayedAtRisk}
           icon={AlertTriangle}
           tone="red"
           sub="Resultados por debajo de la meta"
@@ -550,7 +570,9 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
             )}
           </div>
 
-          <div className="border rounded-lg overflow-hidden" data-tour="hr-kpi-results-items">
+          {resultsQuery.isLoading && <div className="rounded-xl border border-border/50 bg-card p-8 text-center text-sm text-muted-foreground">Cargando resultados KPI...</div>}
+          {resultsQuery.isError && <div className="flex flex-col items-center gap-3 rounded-xl border border-border/50 bg-card p-6"><KpiSummaryNotice error /><Button variant="outline" onClick={() => void resultsQuery.refetch()}>Reintentar</Button></div>}
+          <div className={cn('border rounded-lg overflow-hidden', (resultsQuery.isLoading || resultsQuery.isError) && 'hidden')} data-tour="hr-kpi-results-items">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px]">
                 <thead className="bg-muted/50">
@@ -617,7 +639,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
                 </tbody>
               </table>
             </div>
-            {filteredResults.length === 0 && (
+            {!resultsQuery.isLoading && !resultsQuery.isError && filteredResults.length === 0 && (
               <div className="text-center py-12">
                 <BarChart3 className="size-12 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">No hay resultados KPI registrados</p>

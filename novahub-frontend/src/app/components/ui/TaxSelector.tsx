@@ -5,6 +5,7 @@ import { Label } from './label'
 import { ShieldAlert } from 'lucide-react'
 import { isTaxExempt } from '../../utils/taxUtils'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
+import { formatCurrencyNumber, roundCurrencyNumber } from '../../utils/currency'
 
 interface TaxCatalogEntry {
   id: string
@@ -109,8 +110,8 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
     ? Number(item.withholdingRate)
     : (whEntry ? whEntry.rate : 0)
 
-  const calcTaxAmount = (base: number) => base * effectiveTaxRate / 100
-  const calcWhAmount = (base: number) => base * effectiveWhRate / 100
+  const calcTaxAmount = (base: number) => roundCurrencyNumber(base * effectiveTaxRate / 100)
+  const calcWhAmount = (base: number) => roundCurrencyNumber(base * effectiveWhRate / 100)
 
   const hasTax = Boolean(item.taxType && !isTaxExempt(item.taxType))
   const hasWithholding = Boolean(item.withholdingType && item.withholdingType !== 'NONE')
@@ -132,10 +133,10 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
               onItemChange('taxType', v)
               if (entry) {
                 const rate = Number(entry.rate)
-                const base = Number((entry.baseCalculation === 'LINE_TOTAL' ? lineTotal : item.taxBase || lineTotal).toFixed(2))
+                const base = roundCurrencyNumber(entry.baseCalculation === 'LINE_TOTAL' ? lineTotal : item.taxBase || lineTotal)
                 onItemChange('taxRate', rate)
                 onItemChange('taxBase', base)
-                onItemChange('taxAmount', Number((base * rate / 100).toFixed(2)))
+                onItemChange('taxAmount', calcTaxAmount(base))
               }
             }}
           />
@@ -148,7 +149,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
                 type="number"
                 step="0.01"
                 min="0"
-                value={formatTwoDecimals(item.taxBase || 0)}
+                value={formatCurrencyNumber(item.taxBase || 0)}
                 disabled={disabled || calculatedFieldsReadOnly}
                 readOnly={calculatedFieldsReadOnly}
                 aria-readonly={calculatedFieldsReadOnly}
@@ -156,9 +157,8 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
                 onChange={(e) => {
                   const base = Number(e.target.value || 0)
                   onItemChange('taxBase', base)
-                  onItemChange('taxAmount', Number(calcTaxAmount(base).toFixed(2)))
-                }}
-              />
+                  onItemChange('taxAmount', calcTaxAmount(base))
+                }} currencyPrecision />
             </div>
             <div className="min-w-0 xl:col-start-3">
               <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">
@@ -177,14 +177,13 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
                 onChange={(e) => {
                   const rate = Number(e.target.value || 0)
                   onItemChange('taxRate', rate)
-                  onItemChange('taxAmount', Number((taxBase * rate / 100).toFixed(2)))
-                }}
-              />
+                  onItemChange('taxAmount', roundCurrencyNumber(taxBase * rate / 100))
+                }} />
             </div>
             <div className="min-w-0 xl:col-start-4">
               <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">IVA</Label>
               <div className="flex h-8 items-center text-right text-sm font-medium tabular-nums text-rose-500">
-                {sym} {formatTwoDecimals(taxAmount)}
+                {sym} {formatCurrencyNumber(taxAmount)}
               </div>
             </div>
           </>
@@ -205,7 +204,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
               const entry = whEntries.find(e => e.code === v)
               onItemChange('withholdingType', v)
               if (entry && v !== 'NONE') {
-                const base = Number((entry.baseCalculation === 'LINE_TOTAL' ? lineTotal : Number(item.withholdingBase || lineTotal)).toFixed(2))
+                const base = roundCurrencyNumber(entry.baseCalculation === 'LINE_TOTAL' ? lineTotal : Number(item.withholdingBase || lineTotal))
                 onItemChange('withholdingRate', entry.rate)
                 onItemChange('withholdingBase', base)
               } else {
@@ -223,13 +222,12 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
                 type="number"
                 step="0.01"
                 min="0"
-                value={formatTwoDecimals(item.withholdingBase || 0)}
+                value={formatCurrencyNumber(item.withholdingBase || 0)}
                 disabled={disabled || calculatedFieldsReadOnly}
                 readOnly={calculatedFieldsReadOnly}
                 aria-readonly={calculatedFieldsReadOnly}
                 className={`h-8 min-w-0 px-2 text-right text-xs ${calculatedFieldsReadOnly ? 'cursor-not-allowed border-border/70 bg-muted/40 text-muted-foreground' : ''}`}
-                onChange={(e) => onItemChange('withholdingBase', Number(e.target.value || 0))}
-              />
+                onChange={(e) => onItemChange('withholdingBase', Number(e.target.value || 0))} currencyPrecision />
             </div>
             <div className="min-w-0 xl:col-start-7">
               <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">
@@ -251,7 +249,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
             <div className="min-w-0 xl:col-start-8">
               <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">Monto Retenido</Label>
               <div className="flex h-8 items-center text-right text-sm font-medium tabular-nums text-amber-600">
-                -{sym} {formatTwoDecimals(calcWhAmount(withholdingBase))}
+                -{sym} {formatCurrencyNumber(calcWhAmount(withholdingBase))}
               </div>
             </div>
           </>

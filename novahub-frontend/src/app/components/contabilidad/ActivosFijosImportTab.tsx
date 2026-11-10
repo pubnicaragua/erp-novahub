@@ -15,6 +15,7 @@ import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const TEMPLATE_HEADERS = [
   'Código', 'Nombre', 'Categoría', 'Marca', 'Modelo', 'No. serie', 'Sucursal', 'Centro de costo',
@@ -166,7 +167,7 @@ export function ActivosFijosImportTab() {
       const rowCurrency = String(next.moneda ?? '').trim().toUpperCase();
       if (residualInNio && next.valor_residual && rowCurrency === 'USD') {
         const rate = Number(next.tipo_de_cambio) || 0;
-        if (rate > 0) next.valor_residual = (Number(next.valor_residual) / rate).toFixed(2);
+        if (rate > 0) next.valor_residual = (Number(next.valor_residual) / rate).toFixed(getCurrencyDecimalPlaces());
       }
       delete next.residual_en_nio;
       return next;
@@ -249,7 +250,7 @@ export function ActivosFijosImportTab() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="default-accum">Depreciación acumulada inicial (opcional)</Label>
-              <Input id="default-accum" type="number" step="0.01" min="0" value={defaultAccum} onChange={(e) => setDefaultAccum(e.target.value)} />
+              <Input id="default-accum" type="number" step="0.01" min="0" value={defaultAccum} onChange={(e) => setDefaultAccum(e.target.value)} currencyPrecision />
               <p className="text-[11px] text-muted-foreground">Se aplica a las filas que no especifiquen su propia depreciación acumulada inicial.</p>
             </div>
           </div>

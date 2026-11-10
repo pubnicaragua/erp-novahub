@@ -53,6 +53,7 @@ import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorT
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase } from '../../utils/paymentSettlement';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { SalesPaymentReceiptDialog } from './SalesPaymentReceiptDialog';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface NotasCreditoViewProps {
   data: CreditDocument[];
@@ -275,7 +276,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         paymentCreditBalanceBase,
         otherPaymentsBase,
       );
-      return { ...nextLine, amount: maximumBase.toFixed(2), currency: baseCurrency, exchangeRate: 1 };
+      return { ...nextLine, amount: maximumBase.toFixed(getCurrencyDecimalPlaces()), currency: baseCurrency, exchangeRate: 1 };
     }));
   };
 
@@ -314,7 +315,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     if (Number.isFinite(reportedPaid) && reportedPaid > 0.01) return reportedPaid;
     // Compatibilidad con respuestas antiguas que todavía no incluyen
     // invoice.amountPaid: el crédito conserva exactamente el saldo pendiente.
-    return Math.max(0, Number((sourceInvoiceTotal(row) - creditDebt(row)).toFixed(2)));
+    return Math.max(0, Number((sourceInvoiceTotal(row) - creditDebt(row)).toFixed(getCurrencyDecimalPlaces())));
   };
   const sourceCurrency = (row: CreditNote) => row.invoice?.currency || row.currency;
   const sourceExchangeRate = (row: CreditNote) => row.invoice?.exchangeRate || row.exchangeRate;
@@ -520,7 +521,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     const creditCurrency = credit.currency === 'USD' ? 'USD' : 'NIO';
     const creditBalance = Number(credit.balance ?? Number(credit.total || 0) - Number(credit.amountPaid || 0));
     const initialAmount = convertBetweenCurrencies(creditBalance, creditCurrency, nextCurrency, Number(credit.exchangeRate || globalRate || 1), nextRate);
-    setPaymentLines([{ ...paymentLine('TRANSFER', initialAmount.toFixed(2), nextCurrency), reference: credit.number }]);
+    setPaymentLines([{ ...paymentLine('TRANSFER', initialAmount.toFixed(getCurrencyDecimalPlaces()), nextCurrency), reference: credit.number }]);
     setMixedPaymentEnabled(false);
     setPartialPaymentEnabled(false);
   };
@@ -556,7 +557,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       lineBaseAmount,
       (appliedBase, line) => {
         const lineRate = line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate || 1);
-        return convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(2);
+        return convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(getCurrencyDecimalPlaces());
       },
     );
     const submittedPaymentTotalBase = submittedLines.reduce((sum, line) => sum + toBaseAmount(
@@ -802,7 +803,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     const exchangeRate = currency === 'NIO' ? 1 : Number(globalRate || 1);
     const convertCharge = (amount: number) => {
       const baseAmount = previousCurrency === 'USD' ? amount * previousRate : amount;
-      return Number((currency === 'USD' ? baseAmount / exchangeRate : baseAmount).toFixed(2));
+      return Number((currency === 'USD' ? baseAmount / exchangeRate : baseAmount).toFixed(getCurrencyDecimalPlaces()));
     };
     const convertedItems = (localDoc.items || []).map((item: any) => {
       const basePrice = previousCurrency === 'USD' ? Number(item.unitPrice || 0) * previousRate : Number(item.unitPrice || 0);
@@ -827,7 +828,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     // sí filtra las líneas sin monto/descripción al momento de guardar.
     const nextDoc = { ...localDoc, extraCharges: charges, ...getLegacySalesExtraCostFields(payload) };
     const lineTotal = Number(localDoc.total || 0) - getCreditAdditionalChargesAmount(localDoc);
-    setLocalDoc({ ...nextDoc, total: Number((lineTotal + getCreditAdditionalChargesAmount(nextDoc)).toFixed(2)) });
+    setLocalDoc({ ...nextDoc, total: Number((lineTotal + getCreditAdditionalChargesAmount(nextDoc)).toFixed(getCurrencyDecimalPlaces())) });
   };
 
   const updateCreditDelivery = (updates: { deliveryDescription?: string | null; deliveryAmount?: number }) => {
@@ -838,7 +839,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       deliveryAmount: Math.max(0, Number(updates.deliveryAmount ?? localDoc.deliveryAmount ?? 0)),
     };
     const lineTotal = Number(localDoc.total || 0) - getCreditAdditionalChargesAmount(localDoc);
-    setLocalDoc({ ...nextDoc, total: Number((lineTotal + getCreditAdditionalChargesAmount(nextDoc)).toFixed(2)) });
+    setLocalDoc({ ...nextDoc, total: Number((lineTotal + getCreditAdditionalChargesAmount(nextDoc)).toFixed(getCurrencyDecimalPlaces())) });
   };
 
   const columns: ColumnDef<CreditDocument>[] = [
@@ -1036,7 +1037,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                       <Input type="number" inputMode="numeric" min="1" step="1" value={Number(item.quantity) || ''} onChange={(event) => updateItem(index, { quantity: toWholeQuantity(event.target.value) })} placeholder="1" />
                     </div>
                     <div className="min-w-0 xl:col-span-1">
-                      <Input type="text" inputMode="decimal" min="0" value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice} readOnly={Boolean(item.productId)} title={item.productId ? 'Precio definido por la lista de precios' : 'Precio personalizado'} onChange={(event) => updateItem(index, { unitPrice: Number(String(event.target.value).replace(/,/g, '')) || 0 })} placeholder="0" />
+                      <Input type="text" inputMode="decimal" min="0" value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice} readOnly={Boolean(item.productId)} title={item.productId ? 'Precio definido por la lista de precios' : 'Precio personalizado'} onChange={(event) => updateItem(index, { unitPrice: Number(String(event.target.value).replace(/,/g, '')) || 0 })} placeholder="0" currencyPrecision />
                     </div>
                     <div className="col-span-2 flex items-center justify-end xl:col-span-1">
                       <Input type="text" readOnly value={formatConvertedAmount(((Number(item.quantity || 0) * Number(item.unitPrice || 0)) - (Number(item.quantity || 0) * Number(item.unitPrice || 0) * Number(item.discount || 0) / 100)) * Number(item.taxRate || 0) / 100, localDoc.currency, localDoc.exchangeRate)} className="h-8 w-16 border-none bg-transparent px-0 text-right text-xs font-black shadow-none focus-visible:border-transparent focus-visible:ring-0" />
@@ -1051,8 +1052,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
               {!localDoc.items?.length && <div className="rounded-xl border border-dashed border-border/50 py-8 text-center text-xs text-muted-foreground">Agrega los productos o servicios que se entregarán a crédito.</div>}
             </div>
             {(normalizeSalesExtraCharges(localDoc).length > 0 || String(localDoc?.deliveryDescription || '').trim() || Number(localDoc?.deliveryAmount || 0) > 0) && <div className="mt-5 grid gap-3 border-t border-border/50 pt-5 md:grid-cols-2">
-              {normalizeSalesExtraCharges(localDoc).map((charge, index) => <div key={charge.id} className="rounded-xl border border-border/50 bg-muted/10 p-3"><div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Coste extra {index + 1}</span><Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" aria-label={`Eliminar coste extra ${index + 1}`} onClick={() => updateCreditExtraCharges(normalizeSalesExtraCharges(localDoc).filter((entry) => entry.id !== charge.id))}><Trash2 className="size-3.5" /></Button></div><div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={charge.description} placeholder="Descripción" onChange={(event) => updateCreditExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, description: event.target.value } : entry))} /><Input type="number" min="0" step="0.01" value={charge.amount || ''} placeholder="Monto" onChange={(event) => updateCreditExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, amount: Math.max(0, Number(event.target.value) || 0) } : entry))} /></div></div>)}
-              {(String(localDoc?.deliveryDescription || '').trim() || Number(localDoc?.deliveryAmount || 0) > 0) && <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Delivery</span><Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" aria-label="Eliminar delivery" onClick={() => updateCreditDelivery({ deliveryDescription: null, deliveryAmount: 0 })}><Trash2 className="size-3.5" /></Button></div><div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={localDoc.deliveryDescription || ''} placeholder="Descripción del delivery" onChange={(event) => updateCreditDelivery({ deliveryDescription: event.target.value })} /><Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} placeholder="Monto" onChange={(event) => updateCreditDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} /></div></div>}
+              {normalizeSalesExtraCharges(localDoc).map((charge, index) => <div key={charge.id} className="rounded-xl border border-border/50 bg-muted/10 p-3"><div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Coste extra {index + 1}</span><Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" aria-label={`Eliminar coste extra ${index + 1}`} onClick={() => updateCreditExtraCharges(normalizeSalesExtraCharges(localDoc).filter((entry) => entry.id !== charge.id))}><Trash2 className="size-3.5" /></Button></div><div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={charge.description} placeholder="Descripción" onChange={(event) => updateCreditExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, description: event.target.value } : entry))} /><Input type="number" min="0" step="0.01" value={charge.amount || ''} placeholder="Monto" onChange={(event) => updateCreditExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, amount: Math.max(0, Number(event.target.value) || 0) } : entry))} currencyPrecision /></div></div>)}
+              {(String(localDoc?.deliveryDescription || '').trim() || Number(localDoc?.deliveryAmount || 0) > 0) && <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Delivery</span><Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" aria-label="Eliminar delivery" onClick={() => updateCreditDelivery({ deliveryDescription: null, deliveryAmount: 0 })}><Trash2 className="size-3.5" /></Button></div><div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={localDoc.deliveryDescription || ''} placeholder="Descripción del delivery" onChange={(event) => updateCreditDelivery({ deliveryDescription: event.target.value })} /><Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} placeholder="Monto" onChange={(event) => updateCreditDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} currencyPrecision /></div></div>}
             </div>}
             <div className="mt-5 rounded-xl border border-border/50 bg-muted/10 p-4 space-y-2">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">Resumen del crédito</p>
@@ -1246,7 +1247,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
                           const nextRate = paymentLineRate(nextCurrency);
-                          return { ...item, amount: convertBetweenCurrencies(Number(String(item.amount || '').replace(/,/g, '') || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined };
+                          return { ...item, amount: convertBetweenCurrencies(Number(String(item.amount || '').replace(/,/g, '') || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces()), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined };
                         }))} />
                         <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: event.target.value, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value || 0), Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} disabled={paymentLoading} className="h-9 text-xs tabular-nums" /></div>
                         <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1 || paymentLoading} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar medio de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>

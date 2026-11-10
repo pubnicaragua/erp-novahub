@@ -1,5 +1,6 @@
 import { getPdfTemplatePartyConfig, getPdfTemplateTarget, isPdfTemplateFixed, type PdfTemplateTarget } from './pdf-document-catalog';
 import { normalizePdfHeaderContentSpacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM } from './pdf-header-spacing';
+import { getCurrencyDecimalPlaces } from '../utils/currency';
 
 export type PdfTemplateNodeType = 'section' | 'text' | 'field' | 'table' | 'report-sections' | 'chart' | 'totals' | 'image' | 'barcode' | 'divider' | 'spacer';
 export type PdfTemplateChartType = 'area' | 'bar' | 'donut';
@@ -643,7 +644,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     ? `${18 + index * 3}.5%`
     : /activo|factura|producto|colaborador|movimiento|unidades|cuenta|sesiones|saldo|cliente|proveedor|pendiente/.test(label.toLocaleLowerCase('es-NI'))
       ? (index + 1) * 24
-      : `C$ ${(24500 + index * 1825).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      : `C$ ${(24500 + index * 1825).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
 
   if (target.key === 'ventas.customer-history') {
     const history = [
@@ -2487,7 +2488,11 @@ export function resolveTemplateToken(token: string | undefined, data: PdfTemplat
     }
   }
   if (value === null || value === undefined) return fallback;
-  if (typeof value === 'number') return value.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (typeof value === 'number') {
+    const isMoneyToken = /amount|total|subtotal|price|cost|balance|debit|credit|tax|discount|payment|salary|fee|income|expense|capital|principal|interest|charge|monto|precio|costo|saldo|pago|ingreso|egreso|impuesto|salario|abono|cargo/i.test(token);
+    const digits = isMoneyToken ? getCurrencyDecimalPlaces() : 2;
+    return value.toLocaleString('es-NI', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
   return String(value);
 }
 

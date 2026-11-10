@@ -11,6 +11,7 @@ import type { PdfDownloadFormat } from '../../../utils/pdfDownloadFormats';
 import { api } from '../../../services/api';
 import type { PurchaseOrder, Supplier } from '../../../types';
 import { getPurchaseOrderStatusOption, normalizePurchaseOrderStatus, PURCHASE_ORDER_ACTIONABLE_STATUSES } from '../../../utils/purchaseOrderStatus';
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
 const ACTION_LABELS: Record<string, string> = {
   CREATE: 'Creación',
@@ -47,8 +48,8 @@ const HISTORY_VALUE_LABELS: Record<string, string> = {
 };
 
 const formatAmount = (value: unknown) => new Intl.NumberFormat('es-NI', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
+  minimumFractionDigits: getCurrencyDecimalPlaces(),
+  maximumFractionDigits: getCurrencyDecimalPlaces(),
 }).format(Number(value || 0));
 
 const formatDate = (value: unknown) => value

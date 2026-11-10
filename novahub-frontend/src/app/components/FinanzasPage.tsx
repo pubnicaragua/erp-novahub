@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   DollarSign, TrendingUp, TrendingDown, BarChart3, 
@@ -23,7 +23,7 @@ import { FinanceLossesView } from './finanzas/FinanceLossesView';
 import { FinanceFundingModal } from './finanzas/FinanceFundingModal';
 import { LoanInstallmentsPanel } from './finanzas/LoanInstallmentsPanel';
 import { incomeKindLabel, isLoanKind, isOperatingIncome } from './finanzas/incomeKinds';
-import { accountsService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
+import { accountsService, financeDashboardService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
 import { FinancialJournalView } from './finanzas/FinancialJournalView';
 import { contabilidadService } from '../services/contabilidad.service';
 import { toast } from '@/app/services/toast';
@@ -37,6 +37,7 @@ import { cn } from './ui/utils';
 import { financeCategoryLabel } from './finanzas/financeChartTheme';
 import { fetchAllReportPages } from '../hooks/useTenantQuery';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../services/notification-action-coordinator';
+import { getCurrencyDecimalPlaces } from '../utils/currency';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
@@ -104,7 +105,7 @@ function groupSalesIncomePayments(
       row?.baseAmount !== undefined && row?.baseAmount !== null
         ? Number(row.baseAmount)
         : toBaseAmount(Number(row?.amount || 0), row?.currency, Number(row?.exchangeRate || globalRate))
-    ), 0).toFixed(2));
+    ), 0).toFixed(getCurrencyDecimalPlaces()));
     const sameCurrency = currencies.size <= 1;
     const isMixed = ordered.some((row) => /cobro mixto|pago mixto/i.test(String(row?.description || '')))
       || (String(first?.source || '').toLowerCase() === 'ventas - caja' && new Set(ordered.map((row) => String(row?.description || '').match(/\(([^)]+)\)/)?.[1] || '')).size > 1);
@@ -114,7 +115,7 @@ function groupSalesIncomePayments(
       ...first,
       id: `income-group:${documentNumber}`,
       number: first.number,
-      amount: sameCurrency ? Number(ordered.reduce((sum, row) => sum + Number(row?.amount || 0), 0).toFixed(2)) : baseAmount,
+      amount: sameCurrency ? Number(ordered.reduce((sum, row) => sum + Number(row?.amount || 0), 0).toFixed(getCurrencyDecimalPlaces())) : baseAmount,
       currency: sameCurrency ? first.currency : baseCurrency,
       exchangeRate: sameCurrency ? Number(first.exchangeRate || 1) : 1,
       baseAmount,
@@ -135,6 +136,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const queryClient = useQueryClient();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const { displayCurrency, baseCurrency, exchangeRate: globalRate, valuationMode, valuationModeLabel, showValuationLegend, convertAmount, convertCurrentAmount, formatCurrentAmount, toBaseAmount } = useCurrency();
+  const dashboardSummaryStartedAt = useRef<number | null>(null);
 
   const hasAccess = (moduleId: string) => {
     if (!user?.enabledModules) return true;
@@ -203,12 +205,41 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
   const financeParams = { pageSize: 5000, report: true, ...(dateFrom && { dateFrom }), ...(dateTo && { dateTo }) };
   const activeDataTabs = {
-    income: ['resumen', 'ingresos', 'analisis', 'balance-general'].includes(activeTab),
-    expense: ['resumen', 'gastos', 'analisis', 'balance-general'].includes(activeTab),
-    recurringExpense: ['resumen', 'recurrentes', 'calendario', 'analisis'].includes(activeTab),
-    recurringIncome: ['resumen', 'recurrentes', 'ingresos-recurrentes', 'calendario', 'analisis'].includes(activeTab),
-    accounts: ['resumen', 'ingresos', 'gastos', 'recurrentes', 'ingresos-recurrentes', 'balance-general'].includes(activeTab),
+    income: ['ingresos', 'analisis', 'balance-general'].includes(activeTab),
+    expense: ['gastos', 'analisis', 'balance-general'].includes(activeTab),
+    recurringExpense: ['recurrentes', 'calendario', 'analisis'].includes(activeTab),
+    recurringIncome: ['recurrentes', 'ingresos-recurrentes', 'calendario', 'analisis'].includes(activeTab),
+    accounts: ['ingresos', 'gastos', 'recurrentes', 'ingresos-recurrentes', 'balance-general'].includes(activeTab),
   };
+  const dashboardSummaryQuery = useQuery({
+    queryKey: ['finance', 'dashboard-operational-summary', tenantKey, dateFrom, dateTo],
+    queryFn: ({ signal }) => financeDashboardService.getOperationalSummary({ ...(dateFrom && { dateFrom }), ...(dateTo && { dateTo }) }, signal),
+    enabled: canReadFinancial && canPerform('FINANCIAL_DASHBOARD', 'view') && activeTab === 'resumen',
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  useEffect(() => {
+    if (activeTab !== 'resumen') {
+      dashboardSummaryStartedAt.current = null;
+      return;
+    }
+    if (dashboardSummaryStartedAt.current === null && typeof performance !== 'undefined') {
+      dashboardSummaryStartedAt.current = performance.now();
+    }
+    if (!(dashboardSummaryQuery.isSuccess || dashboardSummaryQuery.isError) || dashboardSummaryStartedAt.current === null) return;
+    if (typeof performance !== 'undefined') {
+      performance.measure('novahub.finance.dashboard-summary-ready', {
+        start: dashboardSummaryStartedAt.current,
+        end: performance.now(),
+      });
+    }
+    dashboardSummaryStartedAt.current = null;
+  }, [activeTab, dashboardSummaryQuery.isSuccess, dashboardSummaryQuery.isError, dashboardSummaryQuery.dataUpdatedAt]);
+  const invalidateDashboardSummary = () => queryClient.invalidateQueries({
+    queryKey: ['finance', 'dashboard-operational-summary', tenantKey],
+  });
   const incomesQuery = useQuery({
     queryKey: ['finance', 'income', tenantKey, dateFrom, dateTo],
     queryFn: ({ signal }) => fetchAllReportPages((filters) => incomeService.getAll(filters, signal), financeParams, signal),
@@ -270,6 +301,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const recurringIncomes = normalizeListResponse(recurringIncomesQuery.data);
   const accounts = normalizeListResponse(accountsQuery.data);
   const activeQueries = [
+    activeTab === 'resumen' && dashboardSummaryQuery,
     activeDataTabs.income && incomesQuery,
     activeDataTabs.expense && expensesQuery,
     activeDataTabs.recurringExpense && recurringExpensesQuery,
@@ -286,6 +318,23 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   // Aportes de socio, préstamos y financiamientos no son ingreso: quedan fuera de totales, resumen y análisis.
   const operatingIncomes = fIncomes.filter(isOperatingIncome);
   const groupedIncomeRows = groupSalesIncomePayments(fIncomes, baseCurrency, globalRate, toBaseAmount);
+  const dashboardSummary = dashboardSummaryQuery.data;
+  const dashboardIncomeRows = (dashboardSummary?.incomeGroups || []).map((group) => ({
+    date: `${group.month}-01T00:00:00.000Z`,
+    amount: group.amount,
+    currency: group.currency,
+    exchangeRate: group.exchangeRate,
+    kind: 'OPERATING',
+  }));
+  const dashboardExpenseRows = (dashboardSummary?.expenseGroups || []).map((group) => ({
+    date: `${group.month}-01T00:00:00.000Z`,
+    amount: group.amount,
+    currency: group.currency,
+    exchangeRate: group.exchangeRate,
+    category: group.category,
+  }));
+  const dashboardRecurringExpenseRows = (dashboardSummary?.recurringExpenseGroups || []).map((group) => ({ ...group, status: 'ACTIVE' }));
+  const dashboardRecurringIncomeRows = (dashboardSummary?.recurringIncomeGroups || []).map((group) => ({ ...group, status: 'ACTIVE' }));
   const [fundingOpen, setFundingOpen] = useState(false);
 
   const normalizeItemResponse = (response: any) => {
@@ -454,6 +503,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     try {
       await expensesService.update(id, updates);
       await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
+      await invalidateDashboardSummary();
       completeNotificationAction(actionToken);
     } catch (error) {
       toast.error('No se pudo actualizar el gasto');
@@ -472,6 +522,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     try {
       await incomeService.update(id, updates);
       await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
+      await invalidateDashboardSummary();
       completeNotificationAction(actionToken);
     } catch (error) {
       toast.error('No se pudo actualizar el ingreso');
@@ -487,9 +538,11 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       if (isIncome) {
         await recurringIncomesService.update(id, updates);
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
+        await invalidateDashboardSummary();
       } else {
         await recurringExpensesService.update(id, updates);
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
+        await invalidateDashboardSummary();
       }
       completeNotificationAction(actionToken);
     } catch (error) {
@@ -518,9 +571,11 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       if (type === 'INCOME') {
         await recurringIncomesService.create(payload);
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
+        await invalidateDashboardSummary();
       } else {
         await recurringExpensesService.create(payload);
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
+        await invalidateDashboardSummary();
       }
       toast.success(`Nuevo movimiento ${type === 'INCOME' ? 'de ingreso' : 'de gasto'} recurrente añadido`);
       completeNotificationAction(actionToken);
@@ -537,6 +592,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       const newItem = { source: 'Manual', description: 'Nuevo Gasto', category: 'OTROS', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, currency: 'NIO' as any, exchangeRate: globalRate, status: 'PENDING' as any, notes: '' };
       await expensesService.create(newItem);
       await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
+      await invalidateDashboardSummary();
       toast.success('Nuevo gasto añadido');
       completeNotificationAction(actionToken);
     } catch (error) { toast.error('Error al crear gasto'); failNotificationAction(actionToken); }
@@ -547,6 +603,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     try {
       await expensesService.delete(id);
       await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
+      await invalidateDashboardSummary();
       toast.success('Gasto eliminado');
       completeNotificationAction(actionToken);
     } catch (error) {
@@ -561,6 +618,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     try {
       await expensesService.cancel(id);
       await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
+      await invalidateDashboardSummary();
       toast.success('Gasto anulado; se conservó su historial');
       completeNotificationAction(actionToken);
     } catch (error) {
@@ -583,11 +641,13 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         else if (action === 'resume') await recurringIncomesService.resume(id);
         else await recurringIncomesService.cancel(id);
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
+        await invalidateDashboardSummary();
       } else {
         if (action === 'pause') await recurringExpensesService.pause(id);
         else if (action === 'resume') await recurringExpensesService.resume(id);
         else await recurringExpensesService.cancel(id);
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
+        await invalidateDashboardSummary();
       }
       const actionLabel = action === 'pause' ? 'pausada' : action === 'resume' ? 'reanudada' : 'cancelada';
       toast.success(`Programación ${actionLabel}; se conservaron el registro y su historial`);
@@ -687,7 +747,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             <>
               <TabsContent value="resumen" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                  <FinanceDashboardView incomes={operatingIncomes} expenses={fExpenses} recurringExpenses={fRecurringExpenses} recurringIncomes={fRecurringIncomes} onNavigate={(tab) => handleTabChange(tab)} />
+                  <FinanceDashboardView incomes={dashboardIncomeRows} expenses={dashboardExpenseRows} recurringExpenses={dashboardRecurringExpenseRows} recurringIncomes={dashboardRecurringIncomeRows} onNavigate={(tab) => handleTabChange(tab)} />
                 </motion.div>
               </TabsContent>
 

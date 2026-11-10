@@ -155,8 +155,15 @@ export const hrService = {
   // ─── KPI ─────────────────────────────────────────────────────────────
   createKpiDefinition: (data: any) => api.post('/hr/kpi-definitions', data),
   getKpiDefinitions: (assignToType?: string, signal?: AbortSignal) => api.get('/hr/kpi-definitions', withSignal({ assignToType }, signal)),
+  getKpiEmployeeLookup: (signal?: AbortSignal) => api.get<Array<{ id: string; firstName: string; lastName: string }>>('/hr/kpi-employees', withSignal(undefined, signal)),
   updateKpiDefinition: (id: string, data: any) => api.patch(`/hr/kpi-definitions/${id}`, data),
   createKpiResult: (data: any) => api.post('/hr/kpi-results', data),
+  getKpiResultsSummary: (signal?: AbortSignal) => api.get<{
+    total: number;
+    withTarget: number;
+    averageCompliance: number | null;
+    atRisk: number;
+  }>('/hr/kpi-results/summary', withSignal(undefined, signal)),
   getKpiResults: (employeeId?: string, kpiDefinitionId?: string, signal?: AbortSignal, filters: Record<string, any> = {}) => api.get('/hr/kpi-results', withSignal({ ...filters, employeeId, kpiDefinitionId }, signal)),
 };
 

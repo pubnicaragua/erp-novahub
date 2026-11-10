@@ -7,6 +7,7 @@ import { getApiErrorMessage } from '../../services/api';
 import { restaurantService, type RestaurantMenuCategory, type RestaurantMenuItem, type RestaurantMenuOptionGroup, type RestaurantPublicBranding } from '../../services/restaurant.service';
 import { hotelService } from '../../services/hotel.service';
 import { getReadableForeground, getReadableForegroundForBackgrounds } from '../../utils/color-contrast';
+import { formatCurrencyNumber } from '../../utils/currency';
 
 type MenuTheme = RestaurantPublicBranding['theme'];
 
@@ -26,7 +27,7 @@ const DEFAULT_BRANDING: RestaurantPublicBranding = {
   whiteLabel: false,
 };
 
-const money = (value: number) => `C$ ${Number(value || 0).toFixed(2)}`;
+const money = (value: number) => `C$ ${formatCurrencyNumber(value)}`;
 
 function themeStyles(theme: MenuTheme, _primary: string, _accent: string) {
   switch (theme) {

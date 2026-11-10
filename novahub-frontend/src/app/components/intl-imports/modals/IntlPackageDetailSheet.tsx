@@ -46,6 +46,7 @@ import {
   type IntlImportPackageStatus,
   type PackageMovement,
 } from '../../../services/intl-imports.service';
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
 interface IntlPackageDetailSheetProps {
   packageData: IntlImportPackage | null;
@@ -283,7 +284,7 @@ export function IntlPackageDetailSheet({
                   </p>
                   <p className="mt-1 text-2xl sm:text-3xl font-black tabular-nums text-primary font-mono">
                     {packageData.proratedCost && packageData.proratedCost > 0
-                      ? `$${packageData.proratedCost.toFixed(2)} USD`
+                      ? `$${packageData.proratedCost.toFixed(getCurrencyDecimalPlaces())} USD`
                       : `${packageData.chargeableWeightKg || packageData.chargeableWeight || packageData.actualWeightKg} kg`}
                   </p>
 
@@ -296,7 +297,7 @@ export function IntlPackageDetailSheet({
                     </span>
                     {packageData.declaredValueUsd && Number(packageData.declaredValueUsd) > 0 ? (
                       <span>
-                        Val. Declarado: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">${Number(packageData.declaredValueUsd).toFixed(2)} USD</strong>
+                        Val. Declarado: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">${Number(packageData.declaredValueUsd).toFixed(getCurrencyDecimalPlaces())} USD</strong>
                       </span>
                     ) : null}
                     {packageData.originalTrackingNumber && (
@@ -447,7 +448,7 @@ export function IntlPackageDetailSheet({
                       <span className="text-[10px] text-muted-foreground block font-bold uppercase">Val. Declarado</span>
                       <span className="mt-1 font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
                         {packageData.declaredValueUsd && Number(packageData.declaredValueUsd) > 0
-                          ? `$${Number(packageData.declaredValueUsd).toFixed(2)}`
+                          ? `$${Number(packageData.declaredValueUsd).toFixed(getCurrencyDecimalPlaces())}`
                           : '—'}
                       </span>
                     </div>

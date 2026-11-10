@@ -1,15 +1,21 @@
-import { useEffect, useState } from 'react';
-import { FileText, Loader2, Paperclip, RotateCcw, X } from 'lucide-react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import type { DragEvent as ReactDragEvent } from 'react';
+import { FileText, Loader2, Paperclip, RotateCcw, Upload, X } from 'lucide-react';
 import { messagesService } from '../../services/notificaciones.service';
 import { supportConversationsService } from '../../services/support-conversations.service';
 import type { MessageAttachment } from '../../types';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
+import { getMessageAttachmentFiles, hasMessageAttachmentFiles } from './message-attachment-input';
 
 const MAX_FILES = 5;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED = '.jpg,.jpeg,.png,.webp,.pdf,.docx,.xlsx,.csv';
+
+export interface MessageAttachmentComposerHandle {
+  addFiles: (selectedFiles: FileList | File[] | null) => void;
+}
 
 interface ComposerFile {
   key: string;
@@ -31,14 +37,17 @@ interface MessageAttachmentComposerProps {
   }) => void;
 }
 
-export function MessageAttachmentComposer({
+export const MessageAttachmentComposer = forwardRef<MessageAttachmentComposerHandle, MessageAttachmentComposerProps>(function MessageAttachmentComposer({
   conversationId,
   kind = 'SUPPORT',
   disabled = false,
   onChange,
-}: MessageAttachmentComposerProps) {
+}, ref) {
   const [files, setFiles] = useState<ComposerFile[]>([]);
   const [selectionError, setSelectionError] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const dragDepthRef = useRef(0);
+  const filesRef = useRef<ComposerFile[]>([]);
 
   useEffect(() => {
     onChange({
@@ -48,11 +57,12 @@ export function MessageAttachmentComposer({
     });
   }, [files, onChange]);
 
-  const setFile = (key: string, update: (current: ComposerFile) => ComposerFile) => {
-    setFiles((current) => current.map((item) => item.key === key ? update(item) : item));
-  };
+  const setFile = useCallback((key: string, update: (current: ComposerFile) => ComposerFile) => {
+    filesRef.current = filesRef.current.map((item) => item.key === key ? update(item) : item);
+    setFiles(filesRef.current);
+  }, []);
 
-  const upload = async (item: ComposerFile) => {
+  const upload = useCallback(async (item: ComposerFile) => {
     setFile(item.key, (current) => ({ ...current, status: 'uploading', progress: 0, error: undefined }));
     try {
       const onProgress = (progress: number) => setFile(item.key, (current) => ({ ...current, progress }));
@@ -68,14 +78,16 @@ export function MessageAttachmentComposer({
         error: failure?.response?.data?.message || failure?.message || 'No se pudo cargar el archivo.',
       }));
     }
-  };
+  }, [conversationId, kind, setFile]);
 
-  const addFiles = (selectedFiles: FileList | null) => {
+  const addFiles = useCallback((selectedFiles: FileList | File[] | null) => {
+    if (disabled) return;
     const newFiles = Array.from(selectedFiles || []);
     if (!newFiles.length) return;
     setSelectionError('');
-    const alreadySelectedBytes = files.reduce((total, item) => total + item.file.size, 0);
-    if (files.length + newFiles.length > MAX_FILES) {
+    const currentFiles = filesRef.current;
+    const alreadySelectedBytes = currentFiles.reduce((total, item) => total + item.file.size, 0);
+    if (currentFiles.length + newFiles.length > MAX_FILES) {
       setSelectionError('Puedes adjuntar hasta 5 archivos por mensaje.');
       return;
     }
@@ -94,14 +106,59 @@ export function MessageAttachmentComposer({
       progress: 0,
       status: 'uploading' as const,
     }));
-    setFiles((current) => [...current, ...added]);
+    filesRef.current = [...currentFiles, ...added];
+    setFiles(filesRef.current);
     for (const item of added) void upload(item);
+  }, [disabled, upload]);
+
+  useImperativeHandle(ref, () => ({ addFiles }), [addFiles]);
+
+  const handleDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (disabled || !hasMessageAttachmentFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDragging(true);
   };
 
-  const removeFile = (key: string) => setFiles((current) => current.filter((item) => item.key !== key));
+  const handleDragLeave = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!hasMessageAttachmentFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDragging(false);
+  };
+
+  const handleDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (disabled || !hasMessageAttachmentFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (disabled || !hasMessageAttachmentFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDragging(false);
+    addFiles(getMessageAttachmentFiles(event.dataTransfer));
+  };
+
+  const removeFile = (key: string) => {
+    filesRef.current = filesRef.current.filter((item) => item.key !== key);
+    setFiles(filesRef.current);
+  };
 
   return (
-    <div className="space-y-2">
+    <div
+      className={cn('relative space-y-2 rounded-xl transition-colors', isDragging && 'border border-dashed border-primary bg-primary/5 p-2')}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <div className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-xs font-semibold text-primary" role="status" aria-live="polite">
+          <Upload className="size-4 shrink-0" /> Suelta los archivos para adjuntarlos
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <label className={cn(
           'inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-semibold transition hover:bg-muted/60 focus-within:ring-2 focus-within:ring-ring/50',
@@ -123,6 +180,7 @@ export function MessageAttachmentComposer({
         </label>
         <span className="text-[11px] text-muted-foreground">Hasta 5 archivos · 10 MB cada uno · 25 MB por mensaje</span>
       </div>
+      <p className="text-[11px] text-muted-foreground">También puedes arrastrar archivos aquí o pegar archivos e imágenes desde el portapapeles.</p>
 
       {selectionError && <p className="text-xs text-destructive" role="alert">{selectionError}</p>}
 
@@ -162,4 +220,4 @@ export function MessageAttachmentComposer({
       )}
     </div>
   );
-}
+});

@@ -10,6 +10,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { formatDateOnly } from '../../utils/dateFormat';
+import { formatCurrencyNumber } from '../../utils/currency';
 
 interface ActivityLine {
   accountId: string | null;
@@ -50,7 +51,7 @@ const MODULE_COLORS: Record<string, string> = {
   Manual: 'bg-muted text-muted-foreground border-border/30',
 };
 
-const fmt = (n: number) => n.toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n: number) => formatCurrencyNumber(n);
 
 export function ActividadModulosView() {
   const [search, setSearch] = useState('');

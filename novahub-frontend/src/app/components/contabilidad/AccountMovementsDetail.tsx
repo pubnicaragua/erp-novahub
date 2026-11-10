@@ -8,6 +8,7 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { referenceTypeLabel } from '../../utils/accountingLabels';
 import { formatDateOnly, formatInstant } from '../../utils/dateFormat';
 import { useAuth } from '../../contexts/AuthContext';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface AccountMovementsDetailProps {
   accountId: string;
@@ -56,8 +57,8 @@ interface SourceDocument {
 }
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('es-NI', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
+  minimumFractionDigits: getCurrencyDecimalPlaces(),
+  maximumFractionDigits: getCurrencyDecimalPlaces(),
 }).format(Number(value || 0));
 
 const formatQuantity = (value: number) => new Intl.NumberFormat('es-NI', {

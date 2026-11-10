@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { recurringInvoicesService } from '../../services/ventas.service';
+import { recurringInvoicesService, type RecurringInvoiceKpiSummary } from '../../services/ventas.service';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
@@ -28,7 +28,6 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_STATUS_COLORS } from '../../utils/salesStatus';
@@ -39,12 +38,12 @@ import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
 import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
-import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { normalizeCurrency, type SupportedCurrency } from '../../utils/currency';
 import { normalizeSalesExtraCharges, getSalesExtraChargesPayload, getSalesExtraChargesAmount, getLegacySalesExtraCostFields, type SalesExtraChargeLine } from '../../utils/salesCharges';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
-  summaryData?: RecurringInvoice[];
+  summaryData?: RecurringInvoiceKpiSummary;
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading: boolean;
@@ -233,13 +232,11 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
     ((r as any).profileName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (r.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((recurring) =>
-    ((recurring as any).profileName || '').toLowerCase().includes(searchTerm.toLowerCase())
-    || (recurring.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()),
-  );
-  const summaryRowsWithoutStatusFilter = summarySearchRows;
-  const summaryFilteredData = summarySearchRows.filter((recurring) => statusFilter === 'ALL' || String(recurring.status || '').toUpperCase() === statusFilter);
+  const summaryAvailable = summaryData !== undefined;
+  const summaryGroups = summaryData?.groups || [];
+  const activeRecurringGroups = statusFilter === 'ALL' || statusFilter === 'ACTIVE'
+    ? summaryGroups.filter((group) => group.status === 'ACTIVE')
+    : [];
 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringInvoice>) => {
     try {
@@ -566,31 +563,21 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
     { key: 'nextInvoiceDate', header: 'Próxima Fecha', render: (val) => <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Calendar className="size-3" />{formatDateSafe(val)}</div> },
   ];
 
-  const activeRecurring = summaryFilteredData.filter(recurring => (recurring.status || '').toUpperCase() === 'ACTIVE');
-  const activeRecurringInBaseCurrency = activeRecurring
-    .reduce((acc, recurring) => acc + ((recurring as any).baseTotal !== null && (recurring as any).baseTotal !== undefined
-      ? Number((recurring as any).baseTotal)
-      : toBaseAmount(recurring.total || 0, (recurring as any).currency, (recurring as any).exchangeRate || globalRate)), 0);
-  const activeRecurringOriginalBreakdown = summarizeAmountsByCurrency(
-    activeRecurring,
-    (recurring) => Number(recurring.total || 0),
-    (recurring) => recurring.currency,
-  );
+  const activeRecurringInBaseCurrency = activeRecurringGroups.reduce((acc, group) => acc + (group.baseTotalCount === group.count && group.baseTotal !== null
+    ? group.baseTotal
+    : toBaseAmount(group.total, group.currency, group.exchangeRate)), 0);
+  const activeRecurringOriginalBreakdown = Object.values(activeRecurringGroups.reduce((acc, group) => {
+    const currency = normalizeCurrency(group.currency, baseCurrency) as SupportedCurrency;
+    const current = acc[currency] || { currency, amount: 0, count: 0 };
+    current.amount += group.total;
+    current.count += group.count;
+    acc[currency] = current;
+    return acc;
+  }, {} as Record<SupportedCurrency, { currency: SupportedCurrency; amount: number; count: number }>));
   const recurringBreakdown = activeRecurringOriginalBreakdown.length
     ? activeRecurringOriginalBreakdown
     : [{ currency: baseCurrency as SupportedCurrency, amount: activeRecurringInBaseCurrency, count: 0 }];
-  const sevenDaysAhead = new Date();
-  sevenDaysAhead.setDate(sevenDaysAhead.getDate() + 7);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const upcomingIn7Days = summaryFilteredData.filter(recurring => {
-    const status = (recurring.status || '').toUpperCase();
-    if (status !== 'ACTIVE') return false;
-    if (!recurring.nextInvoiceDate) return false;
-    const nextDate = new Date(recurring.nextInvoiceDate);
-    if (Number.isNaN(nextDate.getTime())) return false;
-    return nextDate >= today && nextDate <= sevenDaysAhead;
-  }).length;
+  const upcomingIn7Days = statusFilter === 'ALL' || statusFilter === 'ACTIVE' ? Number(summaryData?.upcomingCount || 0) : 0;
   const annualRunRateInBaseCurrency = activeRecurringInBaseCurrency * 12;
   const recurringMoneyKpis = displayMode === 'ORIGINAL'
     ? recurringBreakdown.map((item) => ({
@@ -717,7 +704,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                     const dRate = Math.min(100, Math.max(0, Number(event.target.value) || 0));
                     setLocalRates((prev) => ({ ...prev, dRate }));
                     setLocalDoc({ ...localDoc, ...recalcTotals(localDoc.items || [], 'global', { ...localRates, dRate }) });
-                  }} className="h-8 w-16 text-right text-xs" /><span>%</span></>}
+                  }} className="h-8 w-16 text-right text-xs" currencyPrecision /><span>%</span></>}
                   - {formatConvertedAmount(Number(localDoc?.discountAmount || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}
                 </div></div>
                 <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">IVA</span><div className="flex items-center gap-2">
@@ -845,7 +832,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                         const recalculated = recalcTotals(ni, 'individual');
                         setLocalDoc({ ...localDoc, ...recalculated });
                         if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
-                      }} className="w-full pr-6 text-left text-xs" />
+                      }} className="w-full pr-6 text-left text-xs" currencyPrecision />
                       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">%</span>
                     </div>
                   </div>}
@@ -875,11 +862,11 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
             {(normalizeSalesExtraCharges(localDoc).length > 0 || String(localDoc?.deliveryDescription || '').trim() || Number(localDoc?.deliveryAmount || 0) > 0) && <div className="mt-6 grid gap-3 border-t border-border/50 pt-5 md:grid-cols-2">
               {normalizeSalesExtraCharges(localDoc).map((charge, index) => <div key={charge.id} className="rounded-xl border border-border/50 bg-muted/10 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Coste extra {index + 1}</span><Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" aria-label={`Eliminar coste extra ${index + 1}`} onClick={() => updateRecurringExtraCharges(normalizeSalesExtraCharges(localDoc).filter((entry) => entry.id !== charge.id))}><Trash2 className="size-3.5" /></Button></div>
-                <div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={charge.description} placeholder="Descripción" onChange={(event) => updateRecurringExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, description: event.target.value } : entry))} /><Input type="number" min="0" step="0.01" value={charge.amount || ''} placeholder="Monto" onChange={(event) => updateRecurringExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, amount: Math.max(0, Number(event.target.value) || 0) } : entry))} /></div>
+                <div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={charge.description} placeholder="Descripción" onChange={(event) => updateRecurringExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, description: event.target.value } : entry))} /><Input type="number" min="0" step="0.01" value={charge.amount || ''} placeholder="Monto" onChange={(event) => updateRecurringExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, amount: Math.max(0, Number(event.target.value) || 0) } : entry))} currencyPrecision /></div>
               </div>)}
               {(String(localDoc?.deliveryDescription || '').trim() || Number(localDoc?.deliveryAmount || 0) > 0) && <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Delivery</span><Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" aria-label="Eliminar delivery" onClick={() => updateRecurringDelivery({ deliveryDescription: null, deliveryAmount: 0 })}><Trash2 className="size-3.5" /></Button></div>
-                <div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={localDoc.deliveryDescription || ''} placeholder="Descripción del delivery" onChange={(event) => updateRecurringDelivery({ deliveryDescription: event.target.value })} /><Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} placeholder="Monto" onChange={(event) => updateRecurringDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} /></div>
+                <div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={localDoc.deliveryDescription || ''} placeholder="Descripción del delivery" onChange={(event) => updateRecurringDelivery({ deliveryDescription: event.target.value })} /><Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} placeholder="Monto" onChange={(event) => updateRecurringDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} currencyPrecision /></div>
               </div>}
             </div>}
           </CardContent>
@@ -897,10 +884,10 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
       <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {resolvedSummaryRows ? recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`mrr-${kpi.currency}`} title={`MRR Activo (${kpi.currency})`} value={kpi.mrr} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />) : <SalesKpiCard title="MRR Activo" value="—" icon={RotateCcw} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Próximas 7 días" value={resolvedSummaryRows ? upcomingIn7Days : '—'} icon={Calendar} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title="Activas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'ACTIVE'} onClick={() => setStatusFilter(statusFilter === 'ACTIVE' ? 'ALL' : 'ACTIVE')} />
-        {resolvedSummaryRows ? recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`arr-${kpi.currency}`} title={`ARR (${kpi.currency})`} value={kpi.arr} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />) : <SalesKpiCard title="ARR" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
+        {summaryAvailable ? recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`mrr-${kpi.currency}`} title={`MRR Activo (${kpi.currency})`} value={kpi.mrr} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />) : <SalesKpiCard title="MRR Activo" value="—" icon={RotateCcw} color="text-primary" bg="bg-primary/10" />}
+        <SalesKpiCard title="Próximas 7 días" value={summaryAvailable ? upcomingIn7Days : '—'} icon={Calendar} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Activas" value={summaryAvailable ? summaryGroups.filter((group) => group.status === 'ACTIVE').reduce((sum, group) => sum + group.count, 0) : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'ACTIVE'} onClick={() => setStatusFilter(statusFilter === 'ACTIVE' ? 'ALL' : 'ACTIVE')} />
+        {summaryAvailable ? recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`arr-${kpi.currency}`} title={`ARR (${kpi.currency})`} value={kpi.arr} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />) : <SalesKpiCard title="ARR" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
         </div>
       </div>
       <div className="flex flex-col gap-4">

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { 
   Plus, Search, TrendingUp, Clock, ArrowRightCircle, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
@@ -10,7 +11,7 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
-import { salesOrdersService } from '../../services/ventas.service';
+import { salesOrdersService, type SalesOrderKpiSummary } from '../../services/ventas.service';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import type { SalesOrder, Customer, Product, Employee, SalesPaginationControls } from '../../types';
@@ -33,7 +34,7 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -50,6 +51,7 @@ import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker'
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { getSalesOrderOriginBadge } from '../../utils/document-origin-badges';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const paymentMethodOptions = [
   { label: 'Efectivo', value: 'CASH' },
@@ -62,7 +64,7 @@ const paymentMethodOptions = [
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
-  summaryData?: SalesOrder[];
+  summaryData?: SalesOrderKpiSummary;
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading: boolean;
@@ -80,6 +82,7 @@ interface OrdenesVentaViewProps {
   onSearchChange?: (value: string) => void;
   dateFrom?: string;
   dateTo?: string;
+  selectedBranchId?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
   statusFilter?: OrderStatusFilter;
   onStatusFilterChange?: (value: OrderStatusFilter) => void;
@@ -120,7 +123,7 @@ const getOrderWorkflowIssues = (order: SalesOrder | null | undefined): string[] 
   return issues;
 };
 
-export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
+export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, selectedBranchId = '', statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
@@ -454,8 +457,20 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     invoicedAt: (row: SalesOrder) => (row.invoicedAt ? new Date(row.invoicedAt).getTime() : null),
   };
   const filteredData = colFilters.applyTo(statusOrdered, filterGetters);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((order) => {
+  const hasColumnValueFilters = Object.values(colFilters.state).some((filter) => Boolean(filter.values?.length));
+  const columnFilterSummaryQuery = useQuery({
+    queryKey: ['sales', 'orders-kpi-filtered-rows', user?.tenantId, searchTerm, dateFrom, dateTo, selectedBranchId],
+    queryFn: ({ signal }) => fetchAllReportPages<SalesOrder>(
+      (filters) => salesOrdersService.getAll(filters, signal),
+      { pageSize: 5000, report: true, search: searchTerm.trim() || undefined, dateFrom, dateTo, branchId: selectedBranchId || undefined },
+      signal,
+    ),
+    enabled: hasColumnValueFilters,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const fallbackSummaryRows = hasColumnValueFilters ? columnFilterSummaryQuery.data : undefined;
+  const summarySearchRows = (fallbackSummaryRows || []).filter((order) => {
     const search = searchTerm.trim().toLowerCase();
     return !search || String(order.number || '').toLowerCase().includes(search) || String(order.customer?.name || '').toLowerCase().includes(search);
   });
@@ -465,6 +480,23 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     return new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime();
   }), filterGetters);
   const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((order) => statusFilter === 'ALL' || normalizeOrderStatus(order.status) === statusFilter), filterGetters);
+  const isKpiSummaryLoading = hasColumnValueFilters
+    ? columnFilterSummaryQuery.isPending || columnFilterSummaryQuery.isFetching
+    : summaryLoading;
+  const isKpiSummaryError = hasColumnValueFilters ? columnFilterSummaryQuery.isError : summaryError;
+  const summaryAvailable = hasColumnValueFilters ? fallbackSummaryRows !== undefined : summaryData !== undefined;
+  const summaryGroups = summaryData?.groups || [];
+  const selectedSummaryGroups = hasColumnValueFilters ? [] : summaryGroups.filter((group) => statusFilter === 'ALL' || group.status === statusFilter);
+  const approvedSummaryGroups = selectedSummaryGroups.filter((group) => group.status === 'APPROVED');
+  const inProcessOrderCount = hasColumnValueFilters
+    ? summaryRowsWithoutStatusFilter.filter((order) => normalizeOrderStatus(order.status) === 'IN_PROCESS').length
+    : summaryGroups.filter((group) => group.status === 'IN_PROCESS').reduce((total, group) => total + group.count, 0);
+  const approvedOrderCount = hasColumnValueFilters
+    ? summaryRowsWithoutStatusFilter.filter((order) => normalizeOrderStatus(order.status) === 'APPROVED').length
+    : summaryGroups.filter((group) => group.status === 'APPROVED').reduce((total, group) => total + group.count, 0);
+  const draftOrderCount = hasColumnValueFilters
+    ? summaryRowsWithoutStatusFilter.filter((order) => normalizeOrderStatus(order.status) === 'DRAFT').length
+    : summaryGroups.filter((group) => group.status === 'DRAFT').reduce((total, group) => total + group.count, 0);
   const distinctCustomers = [...new Map(filtered.map((o) => [o.customer?.name || 'Varios', o.customer?.name || 'Varios'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((o) => (o.customer?.name || 'Varios') === label).length }));
 
@@ -837,15 +869,17 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     { key: 'paymentStatus', label: 'Estado de pago' },
   ];
 
-  const approvedAmountInDisplayCurrency = summaryFilteredData
-    .filter(order => normalizeOrderStatus(order.status) === 'APPROVED')
-    // `total` + la tasa histórica son la fuente de verdad. `baseTotal` puede
-    // pertenecer a registros antiguos que quedaron desfasados.
-    .reduce((acc, order) => acc + toBaseAmount(order.total || 0, order.currency, order.exchangeRate), 0);
+  const approvedAmountInDisplayCurrency = hasColumnValueFilters
+    ? summaryFilteredData
+      .filter(order => normalizeOrderStatus(order.status) === 'APPROVED')
+      // `total` + la tasa histórica son la fuente de verdad. `baseTotal` puede
+      // pertenecer a registros antiguos que quedaron desfasados.
+      .reduce((acc, order) => acc + toBaseAmount(order.total || 0, order.currency, order.exchangeRate), 0)
+    : approvedSummaryGroups.reduce((acc, group) => acc + toBaseAmount(group.total, group.currency, group.exchangeRate), 0);
   const originalApprovedAmounts = summarizeAmountsByCurrency(
-    summaryFilteredData.filter(order => normalizeOrderStatus(order.status) === 'APPROVED'),
-    (order) => Number(order.total || 0),
-    (order) => order.currency,
+    hasColumnValueFilters ? summaryFilteredData.filter(order => normalizeOrderStatus(order.status) === 'APPROVED') : approvedSummaryGroups,
+    (order: any) => Number(order.total || 0),
+    (order: any) => order.currency,
     baseCurrency,
   );
 
@@ -937,7 +971,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                   <p className="text-[10px] text-muted-foreground mb-1">Comisión configurada</p>
                   <div className="grid grid-cols-2 gap-2">
                     <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Porcentaje</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? `${Number(localDoc?.commissionRate || 0).toFixed(2)}%` : '—'} className="h-8 bg-muted/20 text-xs" /></div>
-                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? Number(localDoc?.commissionAmount || 0).toFixed(2) : '—'} className="h-8 bg-muted/20 text-xs" /></div>
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? Number(localDoc?.commissionAmount || 0).toFixed(getCurrencyDecimalPlaces()) : '—'} className="h-8 bg-muted/20 text-xs" /></div>
                   </div>
                   <p className="text-[9px] text-muted-foreground">Se aplica automáticamente al subtotal neto; no se puede editar en la venta.</p>
                 </div>
@@ -1034,7 +1068,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                       const tAmount = calculateGlobalTaxAmount(localDoc?.items || [], newRate, localRates.tRate);
                       const newTotal = base + tAmount + additionalChargesTotal();
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
-                    }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
+                    }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" currencyPrecision /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
                     <span className="min-w-[7.5rem] text-right tabular-nums">-{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.discountAmount || 0))}</span>
                   </div>
                 </div>
@@ -1353,6 +1387,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                       type="number"
                       inputMode="decimal"
                       step="any"
+                      currencyPrecision
                       value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice}
                       placeholder="0"
                       readOnly={Boolean(item.productId)}
@@ -1423,7 +1458,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     <Input value={charge.description} onChange={(event) => editExtraChargeDescription(index, event.target.value)} onBlur={persistExtraCharges} placeholder="Descripción" className="h-8 w-full min-w-0 text-xs sm:flex-1" />
                     <div className="flex w-full min-w-0 items-center gap-1 rounded-md border border-input bg-background px-2 sm:w-auto sm:min-w-[8.5rem]">
                       <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
-                      <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeSalesExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" />
+                      <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeSalesExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" currencyPrecision />
                     </div>
                     <Button type="button" variant="ghost" size="icon" aria-label={`Eliminar coste extra ${index + 1}`} className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateExtraCharges(normalizeSalesExtraCharges(localDoc).filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="size-3.5" /></Button>
                   </div>
@@ -1434,7 +1469,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     <Input value={localDoc.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value })} onBlur={() => updateDelivery({ deliveryDescription: localDoc.deliveryDescription || null })} placeholder="Descripción" className="h-8 w-full min-w-0 text-xs sm:flex-1" />
                     <div className="flex w-full min-w-0 items-center gap-1 rounded-md border border-input bg-background px-2 sm:w-auto sm:min-w-[8.5rem]">
                       <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
-                      <Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" />
+                      <Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" currencyPrecision />
                     </div>
                     <Button type="button" variant="ghost" size="icon" aria-label="Eliminar delivery" className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateDelivery({ deliveryDescription: null, deliveryAmount: 0 })}><Trash2 className="size-3.5" /></Button>
                   </div>
@@ -1455,17 +1490,17 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
-        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
+        <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SalesKpiCard title="Órdenes en Proceso" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(o => normalizeOrderStatus(o.status) === 'IN_PROCESS').length : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
-        {!resolvedSummaryRows
+        <SalesKpiCard title="Órdenes en Proceso" value={summaryAvailable ? inProcessOrderCount : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
+        {!summaryAvailable
           ? <SalesKpiCard title="Monto Aprobado" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
           : displayMode === 'ORIGINAL'
           ? originalApprovedAmounts.map((summary) => <SalesKpiCard key={`approved-${summary.currency}`} title={`Monto Aprobado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Monto Aprobado (${displayCurrency})`} value={formatConvertedAmount(approvedAmountInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Órdenes Aprobadas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(o => normalizeOrderStatus(o.status) === 'APPROVED').length : '—'} icon={Check} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
-        <SalesKpiCard title="Órdenes en Borrador" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(o => normalizeOrderStatus(o.status) === 'DRAFT').length : '—'} icon={Eye} color="text-primary" bg="bg-primary/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
+        <SalesKpiCard title="Órdenes Aprobadas" value={summaryAvailable ? approvedOrderCount : '—'} icon={Check} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="Órdenes en Borrador" value={summaryAvailable ? draftOrderCount : '—'} icon={Eye} color="text-primary" bg="bg-primary/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
         </div>
       </div>
       <div className="flex flex-col gap-4">

@@ -4,8 +4,9 @@ import { Skeleton } from '../../ui/skeleton';
 import { cn } from '../../ui/utils';
 import { useTenantQuery } from '../../../hooks/useTenantQuery';
 import { employeeProfileService, LEAVE_TYPE_LABEL } from '../../../services/employee-profile.service';
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
-const money = (value: number, currency: string) => `${currency} ${new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}`;
+const money = (value: number, currency: string) => `${currency} ${new Intl.NumberFormat('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() }).format(value)}`;
 const days = (value: number) => new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 }).format(value);
 
 function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'warn' | 'ok' }) {

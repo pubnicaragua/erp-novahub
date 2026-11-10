@@ -39,6 +39,8 @@ export interface ApiFilters {
   purpose?: string;
   dateFrom?: string;
   dateTo?: string;
+  upcomingFrom?: string;
+  upcomingTo?: string;
   from?: string;
   to?: string;
   page?: number;

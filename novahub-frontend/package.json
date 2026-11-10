@@ -30,6 +30,8 @@
     "test:manager-branch-views": "node --experimental-strip-types e2e/scripts/test-manager-branch-views.mjs",
     "test:manager-consolidation-views": "node --experimental-strip-types e2e/scripts/test-manager-consolidation-views.mjs",
     "test:pdf-templates": "node scripts/test-pdf-templates.mjs",
+    "test:report-currency-exports": "node --experimental-strip-types scripts/test-report-currency-exports.mjs",
+    "test:currency-precision": "node --experimental-strip-types scripts/test-currency-precision.mjs",
     "test:customer-history-import": "node --experimental-strip-types scripts/test-customer-history-import.mjs",
     "test:customer-loan-permissions": "node --experimental-strip-types scripts/test-customer-loan-permissions.mjs",
     "test:customer-loans-credit-view": "node scripts/test-customer-loans-credit-view.mjs",

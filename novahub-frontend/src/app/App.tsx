@@ -18,17 +18,6 @@ import { PLATFORM_SIDEBAR_MODULE_ORDER, SIDEBAR_MODULE_ORDER, Sidebar } from './
 import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
 import { ActionClickGuard } from './components/ui/ActionClickGuard';
-import { PublicAccessPage } from './components/public/PublicAccessPage';
-import { PublicRsvpPage } from './components/public/PublicRsvpPage';
-import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
-import { PublicHotelGuestPage } from './components/public/PublicHotelGuestPage';
-import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
-import { PublicTrackingPage } from './components/public/PublicTrackingPage';
-import { PoketPaymentCallbackPage } from './components/public/PoketPaymentCallbackPage';
-import { PublicProjectProgressPage } from './components/public/PublicProjectProgressPage';
-import { PublicContractSignPage } from './components/public/PublicContractSignPage';
-import { PublicSupplierQuotationPage } from './components/public/PublicSupplierQuotationPage';
-import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { BrowserNotificationPrompt } from './components/notificaciones/BrowserNotificationPrompt';
 import { CheckinPromptHost } from './components/seguimiento/CheckinPromptHost';
@@ -44,12 +33,24 @@ import { GUIDED_TOUR_REQUEST_EVENT, type GuidedTourRequestResult } from './servi
 import { ForceSalesTrackingRuntime } from './components/ForceSalesTrackingRuntime';
 import { ForceSalesOfflineTrackingFallback } from './components/ForceSalesOfflineTrackingFallback';
 import { getOfflineRouteEligibility } from './services/force-sales-location-queue';
+import { NovaHubLogo } from './components/NovaHubLogo';
 
 function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(loader: () => Promise<T>, moduleName: string) {
   return lazy(() => loadModuleWithChunkRecovery(loader, moduleName, reportChunkLoadIncident));
 }
 
 const OverviewDashboard = lazyWithChunkRecovery(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })), 'dashboard');
+const PublicAccessPage = lazyWithChunkRecovery(() => import('./components/public/PublicAccessPage').then(m => ({ default: m.PublicAccessPage })), 'public-access');
+const PublicRsvpPage = lazyWithChunkRecovery(() => import('./components/public/PublicRsvpPage').then(m => ({ default: m.PublicRsvpPage })), 'public-rsvp');
+const PublicRestaurantMenuPage = lazyWithChunkRecovery(() => import('./components/public/PublicRestaurantMenuPage').then(m => ({ default: m.PublicRestaurantMenuPage })), 'public-restaurant-menu');
+const PublicHotelGuestPage = lazyWithChunkRecovery(() => import('./components/public/PublicHotelGuestPage').then(m => ({ default: m.PublicHotelGuestPage })), 'public-hotel-guest');
+const ArcaSupplyEcommercePreviewPage = lazyWithChunkRecovery(() => import('./components/public/ArcaSupplyEcommercePreviewPage').then(m => ({ default: m.ArcaSupplyEcommercePreviewPage })), 'public-ecommerce-preview');
+const PublicTrackingPage = lazyWithChunkRecovery(() => import('./components/public/PublicTrackingPage').then(m => ({ default: m.PublicTrackingPage })), 'public-tracking');
+const PoketPaymentCallbackPage = lazyWithChunkRecovery(() => import('./components/public/PoketPaymentCallbackPage').then(m => ({ default: m.PoketPaymentCallbackPage })), 'public-payment-callback');
+const PublicProjectProgressPage = lazyWithChunkRecovery(() => import('./components/public/PublicProjectProgressPage').then(m => ({ default: m.PublicProjectProgressPage })), 'public-project-progress');
+const PublicContractSignPage = lazyWithChunkRecovery(() => import('./components/public/PublicContractSignPage').then(m => ({ default: m.PublicContractSignPage })), 'public-contract-sign');
+const PublicSupplierQuotationPage = lazyWithChunkRecovery(() => import('./components/public/PublicSupplierQuotationPage').then(m => ({ default: m.PublicSupplierQuotationPage })), 'public-supplier-quotation');
+const FloatingChat = lazyWithChunkRecovery(() => import('./components/ai/FloatingChat').then(m => ({ default: m.FloatingChat })), 'floating-chat');
 const PartnerDashboard = lazyWithChunkRecovery(() => import('./components/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })), 'partner');
 const InventarioPage = lazyWithChunkRecovery(async () => {
   const module = await import('./components/InventarioPage');
@@ -105,6 +106,64 @@ function PageLoader() {
         <p className="text-sm">Cargando...</p>
       </div>
     </div>
+  );
+}
+
+type DeferredChatRequest = { message?: string; context?: { source?: string; periodFrom?: string; periodTo?: string } };
+
+function ChatLauncherButton({ onClick, loading = false }: { onClick: () => void; loading?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      aria-label={loading ? 'Cargando Nova AI' : 'Abrir Nova AI'}
+      aria-busy={loading}
+      title="Preguntar a Nova"
+      className="group fixed bottom-4 right-3 z-[9000] flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary to-emerald-600 text-primary-foreground shadow-2xl shadow-primary/40 ring-4 ring-primary/15 transition-[transform,box-shadow] hover:scale-110 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 active:scale-95 disabled:cursor-wait sm:bottom-6 sm:right-4 sm:size-12"
+    >
+      <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-background bg-emerald-300" />
+      <NovaHubLogo size={25} className="rounded-full bg-white p-1" />
+    </button>
+  );
+}
+
+function DeferredFloatingChat() {
+  const { user } = useAuth();
+  const userId = user?.id || user?.email || 'user';
+  const tenantId = user?.clientTenantId || user?.tenantId || 'current';
+  const openStorageKey = `erp-nova-ai-open.${tenantId}.${userId}`;
+  const [loaded, setLoaded] = useState(() => safeGetItem(openStorageKey) === 'true');
+  const [initiallyOpen, setInitiallyOpen] = useState(() => safeGetItem(openStorageKey) === 'true');
+  const [initialRequest, setInitialRequest] = useState<DeferredChatRequest | null>(null);
+
+  useEffect(() => {
+    const savedOpen = safeGetItem(openStorageKey) === 'true';
+    setLoaded(savedOpen);
+    setInitiallyOpen(savedOpen);
+    setInitialRequest(null);
+  }, [openStorageKey]);
+
+  useEffect(() => {
+    if (loaded) return undefined;
+    const handleOpenRequest = (event: Event) => {
+      const detail = (event as CustomEvent<DeferredChatRequest>).detail || {};
+      setInitialRequest(detail);
+      setInitiallyOpen(true);
+      setLoaded(true);
+    };
+    window.addEventListener('open-erp-chat', handleOpenRequest);
+    return () => window.removeEventListener('open-erp-chat', handleOpenRequest);
+  }, [loaded]);
+
+  if (!loaded) {
+    return <ChatLauncherButton onClick={() => { setInitiallyOpen(true); setLoaded(true); }} />;
+  }
+
+  return (
+    <Suspense fallback={<ChatLauncherButton onClick={() => undefined} loading />}>
+      <FloatingChat initiallyOpen={initiallyOpen} initialRequest={initialRequest} />
+    </Suspense>
   );
 }
 
@@ -608,7 +667,7 @@ function DashboardLayout() {
           </Suspense>
         </main>
       </div>
-      {currentModule !== 'fuerza-comercial' && <FloatingChat />}
+      {currentModule !== 'fuerza-comercial' && <DeferredFloatingChat key={`${user?.clientTenantId || user?.tenantId || 'current'}.${user?.id || user?.email || 'user'}`} />}
     </div>
   );
 }
@@ -733,24 +792,24 @@ function AppContent() {
     document.documentElement.classList.toggle('dark', isAuthenticated && readPersistedDarkMode());
   }, [isAuthenticated]);
 
-  if (location.pathname === '/integrations/poket/callback') return <PoketPaymentCallbackPage />;
-  if (location.pathname === '/public/tracking' || location.pathname.startsWith('/public/tracking/')) return <PublicTrackingPage />;
-  if (location.pathname.startsWith('/rsvp/') || location.pathname.startsWith('/public/rsvp/')) return <PublicRsvpPage />;
-  if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
-  if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
-  if (location.pathname.startsWith('/public/project/')) return <PublicProjectProgressPage />;
-  if (location.pathname.startsWith('/firmar-contrato/')) return <PublicContractSignPage />;
-  if (location.pathname.startsWith('/public/subquotation/')) return <PublicSupplierQuotationPage />;
+  if (location.pathname === '/integrations/poket/callback') return <Suspense fallback={<PageLoader />}><PoketPaymentCallbackPage /></Suspense>;
+  if (location.pathname === '/public/tracking' || location.pathname.startsWith('/public/tracking/')) return <Suspense fallback={<PageLoader />}><PublicTrackingPage /></Suspense>;
+  if (location.pathname.startsWith('/rsvp/') || location.pathname.startsWith('/public/rsvp/')) return <Suspense fallback={<PageLoader />}><PublicRsvpPage /></Suspense>;
+  if (location.pathname.startsWith('/public/document/')) return <Suspense fallback={<PageLoader />}><PublicAccessPage mode="document" /></Suspense>;
+  if (location.pathname.startsWith('/public/portal/')) return <Suspense fallback={<PageLoader />}><PublicAccessPage mode="portal" /></Suspense>;
+  if (location.pathname.startsWith('/public/project/')) return <Suspense fallback={<PageLoader />}><PublicProjectProgressPage /></Suspense>;
+  if (location.pathname.startsWith('/firmar-contrato/')) return <Suspense fallback={<PageLoader />}><PublicContractSignPage /></Suspense>;
+  if (location.pathname.startsWith('/public/subquotation/')) return <Suspense fallback={<PageLoader />}><PublicSupplierQuotationPage /></Suspense>;
   if (location.pathname.startsWith('/restaurant/menu/')) {
     const tableToken = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
-    return <PublicRestaurantMenuPage tableToken={tableToken} />;
+    return <Suspense fallback={<PageLoader />}><PublicRestaurantMenuPage tableToken={tableToken} /></Suspense>;
   }
   if (location.pathname.startsWith('/hotel/guest/')) {
     const token = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
-    return <PublicHotelGuestPage token={token} />;
+    return <Suspense fallback={<PageLoader />}><PublicHotelGuestPage token={token} /></Suspense>;
   }
   if (location.pathname === '/preview/arca-supply' || location.pathname === '/ecommerce/arcasupply') {
-    return <ArcaSupplyEcommercePreviewPage />;
+    return <Suspense fallback={<PageLoader />}><ArcaSupplyEcommercePreviewPage /></Suspense>;
   }
 
   // Ruta pública de registro: no requiere autenticación y evita el guard.

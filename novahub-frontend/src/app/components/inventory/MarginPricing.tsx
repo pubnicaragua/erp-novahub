@@ -3,8 +3,9 @@ import { Calculator } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { MARGIN_MODE_LABEL, priceFromCost, type MarginMode } from '../../utils/marginPricing';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
-const money = (value: number) => value.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (value: number) => value.toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() });
 
 function ModeSelect({ value, onChange }: { value: MarginMode; onChange: (mode: MarginMode) => void }) {
   return (

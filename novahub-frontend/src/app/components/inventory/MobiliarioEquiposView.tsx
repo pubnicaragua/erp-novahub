@@ -29,6 +29,7 @@ import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { ExportMenu } from '../ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const CATEGORIES = [
   { value: 'BUILDING', label: 'Edificios' },
@@ -599,7 +600,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
     }
   };
 
-  const fmtCost = (n: number) => n.toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtCost = (n: number) => n.toLocaleString('es', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() });
   const categoryLabelOf = (v: string) => CATEGORIES.find(c => c.value === v)?.label || v;
   const statusLabelOf = (v: string) => STATUSES.find(s => s.value === v)?.label || v;
   const branchNameOf = (id?: string | null) => branches.find(b => b.id === id)?.name || '—';
@@ -1037,7 +1038,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               </div>
               {canViewInventoryCost && <div className="space-y-2">
                 <Label>Costo</Label>
-                <Input type="number" step="0.01" min="0" value={form.cost} onChange={e => set('cost', e.target.value)} />
+                <Input type="number" step="0.01" min="0" value={form.cost} onChange={e => set('cost', e.target.value)} currencyPrecision />
               </div>}
               {canViewInventoryCost && <div className="space-y-2">
                 <Label>Moneda del costo</Label>

@@ -13,11 +13,12 @@ import { useTenantQuery } from '../../../hooks/useTenantQuery';
 import { toast } from '../../../services/toast';
 import { storageService } from '../../../services/storage.service';
 import { BILLING_LABEL, CONTRACT_HEALTH_LABEL, CONTRACT_STATUS_LABEL, clientContractsService, type BillingFrequency, type ContractDetail, type ContractStatus } from '../../../services/client-contracts.service';
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
 const failure = (error: unknown) => (error as any)?.response?.data?.message?.toString?.() || (error as Error)?.message || 'No se pudo completar la acción.';
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-NI', { dateStyle: 'medium', timeZone: 'UTC' }) : '—');
 const iso = (value: string | null) => (value ? value.slice(0, 10) : '');
-const money = (amount: number, currency: string) => `${currency} ${new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2 }).format(amount)}`;
+const money = (amount: number, currency: string) => `${currency} ${new Intl.NumberFormat('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() }).format(amount)}`;
 const field = 'h-10 w-full rounded-xl border border-border/60 bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60';
 type Tab = 'resumen' | 'texto' | 'hitos' | 'seguimiento';
 
@@ -100,7 +101,7 @@ export function ClientContractDialog({ contractId, onClose, onChanged }: { contr
                   <div className="space-y-1.5"><Label htmlFor="cc-contact">Contacto</Label><Input id="cc-contact" disabled={!editable} value={String(value('contactName', contract.contactName ?? ''))} onChange={(e) => set('contactName', e.target.value)} /></div>
                   <div className="space-y-1.5"><Label htmlFor="cc-email">Correo del contacto</Label><Input id="cc-email" type="email" disabled={!editable} value={String(value('contactEmail', contract.contactEmail ?? ''))} onChange={(e) => set('contactEmail', e.target.value)} /></div>
                   <div className="space-y-1.5"><Label htmlFor="cc-title">Título</Label><Input id="cc-title" disabled={!isDraft || !editable} value={String(value('title', contract.title))} onChange={(e) => set('title', e.target.value)} /></div>
-                  <div className="space-y-1.5"><Label htmlFor="cc-amount">Monto ({contract.currency})</Label><Input id="cc-amount" type="number" min="0" step="0.01" disabled={!isDraft || !editable} value={String(value('amount', String(contract.amount)))} onChange={(e) => set('amount', e.target.value)} /></div>
+                  <div className="space-y-1.5"><Label htmlFor="cc-amount">Monto ({contract.currency})</Label><Input id="cc-amount" type="number" min="0" step="0.01" disabled={!isDraft || !editable} value={String(value('amount', String(contract.amount)))} onChange={(e) => set('amount', e.target.value)} currencyPrecision /></div>
                   <div className="space-y-1.5"><Label htmlFor="cc-bill">Facturación</Label><select id="cc-bill" className={field} disabled={!isDraft || !editable} value={String(value('billingFrequency', contract.billingFrequency))} onChange={(e) => set('billingFrequency', e.target.value)}>{(Object.keys(BILLING_LABEL) as BillingFrequency[]).map((key) => <option key={key} value={key}>{BILLING_LABEL[key]}</option>)}</select></div>
                   <div className="space-y-1.5"><Label htmlFor="cc-start">Inicio</Label><Input id="cc-start" type="date" disabled={!isDraft || !editable} value={String(value('startDate', iso(contract.startDate)))} onChange={(e) => set('startDate', e.target.value)} /></div>
                   <div className="space-y-1.5"><Label htmlFor="cc-end">Fin</Label><Input id="cc-end" type="date" disabled={!editable} value={String(value('endDate', iso(contract.endDate)))} onChange={(e) => set('endDate', e.target.value)} /></div>
@@ -149,7 +150,7 @@ export function ClientContractDialog({ contractId, onClose, onChanged }: { contr
                   <div className="grid gap-3 rounded-xl border border-border/60 p-3 sm:grid-cols-6">
                     <div className="space-y-1.5 sm:col-span-3"><Label htmlFor="ms-title">Nuevo hito</Label><Input id="ms-title" value={mTitle} maxLength={160} onChange={(e) => setMTitle(e.target.value)} placeholder="Entrega, pago, capacitación…" /></div>
                     <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="ms-due">Fecha</Label><Input id="ms-due" type="date" value={mDue} onChange={(e) => setMDue(e.target.value)} /></div>
-                    <div className="space-y-1.5"><Label htmlFor="ms-amount">Monto</Label><Input id="ms-amount" type="number" min="0" step="0.01" value={mAmount} onChange={(e) => setMAmount(e.target.value)} /></div>
+                    <div className="space-y-1.5"><Label htmlFor="ms-amount">Monto</Label><Input id="ms-amount" type="number" min="0" step="0.01" value={mAmount} onChange={(e) => setMAmount(e.target.value)} currencyPrecision /></div>
                     <div className="flex justify-end sm:col-span-6"><Button type="button" disabled={busy || !mTitle.trim()} onClick={() => void run(async () => { await clientContractsService.addMilestone(contract.id, { title: mTitle.trim(), dueDate: mDue || null, amount: mAmount === '' ? null : Number(mAmount) }); setMTitle(''); setMDue(''); setMAmount(''); })}><Plus className="mr-1.5 size-4" /> Agregar hito</Button></div>
                   </div>
                 )}

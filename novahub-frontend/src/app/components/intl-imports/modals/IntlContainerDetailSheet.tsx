@@ -47,6 +47,7 @@ import {
 } from '../../../services/intl-imports.service';
 import { IntlPackageDetailSheet } from './IntlPackageDetailSheet';
 import { MovePackagesModal } from './MovePackagesModal';
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
 interface IntlContainerDetailSheetProps {
   container: IntlImportContainer | null;
@@ -283,7 +284,7 @@ export function IntlContainerDetailSheet({
                 <div className="text-center">
                   <p className="text-[10px] text-muted-foreground font-bold uppercase">Gastos</p>
                   <p className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400 mt-0.5">
-                    ${totalExpenses.toFixed(2)}
+                    ${totalExpenses.toFixed(getCurrencyDecimalPlaces())}
                   </p>
                 </div>
               </div>
@@ -421,7 +422,7 @@ export function IntlContainerDetailSheet({
                               </TableCell>
                               <TableCell className="py-2.5 text-right font-mono text-xs font-semibold">
                                 {declaredValue > 0 ? (
-                                  <span className="text-emerald-600 dark:text-emerald-400">${declaredValue.toFixed(2)}</span>
+                                  <span className="text-emerald-600 dark:text-emerald-400">${declaredValue.toFixed(getCurrencyDecimalPlaces())}</span>
                                 ) : (
                                   <span className="text-muted-foreground">—</span>
                                 )}

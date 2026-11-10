@@ -28,6 +28,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { formatDateOnly, formatInstant, todayIso } from '../../utils/dateFormat';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const statusStyles: Record<string, string> = {
   PENDING: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -146,7 +147,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
 
   const formatAmount = (value: any) => {
     const symbol = detail?.bank?.currency === 'USD' ? 'US$' : 'C$';
-    return `${symbol} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    return `${symbol} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces() })}`;
   };
 
   const handleCreate = async () => {
@@ -384,7 +385,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                 </div>
                 <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
                   <p className="text-[10px] text-muted-foreground">Conciliados ({detail.matchedCount || 0}/{detail.totalCount || 0})</p>
-                  <p className="text-lg font-black tabular-nums">{matchedNet >= 0 ? '+' : ''}{matchedNet.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                  <p className="text-lg font-black tabular-nums">{matchedNet >= 0 ? '+' : ''}{matchedNet.toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}</p>
                   <p className="text-[9px] text-muted-foreground">Neto marcado ✓</p>
                 </div>
                 <div className="rounded-xl border border-border/40 bg-emerald-500/5 p-3">
@@ -408,8 +409,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                     onChange={(e) => setBankEndInput(e.target.value)}
                     onBlur={handleEndBalanceBlur}
                     placeholder="0.00"
-                    className="h-8 w-full text-sm font-black tabular-nums"
-                  />
+                    className="h-8 w-full text-sm font-black tabular-nums" currencyPrecision />
                   <p className="text-[9px] text-muted-foreground">Dato del estado de cuenta; se guarda al salir del campo</p>
                 </div>
                 <div className={cn('rounded-xl border p-3', detail.isBalanced ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-rose-500/30 bg-rose-500/5')}>
@@ -467,8 +467,8 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                       <TableCell className="text-xs font-mono">{item.date ? formatDateOnly(item.date) : 'N/A'}</TableCell>
                       <TableCell className="text-xs font-medium">{item.description || 'N/A'}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{item.reference || 'N/A'}</TableCell>
-                      <TableCell className="text-xs tabular-nums text-right">{Number(item.debit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
-                      <TableCell className="text-xs tabular-nums text-right">{Number(item.credit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell className="text-xs tabular-nums text-right">{Number(item.debit || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces() })}</TableCell>
+                      <TableCell className="text-xs tabular-nums text-right">{Number(item.credit || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces() })}</TableCell>
                       <TableCell className="text-right">
                         <Input
                           type="number"
@@ -482,8 +482,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                           }}
                           onBlur={() => handleBankAmountBlur(item)}
                           placeholder="—"
-                          className="ml-auto h-8 w-28 rounded-lg text-right text-xs tabular-nums"
-                        />
+                          className="ml-auto h-8 w-28 rounded-lg text-right text-xs tabular-nums" currencyPrecision />
                       </TableCell>
                       <TableCell className="text-center">
                         <Checkbox
@@ -529,7 +528,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto</Label>
-                <Input type="number" min="0" step="0.01" value={addItemForm.amount} onChange={(e) => setAddItemForm({ ...addItemForm, amount: e.target.value })} placeholder="0.00" className="h-9 text-xs" />
+                <Input type="number" min="0" step="0.01" value={addItemForm.amount} onChange={(e) => setAddItemForm({ ...addItemForm, amount: e.target.value })} placeholder="0.00" className="h-9 text-xs" currencyPrecision />
               </div>
               <div className="col-span-2 space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción</Label>
@@ -691,8 +690,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                 value={form.endBalance}
                 onChange={(e) => setForm({ ...form, endBalance: e.target.value })}
                 placeholder="Lo puedes ajustar después"
-                className="h-9 text-xs"
-              />
+                className="h-9 text-xs" currencyPrecision />
             </div>
             <div className="col-span-2 space-y-2">
               {previewLoading ? (
@@ -704,7 +702,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
                       <p className="text-[9px] text-muted-foreground">Saldo inicial (libros)</p>
-                      <p className="text-sm font-black tabular-nums">{preview.currency === 'USD' ? 'US$' : 'C$'} {Number(preview.startBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                      <p className="text-sm font-black tabular-nums">{preview.currency === 'USD' ? 'US$' : 'C$'} {Number(preview.startBalance || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces() })}</p>
                       <p className="text-[9px] text-muted-foreground">Calculado por el sistema</p>
                     </div>
                     <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
@@ -714,7 +712,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                     </div>
                     <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
                       <p className="text-[9px] text-muted-foreground">Saldo en libros al cierre</p>
-                      <p className="text-sm font-black tabular-nums">{preview.currency === 'USD' ? 'US$' : 'C$'} {Number(preview.closingBookBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                      <p className="text-sm font-black tabular-nums">{preview.currency === 'USD' ? 'US$' : 'C$'} {Number(preview.closingBookBalance || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces() })}</p>
                       <p className="text-[9px] text-muted-foreground">Inicial + movimientos</p>
                     </div>
                   </div>

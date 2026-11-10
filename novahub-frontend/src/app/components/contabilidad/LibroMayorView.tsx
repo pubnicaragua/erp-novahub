@@ -24,6 +24,8 @@ import { PdfDownloadButton, type PdfExportScope } from '../ui/PdfDownloadButton'
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { formatDateOnly } from '../../utils/dateFormat';
+import { useCurrency } from '../../contexts/CurrencyContext';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 // import { motion } from 'motion/react';
 
 interface LedgerEntry {
@@ -62,7 +64,7 @@ const MOVEMENT_TYPES = [
 const PAGE_SIZES = [50, 100, 200];
 
 function formatCurrency(n: number): string {
-  return new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() }).format(n);
 }
 
 function formatAccountingDate(value?: string | Date | null): string {
@@ -76,6 +78,9 @@ function journalStatusLabel(value?: string): string {
 
 export function LibroMayorView() {
   const { user, canPerform } = useAuth();
+  const { baseCurrency, displayCurrency, displayMode, convertCurrentAmount } = useCurrency();
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const toReportAmount = (amount: number) => displayMode === 'ORIGINAL' ? Number(amount || 0) : convertCurrentAmount(Number(amount || 0), baseCurrency);
   const [filterAccountId, setFilterAccountId] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -208,9 +213,9 @@ export function LibroMayorView() {
         accountType: accountTypeLabel(e.accountType),
         description: e.description || '-',
         reference: e.reference || '-',
-        debit: e.debit || 0,
-        credit: e.credit || 0,
-        balance: e.balance || 0,
+        debit: toReportAmount(e.debit || 0),
+        credit: toReportAmount(e.credit || 0),
+        balance: toReportAmount(e.balance || 0),
       }));
 
       const exportDebits = orderedExportEntries.reduce((sum, entry) => sum + Number(entry.debit || 0), 0);
@@ -222,11 +227,12 @@ export function LibroMayorView() {
         dateFrom: filterDateFrom,
         dateTo: filterDateTo,
         accountName: selectedAccountName,
+        currencyLabel: displayMode === 'ORIGINAL' ? `${baseCurrency} (base)` : reportCurrency,
         format,
         totals: {
-          debitos: formatCurrency(exportDebits),
-          creditos: formatCurrency(exportCredits),
-          saldo: formatCurrency(exportDebits - exportCredits),
+          debitos: formatCurrency(toReportAmount(exportDebits)),
+          creditos: formatCurrency(toReportAmount(exportCredits)),
+          saldo: formatCurrency(toReportAmount(exportDebits - exportCredits)),
         },
       });
       toast.success(`PDF exportado con ${orderedExportEntries.length} movimiento(s)`);
@@ -262,9 +268,9 @@ export function LibroMayorView() {
         Tipo: accountTypeLabel(e.accountType),
         Descripción: e.description || '-',
         Referencia: e.reference || '-',
-        Débito: e.debit || 0,
-        Crédito: e.credit || 0,
-        Saldo: e.balance || 0,
+        [`Débito (${reportCurrency})`]: toReportAmount(e.debit || 0),
+        [`Crédito (${reportCurrency})`]: toReportAmount(e.credit || 0),
+        [`Saldo (${reportCurrency})`]: toReportAmount(e.balance || 0),
       }));
 
       const workbook = XLSX.utils.book_new();
@@ -287,10 +293,11 @@ export function LibroMayorView() {
         ['Cuenta filtrada', selectedAccountName || 'Todas las cuentas'],
         ['Desde', filterDateFrom || 'Inicio'],
         ['Hasta', filterDateTo || 'Actual'],
+        ['Moneda', displayMode === 'ORIGINAL' ? `${baseCurrency} (moneda base de saldos agregados)` : reportCurrency],
         ['Total movimientos', orderedExportEntries.length],
-        ['Total débitos', orderedExportEntries.reduce((sum, entry) => sum + Number(entry.debit || 0), 0)],
-        ['Total créditos', orderedExportEntries.reduce((sum, entry) => sum + Number(entry.credit || 0), 0)],
-        ['Saldo neto', orderedExportEntries.reduce((sum, entry) => sum + Number(entry.debit || 0) - Number(entry.credit || 0), 0)],
+        ['Total débitos', toReportAmount(orderedExportEntries.reduce((sum, entry) => sum + Number(entry.debit || 0), 0))],
+        ['Total créditos', toReportAmount(orderedExportEntries.reduce((sum, entry) => sum + Number(entry.credit || 0), 0))],
+        ['Saldo neto', toReportAmount(orderedExportEntries.reduce((sum, entry) => sum + Number(entry.debit || 0) - Number(entry.credit || 0), 0))],
       ]);
       summarySheet['!cols'] = [{ wch: 20 }, { wch: 30 }];
       XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen');

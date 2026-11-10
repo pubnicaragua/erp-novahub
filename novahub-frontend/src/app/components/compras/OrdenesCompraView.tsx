@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { 
   ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, ChevronRight, Pencil, Download, FileText, X, Upload, AlertTriangle, Check, CircleHelp
 } from 'lucide-react';
@@ -37,7 +38,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseRecordPDF, generatePurchaseListPDF } from '../../utils/purchaseExports';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseVariantPickerModal } from './PurchaseVariantPickerModal';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
@@ -59,12 +59,12 @@ import type { SimilarProductGroup, SimilarProductMatch } from '../../services/in
 import { buildVariantDisplayName } from '../../types/variants';
 import { resolveStandardProductPriceLists } from '../../utils/product-price-lists';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 
 interface Props {
   data: PurchaseOrder[];
-  summaryData?: PurchaseOrder[];
-  summaryLoading?: boolean;
-  summaryError?: boolean;
+  summarySearch?: string;
   loading: boolean;
   onRefresh: () => void;
   supplierCatalog?: Supplier[];
@@ -420,15 +420,15 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
           <ImportPreviewField label="Notas"><div><Input value={row.commercialNoteSnapshot || ''} maxLength={100} onChange={(event) => onRowUpdate(index, 'commercialNoteSnapshot', event.target.value)} className={importPreviewFieldClass} disabled={importing} /><p className="mt-1 text-[10px] text-muted-foreground">{Array.from(row.commercialNoteSnapshot || '').length}/100</p></div></ImportPreviewField>
           <ImportPreviewField label="Categoría" className="sm:col-span-2"><div className="flex min-w-0 items-center gap-1"><Combobox options={categoryComboboxOptions} value={categoryValue === '__none__' ? '' : String(categoryValue)} onChange={(value) => onCategoryChange(index, value, categoryComboboxOptions.find((option) => option.value === value)?.label)} placeholder={row.category ? `No existe: ${row.category}` : 'Seleccionar categoría *'} searchPlaceholder="Buscar categoría..." emptyMessage="No se encontró la categoría" maxVisibleOptions={100} ariaLabel={`Categoría de ${row.sku || `fila ${index + 1}`}`} className={`${importPreviewFieldClass} min-w-0 flex-1 ${row._hasError ? 'border-red-500' : matchingCategory ? '' : 'border-amber-500/70 text-amber-700'}`} contentClassName="z-[80] w-[min(24rem,calc(100vw-2rem))]" disabled={importing} /><Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg border-amber-500/50 p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => openCategoryDialog(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button></div></ImportPreviewField>
           <ImportPreviewField label="Cantidad"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label={`Costo unitario de compra (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(row.unitPrice)} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label={`Costo unitario de compra (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(row.unitPrice)} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencyPrecision /></ImportPreviewField>
           <ImportPreviewField label="Tipo IVA"><select value={taxValue} onChange={(event) => onRowUpdate(index, 'taxType', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="">Seleccionar IVA</option>{taxOptions.filter((option) => option.isActive !== false).map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></ImportPreviewField>
-          <ImportPreviewField label={`Base IVA (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(isTaxExempt(taxValue) ? 0 : tax.taxBase)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
-          <ImportPreviewField label="IVA %"><Input type="text" inputMode="decimal" value={formatInputNumber(tax.taxRate)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
-          <ImportPreviewField label={`Monto IVA (${currencySymbol})`}><div className="flex h-9 items-center justify-end rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-bold text-rose-500">{currencySymbol} {tax.taxAmount.toFixed(2)}</div></ImportPreviewField>
+          <ImportPreviewField label={`Base IVA (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(isTaxExempt(taxValue) ? 0 : tax.taxBase)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} currencyPrecision /></ImportPreviewField>
+          <ImportPreviewField label="IVA %"><Input type="text" inputMode="decimal" value={formatDecimalInput(tax.taxRate, 2)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
+          <ImportPreviewField label={`Monto IVA (${currencySymbol})`}><div className="flex h-9 items-center justify-end rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-bold text-rose-500">{currencySymbol} {tax.taxAmount.toFixed(getCurrencyDecimalPlaces())}</div></ImportPreviewField>
           <ImportPreviewField label="Retención" className="sm:col-span-2"><select value={withholdingValue} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="NONE">0 · Sin retención</option>{withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE').map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></ImportPreviewField>
           <ImportPreviewField label={`Base ret. (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(withholdingValue === 'NONE' ? 0 : withholding.withholdingBase)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
-          <ImportPreviewField label="Ret. %"><Input type="text" inputMode="decimal" value={formatInputNumber(withholding.withholdingRate)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
-          <ImportPreviewField label={`Monto ret. (${currencySymbol})`}><div className="flex h-9 items-center justify-end rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-bold text-amber-600">{currencySymbol} {withholding.withholdingTotal.toFixed(2)}</div></ImportPreviewField>
+          <ImportPreviewField label="Ret. %"><Input type="text" inputMode="decimal" value={formatDecimalInput(withholding.withholdingRate, 2)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
+          <ImportPreviewField label={`Monto ret. (${currencySymbol})`}><div className="flex h-9 items-center justify-end rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-bold text-amber-600">{currencySymbol} {withholding.withholdingTotal.toFixed(getCurrencyDecimalPlaces())}</div></ImportPreviewField>
         </div>
       </ImportPreviewMobileCard>
     );
@@ -609,15 +609,15 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                   </TableCell>
                   <TableCell className="p-1 text-right text-xs font-black text-primary">{row.currentStock ?? '—'}</TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className="h-8 border-2 border-border bg-background text-right text-xs shadow-sm" /></TableCell>
-                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(row.unitPrice)} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className="h-8 border-2 border-primary/30 bg-background text-right text-xs shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(row.unitPrice)} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className="h-8 border-2 border-primary/30 bg-background text-right text-xs shadow-sm" currencyPrecision /></TableCell>
                   <TableCell className="p-1"><select value={taxValue} onChange={(event) => onRowUpdate(index, 'taxType', event.target.value)} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="">Seleccionar IVA</option>{taxValue && !taxOptionExists && <option value={taxValue}>{taxValue}</option>}{taxOptions.filter((option) => option.isActive !== false).map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></TableCell>
-                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(isTaxExempt(taxValue) ? 0 : tax.taxBase)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
-                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(tax.taxRate)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
-                  <TableCell className="p-1 text-right text-xs font-bold text-rose-500">{currencySymbol} {tax.taxAmount.toFixed(2)}</TableCell>
+                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(isTaxExempt(taxValue) ? 0 : tax.taxBase)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" currencyPrecision /></TableCell>
+                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatDecimalInput(tax.taxRate, 2)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
+                  <TableCell className="p-1 text-right text-xs font-bold text-rose-500">{currencySymbol} {tax.taxAmount.toFixed(getCurrencyDecimalPlaces())}</TableCell>
                   <TableCell className="p-1"><select value={withholdingValue} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="NONE">0 · Sin retención</option>{withholdingValue !== 'NONE' && !withholdingOptionExists && <option value={withholdingValue}>{withholdingValue}</option>}{withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE').map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></TableCell>
                   <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(withholdingValue === 'NONE' ? 0 : withholding.withholdingBase)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
-                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(withholding.withholdingRate)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
-                  <TableCell className="p-1 text-right text-xs font-bold text-amber-600">{currencySymbol} {withholding.withholdingTotal.toFixed(2)}</TableCell>
+                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatDecimalInput(withholding.withholdingRate, 2)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
+                  <TableCell className="p-1 text-right text-xs font-bold text-amber-600">{currencySymbol} {withholding.withholdingTotal.toFixed(getCurrencyDecimalPlaces())}</TableCell>
                 </TableRow>
                 );
               })}
@@ -811,17 +811,32 @@ const getProductStockForWarehouse = (product: any, variantId?: string | null, wa
   return levels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0);
 };
 
-const findImportProductMatch = (sku: unknown, catalog: any[] = []) => {
+type ImportProductIndex = {
+  bySku: Map<string, { product: any; variant?: any }>;
+  byId: Map<string, any>;
+};
+
+const buildImportProductIndex = (catalog: any[] = []): ImportProductIndex => {
+  const bySku = new Map<string, { product: any; variant?: any }>();
+  const byId = new Map<string, any>();
+  for (const product of catalog) {
+    const id = String(product?.id || '');
+    if (id && !byId.has(id)) byId.set(id, product);
+    const code = normalizeProductCode(product);
+    if (code && !bySku.has(code)) bySku.set(code, { product, variant: undefined });
+    for (const variant of Array.isArray(product?.variants) ? product.variants : []) {
+      const sku = String(variant?.sku || '').trim().toLowerCase();
+      if (sku && !bySku.has(sku)) bySku.set(sku, { product, variant });
+    }
+  }
+  return { bySku, byId };
+};
+
+const findImportProductMatch = (sku: unknown, catalogOrIndex: any[] | ImportProductIndex = []): { product: any; variant?: any } | undefined => {
   const normalized = String(sku || '').trim().toLowerCase();
   if (!normalized) return undefined;
-  for (const product of catalog) {
-    if (normalizeProductCode(product) === normalized) return { product, variant: undefined };
-    const variant = Array.isArray(product?.variants)
-      ? product.variants.find((candidate: any) => String(candidate?.sku || '').trim().toLowerCase() === normalized)
-      : undefined;
-    if (variant) return { product, variant };
-  }
-  return undefined;
+  if (!Array.isArray(catalogOrIndex)) return catalogOrIndex.bySku.get(normalized);
+  return buildImportProductIndex(catalogOrIndex).bySku.get(normalized);
 };
 
 /**
@@ -1023,9 +1038,9 @@ const buildPendingPurchaseCatalogFromRow = (row: PurchaseImportRow, priceCurrenc
   variant: null,
 });
 
-export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
+export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertBetweenCurrencies } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, displayMode, formatConvertedAmount, convertDisplayAmount, convertBetweenCurrencies } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-orders-layout', 'table', 24 * 365);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
@@ -1052,6 +1067,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
   const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const importProductIndex = useMemo(() => buildImportProductIndex(products), [products]);
   const [categories, setCategories] = useState<any[]>([]);
   const [purchasePriceLists, setPurchasePriceLists] = useState<Array<{ code: string; name: string }>>([]);
   const [taxOptions, setTaxOptions] = useState<ImportCatalogOption[]>(FALLBACK_IMPORT_TAX_OPTIONS);
@@ -1145,11 +1161,9 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
     if (initialStatus) setStatusFilter(initialStatus);
   }, [initialStatus]);
 
-  const findImportProduct = (sku: unknown, catalog = products) => {
-    return findImportProductMatch(sku, catalog)?.product;
-  };
-
-  const validateImportRows = useCallback((rows: PurchaseImportRow[], catalog = products) => {
+  const validateImportRows = useCallback((rows: PurchaseImportRow[], catalog = products, rowIndexes?: ReadonlySet<number>) => {
+    const productIndex = catalog === products ? importProductIndex : buildImportProductIndex(catalog);
+    const categoryIndex = new Map(categories.map((category: any) => [String(category.name || '').trim().toLowerCase(), category]));
     const skuCounts = new Map<string, number>();
     const existingOrderSkus = new Set(((localDoc?.items || []) as any[]).map((item) => String(item.code || item.sku || '').trim().toLowerCase()).filter(Boolean));
     const importTaxOptions = mergeImportCatalogOptions(taxOptions, FALLBACK_IMPORT_TAX_OPTIONS);
@@ -1161,18 +1175,19 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
       if (sku) skuCounts.set(sku, (skuCounts.get(sku) || 0) + 1);
     });
 
-    return rows.map((sourceRow): PurchaseImportRow => {
+    return rows.map((sourceRow, rowIndex): PurchaseImportRow => {
+      if (rowIndexes && !rowIndexes.has(rowIndex)) return sourceRow;
       const row = { ...sourceRow };
       const sku = String(row.sku || '').trim();
       const selectedProduct = row.similarityResolution === 'USE_EXISTING' && row.similarityProductId
-        ? catalog.find((candidate: any) => String(candidate.id) === String(row.similarityProductId))
+        ? productIndex.byId.get(String(row.similarityProductId))
         : undefined;
       const selectedVariant = selectedProduct?.variants?.find((variant: any) => String(variant.id) === String(row.variantId))
         || selectedProduct?.variants?.find((variant: any) => normalizeSimilarityInputKey(variant.sku) === normalizeSimilarityInputKey(sku));
       const match = selectedProduct
         ? { product: selectedProduct, variant: selectedVariant }
-        : findImportProductMatch(sku, catalog)
-          || (row._advanced && row.parentProductCode ? findImportProductMatch(row.parentProductCode, catalog) : undefined);
+        : findImportProductMatch(sku, productIndex)
+          || (row._advanced && row.parentProductCode ? findImportProductMatch(row.parentProductCode, productIndex) : undefined);
       const product = match?.product;
       const exactSkuMatch = Boolean(match && (
         normalizeSimilarityInputKey(product?.code) === normalizeSimilarityInputKey(sku)
@@ -1195,7 +1210,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
       const taxOption = importTaxOptions.find((option) => option.code === taxType);
       const withholdingOption = importWithholdingOptions.find((option) => option.code === withholdingType);
       const categoryName = String(row.category || linkedProduct?.category?.name || linkedProduct?.category || '').trim();
-      const categoryByName = categories.find((category: any) => String(category.name || '').trim().toLowerCase() === categoryName.toLowerCase());
+      const categoryByName = categoryIndex.get(categoryName.toLowerCase());
       const resolvedCategoryId = String(row.categoryId || linkedProduct?.categoryId || linkedProduct?.category?.id || categoryByName?.id || '').trim();
       const canCreateCategoryOnImport = Boolean(row._advanced) && Boolean(categoryName);
       const lineTotal = Number.isFinite(quantity) && Number.isFinite(unitPrice) ? Math.max(0, quantity) * Math.max(0, unitPrice) : 0;
@@ -1252,8 +1267,8 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
             : 'Se creará un producto nuevo al recepcionar; el SKU importado debe ser diferente al existente'
           : '',
         canCreateCategoryOnImport && !resolvedCategoryId ? `La categoría "${categoryName}" se creará al recepcionar` : '',
-        taxAmountMismatch ? `Monto IVA ajustado a ${taxAmount.toFixed(2)} para coincidir con base y porcentaje` : '',
-        withholdingAmountMismatch ? `Monto ret. ajustado a ${withholdingTotal.toFixed(2)} para coincidir con base y porcentaje` : '',
+        taxAmountMismatch ? `Monto IVA ajustado a ${taxAmount.toFixed(getCurrencyDecimalPlaces())} para coincidir con base y porcentaje` : '',
+        withholdingAmountMismatch ? `Monto ret. ajustado a ${withholdingTotal.toFixed(getCurrencyDecimalPlaces())} para coincidir con base y porcentaje` : '',
       ].filter(Boolean);
 
       // Si el archivo trae una nota explícita, prevalece sobre la nota del
@@ -1310,7 +1325,18 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
             : '',
       };
     });
-  }, [categories, localDoc?.items, products, taxOptions, withholdingOptions]);
+  }, [categories, importProductIndex, localDoc?.items, products, taxOptions, withholdingOptions]);
+
+  const affectedImportRowIndexes = (rows: PurchaseImportRow[], targetIndex: number, priorSku?: unknown) => {
+    const affected = new Set([targetIndex]);
+    const changedSkuKeys = new Set([priorSku, rows[targetIndex]?.sku]
+      .map(normalizeSimilarityInputKey)
+      .filter(Boolean));
+    if (changedSkuKeys.size > 0) rows.forEach((row, rowIndex) => {
+      if (changedSkuKeys.has(normalizeSimilarityInputKey(row.sku))) affected.add(rowIndex);
+    });
+    return affected;
+  };
 
   // La carga de catálogos puede terminar después de leer el archivo. En ese
   // caso una fila puede mostrar una categoría válida pero conservar el error
@@ -1340,7 +1366,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
     const unresolvedSkus = Array.from(new Set(
       rows
         .map((row) => String(row.sku || '').trim())
-        .filter((sku) => sku && !findImportProduct(sku, catalog)),
+        .filter((sku) => sku && !findImportProductMatch(sku, importProductIndex)),
     ));
     const remoteProducts: any[] = [];
 
@@ -1357,7 +1383,13 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
           report: true,
           includeInactive: true,
         });
-        remoteProducts.push(...getProductListFromResponse(response).filter((product) => batch.some((sku) => Boolean(findImportProductMatch(sku, [product])))));
+        const responseProducts = getProductListFromResponse(response);
+        const responseIndex = buildImportProductIndex(responseProducts);
+        const matchedIds = new Set(batch
+          .map((sku) => findImportProductMatch(sku, responseIndex)?.product?.id)
+          .filter(Boolean)
+          .map(String));
+        remoteProducts.push(...responseProducts.filter((product) => matchedIds.has(String(product.id))));
       } catch {
         // Si la resolución masiva falla, las filas quedan como manuales y la
         // persona puede corregirlas en la previsualización sin perder la carga.
@@ -1373,7 +1405,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
     }
 
     return [...catalog, ...remoteProducts];
-  }, [products]);
+  }, [importProductIndex, products]);
 
   const handleDownloadPurchaseTemplate = useCallback(() => {
     downloadCanonicalVariantImportTemplate({
@@ -1564,31 +1596,35 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
   }, [checkPurchaseImportSimilarity, displayCurrency, globalRate, importData, importDataCurrency, importProcessing, importing, localDoc?.currency, previewLoading, validateImportRows]);
 
   const handlePurchaseImportRowUpdate = (index: number, field: keyof PurchaseImportRow, value: any) => {
-    setImportData((current) => validateImportRows(current.map((row, rowIndex) => {
-      if (rowIndex !== index) return row;
-      const nextRow = { ...row, [field]: value } as PurchaseImportRow;
-      if (field === 'sku' || field === 'description' || field === 'brand' || field === 'attributes') {
-        nextRow.similarityResolution = undefined;
-        nextRow.similarityProductId = undefined;
-      }
-      const lineTotal = Number(nextRow.quantity || 0) * Number(nextRow.unitPrice || 0);
-      if (field === 'taxType') {
-        const selected = taxOptions.find((option) => option.code === String(value || '').toUpperCase());
-        nextRow.taxRate = selected?.rate ?? (isTaxExempt(String(value || '').toUpperCase()) ? 0 : 15);
-        nextRow.taxBase = isTaxExempt(String(value || '').toUpperCase()) ? 0 : lineTotal;
-      }
-      if (field === 'withholdingType') {
-        const normalized = String(value || 'NONE').toUpperCase();
-        const selected = withholdingOptions.find((option) => option.code === normalized);
-        nextRow.withholdingRate = normalized === 'NONE' ? 0 : (selected?.rate ?? DEFAULT_ORDER_WITHHOLDING_RATES[normalized] ?? 0);
-        nextRow.withholdingBase = normalized === 'NONE' ? 0 : lineTotal;
-      }
-      if (field === 'quantity' || field === 'unitPrice') {
-        nextRow.taxBase = isTaxExempt(String(nextRow.taxType || 'GRAVADO').toUpperCase()) ? 0 : lineTotal;
-        nextRow.withholdingBase = String(nextRow.withholdingType || 'NONE').toUpperCase() === 'NONE' ? 0 : lineTotal;
-      }
-      return nextRow;
-    })));
+    setImportData((current) => {
+      const nextRows = current.map((row, rowIndex) => {
+        if (rowIndex !== index) return row;
+        const nextRow = { ...row, [field]: value } as PurchaseImportRow;
+        if (field === 'sku' || field === 'description' || field === 'brand' || field === 'attributes') {
+          nextRow.similarityResolution = undefined;
+          nextRow.similarityProductId = undefined;
+        }
+        const lineTotal = Number(nextRow.quantity || 0) * Number(nextRow.unitPrice || 0);
+        if (field === 'taxType') {
+          const selected = taxOptions.find((option) => option.code === String(value || '').toUpperCase());
+          nextRow.taxRate = selected?.rate ?? (isTaxExempt(String(value || '').toUpperCase()) ? 0 : 15);
+          nextRow.taxBase = isTaxExempt(String(value || '').toUpperCase()) ? 0 : lineTotal;
+        }
+        if (field === 'withholdingType') {
+          const normalized = String(value || 'NONE').toUpperCase();
+          const selected = withholdingOptions.find((option) => option.code === normalized);
+          nextRow.withholdingRate = normalized === 'NONE' ? 0 : (selected?.rate ?? DEFAULT_ORDER_WITHHOLDING_RATES[normalized] ?? 0);
+          nextRow.withholdingBase = normalized === 'NONE' ? 0 : lineTotal;
+        }
+        if (field === 'quantity' || field === 'unitPrice') {
+          nextRow.taxBase = isTaxExempt(String(nextRow.taxType || 'GRAVADO').toUpperCase()) ? 0 : lineTotal;
+          nextRow.withholdingBase = String(nextRow.withholdingType || 'NONE').toUpperCase() === 'NONE' ? 0 : lineTotal;
+        }
+        return nextRow;
+      });
+      const affectedIndexes = affectedImportRowIndexes(nextRows, index, current[index]?.sku);
+      return validateImportRows(nextRows, products, affectedIndexes);
+    });
     if (field === 'sku') {
       const previousRow = importData[index];
       const previousKeys = [previousRow?.sku, previousRow?.description, previousRow?.parentProductCode]
@@ -1608,8 +1644,8 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
         categoryId: selected?.id || categoryId || '',
         category: selected?.name || categoryName || '',
       };
-    })));
-  }, [categories, validateImportRows]);
+    })), products, new Set([index]));
+  }, [categories, products, validateImportRows]);
 
   const handleCreatePurchaseImportCategory = useCallback(async (name: string) => {
     const categoryType = localDoc?.purchaseType === 'SERVICE' ? 'SERVICE' : 'PRODUCT';
@@ -1810,7 +1846,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
     }
     if (exactSku) {
       const normalizedRequestedSku = normalizeSimilarityInputKey(requestedSku);
-      const matchesExistingProduct = Boolean(findImportProductMatch(requestedSku, products));
+      const matchesExistingProduct = Boolean(findImportProductMatch(requestedSku, importProductIndex));
       const duplicatesAnotherRow = importData.some((row, index) => index !== rowIndex && normalizeSimilarityInputKey(row.sku) === normalizedRequestedSku);
       if (!normalizedRequestedSku || matchesExistingProduct || duplicatesAnotherRow) {
         toast.error('El nuevo SKU ya existe o está repetido. Escribe un SKU diferente.');
@@ -1824,7 +1860,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
     setSimilarPurchaseGroups(remainingSimilarityGroups);
     if (remainingSimilarityGroups.length === 0) setSimilarPurchaseAlertOpen(false);
     toast.info('La fila se creará como un producto nuevo al recepcionar la orden.');
-  }, [importData, products, similarPurchaseGroups, validateImportRows]);
+  }, [importData, importProductIndex, products, similarPurchaseGroups, validateImportRows]);
 
   const handleFinalPurchaseImport = async () => {
     if (importConfirmText !== 'IMPORTAR' || !localDoc) return;
@@ -1863,13 +1899,13 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
         unitPrice,
         taxType: String(row.taxType || 'GRAVADO').toUpperCase(),
         taxRate: Number(tax.taxRate.toFixed(2)),
-        taxBase: Number(tax.taxBase.toFixed(2)),
-        taxAmount: Number(tax.taxAmount.toFixed(2)),
+        taxBase: Number(tax.taxBase.toFixed(getCurrencyDecimalPlaces())),
+        taxAmount: Number(tax.taxAmount.toFixed(getCurrencyDecimalPlaces())),
         withholdingType: String(row.withholdingType || 'NONE').toUpperCase(),
         withholdingRate: Number(withholding.withholdingRate.toFixed(2)),
-        withholdingBase: Number(withholding.withholdingBase.toFixed(2)),
-        withholdingTotal: Number(withholding.withholdingTotal.toFixed(2)),
-        total: Number((quantity * unitPrice).toFixed(2)),
+        withholdingBase: Number(withholding.withholdingBase.toFixed(getCurrencyDecimalPlaces())),
+        withholdingTotal: Number(withholding.withholdingTotal.toFixed(getCurrencyDecimalPlaces())),
+        total: Number((quantity * unitPrice).toFixed(getCurrencyDecimalPlaces())),
         pendingCatalog: row.productId && !(row._advanced && row.variantLabel && !row.variantId)
           ? undefined
           : advancedImportCatalog
@@ -2048,13 +2084,50 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
     status: (row: PurchaseOrder) => normalizePurchaseOrderStatus(row.status),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((order) => {
+  const summaryFilterValues = useMemo(() => ({
+    supplier: colFilters.state.supplier?.values || [],
+    status: colFilters.state.status?.values || [],
+  }), [colFilters.state.supplier?.values, colFilters.state.status?.values]);
+  const serializedSummaryFilters = JSON.stringify(summaryFilterValues);
+  const itemCountFilterValues = colFilters.state.itemCount?.values || [];
+  const hasItemCountFilter = itemCountFilterValues.length > 0;
+  const summaryQuery = useQuery({
+    queryKey: ['purchases', 'orders-kpi-summary', user?.tenantId, selectedBranchId, summarySearch, serializedSummaryFilters],
+    queryFn: ({ signal }) => purchaseOrdersService.getSummary({
+      summarySearch: summarySearch || undefined,
+      summaryFilters: serializedSummaryFilters,
+      branchId: selectedBranchId || undefined,
+    }, signal),
+    enabled: !hasItemCountFilter,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const itemCountFallbackQuery = useQuery({
+    queryKey: ['purchases', 'orders-kpi-item-count-filter', user?.tenantId, selectedBranchId, summarySearch],
+    queryFn: ({ signal }) => fetchAllReportPages<PurchaseOrder>(
+      (filters) => purchaseOrdersService.getAll(filters, signal),
+      { pageSize: 5000, report: true, branchId: selectedBranchId || undefined },
+      signal,
+    ),
+    enabled: hasItemCountFilter,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const itemCountFallbackRows = (itemCountFallbackQuery.data || []).filter((order) => {
     if (!normalizedSearchTerm) return true;
     const haystack = [order.number, order.supplier?.name, order.address, order.requestedBy, order.notes, ...(order.items || []).flatMap((item: any) => [item.code, item.name, item.category, item.description])].filter(Boolean).join(' ').toLowerCase();
     return haystack.includes(normalizedSearchTerm);
   });
-  const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
+  const summaryRowsWithItemCountFilter = hasItemCountFilter
+    ? colFilters.applyTo(itemCountFallbackRows, filterGetters)
+    : undefined;
+  const summaryLoading = hasItemCountFilter
+    ? itemCountFallbackQuery.isPending || itemCountFallbackQuery.isFetching
+    : summaryQuery.isPending || summaryQuery.isFetching;
+  const summaryError = hasItemCountFilter ? itemCountFallbackQuery.isError : summaryQuery.isError;
+  const summaryReady = hasItemCountFilter
+    ? itemCountFallbackQuery.data !== undefined
+    : summaryQuery.data !== undefined;
 
   const statusOptionsForFilter = PURCHASE_ORDER_STATUS_OPTIONS.map((option) => ({
     value: option.value,
@@ -2159,10 +2232,10 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
       createReportWorkbook({
         fileName: 'ordenes_de_compra.xlsx',
         sheets: [
-          { name: 'Ordenes', rows: exportRows.map((order) => ({ Numero: order.number || '—', Proveedor: order.supplier?.name || 'Sin proveedor', Fecha: order.date || '—', Estado: getPurchaseOrderStatusOption(order.status).label, Moneda: order.currency || '—', Total: Number(order.total || 0), Items: order.items?.length || 0 })) },
-          { name: 'Detalle', rows: exportRows.flatMap((order) => (order.items || []).map((item: any) => ({ Orden: order.number || order.id, Codigo: item.code || item.sku || '—', Producto: item.name || item.description || '—', Cantidad: Number(item.quantity || 0), Precio: Number(item.unitPrice || item.price || 0), Total: Number(item.total || 0) }))) },
+          { name: 'Ordenes', rows: exportRows.map((order) => ({ Numero: order.number || '—', Proveedor: order.supplier?.name || 'Sin proveedor', Fecha: order.date || '—', Estado: getPurchaseOrderStatusOption(order.status).label, Moneda: displayMode === 'ORIGINAL' ? (order.currency || '—') : displayCurrency, Total: convertDisplayAmount(Number(order.total || 0), order.currency, order.exchangeRate), Items: order.items?.length || 0 })) },
+          { name: 'Detalle', rows: exportRows.flatMap((order) => (order.items || []).map((item: any) => ({ Orden: order.number || order.id, Codigo: item.code || item.sku || '—', Producto: item.name || item.description || '—', Cantidad: Number(item.quantity || 0), Precio: convertDisplayAmount(Number(item.unitPrice || item.price || 0), order.currency, order.exchangeRate), Total: convertDisplayAmount(Number(item.total || 0), order.currency, order.exchangeRate), Moneda: displayMode === 'ORIGINAL' ? (order.currency || '—') : displayCurrency }))) },
         ],
-        filters: { Buscar: searchTerm, Estado: statusFilter, Alcance: scope === 'all' ? 'Todos los registros' : 'Página visible' },
+        filters: { Buscar: searchTerm, Estado: statusFilter, Alcance: scope === 'all' ? 'Todos los registros' : 'Página visible', Moneda: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
       });
       toast.success('Excel de órdenes descargado', { id: exportToastId });
     } catch (error: any) {
@@ -2408,12 +2481,12 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
         unitPrice,
         taxType,
         taxRate: Number(tax.taxRate.toFixed(2)),
-        taxBase: Number(tax.taxBase.toFixed(2)),
-        taxAmount: Number(tax.taxAmount.toFixed(2)),
+        taxBase: Number(tax.taxBase.toFixed(getCurrencyDecimalPlaces())),
+        taxAmount: Number(tax.taxAmount.toFixed(getCurrencyDecimalPlaces())),
         withholdingType: it.withholdingType || 'NONE',
         withholdingRate: Number(withholding.withholdingRate.toFixed(2)),
-        withholdingBase: Number(withholding.withholdingBase.toFixed(2)),
-        total: Number((quantity * unitPrice).toFixed(2)),
+        withholdingBase: Number(withholding.withholdingBase.toFixed(getCurrencyDecimalPlaces())),
+        total: Number((quantity * unitPrice).toFixed(getCurrencyDecimalPlaces())),
       };
     });
     const calculatedTotals = calculateTotals(normalizedItems as any[]);
@@ -2557,8 +2630,8 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
         } else {
           const tax = calcItemTax(newItems[idx]);
           newItems[idx].taxRate = Number(tax.taxRate.toFixed(2));
-          newItems[idx].taxBase = Number(tax.taxBase.toFixed(2));
-          newItems[idx].taxAmount = Number(tax.taxAmount.toFixed(2));
+          newItems[idx].taxBase = Number(tax.taxBase.toFixed(getCurrencyDecimalPlaces()));
+          newItems[idx].taxAmount = Number(tax.taxAmount.toFixed(getCurrencyDecimalPlaces()));
         }
         const wt = (newItems[idx].withholdingType || 'NONE').toUpperCase();
         if (wt === 'NONE') {
@@ -2567,7 +2640,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
         } else {
           const withholding = calcItemWithholding(newItems[idx]);
           newItems[idx].withholdingRate = Number(withholding.withholdingRate.toFixed(2));
-          newItems[idx].withholdingBase = Number(withholding.withholdingBase.toFixed(2));
+          newItems[idx].withholdingBase = Number(withholding.withholdingBase.toFixed(getCurrencyDecimalPlaces()));
         }
         newItems[idx].total = Number(sub.toFixed(2));
       }
@@ -2607,7 +2680,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
     const rawTaxRate = Number(selected.taxRate);
     const taxRate = rawTaxRate > 0 && rawTaxRate <= 1 ? rawTaxRate * 100 : Number.isFinite(rawTaxRate) && rawTaxRate >= 0 ? rawTaxRate : 15;
     const quantity = Math.max(0, Math.trunc(Number(currentItem.quantity || 1)));
-    const lineTotal = Number((quantity * purchasePrice).toFixed(2));
+    const lineTotal = Number((quantity * purchasePrice).toFixed(getCurrencyDecimalPlaces()));
     const taxType = selected.taxType || (taxRate > 0 ? 'GRAVADO' : 'EXENTO');
     const taxBase = isTaxExempt(taxType) ? 0 : lineTotal;
     const categoryId = selected.categoryId || selected.category?.id || categories.find((category: any) =>
@@ -2630,7 +2703,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
       taxType,
       taxRate: isTaxExempt(taxType) ? 0 : taxRate,
       taxBase,
-      taxAmount: isTaxExempt(taxType) ? 0 : Number((taxBase * taxRate / 100).toFixed(2)),
+      taxAmount: isTaxExempt(taxType) ? 0 : Number((taxBase * taxRate / 100).toFixed(getCurrencyDecimalPlaces())),
       withholdingType: 'NONE',
       withholdingRate: 0,
       withholdingBase: 0,
@@ -2773,10 +2846,10 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
     const convertToEquivalent = (amount: number) => orderCurrency === 'USD'
       ? Number(amount || 0) * conversionRate
       : Number(amount || 0) / conversionRate;
-    const formatFinancialAmount = (amount: number) => `${orderCurrencySymbol} ${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const formatFinancialAmount = (amount: number) => `${orderCurrencySymbol} ${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
     const renderEquivalent = (amount: number, negative = false) => (
       <span className="block text-[9px] font-medium tabular-nums text-muted-foreground">
-        ≈ {negative ? '-' : ''}{equivalentCurrencySymbol} {Math.abs(convertToEquivalent(amount)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {equivalentCurrency}
+        ≈ {negative ? '-' : ''}{equivalentCurrencySymbol} {Math.abs(convertToEquivalent(amount)).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })} {equivalentCurrency}
       </span>
     );
     const canEditOrderItems = isNew
@@ -3189,8 +3262,7 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
                         value={formatInputNumber(item.unitPrice)}
                         onChange={(e) => handleItemChange(idx, 'unitPrice', normalizePurchaseDecimalInput(e.target.value))}
                         className="h-8 text-xs text-right"
-                        placeholder="0"
-                      />
+                        placeholder="0" currencyPrecision />
                     </div>
                   </div>
 
@@ -3212,19 +3284,19 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
                   <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-border/50 pt-2">
                     <span className="text-[9px] font-black uppercase tracking-widest text-foreground">Subtotal costo</span>
                     <span className="text-sm font-black tabular-nums">
-                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.quantity * item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.quantity * item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}
                     </span>
                     <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/70">IVA</span>
                     <span className="text-xs font-black tabular-nums text-rose-500">
-                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(calcItemTax(item).taxAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(calcItemTax(item).taxAmount || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}
                     </span>
                     <span className="text-[9px] font-black uppercase tracking-widest text-amber-500/70">Retención</span>
                     <span className="text-xs font-black tabular-nums text-amber-500">
-                      -{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(calcItemWithholding(item).withholdingTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      -{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(calcItemWithholding(item).withholdingTotal || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}
                     </span>
                     <span className="border-l border-border/70 pl-4 text-[9px] font-black uppercase tracking-widest text-primary">Total</span>
                     <span className="text-sm font-black tabular-nums text-primary">
-                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity || 0) * Number(item.unitPrice || 0) + calcItemTax(item).taxAmount - calcItemWithholding(item).withholdingTotal) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity || 0) * Number(item.unitPrice || 0) + calcItemTax(item).taxAmount - calcItemWithholding(item).withholdingTotal) || 0).toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}
                     </span>
                   </div>
                 </div>
@@ -3400,13 +3472,15 @@ export function OrdenesCompraView({ data, summaryData, summaryLoading, summaryEr
     );
   }
 
-  const countOrdersByStatus = (status: 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'REJECTED') => summaryRowsWithoutStatusFilter.filter((order) => normalizePurchaseOrderStatus(order.status) === status).length;
+  const countOrdersByStatus = (status: 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'REJECTED') => hasItemCountFilter
+    ? (summaryRowsWithItemCountFilter || []).filter((order) => normalizePurchaseOrderStatus(order.status) === status).length
+    : Number(summaryQuery.data?.statusCounts?.[status] || 0);
   const kpis = [
-    { title: 'Total órdenes', value: resolvedSummaryRows ? summaryRowsWithoutStatusFilter.length : '—', icon: ClipboardList, color: 'text-primary', bg: 'bg-primary/10', filter: 'ALL' },
-    { title: 'Borradores', value: resolvedSummaryRows ? countOrdersByStatus('DRAFT') : '—', icon: FileText, color: 'text-primary', bg: 'bg-primary/10', filter: 'DRAFT' },
-    { title: 'En proceso', value: resolvedSummaryRows ? countOrdersByStatus('IN_PROCESS') : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', filter: 'IN_PROCESS' },
-    { title: 'Aprobadas', value: resolvedSummaryRows ? countOrdersByStatus('APPROVED') : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'APPROVED' },
-    { title: 'Rechazadas', value: resolvedSummaryRows ? countOrdersByStatus('REJECTED') : '—', icon: Ban, color: 'text-primary', bg: 'bg-primary/10', filter: 'REJECTED' },
+    { title: 'Total órdenes', value: summaryReady ? (hasItemCountFilter ? summaryRowsWithItemCountFilter?.length || 0 : Number(summaryQuery.data?.total || 0)) : '—', icon: ClipboardList, color: 'text-primary', bg: 'bg-primary/10', filter: 'ALL' },
+    { title: 'Borradores', value: summaryReady ? countOrdersByStatus('DRAFT') : '—', icon: FileText, color: 'text-primary', bg: 'bg-primary/10', filter: 'DRAFT' },
+    { title: 'En proceso', value: summaryReady ? countOrdersByStatus('IN_PROCESS') : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', filter: 'IN_PROCESS' },
+    { title: 'Aprobadas', value: summaryReady ? countOrdersByStatus('APPROVED') : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'APPROVED' },
+    { title: 'Rechazadas', value: summaryReady ? countOrdersByStatus('REJECTED') : '—', icon: Ban, color: 'text-primary', bg: 'bg-primary/10', filter: 'REJECTED' },
   ];
 
   return (

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, Ban,
   AlertTriangle, XCircle, ArrowDown, FileText, Banknote, Calculator, ArrowRight, Paperclip, CircleDollarSign, RefreshCw, Send
@@ -10,7 +10,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
-import { paymentsService, purchaseOrdersService, purchaseReceiptsService, supplierInvoicesService } from '../../services/compras.service';
+import { paymentsService, purchaseOrdersService, purchaseReceiptsService, supplierInvoicesService, type PurchaseReceiptSummary } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import type { Currency, PaymentMethod, PurchaseReceipt, Supplier, PurchaseOrder, Warehouse } from '../../types';
@@ -25,7 +25,6 @@ import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -47,8 +46,10 @@ import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { VoiceSaleComposer } from '../ventas/VoiceSaleComposer';
 import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-parser';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 
-interface Props { data: PurchaseReceipt[]; summaryData?: PurchaseReceipt[]; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
+interface Props { data: PurchaseReceipt[]; summaryData?: PurchaseReceiptSummary; summaryLoading?: boolean; summaryError?: boolean; summarySearch?: string; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
 const statusOpts = [
   { label: 'Pendiente', value: 'PENDING', color: 'bg-primary/10 text-primary' },
@@ -78,6 +79,16 @@ function getReceiptDisplayStatus(receipt: Pick<PurchaseReceipt, 'status' | 'supp
   if (operationalStatus === 'PAID') return 'PAID';
   if (operationalStatus === 'PARTIAL') return isReceiptPaid(receipt) ? 'PAID' : 'WITH_INCIDENTS';
   return isReceiptPaid(receipt) ? 'PAID' : operationalStatus;
+}
+
+function getReceiptPaymentStatus(receipt: Pick<PurchaseReceipt, 'supplierInvoices'>) {
+  const openInvoices = getActiveReceiptInvoices(receipt).filter((invoice) =>
+    Number(invoice.balance ?? invoice.total ?? 0) > 0.01,
+  );
+  if (openInvoices.some((invoice) => String(invoice.status || '').toUpperCase() === 'CREDIT')) return 'CREDIT';
+  if (openInvoices.some((invoice) => String(invoice.status || '').toUpperCase() === 'OVERDUE')) return 'OVERDUE';
+  if (openInvoices.some((invoice) => String(invoice.status || '').toUpperCase() === 'PARTIAL')) return 'PARTIAL';
+  return null;
 }
 
 const STATUS_OPTIONS_RECEIVING = ['RECEIVED', 'WITH_INCIDENTS'];
@@ -169,7 +180,7 @@ function getReceiptCurrencyMeta(value?: unknown) {
 
 function formatReceiptAmount(value: number, currency?: unknown) {
   const meta = getReceiptCurrencyMeta(currency);
-  return `${meta.symbol} ${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${meta.symbol} ${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
 }
 
 function formatInventoryOperationAmount(value: number, currency: string) {
@@ -319,7 +330,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
       initialCurrency,
       Number(draft.exchangeRate || globalRate || 1),
       initialRate,
-    ).toFixed(2));
+    ).toFixed(getCurrencyDecimalPlaces()));
     setPaymentLines([{ method: draftMethod, amount: initialAmount, currency: initialCurrency, exchangeRate: initialRate, reference: draft.reference || '' }]);
     setPartialPaymentEnabled(false);
     setNotes(draft.notes || '');
@@ -342,7 +353,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
       const invoice = await onRegisterInvoice({ draft, number: invoiceNumber.trim(), date: invoiceDate, dueDate: invoiceDueDate, files: invoiceFiles });
       const savedInvoice = invoice?.data ?? invoice;
       if (draft.invoiceOnly) {
-        toast.success('Compra a crédito registrada correctamente. Quedó como cuenta por pagar del proveedor.', { id: invoiceToastId });
+      toast.success('Compra a crédito registrada. Ya puedes verla en Créditos del proveedor y registrar el pago desde ahí, Pagos realizados o la recepción.', { id: invoiceToastId });
         onClose();
         return;
       }
@@ -378,8 +389,8 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
       line.amount,
       line.currency,
       line.currency === baseCurrency ? 1 : line.exchangeRate,
-    ), 0).toFixed(2));
-    const draftBaseAmount = Number(toBaseAmount(Number(draft.amount || 0), draft.currency, Number(draft.exchangeRate || globalRate || 1)).toFixed(2));
+    ), 0).toFixed(getCurrencyDecimalPlaces()));
+    const draftBaseAmount = Number(toBaseAmount(Number(draft.amount || 0), draft.currency, Number(draft.exchangeRate || globalRate || 1)).toFixed(getCurrencyDecimalPlaces()));
     if (paymentBaseAmount > draftBaseAmount + 0.01) return toast.error('El monto convertido no puede superar el saldo pendiente.');
     if (paymentBaseAmount < draftBaseAmount - 0.01 && !partialPaymentEnabled) return toast.error('Activa "Pago parcial" para registrar solo una parte de la factura.');
     setSaving(true);
@@ -436,14 +447,18 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
       Number(line.amount || 0),
       line.currency,
       line.currency === baseCurrency ? 1 : line.exchangeRate,
-    ), 0).toFixed(2))
+    ), 0).toFixed(getCurrencyDecimalPlaces()))
     : 0;
   const draftBaseAmount = draft
-    ? Number(toBaseAmount(Number(draft.amount || 0), draft.currency, Number(draft.exchangeRate || globalRate || 1)).toFixed(2))
+    ? Number(toBaseAmount(Number(draft.amount || 0), draft.currency, Number(draft.exchangeRate || globalRate || 1)).toFixed(getCurrencyDecimalPlaces()))
     : 0;
   const paymentExceedsDraftBalance = paymentBaseAmount > draftBaseAmount + 0.01;
   const draftCurrency = draft ? getReceiptCurrencyMeta(draft.currency).code : baseCurrency;
   const draftRate = Number(draft?.exchangeRate || globalRate || 1);
+  const paymentRemainingBase = Math.max(0, draftBaseAmount - paymentBaseAmount);
+  const paymentRemainingInDraftCurrency = draft
+    ? convertBetweenCurrencies(paymentRemainingBase, baseCurrency, draftCurrency, 1, draftRate)
+    : 0;
 
   return (
     <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !saving && !invoiceSaving) onClose(); }}>
@@ -515,9 +530,9 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
                             if (itemIndex !== index) return item;
                             const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
                             const nextRate = paymentLineRate(nextCurrency);
-                            return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined };
+                            return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined };
                           }))} />
-                          <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="text" inputMode="decimal" min="0" value={formatDecimalInput(line.amount) || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeDecimalInput(event.target.value) } : item))} disabled={saving} className="h-10 font-black tabular-nums" /></div>
+                          <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="text" inputMode="decimal" min="0" value={formatDecimalInput(line.amount) || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeDecimalInput(event.target.value) } : item))} disabled={saving} className="h-10 font-black tabular-nums" currencyPrecision /></div>
                           <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1 || saving} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                           </div>
                         {draft && line.currency !== draftCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatExplicitAmount(getPaymentLineDocumentAmount(line, draftCurrency, draftRate, baseCurrency, convertBetweenCurrencies), draftCurrency)}</p>}
@@ -527,7 +542,17 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
                     ))}
                     <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, { method: 'CARD', amount: 0, currency: displayCurrency === 'USD' ? 'USD' : 'NIO', exchangeRate: paymentLineRate(displayCurrency === 'USD' ? 'USD' : 'NIO') }])} disabled={saving}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>
                   </div>
-                  <div className="mt-3 border-t border-border/50 pt-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><div className="flex items-center justify-between"><span>Total aplicado (base)</span><span className="text-primary">{formatConvertedAmount(paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0), baseCurrency)}</span></div>{draft && <div className="mt-1 flex items-center justify-between"><span>Equivalente factura</span><span className="text-primary">{formatExplicitAmount(convertBetweenCurrencies(paymentBaseAmount, baseCurrency, draftCurrency, 1, draftRate), draftCurrency)}</span></div>}</div>
+                  <div className="mt-3 space-y-1 border-t border-border/50 pt-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    <div className="flex items-center justify-between"><span>Total aplicado (base)</span><span className="text-primary">{formatConvertedAmount(paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0), baseCurrency)}</span></div>
+                    {draft && <>
+                      <div className="flex items-center justify-between"><span>Equivalente factura aplicado</span><span className="text-primary">{formatExplicitAmount(convertBetweenCurrencies(paymentBaseAmount, baseCurrency, draftCurrency, 1, draftRate), draftCurrency)}</span></div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className={paymentExceedsDraftBalance ? 'text-destructive' : paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-muted-foreground'}>{paymentExceedsDraftBalance ? 'Exceso sobre el saldo' : paymentRemainingBase > 0.01 ? 'Saldo pendiente después del pago' : 'Saldo cubierto'}</span>
+                        <span className={cn('font-black tabular-nums', paymentExceedsDraftBalance ? 'text-destructive' : paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentExceedsDraftBalance ? paymentBaseAmount - draftBaseAmount : paymentRemainingBase, baseCurrency)}</span>
+                      </div>
+                      <div className="flex items-center justify-between"><span>Equivalente restante en factura</span><span className="text-foreground">{formatExplicitAmount(paymentRemainingInDraftCurrency, draftCurrency)}</span></div>
+                    </>}
+                  </div>
                   <p className="mt-1 text-[10px] text-muted-foreground">Máximo: {formatReceiptAmount(Number(draft.amount), draft.currency)} · Efectivo no requiere referencia.</p>
                 </div>
                 <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imágenes originales hasta 10 MB; se optimizan. Documentos hasta 10 MB.</p>{files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}</div>
@@ -546,13 +571,13 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
   );
 }
 
-export function RecepcionesCompraView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], selectedBranchId = '', pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
+export function RecepcionesCompraView({ data, summaryData, summaryLoading, summaryError, summarySearch, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], selectedBranchId = '', pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const integrationPolicyQuery = usePurchasesIntegrationPolicy();
   const integrationPolicyReady = !integrationPolicyQuery.isFetching && !integrationPolicyQuery.isError && Boolean(integrationPolicyQuery.data);
   const accountingConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.accountingRequired === true;
   const financeConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.financeEnabled === true;
-  const { baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, displayCurrencyLabel, displayMode, convertDisplayAmount, formatConvertedAmount, toBaseAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-receipts-layout', 'table', 24 * 365);
@@ -711,13 +736,33 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
     status: (row: PurchaseReceipt) => getReceiptDisplayStatus(row),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((receipt) =>
-    String(receipt.number || '').toLowerCase().includes(searchTerm.toLowerCase())
-    || String(receipt.supplier?.name || '').toLowerCase().includes(searchTerm.toLowerCase()),
+  const hasColumnValueFilters = Object.values(colFilters.state).some((filter) => Boolean(filter.values?.length));
+  const columnFilterFallbackQuery = useQuery({
+    queryKey: ['purchases', 'receipts-kpi-filtered-rows', user?.tenantId, selectedBranchId, summarySearch],
+    queryFn: ({ signal }) => fetchAllReportPages<PurchaseReceipt>(
+      (filters) => purchaseReceiptsService.getAll(filters, signal),
+      { pageSize: 5000, report: true, search: summarySearch || undefined, branchId: selectedBranchId || undefined },
+      signal,
+    ),
+    enabled: hasColumnValueFilters,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const fallbackSummaryRows = hasColumnValueFilters ? columnFilterFallbackQuery.data || [] : [];
+  const normalizedSummarySearch = String(summarySearch || '').trim().toLowerCase();
+  const summarySearchRows = fallbackSummaryRows.filter((receipt) =>
+    !normalizedSummarySearch
+    || String(receipt.number || '').toLowerCase().includes(normalizedSummarySearch)
+    || String(receipt.supplier?.name || '').toLowerCase().includes(normalizedSummarySearch),
   );
   const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
   const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((receipt) => statusFilter === 'ALL' || getReceiptDisplayStatus(receipt) === statusFilter), filterGetters);
+  const resolvedSummaryRows = hasColumnValueFilters ? columnFilterFallbackQuery.data : summaryData;
+  const isSummaryLoading = hasColumnValueFilters
+    ? columnFilterFallbackQuery.isPending || columnFilterFallbackQuery.isFetching
+    : summaryLoading;
+  const isSummaryError = hasColumnValueFilters ? columnFilterFallbackQuery.isError : summaryError;
+  const summaryReady = resolvedSummaryRows !== undefined && !isSummaryError;
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page', exportFilter?: string) => {
     const exportToastId = toast.loading('Generando reporte de recepciones...');
@@ -786,8 +831,22 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
       createReportWorkbook({
         fileName: 'recepciones_compra.xlsx',
-        sheets: [{ name: 'Recepciones', rows: exportRows.map(row => ({ Numero: row.number || '—', Proveedor: row.supplier?.name || 'Sin proveedor', Fecha: row.date || '—', Comprometido: Number(expectedReceiptPayment(row) || 0), Pagado: Number(paidReceiptAmount(row) || 0), Estado: getReceiptDisplayStatus(row) })) }],
-        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter, Sucursal: selectedBranchId || 'Todas' },
+        sheets: [{ name: 'Recepciones', rows: exportRows.map(row => {
+          const expectedCurrency = receiptExpectedCurrency(row) || baseCurrency;
+          const paidCurrency = receiptPaidCurrency(row) || baseCurrency;
+          const paidRate = activeReceiptInvoices(row)[0]?.exchangeRate || row.exchangeRate;
+          return {
+            Numero: row.number || '—',
+            Proveedor: row.supplier?.name || 'Sin proveedor',
+            Fecha: row.date || '—',
+            Comprometido: convertDisplayAmount(expectedReceiptPayment(row), expectedCurrency, row.purchaseOrder?.exchangeRate || row.exchangeRate),
+            Pagado: convertDisplayAmount(paidReceiptAmount(row), paidCurrency, paidRate),
+            'Moneda comprometido': displayMode === 'ORIGINAL' ? expectedCurrency : displayCurrency,
+            'Moneda pagado': displayMode === 'ORIGINAL' ? paidCurrency : displayCurrency,
+            Estado: getReceiptDisplayStatus(row),
+          };
+        }) }],
+        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter, Sucursal: selectedBranchId || 'Todas', Moneda: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
       });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el Excel de recepciones');
@@ -918,9 +977,21 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
           {rechazados.length > 0 && <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black text-amber-600 dark:text-amber-400">{rechazados.length} no acept.</span>}
         </div>;
       } },
-    { key: 'status',    header: 'Estado',      width: '130px',
+    { key: 'status',    header: 'Estado',      width: '180px',
       headerExtra: <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
-      render: (_val, row) => { const displayStatus = getReceiptDisplayStatus(row); const o = statusOpts.find(x => x.value === displayStatus); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label || displayStatus}</Badge>; } },
+      render: (_val, row) => {
+        const displayStatus = getReceiptDisplayStatus(row);
+        const receiptStatus = statusOpts.find((option) => option.value === displayStatus);
+        const paymentStatus = getReceiptPaymentStatus(row);
+        const paymentStatusLabel = paymentStatus === 'CREDIT' ? 'A crédito' : paymentStatus === 'PARTIAL' ? 'Pago parcial' : paymentStatus === 'OVERDUE' ? 'Vencida' : '';
+        const paymentStatusClass = paymentStatus === 'OVERDUE' ? 'bg-destructive/10 text-destructive' : paymentStatus === 'PARTIAL' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-primary/10 text-primary';
+        return (
+          <div className="flex min-w-0 flex-col items-center gap-1">
+            {paymentStatusLabel && <Badge variant="outline" className={cn('max-w-full whitespace-normal break-words border-none px-2 py-0.5 text-center text-[9px] font-black uppercase leading-tight', paymentStatusClass)}>{paymentStatusLabel}</Badge>}
+            <Badge title={receiptStatus?.label || displayStatus} variant="outline" className={cn('max-w-full whitespace-normal break-words border-none px-2 py-1 text-center text-[9px] font-black uppercase leading-tight', receiptStatus?.color || 'bg-muted/20 text-muted-foreground')}>{receiptStatus?.label || displayStatus}</Badge>
+          </div>
+        );
+      } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseReceipt>) => {
@@ -1000,7 +1071,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       return;
     }
     const receiptTotals = calculateReceiptTotalsForForm(receipt.items || []);
-    const calculatedTotal = Math.max(0, Number((receiptTotals.subtotal + receiptTotals.taxAmount - receiptTotals.withholdingTotal).toFixed(2)));
+    const calculatedTotal = Math.max(0, Number((receiptTotals.subtotal + receiptTotals.taxAmount - receiptTotals.withholdingTotal).toFixed(getCurrencyDecimalPlaces())));
     const balance = invoice?.id ? Number(invoice.balance || 0) : calculatedTotal;
     if (invoice?.id && balance <= 0) {
       toast.error('Esta recepción no tiene una cuenta por pagar con saldo pendiente.');
@@ -1180,7 +1251,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
     }
 
     const receiptTotals = calculateReceiptTotalsForForm(receipt.items || []);
-    const calculatedInvoiceTotal = Math.max(0, Number((receiptTotals.subtotal + receiptTotals.taxAmount - receiptTotals.withholdingTotal).toFixed(2)));
+    const calculatedInvoiceTotal = Math.max(0, Number((receiptTotals.subtotal + receiptTotals.taxAmount - receiptTotals.withholdingTotal).toFixed(getCurrencyDecimalPlaces())));
     const receiptCurrency = normalizeReceiptCurrency(receipt.currency || receipt.purchaseOrder?.currency || draft.currency);
     const receiptExchangeRate = Number(receipt.exchangeRate || receipt.purchaseOrder?.exchangeRate || draft.exchangeRate || 1);
     const response = await purchaseReceiptsService.registerInvoice(draft.receiptId, {
@@ -1854,8 +1925,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                         value={item.unitPrice === 0 ? '' : formatDecimalInput(item.unitPrice)}
                         onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
                         className="h-8 text-right text-xs"
-                        placeholder="0"
-                      />
+                        placeholder="0" currencyPrecision />
                     </div>
                   </div>
 
@@ -1928,7 +1998,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                         <span className="text-muted-foreground">Subtotal <b className="text-foreground">{formatReceiptAmount(lineAmounts.lineTotal, receiptCurrency)}</b></span>
                         <span className="text-rose-500">IVA +{formatReceiptAmount(lineAmounts.taxAmount, receiptCurrency)}</span>
                         {lineAmounts.withholdingAmount > 0 && <span className="text-amber-600">Retención -{formatReceiptAmount(lineAmounts.withholdingAmount, receiptCurrency)}</span>}
-                        <span className="text-xs font-black">{formatReceiptAmount(Number((lineAmounts.lineTotal + lineAmounts.taxAmount - lineAmounts.withholdingAmount).toFixed(2)), receiptCurrency)}</span>
+                        <span className="text-xs font-black">{formatReceiptAmount(Number((lineAmounts.lineTotal + lineAmounts.taxAmount - lineAmounts.withholdingAmount).toFixed(getCurrencyDecimalPlaces())), receiptCurrency)}</span>
                       </div>
                     </div>
                   </div>
@@ -1961,20 +2031,29 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
 
   const receivedReceipts = summaryRowsWithoutStatusFilter.filter((receipt) => getReceiptDisplayStatus(receipt) === 'RECEIVED');
   const incidentReceipts = summaryRowsWithoutStatusFilter.filter((receipt) => getReceiptDisplayStatus(receipt) === 'WITH_INCIDENTS');
-  const totalItemsReceived = receivedReceipts.reduce((acc, r) => acc + (r.items?.reduce((a,i:any) => a + Number(i.quantityReceived||0),0)||0), 0);
-  const totalRechazados = incidentReceipts.reduce((acc, r) => acc + (r.items?.reduce((a,i:any) => a + Number(i.quantityRejected||0),0)||0), 0);
-  const withIncidencias = incidentReceipts.length;
+  const totalItemsReceived = hasColumnValueFilters
+    ? receivedReceipts.reduce((acc, receipt) => acc + (receipt.items?.reduce((sum, item: any) => sum + Number(item.quantityReceived || 0), 0) || 0), 0)
+    : Number(summaryData?.receivedQuantity || 0);
+  const totalRechazados = hasColumnValueFilters
+    ? incidentReceipts.reduce((acc, receipt) => acc + (receipt.items?.reduce((sum, item: any) => sum + Number(item.quantityRejected || 0), 0) || 0), 0)
+    : Number(summaryData?.incidentRejectedQuantity || 0);
+  const withIncidencias = hasColumnValueFilters ? incidentReceipts.length : Number(summaryData?.incidentCount || 0);
+  const receiptsCount = hasColumnValueFilters
+    ? summaryFilteredData.length
+    : statusFilter === 'ALL'
+      ? Number(summaryData?.total || 0)
+      : Number(summaryData?.statusCounts?.[statusFilter] || 0);
 
   const kpis = [
-    { title: 'Recepciones', value: resolvedSummaryRows ? summaryFilteredData.length : '—', icon: PackageCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Ítems Recibidos', value: resolvedSummaryRows ? totalItemsReceived : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'RECEIVED' as const },
-    { title: 'Incidencias', value: resolvedSummaryRows ? `${withIncidencias} rec. / ${totalRechazados} rech.` : '—', icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'WITH_INCIDENTS' as const },
+    { title: 'Recepciones', value: summaryReady ? receiptsCount : '—', icon: PackageCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Ítems Recibidos', value: summaryReady ? totalItemsReceived : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'RECEIVED' as const },
+    { title: 'Incidencias', value: summaryReady ? `${withIncidencias} rec. / ${totalRechazados} rech.` : '—', icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'WITH_INCIDENTS' as const },
   ];
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
-        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(isSummaryLoading)}>
+        <KpiSummaryNotice loading={isSummaryLoading} error={isSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />

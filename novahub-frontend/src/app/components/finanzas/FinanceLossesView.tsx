@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const REASON_LABELS: Record<string, string> = {
   DISCREPANCY: 'Discrepancia',
@@ -236,7 +237,7 @@ export function FinanceLossesView({ globalDateRange, onClearGlobalDateRange }: F
         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
           <span>Página {meta.page} de {meta.totalPages}</span>
           <span>·</span>
-          <span>{meta.total} pérdida(s) · {Number(totalQty).toLocaleString('es-NI', { maximumFractionDigits: 2 })} unidades</span>
+          <span>{meta.total} pérdida(s) · {Number(totalQty).toLocaleString('es-NI', { maximumFractionDigits: getCurrencyDecimalPlaces() })} unidades</span>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</Button>

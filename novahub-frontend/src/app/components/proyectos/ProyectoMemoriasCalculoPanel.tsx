@@ -34,6 +34,7 @@ import { projectsService } from '@/app/services/projects.service';
 import { useTenantQuery } from '@/app/hooks/useTenantQuery';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface ProyectoMemoriasCalculoPanelProps {
@@ -1110,8 +1111,7 @@ function ProjectCalculationMemoryEditor({
                     step={0.5}
                     value={panelBasePricePerM2}
                     onChange={(e) => setPanelBasePricePerM2(parseFloat(e.target.value) || 0)}
-                    className="h-8 text-xs font-bold"
-                  />
+                    className="h-8 text-xs font-bold" currencyPrecision />
                 </div>
 
                 {/* COSTO DE SAQUE */}
@@ -1125,8 +1125,7 @@ function ProjectCalculationMemoryEditor({
                     step={0.5}
                     value={panelNotchCost}
                     onChange={(e) => setPanelNotchCost(parseFloat(e.target.value) || 0)}
-                    className="h-8 text-xs font-bold"
-                  />
+                    className="h-8 text-xs font-bold" currencyPrecision />
                 </div>
 
                 {/* COSTO DE PERFORACIÓN */}
@@ -1140,8 +1139,7 @@ function ProjectCalculationMemoryEditor({
                     step={0.25}
                     value={panelHoleCost}
                     onChange={(e) => setPanelHoleCost(parseFloat(e.target.value) || 0)}
-                    className="h-8 text-xs font-bold"
-                  />
+                    className="h-8 text-xs font-bold" currencyPrecision />
                 </div>
 
                 {/* COSTO CANTEADO / PULIDO POR ML */}
@@ -1155,8 +1153,7 @@ function ProjectCalculationMemoryEditor({
                     step={0.25}
                     value={panelEdgePolishCost}
                     onChange={(e) => setPanelEdgePolishCost(parseFloat(e.target.value) || 0)}
-                    className="h-8 text-xs font-bold"
-                  />
+                    className="h-8 text-xs font-bold" currencyPrecision />
                 </div>
               </div>
 
@@ -1221,7 +1218,7 @@ function ProjectCalculationMemoryEditor({
                   Canteado / Pulido
                 </p>
                 <p className="mt-1 text-xl font-black tracking-tight text-emerald-600 dark:text-emerald-400">
-                  {panelCalculations.totalPolishedMl.toFixed(2)} ml
+                  {panelCalculations.totalPolishedMl.toFixed(getCurrencyDecimalPlaces())} ml
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">Perímetro total acumulado</p>
               </CardContent>
@@ -1261,8 +1258,8 @@ function ProjectCalculationMemoryEditor({
                 </div>
                 <p className="mt-1 text-xl font-black tracking-tight text-primary">
                   ${panelCalculations.totalEstimatedCost.toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: getCurrencyDecimalPlaces(),
+                    maximumFractionDigits: getCurrencyDecimalPlaces(),
                   })}
                 </p>
                 <p className="mt-0.5 text-[10px] text-muted-foreground">
@@ -1841,7 +1838,7 @@ function ProjectCalculationMemoryEditor({
                   Desperdicio / Retazo Total
                 </p>
                 <p className="mt-1 text-2xl font-black text-rose-600 dark:text-rose-400">
-                  {barCalculations.totalWasteMeters.toFixed(2)} ml
+                  {barCalculations.totalWasteMeters.toFixed(getCurrencyDecimalPlaces())} ml
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                   Sobrante acumulado no utilizado

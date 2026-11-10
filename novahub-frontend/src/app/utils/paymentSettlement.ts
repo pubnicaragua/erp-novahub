@@ -1,3 +1,5 @@
+import { getCurrencyDecimalPlaces } from './currency';
+
 export type PaymentSettlementLine = {
   method?: string | null;
   amount: number | string | null | undefined;
@@ -29,7 +31,7 @@ export function getPaymentLineDocumentAmount<T extends PaymentSettlementLine>(
   const targetCurrency = String(documentCurrency || baseCurrency).toUpperCase();
   const sourceRate = sourceCurrency === String(baseCurrency).toUpperCase() ? 1 : Number(line.exchangeRate || 1);
   const targetRate = targetCurrency === String(baseCurrency).toUpperCase() ? 1 : Number(documentExchangeRate || 1);
-  return Number(convertBetweenCurrencies(Number(line.amount || 0), sourceCurrency, targetCurrency, sourceRate, targetRate).toFixed(2));
+  return Number(convertBetweenCurrencies(Number(line.amount || 0), sourceCurrency, targetCurrency, sourceRate, targetRate).toFixed(getCurrencyDecimalPlaces()));
 }
 
 export function getPaymentLinesDocumentAmount<T extends PaymentSettlementLine>(
@@ -42,7 +44,7 @@ export function getPaymentLinesDocumentAmount<T extends PaymentSettlementLine>(
   return Number(lines.reduce(
     (total, line) => total + getPaymentLineDocumentAmount(line, documentCurrency, documentExchangeRate, baseCurrency, convertBetweenCurrencies),
     0,
-  ).toFixed(2));
+  ).toFixed(getCurrencyDecimalPlaces()));
 }
 
 export function getPaymentCurrencies<T extends PaymentSettlementLine>(lines: T[]) {
@@ -96,14 +98,14 @@ export function getPaymentTotalBaseForSettlement<T extends PaymentSettlementLine
   const paymentRate = paymentCurrency === normalizedBaseCurrency ? 1 : Number(firstLine?.exchangeRate || 1);
   if (!Number.isFinite(paymentRate) || paymentRate <= 0) return rawTotalBase;
 
-  const enteredAmount = Number(lines.reduce((total, line) => total + Number(line.amount || 0), 0).toFixed(2));
+  const enteredAmount = Number(lines.reduce((total, line) => total + Number(line.amount || 0), 0).toFixed(getCurrencyDecimalPlaces()));
   const requiredAmount = Number(convertBetweenCurrencies(
     normalizedBalance,
     normalizedBaseCurrency,
     paymentCurrency,
     1,
     paymentRate,
-  ).toFixed(2));
+  ).toFixed(getCurrencyDecimalPlaces()));
 
   return enteredAmount >= requiredAmount ? normalizedBalance : rawTotalBase;
 }

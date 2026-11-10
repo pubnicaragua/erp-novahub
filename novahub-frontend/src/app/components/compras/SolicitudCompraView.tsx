@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Combobox } from '../ui/Combobox';
 import { toast } from '@/app/services/toast';
 import { purchaseRequestsService, purchaseManagementService } from '../../services/compras.service';
+import type { PurchaseRequestSummary } from '../../services/compras.service';
 import type { Product, PurchaseRequest, PurchaseManagement, Warehouse, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { cn } from '../ui/utils';
@@ -20,7 +21,6 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { PromptDialog } from '../ui/PromptDialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
@@ -88,7 +88,7 @@ function normalizeRequestStatus(status?: string): 'PENDING_APPROVAL' | 'APPROVED
 
 interface SolicitudCompraViewProps {
   data: PurchaseRequest[];
-  summaryData?: PurchaseRequest[];
+  summaryData?: PurchaseRequestSummary;
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading?: boolean;
@@ -124,7 +124,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
     data: supplierCatalog,
   });
   const supplierDependencyMessages = WORKFLOW_DEPENDENCIES.PURCHASE_REQUEST_APPROVAL_SUPPLIER.messages;
-  const { exchangeRate: globalRate, displayCurrency, convertBetweenCurrencies, formatConvertedAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, displayMode, convertDisplayAmount, convertBetweenCurrencies, formatConvertedAmount } = useCurrency();
   const [search, setSearch] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-requests-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -162,19 +162,12 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         || (r.management?.[0]?.supplier?.name?.toLowerCase().includes(s));
     });
   }, [data, search, statusFilter]);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((request) => {
-    if (!search) return true;
-    const value = search.toLowerCase();
-    return (request.number || '').toLowerCase().includes(value)
-      || Boolean(request.requestedBy?.firstName?.toLowerCase().includes(value))
-      || Boolean(request.requestedBy?.lastName?.toLowerCase().includes(value))
-      || Boolean(request.warehouse?.name?.toLowerCase().includes(value))
-      || Boolean(request.supplier?.name?.toLowerCase().includes(value))
-      || Boolean(request.management?.[0]?.supplier?.name?.toLowerCase().includes(value));
-  });
-  const summaryRowsWithoutStatusFilter = summarySearchRows;
-  const summaryFilteredRows = summarySearchRows.filter((request) => statusFilter === 'all' || normalizeRequestStatus(request.status) === statusFilter);
+  const hasRequestSummary = Boolean(summaryData && !summaryLoading && !summaryError);
+  const summaryStatusCounts = Object.entries(summaryData?.statusCounts || {}).reduce<Record<'PENDING_APPROVAL' | 'APPROVED' | 'CANCELLED', number>>((counts, [status, count]) => {
+    const normalizedStatus = normalizeRequestStatus(status);
+    counts[normalizedStatus] += Number(count || 0);
+    return counts;
+  }, { PENDING_APPROVAL: 0, APPROVED: 0, CANCELLED: 0 });
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page', exportFilter = 'all') => {
     const exportToastId = toast.loading('Generando reporte de solicitudes...');
@@ -259,10 +252,10 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
       createReportWorkbook({
         fileName: 'solicitudes_de_compra.xlsx',
         sheets: [
-          { name: 'Solicitudes', rows: exportRows.map((request) => { const management = request.management?.[0]; return { Numero: request.number || '—', Solicitante: [request.requestedBy?.firstName, request.requestedBy?.lastName].filter(Boolean).join(' ') || '—', Proveedor: request.supplier?.name || management?.supplier?.name || 'Sin proveedor', Fecha: request.date || '—', Estado: STATUS_LABELS[normalizeRequestStatus(request.status)], Total: Number(management?.total || 0), Moneda: management?.currency || '—' }; }) },
+          { name: 'Solicitudes', rows: exportRows.map((request) => { const management = request.management?.[0]; const sourceCurrency = management?.currency || displayCurrency; return { Numero: request.number || '—', Solicitante: [request.requestedBy?.firstName, request.requestedBy?.lastName].filter(Boolean).join(' ') || '—', Proveedor: request.supplier?.name || management?.supplier?.name || 'Sin proveedor', Fecha: request.date || '—', Estado: STATUS_LABELS[normalizeRequestStatus(request.status)], Total: convertDisplayAmount(Number(management?.total || 0), sourceCurrency, management?.exchangeRate), Moneda: displayMode === 'ORIGINAL' ? sourceCurrency : displayCurrency }; }) },
           { name: 'Detalle', rows: exportRows.flatMap((request) => (request.items || []).map((item: any) => ({ Solicitud: request.number || request.id, Producto: item.product?.name || item.name || item.description || '—', Codigo: item.product?.code || item.sku || '—', Cantidad: Number(item.quantity || 0), Observaciones: item.notes || '—' }))) },
         ],
-        filters: { Buscar: search, Estado: statusFilter, Alcance: scope === 'all' ? 'Todos los registros' : 'Página visible' },
+        filters: { Buscar: search, Estado: statusFilter, Alcance: scope === 'all' ? 'Todos los registros' : 'Página visible', Moneda: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
       });
       toast.success('Excel de solicitudes descargado', { id: exportToastId });
     } catch (error: any) {
@@ -589,10 +582,10 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
   };
 
   const requestKpis = [
-    { title: 'Solicitudes', value: resolvedSummaryRows ? summaryFilteredRows.length : '—', icon: ClipboardList, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Pendientes', value: resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => normalizeRequestStatus(r.status) === 'PENDING_APPROVAL').length : '—', icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PENDING_APPROVAL' },
-    { title: 'Aprobadas', value: resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => normalizeRequestStatus(r.status) === 'APPROVED').length : '—', icon: CheckCircle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'APPROVED' },
-    { title: 'Anuladas', value: resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(r => normalizeRequestStatus(r.status) === 'CANCELLED').length : '—', icon: Ban, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'CANCELLED' },
+    { title: 'Solicitudes', value: hasRequestSummary ? (statusFilter === 'all' ? summaryData?.total ?? 0 : summaryStatusCounts[normalizeRequestStatus(statusFilter)]) : '—', icon: ClipboardList, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Pendientes', value: hasRequestSummary ? summaryStatusCounts.PENDING_APPROVAL : '—', icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PENDING_APPROVAL' },
+    { title: 'Aprobadas', value: hasRequestSummary ? summaryStatusCounts.APPROVED : '—', icon: CheckCircle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'APPROVED' },
+    { title: 'Anuladas', value: hasRequestSummary ? summaryStatusCounts.CANCELLED : '—', icon: Ban, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'CANCELLED' },
   ];
 
   return (

@@ -6,12 +6,13 @@ import type { DayTimeline, TimelineHour } from '../../services/performance.servi
 import { RatingStars } from '../organizacion/TaskRating';
 import { formatMinutes } from '../organizacion/organizacion.utils';
 import { CHECKIN_STATUS_LABEL, CHECKIN_STATUS_TONE, clockLabel } from './seguimiento.utils';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 /** Horas que se muestran por omisión aunque no haya actividad: la jornada típica. */
 const DEFAULT_FROM = 7;
 const DEFAULT_TO = 18;
 
-const money = (value: number) => new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 }).format(value);
+const money = (value: number) => new Intl.NumberFormat('es-NI', { maximumFractionDigits: getCurrencyDecimalPlaces() }).format(value);
 
 function Chip({ icon, children, tone = 'bg-slate-100 text-slate-800' }: { icon: ReactNode; children: ReactNode; tone?: string }) {
   return <span className={cn('inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', tone)}>{icon}<span className="min-w-0 break-words">{children}</span></span>;

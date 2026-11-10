@@ -10,9 +10,10 @@ import {
   type PoketPayLinkStatus,
   type PoketPublicReceipt,
 } from '../../services/poket-paylink.service';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 function money(value: unknown, currency = 'NIO') {
-  return `${currency} ${new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))}`;
+  return `${currency} ${new Intl.NumberFormat('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() }).format(Number(value || 0))}`;
 }
 
 function formatDate(value: unknown) {

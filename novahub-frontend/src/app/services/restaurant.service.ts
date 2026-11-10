@@ -130,8 +130,10 @@ export interface RestaurantSummary {
   subtotal: number;
   tax: number;
   total: number;
+  totalsByCurrency?: Array<{ currency: string; orders: number; subtotal: number; tax: number; total: number }>;
   byType: Array<{ type: string; status: string; _count: { _all: number }; _sum: { total: number | null } }>;
   topItems: Array<{ description: string; _sum: { quantity: number | null; total: number | null } }>;
+  topItemsByCurrency?: Array<{ currency: string; description: string; _sum: { quantity: number | null; total: number | null } }>;
   hourlySales?: Array<{ hour: number; total: number; orders: number }>;
   byChannel?: Array<{ type: string; orders: number; total: number }>;
   averagePrepMinutes?: number | null;

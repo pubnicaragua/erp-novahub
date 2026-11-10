@@ -313,7 +313,7 @@ export function RecursosHumanosFinal() {
             </div>
             <div className="space-y-2">
               <Label>Salario</Label>
-              <Input type="number" value={employeeForm.salary} onChange={e => setEmployeeForm({...employeeForm, salary: e.target.value})} />
+              <Input type="number" value={employeeForm.salary} onChange={e => setEmployeeForm({...employeeForm, salary: e.target.value})} currencyPrecision />
             </div>
             <div className="space-y-2">
               <Label>Tipo Contrato</Label>

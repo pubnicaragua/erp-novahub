@@ -20,6 +20,7 @@ import { DateField } from '../ui/DateField';
 import { useAuth } from '../../contexts/AuthContext';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { formatDateOnly, formatInstantDate } from '../../utils/dateFormat';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 type AuditKind = 'SALE' | 'PURCHASE';
 type AuditStatus = 'ALL' | 'PENDING' | 'APPROVED' | 'ISSUES';
@@ -32,7 +33,7 @@ interface AuditResult {
   checks: { key: string; label: string; ok: boolean; detail: string }[];
 }
 
-const fmtMoney = (n: number) => Number(n || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtMoney = (n: number) => Number(n || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() });
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pendiente', PAID: 'Pagada', PARTIAL: 'Parcial', OVERDUE: 'Vencida', DRAFT: 'Borrador', CANCELLED: 'Anulada',

@@ -544,8 +544,7 @@ export function ClientDetailPanel({ data, onBack, onRefresh }: Props) {
                                   const newItems = [...invoiceItems];
                                   newItems[index].unitPrice = Number(e.target.value);
                                   setInvoiceItems(newItems);
-                                }}
-                              />
+                                }} currencyPrecision />
                             </div>
                             <div className="flex-1">
                               <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Subtotal</label>

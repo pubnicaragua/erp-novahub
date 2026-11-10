@@ -27,6 +27,7 @@ import { cn } from '../ui/utils';
 import { useTenantQuery, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { projectsService, type ProjectDetail } from '../../services/projects.service';
 import { useQueryClient } from '@tanstack/react-query';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface ProyectoParametrosPanelProps {
   projectId: string;
@@ -749,7 +750,7 @@ function ProyectoParametrosForm({ projectId, project, initialData, canEditPricin
                 <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5">
                   <span className="text-xs font-bold text-muted-foreground">Precio Aplicado Actual:</span>
                   <span className="font-mono text-sm font-black text-primary">
-                    ${Number(formData.glassAppliedPrice).toFixed(2)} USD/m²
+                    ${Number(formData.glassAppliedPrice).toFixed(getCurrencyDecimalPlaces())} USD/m²
                   </span>
                 </div>
               </div>
@@ -781,7 +782,7 @@ function ProyectoParametrosForm({ projectId, project, initialData, canEditPricin
                       </div>
                       <div className="mt-3">
                         <span className="font-mono text-base font-black text-foreground group-hover:text-primary transition-colors">
-                          ${Number(price).toFixed(2)}
+                          ${Number(price).toFixed(getCurrencyDecimalPlaces())}
                         </span>
                         <span className="text-[10px] text-muted-foreground ml-1">/m²</span>
                       </div>
@@ -802,8 +803,7 @@ function ProyectoParametrosForm({ projectId, project, initialData, canEditPricin
                       min="0"
                       value={formData.glassAppliedPrice}
                       onChange={(e) => updateNumberField('glassAppliedPrice', e.target.value)}
-                      className="font-mono font-bold pr-16 text-sm"
-                    />
+                      className="font-mono font-bold pr-16 text-sm" currencyPrecision />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
                       USD/m²
                     </span>
@@ -839,8 +839,7 @@ function ProyectoParametrosForm({ projectId, project, initialData, canEditPricin
                       min="0"
                       value={formData.targetProfitAmount}
                       onChange={(e) => updateNumberField('targetProfitAmount', e.target.value)}
-                      className="font-mono font-bold pr-12 text-sm"
-                    />
+                      className="font-mono font-bold pr-12 text-sm" currencyPrecision />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
                       USD
                     </span>

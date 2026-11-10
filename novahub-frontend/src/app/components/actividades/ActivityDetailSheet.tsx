@@ -23,6 +23,7 @@ import { format, formatDistanceToNowStrict } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { detectMeetingUrl } from '../../utils/meetingLink';
 import type { ActivityCustomField, ActivityReassignmentEntry, Task } from '../../types';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 export type ActivityDetailKind = 'task' | 'event' | 'meeting' | 'reminder' | 'log';
 
@@ -489,7 +490,7 @@ function AccountingMovementCard({ type, amount, currency, movement, journal, acc
           </div>
           <div className="min-w-0"><p className="text-sm font-black">{isExpense ? 'Costo del evento' : 'Ingreso del evento'}</p><p className="truncate text-[10px] text-muted-foreground">{movement?.number || 'Movimiento financiero vinculado'}</p></div>
         </div>
-        <p className={cn('shrink-0 text-sm font-black tabular-nums', isExpense ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{currency || 'USD'} {Number(amount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}</p>
+        <p className={cn('shrink-0 text-sm font-black tabular-nums', isExpense ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{currency || 'USD'} {Number(amount || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}</p>
       </div>
       <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
         <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cuenta contable</p><p className="mt-1 break-words font-semibold">{account}</p></div>
@@ -763,7 +764,7 @@ function EventDetails({ item, accounts = [], linkedExpense, linkedIncome, linked
       <DetailSection title="Ficha del evento" icon={Info}><div className="grid gap-3 sm:grid-cols-2"><DetailItem label="Tipo" value={formatLabel(item.type || 'EVENT')} icon={CalendarDays} /><DetailItem label="Duración" value={duration ? `${Math.floor(duration / 60)} h ${duration % 60 ? `${duration % 60} min` : ''}` : 'No especificada'} icon={Clock3} /><DetailItem label="Creado" value={formatDate(item.createdAt)} icon={CalendarClock} /><DetailItem label="Moneda" value={item.currency || 'USD'} icon={DollarSign} /></div></DetailSection>
       <DetailSection title="Descripción y notas" icon={FileText}><p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{item.description || 'Este evento no tiene notas adicionales.'}</p></DetailSection>
       <DetailSection title="Resumen financiero" icon={DollarSign}>
-        <div className="grid grid-cols-3 gap-2"><DetailItem label="Costo" value={`${item.currency || 'USD'} ${Number(item.cost || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}`} /><DetailItem label="Ingreso" value={`${item.currency || 'USD'} ${Number(item.income || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}`} /><DetailItem label="Balance" value={<span className={balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{`${item.currency || 'USD'} ${balance.toLocaleString('es-NI', { minimumFractionDigits: 2 })}`}</span>} /></div>
+        <div className="grid grid-cols-3 gap-2"><DetailItem label="Costo" value={`${item.currency || 'USD'} ${Number(item.cost || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}`} /><DetailItem label="Ingreso" value={`${item.currency || 'USD'} ${Number(item.income || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}`} /><DetailItem label="Balance" value={<span className={balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{`${item.currency || 'USD'} ${balance.toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}`}</span>} /></div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2"><DetailItem label="Costo base" value={item.baseCost != null ? String(item.baseCost) : undefined} icon={DollarSign} /><DetailItem label="Ingreso base" value={item.baseIncome != null ? String(item.baseIncome) : undefined} icon={DollarSign} /><DetailItem label="Tasa de cambio" value={item.exchangeRate || undefined} icon={Link2} mono /><DetailItem label="Cuenta de gasto" value={formatAccount(linkedExpense?.accountId || item.expense?.accountId || item.expenseAccountId || item.expenseId, accounts, linkedExpense?.account || linkedExpenseAccount || item.expense?.account || item.expenseAccount)} icon={Link2} /><DetailItem label="Cuenta de ingreso" value={formatAccount(linkedIncome?.accountId || item.income?.accountId || item.incomeAccountId || item.incomeId, accounts, linkedIncome?.account || linkedIncomeAccount || item.income?.account || item.incomeAccount)} icon={Link2} /></div>
       </DetailSection>
       <DetailSection title="Contabilidad" icon={BookOpen}>

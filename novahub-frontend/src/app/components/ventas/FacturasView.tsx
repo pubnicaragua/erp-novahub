@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import * as Sentry from '@sentry/react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
   FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Inbox, Link2, Smartphone, Upload, Printer
@@ -10,7 +12,7 @@ import { Label } from '../ui/label';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { invoicesService, paymentsService } from '../../services/ventas.service';
+import { invoicesService, paymentsService, type InvoiceKpiSummary } from '../../services/ventas.service';
 import { useSalesIntegrationPolicy } from '../../hooks/useSalesIntegrationPolicy';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -40,7 +42,7 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
@@ -65,10 +67,11 @@ import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { VoiceSaleComposer } from './VoiceSaleComposer';
 import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-parser';
 import { SalesImportWizard } from './importacion/SalesImportWizard';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface FacturasViewProps {
   data: Invoice[];
-  summaryData?: Invoice[];
+  summaryData?: InvoiceKpiSummary;
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading: boolean;
@@ -89,6 +92,7 @@ interface FacturasViewProps {
   dateFrom?: string;
   dateTo?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
+  selectedBranchId?: string;
   salesAlert?: PurchaseAlertDetail;
   isSidebarCollapsed?: boolean;
 }
@@ -129,7 +133,26 @@ type InvoicePaymentLine = {
 
 type InvoiceSaveAction = 'SAVE' | 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT';
 
-export function FacturasView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert, isSidebarCollapsed = false }: FacturasViewProps) {
+export function FacturasView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, selectedBranchId = '', salesAlert, isSidebarCollapsed = false }: FacturasViewProps) {
+  const invoiceListStartedAt = useRef<number | null>(typeof performance === 'undefined' ? null : performance.now());
+  const invoiceListSpan = useRef<ReturnType<typeof Sentry.startInactiveSpan> | null>(Sentry.startInactiveSpan({ op: 'ui.load', name: 'Sales invoices list ready' }));
+  const invoiceListMeasured = useRef(false);
+  useEffect(() => {
+    if (invoiceListMeasured.current || loading || summaryLoading) return;
+    invoiceListMeasured.current = true;
+    if (invoiceListStartedAt.current != null && typeof performance !== 'undefined') {
+      performance.measure('novahub.sales.invoices-list-ready', { start: invoiceListStartedAt.current, end: performance.now() });
+    }
+    invoiceListSpan.current?.setAttribute('outcome', summaryError ? 'partial' : 'success');
+    invoiceListSpan.current?.end();
+    invoiceListSpan.current = null;
+  }, [loading, summaryLoading, summaryError]);
+  useEffect(() => () => {
+    if (invoiceListMeasured.current || !invoiceListSpan.current) return;
+    invoiceListSpan.current.setAttribute('outcome', 'cancelled');
+    invoiceListSpan.current.end();
+    invoiceListSpan.current = null;
+  }, []);
   const {
     exchangeRate: globalRate,
     displayCurrency,
@@ -562,8 +585,20 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     balance: (row: Invoice) => getInvoiceBalance(row),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((invoice) => {
+  const hasColumnValueFilters = Object.values(colFilters.state).some((filter) => Boolean(filter.values?.length));
+  const columnFilterSummaryQuery = useQuery({
+    queryKey: ['sales', 'invoices-kpi-filtered-rows', user?.tenantId, searchTerm, dateFrom, dateTo, selectedBranchId],
+    queryFn: ({ signal }) => fetchAllReportPages<Invoice>(
+      (filters) => invoicesService.getAll(filters, signal),
+      { pageSize: 5000, report: true, search: searchTerm, dateFrom, dateTo, branchId: selectedBranchId || undefined },
+      signal,
+    ),
+    enabled: hasColumnValueFilters,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const fallbackSummaryRows = hasColumnValueFilters ? columnFilterSummaryQuery.data : undefined;
+  const summarySearchRows = (fallbackSummaryRows || []).filter((invoice) => {
     if (String(invoice.paymentMethod || '').toUpperCase() === 'CUSTOMER_LOAN') return false;
     const search = searchTerm.toLowerCase();
     return String(invoice.number || '').toLowerCase().includes(search) || String(invoice.customer?.name || '').toLowerCase().includes(search);
@@ -574,6 +609,19 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   ), filterGetters);
   const summaryReceivableRows = summaryRowsWithoutStatusFilter.filter((invoice) => ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(String(invoice.status || '').toUpperCase()));
   const summaryPaidRows = summaryRowsWithoutStatusFilter.filter((invoice) => String(invoice.status || '').toUpperCase() === 'PAID');
+  const isKpiSummaryLoading = hasColumnValueFilters
+    ? columnFilterSummaryQuery.isPending || columnFilterSummaryQuery.isFetching
+    : summaryLoading;
+  const isKpiSummaryError = hasColumnValueFilters ? columnFilterSummaryQuery.isError : summaryError;
+  const summaryAvailable = hasColumnValueFilters ? fallbackSummaryRows !== undefined : summaryData !== undefined;
+  const summaryGroups = summaryData?.groups || [];
+  const selectedSummaryGroups = hasColumnValueFilters ? [] : summaryGroups.filter((group) =>
+    statusFilter === 'ALL'
+      || (statusFilter === 'RECEIVABLE' && ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(group.status))
+      || group.status === statusFilter,
+  );
+  const receivableSummaryGroups = hasColumnValueFilters ? [] : summaryGroups.filter((group) => ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(group.status));
+  const paidSummaryGroups = hasColumnValueFilters ? [] : summaryGroups.filter((group) => group.status === 'PAID');
   const distinctCustomers = [...new Map(filtered.map((f) => [f.customer?.name || 'Varios', f.customer?.name || 'Varios'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((f) => (f.customer?.name || 'Varios') === label).length }));
 
@@ -641,7 +689,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       initialCurrency,
       Number(invoice.exchangeRate || 1),
       paymentLineRate(initialCurrency),
-    ).toFixed(2));
+    ).toFixed(getCurrencyDecimalPlaces()));
     setPaymentLines([paymentLine('CASH', initialAmount, initialCurrency)]);
     setPartialPaymentEnabled(false);
     setMixedPaymentEnabled(false);
@@ -812,10 +860,10 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       getLineBaseAmount,
       (appliedBase, line) => {
         const lineRate = line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate || 1);
-        return Number(convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(2));
+        return Number(convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(getCurrencyDecimalPlaces()));
       },
     );
-    const amount = Number(submittedPaymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toFixed(2));
+    const amount = Number(submittedPaymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toFixed(getCurrencyDecimalPlaces()));
     if (!paymentDate || Number.isNaN(new Date(`${paymentDate}T12:00:00`).getTime())) {
       toast.error('Selecciona una fecha válida para registrar el pago');
       return;
@@ -824,7 +872,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       Number(line.amount || 0),
       line.currency,
       line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
-    ), 0).toFixed(2));
+    ), 0).toFixed(getCurrencyDecimalPlaces()));
     const paymentCustomer = paymentInvoice.customer || customers.find((customer) => customer.id === paymentInvoice.customerId);
     const customerFavorBase = getCustomerFavorAmount(paymentCustomer);
     const customerFavorAppliedBase = Number(submittedPaymentLines
@@ -833,7 +881,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         Number(line.amount || 0),
         line.currency,
         line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
-      ), 0).toFixed(2));
+      ), 0).toFixed(getCurrencyDecimalPlaces()));
     if (customerFavorAppliedBase > customerFavorBase + 0.01) {
       toast.error(`El saldo a favor disponible es de ${formatConvertedAmount(customerFavorBase, baseCurrency)}.`);
       return;
@@ -845,7 +893,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       invoiceCurrency,
       1,
       paymentInvoice.exchangeRate,
-    ).toFixed(2));
+    ).toFixed(getCurrencyDecimalPlaces()));
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error('El monto del pago debe ser mayor que cero');
       return;
@@ -862,7 +910,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       toast.error('Selecciona el banco global para cada tarjeta, transferencia o cheque');
       return;
     }
-    const remaining = Math.max(0, Number((maxAmount - amountAppliedToInvoice).toFixed(2)));
+    const remaining = Math.max(0, Number((maxAmount - amountAppliedToInvoice).toFixed(getCurrencyDecimalPlaces())));
     if (remaining > 0.01 && !paymentPartialActive) {
       toast.error('Marca "Pago parcial" para dejar un saldo pendiente');
       return;
@@ -1252,7 +1300,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const paymentRemainingBase = paymentInvoice
     ? toBaseAmount(paymentRemainingInInvoiceCurrency, paymentInvoice.currency, Number(paymentInvoice.exchangeRate || 1))
     : 0;
-  const paymentCreditAfterBase = Math.max(0, Number((paymentCreditAvailableBase - paymentRemainingBase).toFixed(2)));
+  const paymentCreditAfterBase = Math.max(0, Number((paymentCreditAvailableBase - paymentRemainingBase).toFixed(getCurrencyDecimalPlaces())));
   const paymentPartialCreditFits = paymentHasActiveCredit || paymentRemainingBase <= paymentCreditAvailableBase + 0.01;
   const paymentPartialActive = partialPaymentEnabled && paymentPartialCreditFits;
   const paymentCustomer = paymentInvoice?.customer || (paymentInvoice?.customerId ? customers.find((customer) => customer.id === paymentInvoice.customerId) : undefined);
@@ -1263,7 +1311,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       Number(line.amount || 0),
       line.currency,
       line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
-    ), 0).toFixed(2));
+    ), 0).toFixed(getCurrencyDecimalPlaces()));
   const paymentCustomerFavorExceeded = paymentCustomerFavorAppliedBase > paymentCustomerFavorBase + 0.01;
   const handlePaymentMethodChange = (index: number, nextMethod: string) => {
     setPaymentLines((current) => current.map((item, itemIndex) => {
@@ -1460,7 +1508,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     commitLocalDoc(nextDoc);
     if (!isCreating) void handleUpdate(localDoc.id, { customerId: nextCustomerId, priceListId, items: nextItems, notes: nextDoc.notes, ...calc } as any);
     if (metadata.total !== null && Math.abs(Number(calc.total || 0) - metadata.total) > 0.01) {
-      toast.warning(`El total dictado (${metadata.total.toLocaleString('es-NI', { minimumFractionDigits: 2 })}) no coincide con el cálculo (${Number(calc.total || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}). Revisá impuestos, descuentos o cargos.`);
+      toast.warning(`El total dictado (${metadata.total.toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}) no coincide con el cálculo (${Number(calc.total || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}). Revisá impuestos, descuentos o cargos.`);
     }
   };
 
@@ -1472,7 +1520,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     if (Number.isFinite(total)) {
       // `total` ya incluye subtotal, impuestos (incluido IVA), descuentos y
       // retenciones. El saldo no debe depender del campo persistido `balance`.
-      return Math.max(0, Number((total - amountPaid).toFixed(2)));
+      return Math.max(0, Number((total - amountPaid).toFixed(getCurrencyDecimalPlaces())));
     }
     return Math.max(0, Number(invoice.balance || 0));
   }
@@ -1502,7 +1550,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     const cumulativePaid = payments
       .slice(0, paymentIndex + 1)
       .reduce((sum, candidate) => sum + getPaymentAppliedAmountInInvoiceCurrency(candidate, invoice), 0);
-    return Math.max(0, Number((Number(invoice.total || 0) - cumulativePaid).toFixed(2)));
+    return Math.max(0, Number((Number(invoice.total || 0) - cumulativePaid).toFixed(getCurrencyDecimalPlaces())));
   };
 
   const formatInvoiceAmount = (amount: number, currency?: string, rate?: number) => (
@@ -1764,24 +1812,36 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       : convertAmount(amount, currency, rate || globalRate)
   );
 
-  const totalBilledInDisplayCurrency = summaryFilteredData.reduce(
-    (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.total ?? invoice.baseTotal ?? 0), invoice.currency, invoice.exchangeRate),
-    0,
-  );
-  const accountsReceivableInDisplayCurrency = summaryReceivableRows
-    .reduce((acc, invoice) => acc + displayInvoiceAmount(getInvoiceBalance(invoice), invoice.currency, invoice.exchangeRate), 0);
-  const paidInDisplayCurrency = summaryPaidRows.reduce(
-    (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate),
-    0,
-  );
-  const originalBilled = summarizeAmountsByCurrency(summaryFilteredData, (invoice) => Number(invoice.total ?? invoice.baseTotal ?? 0), (invoice) => invoice.currency, baseCurrency);
-  const originalReceivable = summarizeAmountsByCurrency(
-    summaryReceivableRows,
-    getInvoiceBalance,
-    (invoice) => invoice.currency,
+  const totalBilledInDisplayCurrency = hasColumnValueFilters
+    ? summaryFilteredData.reduce(
+      (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.total ?? invoice.baseTotal ?? 0), invoice.currency, invoice.exchangeRate),
+      0,
+    )
+    : selectedSummaryGroups.reduce((acc, group) => acc + displayInvoiceAmount(group.total, group.currency, group.exchangeRate), 0);
+  const accountsReceivableInDisplayCurrency = hasColumnValueFilters
+    ? summaryReceivableRows.reduce((acc, invoice) => acc + displayInvoiceAmount(getInvoiceBalance(invoice), invoice.currency, invoice.exchangeRate), 0)
+    : receivableSummaryGroups.reduce((acc, group) => acc + displayInvoiceAmount(Math.max(0, group.total - group.amountPaid), group.currency, group.exchangeRate), 0);
+  const paidInDisplayCurrency = hasColumnValueFilters
+    ? summaryPaidRows.reduce((acc, invoice) => acc + displayInvoiceAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate), 0)
+    : paidSummaryGroups.reduce((acc, group) => acc + displayInvoiceAmount(group.amountPaid, group.currency, group.exchangeRate), 0);
+  const originalBilled = summarizeAmountsByCurrency(
+    hasColumnValueFilters ? summaryFilteredData : selectedSummaryGroups,
+    (invoice: any) => Number(invoice.total ?? invoice.baseTotal ?? 0),
+    (invoice: any) => invoice.currency,
     baseCurrency,
   );
-  const originalPaid = summarizeAmountsByCurrency(summaryPaidRows, (invoice) => Number(invoice.amountPaid || 0), (invoice) => invoice.currency, baseCurrency);
+  const originalReceivable = summarizeAmountsByCurrency(
+    hasColumnValueFilters ? summaryReceivableRows : receivableSummaryGroups,
+    (invoice: any) => hasColumnValueFilters ? getInvoiceBalance(invoice) : Math.max(0, invoice.total - invoice.amountPaid),
+    (invoice: any) => invoice.currency,
+    baseCurrency,
+  );
+  const originalPaid = summarizeAmountsByCurrency(
+    hasColumnValueFilters ? summaryPaidRows : paidSummaryGroups,
+    (invoice: any) => Number(invoice.amountPaid || 0),
+    (invoice: any) => invoice.currency,
+    baseCurrency,
+  );
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc && !paymentDialogOpen && !creditInvoice) {
@@ -1945,7 +2005,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   <p className="text-[10px] text-muted-foreground mb-1">Comisión configurada</p>
                   <div className="grid grid-cols-2 gap-2">
                     <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Porcentaje</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : isCreating ? 'Se calcula al guardar' : `${Number(localDoc?.commissionRate || 0).toFixed(2)}%`} className="h-8 bg-muted/20 text-xs" /></div>
-                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : isCreating ? 'Se calcula al guardar' : Number(localDoc?.commissionAmount || 0).toFixed(2)} className="h-8 bg-muted/20 text-xs" /></div>
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : isCreating ? 'Se calcula al guardar' : Number(localDoc?.commissionAmount || 0).toFixed(getCurrencyDecimalPlaces())} className="h-8 bg-muted/20 text-xs" /></div>
                   </div>
                   <p className="text-[9px] text-muted-foreground">Se toma del plan de comisiones del vendedor (Ventas → Comisiones) sobre el subtotal neto; si el vendedor no tiene plan ni regla global, queda en 0%.</p>
                 </div>
@@ -1988,7 +2048,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                       const newRate = Number(e.target.value); setLocalRates(p => ({ ...p, dRate: newRate }));
                       const calc = recalcTotals(localDoc?.items || [], newRate, localRates.tRate);
                       setLocalDoc({ ...localDoc, ...calc });
-                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" disabled={isInvoiceLocked} /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
+                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" disabled={isInvoiceLocked} currencyPrecision /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
                     <span className="min-w-[7.5rem] text-right tabular-nums">-{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.discountAmount)}</span>
                   </div></div>
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">IVA de productos</span>
@@ -2285,7 +2345,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           const recalculated = recalcTotals(nextItems, 0, 0);
                           setLocalDoc({ ...localDoc, ...recalculated });
                           if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
-                        }} className="h-8 w-full rounded-md border border-input bg-background pr-6 text-left text-xs" disabled={isInvoiceLocked} />
+                        }} className="h-8 w-full rounded-md border border-input bg-background pr-6 text-left text-xs" disabled={isInvoiceLocked} currencyPrecision />
                         <span className="pointer-events-none absolute right-2 text-[10px] text-muted-foreground">%</span>
                       </label>
                     </div>
@@ -2312,7 +2372,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                        }} className="h-8 w-full rounded-md border border-input bg-background text-xs text-right" disabled={Boolean(item.productId && isSerialTracked(findProductForItem(item))) || isInvoiceLocked} />
                   </div>
                   <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
-                    <Input type="number" inputMode="decimal" min="0" step="any" value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice} placeholder="0"
+                    <Input type="number" inputMode="decimal" min="0" step="any" currencyPrecision value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice} placeholder="0"
                       readOnly={Boolean(item.productId)}
                       title={item.productId ? 'Precio definido por la lista de precios' : 'Precio personalizado'}
                       onChange={(e) => {
@@ -2385,7 +2445,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                     <Input value={charge.description} onChange={(event) => editExtraChargeDescription(index, event.target.value)} onBlur={persistExtraCharges} placeholder="Descripción" className="h-8 w-full min-w-0 text-xs sm:flex-1" disabled={isInvoiceLocked} />
                     <div className="flex w-full min-w-0 items-center gap-1 rounded-md border border-input bg-background px-2 sm:w-auto sm:min-w-[8.5rem]">
                       <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
-                      <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" disabled={isInvoiceLocked} />
+                      <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" disabled={isInvoiceLocked} currencyPrecision />
                     </div>
                     {!isInvoiceLocked && <Button type="button" variant="ghost" size="icon" aria-label={`Eliminar coste extra ${index + 1}`} className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateExtraCharges(normalizeExtraCharges(localDoc).filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="size-3.5" /></Button>}
                   </div>
@@ -2396,7 +2456,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                     <Input value={localDoc.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value })} onBlur={() => !isCreating && void handleUpdate(localDoc.id, { deliveryDescription: localDoc.deliveryDescription || null } as any)} placeholder="Descripción" className="h-8 w-full min-w-0 text-xs sm:flex-1" disabled={isInvoiceLocked} />
                     <div className="flex w-full min-w-0 items-center gap-1 rounded-md border border-input bg-background px-2 sm:w-auto sm:min-w-[8.5rem]">
                       <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
-                      <Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" disabled={isInvoiceLocked} />
+                      <Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" disabled={isInvoiceLocked} currencyPrecision />
                     </div>
                     {!isInvoiceLocked && <Button type="button" variant="ghost" size="icon" aria-label="Eliminar delivery" className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateDelivery({ deliveryDescription: null, deliveryAmount: 0 })}><Trash2 className="size-3.5" /></Button>}
                   </div>
@@ -2420,19 +2480,19 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
-        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
+        <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {!resolvedSummaryRows
+        {!summaryAvailable
           ? <SalesKpiCard title="Facturado Total" value="—" icon={FileText} color="text-primary" bg="bg-primary/10" />
           : displayMode === 'ORIGINAL'
           ? originalBilled.map((summary) => <SalesKpiCard key={`billed-${summary.currency}`} title={`Facturado Total (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileText} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Facturado Total (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />}
-        {!resolvedSummaryRows ? <SalesKpiCard title="Por Cobrar" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
+        {!summaryAvailable ? <SalesKpiCard title="Por Cobrar" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
            ? originalReceivable.map((summary) => <SalesKpiCard key={`receivable-${summary.currency}`} title={`Por Cobrar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />)
            : <SalesKpiCard title={`Por Cobrar (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />}
-         <SalesKpiCard title="Vencidas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length : '—'} icon={AlertCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
-        {!resolvedSummaryRows ? <SalesKpiCard title="Cobrado" value="—" icon={CheckCircle2} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
+         <SalesKpiCard title="Vencidas" value={summaryAvailable ? (hasColumnValueFilters ? summaryRowsWithoutStatusFilter.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length : summaryGroups.filter((group) => group.status === 'OVERDUE').reduce((total, group) => total + group.count, 0)) : '—'} icon={AlertCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
+        {!summaryAvailable ? <SalesKpiCard title="Cobrado" value="—" icon={CheckCircle2} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
            ? originalPaid.map((summary) => <SalesKpiCard key={`paid-${summary.currency}`} title={`Cobrado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />)
            : <SalesKpiCard title={`Cobrado (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />}
         </div>
@@ -2863,7 +2923,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           const nextRate = paymentLineRate(nextCurrency);
                           return {
                             ...item,
-                            amount: Number(convertBetweenCurrencies(item.amount, item.currency, nextCurrency, previousRate, nextRate).toFixed(2)),
+                            amount: Number(convertBetweenCurrencies(item.amount, item.currency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())),
                             currency: nextCurrency,
                             exchangeRate: nextRate,
                             bankAccountId: undefined,

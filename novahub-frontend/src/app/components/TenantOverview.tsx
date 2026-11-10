@@ -22,7 +22,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { DateField } from './ui/DateField';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../utils/pdfGenerator';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../utils/currency';
 
@@ -126,7 +125,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
   const [draftKpiIds, setDraftKpiIds] = useState<string[]>(DEFAULT_KPI_IDS);
   const [showKpiConfig, setShowKpiConfig] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<any | null>(null);
-  const { formatConvertedAmount, displayMode, formatExplicitAmount, valuationMode, valuationModeSuffix } = useCurrency();
+  const { formatConvertedAmount, displayMode, displayCurrencyLabel, baseCurrency, formatExplicitAmount, valuationMode, valuationModeSuffix } = useCurrency();
   const { themeConfig } = useTheme();
   const { user, canPerform } = useAuth();
   const canViewDashboard = canPerform('DASHBOARD', 'view');
@@ -190,7 +189,12 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
     toast.success(`${draftKpiIds.length} KPI${draftKpiIds.length === 1 ? '' : 's'} configurado${draftKpiIds.length === 1 ? '' : 's'}`);
   };
 
-  const fmt = (amount: number) => formatConvertedAmount(amount);
+  const fmt = (amount: number) => formatConvertedAmount(amount, cajaData?.baseCurrency || baseCurrency);
+  const fmtTransaction = (transaction: any) => formatConvertedAmount(
+    Number(transaction?.sourceTotal ?? transaction?.total ?? 0),
+    transaction?.currency || cajaData?.baseCurrency || baseCurrency,
+    transaction?.exchangeRate,
+  );
 
   const navigateWithTarget = useCallback((module: Module, detail?: Record<string, unknown>) => {
     onNavigate?.(module);
@@ -344,7 +348,11 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
     if (!cajaData) { toast.error('No hay datos para exportar'); return; }
     setIsExporting(true);
     try {
-      const { default: jsPDF } = await import('jspdf');
+      const [{ default: jsPDF }, pdfGenerator] = await Promise.all([
+        import('jspdf'),
+        import('../utils/pdfGenerator'),
+      ]);
+      const { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } = pdfGenerator;
       const pdfSettings = await getPdfDesignSettings('dashboard.tenant-overview');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings));
       const pageW = doc.internal.pageSize.getWidth();
@@ -357,7 +365,10 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(120);
-      doc.text(`Periodo: ${period === 'month' ? 'Este Mes' : period === 'quarter' ? 'Este Trimestre' : 'Este Año'}  |  Generado: ${new Date().toLocaleDateString('es-NI')}`, pageW / 2, y, { align: 'center' });
+      const reportCurrencyLabel = displayMode === 'ORIGINAL'
+        ? `Original por operación · agregados en ${cajaData?.baseCurrency || baseCurrency}`
+        : displayCurrencyLabel;
+      doc.text(`Periodo: ${period === 'month' ? 'Este Mes' : period === 'quarter' ? 'Este Trimestre' : 'Este Año'}  |  Moneda: ${reportCurrencyLabel}  |  Generado: ${new Date().toLocaleDateString('es-NI')}`, pageW / 2, y, { align: 'center' });
       y += 12;
 
       doc.setDrawColor(200);
@@ -371,7 +382,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
       y += 8;
 
       const kpiRows: [string, string][] = selectedKpiData.map((kpi) => [kpi.label, String(kpi.value)]);
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'dashboard.tenant-overview', title: 'Reporte del dashboard', tenantName: themeConfig.tenantName || user?.tenantName || 'Mi Empresa', tenantLogo: themeConfig.logo || '', rows: selectedKpiData, columns: [{ header: 'Indicador', value: row => row.label }, { header: 'Valor', value: row => row.value }, { header: 'Detalle', value: row => row.detail || '—' }], fileName: buildDatedDownloadFileName(['reporte_dashboard'], 'pdf') });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'dashboard.tenant-overview', title: `Reporte del dashboard · ${reportCurrencyLabel}`, tenantName: themeConfig.tenantName || user?.tenantName || 'Mi Empresa', tenantLogo: themeConfig.logo || '', rows: selectedKpiData, columns: [{ header: 'Indicador', value: row => row.label }, { header: 'Valor', value: row => row.value }, { header: 'Detalle', value: row => row.detail || '—' }], fileName: buildDatedDownloadFileName(['reporte_dashboard'], 'pdf') });
       if (configured) { toast.success('PDF exportado exitosamente'); setIsExporting(false); return; }
 
       doc.setFontSize(10);
@@ -453,7 +464,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
           doc.text(tx.number || 'FAC-???', 24, y);
           doc.text((tx.origin || tx.register?.name || '-').substring(0, 24), 60, y);
           doc.text((tx.customer || 'Cliente General').substring(0, 20), 95, y);
-          doc.text(fmt(tx.total || 0), 140, y);
+          doc.text(fmtTransaction(tx), 140, y);
           doc.text(tx.hasIVA ? '15%' : 'Exento', 170, y);
           y += 5;
         }

@@ -545,8 +545,7 @@ export function IntlPackageModal({
                   inputMode="decimal"
                   placeholder="0.00"
                   value={form.declaredValueUsd}
-                  onChange={(e) => setForm((prev) => ({ ...prev, declaredValueUsd: e.target.value }))}
-                />
+                  onChange={(e) => setForm((prev) => ({ ...prev, declaredValueUsd: e.target.value }))} currencyPrecision />
               </div>
             </div>
           </div>

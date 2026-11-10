@@ -49,7 +49,9 @@ interface PnLData {
 export function EstadoResultadosView() {
   const { canPerform, user } = useAuth();
   const canExportProfitLoss = canPerform('ACCOUNTING_PROFIT_LOSS', 'export');
-  const { baseCurrency, formatCurrentAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, displayMode, convertCurrentAmount, formatCurrentAmount } = useCurrency();
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const toReportAmount = (amount: number) => displayMode === 'ORIGINAL' ? Number(amount || 0) : convertCurrentAmount(Number(amount || 0), baseCurrency);
   const toLocalDate = (value: Date) => {
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
@@ -129,9 +131,9 @@ export function EstadoResultadosView() {
         Código: account.codigo,
         Cuenta: account.cuenta,
         Tipo: section.sign === 'INCOME' ? 'Ingreso' : 'Gasto',
-        'Período actual': account.currentAmount,
+        [`Período actual (${reportCurrency})`]: toReportAmount(account.currentAmount),
       })),
-      { Sección: `Total ${section.label}`, Código: '', Cuenta: '', Tipo: '', 'Período actual': section.total },
+      { Sección: `Total ${section.label}`, Código: '', Cuenta: '', Tipo: '', [`Período actual (${reportCurrency})`]: toReportAmount(section.total) },
     ]);
     const workbook = XLSX.utils.book_new();
     const detailSheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]);
@@ -141,10 +143,10 @@ export function EstadoResultadosView() {
       ['Reporte', 'Estado de resultados'],
       ['Desde', dateFrom],
       ['Hasta', dateTo],
-      ['Moneda', baseCurrency],
-      ['Total ingresos', data.totalIngresos],
-      ['Total gastos', data.totalGastos],
-      ['Resultado neto', netIncome],
+      ['Moneda', displayMode === 'ORIGINAL' ? `${baseCurrency} (moneda base de saldos agregados)` : reportCurrency],
+      ['Total ingresos', toReportAmount(data.totalIngresos)],
+      ['Total gastos', toReportAmount(data.totalGastos)],
+      ['Resultado neto', toReportAmount(netIncome)],
     ]), 'Resumen');
     XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['estado_resultados'], 'xlsx', dateFrom, dateTo));
     toast.success(`Estado de resultados exportado con ${rows.length} fila(s)`);
@@ -167,7 +169,7 @@ export function EstadoResultadosView() {
     })));
     await generateConfiguredReportTemplate({
       targetKey: 'contabilidad.profit-loss',
-      title: 'Estado de resultados',
+      title: `Estado de resultados · Moneda: ${displayMode === 'ORIGINAL' ? `${baseCurrency} (base)` : reportCurrency}`,
       tenantName: user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub ERP',
       tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
       rows,

@@ -1,3 +1,5 @@
+import { getCurrencyDecimalPlaces } from './currency';
+
 export type CustomerBalanceState = 'FAVOR' | 'DEBT' | 'CLEAR';
 
 type CustomerBalanceRecord = {
@@ -103,4 +105,4 @@ export const getMaximumCustomerFavorToApply = (
     Math.max(0, Number(favorBase) || 0),
     Math.max(0, (Number(documentBalanceBase) || 0) - (Number(otherPaymentsBase) || 0)),
   ),
-).toFixed(2));
+).toFixed(getCurrencyDecimalPlaces()));

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { Truck, Plus, Search, Eye, TrendingDown, CheckCircle2, Upload, Download, Ban, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -6,7 +7,7 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { suppliersService } from '../../services/compras.service';
+import { suppliersService, type SupplierKpiSummary } from '../../services/compras.service';
 import type { Supplier, EntityStatus } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -21,7 +22,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { SupplierImportPreview, type SupplierImportResult, type SupplierImportRow } from './SupplierImportPreview';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
@@ -36,7 +37,7 @@ import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 
-interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; summaryData?: Supplier[]; summaryLoading?: boolean; summaryError?: boolean; isSidebarCollapsed?: boolean; }
+interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; summaryData?: SupplierKpiSummary; summaryLoading?: boolean; summaryError?: boolean; isSidebarCollapsed?: boolean; }
 
 const emptyDraft = () => ({
   code: '',
@@ -309,10 +310,20 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     status: (row: Supplier) => isSupplierInactive(row) ? 'INACTIVE' : 'ACTIVE',
   };
   const filteredData = colFilters.applyTo(filteredAndSorted, filterGetters);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError
-    ? data
-    : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((supplier) => {
+  const hasColumnValueFilters = Object.values(colFilters.state).some((filter) => Boolean(filter.values?.length));
+  const columnFilterSummaryQuery = useQuery({
+    queryKey: ['purchases', 'suppliers-kpi-filtered-rows', user?.tenantId, searchTerm],
+    queryFn: ({ signal }) => fetchAllReportPages<Supplier>(
+      (filters) => suppliersService.getAll(filters, signal),
+      { pageSize: 5000, report: true, search: searchTerm.trim() || undefined },
+      signal,
+    ),
+    enabled: hasColumnValueFilters,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const fallbackSummaryRows = hasColumnValueFilters ? columnFilterSummaryQuery.data : undefined;
+  const summarySearchRows = (fallbackSummaryRows || []).filter((supplier) => {
     const search = searchTerm.toLowerCase();
     return String(supplier.name || '').toLowerCase().includes(search)
       || String(supplier.companyName || '').toLowerCase().includes(search)
@@ -325,6 +336,13 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     const active = !isSupplierInactive(supplier);
     return statusFilter === 'ALL' || (statusFilter === 'ACTIVE' ? active : !active);
   }).sort(compareSupplierNames), filterGetters);
+  const isKpiSummaryLoading = hasColumnValueFilters
+    ? columnFilterSummaryQuery.isPending || columnFilterSummaryQuery.isFetching
+    : summaryLoading;
+  const isKpiSummaryError = hasColumnValueFilters ? columnFilterSummaryQuery.isError : summaryError;
+  const summaryAvailable = hasColumnValueFilters ? fallbackSummaryRows !== undefined : summaryData !== undefined;
+  const summaryGroups = summaryData?.groups || [];
+  const summaryGroupsWithoutStatusFilter = summaryGroups.filter((group) => statusFilter === 'ALL' || group.status === statusFilter);
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page', exportFilter = 'all') => {
     const exportToastId = toast.loading('Generando reporte de proveedores...');
@@ -604,16 +622,20 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     }
   };
 
-  const totalSupplierDebt = summaryFilteredData.reduce((acc, supplier) => acc + getSupplierDebtAmount(supplier), 0);
+  const totalSupplierDebt = hasColumnValueFilters
+    ? summaryFilteredData.reduce((acc, supplier) => acc + getSupplierDebtAmount(supplier), 0)
+    : summaryGroupsWithoutStatusFilter.reduce((acc, group) => acc + Number(group.balance || 0), 0);
   const totalSupplierDebtBreakdown = summarizeAmountsByCurrency(
-    summaryFilteredData.flatMap((supplier) => supplier.balanceOriginalCurrencyBreakdown || []),
+    hasColumnValueFilters
+      ? summaryFilteredData.flatMap((supplier) => supplier.balanceOriginalCurrencyBreakdown || [])
+      : summaryGroupsWithoutStatusFilter.flatMap((group) => group.balanceOriginalCurrencyBreakdown || []),
     (item) => Number(item.amount || 0),
     (item) => item.currency,
   );
   const supplierDebtRows = totalSupplierDebtBreakdown.length
     ? totalSupplierDebtBreakdown
     : [{ currency: baseCurrency as SupportedCurrency, amount: totalSupplierDebt, count: 0 }];
-  const supplierDebtKpis = !resolvedSummaryRows
+  const supplierDebtKpis = !summaryAvailable
     ? [{ title: 'Cartera pendiente', value: '—' }]
     : displayMode === 'ORIGINAL'
     ? supplierDebtRows.map((item) => ({
@@ -623,8 +645,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     : [{ title: `Cartera pendiente${valuationModeSuffix}`, value: formatConvertedAmount(totalSupplierDebt, baseCurrency) }];
 
   const kpis = [
-    { title: 'Total',     value: resolvedSummaryRows ? summaryFilteredData.length : '—', icon: Truck, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Activos',   value: resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(s => !isSupplierInactive(s)).length : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
+    { title: 'Total',     value: summaryAvailable ? (hasColumnValueFilters ? summaryFilteredData.length : summaryGroupsWithoutStatusFilter.reduce((total, group) => total + group.count, 0)) : '—', icon: Truck, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Activos',   value: summaryAvailable ? (hasColumnValueFilters ? summaryRowsWithoutStatusFilter.filter(s => !isSupplierInactive(s)).length : summaryGroups.filter((group) => group.status !== 'INACTIVE').reduce((total, group) => total + group.count, 0)) : '—', icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
     ...supplierDebtKpis.map((item) => ({ title: item.title, value: item.value, icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10', kind: 'indicator' as const })),
   ];
 
@@ -634,8 +656,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
-        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+      <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
+        <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={'filter' in k && k.filter === statusFilter} onClick={'filter' in k && k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />

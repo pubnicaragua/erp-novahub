@@ -22,7 +22,7 @@ import {
 } from 'recharts';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
-import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { getCurrencyDecimalPlaces, normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { getReadableForeground } from '../../utils/color-contrast';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { ExportMenu } from '../ui/ExportMenu';
@@ -1162,7 +1162,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
                   <YAxis tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => sym + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'K' : v.toFixed(0))} width={64} />
                   <Tooltip content={({active, payload, label}: any) => {
                     if (!active || !payload?.length) return null
-                    return <FinanceTooltipCard active={active} payload={payload} label={label} formatter={(value) => `${sym}${Number(value).toLocaleString(undefined,{minimumFractionDigits:2})}`} />
+                    return <FinanceTooltipCard active={active} payload={payload} label={label} formatter={(value) => `${sym}${Number(value).toLocaleString(undefined,{minimumFractionDigits:getCurrencyDecimalPlaces(),maximumFractionDigits:getCurrencyDecimalPlaces()})}`} />
                   }} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ fill: 'var(--muted)', fillOpacity: 0.35 }} />
                   <Legend verticalAlign="bottom" height={28} formatter={(value:string) => <span style={{color:'var(--foreground)', fontWeight:600, fontSize:11}}>{value}</span>} />
                   {(viewType !== 'solo-gastos') && <Bar dataKey="ingresos" fill="#10b981" radius={[5,5,0,0]} maxBarSize={32} name="Ingresos" />}
@@ -1192,7 +1192,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
                     <Pie data={categoryData} cx="50%" cy="44%" innerRadius="52%" outerRadius="76%" startAngle={90} endAngle={-270} paddingAngle={categoryData.length > 1 ? 2 : 0} dataKey="value">
                       {categoryData.map((_,i) => <Cell key={i} fill={COLORS[i%COLORS.length]} />)}
                     </Pie>
-                    <Tooltip content={<FinanceTooltipCard formatter={(value) => `${sym}${Number(value).toLocaleString(undefined,{minimumFractionDigits:2})}`} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} />
+                    <Tooltip content={<FinanceTooltipCard formatter={(value) => `${sym}${Number(value).toLocaleString(undefined,{minimumFractionDigits:getCurrencyDecimalPlaces(),maximumFractionDigits:getCurrencyDecimalPlaces()})}`} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} />
                     <Legend verticalAlign="bottom" height={36} iconType="circle" formatter={(value: string) => <span style={{ color: 'var(--foreground)', fontSize: 11, fontWeight: 600 }}>{value}</span>} />
                   </PieChart>
                 </ResponsiveContainer>

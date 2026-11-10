@@ -1,3 +1,5 @@
+import { getCurrencyDecimalPlaces } from './currency';
+
 export type CustomerHistoryCurrency = 'NIO' | 'USD';
 
 export type CustomerHistorySourceRow = {
@@ -275,7 +277,7 @@ export function aggregateCustomerHistory(
       measureLabel,
       measureValue: group.hasMeasure ? Number(group.measureValue.toFixed(4)) : null,
       measureUnit,
-      amount: Number(group.amount.toFixed(2)),
+      amount: Number(group.amount.toFixed(getCurrencyDecimalPlaces())),
       currency: group.currency,
     });
   }

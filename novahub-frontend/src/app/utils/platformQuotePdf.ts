@@ -3,6 +3,7 @@ import autoTable, { type RowInput } from 'jspdf-autotable';
 import type { PlatformQuote } from '../services/enterprise-groups.service';
 import { getNovaHubLogotipoPng } from './novahubBrand';
 import { buildLabeledPdfFileName } from './exportFileNames';
+import { getCurrencyDecimalPlaces } from './currency';
 
 type Rgb = [number, number, number];
 
@@ -19,7 +20,7 @@ function money(value: number, currency: string) {
   return new Intl.NumberFormat('es-NI', {
     style: 'currency',
     currency,
-    minimumFractionDigits: 2,
+    minimumFractionDigits: getCurrencyDecimalPlaces(),
   }).format(Number(value || 0));
 }
 

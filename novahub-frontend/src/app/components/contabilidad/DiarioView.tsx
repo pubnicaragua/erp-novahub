@@ -136,7 +136,9 @@ interface PreviewRow {
 
 export function DiarioView() {
   const { user, canPerform } = useAuth();
-  const { baseCurrency, formatAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, displayMode, convertCurrentAmount, formatAmount } = useCurrency();
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const toReportAmount = (amount: number) => displayMode === 'ORIGINAL' ? Number(amount || 0) : convertCurrentAmount(Number(amount || 0), baseCurrency);
   const [filterStatus, setFilterStatus] = useState('POSTED');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -222,8 +224,8 @@ export function DiarioView() {
           date: formatAccountingDate(j.date),
           description: accountingDescriptionLabel(j.description),
           status: j.status,
-          debit: totalDeb,
-          credit: totalCred,
+          debit: toReportAmount(totalDeb),
+          credit: toReportAmount(totalCred),
           referenceType: referenceTypeLabel((j as any).referenceType),
           referenceNumber: referenceDisplay(j),
         };
@@ -239,6 +241,7 @@ export function DiarioView() {
         dateFrom: filterDateFrom,
         dateTo: filterDateTo,
         filterStatus,
+        currencyLabel: displayMode === 'ORIGINAL' ? `${baseCurrency} (base)` : reportCurrency,
         format,
         totals: {
           debitos: formatAmount(totalDebitsSum, baseCurrency),
@@ -273,8 +276,8 @@ export function DiarioView() {
           Fecha: formatAccountingDate(j.date),
           Descripción: accountingDescriptionLabel(j.description),
           Estado: journalStatusLabel(j.status),
-          'Débito Total': totalDeb,
-          'Crédito Total': totalCred,
+          [`Débito Total (${reportCurrency})`]: toReportAmount(totalDeb),
+          [`Crédito Total (${reportCurrency})`]: toReportAmount(totalCred),
           'Tipo Referencia': referenceTypeLabel((j as any).referenceType) || '-',
           Referencia: referenceDisplay(j),
           'Cantidad Líneas': j.lines?.length || 0,
@@ -287,8 +290,8 @@ export function DiarioView() {
               Fecha: formatAccountingDate(j.date),
               Descripción: `    Línea: ${l.account?.code ? `${l.account.code} - ${l.account.name}` : l.description || '-'}`,
               Estado: journalStatusLabel(j.status),
-              'Débito Total': Number(l.debit || 0),
-              'Crédito Total': Number(l.credit || 0),
+              [`Débito Total (${reportCurrency})`]: toReportAmount(Number(l.debit || 0)),
+              [`Crédito Total (${reportCurrency})`]: toReportAmount(Number(l.credit || 0)),
               'Tipo Referencia': referenceTypeLabel((j as any).referenceType) || '-',
               Referencia: referenceDisplay(j),
               'Cantidad Líneas': '',
@@ -320,9 +323,10 @@ export function DiarioView() {
         ['Estado filtrado', filterStatus || 'Todos'],
         ['Desde', filterDateFrom || 'Inicio'],
         ['Hasta', filterDateTo || 'Actual'],
+        ['Moneda', displayMode === 'ORIGINAL' ? `${baseCurrency} (moneda base de saldos agregados)` : reportCurrency],
         ['Total asientos', exportJournals.length],
-        ['Total débitos', totalDebitsSum],
-        ['Total créditos', totalCreditsSum],
+        ['Total débitos', toReportAmount(totalDebitsSum)],
+        ['Total créditos', toReportAmount(totalCreditsSum)],
       ]);
       summarySheet['!cols'] = [{ wch: 20 }, { wch: 25 }];
       XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen');

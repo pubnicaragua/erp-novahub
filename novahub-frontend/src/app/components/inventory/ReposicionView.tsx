@@ -68,7 +68,7 @@ export function ReposicionView({ warehouses }: Props) {
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 350);
+    const timer = window.setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 300);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 

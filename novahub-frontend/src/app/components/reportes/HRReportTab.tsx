@@ -20,7 +20,7 @@ import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTena
 import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
-import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { formatCurrencyNumber, normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -225,7 +225,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const { themeConfig } = useTheme();
   const { canPerform } = useAuth();
   const canViewHr = canPerform('REPORTS_HR', 'view');
-  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const currencySymbol = reportCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
@@ -296,7 +297,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     if (!Number.isFinite(num)) return `${currencySymbol}0.00`;
     const converted = toBaseAmount(num, baseCurrency, 1);
     const sign = converted < 0 ? '-' : '';
-    return `${sign}${currencySymbol}${Math.abs(converted).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${sign}${currencySymbol}${formatCurrencyNumber(Math.abs(converted))}`;
   };
 
   const pctVar = (cur: number, prev: number) => (prev > 0 ? ((cur - prev) / prev) * 100 : cur > 0 ? 100 : 0);
@@ -1042,7 +1043,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(120, 120, 120);
-        doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')}  |  Moneda: ${displayCurrency}  |  Período: ${dateRange}`, pageWidth / 2, currentY, { align: 'center' });
+        doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')}  |  Moneda: ${displayMode === 'ORIGINAL' ? `totales agregados en ${baseCurrency}` : reportCurrency}  |  Período: ${dateRange}`, pageWidth / 2, currentY, { align: 'center' });
         currentY += 5;
         currentY = drawReportBrandMeta({ doc, settings: pdfSettings, pageWidth, contentWidth, currentY });
 
@@ -1255,7 +1256,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
 
         ws.mergeCells(`A${currentRow}:F${currentRow}`);
         const cMeta = ws.getCell(`A${currentRow}`);
-        cMeta.value = `Moneda: ${displayCurrency} (${currencySymbol})  |  Período: ${dateRange}  |  ${new Date().toLocaleDateString('es-NI')}`;
+        cMeta.value = `Moneda: ${displayMode === 'ORIGINAL' ? `${baseCurrency} · totales agregados en moneda base` : `${reportCurrency} (${currencySymbol})`}  |  Período: ${dateRange}  |  ${new Date().toLocaleDateString('es-NI')}`;
         cMeta.font = { size: 10, italic: true, color: { argb: 'FF888888' } };
         cMeta.alignment = { horizontal: 'center' };
         currentRow += 2;

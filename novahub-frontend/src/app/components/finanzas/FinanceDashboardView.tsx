@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import * as Sentry from '@sentry/react';
 import { useQuery } from '@tanstack/react-query';
 import {
   TrendingUp, TrendingDown, DollarSign, Landmark, BarChart3, ArrowUpRight, ArrowDownRight,
@@ -10,9 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { accountsService, sourceDocumentsService } from '../../services/finanzas.service';
+import { sourceDocumentsService, accountsService } from '../../services/finanzas.service';
 import { toast } from '@/app/services/toast';
-import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard, financeCategoryLabel } from './financeChartTheme';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -42,6 +42,9 @@ const monthlyFactor = (frequency: unknown) => {
 };
 
 export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, onNavigate }: Props) {
+  const indicatorsStartedAt = useRef<number | null>(typeof performance === 'undefined' ? null : performance.now());
+  const indicatorsSpan = useRef<ReturnType<typeof Sentry.startInactiveSpan> | null>(Sentry.startInactiveSpan({ op: 'ui.load', name: 'Finance dashboard indicators ready' }));
+  const indicatorsMeasured = useRef(false);
   const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const canReadSales = canPerform('SALES', 'view');
@@ -52,11 +55,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
 
   const salesInvoicesQuery = useQuery({
     queryKey: ['finance', 'sales-invoices', tenantKey],
-    queryFn: ({ signal }) => fetchAllReportPages(
-      (filters) => sourceDocumentsService.getLookup({ ...filters, origin: 'SALES' }, signal),
-      { pageSize: 200, report: true },
-      signal,
-    ),
+    queryFn: ({ signal }) => sourceDocumentsService.getDashboardSummary('SALES', signal),
     enabled: canReadSales,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
@@ -65,11 +64,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   });
   const supplierInvoicesQuery = useQuery({
     queryKey: ['finance', 'supplier-invoices', tenantKey],
-    queryFn: ({ signal }) => fetchAllReportPages(
-      (filters) => sourceDocumentsService.getLookup({ ...filters, origin: 'PURCHASES' }, signal),
-      { pageSize: 200, report: true },
-      signal,
-    ),
+    queryFn: ({ signal }) => sourceDocumentsService.getDashboardSummary('PURCHASES', signal),
     enabled: canReadPurchases,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
@@ -77,12 +72,8 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
     retry: 1,
   });
   const chartAccountsQuery = useQuery({
-    queryKey: ['finance', 'accounts', tenantKey],
-    queryFn: ({ signal }) => fetchAllReportPages(
-      (filters) => accountsService.getAll(filters, signal),
-      { pageSize: 5000, report: true },
-      signal,
-    ),
+    queryKey: ['finance', 'cash-bank-summary', tenantKey],
+    queryFn: ({ signal }) => accountsService.getCashBankSummary(signal),
     enabled: canReadFinancial,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
@@ -91,11 +82,30 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   });
   const salesInvoices = toList(salesInvoicesQuery.data);
   const supplierInvoices = toList(supplierInvoicesQuery.data);
-  const bankAccounts = toList(chartAccountsQuery.data).filter((a: any) =>
-    ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) ||
-    String(a.name || '').toUpperCase().includes('CAJA') ||
-    String(a.name || '').toUpperCase().includes('BANCO')
-  );
+  const bankAccounts = toList(chartAccountsQuery.data);
+  const indicatorsQueries = [
+    { query: salesInvoicesQuery, enabled: canReadSales },
+    { query: supplierInvoicesQuery, enabled: canReadPurchases },
+    { query: chartAccountsQuery, enabled: canReadFinancial },
+  ];
+  const indicatorsReady = indicatorsQueries.every(({ query, enabled }) => !enabled || query.isSuccess || query.isError);
+  useEffect(() => {
+    if (!indicatorsReady || indicatorsMeasured.current) return;
+    indicatorsMeasured.current = true;
+    const failed = indicatorsQueries.some(({ query, enabled }) => enabled && query.isError);
+    if (indicatorsStartedAt.current != null && typeof performance !== 'undefined') {
+      performance.measure('novahub.finance.indicators-ready', { start: indicatorsStartedAt.current, end: performance.now() });
+    }
+    indicatorsSpan.current?.setAttribute('outcome', failed ? 'partial' : 'success');
+    indicatorsSpan.current?.end();
+    indicatorsSpan.current = null;
+  }, [indicatorsReady, salesInvoicesQuery.isError, supplierInvoicesQuery.isError, chartAccountsQuery.isError]);
+  useEffect(() => () => {
+    if (indicatorsMeasured.current || !indicatorsSpan.current) return;
+    indicatorsSpan.current.setAttribute('outcome', 'cancelled');
+    indicatorsSpan.current.end();
+    indicatorsSpan.current = null;
+  }, []);
 
   const cv = (item: any) => {
     const amount = Number(item.amount ?? item.baseAmount ?? 0);
@@ -103,24 +113,18 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
       ? convertCurrentAmount(amount, item.currency)
       : convertAmount(amount, item.currency, item.exchangeRate);
   };
-  const docBalance = (item: any) => {
-    const amount = Number(item.balance ?? item.balanceDue ?? (Number(item.total || 0) - Number(item.amountPaid || 0)));
-    return valuationMode === 'CURRENT'
-      ? convertCurrentAmount(amount, item.currency)
-      : convertAmount(amount, item.currency, item.exchangeRate);
-  };
-  const rawDocBalance = (item: any) => Number(item.balance ?? item.balanceDue ?? (Number(item.total || 0) - Number(item.amountPaid || 0)));
+  const rawDocBalance = (item: any) => Number(item.amount ?? item.balance ?? item.balanceDue ?? (Number(item.total || 0) - Number(item.amountPaid || 0)));
   const totalIncome = useMemo(() => incomes.reduce((a: number, i: any) => a + cv(i), 0), [incomes, valuationMode, convertAmount, convertCurrentAmount]);
   const totalExpense = useMemo(() => expenses.reduce((a: number, e: any) => a + cv(e), 0), [expenses, valuationMode, convertAmount, convertCurrentAmount]);
   const netCashFlow = totalIncome - totalExpense;
 
-  const pendingSalesInvoices = useMemo(() => salesInvoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' }), [salesInvoices]);
-  const pendingSupplierInvoices = useMemo(() => supplierInvoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' }), [supplierInvoices]);
-  const totalCxc = useMemo(() => pendingSalesInvoices.reduce((a: number, inv: any) => a + docBalance(inv), 0), [pendingSalesInvoices, valuationMode, convertAmount, convertCurrentAmount]);
-  const totalCxp = useMemo(() => pendingSupplierInvoices.reduce((a: number, inv: any) => a + docBalance(inv), 0), [pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
+  const pendingSalesInvoices = salesInvoices;
+  const pendingSupplierInvoices = supplierInvoices;
+  const totalCxc = useMemo(() => pendingSalesInvoices.reduce((sum: number, row: any) => sum + cv(row), 0), [pendingSalesInvoices, valuationMode, convertAmount, convertCurrentAmount]);
+  const totalCxp = useMemo(() => pendingSupplierInvoices.reduce((sum: number, row: any) => sum + cv(row), 0), [pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
   const bankBalance = useMemo(() => bankAccounts.reduce((a: number, acc: any) => a + (valuationMode === 'CURRENT'
-    ? convertCurrentAmount(Number(acc.balance || 0), acc.currency)
-    : convertAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate)), 0), [bankAccounts, valuationMode, convertAmount, convertCurrentAmount]);
+    ? convertCurrentAmount(Number(acc.amount || 0), acc.currency)
+    : convertAmount(Number(acc.amount || 0), acc.currency, acc.exchangeRate)), 0), [bankAccounts, valuationMode, convertAmount, convertCurrentAmount]);
 
   const originalCurrencies = useMemo<SupportedCurrency[]>(() => summarizeAmountsByCurrency(
     [...incomes, ...expenses, ...bankAccounts, ...pendingSalesInvoices, ...pendingSupplierInvoices],
@@ -132,13 +136,12 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
     .reduce((sum, row) => sum + (Number.isFinite(amountOf(row)) ? amountOf(row) : 0), 0);
   const originalIncome = (currency: SupportedCurrency) => originalSum(incomes, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency);
   const originalExpense = (currency: SupportedCurrency) => originalSum(expenses, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency);
-  const originalBank = (currency: SupportedCurrency) => originalSum(bankAccounts, (row) => Number(row.balance || 0), currency);
+  const originalBank = (currency: SupportedCurrency) => originalSum(bankAccounts, (row) => Number(row.amount || 0), currency);
   const originalCxc = (currency: SupportedCurrency) => originalSum(pendingSalesInvoices, rawDocBalance, currency);
   const originalCxp = (currency: SupportedCurrency) => originalSum(pendingSupplierInvoices, rawDocBalance, currency);
-  const originalOverdue = (rows: any[], currency: SupportedCurrency) => originalSum(rows.filter((inv: any) => {
-    const due = inv.dueDate ? new Date(inv.dueDate) : null;
-    return due && due < new Date() && rawDocBalance(inv) > 0;
-  }), rawDocBalance, currency);
+  const originalOverdue = (rows: any[], currency: SupportedCurrency) => originalSum(
+    rows.filter((row: any) => row.agingBucket !== 'NOT_DUE'), rawDocBalance, currency,
+  );
 
   const activeRecurringExpenses = useMemo(() => recurringExpenses.filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringExpenses]);
   const activeRecurringIncomes = useMemo(() => (recurringIncomes || []).filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringIncomes]);
@@ -161,14 +164,11 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
     return Object.entries(months).sort(([a], [b]) => a.localeCompare(b)).map(([month, d]) => ({ month, ...d, net: d.income - d.expense }));
   }, [incomes, expenses, valuationMode, convertAmount, convertCurrentAmount]);
 
-  const agingData = useMemo(() => {
-    const ranges = [{ label: '0-30 días', min: 0, max: 30 }, { label: '31-60 días', min: 31, max: 60 }, { label: '61-90 días', min: 61, max: 90 }, { label: '+90 días', min: 91, max: Infinity }];
-    return ranges.map(r => {
-      const cxcAmt = pendingSalesInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && docBalance(inv) > 0; }).reduce((a: number, inv: any) => a + docBalance(inv), 0);
-      const cxpAmt = pendingSupplierInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && docBalance(inv) > 0; }).reduce((a: number, inv: any) => a + docBalance(inv), 0);
-      return { label: r.label, cxc: cxcAmt, cxp: cxpAmt };
-    });
-  }, [pendingSalesInvoices, pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
+  const agingData = useMemo(() => ['0-30 días', '31-60 días', '61-90 días', '+90 días'].map((label) => ({
+    label,
+    cxc: pendingSalesInvoices.filter((row: any) => row.agingBucket === label).reduce((sum: number, row: any) => sum + cv(row), 0),
+    cxp: pendingSupplierInvoices.filter((row: any) => row.agingBucket === label).reduce((sum: number, row: any) => sum + cv(row), 0),
+  })), [pendingSalesInvoices, pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
 
   const projectData = useMemo(() => {
     const last = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1] : null;

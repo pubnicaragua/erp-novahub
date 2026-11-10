@@ -38,6 +38,7 @@ import {
 } from '../../services/intl-imports.service';
 import { NewIntlPackageModal } from './modals/NewIntlPackageModal';
 import { IntlPackageDetailSheet } from './modals/IntlPackageDetailSheet';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface OriginWarehouseTabProps {
   canCreate?: boolean;
@@ -380,7 +381,7 @@ export function OriginWarehouseTab({
                   <TableCell className="text-right font-mono">{pkg.chargeableWeight || pkg.chargeableWeightKg} kg</TableCell>
                   <TableCell className="text-right font-mono text-xs font-semibold">
                     {pkg.declaredValueUsd && Number(pkg.declaredValueUsd) > 0 ? (
-                      <span className="text-emerald-600 dark:text-emerald-400">${Number(pkg.declaredValueUsd).toFixed(2)}</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">${Number(pkg.declaredValueUsd).toFixed(getCurrencyDecimalPlaces())}</span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}

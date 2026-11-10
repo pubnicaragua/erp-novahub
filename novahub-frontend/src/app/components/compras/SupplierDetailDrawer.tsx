@@ -52,6 +52,7 @@ import { formatCurrencyAmount } from '../../utils/currency';
 import { toast } from '@/app/services/toast';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface SupplierDetailDrawerProps {
   supplierId: string | null;
@@ -280,8 +281,8 @@ export function SupplierDetailDrawer({
     try {
       const outputItems = selectedHistoryItems.map((item) => ({
         ...item,
-        unitPrice: Number(convertBetweenCurrencies(Number(item.unitPrice || 0), item.currency, historyExportCurrency, item.exchangeRate, exchangeRate).toFixed(2)),
-        total: Number(convertBetweenCurrencies(Number(item.total || 0), item.currency, historyExportCurrency, item.exchangeRate, exchangeRate).toFixed(2)),
+        unitPrice: Number(convertBetweenCurrencies(Number(item.unitPrice || 0), item.currency, historyExportCurrency, item.exchangeRate, exchangeRate).toFixed(getCurrencyDecimalPlaces())),
+        total: Number(convertBetweenCurrencies(Number(item.total || 0), item.currency, historyExportCurrency, item.exchangeRate, exchangeRate).toFixed(getCurrencyDecimalPlaces())),
         currency: historyExportCurrency,
         exchangeRate: 1,
       }));

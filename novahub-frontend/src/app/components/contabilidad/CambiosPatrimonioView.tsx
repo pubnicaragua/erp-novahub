@@ -10,6 +10,7 @@ import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { DateField } from '../ui/DateField';
 import { formatDateOnly } from '../../utils/dateFormat';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface EquityRow {
   accountId: string;
@@ -39,7 +40,7 @@ interface EquityData {
 }
 
 function formatCurrency(n: number): string {
-  return new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() }).format(n);
 }
 
 const localISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

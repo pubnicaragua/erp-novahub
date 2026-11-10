@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from '../../ui/dialog';
 import { intlImportsService, type IntlImportContainer } from '../../../services/intl-imports.service';
+import { getCurrencyDecimalPlaces } from '../../../utils/currency';
 
 interface CloseContainerModalProps {
   container: IntlImportContainer | null;
@@ -87,7 +88,7 @@ export function CloseContainerModal({
           <div className="bg-muted/40 p-3 rounded-lg border border-border/60 space-y-1.5 font-mono">
             <div className="flex justify-between">
               <span className="text-muted-foreground font-sans">Gastos Acumulados:</span>
-              <span className="font-bold text-foreground">${totalExpenses.toFixed(2)} USD</span>
+              <span className="font-bold text-foreground">${totalExpenses.toFixed(getCurrencyDecimalPlaces())} USD</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground font-sans">Volumen Ocupado:</span>
@@ -96,7 +97,7 @@ export function CloseContainerModal({
             <div className="flex justify-between pt-1 border-t border-border/40 font-sans">
               <span className="font-semibold text-foreground">Costo por CBM Líquido:</span>
               <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                ${costPerCbm.toFixed(2)} USD / CBM
+                ${costPerCbm.toFixed(getCurrencyDecimalPlaces())} USD / CBM
               </span>
             </div>
           </div>

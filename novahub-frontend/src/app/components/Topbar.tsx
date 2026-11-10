@@ -58,6 +58,7 @@ import { useImpersonation } from '../contexts/ImpersonationContext';
 import { tenantsService, type TenantBillingInvoice } from '../services/tenants.service';
 import { NotificationGroupDetailsDialog } from './notifications/NotificationGroupDetailsDialog';
 import type { Notification } from '../types';
+import { getCurrencyDecimalPlaces } from '../utils/currency';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -110,7 +111,7 @@ function formatInvoiceDate(value?: string | null) {
 function formatInvoiceTotal(value?: number | string | null) {
   const amount = Number(value);
   return Number.isFinite(amount)
-    ? new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
+    ? new Intl.NumberFormat('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() }).format(amount)
     : null;
 }
 
@@ -358,7 +359,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       setShowPasswordModal(false);
       setNewPassword('');
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Error al actualizar la contraseña');
+      toast.error(error?.response?.data?.message || error?.message || 'Error al actualizar la contraseña');
     } finally {
       setIsUpdatingPassword(false);
     }

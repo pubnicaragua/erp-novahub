@@ -56,6 +56,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface ProyectoCosteo6DPanelProps {
@@ -70,8 +71,8 @@ type PersistedCostTemplate = { id: string; name: string; description?: string | 
 function formatMoney(amount: number, currency = 'USD'): string {
   const symbol = currency === 'NIO' ? 'C$' : '$';
   return `${symbol}${amount.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: getCurrencyDecimalPlaces(),
+    maximumFractionDigits: getCurrencyDecimalPlaces(),
   })}`;
 }
 

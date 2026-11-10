@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card"
 import { Separator } from "../ui/separator"
 import { useAuth } from '../../contexts/AuthContext'
 import { InventoryViewTutorial } from './InventoryViewTutorial'
+import { formatCurrencyNumber } from '../../utils/currency'
 
 interface InventoryDetailPanelProps {
   kind: "transfer" | "adjustment"
@@ -27,7 +28,7 @@ const REASON_LABELS: Record<string, string> = {
 function formatReferenceCost(value: unknown): string {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return '0.00';
-  return (Math.round((numericValue + Number.EPSILON) * 100) / 100).toFixed(2);
+  return formatCurrencyNumber(numericValue);
 }
 
 function StatCard({ label, value, className, valueClassName }: { label: string; value: React.ReactNode; className?: string; valueClassName?: string }) {

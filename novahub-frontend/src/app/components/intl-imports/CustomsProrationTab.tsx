@@ -32,6 +32,7 @@ import {
 } from '../../services/intl-imports.service';
 import { AddExpenseModal } from './modals/AddExpenseModal';
 import { CloseContainerModal } from './modals/CloseContainerModal';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface CustomsProrationTabProps {
   canAddExpense?: boolean;
@@ -263,7 +264,7 @@ export function CustomsProrationTab({
           volumeCbm: vol,
           billableCbm: billable,
           percentage: Number(pct.toFixed(2)),
-          proratedCost: Number(cost.toFixed(2)),
+          proratedCost: Number(cost.toFixed(getCurrencyDecimalPlaces())),
         };
       });
     }
@@ -337,7 +338,7 @@ export function CustomsProrationTab({
 
             <Card className="p-3 sm:p-3.5 border-border/70 min-w-0">
               <span className="text-[11px] sm:text-xs font-medium text-muted-foreground block truncate">Total Gastos Nacionalización</span>
-              <span className="text-base sm:text-lg font-bold font-mono text-foreground truncate block">${totalExpenses.toFixed(2)} USD</span>
+              <span className="text-base sm:text-lg font-bold font-mono text-foreground truncate block">${totalExpenses.toFixed(getCurrencyDecimalPlaces())} USD</span>
               <span className="text-[10px] text-muted-foreground block mt-0.5 truncate">Fletes, DAI, Manejo, Almacenaje</span>
             </Card>
 
@@ -346,7 +347,7 @@ export function CustomsProrationTab({
                 Costo Prorrateado Líquido
               </span>
               <span className="text-base sm:text-lg font-bold font-mono text-primary truncate block">
-                ${(totalBillable > 0 ? totalExpenses / totalBillable : 0).toFixed(2)} / CBM
+                ${(totalBillable > 0 ? totalExpenses / totalBillable : 0).toFixed(getCurrencyDecimalPlaces())} / CBM
               </span>
               <span className="text-[10px] text-muted-foreground block mt-0.5 truncate">
                 USD por cada CBM facturable
@@ -390,7 +391,7 @@ export function CustomsProrationTab({
                       <TableCell className="font-semibold text-foreground">{exp.expenseType}</TableCell>
                       <TableCell className="text-muted-foreground">{exp.description || 'Sin observaciones'}</TableCell>
                       <TableCell className="text-right font-mono font-bold text-foreground">
-                        ${(exp.amount || 0).toFixed(2)} USD
+                        ${(exp.amount || 0).toFixed(getCurrencyDecimalPlaces())} USD
                       </TableCell>
                     </TableRow>
                   ))
@@ -460,7 +461,7 @@ export function CustomsProrationTab({
                         <TableCell className="text-right font-mono text-muted-foreground">{vol.toFixed(3)}</TableCell>
                         <TableCell className="text-right font-mono">{pct.toFixed(2)}%</TableCell>
                         <TableCell className="text-right font-mono font-bold text-foreground">
-                          ${cost.toFixed(2)} USD
+                          ${cost.toFixed(getCurrencyDecimalPlaces())} USD
                         </TableCell>
                       </TableRow>
                     );

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
   FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft, Upload, Image as ImageIcon, Loader2, X
@@ -10,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { estimatesService } from '../../services/ventas.service';
+import { estimatesService, type EstimateKpiSummary } from '../../services/ventas.service';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
@@ -32,7 +33,7 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -54,7 +55,7 @@ import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 
 interface EstimacionesViewProps {
   data: Estimate[];
-  summaryData?: Estimate[];
+  summaryData?: EstimateKpiSummary;
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading: boolean;
@@ -69,6 +70,7 @@ interface EstimacionesViewProps {
   onSearchChange?: (value: string) => void;
   dateFrom?: string;
   dateTo?: string;
+  selectedBranchId?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
   salesAlert?: PurchaseAlertDetail;
 }
@@ -101,7 +103,7 @@ const isLocalEstimate = (id: string | number | undefined | null) => String(id ||
 const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
 const actionIconClass = 'size-4 text-muted-foreground';
 
-export function EstimacionesView({ data, summaryData, summaryLoading, summaryError, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: EstimacionesViewProps) {
+export function EstimacionesView({ data, summaryData, summaryLoading, summaryError, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, selectedBranchId = '', salesAlert }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
@@ -364,13 +366,32 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
     status: (row: Estimate) => normalizeEstimateStatus(row.status),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((estimate) => {
+  const hasColumnValueFilters = Object.values(colFilters.state).some((filter) => Boolean(filter.values?.length));
+  const columnFilterSummaryQuery = useQuery({
+    queryKey: ['sales', 'estimates-kpi-filtered-rows', user?.tenantId, searchTerm, dateFrom, dateTo, selectedBranchId],
+    queryFn: ({ signal }) => fetchAllReportPages<Estimate>(
+      (filters) => estimatesService.getAll(filters, signal),
+      { pageSize: 5000, report: true, search: searchTerm, dateFrom, dateTo, branchId: selectedBranchId || undefined },
+      signal,
+    ),
+    enabled: hasColumnValueFilters,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const fallbackSummaryRows = hasColumnValueFilters ? columnFilterSummaryQuery.data : undefined;
+  const summarySearchRows = (fallbackSummaryRows || []).filter((estimate) => {
     const search = searchTerm.toLowerCase();
     return estimate.number.toLowerCase().includes(search) || (estimate.customer?.name || '').toLowerCase().includes(search);
   });
   const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
   const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((estimate) => statusFilter === 'ALL' || normalizeEstimateStatus(estimate.status) === statusFilter), filterGetters);
+  const isKpiSummaryLoading = hasColumnValueFilters
+    ? columnFilterSummaryQuery.isPending || columnFilterSummaryQuery.isFetching
+    : summaryLoading;
+  const isKpiSummaryError = hasColumnValueFilters ? columnFilterSummaryQuery.isError : summaryError;
+  const summaryAvailable = hasColumnValueFilters ? fallbackSummaryRows !== undefined : summaryData !== undefined;
+  const summaryGroups = summaryData?.groups || [];
+  const selectedSummaryGroups = hasColumnValueFilters ? [] : summaryGroups.filter((group) => statusFilter === 'ALL' || group.status === statusFilter);
   const distinctCustomers = [...new Map(filtered.map((e) => [e.customer?.name || 'Varios', e.customer?.name || 'Varios'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((e) => (e.customer?.name || 'Varios') === label).length }));
   const statusOptionsForFilter = statusOptions.map((option) => ({ value: option.value, label: option.label, count: filtered.filter((e) => normalizeEstimateStatus(e.status) === option.value).length }));
@@ -840,13 +861,29 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
     }
   ];
 
-  const quotedTotalInDisplayCurrency = summaryFilteredData.reduce(
-    (acc, estimate) => acc + ((estimate as any).baseTotal !== null && (estimate as any).baseTotal !== undefined
-      ? Number((estimate as any).baseTotal)
-      : toBaseAmount(estimate.total || 0, estimate.currency, estimate.exchangeRate || globalRate)),
-    0,
+  const quotedTotalInDisplayCurrency = hasColumnValueFilters
+    ? summaryFilteredData.reduce(
+      (acc, estimate) => acc + ((estimate as any).baseTotal !== null && (estimate as any).baseTotal !== undefined
+        ? Number((estimate as any).baseTotal)
+        : toBaseAmount(estimate.total || 0, estimate.currency, estimate.exchangeRate || globalRate)),
+      0,
+    )
+    : selectedSummaryGroups.reduce((acc, group) => acc + (group.baseTotal !== null && group.baseTotalCount === group.count
+      ? group.baseTotal
+      : toBaseAmount(group.total, group.currency, group.exchangeRate || globalRate)), 0);
+  const originalQuotedTotals = summarizeAmountsByCurrency(
+    hasColumnValueFilters ? summaryFilteredData : selectedSummaryGroups,
+    (estimate: any) => Number(estimate.total || 0),
+    (estimate: any) => estimate.currency,
+    baseCurrency,
   );
-  const originalQuotedTotals = summarizeAmountsByCurrency(summaryFilteredData, (estimate) => Number(estimate.total || 0), (estimate) => estimate.currency, baseCurrency);
+  const summaryTotal = hasColumnValueFilters ? summaryRowsWithoutStatusFilter.length : Number(summaryData?.total || 0);
+  const approvedCount = hasColumnValueFilters
+    ? summaryRowsWithoutStatusFilter.filter((estimate) => String(estimate.status || '').toUpperCase() === 'APPROVED').length
+    : summaryGroups.filter((group) => group.status === 'APPROVED').reduce((total, group) => total + group.count, 0);
+  const inProcessCount = hasColumnValueFilters
+    ? summaryRowsWithoutStatusFilter.filter((estimate) => normalizeEstimateStatus(estimate.status) === 'IN_PROCESS').length
+    : summaryGroups.filter((group) => group.status === 'IN_PROCESS').reduce((total, group) => total + group.count, 0);
 
   if (editingId && localDoc) {
     return (
@@ -1005,7 +1042,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                       const tAmount = calculateGlobalTaxAmount(localDoc?.items || [], newRate, localRates.tRate);
                       const newTotal = base + tAmount + additionalChargesTotal();
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
-                    }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
+                    }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" currencyPrecision /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
                     <span className="min-w-[7.5rem] text-right tabular-nums">-{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.discountAmount)}</span>
                   </div>
                 </div>
@@ -1249,7 +1286,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                           const recalculated = recalcIndividualTotals(nextItems);
                           setLocalDoc({ ...localDoc, ...recalculated });
                           void handleUpdate(localDoc!.id, recalculated as any);
-                        }} className="w-full pr-6 text-left text-xs" />
+                        }} className="w-full pr-6 text-left text-xs" currencyPrecision />
                         <span className="pointer-events-none absolute right-2 text-[10px] text-muted-foreground">%</span>
                       </label>
                     </div>
@@ -1343,7 +1380,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                     <Input value={charge.description} onChange={(event) => editExtraChargeDescription(index, event.target.value)} onBlur={persistExtraCharges} placeholder="Descripción" className="h-8 w-full min-w-0 text-xs sm:flex-1" />
                     <div className="flex w-full min-w-0 items-center gap-1 rounded-md border border-input bg-background px-2 sm:w-auto sm:min-w-[8.5rem]">
                       <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
-                      <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeSalesExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" />
+                      <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeSalesExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" currencyPrecision />
                     </div>
                     <Button type="button" variant="ghost" size="icon" aria-label={`Eliminar coste extra ${index + 1}`} className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateExtraCharges(normalizeSalesExtraCharges(localDoc).filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="size-3.5" /></Button>
                   </div>
@@ -1354,7 +1391,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                     <Input value={localDoc.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value })} onBlur={() => updateDelivery({ deliveryDescription: localDoc.deliveryDescription || null })} placeholder="Descripción" className="h-8 w-full min-w-0 text-xs sm:flex-1" />
                     <div className="flex w-full min-w-0 items-center gap-1 rounded-md border border-input bg-background px-2 sm:w-auto sm:min-w-[8.5rem]">
                       <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
-                      <Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" />
+                      <Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" currencyPrecision />
                     </div>
                     <Button type="button" variant="ghost" size="icon" aria-label="Eliminar delivery" className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateDelivery({ deliveryDescription: null, deliveryAmount: 0 })}><Trash2 className="size-3.5" /></Button>
                   </div>
@@ -1484,17 +1521,17 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
-        <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
+      <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
+        <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {!resolvedSummaryRows
+        {!summaryAvailable
           ? <SalesKpiCard title="Total Cotizado" value="—" icon={FileSpreadsheet} color="text-primary" bg="bg-primary/10" />
           : displayMode === 'ORIGINAL'
           ? originalQuotedTotals.map((summary) => <SalesKpiCard key={`quoted-${summary.currency}`} title={`Total Cotizado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileSpreadsheet} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, baseCurrency)} icon={FileSpreadsheet} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Tasa Conversión" value={resolvedSummaryRows ? `${((summaryRowsWithoutStatusFilter.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (summaryRowsWithoutStatusFilter.length || 1)) * 100).toFixed(0)}%` : '—'} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title="En proceso" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(e => normalizeEstimateStatus(e.status) === 'IN_PROCESS').length : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
-        <SalesKpiCard title="Aprobadas" value={resolvedSummaryRows ? summaryRowsWithoutStatusFilter.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="Tasa Conversión" value={summaryAvailable ? `${((approvedCount / (summaryTotal || 1)) * 100).toFixed(0)}%` : '—'} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="En proceso" value={summaryAvailable ? inProcessCount : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
+        <SalesKpiCard title="Aprobadas" value={summaryAvailable ? approvedCount : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { masterConsoleService, type MasterConsoleTenantStorage } from '../services/master-console.service';
 import { useTenantQuery } from '../hooks/useTenantQuery';
+import { getCurrencyDecimalPlaces } from '../utils/currency';
 
 function formatBytes(bytes: number | undefined) {
   const value = Number(bytes || 0);
@@ -13,7 +14,7 @@ function formatBytes(bytes: number | undefined) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const unitIndex = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
   const amount = value / (1024 ** unitIndex);
-  return `${amount >= 100 || unitIndex === 0 ? amount.toFixed(0) : amount.toFixed(2)} ${units[unitIndex]}`;
+  return `${amount >= 100 || unitIndex === 0 ? amount.toFixed(0) : amount.toFixed(getCurrencyDecimalPlaces())} ${units[unitIndex]}`;
 }
 
 const count = (value: number | undefined) => new Intl.NumberFormat('es-NI').format(Number(value || 0));

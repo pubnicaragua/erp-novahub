@@ -7,6 +7,7 @@ import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { recurringExpensesService } from '../../services/compras.service';
+import type { RecurringExpenseSummary } from '../../services/compras.service';
 import type { RecurringExpense, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -19,7 +20,6 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
-import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
@@ -32,7 +32,7 @@ import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalIn
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 
-interface Props { data: RecurringExpense[]; summaryData?: RecurringExpense[]; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface Props { data: RecurringExpense[]; summaryData?: RecurringExpenseSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
 const freqOpts = [
   { label: 'Semanal',    value: 'weekly' },  
@@ -49,7 +49,7 @@ const statusOpts = [
 
 export function GastosRecurrentesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertDisplayAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-expenses-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
@@ -91,13 +91,12 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
     if (statusFilter !== 'ALL' && status !== statusFilter) return false;
     return (e.description||'').toLowerCase().includes(searchTerm.toLowerCase());
   });
-  const resolvedSummaryRows = summaryData === undefined && !summaryLoading && !summaryError ? data : getKpiSummaryRows({ data: summaryData, isLoading: summaryLoading, isError: summaryError });
-  const summarySearchRows = (resolvedSummaryRows || []).filter((expense) => {
-    const search = searchTerm.toLowerCase();
-    return String(expense.name || expense.description || '').toLowerCase().includes(search)
-      || String(expense.supplier?.name || '').toLowerCase().includes(search);
-  });
-  const summaryFilteredRows = summarySearchRows.filter((expense) => statusFilter === 'ALL' || String(expense.status || '').toUpperCase() === statusFilter);
+  const hasRecurringSummary = Boolean(summaryData && !summaryLoading && !summaryError);
+  const recurringSummaryGroups = summaryData?.groups || [];
+  const filteredRecurringSummaryGroups = recurringSummaryGroups.filter((group) => statusFilter === 'ALL' || group.status === statusFilter);
+  const recurringStatusCounts = Object.fromEntries(
+    Object.entries(summaryData?.statusCounts || {}).map(([status, count]) => [status.toUpperCase(), Number(count || 0)]),
+  );
 
   const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     const exportToastId = toast.loading('Generando reporte de gastos recurrentes...');
@@ -120,7 +119,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
         targetKey: 'compras.recurring-expense',
         columns: [
           { label: 'Descripción', value: (row) => row.description || '—' },
-          { label: 'Monto', align: 'right', value: (row) => formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency) },
+          { label: 'Monto', align: 'right', value: (row) => formatConvertedAmount(Number(row.amount || 0), row.currency || displayCurrency, row.exchangeRate) },
           { label: 'Frecuencia', align: 'center', value: (row) => freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—' },
           { label: 'Inicio', value: (row) => row.startDate ? new Date(row.startDate).toLocaleDateString('es-NI') : '—' },
           { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === String(row.status || '').toUpperCase())?.label || row.status || '—' },
@@ -142,8 +141,8 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
       });
       createReportWorkbook({
         fileName: 'gastos_recurrentes.xlsx',
-        sheets: [{ name: 'Registros', rows: exportRows.map(row => ({ Descripcion: row.description || '—', Monto: Number(row.amount || 0), Moneda: row.currency || displayCurrency, Frecuencia: freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—', Inicio: row.startDate || '—', Estado: row.status || '—' })) }],
-        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter },
+        sheets: [{ name: 'Registros', rows: exportRows.map(row => ({ Descripcion: row.description || '—', Monto: convertDisplayAmount(Number(row.amount || 0), row.currency || displayCurrency, row.exchangeRate), Moneda: displayMode === 'ORIGINAL' ? (row.currency || displayCurrency) : displayCurrency, Frecuencia: freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—', Inicio: row.startDate || '—', Estado: row.status || '—' })) }],
+        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter, Moneda: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
       });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el Excel de gastos recurrentes');
@@ -412,8 +411,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                           value={Number(localDoc.amount || 0) === 0 ? '' : formatDecimalInput(localDoc.amount)}
                           onChange={(e) => setLocalDoc({ ...localDoc, amount: normalizeDecimalInput(e.target.value) as any })}
                           className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" 
-                          placeholder="0.00" 
-                        />
+                          placeholder="0.00" currencyPrecision />
                      </div>
                   </div>
                   <div className="flex justify-between items-center text-base pt-2">
@@ -435,19 +433,19 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const monthly = summaryFilteredRows
-    .filter(e => (e.frequency || '').toUpperCase() === 'MONTHLY')
-    .reduce((acc, e) => acc + toDisplayAmount(Number(e.amount ?? e.baseAmount ?? 0), e.currency, e.exchangeRate), 0);
+  const monthlyGroups = filteredRecurringSummaryGroups.filter((group) => group.frequency === 'MONTHLY');
+  const monthly = monthlyGroups.reduce((acc, group) =>
+    acc + toDisplayAmount(group.amount, group.currency, group.exchangeRate), 0);
   const originalMonthlyAmounts = summarizeAmountsByCurrency(
-    summaryFilteredRows.filter(e => (e.frequency || '').toUpperCase() === 'MONTHLY'),
-    (expense) => Number(expense.amount ?? expense.baseAmount ?? 0),
-    (expense) => expense.currency,
+    monthlyGroups,
+    (group) => group.amount,
+    (group) => group.currency,
     baseCurrency,
   );
   const kpis = [
-    { title: 'Total Recurrentes', value: resolvedSummaryRows ? summaryFilteredRows.length : '—', icon: CalendarClock, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Activos', value: resolvedSummaryRows ? summarySearchRows.filter(e => (e.status||'').toUpperCase() === 'ACTIVE').length : '—', icon: RotateCcw, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
-    { title: 'Pausados', value: resolvedSummaryRows ? summarySearchRows.filter(e => (e.status||'').toUpperCase() === 'PAUSED').length : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PAUSED' as const },
+    { title: 'Total Recurrentes', value: hasRecurringSummary ? filteredRecurringSummaryGroups.reduce((total, group) => total + group.count, 0) : '—', icon: CalendarClock, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Activos', value: hasRecurringSummary ? recurringStatusCounts.ACTIVE || 0 : '—', icon: RotateCcw, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
+    { title: 'Pausados', value: hasRecurringSummary ? recurringStatusCounts.PAUSED || 0 : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PAUSED' as const },
   ];
 
   return (
@@ -455,7 +453,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {!resolvedSummaryRows ? <PurchaseKpiCard title="Est. Mensual" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" /> : displayMode === 'ORIGINAL'
+        {!hasRecurringSummary ? <PurchaseKpiCard title="Est. Mensual" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" /> : displayMode === 'ORIGINAL'
           ? originalMonthlyAmounts.map((summary) => <PurchaseKpiCard key={`monthly-${summary.currency}`} title={`Est. Mensual (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />)
           : <PurchaseKpiCard title={`Est. Mensual (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(monthly, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />}
         {kpis.map((k, i) => (

@@ -174,11 +174,12 @@ const TH = 'px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wide
 const TD = 'px-3 py-2 text-xs whitespace-nowrap';
 
 export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, displayMode, baseCurrency, valuationModeLabel, formatConvertedAmount: formatAmountBySource, formatExplicitAmount } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationModeLabel, formatConvertedAmount: formatAmountBySource, convertDisplayAmount, formatExplicitAmount } = useCurrency();
   const { themeConfig } = useTheme();
   const { canPerform } = useAuth();
   const canViewInventory = canPerform('REPORTS_INVENTORY', 'view');
-  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const currencySymbol = reportCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
@@ -713,7 +714,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(120, 120, 120);
-        doc.text(`${cutoffText(cutoffDate ?? new Date())}  |  Período: ${rangeLabel}  |  Moneda: ${displayCurrency}`, pageWidth / 2, currentY, { align: 'center' });
+        doc.text(`${cutoffText(cutoffDate ?? new Date())}  |  Período: ${rangeLabel}  |  Moneda: ${displayMode === 'ORIGINAL' ? `totales agregados en ${baseCurrency}` : reportCurrency}`, pageWidth / 2, currentY, { align: 'center' });
         currentY += 5;
         currentY = drawReportBrandMeta({ doc, settings: pdfSettings, pageWidth, contentWidth, currentY });
 
@@ -880,7 +881,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         ws.mergeCells(`A${currentRow}:G${currentRow}`);
         const cMeta = ws.getCell(`A${currentRow}`);
-        cMeta.value = `${cutoffText(cutoffDate ?? new Date())}  |  Período: ${rangeLabel}  |  Moneda: ${displayCurrency} (${currencySymbol})`;
+        cMeta.value = `${cutoffText(cutoffDate ?? new Date())}  |  Período: ${rangeLabel}  |  Moneda: ${displayMode === 'ORIGINAL' ? `${baseCurrency} · totales agregados en moneda base` : `${reportCurrency} (${currencySymbol})`}`;
         cMeta.font = { size: 10, italic: true, color: { argb: 'FF888888' } };
         cMeta.alignment = { horizontal: 'center' };
         currentRow += 2;
@@ -955,7 +956,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           appendDashboardExcelTable(ws, title, headers, rows);
         };
 
-        writeTable('Productos con mayor valor inmovilizado', ['Producto', 'Unidades', 'Costo prom.', 'Valor total', 'Participación', 'Días sin mov.', 'Bodega'], topValued.map((p) => [p.name, fmtQty(p.qty), p.costPrice, p.value, `${valuation.totalValue > 0 ? ((p.value / valuation.totalValue) * 100).toFixed(1) : '0'}%`, p.daysSince === null ? 'N/D' : fmtQty(p.daysSince), p.mainWarehouse]));
+        writeTable('Productos con mayor valor inmovilizado', ['Producto', 'Unidades', `Costo prom. (${reportCurrency})`, `Valor total (${reportCurrency})`, 'Participación', 'Días sin mov.', 'Bodega'], topValued.map((p) => [p.name, fmtQty(p.qty), convertDisplayAmount(p.costPrice, baseCurrency), convertDisplayAmount(p.value, baseCurrency), `${valuation.totalValue > 0 ? ((p.value / valuation.totalValue) * 100).toFixed(1) : '0'}%`, p.daysSince === null ? 'N/D' : fmtQty(p.daysSince), p.mainWarehouse]));
         writeTable('Productos con mayor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura'], topRotated.map((p) => [p.name, fmtQty(p.outs), fmtQty(p.avgQty), p.rotation !== null ? `${p.rotation.toFixed(1)}x` : 'N/D', fmtQty(p.qty), p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D']));
         writeTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [i.productName, i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), pdfStatusLabel(i.status, '-')]));
 

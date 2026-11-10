@@ -20,25 +20,37 @@ const DEPT_COLORS = [
 
 export function DashboardHRView({ stats, employees, departments, leaveRequests, reviews }: any) {
   const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
+  const payrollByCurrency = Array.isArray(stats?.payrollByCurrency) ? stats.payrollByCurrency : null;
   const activeEmployees = Number(stats?.activeEmployees ?? employees.filter((e: any) => e.employmentStatus === 'ACTIVE').length);
   const totalEmployees = Number(stats?.totalEmployees ?? employees.length);
   const inactiveEmployees = Math.max(0, totalEmployees - activeEmployees);
   const pendingLeaves = Number(stats?.pendingLeaves ?? leaveRequests.filter((l: any) => l.status === 'PENDING').length);
   const departmentCount = Number(stats?.departments ?? departments.length);
   const activePayrollEmployees = employees.filter((employee: any) => employee.employmentStatus === 'ACTIVE');
-  
-  const totalPayroll = activePayrollEmployees.reduce((sum: number, e: any) => {
-    const salary = Number(e.salary ?? e.salaryBase ?? 0) || 0;
-    return sum + (valuationMode === 'CURRENT'
-      ? convertCurrentAmount(salary, e.currency || 'USD')
-      : convertAmount(salary, e.currency || 'USD', e.exchangeRate));
-  }, 0);
+  const totalPayroll = payrollByCurrency
+    ? payrollByCurrency.reduce((sum: number, row: any) => {
+      const amount = Number(row.amount || 0);
+      const currency = row.currency || 'USD';
+      return sum + (valuationMode === 'CURRENT'
+        ? convertCurrentAmount(amount, currency)
+        : convertAmount(amount, currency));
+    }, 0)
+    : activePayrollEmployees.reduce((sum: number, e: any) => {
+      const salary = Number(e.salary ?? e.salaryBase ?? 0) || 0;
+      return sum + (valuationMode === 'CURRENT'
+        ? convertCurrentAmount(salary, e.currency || 'USD')
+        : convertAmount(salary, e.currency || 'USD', e.exchangeRate));
+    }, 0);
 
   const formattedPayroll = formatCurrentAmount(totalPayroll, displayCurrency);
-  const payrollCurrencies = summarizeAmountsByCurrency(activePayrollEmployees, () => 0, (employee: any) => employee.currency || 'USD').map((item) => item.currency);
-  const originalPayroll = (currency: SupportedCurrency) => activePayrollEmployees
-    .filter((employee: any) => normalizeCurrency(employee.currency || 'USD') === currency)
-    .reduce((sum: number, employee: any) => sum + (Number(employee.salary ?? employee.salaryBase ?? 0) || 0), 0);
+  const payrollCurrencies = payrollByCurrency
+    ? payrollByCurrency.map((row: any) => normalizeCurrency(row.currency || 'USD'))
+    : summarizeAmountsByCurrency(activePayrollEmployees, () => 0, (employee: any) => employee.currency || 'USD').map((item) => item.currency);
+  const originalPayroll = (currency: SupportedCurrency) => payrollByCurrency
+    ? payrollByCurrency.filter((row: any) => normalizeCurrency(row.currency || 'USD') === currency).reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0)
+    : activePayrollEmployees
+      .filter((employee: any) => normalizeCurrency(employee.currency || 'USD') === currency)
+      .reduce((sum: number, employee: any) => sum + (Number(employee.salary ?? employee.salaryBase ?? 0) || 0), 0);
   const payrollCards = displayMode === 'ORIGINAL'
     ? payrollCurrencies.map((currency) => ({ label: `Salarios activos (${currency})`, value: formatExplicitAmount(originalPayroll(currency), currency), sub: 'Suma de salarios registrados', icon: DollarSign, color: 'text-success', bg: 'bg-success/10', border: 'border-success/20' }))
     : [{ label: `Salarios activos${valuationModeSuffix}`, value: formattedPayroll, sub: 'Suma de salarios registrados', icon: DollarSign, color: 'text-success', bg: 'bg-success/10', border: 'border-success/20' }];
@@ -51,19 +63,24 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
   ];
 
   // Department distribution
+  const departmentCounts = new Map((stats?.departmentCounts || []).map((row: any) => [row.departmentId, Number(row.count || 0)]));
   const deptDistribution = departments.map((dept: any) => ({
     name: dept.name,
-    count: employees.filter((e: any) => e.departmentId === dept.id).length,
+    count: departmentCounts.has(dept.id) ? departmentCounts.get(dept.id) : employees.filter((e: any) => e.departmentId === dept.id).length,
     budget: dept.budget || 0,
   })).sort((a: any, b: any) => b.count - a.count);
 
   // Recent hires (last 30 days)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const recentHires = employees.filter((e: any) => new Date(e.hireDate) >= thirtyDaysAgo);
+  const recentHires = Array.isArray(stats?.recentHireRows)
+    ? stats.recentHireRows
+    : employees.filter((e: any) => new Date(e.hireDate) >= thirtyDaysAgo);
 
   // Top performers
-  const topPerformers = employees
+  const topPerformers = Array.isArray(stats?.topPerformers)
+    ? stats.topPerformers
+    : employees
     .map((e: any) => {
       const empReviews = reviews.filter((r: any) => r.employeeId === e.id);
       const avgRating = empReviews.length > 0
@@ -74,6 +91,10 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
     .filter((e: any) => e.avgRating > 0)
     .sort((a: any, b: any) => b.avgRating - a.avgRating)
     .slice(0, 5);
+
+  const pendingLeaveRows = Array.isArray(stats?.pendingLeavePreview)
+    ? stats.pendingLeavePreview
+    : leaveRequests.filter((leave: any) => leave.status === 'PENDING').slice(0, 6);
 
   return (
     <div className="space-y-6">
@@ -120,7 +141,7 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
           </CardHeader>
           <CardContent className="pt-5 space-y-4">
             {deptDistribution.slice(0, 8).map((dept: any, i: number) => {
-              const pct = employees.length > 0 ? (dept.count / employees.length) * 100 : 0;
+              const pct = totalEmployees > 0 ? (Number(dept.count) / totalEmployees) * 100 : 0;
               return (
                 <div key={i} className="space-y-1.5">
                   <div className="flex items-center justify-between">
@@ -158,7 +179,7 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
           <CardContent className="pt-4">
             {pendingLeaves > 0 ? (
               <div className="space-y-2">
-                {leaveRequests.filter((l: any) => l.status === 'PENDING').slice(0, 6).map((leave: any, i: number) => (
+                {pendingLeaveRows.map((leave: any, i: number) => (
                   <div key={i} className="flex items-center justify-between p-2 rounded-xl hover:bg-muted/20 transition-colors">
                     <div className="flex items-center gap-2">
                       <div className="size-7 rounded-full bg-warning/10 flex items-center justify-center text-[10px] font-black text-warning">

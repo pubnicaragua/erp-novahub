@@ -29,6 +29,7 @@ import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface SupplierOption { id: string; name: string; code: string; }
 interface OrderOption { id: string; number: string; status: string; }
@@ -380,7 +381,7 @@ export function Reconciliation() {
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Peso proveedor</p><p className="font-black">{preview.weights.supplierWeight.toFixed(2)}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Peso físico</p><p className="font-black">{preview.weights.physicalWeight.toFixed(2)}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Peso cobrable</p><p className="font-black">{preview.weights.billableWeight.toFixed(2)}</p></div>
-            <div><p className="text-[10px] font-black uppercase text-muted-foreground">Costo total</p><p className="font-black text-primary">${preview.totalAmount.toFixed(2)}</p></div>
+            <div><p className="text-[10px] font-black uppercase text-muted-foreground">Costo total</p><p className="font-black text-primary">${preview.totalAmount.toFixed(getCurrencyDecimalPlaces())}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Factura</p><p className="font-black">{preview.invoiceNumber}</p></div>
           </div>
           {canConfirmReconciliation && <Button className="mt-3 rounded-xl text-xs" onClick={confirm} disabled={confirming}>
@@ -394,7 +395,7 @@ export function Reconciliation() {
           <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-600"><CheckCircle2 className="size-4" /> Conciliación registrada</h3>
           <p className="mt-2 text-sm">
             {result.invoice ? (
-              <>Factura de proveedor <b>{result.invoice.number}</b> (${Number(result.invoice.total || 0).toFixed(2)}) con <b>{result.linkedPackages}</b> paquete(s). Los paquetes ya no aparecen en el listado de conciliación.</>
+              <>Factura de proveedor <b>{result.invoice.number}</b> (${Number(result.invoice.total || 0).toFixed(getCurrencyDecimalPlaces())}) con <b>{result.linkedPackages}</b> paquete(s). Los paquetes ya no aparecen en el listado de conciliación.</>
             ) : (
               <>Referencia sin proveedor: se omitió la factura de compra. <b>{result.linkedPackages}</b> paquete(s) vinculados como comprados.</>
             )}

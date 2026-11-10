@@ -730,6 +730,7 @@ export function ConfiguracionProyectosView({ canEdit = true }: { canEdit?: boole
                           id="alq-andamio"
                           type="number"
                           step="1"
+                          currencyPrecision
                           disabled={!canEdit}
                           value={config.rentalScaffoldingDailyNio}
                           onChange={(e) => updateNumberField('rentalScaffoldingDailyNio', e.target.value)}
@@ -742,6 +743,7 @@ export function ConfiguracionProyectosView({ canEdit = true }: { canEdit?: boole
                           id="alq-plataforma"
                           type="number"
                           step="1"
+                          currencyPrecision
                           disabled={!canEdit}
                           value={config.rentalPlatformDailyNio}
                           onChange={(e) => updateNumberField('rentalPlatformDailyNio', e.target.value)}
@@ -754,6 +756,7 @@ export function ConfiguracionProyectosView({ canEdit = true }: { canEdit?: boole
                           id="alq-rodos"
                           type="number"
                           step="1"
+                          currencyPrecision
                           disabled={!canEdit}
                           value={config.rentalCastersDailyNio}
                           onChange={(e) => updateNumberField('rentalCastersDailyNio', e.target.value)}

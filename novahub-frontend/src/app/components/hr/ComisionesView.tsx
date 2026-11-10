@@ -38,6 +38,7 @@ import { CommissionScaleConfigurationView } from './CommissionScaleConfiguration
 import { ExportMenu } from '../ui/ExportMenu';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 type CommissionLayout = 'table' | 'cards';
 type CommissionTab = 'sellers' | 'recent';
@@ -62,7 +63,7 @@ const STATUS_TONES: Record<string, string> = {
 };
 
 const fmt = (value: number, currency: string) =>
-  new Intl.NumberFormat('es-NI', { style: 'currency', currency, minimumFractionDigits: 2 }).format(Number(value) || 0);
+  new Intl.NumberFormat('es-NI', { style: 'currency', currency, minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() }).format(Number(value) || 0);
 
 const fmtQuantity = (value: unknown) =>
   new Intl.NumberFormat('es-NI', { maximumFractionDigits: 0 }).format(Math.round(Number(value) || 0));
@@ -131,6 +132,7 @@ function getCommissionLines(item: any, baseCurrency: string) {
     paymentDetail: line.paymentDetail || 'Pendiente',
     status: line.status || item.status,
     currency: line.currency || invoice.currency || baseCurrency,
+    exchangeRate: Number(line.exchangeRate ?? invoice.exchangeRate ?? 0),
   }));
 }
 
@@ -176,7 +178,7 @@ function RecentCards({ items, baseCurrency }: { items: any[]; baseCurrency: stri
 
 export function ComisionesView() {
   const { user, canPerform } = useAuth();
-  const { baseCurrency: contextBaseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatExplicitAmount } = useCurrency();
+  const { baseCurrency: contextBaseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, convertDisplayAmount } = useCurrency();
   const canViewHr = canPerform('HR_COMMISSIONS', 'view');
   const canViewConfiguration = canPerform('HR_COMMISSIONS_CONFIG', 'view');
   const canExportCommissions = canPerform('HR_COMMISSIONS', 'export');
@@ -196,6 +198,8 @@ export function ComisionesView() {
   const rawReport = query.data as any;
   const report = rawReport?.data ?? rawReport;
   const baseCurrency = (report?.baseCurrency || contextBaseCurrency || 'NIO') as 'NIO' | 'USD';
+  const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
+  const toReportAmount = (amount: number, sourceCurrency = baseCurrency, exchangeRate?: number) => convertDisplayAmount(amount, sourceCurrency, exchangeRate);
   const sellers: any[] = report?.sellers || [];
   const summary = report?.summary || {};
   const sourceBreakdown = (key: string, fallback: number) => {
@@ -230,23 +234,69 @@ export function ComisionesView() {
       const remainingPages = await Promise.all(Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) => hrService.getCommissionReport({ ...commissionFilters, page: index + 2, pageSize, report: true, export: true })));
       const items = [...(firstExportReport?.items || []), ...remainingPages.flatMap((page: any) => (page?.data ?? page)?.items || [])];
       if (!items.length) { toast.info('No hay comisiones para exportar con los filtros seleccionados'); return; }
-      const detailHeaders = ['Vendedor', 'Fecha', 'Hora', 'SKU', 'Cantidad', 'Precio de venta', 'Subtotal productos', 'Total de venta', 'Tipo de precio', 'Comisión', 'Factura / referencia', 'Cliente', 'Forma de pago', 'Forma de pago detallada', 'Estado'];
+      const detailHeaders = ['Vendedor', 'Fecha', 'Hora', 'SKU', 'Cantidad', `Precio de venta (${displayMode === 'ORIGINAL' ? 'origen' : reportCurrency})`, `Subtotal productos (${displayMode === 'ORIGINAL' ? 'origen' : reportCurrency})`, `Total de venta (${displayMode === 'ORIGINAL' ? 'origen' : reportCurrency})`, 'Tipo de precio', `Comisión (${displayMode === 'ORIGINAL' ? 'origen' : reportCurrency})`, 'Moneda', 'Factura / referencia', 'Cliente', 'Forma de pago', 'Forma de pago detallada', 'Estado'];
       const detailRowsForExport: unknown[][] = [detailHeaders];
-      items.forEach((item) => getCommissionLines(item, baseCurrency).forEach((line: any) => detailRowsForExport.push([item.seller?.name || '', formatDate(line.date), formatTime(line.date), line.code || '', Number(line.quantity || 0), Number(line.salePrice || 0), Number(line.productSubtotal || 0), Number(line.totalSale || 0), line.priceType || '', Number(line.commission || 0), line.invoiceNumber || item.invoice?.number || '', line.customer || '', line.paymentForm || '', line.paymentDetail || '', statusLabel(line.status)])));
-      const sellerRows: unknown[][] = [['Vendedor', 'Departamento', 'Ventas', 'Venta base', 'Comisión total', 'Pendiente', 'Pagada'], ...((report.sellers || []).map((seller: any) => [seller.seller?.name || '', seller.seller?.department || '', Number(seller.invoiceCount || 0), Number(seller.salesBase || 0), Number(seller.commissionBase || 0), Number(seller.pendingBase || 0), Number(seller.paidBase || 0)]))];
-      const recentRows: unknown[][] = [['Fecha', 'Vendedor', 'Departamento', 'Factura / referencia', 'Cliente', 'Venta base', 'Comisión', 'Estado'], ...items.slice().sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).map((item: any) => [formatDateTime(item.createdAt || item.invoice?.date), item.seller?.name || '', item.seller?.department || '', item.invoice?.number || '', item.invoice?.customer || item.invoice?.customCustomerName || 'Cliente General', Number(item.invoice?.totalBase ?? item.invoice?.total ?? 0), Number(item.amountBase ?? item.amount ?? 0), statusLabel(item.status)])];
+      items.forEach((item) => {
+        getCommissionLines(item, baseCurrency).forEach((line: any) => {
+          detailRowsForExport.push([
+            item.seller?.name || '',
+            formatDate(line.date),
+            formatTime(line.date),
+            line.code || '',
+            Number(line.quantity || 0),
+            toReportAmount(Number(line.salePrice || 0), line.currency, line.exchangeRate),
+            toReportAmount(Number(line.productSubtotal || 0), line.currency, line.exchangeRate),
+            toReportAmount(Number(line.totalSale || 0), line.currency, line.exchangeRate),
+            line.priceType || '',
+            toReportAmount(Number(line.commission || 0), line.currency, line.exchangeRate),
+            displayMode === 'ORIGINAL' ? line.currency : reportCurrency,
+            line.invoiceNumber || item.invoice?.number || '',
+            line.customer || '',
+            line.paymentForm || '',
+            line.paymentDetail || '',
+            statusLabel(line.status),
+          ]);
+        });
+      });
+      const sellerHeaders = ['Vendedor', 'Departamento', 'Ventas', `Venta base (${reportCurrency})`, `Comisión total (${reportCurrency})`, `Pendiente (${reportCurrency})`, `Pagada (${reportCurrency})`];
+      const sellersForExport = (report.sellers || []).map((seller: any) => [
+        seller.seller?.name || '',
+        seller.seller?.department || '',
+        Number(seller.invoiceCount || 0),
+        toReportAmount(Number(seller.salesBase || 0)),
+        toReportAmount(Number(seller.commissionBase || 0)),
+        toReportAmount(Number(seller.pendingBase || 0)),
+        toReportAmount(Number(seller.paidBase || 0)),
+      ]);
+      const sellerRows: unknown[][] = [sellerHeaders, ...sellersForExport];
+      const recentHeaders = ['Fecha', 'Vendedor', 'Departamento', 'Factura / referencia', 'Cliente', 'Venta base (' + reportCurrency + ')', 'Comisión (' + reportCurrency + ')', 'Estado'];
+      const recentRows: unknown[][] = [recentHeaders];
+      items.slice().sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).forEach((item: any) => {
+        recentRows.push([
+          formatDateTime(item.createdAt || item.invoice?.date),
+          item.seller?.name || '',
+          item.seller?.department || '',
+          item.invoice?.number || '',
+          item.invoice?.customer || item.invoice?.customCustomerName || 'Cliente General',
+          toReportAmount(Number(item.invoice?.totalBase ?? item.invoice?.total ?? 0)),
+          toReportAmount(Number(item.amountBase ?? item.amount ?? 0)),
+          statusLabel(item.status),
+        ]);
+      });
       const workbook = XLSX.utils.book_new();
       const detailSheet = XLSX.utils.aoa_to_sheet(detailRowsForExport);
       const sellerSheet = XLSX.utils.aoa_to_sheet(sellerRows);
       const recentSheet = XLSX.utils.aoa_to_sheet(recentRows);
-      detailSheet['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 8 }, { wch: 22 }, { wch: 10 }, { wch: 16 }, { wch: 19 }, { wch: 17 }, { wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 28 }, { wch: 17 }, { wch: 34 }, { wch: 20 }];
+      detailSheet['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 8 }, { wch: 22 }, { wch: 10 }, { wch: 16 }, { wch: 19 }, { wch: 17 }, { wch: 20 }, { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 28 }, { wch: 17 }, { wch: 34 }, { wch: 20 }];
       sellerSheet['!cols'] = [{ wch: 25 }, { wch: 22 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 }];
       recentSheet['!cols'] = [{ wch: 20 }, { wch: 25 }, { wch: 22 }, { wch: 20 }, { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 20 }];
       XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detalle');
       XLSX.utils.book_append_sheet(workbook, sellerSheet, 'Por vendedor');
       XLSX.utils.book_append_sheet(workbook, recentSheet, 'Recientes');
+      const outputCurrencyDescription = displayMode === 'ORIGINAL' ? 'Original por operación; resumen agregado en ' + baseCurrency : reportCurrency;
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['Moneda de salida', outputCurrencyDescription]]), 'Moneda');
       XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_comisiones'], 'xlsx', from, to));
-      toast.success(`Reporte de comisiones descargado (${items.length} registro(s))`);
+      toast.success('Reporte de comisiones descargado (' + items.length + ' registro(s))');
     } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo preparar el reporte de comisiones'); }
     finally { setExporting(false); }
   };
@@ -263,18 +313,40 @@ export function ComisionesView() {
       const pageCount = Math.max(1, Math.ceil(total / pageSize));
       const remainingPages = await Promise.all(Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) => hrService.getCommissionReport({ ...commissionFilters, page: index + 2, pageSize, report: true, export: true })));
       const items = [...(firstExportReport?.items || []), ...remainingPages.flatMap((page: any) => (page?.data ?? page)?.items || [])];
-      const sellerRows = (firstExportReport?.sellers || report.sellers || []).map((seller: any) => [seller.seller?.name || '—', seller.seller?.department || '—', Number(seller.invoiceCount || 0), Number(seller.salesBase || 0), Number(seller.commissionBase || 0), Number(seller.pendingBase || 0), Number(seller.paidBase || 0)]);
-      const detailRows = items.flatMap((item: any) => getCommissionLines(item, baseCurrency).map((line: any) => [item.seller?.name || '—', formatDate(line.date), line.invoiceNumber || item.invoice?.number || '—', Number(line.totalSale || 0), Number(line.commission || 0), statusLabel(line.status)]));
+      const sellerRows = (firstExportReport?.sellers || report.sellers || []).map((seller: any) => [
+        seller.seller?.name || '—',
+        seller.seller?.department || '—',
+        Number(seller.invoiceCount || 0),
+        toReportAmount(Number(seller.salesBase || 0)),
+        toReportAmount(Number(seller.commissionBase || 0)),
+        toReportAmount(Number(seller.pendingBase || 0)),
+        toReportAmount(Number(seller.paidBase || 0)),
+      ]);
+      const detailRows: unknown[][] = [];
+      items.forEach((item: any) => {
+        getCommissionLines(item, baseCurrency).forEach((line: any) => {
+          const row: unknown[] = [
+            item.seller?.name || '—',
+            formatDate(line.date),
+            line.invoiceNumber || item.invoice?.number || '—',
+            toReportAmount(Number(line.totalSale || 0), line.currency, line.exchangeRate),
+            toReportAmount(Number(line.commission || 0), line.currency, line.exchangeRate),
+          ];
+          if (displayMode === 'ORIGINAL') row.push(line.currency);
+          row.push(statusLabel(line.status));
+          detailRows.push(row);
+        });
+      });
       await generateConfiguredReportSectionsPDF({
         targetKey: 'recursos-humanos.commissions',
-        title: 'Comisiones de ventas',
+        title: displayMode === 'ORIGINAL' ? 'Comisiones de ventas · detalle original; resumen en ' + baseCurrency : 'Comisiones de ventas · ' + reportCurrency,
         tenantName: user?.tenantName || 'Mi Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         sections: [
-          { id: 'hr-commissions-sellers', title: 'Resumen por vendedor', headers: ['Vendedor', 'Departamento', 'Ventas', 'Venta base', 'Comisión total', 'Pendiente', 'Pagada'], rows: sellerRows.length ? sellerRows : [['Sin registros para el alcance seleccionado']] },
-          { id: 'hr-commissions-detail', title: 'Detalle de comisiones', headers: ['Vendedor', 'Fecha', 'Factura / referencia', 'Venta', 'Comisión', 'Estado'], rows: detailRows.length ? detailRows : [['Sin registros para el alcance seleccionado']] },
+          { id: 'hr-commissions-sellers', title: 'Resumen por vendedor', headers: ['Vendedor', 'Departamento', 'Ventas', 'Venta base (' + reportCurrency + ')', 'Comisión total (' + reportCurrency + ')', 'Pendiente (' + reportCurrency + ')', 'Pagada (' + reportCurrency + ')'], rows: sellerRows.length ? sellerRows : [['Sin registros para el alcance seleccionado']] },
+          { id: 'hr-commissions-detail', title: 'Detalle de comisiones', headers: ['Vendedor', 'Fecha', 'Factura / referencia', 'Venta (' + (displayMode === 'ORIGINAL' ? 'original' : reportCurrency) + ')', 'Comisión (' + (displayMode === 'ORIGINAL' ? 'original' : reportCurrency) + ')', ...(displayMode === 'ORIGINAL' ? ['Moneda'] : []), 'Estado'], rows: detailRows.length ? detailRows : [['Sin registros para el alcance seleccionado']] },
         ],
-        periodLabel: from || to ? `${from || 'Inicio'} al ${to || 'Actual'}` : undefined,
+        periodLabel: from || to ? (from || 'Inicio') + ' al ' + (to || 'Actual') : undefined,
         format: paperFormat,
         fileName: buildDateFilteredDownloadFileName(['reporte_comisiones'], 'pdf', from, to),
       });

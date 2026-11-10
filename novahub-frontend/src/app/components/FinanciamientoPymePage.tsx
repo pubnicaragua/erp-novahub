@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { cn } from './ui/utils';
 import { toast } from '@/app/services/toast';
 import { useAuth } from '../contexts/AuthContext';
+import { useCurrency } from '../contexts/CurrencyContext';
 import { financingService, type FinancingApplication, type PrefillData } from '../services/financing.service';
 import { getFinancingStatusTransitions, type FinancingWorkflowAction } from '../utils/financingWorkflow';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
@@ -103,6 +104,7 @@ interface FinanciamientoPymePageProps {
 
 export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: FinanciamientoPymePageProps) {
   const { user, canPerform } = useAuth();
+  const { baseCurrency, displayCurrency, displayMode, displayCurrencyLabel, convertDisplayAmount } = useCurrency();
   const visibleTabs = useMemo(() => FINANCING_TABS.filter((tab) => canPerform(tab.module, 'view')), [canPerform]);
   const [activeTab, setActiveTab] = useState<'solicitudes' | 'calculadora'>('solicitudes');
   const [applications, setApplications] = useState<FinancingApplication[]>([]);
@@ -163,10 +165,12 @@ export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange, isS
     const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de solicitudes…`);
     try {
       const response: any = await financingService.list({ page: 1, pageSize: 5000, report: true, export: true });
+      const sourceCurrency = baseCurrency;
       const rows = (Array.isArray(response) ? response : response?.data || []).map((application: FinancingApplication) => ({
         Número: application.number || application.id,
         Estado: financingService.getStatusLabel(application.status),
-        'Monto solicitado': application.requestedAmount,
+        'Monto solicitado': convertDisplayAmount(application.requestedAmount, sourceCurrency),
+        Moneda: displayMode === 'ORIGINAL' ? sourceCurrency : displayCurrency,
         Plazo: `${application.termMonths || 0} meses`,
         Destino: financingService.getPurposeLabel(application.purpose),
         Garantías: (application.guarantees || []).map(financingService.getGuaranteeLabel).join(', ') || 'Sin garantía',
@@ -174,8 +178,9 @@ export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange, isS
       }));
       const headers = Object.keys(rows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' });
       const sections = [{ id: 'financing-applications', title: 'Solicitudes de financiamiento', headers, rows: rows.length ? rows.map((row: Record<string, unknown>) => headers.map((header) => row[header] as string | number)) : [['Sin registros para el alcance seleccionado']] }];
-      if (format === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName(['solicitudes_financiamiento'], 'xlsx'), sheets: [{ name: 'Solicitudes', rows }], filters: { Alcance: 'Todos los registros autorizados' } });
-      else await generateConfiguredReportSectionsPDF({ targetKey: 'financiamiento.applications', title: 'Solicitudes de financiamiento', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, format: paperFormat, fileName: buildDatedDownloadFileName(['solicitudes_financiamiento'], 'pdf') });
+      const currencyLabel = displayMode === 'ORIGINAL' ? `Original · montos base en ${sourceCurrency}` : displayCurrencyLabel;
+      if (format === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName(['solicitudes_financiamiento'], 'xlsx'), sheets: [{ name: 'Solicitudes', rows }], filters: { Alcance: 'Todos los registros autorizados', Moneda: currencyLabel } });
+      else await generateConfiguredReportSectionsPDF({ targetKey: 'financiamiento.applications', title: `Solicitudes de financiamiento · Moneda: ${currencyLabel}`, tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, format: paperFormat, fileName: buildDatedDownloadFileName(['solicitudes_financiamiento'], 'pdf') });
       toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`, { id: toastId });
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo exportar las solicitudes', { id: toastId });

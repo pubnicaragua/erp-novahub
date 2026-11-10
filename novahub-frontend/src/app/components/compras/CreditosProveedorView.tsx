@@ -139,7 +139,7 @@ const statusOpts = [
 
 export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], supplierInvoices = [], productCatalog = [], selectedBranchId = '', pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertDisplayAmount, exchangeRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-credits-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ISSUED' | 'APPLIED'>('ALL');
@@ -451,8 +451,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
       createReportWorkbook({
         fileName: 'creditos_proveedor.xlsx',
-        sheets: [{ name: 'Créditos', rows: exportRows.map(row => ({ Numero: row.number || row.id?.slice(0, 8) || '—', Proveedor: row.supplier?.name || 'Sin proveedor', Fecha: row.date || '—', Total: Number(row.total || 0), Moneda: resolveSourceCurrency(row.currency), Estado: row.status || '—' })) }],
-        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter, Sucursal: selectedBranchId || 'Todas' },
+        sheets: [{ name: 'Créditos', rows: exportRows.map(row => ({ Numero: row.number || row.id?.slice(0, 8) || '—', Proveedor: row.supplier?.name || 'Sin proveedor', Fecha: row.date || '—', Total: convertDisplayAmount(Number(row.total || 0), resolveSourceCurrency(row.currency), row.exchangeRate), Moneda: displayMode === 'ORIGINAL' ? resolveSourceCurrency(row.currency) : displayCurrency, Estado: row.status || '—' })) }],
+        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter, Sucursal: selectedBranchId || 'Todas', Moneda: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
       });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el Excel de créditos');
@@ -838,8 +838,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                       <Input
                         disabled={!canMutate}
                         type="text" inputMode="decimal" min="0"
-                        value={formatDecimalInput(localDoc.interestRate || 0)}
-                        onChange={(e) => setLocalDoc({ ...localDoc, interestRate: normalizeDecimalInput(e.target.value) as any })}
+                        value={formatDecimalInput(localDoc.interestRate || 0, 2)}
+                        onChange={(e) => setLocalDoc({ ...localDoc, interestRate: normalizeDecimalInput(e.target.value, 2) as any })}
                         className="h-8 w-24 text-xs font-bold tabular-nums"
                         placeholder="% mensual"
                       />
@@ -939,8 +939,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   <Input
                     disabled={!canMutate || !!localDoc.supplierInvoiceId || !isGravado}
                     type="text" inputMode="decimal" min="0"
-                    value={formatDecimalInput(isGravado ? creditTaxRate : 0)}
-                    onChange={(e) => setLocalDoc({ ...localDoc, taxRate: normalizeDecimalInput(e.target.value) as any })}
+                    value={formatDecimalInput(isGravado ? creditTaxRate : 0, 2)}
+                    onChange={(e) => setLocalDoc({ ...localDoc, taxRate: normalizeDecimalInput(e.target.value, 2) as any })}
                     className="h-8 text-xs font-bold tabular-nums" />
                 </div>
                 <div>
@@ -974,8 +974,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   <Input
                     disabled={!canMutate || !!localDoc.supplierInvoiceId || String(localDoc.withholdingType || 'NONE').toUpperCase() === 'NONE'}
                     type="text" inputMode="decimal" min="0"
-                    value={formatDecimalInput(String(localDoc.withholdingType || 'NONE').toUpperCase() !== 'NONE' ? (localDoc.withholdingRate || 0) : 0)}
-                    onChange={(e) => setLocalDoc({ ...localDoc, withholdingRate: normalizeDecimalInput(e.target.value) as any })}
+                    value={formatDecimalInput(String(localDoc.withholdingType || 'NONE').toUpperCase() !== 'NONE' ? (localDoc.withholdingRate || 0) : 0, 2)}
+                    onChange={(e) => setLocalDoc({ ...localDoc, withholdingRate: normalizeDecimalInput(e.target.value, 2) as any })}
                     className="h-8 text-xs font-bold tabular-nums" />
                 </div>
                 <div>
@@ -983,8 +983,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   <Input
                     disabled={!canMutate || !!localDoc.supplierInvoiceId}
                     type="text" inputMode="decimal" min="0"
-                    value={formatDecimalInput(localDoc.discountRate || 0)}
-                    onChange={(e) => setLocalDoc({ ...localDoc, discountRate: normalizeDecimalInput(e.target.value) as any })}
+                    value={formatDecimalInput(localDoc.discountRate || 0, 2)}
+                    onChange={(e) => setLocalDoc({ ...localDoc, discountRate: normalizeDecimalInput(e.target.value, 2) as any })}
                     className="h-8 text-xs font-bold tabular-nums" />
                 </div>
                 <div className="sm:col-span-2 lg:col-span-3">
@@ -1091,8 +1091,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                         value={item.unitPrice === 0 ? '' : formatDecimalInput(item.unitPrice)}
                         onChange={(e) => handleItemChange(idx, 'unitPrice', normalizeCreditDecimalInput(e.target.value))}
                         className="h-8 text-xs text-right" 
-                        placeholder="0" 
-                      />
+                        placeholder="0" currencyPrecision />
                     </div>
                     <div className="col-span-2 flex items-center justify-end gap-2">
                       <span className="text-xs font-black w-20 text-right tabular-nums">{formatConvertedAmount(Number(item.total || 0), resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span>

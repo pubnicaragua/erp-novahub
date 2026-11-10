@@ -30,6 +30,11 @@ interface DashboardContext {
   periodTo?: string;
 }
 
+interface FloatingChatProps {
+  initiallyOpen?: boolean;
+  initialRequest?: { message?: string; context?: DashboardContext } | null;
+}
+
 const WELCOME_MESSAGE = 'Hola. Soy Nova AI, tu asistente empresarial. Puedo revisar ventas, inventario, cartera, caja, clientes y cotizaciones con los datos autorizados de tu empresa.';
 const SUGGESTIONS = [
   '¿Cómo va mi negocio hoy?',
@@ -164,7 +169,7 @@ function NovaFormattedMessage({ content }: { content: string }) {
   return <div className="space-y-2">{blocks}</div>;
 }
 
-export function FloatingChat() {
+export function FloatingChat({ initiallyOpen = false, initialRequest }: FloatingChatProps = {}) {
   const { user } = useAuth();
   const userId = user?.id || user?.email;
   const tenantId = user?.clientTenantId || user?.tenantId;
@@ -173,8 +178,8 @@ export function FloatingChat() {
   const openStorageKey = useMemo(() => scopedKey(OPEN_KEY, userId, tenantId), [tenantId, userId]);
   const userName = user?.name || user?.email || '';
   const greeting = userName ? `Hola, ${userName.split(' ')[0]}. Soy Nova AI, tu asistente empresarial. Puedo revisar los datos autorizados de tu empresa y ayudarte a decidir qué atender primero.` : WELCOME_MESSAGE;
-  const [open, setOpen] = useState(() => safeGetItem(openStorageKey) === 'true');
-  const [input, setInput] = useState('');
+  const [open, setOpen] = useState(() => initiallyOpen || safeGetItem(openStorageKey) === 'true');
+  const [input, setInput] = useState(initialRequest?.message || '');
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const history = loadHistory(historyKey);
     return history.length ? history : [{ id: makeId(), role: 'bot', content: greeting }];
@@ -183,7 +188,7 @@ export function FloatingChat() {
   const [activityIndex, setActivityIndex] = useState(0);
   const [guidesLoaded, setGuidesLoaded] = useState(false);
   const [conversationId, setConversationId] = useState(() => safeGetItem(conversationStorageKey) || undefined);
-  const [dashboardContext, setDashboardContext] = useState<DashboardContext | undefined>();
+  const [dashboardContext, setDashboardContext] = useState<DashboardContext | undefined>(initialRequest?.context);
   const guidesRef = useRef<ChatGuide[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

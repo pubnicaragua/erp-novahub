@@ -38,6 +38,7 @@ import {
 import { suppliersService } from '../../services/compras.service';
 import { queryClient } from '../../services/query-client';
 import { useAuth } from '../../contexts/AuthContext';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface ProyectoCotizacionesPanelProps {
   projectId: string;
@@ -388,7 +389,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
                   <div className="flex justify-between items-center text-muted-foreground">
                     <span>{q._count?.materials || 0} Materiales · {q._count?.subQuotations || 0} Proveedores</span>
                     <span className="font-mono font-bold text-foreground">
-                      {q.currency} {Number(q.selectedTotalAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                      {q.currency} {Number(q.selectedTotalAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}
                     </span>
                   </div>
                 </CardContent>
@@ -571,7 +572,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-1">
             <div className="text-2xl font-black font-mono">
-              {currentQuotation.currency} {Number(currentQuotation.quotedTotalAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+              {currentQuotation.currency} {Number(currentQuotation.quotedTotalAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}
             </div>
             <p className="text-[11px] text-muted-foreground">
               Suma de todas las ofertas recibidas de los proveedores.
@@ -588,7 +589,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-1">
             <div className="text-2xl font-black font-mono text-primary">
-              {currentQuotation.currency} {Number(currentQuotation.selectedTotalAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+              {currentQuotation.currency} {Number(currentQuotation.selectedTotalAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}
             </div>
             <p className="text-[11px] text-muted-foreground">
               Suma de ofertas elegidas para compra + IVA proporcional por proveedor.
@@ -723,7 +724,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
                       <div className="flex justify-between items-baseline border-t border-border/40 pt-2 text-xs">
                         <span className="text-muted-foreground">Total Ofertado:</span>
                         <span className="font-mono text-base font-bold text-foreground">
-                          {sub.currency} {Number(sub.total || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                          {sub.currency} {Number(sub.total || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}
                         </span>
                       </div>
 
@@ -841,7 +842,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
                                   </div>
                                   <div className="pt-1 flex items-baseline justify-between font-mono">
                                     <span className="text-xs font-bold">
-                                      {isQuoted ? `C$ ${off.unitPrice.toFixed(2)}` : 'Sin precio'}
+                                      {isQuoted ? `C$ ${off.unitPrice.toFixed(getCurrencyDecimalPlaces())}` : 'Sin precio'}
                                     </span>
                                     {off.isSelected ? (
                                       <CheckCircle2 className="size-3.5 text-primary" />
@@ -1002,8 +1003,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
                                   }))
                                 }
                                 placeholder="0.00"
-                                className="h-7 text-right font-mono text-xs"
-                              />
+                                className="h-7 text-right font-mono text-xs" currencyPrecision />
                             </td>
                             <td className="p-2 text-right">
                               <Input
@@ -1076,8 +1076,8 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
                     <span>{new Date(snap.createdAt).toLocaleString('es-NI')}</span>
                   </div>
                   <div className="font-mono text-xs">
-                    <p>Subtotal previo: C$ {snap.snapshot?.subtotal?.toFixed(2) || '0.00'}</p>
-                    <p>Total previo: C$ {snap.snapshot?.total?.toFixed(2) || '0.00'}</p>
+                    <p>Subtotal previo: C$ {snap.snapshot?.subtotal.toFixed(getCurrencyDecimalPlaces()) || '0.00'}</p>
+                    <p>Total previo: C$ {snap.snapshot?.total.toFixed(getCurrencyDecimalPlaces()) || '0.00'}</p>
                   </div>
                 </div>
               ))

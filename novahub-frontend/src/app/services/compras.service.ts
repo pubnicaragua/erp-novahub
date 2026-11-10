@@ -9,6 +9,7 @@ import type {
 
 export const suppliersService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Supplier>>('/purchases/suppliers', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<SupplierKpiSummary>('/purchases/suppliers/summary', { params: filters as any, signal }),
   getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Pick<Supplier, 'id' | 'code' | 'name' | 'status'>>>('/purchases/lookups/suppliers', { params: filters as any, signal }),
   /** Todos los proveedores del lookup (páginas de 200); evita que el selector se quede en la primera página. */
   getAllLookup: (filters?: ApiFilters, signal?: AbortSignal) => fetchAllReportPages<Pick<Supplier, 'id' | 'code' | 'name' | 'status'>>(
@@ -27,6 +28,8 @@ export const suppliersService = {
 
 export const purchaseOrdersService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PurchaseOrder>>('/purchases/orders', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters & { summarySearch?: string; summaryFilters?: string }, signal?: AbortSignal) =>
+    api.get<PurchaseOrderSummary>('/purchases/orders/summary', { params: filters as any, signal }),
   getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Pick<PurchaseOrder, 'id' | 'number' | 'status' | 'supplierId' | 'warehouseId'>>>('/purchases/lookups/orders', { params: filters as any, signal }),
   getById: (id: string) => api.get<PurchaseOrder>(`/purchases/orders/${id}`),
   create: (data: Partial<PurchaseOrder>, idempotencyKey?: string) => api.idempotentPost<PurchaseOrder>('/purchases/orders', data, idempotencyKey),
@@ -40,9 +43,16 @@ export const purchaseOrdersService = {
   convertToReceipt: (id: string) => api.post<PurchaseReceipt>(`/purchases/orders/${id}/convert-to-receipt`, {}),
 };
 
+export interface PurchaseOrderSummary {
+  total: number;
+  statusCounts: Partial<Record<'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'REJECTED', number>>;
+}
+
 // ✅ CORRECTED: was /purchase-receipts (404) → now /purchases/receipts
 export const purchaseReceiptsService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PurchaseReceipt>>('/purchases/receipts', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters & { summarySearch?: string }, signal?: AbortSignal) =>
+    api.get<PurchaseReceiptSummary>('/purchases/receipts/summary', { params: filters as any, signal }),
   getById: (id: string) => api.get<PurchaseReceipt>(`/purchases/receipts/${id}`),
   create: (data: Partial<PurchaseReceipt>, idempotencyKey?: string) => api.idempotentPost<PurchaseReceipt>('/purchases/receipts', data, idempotencyKey),
   update: (id: string, data: Partial<PurchaseReceipt>, idempotencyKey?: string) => api.idempotentPatch<PurchaseReceipt>(`/purchases/receipts/${id}`, data, idempotencyKey),
@@ -54,8 +64,18 @@ export const purchaseReceiptsService = {
     api.post<SupplierInvoice>(`/purchases/receipts/${id}/invoice`, data),
 };
 
+export interface PurchaseReceiptSummary {
+  total: number;
+  statusCounts: Record<string, number>;
+  receivedQuantity: number;
+  incidentCount: number;
+  incidentRejectedQuantity: number;
+}
+
 export const supplierInvoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<SupplierInvoice>>('/purchases/invoices', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters & { summarySearch?: string }, signal?: AbortSignal) =>
+    api.get<SupplierInvoiceSummary>('/purchases/invoices/summary', { params: filters as any, signal }),
   getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<{ id: string; number: string; supplierId: string; supplierName: string; balance: number; status: string }>>('/purchases/lookups/invoices', { params: filters as any, signal }),
   getById: (id: string) => api.get<SupplierInvoice>(`/purchases/invoices/${id}`),
   create: (data: Partial<SupplierInvoice>) => api.post<SupplierInvoice>('/purchases/invoices', data),
@@ -67,9 +87,27 @@ export const supplierInvoicesService = {
   removeAttachment: (id: string, attachmentId: string) => api.delete<void>(`/purchases/invoices/${id}/attachments/${attachmentId}`),
 };
 
+export interface SupplierKpiSummary {
+  total: number;
+  groups: Array<{
+    status: string;
+    count: number;
+    balance: number;
+    balanceOriginalCurrencyBreakdown: Array<{ currency: string; amount: number; count: number }>;
+  }>;
+}
+
+export interface SupplierInvoiceSummary {
+  total: number;
+  paidCount: number;
+  overdueCount: number;
+  pendingGroups: Array<{ currency: string; exchangeRate: number; amount: number }>;
+}
+
 // ✅ CORRECTED: was /recurring-supplier-invoices (404) → now /purchases/recurring-invoices
 export const recurringSupplierInvoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<RecurringSupplierInvoice>>('/purchases/recurring-invoices', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<RecurringSupplierInvoiceSummary>('/purchases/recurring-invoices/summary', { params: filters as any, signal }),
   create: (data: Partial<RecurringSupplierInvoice>) => api.post<RecurringSupplierInvoice>('/purchases/recurring-invoices', data),
   update: (id: string, data: Partial<RecurringSupplierInvoice>) => api.patch<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}`, data),
   pause: (id: string) => api.patch<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}/pause`, {}),
@@ -95,9 +133,22 @@ type PurchaseMixedPaymentInput = Omit<Partial<PaymentMade>, 'payments'> & {
   payments: PurchasePaymentLineInput[];
 };
 
+export interface RecurringSupplierInvoiceSummary {
+  total: number;
+  statusCounts: Record<string, number>;
+  groups: Array<{ status: string; frequency: string; currency: string; exchangeRate: number; count: number; amount: number }>;
+}
+
+export interface PaymentMadeSummary {
+  transactionCount: number;
+  currencyTotals: Array<{ currency: string; amount: number }>;
+  valuationGroups: Array<{ currency: string; exchangeRate: number; amount: number }>;
+}
+
 export const paymentsMadeService = {
   getIntegrationPolicy: () => api.get<{ accountingEnabled: boolean; accountingRequired: boolean; autoGenEnabled: boolean; financeEnabled: boolean; routes: Record<string, any> }>('/purchases/integration-policy'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentMade>>('/purchases/payments', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaymentMadeSummary>('/purchases/payments/summary', { params: filters as any, signal }),
   create: (data: Partial<PaymentMade>) => api.post<PaymentMade>('/purchases/payments', data),
   createMixed: (data: PurchaseMixedPaymentInput) => api.post<PaymentMade>('/purchases/payments/mixed', data),
   update: (id: string, data: Partial<PaymentMade>) => api.patch<PaymentMade>(`/purchases/payments/${id}`, data),
@@ -119,6 +170,7 @@ export const supplierCreditsService = {
 
 export const expensesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Expense>>('/purchases/expenses', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<ExpenseSummary>('/purchases/expenses/summary', { params: filters as any, signal }),
   create: (data: Partial<Expense>) => api.post<Expense>('/purchases/expenses', data),
   previewImport: (rows: ExpenseImportRow[]) => api.post<ExpenseImportPreviewResponse>('/purchases/expenses/import/preview', { rows }),
   confirmImportBlock: (data: { attemptId: string; rows: ExpenseImportRow[] }) => api.post<ExpenseImportBlockResponse>('/purchases/expenses/import/confirm-block', data),
@@ -128,6 +180,13 @@ export const expensesService = {
   cancel: (id: string) => api.post<Expense>(`/purchases/expenses/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/purchases/expenses/${id}`),
 };
+
+export interface ExpenseSummary {
+  statusCounts: Record<string, number>;
+  countGroups: Array<{ status: string; category: string; count: number }>;
+  categories: string[];
+  monthlyGroups: Array<{ status: string; category: string; currency: string; exchangeRate: number; amount: number }>;
+}
 
 export interface ExpenseImportRow {
   sourceRowNumber: number;
@@ -189,6 +248,7 @@ export interface ExpenseImportBlockResponse {
 
 export const recurringExpensesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<RecurringExpense>>('/purchases/recurring-expenses', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<RecurringExpenseSummary>('/purchases/recurring-expenses/summary', { params: filters as any, signal }),
   create: (data: Partial<RecurringExpense>) => api.post<RecurringExpense>('/purchases/recurring-expenses', data),
   update: (id: string, data: Partial<RecurringExpense>) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}`, data),
   pause: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/pause`, {}),
@@ -196,6 +256,12 @@ export const recurringExpensesService = {
   cancel: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/purchases/recurring-expenses/${id}`),
 };
+
+export interface RecurringExpenseSummary {
+  total: number;
+  statusCounts: Record<string, number>;
+  groups: Array<{ status: string; frequency: string; currency: string; exchangeRate: number; count: number; amount: number }>;
+}
 
 export const purchasesReportsService = {
   getAging: (supplierId?: string) => api.get<any>('/purchases/reports/aging', { supplierId }),
@@ -209,6 +275,7 @@ export const supplierPricesService = {
 // ─── SOLICITUDES DE COMPRA ──────────────────────────────────────────────────
 export const purchaseRequestsService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PurchaseRequest>>('/purchases/requests', { params: filters as any, signal }),
+  getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PurchaseRequestSummary>('/purchases/requests/summary', { params: filters as any, signal }),
   getById: (id: string) => api.get<PurchaseRequest>(`/purchases/requests/${id}`),
   create: (data: Partial<PurchaseRequest>) => api.post<PurchaseRequest>('/purchases/requests', data),
   update: (id: string, data: Partial<PurchaseRequest>) => api.patch<PurchaseRequest>(`/purchases/requests/${id}`, data),
@@ -216,6 +283,11 @@ export const purchaseRequestsService = {
   changeStatus: (id: string, status: string, reason?: string, supplierId?: string) => api.post<PurchaseRequest>(`/purchases/requests/${id}/status`, { status, reason, supplierId }),
   approve: (id: string, supplierId: string, idempotencyKey?: string) => api.idempotentPost<any>(`/purchases/requests/${id}/approve`, { supplierId }, idempotencyKey),
 };
+
+export interface PurchaseRequestSummary {
+  total: number;
+  statusCounts: Record<string, number>;
+}
 
 // ─── GESTIÓN DE COMPRA ──────────────────────────────────────────────────────
 export const purchaseManagementService = {

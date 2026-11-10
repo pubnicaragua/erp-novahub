@@ -2,6 +2,7 @@ import { Card, CardContent, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Cloud, Check, HardDrive, Zap, Shield, Share2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const plans = [
   {
@@ -104,7 +105,7 @@ export const NovaCloudPlanesView = () => {
                     </div>
                     <CardTitle className="text-xl font-black mb-1">{plan.name}</CardTitle>
                     <div className="flex items-baseline gap-1 mb-2">
-                      <span className="text-4xl font-black">${plan.price.toFixed(2)}</span>
+                      <span className="text-4xl font-black">${plan.price.toFixed(getCurrencyDecimalPlaces())}</span>
                       <span className="text-sm text-muted-foreground font-bold">{plan.period}</span>
                     </div>
                     <p className="text-sm font-bold text-cyan-500 mb-6">

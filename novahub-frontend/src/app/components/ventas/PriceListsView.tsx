@@ -30,6 +30,7 @@ import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 import { buildDownloadFileName } from '../../utils/exportFileNames';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface PriceListsViewProps { products?: any[]; onRefresh?: () => void; isSidebarCollapsed?: boolean; }
 type ImportRow = { code: string; name: string; cost: number | ''; prices: Record<string, number | ''>; error?: string };
@@ -106,8 +107,8 @@ function PriceImportPreviewPage({
       <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
         <ImportPreviewField label="Código / SKU"><Input className={`${importPreviewFieldClass} font-mono`} value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></ImportPreviewField>
         <ImportPreviewField label="Producto"><Input className={importPreviewFieldClass} value={row.name} disabled /></ImportPreviewField>
-        {showCost && <ImportPreviewField label={`Costo (${currencyLabel(currency)})`}><Input className={`${importPreviewFieldClass} text-right`} type="number" value={row.cost} disabled /></ImportPreviewField>}
-        {lists.map((list) => <ImportPreviewField key={list.id} label={list.name}><Input className={`${importPreviewFieldClass} text-right`} type="number" min="0" value={row.prices[list.code] ?? ''} onChange={(event) => onRowUpdate(index, list.code, event.target.value)} disabled={importing} /></ImportPreviewField>)}
+        {showCost && <ImportPreviewField label={`Costo (${currencyLabel(currency)})`}><Input className={`${importPreviewFieldClass} text-right`} type="number" value={row.cost} disabled currencyPrecision /></ImportPreviewField>}
+        {lists.map((list) => <ImportPreviewField key={list.id} label={list.name}><Input className={`${importPreviewFieldClass} text-right`} type="number" min="0" value={row.prices[list.code] ?? ''} onChange={(event) => onRowUpdate(index, list.code, event.target.value)} disabled={importing} currencyPrecision /></ImportPreviewField>)}
       </div>
     </ImportPreviewMobileCard>
   );
@@ -161,8 +162,8 @@ function PriceImportPreviewPage({
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                   <TableCell><Input className="h-9 font-mono text-xs" value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell className="font-medium">{row.name || `${itemLabel} no encontrado`}</TableCell>
-                  {showCost && <TableCell><Input className="h-9 text-right text-muted-foreground" type="number" value={row.cost} disabled /></TableCell>}
-                  {lists.map((list) => <TableCell key={list.id}><Input className="h-9 text-right" type="number" min="0" value={row.prices[list.code] ?? ''} onChange={(event) => onRowUpdate(index, list.code, event.target.value)} disabled={importing} /></TableCell>)}
+                  {showCost && <TableCell><Input className="h-9 text-right text-muted-foreground" type="number" value={row.cost} disabled currencyPrecision /></TableCell>}
+                  {lists.map((list) => <TableCell key={list.id}><Input className="h-9 text-right" type="number" min="0" value={row.prices[list.code] ?? ''} onChange={(event) => onRowUpdate(index, list.code, event.target.value)} disabled={importing} currencyPrecision /></TableCell>)}
                   <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : 'text-xs text-emerald-600'}>{row.error || 'Correcto'}</TableCell>
                 </TableRow>
                 );
@@ -409,7 +410,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   // comas se reserva para la vista; aquí siempre debe entrar un decimal plano.
   const getEditablePriceValue = (basePrice: number) => {
     const displayPrice = convertBaseToDisplay(basePrice);
-    return Number.isFinite(displayPrice) ? displayPrice.toFixed(2) : '';
+    return Number.isFinite(displayPrice) ? displayPrice.toFixed(getCurrencyDecimalPlaces()) : '';
   };
 
   const getTemplatePriceValue = (item?: PriceListItem) => {
@@ -953,7 +954,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                     <TableCell className="text-xs text-muted-foreground">{product.category?.name || '-'}</TableCell>
                     {visibleLists.map((list) => {
                       const item = byList?.get(list.id);
-                      return <TableCell key={list.id} className="text-right">{isEditing ? <Input className="ml-auto h-8 w-32 text-right" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} /> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'rounded-md bg-amber-500/10 font-medium italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio'}</div>}{!item && <span className="mt-1 block text-[10px] text-muted-foreground">Pendiente</span>}</TableCell>;
+                      return <TableCell key={list.id} className="text-right">{isEditing ? <Input className="ml-auto h-8 w-32 text-right" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} currencyPrecision /> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'rounded-md bg-amber-500/10 font-medium italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio'}</div>}{!item && <span className="mt-1 block text-[10px] text-muted-foreground">Pendiente</span>}</TableCell>;
                     })}
                       <TableCell className="text-right">
                       {isEditing ? <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="size-7 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id} aria-label={`Guardar precios de ${product.name}`}>{saving === product.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}</Button><Button variant="ghost" size="icon" className="size-7 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id}><X className="size-4" /></Button></div> : canEditPriceList && <Button variant="ghost" size="icon" className="size-7" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}
@@ -994,7 +995,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                     return <div key={list.id} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2.5 first:rounded-t-xl last:rounded-b-xl">
                       <span className="min-w-0 break-words text-xs font-bold">{list.name}<span className="ml-1.5 font-mono text-[9px] font-normal text-muted-foreground">{list.code}</span></span>
                       <div className="flex min-w-0 shrink-0 flex-col items-end">
-                        {isEditing ? <Input className="h-8 w-32 max-w-[45vw] text-right text-xs" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} aria-label={`Precio ${list.name} para ${product.name}`} /> : <span className={`text-sm font-bold tabular-nums ${!item ? 'italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio'}</span>}
+                        {isEditing ? <Input className="h-8 w-32 max-w-[45vw] text-right text-xs" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} aria-label={`Precio ${list.name} para ${product.name}`} currencyPrecision /> : <span className={`text-sm font-bold tabular-nums ${!item ? 'italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio'}</span>}
                         {!item && <span className="mt-0.5 text-[9px] text-muted-foreground">Pendiente</span>}
                       </div>
                     </div>;
@@ -1276,8 +1277,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                                 onChange={(e) => setEditingVariantPrices((current) => ({
                                   ...current,
                                   [variant.id]: { ...current[variant.id], [list.id]: e.target.value },
-                                }))}
-                              />
+                                }))} currencyPrecision />
                             </TableCell>
                           );
                         }

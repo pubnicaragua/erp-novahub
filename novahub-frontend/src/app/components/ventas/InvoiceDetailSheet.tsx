@@ -12,6 +12,7 @@ import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { getInvoicePaymentPresentation } from '../../utils/paymentMethods';
 import { CurrencyRateDetails } from '../ui/CurrencyValuation';
+import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 type InvoiceSourceBadge = {
   label: string;
@@ -222,7 +223,7 @@ export function InvoiceDetailSheet({
                   <div className="mt-3 space-y-2">
                     {invoice.payments.map((payment) => {
                       const remainingAfterPayment = getPaymentRemaining(payment, invoice);
-                      const paidAfterPayment = Math.max(0, Number((Number(invoice.total || 0) - remainingAfterPayment).toFixed(2)));
+                      const paidAfterPayment = Math.max(0, Number((Number(invoice.total || 0) - remainingAfterPayment).toFixed(getCurrencyDecimalPlaces())));
                       const isCreditPayment = Boolean(payment.creditNoteId || payment.creditNote || (payment as any).creditNoteNumber);
                       const paymentStatus = isCreditPayment && remainingAfterPayment <= 0.01
                         ? { label: 'Cancelado', className: 'bg-primary/10 text-primary' }
