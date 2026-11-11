@@ -20,6 +20,7 @@ import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import type { SalesPaginationControls } from '../../types';
 import { TABLE_LAYOUT_BREAKPOINT, useCardsOnlyBelowTableBreakpoint } from './ViewLayoutSelect';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
+import { cardHeading } from '../../utils/displayText';
 
 const EMPTY_SELECT_VALUE = '__erp_empty_select_value__';
 const toRadixSelectValue = (value: unknown) => value === '' || value === null || value === undefined ? EMPTY_SELECT_VALUE : String(value);
@@ -821,10 +822,10 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   )}
                   <div className="min-w-0">
                     <p className="truncate text-sm font-black text-foreground">
-                      {String(row.name || row.title || row.number || row.code || rowId)}
+                      {cardHeading(row).title}
                     </p>
                     <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                      {String(row.code || row.number || rowId)}
+                      {cardHeading(row).subtitle}
                     </p>
                   </div>
                   {isOpening && <span role="status" className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary">

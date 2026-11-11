@@ -38,6 +38,7 @@ import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { firstReadable } from '../../utils/displayText';
 
 const formatDate = (value?: string | Date) => (value ? format(new Date(value), 'dd/MM/yyyy', { locale: es }) : '');
 const today = () => format(new Date(), 'yyyy-MM-dd');
@@ -682,7 +683,7 @@ export function Billing() {
                   const pkgs = trace.billed.filter((p) => p.saleInvoiceId === invoiceId);
                   return (
                     <div key={invoiceId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background/70 px-2 py-1.5 text-[11px]">
-                      <span className="font-black text-primary">{pkgs[0]?.saleInvoiceNumber || invoiceId}</span>
+                      <span className="font-black text-primary">{firstReadable(pkgs[0]?.saleInvoiceNumber, invoiceId)}</span>
                       <span className="text-muted-foreground">{pkgs.length} paquete(s) · ${pkgs.reduce((s, p) => s + (p.saleAmount ?? 0), 0).toFixed(getCurrencyDecimalPlaces())}</span>
                       <div className="flex gap-1">
                         {canCancelBilling && <Button variant="outline" size="sm" className="h-7 rounded-lg text-[10px]" onClick={() => openReversal(invoiceId)}>

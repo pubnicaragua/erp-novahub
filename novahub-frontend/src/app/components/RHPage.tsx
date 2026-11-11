@@ -15,6 +15,7 @@ import type { Employee, Payroll, TimeOff, PaginatedResponse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from '@/app/services/toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { firstReadable } from '../utils/displayText';
 
 interface RHPageProps {
   activeSubModule?: string;
@@ -396,7 +397,7 @@ export function RHPage({ activeSubModule }: RHPageProps) {
             <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Nombre</TableHead><TableHead>Cargo</TableHead><TableHead>Departamento</TableHead><TableHead className="text-right">Salario</TableHead><TableHead>Ingreso</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader>
               <TableBody>{empleadosData.filter((e) => `${e.firstName} ${e.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())).map((e) => (
                 <TableRow key={e.id} className="hover:bg-muted/20">
-                  <TableCell className="font-medium">{(e as any).code || e.id}</TableCell>
+                  <TableCell className="font-medium">{firstReadable((e as any).code, e.id)}</TableCell>
                   <TableCell className="font-medium">{e.firstName} {e.lastName}</TableCell>
                   <TableCell>{e.position}</TableCell>
                   <TableCell className="text-muted-foreground">{e.department}</TableCell>
@@ -443,7 +444,7 @@ export function RHPage({ activeSubModule }: RHPageProps) {
               <TableBody>{vacacionesArr.map((v) => (
                 <TableRow key={v.id} className="hover:bg-muted/20">
                   <TableCell className="font-medium">{v.id}</TableCell>
-                  <TableCell className="font-medium">{v.employee?.firstName} {v.employee?.lastName || v.employeeId}</TableCell>
+                  <TableCell className="font-medium">{v.employee?.firstName} {firstReadable(v.employee?.lastName, v.employeeId)}</TableCell>
                   <TableCell className="text-muted-foreground">{v.type}</TableCell>
                   <TableCell className="text-muted-foreground">{new Date(v.startDate).toLocaleDateString()}</TableCell>
                   <TableCell className="text-muted-foreground">{new Date(v.endDate).toLocaleDateString()}</TableCell>

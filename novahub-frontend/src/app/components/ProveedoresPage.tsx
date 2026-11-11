@@ -20,6 +20,7 @@ import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 import { ExportMenu } from './ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
+import { firstReadable } from '../utils/displayText';
 
 export function ProveedoresPage() {
   const { user, canPerform } = useAuth();
@@ -264,7 +265,7 @@ export function ProveedoresPage() {
                           <div className="flex flex-col">
                             <span className="font-semibold text-foreground text-sm flex items-center gap-2">{p.name}</span>
                             <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs text-muted-foreground font-mono">{p.code || p.id}</span>
+                              <span className="text-xs text-muted-foreground font-mono">{firstReadable(p.code)}</span>
                               <Badge variant="outline" className="text-[10px] font-normal tracking-wide h-4 py-0 px-1.5">Proveedor</Badge>
                             </div>
                           </div>

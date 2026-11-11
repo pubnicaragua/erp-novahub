@@ -41,6 +41,7 @@ import { TicketFormModal } from './TicketFormModal';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { firstReadable } from '../../utils/displayText';
 
 interface TicketsViewProps {
   data: Ticket[];
@@ -339,7 +340,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
           <div className="flex min-w-0 flex-wrap items-center gap-1">
             {products.slice(0, 2).map((relation) => (
               <span key={relation.id} className="max-w-[9rem] truncate rounded-md bg-primary/5 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                {relation.product?.name || relation.productId}
+                {firstReadable(relation.product?.name, relation.productId)}
               </span>
             ))}
             {products.length > 2 && <Badge variant="outline" className="shrink-0 text-[9px]">+{products.length - 2}</Badge>}
@@ -959,7 +960,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                       <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                         {detailProductLinks.map((relation) => (
                           <div key={relation.id} className="min-w-0 rounded-xl border border-border/60 bg-background/60 p-3">
-                            <p className="truncate text-sm font-semibold">{relation.product?.name || relation.productId}</p>
+                            <p className="truncate text-sm font-semibold">{firstReadable(relation.product?.name, relation.productId)}</p>
                             <p className="mt-1 truncate text-xs text-muted-foreground">
                               {relation.product?.code || 'Sin código'}
                               {relation.invoiceItem?.quantity !== undefined ? ` · Cant. ${relation.invoiceItem.quantity}` : ''}
