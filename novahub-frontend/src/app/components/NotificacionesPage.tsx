@@ -144,7 +144,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
     )} data-message-scroll-layout={activeTab === 'mensajes' ? 'contained' : undefined}>
       <div className={cn(
         'mx-auto w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4',
-        activeTab === 'mensajes' ? 'flex min-h-0 flex-1 flex-col' : 'min-h-[calc(100vh-5rem)]',
+        activeTab === 'mensajes' ? 'mx-0 flex min-h-0 max-w-none flex-1 flex-col p-1 sm:p-1 md:px-1 md:py-1' : 'min-h-[calc(100vh-5rem)]',
       )}>
         {activeQuery.isError && (
           <div role="alert" className="mb-6 flex shrink-0 flex-col gap-3 rounded-2xl border border-destructive/20 bg-destructive/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -161,7 +161,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
 
         <Tabs
           value={activeTab}
-          className={cn('w-full', activeTab === 'mensajes' && 'flex min-h-0 flex-1 flex-col')}
+          className={cn('w-full', activeTab === 'mensajes' && 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden')}
           onValueChange={(value) => {
             setLocalActiveTab(value);
             onSubModuleChange?.(value);
@@ -184,7 +184,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              className={activeTab === 'mensajes' ? 'flex min-h-0 flex-1 flex-col' : undefined}
+              className={activeTab === 'mensajes' ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden' : undefined}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}

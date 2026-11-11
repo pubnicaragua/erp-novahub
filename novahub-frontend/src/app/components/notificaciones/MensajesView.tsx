@@ -13,6 +13,7 @@ import {
   MessageCircle,
   Search,
   Send,
+  Upload,
   Users,
 } from 'lucide-react';
 import { format, isToday } from 'date-fns';
@@ -23,6 +24,7 @@ import { messagesService } from '../../services/notificaciones.service';
 import { supportConversationsService, type SupportConversation } from '../../services/support-conversations.service';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -42,6 +44,7 @@ import { updateMessageThread, upsertMessageThread } from './message-thread-cache
 import {
   allowMessageAttachmentDrop,
   dropMessageAttachmentFiles,
+  hasMessageAttachmentFiles,
   pasteMessageAttachmentFiles,
 } from './message-attachment-input';
 import {
@@ -124,10 +127,12 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   const [replyAttachmentResetKey, setReplyAttachmentResetKey] = useState(0);
   const [replyError, setReplyError] = useState('');
   const [replying, setReplying] = useState(false);
+  const [historyDropActive, setHistoryDropActive] = useState(false);
   const [markingReadId, setMarkingReadId] = useState<string | null>(null);
   const onReplyAttachmentsChange = useCallback((state: AttachmentComposerState) => setReplyAttachmentState(state), []);
   const onComposeAttachmentsChange = useCallback((state: AttachmentComposerState) => setComposeAttachmentState(state), []);
   const messageBodyRef = useRef<HTMLDivElement>(null);
+  const historyDropDepthRef = useRef(0);
   const replyAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
   const composeAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -203,15 +208,6 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   const selectedOrigin = selected?.kind === 'SUPPORT' && user?.isPlatformSupportAgent
     ? participantName(selected.participant, 'Sucursal')
     : user?.tenantName || user?.sessionBranding?.name || 'Sucursal actual';
-  const selectedContext = selected
-    ? selected.kind === 'SYSTEM'
-      ? 'Aviso automático'
-      : selected.kind === 'SUPPORT' && !user?.isPlatformSupportAgent
-        ? 'Soporte técnico'
-        : selected.kind === 'SUPPORT'
-          ? 'Conversación de soporte'
-          : participantName(selected.participant, 'Participante')
-    : '';
   const searchFiltered = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     return threads.filter((thread) => {
@@ -230,6 +226,31 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
     || (filter === 'direct' && thread.kind === 'DIRECT')
     || (filter === 'support' && thread.kind === 'SUPPORT')),
   [searchFiltered, filter]);
+
+  const handleHistoryDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasMessageAttachmentFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    if (!selected?.canReply || !canPerform('NOTIFICATIONS_MESSAGES', 'create')) return;
+    historyDropDepthRef.current += 1;
+    setHistoryDropActive(true);
+  };
+
+  const handleHistoryDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasMessageAttachmentFiles(event.dataTransfer) || !selected?.canReply) return;
+    event.preventDefault();
+    historyDropDepthRef.current = Math.max(0, historyDropDepthRef.current - 1);
+    if (historyDropDepthRef.current === 0) setHistoryDropActive(false);
+  };
+
+  const handleHistoryDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    historyDropDepthRef.current = 0;
+    setHistoryDropActive(false);
+    if (!selected?.canReply || !canPerform('NOTIFICATIONS_MESSAGES', 'create')) {
+      if (hasMessageAttachmentFiles(event.dataTransfer)) event.preventDefault();
+      return;
+    }
+    dropMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files));
+  };
 
   useEffect(() => {
     if (lastSelectedIdRef.current !== selectedId) {
@@ -250,6 +271,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   }, [selectedId, selected?.messages.length, shouldReduceMotion]);
 
   const openThread = (thread: Message) => {
+    historyDropDepthRef.current = 0;
+    setHistoryDropActive(false);
     setReplyAttachmentState(EMPTY_ATTACHMENT_STATE);
     setReplyAttachmentResetKey((current) => current + 1);
     setSelectedId(thread.id);
@@ -361,14 +384,14 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   return (
     <>
       <section
-        className="grid min-h-0 min-w-0 flex-1 grid-cols-1 [grid-template-rows:minmax(0,1fr)] gap-2 overflow-hidden p-1 lg:grid-cols-[minmax(300px,370px)_minmax(0,1fr)]"
+        className="grid h-full min-h-0 min-w-0 flex-1 grid-cols-1 [grid-template-rows:minmax(0,1fr)] gap-1 overflow-hidden p-1 lg:grid-cols-[340px_minmax(0,1fr)]"
         aria-label="Mensajería interna"
         data-testid="messages-workspace"
         data-tour="notificaciones-mensajes"
       >
-        <aside className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm', mobileThreadOpen && 'hidden lg:flex')}>
-          <div className="shrink-0 border-b border-border/60 p-3">
-            <div className="mb-3 flex min-w-0 flex-col gap-2">
+        <aside className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm', mobileThreadOpen && 'hidden lg:flex')}>
+          <div className="shrink-0 border-b border-border/60 p-2">
+            <div className="mb-2 flex min-w-0 flex-col gap-2">
               <div className="min-w-0">
                 <h2 className="text-sm font-black">Mensajes</h2>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -407,7 +430,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
               </Button>
             </div>
 
-            <div className="-mx-1 mt-2 flex min-w-0 gap-1 overflow-x-auto px-1 scrollbar-overlay" aria-label="Filtros de mensajes">
+            <div className="-mx-1 mt-1.5 flex min-w-0 gap-1 overflow-x-auto px-1 scrollbar-overlay" aria-label="Filtros de mensajes">
               {([
                 ['all', 'Todos'],
                 ['unread', `Sin leer${unreadTotal ? ` ${unreadTotal}` : ''}`],
@@ -495,7 +518,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
           </div>
         </aside>
 
-        <article className={cn('h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm lg:flex', mobileThreadOpen ? 'flex' : 'hidden')}>
+        <article className={cn('h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm lg:flex', mobileThreadOpen ? 'flex' : 'hidden')}>
           {!selected ? (
             <div className="flex h-full flex-col items-center justify-center px-8 text-center">
               <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -531,30 +554,39 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                 </Button>
                 <ParticipantAvatar participant={selected.participant} system={selected.kind === 'SYSTEM'} />
                 <div className="min-w-0 flex-1">
-                  <h3 className="break-words text-sm font-bold sm:text-base">{selected.title}</h3>
+                  <h3 className="break-words text-sm font-black sm:text-base">{participantName(selected.participant, selected.kind === 'SUPPORT' ? 'Soporte técnico' : 'Participante')}</h3>
                   <p className="flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground" data-testid="message-thread-context">
+                    <span className="truncate">{selected.title}</span>
+                    <span className="shrink-0">·</span>
                     <MapPin className="size-3 shrink-0" aria-hidden="true" />
                     <span className="truncate">Origen: {selectedOrigin}</span>
-                    <span className="shrink-0">·</span>
-                    <span className="truncate">{selectedContext}</span>
                   </p>
                 </div>
+                <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">{selected.kind === 'SUPPORT' ? 'Soporte técnico' : selected.kind === 'DIRECT' ? 'Equipo' : 'Sistema'}</Badge>
                 {markingReadId === selected.id ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <CheckCheck className="size-4 text-muted-foreground/60" aria-label="Conversación leída" />}
               </header>
 
-              <div
-                ref={messageBodyRef}
-                onScroll={(event) => {
-                  const element = event.currentTarget;
-                  shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
-                }}
-                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 scrollbar-overlay sm:px-4"
-                data-testid="message-thread-body"
-                aria-live="polite"
-                aria-label="Historial de mensajes"
-                tabIndex={0}
-              >
-                <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
+              <div className="relative min-h-0 min-w-0 flex-1">
+                <div
+                  ref={messageBodyRef}
+                  onDragEnter={handleHistoryDragEnter}
+                  onDragLeave={handleHistoryDragLeave}
+                  onDragOver={(event) => {
+                    if (!hasMessageAttachmentFiles(event.dataTransfer)) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = selected.canReply && canPerform('NOTIFICATIONS_MESSAGES', 'create') ? 'copy' : 'none';
+                  }}
+                  onDrop={handleHistoryDrop}
+                  onScroll={(event) => {
+                    const element = event.currentTarget;
+                    shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
+                  }}
+                  className="min-h-0 h-full space-y-3 overflow-y-auto overscroll-contain p-2 scrollbar-overlay"
+                  data-testid="message-thread-body"
+                  aria-live="polite"
+                  aria-label="Historial de mensajes"
+                  tabIndex={0}
+                >
                   <AnimatePresence initial={false}>
                   {(selected.messages || []).map((message) => {
                     const isSystem = selected.kind === 'SYSTEM';
@@ -571,7 +603,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                         transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}
                       >
                         <div className={cn(
-                          'max-w-[88%] rounded-2xl px-4 py-3 sm:max-w-[72%]',
+                          'max-w-[90%] rounded-2xl px-3 py-2.5 sm:max-w-[72%]',
                           message.mine
                             ? 'rounded-br-md bg-primary text-primary-foreground'
                             : isSystem
@@ -612,12 +644,14 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                   })}
                   </AnimatePresence>
                 </div>
+                {historyDropActive && <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-background/80 p-4 text-center text-sm font-bold text-primary shadow-sm backdrop-blur-[2px]" role="status" aria-live="polite"><span className="flex items-center gap-2"><Upload className="size-4 shrink-0" /> Suelta los archivos para adjuntarlos al borrador</span></div>}
               </div>
 
               {selected.canReply ? (
-                <form onSubmit={sendReply} className="shrink-0 border-t border-border/60 bg-card/90 p-2 sm:px-3 sm:py-2" data-testid="message-reply-form">
-                  <div className="mx-auto max-w-4xl">
+                <form onSubmit={sendReply} className="shrink-0 border-t border-border/60 px-1 py-1" data-testid="message-reply-form">
+                  <div className="w-full min-w-0">
                     <label htmlFor="message-reply" className="sr-only">Responder mensaje</label>
+                    <p id="message-reply-help" className="sr-only">Enter envía la respuesta y Shift más Enter agrega una nueva línea.</p>
                     <MessageAttachmentComposer
                       ref={replyAttachmentComposerRef}
                       key={`branch-reply-${selected.id}-${replyAttachmentResetKey}`}
@@ -629,6 +663,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                     >
                       <Textarea
                         id="message-reply"
+                        rows={1}
                         value={reply}
                         onChange={(event) => setReply(event.target.value.slice(0, 4000))}
                         onPaste={(event) => pasteMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files))}
@@ -655,10 +690,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                         {replying ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                       </Button>
                     </MessageAttachmentComposer>
-                    <div className="mt-1.5 flex flex-wrap justify-between gap-x-3 gap-y-1 px-1 text-[11px]">
-                      <span className="text-destructive" role={replyError ? 'alert' : undefined}>{replyError}</span>
-                      <span id="message-reply-help" className="ml-auto text-muted-foreground">Enter para enviar · Shift+Enter para salto de línea</span>
-                    </div>
+                    {replyError && <div className="mt-1 flex justify-between gap-3 px-2 text-[11px]"><span className="text-destructive" role="alert">{replyError}</span></div>}
                   </div>
                 </form>
               ) : (
