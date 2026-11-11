@@ -248,6 +248,8 @@ export interface BonusAward {
 }
 
 export const performanceService = {
+  // Entrada automática de asistencia al abrir el sistema
+  registerAutoEntry: () => api.post<{ registered: boolean; reason?: string; checkIn?: string }>('/performance/attendance/auto-entry', {}),
   // Preguntas por hora: configuración
   getCheckinConfig: (signal?: AbortSignal) => api.get<CheckinConfigResponse>('/performance/checkins/config', { signal }),
   saveCheckinConfig: (data: Partial<CheckinConfig>) => api.put<CheckinConfig>('/performance/checkins/config', data),

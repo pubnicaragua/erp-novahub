@@ -592,6 +592,8 @@ export function ManagerPage() {
   return (
     <ManagerShell
       section={section}
+      enterableBranches={(group?.branches || []).filter((branch) => enterableBranchIds.has(branch.id)).map((branch) => ({ id: branch.id, name: branch.name }))}
+      onEnterBranch={groupId ? (branchId) => { void enterBranch(groupId, branchId); } : undefined}
       onSectionChange={setSection}
       group={group}
       branches={branchOptions}

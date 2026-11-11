@@ -62,6 +62,7 @@ import {
   MessageCircle,
   Ticket,
   Utensils,
+  ArrowUpRight,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -382,6 +383,9 @@ type ManagerShellProps = {
   onSettingsViewChange?: (view: ManagerSettingsView) => void;
   canViewAudit?: boolean;
   canViewPdf?: boolean;
+  /** Sucursales donde este manager puede operar (registrar ventas, facturas, ingresos…). */
+  enterableBranches?: Array<{ id: string; name: string }>;
+  onEnterBranch?: (branchId: string) => void;
 };
 
 export function ManagerShell({
@@ -411,6 +415,8 @@ export function ManagerShell({
   onOperationViewChange,
   selectedBranchId,
   onBranchChange,
+  enterableBranches = [],
+  onEnterBranch,
   onReportCurrencyChange,
   allowedSections,
   availableViews,
@@ -922,6 +928,27 @@ export function ManagerShell({
                 </select>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {onEnterBranch && enterableBranches.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" className="h-10 gap-2 rounded-xl px-3 text-xs font-bold" title="Entra a una sucursal para registrar ventas, facturas, ingresos y demás operaciones">
+                        <ArrowUpRight className="size-4" />
+                        <span>Operar en sucursal</span>
+                        <ChevronDown className="size-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-72 max-w-[calc(100vw-1rem)] rounded-xl p-2">
+                      <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Registrar ventas, facturas e ingresos en…</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {enterableBranches.map((branch) => (
+                        <DropdownMenuItem key={branch.id} onClick={() => onEnterBranch(branch.id)} className="gap-2 rounded-lg p-2.5 text-xs font-bold">
+                          <Building2 className="size-4 shrink-0 text-primary" />
+                          <span className="min-w-0 break-words">{branch.name}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
                 <div className="flex items-center gap-0.5 rounded-xl border border-border bg-background p-0.5" title="Moneda de presentación del Manager">
                     <Button
                       variant="ghost"
