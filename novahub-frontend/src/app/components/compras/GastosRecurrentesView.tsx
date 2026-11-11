@@ -125,7 +125,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
           { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === String(row.status || '').toUpperCase())?.label || row.status || '—' },
         ],
       });
-      toast.success('Reporte PDF descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
     }
@@ -169,15 +169,15 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
             { label: 'Categoría', value: expense.category || '—' },
           ],
           totals: [
-            { label: 'Subtotal', value: formatCurrentAmount(Number(expense.amount || 0), expense.currency || displayCurrency) },
-            { label: 'Impuestos', value: formatCurrentAmount(0, expense.currency || displayCurrency) },
-            { label: 'Descuento', value: formatCurrentAmount(0, expense.currency || displayCurrency) },
+            { label: 'Subtotal', value: formatConvertedAmount(Number(expense.amount || 0), expense.currency || displayCurrency, expense.exchangeRate) },
+            { label: 'Impuestos', value: formatConvertedAmount(0, expense.currency || displayCurrency, expense.exchangeRate) },
+            { label: 'Descuento', value: formatConvertedAmount(0, expense.currency || displayCurrency, expense.exchangeRate) },
           ],
-          total: formatCurrentAmount(Number(expense.amount || 0), expense.currency || displayCurrency),
+          total: formatConvertedAmount(Number(expense.amount || 0), expense.currency || displayCurrency, expense.exchangeRate),
           totalLabel: 'Monto periódico',
         },
       });
-      toast.success('PDF descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
     }
@@ -505,10 +505,10 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
             customerName: detailExpense.supplier?.name || 'Sin proveedor',
             hideCustomer: true,
             status: String(detailExpense.status || 'ACTIVE').toUpperCase(),
-            totalLabel: formatCurrentAmount(Number(detailExpense.amount || 0), detailExpense.currency || displayCurrency),
+            totalLabel: formatConvertedAmount(Number(detailExpense.amount || 0), detailExpense.currency || displayCurrency, detailExpense.exchangeRate),
             summaryDetails: [{ label: 'Frecuencia', value: freqMap[String(detailExpense.frequency || '').toLowerCase()] || detailExpense.frequency || '—' }, { label: 'Categoría', value: detailExpense.category || '—' }],
             metadata: [{ label: 'Inicio', value: detailExpense.startDate ? new Date(detailExpense.startDate).toLocaleDateString('es-NI') : 'No disponible' }, { label: 'Fin', value: detailExpense.endDate ? new Date(detailExpense.endDate).toLocaleDateString('es-NI') : 'Sin fecha de fin' }, { label: 'Proveedor', value: detailExpense.supplier?.name || 'No disponible' }],
-            lines: [{ id: detailExpense.id, description: detailExpense.description || 'Gasto recurrente', quantity: 1, totalLabel: formatCurrentAmount(Number(detailExpense.amount || 0), detailExpense.currency || displayCurrency) }],
+            lines: [{ id: detailExpense.id, description: detailExpense.description || 'Gasto recurrente', quantity: 1, unitPriceLabel: formatConvertedAmount(Number(detailExpense.amount || 0), detailExpense.currency || displayCurrency, detailExpense.exchangeRate), totalLabel: formatConvertedAmount(Number(detailExpense.amount || 0), detailExpense.currency || displayCurrency, detailExpense.exchangeRate) }],
           } : null}
           entity="RECURRING_EXPENSE"
           open={Boolean(detailExpense)}

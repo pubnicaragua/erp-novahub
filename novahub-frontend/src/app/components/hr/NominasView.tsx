@@ -27,6 +27,7 @@ import { beginNotificationAction, completeNotificationAction, failNotificationAc
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 import { ExportMenu } from '../ui/ExportMenu';
+import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 
@@ -423,7 +424,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     try {
       const exportRows = await loadPayrollExportRows();
       const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: exportRows, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Periodicidad', value: row => payrollFrequencyLabel(row.frequency || row.employee?.payFrequency) }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => (isOverdue(row) ? 'Vencida' : pdfStatusLabel(row.status)) }], format: paperFormat, fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
-      if (configured) { toast.success('Reporte PDF descargado'); return; }
+      if (configured) { toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.'); return; }
       const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'recursos-humanos.payrolls', paperFormat)) as any;
       doc.text("Reporte de Nominas", 14, 15);
@@ -450,8 +451,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         headStyles: { valign: 'middle' },
       });
 
-      doc.save(buildHumanPdfFileName(`Reporte de nóminas ${new Date().toISOString().slice(0, 10)}`));
-      toast.success('Reporte PDF descargado');
+      showPdfInBrowserPreview(doc.output('blob'), buildHumanPdfFileName(`Reporte de nóminas ${new Date().toISOString().slice(0, 10)}`));
+      toast.success('Reporte PDF listo para previsualizar');
     } catch {
       toast.error('Error generando PDF');
     }

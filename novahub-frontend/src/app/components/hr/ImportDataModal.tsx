@@ -16,6 +16,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { hrService } from '../../services/hr.service';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 
 // PDF.js worker from CDN
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -469,11 +470,11 @@ export function ImportDataModal({
       });
     }
 
-    doc.save(type === 'employees'
+    showPdfInBrowserPreview(doc.output('blob'), type === 'employees'
       ? `plantilla_empleados_${new Date().toISOString().split('T')[0]}.pdf`
       : `plantilla_nominas_${new Date().toISOString().split('T')[0]}.pdf`
     );
-    toast.success('Plantilla PDF descargada');
+    toast.success('Plantilla PDF lista para previsualizar');
   };
 
   // ── Map raw rows (array of objects or arrays) to structured data ──

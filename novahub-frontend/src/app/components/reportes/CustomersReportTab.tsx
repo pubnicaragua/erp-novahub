@@ -18,6 +18,7 @@ import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery'
 import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
+import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { buildReportDateFilters } from '../../utils/report-date-filters';
 import { ACQUISITION_GROUPS, acquisitionPeriodLabel, buildCustomerAcquisitionSeries, buildCustomerAcquisitionSection, buildCustomerComposition, type AcquisitionGrouping } from '../../utils/customer-acquisition-report';
@@ -307,7 +308,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           doc.text(`${companyName} - Reporte de Clientes - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
         }
 
-        doc.save(buildReportDownloadFileName(['reporte_clientes'], 'pdf', dateRange));
+        showPdfInBrowserPreview(doc.output('blob'), buildReportDownloadFileName(['reporte_clientes'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
       } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar PDF"); }
     },

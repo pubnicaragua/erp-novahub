@@ -7,6 +7,7 @@ import { customerPortalService, type CustomerPortalInventoryRow, type CustomerPo
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { toast } from '@/app/services/toast';
+import { beginPdfBrowserPreview } from '../../utils/pdfBrowserPreview';
 
 type PortalTab = 'summary' | 'inventory' | 'sales';
 
@@ -80,6 +81,7 @@ export function CustomerPortalPage() {
   const summaryMoney = (value: number) => money(value, summary.currency);
 
   const exportPortal = async (format: 'excel' | 'pdf') => {
+    if (format === 'pdf') beginPdfBrowserPreview('Resumen del portal de clientes');
     setExporting(format);
     try {
       const exportOptions = {
@@ -98,7 +100,7 @@ export function CustomerPortalPage() {
         toast.success('Excel del portal descargado.');
       } else {
         await exportCustomerPortalPdf(exportOptions);
-        toast.success('PDF del portal descargado.');
+        toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.');
       }
     } catch (exportError: any) {
       toast.error(exportError?.message || 'No se pudo generar la exportación.');

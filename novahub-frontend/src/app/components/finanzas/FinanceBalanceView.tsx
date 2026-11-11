@@ -26,6 +26,7 @@ import { getCurrencyDecimalPlaces, normalizeCurrency, summarizeAmountsByCurrency
 import { getReadableForeground } from '../../utils/color-contrast';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { ExportMenu } from '../ui/ExportMenu';
+import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 
 interface FinanceBalanceViewProps {
   incomes: any[];
@@ -730,7 +731,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         }
       }
 
-      doc.save(buildDateFilteredLabeledPdfFileName('Balance general', 'pdf', dateRange.start, dateRange.end));
+      showPdfInBrowserPreview(doc.output('blob'), buildDateFilteredLabeledPdfFileName('Balance general', 'pdf', dateRange.start, dateRange.end));
       toast.success("PDF exportado exitosamente");
     } catch (e: any) {
        console.error(e);

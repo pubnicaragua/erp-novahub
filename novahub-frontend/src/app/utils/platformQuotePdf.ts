@@ -4,6 +4,7 @@ import type { PlatformQuote } from '../services/enterprise-groups.service';
 import { getNovaHubLogotipoPng } from './novahubBrand';
 import { buildLabeledPdfFileName } from './exportFileNames';
 import { getCurrencyDecimalPlaces } from './currency';
+import { ensurePdfBrowserPreview, showPdfInBrowserPreview } from './pdfBrowserPreview';
 
 type Rgb = [number, number, number];
 
@@ -140,6 +141,7 @@ export interface CommercialReportOptions {
 }
 
 export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: PdfOptions = {}) {
+  ensurePdfBrowserPreview('Cotización de plataforma');
   const { mode = 'quote', paymentDate } = options;
   const isInvoice = mode === 'invoice';
   const doc = new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
@@ -477,13 +479,14 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   doc.text(isInvoice ? 'EL CLIENTE' : 'EL CLIENTE / PROSPECTO', width - margin - 38, y, { align: 'center' });
 
   drawFooter();
-  doc.save(buildLabeledPdfFileName(isInvoice ? 'Factura' : 'Cotización', quote.number));
+  showPdfInBrowserPreview(doc.output('blob'), buildLabeledPdfFileName(isInvoice ? 'Factura' : 'Cotización', quote.number));
 }
 
 export async function downloadPlatformQuoteCommercialReport(
   quote: PlatformQuote,
   report: CommercialReportOptions,
 ) {
+  ensurePdfBrowserPreview('Reporte comercial');
   const doc = new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
   const width = doc.internal.pageSize.getWidth();
   const height = doc.internal.pageSize.getHeight();
@@ -669,5 +672,5 @@ export async function downloadPlatformQuoteCommercialReport(
     doc.text(doc.splitTextToSize(report.reason.trim(), contentWidth - 12).slice(0, 2), margin + 6, y + 61);
   }
   drawFooter();
-  doc.save(`Reporte-Comercial-${quote.number}.pdf`);
+  showPdfInBrowserPreview(doc.output('blob'), `Reporte-Comercial-${quote.number}.pdf`);
 }

@@ -7,6 +7,7 @@ import { getSalesAdditionalCharges } from './salesCharges';
 import { buildSalesPdfFileName } from './exportFileNames';
 import { pdfStatusLabel } from './pdfStatus';
 import { isEstimateCustomFieldExpired, normalizeEstimateImages } from '../types';
+import { ensurePdfBrowserPreview, showPdfInBrowserPreview } from './pdfBrowserPreview';
 
 export interface GenerateNovaHubCommercialPDFParams {
   estimate: any;
@@ -45,15 +46,8 @@ function fitPdfImage(doc: jsPDF, image: string, maxWidth: number, maxHeight: num
 }
 
 function savePdfBlob(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  ensurePdfBrowserPreview(fileName);
+  showPdfInBrowserPreview(blob, fileName);
 }
 
 function formatCommercialLineDescription(item: any, fallback = 'Producto'): string {
@@ -653,6 +647,7 @@ export async function generateNovaHubCommercialPDF({
   save = true,
   withImages = true,
 }: GenerateNovaHubCommercialPDFParams): Promise<{ doc: jsPDF; blob: Blob }> {
+  if (save) ensurePdfBrowserPreview(String(documentType || 'Documento comercial'));
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',

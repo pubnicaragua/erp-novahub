@@ -231,7 +231,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
           { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === String(row.status || '').toUpperCase())?.label || row.status || '—' },
         ],
       });
-      toast.success('Reporte PDF descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
     }
@@ -278,17 +278,17 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
             { label: 'Inicio', value: invoice.startDate ? new Date(invoice.startDate).toLocaleDateString('es-NI') : '—' },
             { label: 'Dirección', value: invoice.address || '—' },
           ],
-          lines: ((invoice as any).items || []).map((item: any) => ({ description: item.description || 'Concepto sin descripción', code: item.code, productCode: item.productCode, variantId: item.variantId, variantSku: item.variantSku, variantName: item.variantName, variantAttributes: item.variantAttributes, variant: item.variant, quantity: item.quantity || 0, unitPrice: formatCurrentAmount(Number(item.unitPrice || 0), invoice.currency || displayCurrency), total: formatCurrentAmount(Number(item.total || 0), invoice.currency || displayCurrency), secondary: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
+          lines: ((invoice as any).items || []).map((item: any) => ({ description: item.description || 'Concepto sin descripción', code: item.code, productCode: item.productCode, variantId: item.variantId, variantSku: item.variantSku, variantName: item.variantName, variantAttributes: item.variantAttributes, variant: item.variant, quantity: item.quantity || 0, unitPrice: formatConvertedAmount(Number(item.unitPrice || 0), invoice.currency || displayCurrency, invoice.exchangeRate), total: formatConvertedAmount(Number(item.total || 0), invoice.currency || displayCurrency, invoice.exchangeRate), secondary: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
           totals: [
-            { label: 'Subtotal', value: formatCurrentAmount(Number(invoice.subtotal || 0), invoice.currency || displayCurrency) },
-            { label: 'Impuestos', value: formatCurrentAmount(Number(invoice.taxAmount || 0), invoice.currency || displayCurrency) },
-            { label: 'Descuento', value: formatCurrentAmount(Number(invoice.withholdingTotal || 0), invoice.currency || displayCurrency) },
+            { label: 'Subtotal', value: formatConvertedAmount(Number(invoice.subtotal || 0), invoice.currency || displayCurrency, invoice.exchangeRate) },
+            { label: 'Impuestos', value: formatConvertedAmount(Number(invoice.taxAmount || 0), invoice.currency || displayCurrency, invoice.exchangeRate) },
+            { label: 'Descuento', value: formatConvertedAmount(Number(invoice.withholdingTotal || 0), invoice.currency || displayCurrency, invoice.exchangeRate) },
           ],
-          total: formatCurrentAmount(Number(invoice.total || (invoice as any).amount || 0), invoice.currency || displayCurrency),
+          total: formatConvertedAmount(Number(invoice.total || (invoice as any).amount || 0), invoice.currency || displayCurrency, invoice.exchangeRate),
           totalLabel: 'Monto estimado',
         },
       });
-      toast.success('PDF descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
     }
@@ -821,7 +821,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
             customerName: detailInvoice.supplier?.name || 'Sin proveedor',
             hideCustomer: true,
             status: String(detailInvoice.status || 'ACTIVE').toUpperCase(),
-            totalLabel: formatCurrentAmount(Number(detailInvoice.total || (detailInvoice as any).amount || 0), detailInvoice.currency || displayCurrency),
+            totalLabel: formatConvertedAmount(Number(detailInvoice.total || (detailInvoice as any).amount || 0), detailInvoice.currency || displayCurrency, detailInvoice.exchangeRate),
             sourceCurrency: detailInvoice.currency || displayCurrency,
             sourceExchangeRate: detailInvoice.exchangeRate,
              summaryDetails: [
@@ -836,7 +836,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
                { label: 'Inicio', value: detailInvoice.startDate ? new Date(detailInvoice.startDate).toLocaleDateString('es-NI') : 'No disponible' },
                { label: 'Dirección', value: detailInvoice.address || 'No disponible' },
              ],
-            lines: ((detailInvoice as any).items || []).map((item: any, index: number) => ({ id: String(item.id || index), description: item.description || 'Concepto sin descripción', quantity: Number(item.quantity || 0), unitPriceLabel: formatCurrentAmount(Number(item.unitPrice || 0), detailInvoice.currency || displayCurrency), totalLabel: formatCurrentAmount(Number(item.total || 0), detailInvoice.currency || displayCurrency), secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
+            lines: ((detailInvoice as any).items || []).map((item: any, index: number) => ({ id: String(item.id || index), description: item.description || 'Concepto sin descripción', quantity: Number(item.quantity || 0), unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), detailInvoice.currency || displayCurrency, detailInvoice.exchangeRate), totalLabel: formatConvertedAmount(Number(item.total || 0), detailInvoice.currency || displayCurrency, detailInvoice.exchangeRate), secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
           } : null}
           entity="RECURRING_SUPPLIER_INVOICE"
           open={Boolean(detailInvoice)}

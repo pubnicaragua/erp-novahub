@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { getPdfDesignSettings, pdfDesignPaper } from './pdfGenerator';
+import { ensurePdfBrowserPreview, showPdfInBrowserPreview } from './pdfBrowserPreview';
 
 /**
  * Renderizador fijo para consolidados de Manager. Estos reportes no son
@@ -8,6 +9,7 @@ import { getPdfDesignSettings, pdfDesignPaper } from './pdfGenerator';
  * solo reutilizan papel y tipografía corporativa disponibles en la cuenta.
  */
 export async function generateManagerTablePDF({ title, rows, fileName }: { title: string; rows: Array<Record<string, unknown>>; fileName: string }) {
+  ensurePdfBrowserPreview(title);
   let settings: Record<string, any> = {};
   try {
     settings = await getPdfDesignSettings('reportes.finance');
@@ -22,5 +24,5 @@ export async function generateManagerTablePDF({ title, rows, fileName }: { title
   doc.setFontSize(9);
   doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')}`, 14, 23);
   doc.autoTable({ startY: 29, head: [columns], body, styles: { fontSize: 7, cellPadding: 2, valign: 'middle' }, headStyles: { fillColor: [16, 185, 129], valign: 'middle' }, theme: 'grid' });
-  doc.save(fileName);
+  showPdfInBrowserPreview(doc.output('blob'), fileName);
 }

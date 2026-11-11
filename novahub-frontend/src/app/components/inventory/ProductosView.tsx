@@ -2149,7 +2149,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
         fileName: buildDatedDownloadFileName([isServiceView ? 'reporte_servicios' : 'reporte_inventario_productos'], 'pdf'),
         format: paperFormat,
       });
-      toast.success(`PDF de ${isServiceView ? 'servicios' : 'productos'} descargado.`);
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.');
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el PDF.');
     }

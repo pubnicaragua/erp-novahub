@@ -32,6 +32,7 @@
     "test:pdf-templates": "node scripts/test-pdf-templates.mjs",
     "test:report-currency-exports": "node --experimental-strip-types scripts/test-report-currency-exports.mjs",
     "test:purchase-receipt-currency-preview": "node scripts/test-purchase-receipt-currency-preview.mjs",
+    "test:system-pdf-preview-currency": "node scripts/test-system-pdf-preview-currency.mjs",
     "test:currency-precision": "node --experimental-strip-types scripts/test-currency-precision.mjs",
     "test:customer-history-import": "node --experimental-strip-types scripts/test-customer-history-import.mjs",
     "test:customer-loan-permissions": "node --experimental-strip-types scripts/test-customer-loan-permissions.mjs",

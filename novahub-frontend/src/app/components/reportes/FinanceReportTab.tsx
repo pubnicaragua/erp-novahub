@@ -31,6 +31,7 @@ import type { FinancialData, BreakEvenConfig, BreakEvenResult, CostBehavior } fr
 import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
+import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { buildReportDateFilters } from '../../utils/report-date-filters';
 
@@ -662,7 +663,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
           doc.text(`${companyName} - Reporte Financiero - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
         }
 
-        doc.save(buildReportDownloadFileName(['reporte_finanzas'], 'pdf', dateRange));
+        showPdfInBrowserPreview(doc.output('blob'), buildReportDownloadFileName(['reporte_finanzas'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
       } catch (e: any) {
         console.error(e);

@@ -350,7 +350,7 @@ export function ComisionesView() {
         format: paperFormat,
         fileName: buildDateFilteredDownloadFileName(['reporte_comisiones'], 'pdf', from, to),
       });
-      toast.success('PDF de comisiones descargado', { id: toastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: toastId });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo preparar el PDF de comisiones', { id: toastId });
     } finally {

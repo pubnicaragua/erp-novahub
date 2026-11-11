@@ -298,7 +298,7 @@ export function SupplierDetailDrawer({
         format,
         outputCurrency: historyExportCurrency,
       });
-      toast.success('Historial del proveedor descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo descargar el historial del proveedor.', { id: exportToastId });
     } finally {

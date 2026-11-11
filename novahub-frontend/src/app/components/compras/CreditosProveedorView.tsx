@@ -431,7 +431,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === String(row.status || '').toLowerCase())?.label || row.status || '—' },
         ],
       });
-      toast.success('Reporte PDF descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
     }
@@ -683,7 +683,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           totalLabel: 'Total del crédito',
         },
       });
-      toast.success('PDF descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
     }

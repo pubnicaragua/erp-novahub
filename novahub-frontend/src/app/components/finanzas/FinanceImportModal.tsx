@@ -14,6 +14,7 @@ import autoTable from 'jspdf-autotable';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
@@ -214,8 +215,8 @@ export function FinanceImportModal({
       },
     });
 
-    doc.save(`plantilla_${itemName}_${new Date().toISOString().split('T')[0]}.pdf`);
-    toast.success('Plantilla PDF descargada');
+    showPdfInBrowserPreview(doc.output('blob'), `plantilla_${itemName}_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.');
   };
 
   const processFileBuffer = async (buffer: ArrayBuffer, fileName: string) => {

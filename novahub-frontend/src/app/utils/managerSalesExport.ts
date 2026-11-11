@@ -8,6 +8,7 @@ import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { buildDateFilteredDownloadFileName, buildDateFilteredPdfFileName } from './exportFileNames';
 import { pdfStatusLabel } from './pdfStatus';
 import { resolveManagerPdfRender } from './managerPdfRender';
+import { ensurePdfBrowserPreview, showPdfInBrowserPreview } from './pdfBrowserPreview';
 
 type ManagerSalesExportOptions = {
   groupId: string;
@@ -147,6 +148,7 @@ export async function exportManagerSalesExcel(options: ManagerSalesExportOptions
 }
 
 export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) {
+  ensurePdfBrowserPreview(options.title);
   const managerPdf = await resolveManagerPdfRender(options.groupId, options.targetKey);
   const tenantName = managerPdf.tenantName || options.tenantName;
   const tenantLogo = managerPdf.tenantLogo || options.tenantLogo;
@@ -228,5 +230,6 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
     doc.setTextColor(148, 163, 184);
     doc.text(`${tenantName || 'NovaHub'} · Página ${page} de ${pageCount}`, pageWidth / 2, pageHeight - 7, { align: 'center' });
   }
-  doc.save(buildDateFilteredPdfFileName([options.fileBase], options.pdfFormat, options.dateFrom, options.dateTo));
+  const fileName = buildDateFilteredPdfFileName([options.fileBase], options.pdfFormat, options.dateFrom, options.dateTo);
+  showPdfInBrowserPreview(doc.output('blob'), fileName);
 }

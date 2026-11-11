@@ -2203,7 +2203,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
           { label: 'Estado', align: 'center', value: (row) => getPurchaseOrderStatusOption(row.status).label },
         ],
       });
-      toast.success('Reporte PDF descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
     }
@@ -2392,7 +2392,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
         tenantName: user?.tenantName || '',
         tenantLogo: user?.sessionBranding?.logo || null,
       });
-      toast.success('PDF descargado', { id: pdfToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: pdfToastId });
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo generar el PDF', { id: pdfToastId });
     }

@@ -33,6 +33,7 @@ import { pdfStatusLabel } from '../../utils/pdfStatus';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { ExportMenu } from '../ui/ExportMenu';
+import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 
 interface Column {
   key: string;
@@ -578,7 +579,7 @@ export function FinanceTableView({
         doc.text(`${companyName} - Página ${i} de ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
       }
 
-      doc.save(buildDateFilteredLabeledPdfFileName(title, 'pdf', dateRange.start, dateRange.end));
+      showPdfInBrowserPreview(doc.output('blob'), buildDateFilteredLabeledPdfFileName(title, 'pdf', dateRange.start, dateRange.end));
       toast.success("PDF exportado exitosamente");
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || "Error al exportar PDF"); }
   };

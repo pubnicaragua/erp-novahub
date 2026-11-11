@@ -383,7 +383,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           { label: 'Estado', align: 'center', value: (row) => isSupplierInactive(row) ? 'Inactivo' : 'Activo' },
         ],
       });
-      toast.success('Reporte PDF descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
     }

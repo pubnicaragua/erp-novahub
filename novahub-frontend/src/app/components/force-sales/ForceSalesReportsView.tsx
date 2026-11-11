@@ -234,7 +234,7 @@ export function ForceSalesReportsView({ activeSubModule, onSubModuleChange, isSi
         useVectorTables: true,
       });
       recordDownload('PDF', pdfFileName);
-      toast.success('PDF descargado.', { id: toastId, position: 'bottom-center' });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: toastId, position: 'bottom-center' });
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo generar el PDF.'), { id: toastId, position: 'bottom-center' });
     } finally {

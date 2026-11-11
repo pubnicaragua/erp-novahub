@@ -10,6 +10,7 @@ import { normalizePdfHeaderContentSpacing, PDF_HEADER_CONTENT_SPACING_DEFAULT_MM
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
 import { inlinePdfFontFaceRules } from './pdf-font-embedding';
 import { pdfStatusLabel } from './pdfStatus';
+import { ensurePdfBrowserPreview, showPdfInBrowserPreview } from './pdfBrowserPreview';
 
 export interface PdfTemplateRenderSettings {
   paperSize: 'LETTER' | 'A4' | 'OFICIO' | 'LEGAL' | string;
@@ -2565,6 +2566,7 @@ function reflowPartySection(page: HTMLElement, definition: PdfTemplateDefinition
 
 export async function renderPdfTemplateToPdf({ definition, settings: requestedSettings, targetKey, data, fileName, save = true, onProgress }: PdfTemplateRenderOptions) {
   if (typeof document === 'undefined') throw new Error('La plantilla PDF requiere un navegador.');
+  if (save) ensurePdfBrowserPreview(fileName || getPdfTemplateTarget(targetKey).key);
   const target = getPdfTemplateTarget(targetKey);
   const isLegacyStandardDefinition = isStandardPdfLayoutTarget(target.key) && !hasCurrentStandardPdfLayout(target.key, definition);
   const standardSettings = isLegacyStandardDefinition
@@ -2855,7 +2857,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       page.remove();
     }
     const blob = pdf.output('blob');
-    if (save) pdf.save(fileName || `${getPdfTemplateTarget(targetKey).key.replace(/[^a-z0-9.-]+/gi, '-')}.pdf`);
+    if (save) showPdfInBrowserPreview(blob, fileName || `${getPdfTemplateTarget(targetKey).key.replace(/[^a-z0-9.-]+/gi, '-')}.pdf`);
     return { doc: pdf, blob };
   } finally { renderFrame.remove(); }
 }

@@ -15,6 +15,7 @@ import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery'
 import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
+import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { buildReportDateFilters } from '../../utils/report-date-filters';
 
@@ -286,7 +287,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           doc.text(`${companyName} - Reporte Proveedores - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
         }
 
-        doc.save(buildReportDownloadFileName(['reporte_proveedores'], 'pdf', dateRange));
+        showPdfInBrowserPreview(doc.output('blob'), buildReportDownloadFileName(['reporte_proveedores'], 'pdf', dateRange));
         toast.success('PDF generado exitosamente');
       } catch (e: any) {
         console.error(e);

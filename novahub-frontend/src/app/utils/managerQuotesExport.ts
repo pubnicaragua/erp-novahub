@@ -8,6 +8,7 @@ import { normalizeSalesExtraCharges } from './salesCharges';
 import { buildDateFilteredDownloadFileName, buildDateFilteredPdfFileName } from './exportFileNames';
 import type { CurrencyDisplayMode } from '../contexts/CurrencyContext';
 import { pdfStatusLabel } from './pdfStatus';
+import { showPdfInBrowserPreview } from './pdfBrowserPreview';
 
 export interface ManagerQuoteExportRow {
   number?: string | null;
@@ -243,5 +244,6 @@ export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions
     doc.setTextColor(148, 163, 184);
     doc.text(`${options.tenantName || 'NovaHub'} · Página ${page} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
   }
-  doc.save(buildDateFilteredPdfFileName(['reporte_cotizaciones_consolidadas'], 'configured', options.dateFrom, options.dateTo));
+  const fileName = buildDateFilteredPdfFileName(['reporte_cotizaciones_consolidadas'], 'configured', options.dateFrom, options.dateTo);
+  showPdfInBrowserPreview(doc.output('blob'), fileName);
 }

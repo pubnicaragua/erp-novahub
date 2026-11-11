@@ -25,6 +25,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF, previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { buildSalesPdfFileName } from '../../utils/exportFileNames';
+import { beginPdfBrowserPreview, closePdfBrowserPreview, showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
@@ -523,10 +524,13 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
   const handleWhatsApp = async (estimateOverride?: Estimate) => {
     const baseEstimate = estimateOverride || localDoc;
     if (!baseEstimate) return;
+    const pdfPreview = beginPdfBrowserPreview('Cotización para WhatsApp');
+    let previewOpened = false;
     const currentCustomer = await resolveEstimateCustomer(baseEstimate);
     const estimate = currentCustomer ? { ...baseEstimate, customer: currentCustomer } : baseEstimate;
     const phone = getCustomerPhone(estimate);
     if (!phone) {
+      closePdfBrowserPreview(pdfPreview);
       toast.error('El cliente no tiene un número asociado para enviar la cotización por WhatsApp');
       return;
     }
@@ -546,6 +550,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
           secureDocumentUrl = publicLinkUrl(documentLink.path);
           securePortalUrl = publicLinkUrl(portalLink.path);
         }
+        if (secureDocumentUrl) closePdfBrowserPreview(pdfPreview);
         if (!secureDocumentUrl) {
           const activeCustomFields = getEstimateCustomFields(estimate);
           const { blob } = await generateEstimatePDF({
@@ -553,8 +558,10 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
             tenantName: user?.sessionBranding?.name || themeConfig?.tenantName || user?.tenantName || 'Empresa',
             tenantLogo: themeConfig?.logo,
             formatAmount: formatConvertedAmount,
-            save: true,
+            save: false,
           });
+          showPdfInBrowserPreview(blob, buildSalesPdfFileName('estimate', estimate.number), pdfPreview);
+          previewOpened = true;
           // Compatibilidad: solo usa el enlace legado si el servicio seguro no está disponible.
           const fileName = buildSalesPdfFileName('estimate', estimate.number);
           const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
@@ -562,6 +569,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
           if (uploaded?.url) publicPdfUrl = uploaded.url;
         }
       } catch (err) {
+        if (!previewOpened) closePdfBrowserPreview(pdfPreview);
         console.warn('No se pudo generar enlace en la nube, usando modo estándar:', err);
       }
     }
@@ -586,7 +594,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
     if (publicPdfUrl) {
       toast.success('¡Enlace público del PDF generado e incluido en el mensaje de WhatsApp!', preparingToastId ? { id: preparingToastId } : undefined);
     } else {
-      toast.success('PDF descargado. ¡Se abrió WhatsApp para que lo adjuntes!', { ...(preparingToastId ? { id: preparingToastId } : {}) });
+      toast.success('Previsualización abierta. Descarga el PDF desde el visor y adjúntalo en WhatsApp.', { ...(preparingToastId ? { id: preparingToastId } : {}) });
     }
   };
 

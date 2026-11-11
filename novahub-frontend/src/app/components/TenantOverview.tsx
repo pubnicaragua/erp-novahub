@@ -23,6 +23,7 @@ import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { DateField } from './ui/DateField';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
+import { showPdfInBrowserPreview } from '../utils/pdfBrowserPreview';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../utils/currency';
 
 interface TenantOverviewProps {
@@ -470,7 +471,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
         }
       }
 
-      doc.save(buildDatedDownloadFileName(['reporte_resumen_general'], 'pdf'));
+      showPdfInBrowserPreview(doc.output('blob'), buildDatedDownloadFileName(['reporte_resumen_general'], 'pdf'));
       toast.success('Reporte PDF exportado');
     } catch (err) {
       console.error('Error exportando PDF:', err);

@@ -19,6 +19,7 @@ import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, 
 import { cn } from '../ui/utils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
+import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 import { buildReportDateFilters } from '../../utils/report-date-filters';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -841,7 +842,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           doc.text(`${companyName} - Reporte de Ventas - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
         }
 
-        doc.save(buildReportDownloadFileName(['reporte_ventas'], 'pdf', dateRange));
+        showPdfInBrowserPreview(doc.output('blob'), buildReportDownloadFileName(['reporte_ventas'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
       } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar PDF"); }
     },

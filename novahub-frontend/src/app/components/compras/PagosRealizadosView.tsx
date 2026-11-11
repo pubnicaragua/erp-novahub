@@ -455,7 +455,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
           { label: 'Método', align: 'center', value: (row) => getMethodLabel(row.method) },
         ],
       });
-      toast.success('Reporte PDF descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
     }
@@ -714,13 +714,13 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
             { label: 'Tipo', value: payment.paymentLabel || 'Pago único' },
             { label: 'Referencia', value: payment.displayReference || paymentReferenceLabel(payment) },
           ],
-          lines: paymentRows.map((row) => ({ description: getMethodLabel(row.method), quantity: 1, unitPrice: formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency), total: formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency), secondary: `Referencia: ${paymentReferenceLabel(row)}${row.bankAccountId ? ` · Banco: ${row.bankAccountId}` : ''}` })),
+          lines: paymentRows.map((row) => ({ description: getMethodLabel(row.method), quantity: 1, unitPrice: formatConvertedAmount(Number(row.amount || 0), row.currency || displayCurrency, row.exchangeRate || payment.exchangeRate), total: formatConvertedAmount(Number(row.amount || 0), row.currency || displayCurrency, row.exchangeRate || payment.exchangeRate), secondary: `Referencia: ${paymentReferenceLabel(row)}${row.bankAccountId ? ` · Banco: ${row.bankAccountId}` : ''}` })),
           totals: [
-            { label: 'Subtotal', value: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency) },
-            { label: 'Impuestos', value: formatCurrentAmount(0, payment.currency || displayCurrency) },
-            { label: 'Descuento', value: formatCurrentAmount(0, payment.currency || displayCurrency) },
+            { label: 'Subtotal', value: formatConvertedAmount(Number(payment.amount || 0), payment.currency || displayCurrency, payment.exchangeRate) },
+            { label: 'Impuestos', value: formatConvertedAmount(0, payment.currency || displayCurrency, payment.exchangeRate) },
+            { label: 'Descuento', value: formatConvertedAmount(0, payment.currency || displayCurrency, payment.exchangeRate) },
           ],
-          total: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency),
+          total: formatConvertedAmount(Number(payment.amount || 0), payment.currency || displayCurrency, payment.exchangeRate),
           totalLabel: 'Total pagado',
           notes: [payment.notes, paymentVariantDetails(payment)].filter(Boolean).join('\n'),
         },
@@ -1121,12 +1121,12 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
           customerName: detailPayment.supplier?.name || 'Sin proveedor',
           hideCustomer: true,
           status: detailPayment.isActive === false ? 'VOIDED' : 'PAID',
-          totalLabel: formatCurrentAmount(Number(detailPayment.amount || 0), detailPayment.currency || displayCurrency),
+          totalLabel: formatConvertedAmount(Number(detailPayment.amount || 0), detailPayment.currency || displayCurrency, detailPayment.exchangeRate),
           sourceCurrency: detailPayment.currency || displayCurrency,
           sourceExchangeRate: detailPayment.exchangeRate,
           summaryDetails: [{ label: 'Tipo', value: detailPayment.paymentLabel || 'Pago único' }, { label: 'Método', value: getMethodLabel(detailPayment.method) }],
           metadata: [{ label: 'Fecha', value: detailPayment.date ? formatDateEs(detailPayment.date) : 'No disponible' }, { label: 'Destino', value: linkedInvoiceForPayment(detailPayment)?.number || (detailPayment.balanceApplicationType === 'GENERAL_BALANCE' ? 'Abono al saldo general' : 'Anticipo') }, { label: 'Referencia', value: detailPayment.displayReference || paymentReferenceLabel(detailPayment) }],
-          lines: (detailPayment.payments?.length ? detailPayment.payments : [detailPayment]).map((payment, index) => ({ id: String(payment.id || index), description: getMethodLabel(payment.method), quantity: 1, unitPriceLabel: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency), totalLabel: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency), secondaryLabel: `Referencia: ${paymentReferenceLabel(payment)}${payment.bankAccountId ? ` · Banco: ${payment.bankAccountId}` : ''}` })),
+          lines: (detailPayment.payments?.length ? detailPayment.payments : [detailPayment]).map((payment, index) => ({ id: String(payment.id || index), description: getMethodLabel(payment.method), quantity: 1, unitPriceLabel: formatConvertedAmount(Number(payment.amount || 0), payment.currency || displayCurrency, payment.exchangeRate || detailPayment.exchangeRate), totalLabel: formatConvertedAmount(Number(payment.amount || 0), payment.currency || displayCurrency, payment.exchangeRate || detailPayment.exchangeRate), secondaryLabel: `Referencia: ${paymentReferenceLabel(payment)}${payment.bankAccountId ? ` · Banco: ${payment.bankAccountId}` : ''}` })),
           notes: detailPayment.notes,
         } : null}
         entity="PAYMENT_MADE"

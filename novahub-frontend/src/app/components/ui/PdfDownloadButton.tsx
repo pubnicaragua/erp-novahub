@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from './dropdown-menu';
 import { PDF_DOWNLOAD_OPTIONS, type PdfPaperFormat, type PdfExportScope } from '../../utils/pdfDownloadFormats';
+import { beginPdfBrowserPreview } from '../../utils/pdfBrowserPreview';
 
 export interface PdfDownloadExtraOptions {
   withImages?: boolean;
@@ -51,6 +52,7 @@ export function PdfDownloadButton({ onDownload, onExcel, className, disabled = f
   const pageSizeOptions = PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'standard');
 
   const triggerDownload = (format: PdfPaperFormat) => {
+    beginPdfBrowserPreview(`Documento PDF · ${format}`);
     onDownload(
       format,
       scopeSelector ? scope : undefined,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, FileText, Loader2, XCircle } from 'lucide-react';
 import { generateSalesTransactionPDF } from '../../utils/pdfGenerator';
+import { ensurePdfBrowserPreview, showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { Button } from '../ui/button';
@@ -122,6 +123,7 @@ export function PoketPaymentCallbackPage() {
   const downloadReceipt = async (format: PdfDownloadFormat = 'configured') => {
     if (!receipt) return;
     try {
+      ensurePdfBrowserPreview('Recibo de pago');
       setDownloadLoading(true);
       const invoice = receipt.invoice;
       const payment = receipt.payment;
@@ -152,12 +154,7 @@ export function PoketPaymentCallbackPage() {
         format,
         save: false,
       });
-      const url = URL.createObjectURL(result.blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `Recibo-${invoice.number}.pdf`;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      showPdfInBrowserPreview(result.blob, `Recibo-${invoice.number}.pdf`);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'No se pudo generar el recibo en PDF.');
     } finally {

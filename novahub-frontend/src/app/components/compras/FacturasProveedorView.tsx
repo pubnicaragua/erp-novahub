@@ -478,7 +478,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
           notes: localDoc.notes || '',
         },
       });
-      toast.success('PDF de la factura de proveedor descargado', { id: exportToastId });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el PDF de la factura de proveedor', { id: exportToastId });
     }

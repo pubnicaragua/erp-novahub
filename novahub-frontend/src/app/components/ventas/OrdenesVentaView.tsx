@@ -22,6 +22,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { generateEstimatePDF, previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { buildSalesPdfFileName } from '../../utils/exportFileNames';
+import { beginPdfBrowserPreview, closePdfBrowserPreview, showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -314,6 +315,8 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       toast.error('El cliente no tiene un número asociado para enviar la orden de venta por WhatsApp');
       return;
     }
+    const pdfPreview = beginPdfBrowserPreview('Orden de venta para WhatsApp');
+    let previewOpened = false;
 
     const customer = order.customer || customers.find((entry) => entry.id === order.customerId);
     let secureDocumentUrl: string | null = null;
@@ -330,6 +333,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
         secureDocumentUrl = publicLinkUrl(documentLink.path);
         securePortalUrl = publicLinkUrl(portalLink.path);
       }
+      if (secureDocumentUrl) closePdfBrowserPreview(pdfPreview);
 
       if (!secureDocumentUrl) {
         const { blob } = await generateEstimatePDF({
@@ -338,13 +342,16 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
           tenantLogo: themeConfig?.logo,
           formatAmount,
           documentType: 'order',
-          save: true,
+          save: false,
         });
+        showPdfInBrowserPreview(blob, buildSalesPdfFileName('order', order.number), pdfPreview);
+        previewOpened = true;
         const pdfFile = new File([blob], buildSalesPdfFileName('order', order.number), { type: 'application/pdf' });
         const uploaded = await storageService.uploadFile('documents', pdfFile, { folder: 'ordenes-venta' });
         if (uploaded?.url) publicPdfUrl = uploaded.url;
       }
     } catch (error) {
+      if (!previewOpened) closePdfBrowserPreview(pdfPreview);
       console.warn('No se pudo generar enlace seguro de la orden, usando modo estándar:', error);
     }
 

@@ -9,6 +9,7 @@ import { buildHumanPdfFileName, buildLabeledPdfFileName } from './exportFileName
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription } from './pdf-line-details';
 import { getBase64Image } from './reportExportUtils';
+import { closePdfBrowserPreview, ensurePdfBrowserPreview, showPdfInBrowserPreview } from './pdfBrowserPreview';
 
 type PdfRgb = [number, number, number];
 
@@ -168,6 +169,7 @@ function renderRollPdf({ document, tenantName, format, settings }: { document: P
 }
 
 export async function generatePurchaseRecordPDF({ document, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.purchase-record', designOverride, allowCuratedTemplate = true, save = true }: PurchaseRecordPdfOptions) {
+  if (save) ensurePdfBrowserPreview(document.title);
   const configuredDesign = designOverride || await getPdfDesign(targetKey);
   const overrideSettings = configuredDesign?.settings && typeof configuredDesign.settings === 'object' ? configuredDesign.settings : null;
   const settings = overrideSettings || await getPdfDesignSettings(targetKey);
@@ -280,59 +282,35 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
     }
     if (tenantName) { doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.text(`Generado por ${tenantName} - Módulo de Compras`, margin, pageHeight - 10); }
   }
-  if (save) doc.save(buildLabeledPdfFileName(document.title, document.number, format));
+  if (save) showPdfInBrowserPreview(doc.output('blob'), buildLabeledPdfFileName(document.title, document.number, format));
   return doc;
-}
-
-function writePurchasePdfPreviewLoadingPage(previewWindow: Window, title: string) {
-  const previewDocument = previewWindow.document;
-  previewDocument.title = `Vista previa · ${title}`;
-  previewDocument.body.replaceChildren();
-  Object.assign(previewDocument.body.style, {
-    margin: '0',
-    display: 'grid',
-    minHeight: '100vh',
-    placeItems: 'center',
-    background: '#111827',
-    color: '#f8fafc',
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-  });
-  const message = previewDocument.createElement('p');
-  message.textContent = 'Preparando la previsualización…';
-  message.style.padding = '24px';
-  message.style.textAlign = 'center';
-  previewDocument.body.appendChild(message);
 }
 
 /** Abre el PDF en el visor del navegador sin iniciar una descarga automática. */
 export async function previewPurchaseRecordPDF(options: PurchaseRecordPdfOptions) {
-  const previewWindow = window.open('', '_blank', 'width=1000,height=850');
-  if (!previewWindow) {
-    throw new Error('No se pudo abrir la previsualización. Habilita las ventanas emergentes para NovaHub.');
-  }
-
-  writePurchasePdfPreviewLoadingPage(previewWindow, options.document.title);
+  const previewSession = ensurePdfBrowserPreview(options.document.title);
+  if (!previewSession) throw new Error('No se pudo abrir la previsualización. Habilita las ventanas emergentes para NovaHub.');
   let previewUrl = '';
   try {
     const doc = await generatePurchaseRecordPDF({ ...options, save: false });
     const blob = doc.output('blob');
-    previewUrl = URL.createObjectURL(blob);
-    previewWindow.location.replace(previewUrl);
-    window.setTimeout(() => URL.revokeObjectURL(previewUrl), 10 * 60 * 1000);
+    const fileName = buildLabeledPdfFileName(options.document.title, options.document.number, options.format || 'configured');
+    previewUrl = showPdfInBrowserPreview(blob, fileName, previewSession).previewUrl;
     return {
       doc,
       blob,
       previewUrl,
-      fileName: buildLabeledPdfFileName(options.document.title, options.document.number, options.format || 'configured'),
+      fileName,
     };
   } catch (error) {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
-    previewWindow.close();
+    closePdfBrowserPreview(previewSession);
     throw error;
   }
 }
 
 export async function generatePurchaseListPDF({ title, rows, columns, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.list', summary, summaryPlacement = 'box', subtitle }: { title: string; rows: any[]; columns: PurchasePdfListColumn[]; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string; summary?: { label: string; value: unknown; columnIndex?: number }; summaryPlacement?: 'box' | 'footer'; subtitle?: string }) {
+  ensurePdfBrowserPreview(title);
   if (isRoll(format)) throw new Error('Los reportes generales solo están disponibles en tamaños de página PDF.');
   // Cada listado resuelve únicamente su propia plantilla. Si no existe una
   // plantilla personalizada, el generador conserva el diseño predeterminado.

@@ -4,6 +4,7 @@ import { getReadableForeground } from './color-contrast';
 import { getBase64Image } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
 import { brandingService } from '../services/branding.service';
+import { ensurePdfBrowserPreview, showPdfInBrowserPreview } from './pdfBrowserPreview';
 
 export interface NovaHubFormatColumn<T = any> {
   header: string;
@@ -203,6 +204,7 @@ export async function generateNovaHubFormatReport<T = any>({
   fileName,
   save = true,
 }: NovaHubFormatReportOptions<T>): Promise<jsPDF> {
+  if (save) ensurePdfBrowserPreview(title);
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -449,7 +451,7 @@ export async function generateNovaHubFormatReport<T = any>({
 
   // 7. Descargar el archivo generado si aplica
   if (save) {
-    doc.save(fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`);
+    showPdfInBrowserPreview(doc.output('blob'), fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`);
   }
   return doc;
 }

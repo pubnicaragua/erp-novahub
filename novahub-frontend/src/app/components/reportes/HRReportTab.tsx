@@ -20,6 +20,7 @@ import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTena
 import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
+import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
 import { formatCurrencyNumber, normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -1206,7 +1207,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         });
         if (configured) { toast.success("PDF generado exitosamente"); return; }
 
-        doc.save(buildReportDownloadFileName(['reporte_recursos_humanos'], 'pdf', dateRange));
+        showPdfInBrowserPreview(doc.output('blob'), buildReportDownloadFileName(['reporte_recursos_humanos'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
       } catch (e: any) {
         toast.error(e?.response?.data?.message || e?.message || "Error exportando PDF");
