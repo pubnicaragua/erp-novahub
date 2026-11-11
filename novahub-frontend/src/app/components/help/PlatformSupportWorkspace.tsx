@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { ArrowLeft, Building2, ChevronRight, CircleHelp, Loader2, LogOut, MailPlus, MessageSquare, Search, Send, ShieldCheck, Users } from 'lucide-react';
+import { ArrowLeft, Building2, ChevronRight, CircleHelp, Loader2, LogOut, MailPlus, MessageSquare, Search, Send, ShieldCheck, Upload, Users } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,6 +12,7 @@ import { updateMessageThread, upsertMessageThread } from '../notificaciones/mess
 import {
   allowMessageAttachmentDrop,
   dropMessageAttachmentFiles,
+  hasMessageAttachmentFiles,
   pasteMessageAttachmentFiles,
 } from '../notificaciones/message-attachment-input';
 import {
@@ -19,6 +20,7 @@ import {
   type MessageAttachmentComposerHandle,
 } from '../notificaciones/MessageAttachmentComposer';
 import { MessageAttachments } from '../notificaciones/MessageAttachments';
+import { MessageText } from '../notificaciones/MessageText';
 import { toast } from '@/app/services/toast';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -77,6 +79,7 @@ export function PlatformSupportWorkspace() {
   const [reply, setReply] = useState('');
   const [replyAttachmentState, setReplyAttachmentState] = useState<AttachmentComposerState>(emptyAttachmentState);
   const [replyAttachmentResetKey, setReplyAttachmentResetKey] = useState(0);
+  const [historyDropActive, setHistoryDropActive] = useState(false);
   const [replying, setReplying] = useState(false);
   const [replyError, setReplyError] = useState('');
   const markingReadIds = useRef(new Set<string>());
@@ -85,6 +88,7 @@ export function PlatformSupportWorkspace() {
   const messageEndRef = useRef<HTMLDivElement>(null);
   const replyAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
   const composeAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
+  const historyDropDepthRef = useRef(0);
   const shouldAutoScrollRef = useRef(true);
   const lastSelectedIdRef = useRef<string | null>(null);
   const refetchConversations = conversationsQuery.refetch;
@@ -223,6 +227,31 @@ export function PlatformSupportWorkspace() {
     } finally { setReplying(false); }
   };
 
+  const handleHistoryDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasMessageAttachmentFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    if (!selected?.canReply) return;
+    historyDropDepthRef.current += 1;
+    setHistoryDropActive(true);
+  };
+
+  const handleHistoryDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasMessageAttachmentFiles(event.dataTransfer) || !selected?.canReply) return;
+    event.preventDefault();
+    historyDropDepthRef.current = Math.max(0, historyDropDepthRef.current - 1);
+    if (historyDropDepthRef.current === 0) setHistoryDropActive(false);
+  };
+
+  const handleHistoryDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    historyDropDepthRef.current = 0;
+    setHistoryDropActive(false);
+    if (!selected?.canReply) {
+      if (hasMessageAttachmentFiles(event.dataTransfer)) event.preventDefault();
+      return;
+    }
+    dropMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files));
+  };
+
   const openConversation = (conversation: SupportConversation) => {
     setSelectedId(conversation.id);
     setMobileThreadOpen(true);
@@ -250,24 +279,24 @@ export function PlatformSupportWorkspace() {
 
   return (
     <main className="flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background text-foreground">
-      <header className="flex shrink-0 flex-col gap-4 border-b border-border/70 bg-card/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><ShieldCheck className="size-5" /></div>
-          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">NovaHub · Soporte externo</p><h1 className="break-words text-xl font-black sm:text-2xl">Bandeja de soporte</h1><p className="text-xs text-muted-foreground">{conversations.length} conversaciones · {unreadTotal} sin leer</p></div>
+      <header className="flex shrink-0 flex-col gap-2 border-b border-border/70 bg-card/80 px-2 py-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"><ShieldCheck className="size-4" /></div>
+          <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.16em] text-primary">NovaHub · Soporte externo</p><h1 className="break-words text-lg font-black">Bandeja de soporte</h1><p className="text-[11px] text-muted-foreground">{conversations.length} conversaciones · {unreadTotal} sin leer</p></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={openComposer} className="h-10 gap-2 rounded-xl"><MailPlus className="size-4" /> Nuevo envío</Button>
-          <Button variant="ghost" onClick={logout} className="h-10 gap-2 rounded-xl text-muted-foreground"><LogOut className="size-4" /> Salir</Button>
+          <Button onClick={openComposer} className="h-9 gap-2 rounded-lg"><MailPlus className="size-4" /> Nuevo envío</Button>
+          <Button variant="ghost" onClick={logout} className="h-9 gap-2 rounded-lg text-muted-foreground"><LogOut className="size-4" /> Salir</Button>
         </div>
       </header>
 
-      <div className="mx-auto grid min-h-0 w-full max-w-[1700px] min-w-0 flex-1 grid-cols-1 [grid-template-rows:minmax(0,1fr)] gap-4 overflow-hidden p-3 sm:p-5 lg:grid-cols-[340px_minmax(0,1fr)] lg:p-8">
-        <Card className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 shadow-sm', mobileThreadOpen && 'hidden lg:flex')}>
-          <div className="shrink-0 border-b border-border/60 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="font-black">Conversaciones</h2><p className="text-xs text-muted-foreground">Cada hilo corresponde a una sucursal.</p></div><Badge variant="secondary">{conversations.length}</Badge></div>
-            <label className="relative block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar conversaciones" className="h-10 rounded-xl pl-9" /></label>
+      <div className="grid min-h-0 w-full min-w-0 flex-1 grid-cols-1 [grid-template-rows:minmax(0,1fr)] gap-1 overflow-hidden p-1 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <Card className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border-border/70 shadow-sm', mobileThreadOpen && 'hidden lg:flex')}>
+          <div className="shrink-0 border-b border-border/60 p-2">
+            <div className="mb-2 flex items-center justify-between gap-2"><div><h2 className="text-sm font-black">Conversaciones</h2><p className="text-[11px] text-muted-foreground">Cada hilo corresponde a una sucursal.</p></div><Badge variant="secondary">{conversations.length}</Badge></div>
+            <label className="relative block"><Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar conversaciones" className="h-9 rounded-lg pl-8" /></label>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1" data-testid="support-chat-inbox">
             {conversationsQuery.isLoading ? <div className="flex justify-center p-12"><Loader2 className="size-5 animate-spin text-primary" /></div>
               : conversationsQuery.isError ? <div className="p-6 text-center text-sm text-destructive">No pudimos cargar la bandeja. Revisa tu conexión y vuelve a intentar.</div>
                 : filtered.length === 0 ? <div className="px-5 py-14 text-center"><MessageSquare className="mx-auto size-8 text-muted-foreground/60" /><p className="mt-3 text-sm font-bold">{conversations.length ? 'Sin coincidencias' : 'Aún no hay conversaciones'}</p><p className="mt-1 text-xs text-muted-foreground">{conversations.length ? 'Prueba con otro texto.' : 'Envía un mensaje para iniciar un hilo por sucursal.'}</p></div>
@@ -281,75 +310,86 @@ export function PlatformSupportWorkspace() {
           </div>
         </Card>
 
-        <Card className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 shadow-sm', !mobileThreadOpen && 'hidden lg:flex')}>
+        <Card className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border-border/70 shadow-sm', !mobileThreadOpen && 'hidden lg:flex')}>
           {selected ? <>
-            <div className="flex min-w-0 shrink-0 items-center gap-3 border-b border-border/60 px-4 py-3 sm:px-6">
-              <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={() => setMobileThreadOpen(false)} aria-label="Volver a conversaciones"><ArrowLeft className="size-4" /></Button>
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Building2 className="size-4" /></div>
+            <div className="flex min-w-0 shrink-0 items-center gap-2 border-b border-border/60 px-2 py-1.5" data-testid="support-chat-header">
+              <Button variant="ghost" size="icon" className="size-8 shrink-0 lg:hidden" onClick={() => setMobileThreadOpen(false)} aria-label="Volver a conversaciones"><ArrowLeft className="size-4" /></Button>
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Building2 className="size-4" /></div>
               <div className="min-w-0 flex-1"><h2 className="break-words font-black">{selected.participant.name}</h2><p className="truncate text-xs text-muted-foreground">{selected.title}</p></div>
               <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">Sucursal</Badge>
             </div>
-            <div
-              ref={messageBodyRef}
-              onScroll={(event) => {
-                const element = event.currentTarget;
-                shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
-              }}
-              className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6"
-              aria-live="polite"
-            >
-              <AnimatePresence initial={false}>
-                {selected.messages.map((message: ChatMessage) => <motion.div key={message.id} className={cn('flex', message.mine ? 'justify-end' : 'justify-start')} layout={!shouldReduceMotion} initial={shouldReduceMotion ? false : { opacity: 0, y: 9, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={shouldReduceMotion ? undefined : { opacity: 0, y: -3 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}><div className={cn('max-w-[90%] rounded-2xl px-4 py-3 sm:max-w-[72%]', message.mine ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md bg-muted/70 text-foreground')}>
-                  {!message.mine && <p className="mb-1 text-[11px] font-bold text-muted-foreground">{message.sender.name}</p>}{message.content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content}</p>}<MessageAttachments threadId={selected.id} kind="SUPPORT" attachments={message.attachments} mine={message.mine} /><p className={cn('mt-1.5 text-right text-[10px]', message.mine ? 'text-primary-foreground/70' : 'text-muted-foreground')}>{formatMessageDate(message.createdAt)}</p>
-                </div></motion.div>)}
-              </AnimatePresence>
-              <div ref={messageEndRef} aria-hidden="true" />
+            <div className="relative min-h-0 min-w-0 flex-1">
+              <div
+                ref={messageBodyRef}
+                onDragEnter={handleHistoryDragEnter}
+                onDragLeave={handleHistoryDragLeave}
+                onDragOver={(event) => {
+                  if (!hasMessageAttachmentFiles(event.dataTransfer)) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = selected.canReply ? 'copy' : 'none';
+                }}
+                onDrop={handleHistoryDrop}
+                onScroll={(event) => {
+                  const element = event.currentTarget;
+                  shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
+                }}
+                className="min-h-0 h-full space-y-3 overflow-y-auto overscroll-contain p-2"
+                data-testid="support-chat-history"
+                aria-live="polite"
+              >
+                <AnimatePresence initial={false}>
+                  {selected.messages.map((message: ChatMessage) => <motion.div key={message.id} className={cn('flex', message.mine ? 'justify-end' : 'justify-start')} layout={!shouldReduceMotion} initial={shouldReduceMotion ? false : { opacity: 0, y: 9, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={shouldReduceMotion ? undefined : { opacity: 0, y: -3 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}><div className={cn('max-w-[90%] rounded-2xl px-3 py-2.5 sm:max-w-[72%]', message.mine ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md bg-muted/70 text-foreground')}>
+                    {!message.mine && <p className="mb-1 text-[11px] font-bold text-muted-foreground">{message.sender.name}</p>}{message.content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed"><MessageText content={message.content} mine={message.mine} /></p>}<MessageAttachments threadId={selected.id} kind="SUPPORT" attachments={message.attachments} mine={message.mine} /><p className={cn('mt-1.5 text-right text-[10px]', message.mine ? 'text-primary-foreground/70' : 'text-muted-foreground')}>{formatMessageDate(message.createdAt)}</p>
+                  </div></motion.div>)}
+                </AnimatePresence>
+                <div ref={messageEndRef} aria-hidden="true" />
+              </div>
+              {historyDropActive && <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-background/80 p-4 text-center text-sm font-bold text-primary shadow-sm backdrop-blur-[2px]" role="status" aria-live="polite"><span className="flex items-center gap-2"><Upload className="size-4 shrink-0" /> Suelta los archivos para adjuntarlos al borrador</span></div>}
             </div>
-            <form onSubmit={submitReply} className="shrink-0 border-t border-border/60 p-3 sm:p-4">
-              <div className="mx-auto max-w-3xl">
+            <form onSubmit={submitReply} className="shrink-0 border-t border-border/60 px-1 py-1" data-testid="support-reply-form">
+              <div className="w-full min-w-0">
                 <label htmlFor="support-agent-reply" className="sr-only">Responder a la sucursal</label>
-                <div className="flex items-end gap-2 rounded-xl border border-border bg-muted/20 p-2 focus-within:ring-2 focus-within:ring-ring/40">
+                <p id="support-reply-help" className="sr-only">Enter envía la respuesta y Shift más Enter agrega una nueva línea.</p>
+                <MessageAttachmentComposer
+                  ref={replyAttachmentComposerRef}
+                  key={`reply-${selected.id}-${replyAttachmentResetKey}`}
+                  density="compact"
+                  kind="SUPPORT"
+                  conversationId={selected.id}
+                  disabled={replying}
+                  onChange={onReplyAttachmentsChange}
+                >
                   <Textarea
                     id="support-agent-reply"
+                    rows={1}
                     value={reply}
                     onChange={(event) => setReply(event.target.value.slice(0, 4000))}
                     onPaste={(event) => pasteMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files))}
-                    onDragOver={allowMessageAttachmentDrop}
-                    onDrop={(event) => dropMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files))}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
+                      if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                         event.preventDefault();
                         void submitReply();
                       }
                     }}
                     placeholder="Escribe una respuesta…"
-                    className="max-h-36 min-h-10 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
+                    aria-describedby="support-reply-help"
+                    className="field-sizing-content min-h-9 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto rounded-full border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
                     disabled={replying}
                   />
                   <Button
                     type="submit"
                     size="icon"
-                    className="size-10 shrink-0 rounded-lg"
+                    className="size-9 shrink-0 rounded-full"
                     disabled={replying || replyAttachmentState.uploading || replyAttachmentState.hasError || (!reply.trim() && !replyAttachmentState.attachments.length)}
                     aria-label="Enviar respuesta"
+                    title="Enviar respuesta"
                   >
                     {replying ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                   </Button>
-                </div>
-                <div className="mt-2">
-                  <MessageAttachmentComposer
-                    ref={replyAttachmentComposerRef}
-                    key={`reply-${selected.id}-${replyAttachmentResetKey}`}
-                    kind="SUPPORT"
-                    conversationId={selected.id}
-                    disabled={replying}
-                    onChange={onReplyAttachmentsChange}
-                  />
-                </div>
-                <div className="mt-1.5 flex justify-between gap-3 px-1 text-[11px]">
+                </MessageAttachmentComposer>
+                {replyError && <div className="mt-1 flex justify-between gap-3 px-2 text-[11px]">
                   <span className="text-destructive" role={replyError ? 'alert' : undefined}>{replyError}</span>
-                  <span className="ml-auto text-muted-foreground">Enter para enviar · Shift + Enter para nueva línea</span>
-                </div>
+                </div>}
               </div>
             </form>
           </> : <div className="flex flex-1 flex-col items-center justify-center p-8 text-center"><div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><CircleHelp className="size-6" /></div><h2 className="mt-4 font-black">Selecciona una conversación</h2><p className="mt-1 max-w-sm text-sm text-muted-foreground">Los mensajes enviados a varias sucursales se separan en hilos privados.</p></div>}

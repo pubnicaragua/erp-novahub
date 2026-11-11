@@ -26,6 +26,8 @@
     "test:force-sales-offline-route": "node --experimental-strip-types scripts/test-force-sales-offline-route.mjs",
     "test:support-scope-selection": "node --experimental-strip-types e2e/scripts/test-support-scope-selection.mjs",
     "test:support-target-selection": "node --experimental-strip-types e2e/scripts/test-support-target-selection.mjs",
+    "test:message-text": "node --experimental-strip-types --test scripts/test-message-text.mjs",
+    "test:support-chat-ui": "node scripts/test-support-chat-ui.mjs",
     "test:support-agent-password": "node --experimental-strip-types e2e/scripts/test-support-agent-password.mjs",
     "test:manager-branch-views": "node --experimental-strip-types e2e/scripts/test-manager-branch-views.mjs",
     "test:manager-consolidation-views": "node --experimental-strip-types e2e/scripts/test-manager-consolidation-views.mjs",

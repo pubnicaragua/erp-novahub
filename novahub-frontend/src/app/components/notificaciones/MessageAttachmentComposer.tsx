@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useRef, useState, type ReactNode } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { FileText, Loader2, Paperclip, RotateCcw, Upload, X } from 'lucide-react';
 import { messagesService } from '../../services/notificaciones.service';
@@ -29,6 +29,8 @@ interface ComposerFile {
 interface MessageAttachmentComposerProps {
   conversationId?: string;
   kind?: 'SUPPORT' | 'DIRECT';
+  density?: 'default' | 'compact';
+  children?: ReactNode;
   disabled?: boolean;
   onChange: (state: {
     attachments: MessageAttachment[];
@@ -40,12 +42,16 @@ interface MessageAttachmentComposerProps {
 export const MessageAttachmentComposer = forwardRef<MessageAttachmentComposerHandle, MessageAttachmentComposerProps>(function MessageAttachmentComposer({
   conversationId,
   kind = 'SUPPORT',
+  density = 'default',
+  children,
   disabled = false,
   onChange,
 }, ref) {
   const [files, setFiles] = useState<ComposerFile[]>([]);
   const [selectionError, setSelectionError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const attachmentHelpId = useId();
+  const compact = density === 'compact';
   const dragDepthRef = useRef(0);
   const filesRef = useRef<ComposerFile[]>([]);
 
@@ -148,23 +154,34 @@ export const MessageAttachmentComposer = forwardRef<MessageAttachmentComposerHan
 
   return (
     <div
-      className={cn('relative space-y-2 rounded-xl transition-colors', isDragging && 'border border-dashed border-primary bg-primary/5 p-2')}
+      className={cn(
+        compact
+          ? 'relative min-w-0 rounded-2xl border border-border bg-muted/20 p-1.5 transition-colors focus-within:ring-2 focus-within:ring-ring/40'
+          : 'relative space-y-2 rounded-xl transition-colors',
+        isDragging && (compact ? 'border-dashed border-primary bg-primary/5' : 'border border-dashed border-primary bg-primary/5 p-2'),
+      )}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
       {isDragging && (
-        <div className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-xs font-semibold text-primary" role="status" aria-live="polite">
+        <div className={cn(
+          'flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-xs font-semibold text-primary',
+          compact && 'absolute bottom-full left-0 right-0 z-20 mb-1 shadow-md',
+        )} role="status" aria-live="polite">
           <Upload className="size-4 shrink-0" /> Suelta los archivos para adjuntarlos
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={cn('flex min-w-0 items-center gap-2', compact && 'gap-1')}>
         <label className={cn(
-          'inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-semibold transition hover:bg-muted/60 focus-within:ring-2 focus-within:ring-ring/50',
+          compact
+            ? 'inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted focus-within:ring-2 focus-within:ring-ring/50'
+            : 'inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-semibold transition hover:bg-muted/60 focus-within:ring-2 focus-within:ring-ring/50',
           (disabled || files.length >= MAX_FILES) && 'pointer-events-none opacity-50',
-        )}>
-          <Paperclip className="size-4" /> Adjuntar archivo
+        )} title="Adjuntar archivos">
+          <Paperclip className="size-4" />
+          <span className={compact ? 'sr-only' : undefined}>Adjuntar archivo</span>
           <input
             type="file"
             accept={ACCEPTED}
@@ -172,22 +189,23 @@ export const MessageAttachmentComposer = forwardRef<MessageAttachmentComposerHan
             disabled={disabled || files.length >= MAX_FILES}
             className="sr-only"
             aria-label="Adjuntar archivos a la conversación"
+            aria-describedby={attachmentHelpId}
             onChange={(event) => {
               addFiles(event.currentTarget.files);
               event.currentTarget.value = '';
             }}
           />
         </label>
-        <span className="text-[11px] text-muted-foreground">Hasta 5 archivos · 10 MB cada uno · 25 MB por mensaje</span>
+        {compact ? children : <span className="text-[11px] text-muted-foreground">Hasta 5 archivos · 10 MB cada uno · 25 MB por mensaje</span>}
       </div>
-      <p className="text-[11px] text-muted-foreground">También puedes arrastrar archivos aquí o pegar archivos e imágenes desde el portapapeles.</p>
+      <p id={attachmentHelpId} className={cn('text-[11px] text-muted-foreground', compact && 'sr-only')}>Hasta 5 archivos · 10 MB cada uno · 25 MB por mensaje. También puedes arrastrar archivos o pegar archivos e imágenes desde el portapapeles.</p>
 
-      {selectionError && <p className="text-xs text-destructive" role="alert">{selectionError}</p>}
+      {selectionError && <p className={cn('text-xs text-destructive', compact && 'mt-1 px-2')} role="alert">{selectionError}</p>}
 
       {files.length > 0 && (
-        <ul className="grid gap-2 sm:grid-cols-2" aria-label="Archivos adjuntos">
+        <ul className={cn('grid gap-2 sm:grid-cols-2', compact && 'mt-1 gap-1.5')} aria-label="Archivos adjuntos">
           {files.map((item) => (
-            <li key={item.key} className="min-w-0 rounded-xl border border-border/70 bg-background/70 p-2.5">
+            <li key={item.key} className={cn('min-w-0 rounded-xl border border-border/70 bg-background/70 p-2.5', compact && 'rounded-lg p-1.5')}>
               <div className="flex min-w-0 items-start gap-2">
                 <FileText className="mt-0.5 size-4 shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
@@ -49,6 +49,7 @@ import {
   type MessageAttachmentComposerHandle,
 } from './MessageAttachmentComposer';
 import { MessageAttachments } from './MessageAttachments';
+import { MessageText } from './MessageText';
 
 interface MensajesViewProps {
   data: Message[];
@@ -82,52 +83,6 @@ const messageTime = (value: string) => {
   if (Number.isNaN(date.getTime())) return '';
   return format(date, "d MMM, HH:mm", { locale: es });
 };
-
-const MESSAGE_URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
-
-function renderMessageText(content: string, mine: boolean): ReactNode {
-  const parts: ReactNode[] = [];
-  let cursor = 0;
-  let linkIndex = 0;
-
-  for (const match of content.matchAll(MESSAGE_URL_PATTERN)) {
-    const rawUrl = match[0];
-    const start = match.index ?? cursor;
-    const url = rawUrl.replace(/[.,!?;:]+$/, '');
-    if (!url) continue;
-
-    const destination = /^www\./i.test(url) ? `https://${url}` : url;
-    try {
-      const { protocol } = new URL(destination);
-      if (protocol !== 'http:' && protocol !== 'https:') continue;
-    } catch {
-      continue;
-    }
-
-    parts.push(content.slice(cursor, start));
-    parts.push(
-      <a
-        key={`message-link-${linkIndex++}`}
-        href={destination}
-        target="_blank"
-        rel="noopener noreferrer"
-        referrerPolicy="no-referrer"
-        aria-label={`Abrir enlace ${url} en una pestaña nueva`}
-        className={cn(
-          'break-all font-medium underline underline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-          mine ? 'text-primary-foreground' : 'text-primary hover:text-primary/80',
-        )}
-      >
-        {url}
-      </a>,
-    );
-    if (rawUrl.length > url.length) parts.push(rawUrl.slice(url.length));
-    cursor = start + rawUrl.length;
-  }
-
-  parts.push(content.slice(cursor));
-  return parts;
-}
 
 const participantName = (value?: Partial<MessageParticipant> | null, fallback = 'Sistema') =>
   String(value?.name || fallback);
@@ -628,7 +583,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                               {participantName(message.sender, isSystem ? 'Sistema' : participantName(selected.participant, 'Participante'))}
                             </p>
                           )}
-                          {content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{renderMessageText(content, message.mine)}</p>}
+                          {content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed"><MessageText content={content} mine={message.mine} /></p>}
                           {(selected.kind === 'SUPPORT' || selected.kind === 'DIRECT') && (
                             <MessageAttachments
                               threadId={selected.id}
