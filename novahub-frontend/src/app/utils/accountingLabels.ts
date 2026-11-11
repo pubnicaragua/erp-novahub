@@ -39,6 +39,40 @@ export function referenceTypeLabel(value?: string): string {
   return REFERENCE_TYPE_LABELS[String(value).toUpperCase()] || 'Operación contable';
 }
 
+const ACCOUNTING_MODULE_ORIGIN_LABELS: Record<string, string> = {
+  PAID_INVOICE: 'Ventas',
+  INVOICE: 'Ventas',
+  PAYMENT: 'Ventas',
+  CREDIT_NOTE: 'Ventas',
+  SALE_RETURN: 'Ventas',
+  SUPPLIER_INVOICE: 'Compras',
+  SUPPLIER_INVOICE_PAYMENT: 'Compras',
+  PURCHASE_RECEIPT: 'Compras',
+  PAYMENT_MADE: 'Compras',
+  SUPPLIER_CREDIT: 'Compras',
+  SUPPLIER_CREDIT_ISSUED: 'Compras',
+  EXPENSE: 'Gastos',
+  FINANCIAL_INCOME: 'Finanzas',
+  FINANCIAL_EXPENSE: 'Finanzas',
+  PAYROLL: 'RRHH',
+  PAYROLL_ACCRUAL: 'RRHH',
+  PAYROLL_PAYMENT: 'RRHH',
+  INVENTORY_ADJUSTMENT: 'Inventario',
+  TRANSFER: 'Inventario',
+  CASH_REGISTER_SESSION: 'Caja',
+  CASH_REGISTER_DEPOSIT: 'Caja',
+  FIXED_ASSET_DEPRECIATION: 'Activos fijos',
+  FX_REVALUATION: 'Diferencias cambiarias',
+  FX_REVALUATION_REVERSAL: 'Diferencias cambiarias',
+  BANK_RECONCILIATION: 'Contabilidad',
+  MANUAL: 'Contabilidad',
+};
+
+export function accountingModuleOriginLabel(value?: string): string {
+  if (!value) return 'Contabilidad';
+  return ACCOUNTING_MODULE_ORIGIN_LABELS[String(value).toUpperCase()] || 'Contabilidad';
+}
+
 const ACCOUNTING_DESCRIPTION_LABELS: Record<string, string> = {
   ACCOUNT: 'Cuenta',
   ACCOUNT_TRANSFER: 'Transferencia de cuenta',
@@ -111,6 +145,8 @@ const ACCOUNTING_DESCRIPTION_PHRASES: Array<[RegExp, string]> = [
 export function accountingDescriptionLabel(value?: unknown): string {
   const raw = String(value ?? '').trim();
   if (!raw) return '—';
+  const inventoryAdjustment = raw.match(/^Ajuste(?:\s+de)?\s+Inventario\s+(#[^\s·•]+)(?:\s*[·•]\s*[A-Z][A-Z0-9_]*)?$/i);
+  if (inventoryAdjustment) return `Ajuste de Inventario ${inventoryAdjustment[1]}`;
   const legacyLoanLineLabels: Record<string, string> = {
     'cuenta por cobrar del préstamo': 'Total a cobrar al cliente (principal + intereses)',
     'principal desembolsado': 'Efectivo entregado al cliente (solo principal)',

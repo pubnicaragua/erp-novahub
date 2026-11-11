@@ -23,7 +23,7 @@ import type { ChartAccount } from '../../types/accounting';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
-import { REFERENCE_TYPES, accountingDescriptionLabel, referenceTypeLabel } from '../../utils/accountingLabels';
+import { REFERENCE_TYPES, accountingDescriptionLabel, accountingModuleOriginLabel, referenceTypeLabel } from '../../utils/accountingLabels';
 import { generateJournalPDF } from '../../utils/pdfGenerator';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
@@ -1022,13 +1022,13 @@ export function DiarioView() {
                   </div>
 
                   <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Origen por sucursal</p>
-                    <p className="mt-1 text-sm font-semibold">
-                      {(viewJournal as any).branchLinks?.length
-                        ? (viewJournal as any).branchLinks.map((link: any) => link.branch?.name).filter(Boolean).join(' · ')
-                        : 'General / sin sucursal vinculada'}
-                    </p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">Es el mismo asiento contable; esta vinculación solo permite consultar y filtrar su origen.</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Origen</p>
+                    <p className="mt-1 text-sm font-semibold">{accountingModuleOriginLabel((viewJournal as any).referenceType)}</p>
+                    {!!(viewJournal as any).branchLinks?.length && (
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        Sucursales vinculadas: {(viewJournal as any).branchLinks.map((link: any) => link.branch?.name).filter(Boolean).join(' · ')}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap gap-2">

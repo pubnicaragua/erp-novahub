@@ -7,6 +7,7 @@
     "audit:screens": "node scripts/audit-screens.mjs",
     "audit:ids": "node scripts/audit-raw-ids.mjs",
     "test:display-text": "node scripts/test-display-text.mjs",
+    "test:accounting-labels": "node scripts/test-accounting-labels.mjs",
     "check:init": "node scripts/check-use-before-init.mjs",
     "test:check-init": "node scripts/test-check-use-before-init.mjs",
     "check:names": "node scripts/check-undefined-names.mjs",
