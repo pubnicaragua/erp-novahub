@@ -40,7 +40,7 @@ import { hasPaymentReferenceField, isBankPaymentMethod, requiresPaymentReference
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
-import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import { generatePurchaseListPDF, previewPurchaseRecordPDF } from '../../utils/purchaseExports';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
@@ -687,48 +687,49 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       exchangeRate: hasFinalAmount ? (receipt.exchangeRate || linkedOrder?.exchangeRate) : (linkedOrder?.exchangeRate || receipt.exchangeRate),
     };
   };
-  const buildReceiptPanel = (receipt: PurchaseReceipt): SalesDocumentPanelData => ({
-    id: receipt.id,
-    number: receipt.number,
-    title: 'Recepción de compra',
-    customerName: receipt.supplier?.name || 'Proveedor sin nombre',
-    hideCustomer: true,
-    status: getReceiptDisplayStatus(receipt),
-    sourceLabel: receipt.purchaseOrder?.number ? `Orden de compra ${receipt.purchaseOrder.number}` : undefined,
-    totalLabel: formatConvertedAmount(
-      Number(receipt.total || 0),
-      receipt.currency,
-      receipt.exchangeRate,
-    ),
-    sourceCurrency: receipt.currency,
-    sourceExchangeRate: receipt.exchangeRate,
-    summaryDetails: [
-      { label: 'Moneda', value: String(receipt.currency || 'NIO').toUpperCase() },
-      { label: 'Líneas', value: String(receipt.items?.length || 0) },
-      { label: 'Importe comprometido', value: formatConvertedAmount(expectedReceiptPayment(receipt), receiptExpectedCurrency(receipt), receipt.purchaseOrder?.exchangeRate || receipt.exchangeRate) },
-      { label: 'Pagado', value: formatConvertedAmount(paidReceiptAmount(receipt), receiptPaidCurrency(receipt), activeReceiptInvoices(receipt)[0]?.exchangeRate || receipt.exchangeRate) },
-    ],
-    metadata: [
-      { label: 'Proveedor', value: receipt.supplier?.name || 'No disponible' },
-      { label: 'Fecha de recepción', value: receipt.date ? formatDateEs(receipt.date) : 'No disponible' },
-      { label: 'Orden de compra', value: receipt.purchaseOrder?.number || 'No vinculada' },
-    ],
-    lines: (receipt.items || []).map((item) => {
-      const ordered = Number(item.quantityOrdered || 0);
-      const received = Number(item.quantityReceived || 0);
-      const rejected = Number(item.quantityRejected || 0);
-      const lineTotal = received * Number(item.unitPrice || 0);
-      return {
-        id: item.id,
-        description: item.description || item.name || item.code || 'Artículo sin descripción',
-        quantity: received,
-        unitPriceLabel: formatReceiptAmount(Number(item.unitPrice || 0), receipt.currency),
-        totalLabel: formatReceiptAmount(lineTotal, receipt.currency),
-        secondaryLabel: `Ordenada: ${ordered} · Recibida: ${received} · Rechazada: ${rejected}${item.commercialNoteSnapshot ? ` · Nota: ${item.commercialNoteSnapshot}` : ''}`,
-      };
-    }),
-    notes: receipt.notes,
-  });
+  const buildReceiptPanel = (receipt: PurchaseReceipt): SalesDocumentPanelData => {
+    const totals = receiptTotalDetails(receipt);
+    const operationCurrency = normalizeReceiptCurrency(receipt.currency || receipt.purchaseOrder?.currency);
+    return {
+      id: receipt.id,
+      number: receipt.number,
+      title: 'Recepción de compra',
+      customerName: receipt.supplier?.name || 'Proveedor sin nombre',
+      hideCustomer: true,
+      status: getReceiptDisplayStatus(receipt),
+      sourceLabel: receipt.purchaseOrder?.number ? `Orden de compra ${receipt.purchaseOrder.number}` : undefined,
+      totalLabel: formatConvertedAmount(totals.amount, totals.currency, totals.exchangeRate),
+      sourceCurrency: totals.currency,
+      sourceExchangeRate: totals.exchangeRate,
+      summaryDetails: [
+        { label: 'Moneda de operación', value: operationCurrency },
+        { label: 'Moneda de visualización', value: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
+        { label: 'Líneas', value: String(receipt.items?.length || 0) },
+        { label: 'Importe comprometido', value: formatConvertedAmount(expectedReceiptPayment(receipt), receiptExpectedCurrency(receipt), receipt.purchaseOrder?.exchangeRate || receipt.exchangeRate) },
+        { label: 'Pagado', value: formatConvertedAmount(paidReceiptAmount(receipt), receiptPaidCurrency(receipt), activeReceiptInvoices(receipt)[0]?.exchangeRate || receipt.exchangeRate) },
+      ],
+      metadata: [
+        { label: 'Proveedor', value: receipt.supplier?.name || 'No disponible' },
+        { label: 'Fecha de recepción', value: receipt.date ? formatDateEs(receipt.date) : 'No disponible' },
+        { label: 'Orden de compra', value: receipt.purchaseOrder?.number || 'No vinculada' },
+      ],
+      lines: (receipt.items || []).map((item) => {
+        const ordered = Number(item.quantityOrdered || 0);
+        const received = Number(item.quantityReceived || 0);
+        const rejected = Number(item.quantityRejected || 0);
+        const lineTotal = received * Number(item.unitPrice || 0);
+        return {
+          id: item.id,
+          description: item.description || item.name || item.code || 'Artículo sin descripción',
+          quantity: received,
+          unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), receipt.currency || operationCurrency, receipt.exchangeRate || receipt.purchaseOrder?.exchangeRate),
+          totalLabel: formatConvertedAmount(lineTotal, receipt.currency || operationCurrency, receipt.exchangeRate || receipt.purchaseOrder?.exchangeRate),
+          secondaryLabel: `Ordenada: ${ordered} · Recibida: ${received} · Rechazada: ${rejected}${item.commercialNoteSnapshot ? ` · Nota: ${item.commercialNoteSnapshot}` : ''}`,
+        };
+      }),
+      notes: receipt.notes,
+    };
+  };
   const filterGetters = {
     supplier: (row: PurchaseReceipt) => row.supplier?.name || '-',
     date: (row: PurchaseReceipt) => (row.date ? new Date(row.date).getTime() : null),
@@ -853,54 +854,67 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
     }
   };
 
+  const receiptPdfParams = (receipt: PurchaseReceipt, format: PdfDownloadFormat) => {
+    const receiptTotals = calculateReceiptTotalsForForm(receipt.items || []);
+    const operationCurrency = normalizeReceiptCurrency(receipt.currency || receipt.purchaseOrder?.currency);
+    const operationExchangeRate = receipt.exchangeRate || receipt.purchaseOrder?.exchangeRate;
+    const totalDetails = receiptTotalDetails(receipt);
+    const expectedCurrency = normalizeReceiptCurrency(receiptExpectedCurrency(receipt));
+    const paidInvoice = activeReceiptInvoices(receipt)[0];
+    const paidCurrency = normalizeReceiptCurrency(paidInvoice?.currency || receipt.currency);
+    const displayCurrencyDescription = displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel;
+
+    return {
+      tenantName: user?.tenantName || '',
+      tenantLogo: user?.sessionBranding?.logo || null,
+      format,
+      targetKey: 'compras.purchase-receipt',
+      document: {
+        title: 'Recepción de compra',
+        number: receipt.number,
+        date: receipt.date ? formatDateEs(receipt.date) : undefined,
+        status: statusOpts.find((option) => option.value === getReceiptDisplayStatus(receipt))?.label || receipt.status,
+        supplier: receipt.supplier?.name || 'Sin proveedor',
+        fields: [
+          { label: 'Orden de compra', value: receipt.purchaseOrder?.number || 'No vinculada' },
+          { label: 'Moneda de operación', value: operationCurrency },
+          { label: 'Moneda de visualización', value: displayCurrencyDescription },
+          { label: displayMode === 'ORIGINAL' ? `Importe comprometido (${expectedCurrency})` : 'Importe comprometido', value: formatConvertedAmount(expectedReceiptPayment(receipt), expectedCurrency, receipt.purchaseOrder?.exchangeRate || receipt.exchangeRate) },
+          { label: displayMode === 'ORIGINAL' ? `Pagado (${paidCurrency})` : 'Pagado', value: formatConvertedAmount(paidReceiptAmount(receipt), paidCurrency, paidInvoice?.exchangeRate || receipt.exchangeRate) },
+        ],
+        lines: (receipt.items || []).map((item) => ({
+          description: item.description || item.name || item.code || 'Artículo sin descripción',
+          code: item.code,
+          productCode: (item as any).productCode,
+          variantId: (item as any).variantId,
+          variantSku: (item as any).variantSku,
+          variantName: (item as any).variantName,
+          variantAttributes: (item as any).variantAttributes,
+          variant: (item as any).variant,
+          quantity: Number(item.quantityReceived || 0),
+          unitPrice: formatConvertedAmount(Number(item.unitPrice || 0), operationCurrency, operationExchangeRate),
+          total: formatConvertedAmount(Number(item.quantityReceived || 0) * Number(item.unitPrice || 0), operationCurrency, operationExchangeRate),
+          secondary: `Ordenada: ${Number(item.quantityOrdered || 0)} · Rechazada: ${Number(item.quantityRejected || 0)}${item.commercialNoteSnapshot ? ` · Nota: ${item.commercialNoteSnapshot}` : ''}`,
+        })),
+        totals: [
+          { label: 'Subtotal', value: formatConvertedAmount(Number(receipt.subtotal ?? receiptTotals.subtotal), operationCurrency, operationExchangeRate) },
+          { label: 'Impuestos', value: formatConvertedAmount(Number(receipt.taxAmount ?? receiptTotals.taxAmount), operationCurrency, operationExchangeRate) },
+          { label: 'Retención', value: formatConvertedAmount(Number(receipt.withholdingTotal ?? receiptTotals.withholdingTotal), operationCurrency, operationExchangeRate) },
+        ],
+        total: formatConvertedAmount(totalDetails.amount, totalDetails.currency, totalDetails.exchangeRate),
+        totalLabel: 'Total recibido',
+        notes: receipt.notes,
+      },
+    };
+  };
+
   const handleDownloadReceiptPdf = async (receipt: PurchaseReceipt, format: PdfDownloadFormat) => {
-    const exportToastId = toast.loading('Generando PDF de la recepción...');
+    const exportToastId = toast.loading('Preparando vista previa de la recepción...');
     try {
-      const receiptTotals = calculateReceiptTotalsForForm(receipt.items || []);
-      await generatePurchaseRecordPDF({
-        tenantName: user?.tenantName || '',
-        tenantLogo: user?.sessionBranding?.logo || null,
-        format,
-        targetKey: 'compras.purchase-receipt',
-        document: {
-          title: 'Recepción de compra',
-          number: receipt.number,
-          date: receipt.date ? formatDateEs(receipt.date) : undefined,
-           status: statusOpts.find((option) => option.value === getReceiptDisplayStatus(receipt))?.label || receipt.status,
-          supplier: receipt.supplier?.name || 'Sin proveedor',
-          fields: [
-            { label: 'Orden de compra', value: receipt.purchaseOrder?.number || 'No vinculada' },
-            { label: 'Moneda', value: String(receipt.currency || 'NIO').toUpperCase() },
-            { label: 'Importe comprometido', value: formatConvertedAmount(expectedReceiptPayment(receipt), receiptExpectedCurrency(receipt), receipt.purchaseOrder?.exchangeRate || receipt.exchangeRate) },
-            { label: 'Pagado', value: formatConvertedAmount(paidReceiptAmount(receipt), receiptPaidCurrency(receipt), activeReceiptInvoices(receipt)[0]?.exchangeRate || receipt.exchangeRate) },
-          ],
-          lines: (receipt.items || []).map((item) => ({
-            description: item.description || item.name || item.code || 'Artículo sin descripción',
-            code: item.code,
-            productCode: (item as any).productCode,
-            variantId: (item as any).variantId,
-            variantSku: (item as any).variantSku,
-            variantName: (item as any).variantName,
-            variantAttributes: (item as any).variantAttributes,
-            variant: (item as any).variant,
-            quantity: Number(item.quantityReceived || 0),
-            unitPrice: formatReceiptAmount(Number(item.unitPrice || 0), receipt.currency),
-            total: formatReceiptAmount(Number(item.quantityReceived || 0) * Number(item.unitPrice || 0), receipt.currency),
-            secondary: `Ordenada: ${Number(item.quantityOrdered || 0)} · Rechazada: ${Number(item.quantityRejected || 0)}${item.commercialNoteSnapshot ? ` · Nota: ${item.commercialNoteSnapshot}` : ''}`,
-          })),
-          totals: [
-            { label: 'Subtotal', value: formatReceiptAmount(Number(receipt.subtotal ?? receiptTotals.subtotal), receipt.currency) },
-            { label: 'Impuestos', value: formatReceiptAmount(Number(receipt.taxAmount ?? receiptTotals.taxAmount), receipt.currency) },
-            { label: 'Descuento', value: formatReceiptAmount(Number(receipt.withholdingTotal ?? receiptTotals.withholdingTotal), receipt.currency) },
-          ],
-          total: formatReceiptAmount(Number(receipt.total || 0), receipt.currency),
-          totalLabel: 'Total recibido',
-          notes: receipt.notes,
-        },
-      });
-      toast.success('PDF descargado', { id: exportToastId });
+      await previewPurchaseRecordPDF(receiptPdfParams(receipt, format));
+      toast.success('Vista previa abierta en el navegador', { id: exportToastId });
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
+      toast.error(error?.message || 'No se pudo abrir la vista previa del PDF', { id: exportToastId });
     }
   };
 
