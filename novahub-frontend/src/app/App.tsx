@@ -365,10 +365,6 @@ function DashboardLayout() {
 
   const mainRef = useRef<HTMLElement | null>(null);
   const mainScrollStorageKey = `erp-scroll-position:${user?.id || 'anonymous'}:${activeModule}:${activeSubModule || ''}`;
-  const isMessagesWorkspace = activeModule === 'notificaciones'
-    && activeSubModule === 'mensajes'
-    && hasAccess('notificaciones')
-    && canPerform('NOTIFICATIONS_MESSAGES', 'view');
 
   useEffect(() => {
     const isVisibleGuideTrigger = (element: HTMLElement) => {
@@ -416,10 +412,7 @@ function DashboardLayout() {
   useEffect(() => {
     const main = mainRef.current;
     if (!main) return;
-    if (isMessagesWorkspace) {
-      main.scrollTop = 0;
-      return;
-    }
+    const isMessagesScrollLocked = () => Boolean(main.querySelector('[data-message-scroll-layout="contained"]'));
 
     const initialSaved = Number(safeGetItem(mainScrollStorageKey) || 0);
     let restorePending = Number.isFinite(initialSaved) && initialSaved > 0;
@@ -427,6 +420,11 @@ function DashboardLayout() {
     let saveFrame = 0;
 
     const restoreScrollPosition = () => {
+      if (isMessagesScrollLocked()) {
+        main.scrollTop = 0;
+        restorePending = false;
+        return;
+      }
       if (!restorePending || userInteracted) return;
 
       // Read again because the authenticated user and the POS view can finish
@@ -449,6 +447,7 @@ function DashboardLayout() {
     };
 
     const saveScrollPosition = () => {
+      if (isMessagesScrollLocked()) return;
       if (saveFrame) return;
       saveFrame = window.requestAnimationFrame(() => {
         saveFrame = 0;
@@ -471,7 +470,12 @@ function DashboardLayout() {
     const mutationObserver = typeof MutationObserver !== 'undefined'
       ? new MutationObserver(restoreScrollPosition)
       : null;
-    mutationObserver?.observe(main, { childList: true, subtree: true });
+    mutationObserver?.observe(main, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-message-scroll-layout'],
+    });
 
     return () => {
       main.removeEventListener('scroll', saveScrollPosition);
@@ -484,7 +488,7 @@ function DashboardLayout() {
       if (saveFrame) window.cancelAnimationFrame(saveFrame);
       if (!restorePending) safeSetItem(mainScrollStorageKey, String(main.scrollTop));
     };
-  }, [isMessagesWorkspace, mainScrollStorageKey]);
+  }, [mainScrollStorageKey]);
 
   useEffect(() => {
     const handleImportPreviewOpened = () => {
@@ -667,7 +671,7 @@ function DashboardLayout() {
         />
         <main
           ref={mainRef}
-          className={`scrollbar-overlay module-${currentModule} min-h-0 min-w-0 flex-1 overflow-x-hidden ${isMessagesWorkspace ? 'overflow-y-hidden' : 'overflow-y-auto'}`}
+          className={`scrollbar-overlay module-${currentModule} min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto`}
           style={{ overflowAnchor: 'none' }}
         >
           <Suspense fallback={<PageLoader />}>

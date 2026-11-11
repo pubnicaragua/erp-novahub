@@ -141,7 +141,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
     <div className={cn(
       'notifications-module bg-background',
       activeTab === 'mensajes' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'min-h-full',
-    )}>
+    )} data-message-scroll-layout={activeTab === 'mensajes' ? 'contained' : undefined}>
       <div className={cn(
         'mx-auto w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4',
         activeTab === 'mensajes' ? 'flex min-h-0 flex-1 flex-col' : 'min-h-[calc(100vh-5rem)]',

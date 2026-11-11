@@ -2665,6 +2665,11 @@ th .column-filter-menu .column-filter-icon,
   touch-action: pan-x pan-y pinch-zoom;
 }
 
+main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
+  overflow-y: hidden !important;
+  overscroll-behavior-y: none;
+}
+
 .scrollbar-overlay::-webkit-scrollbar {
   width: 6px;
   height: 6px;
