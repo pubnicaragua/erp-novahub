@@ -86,7 +86,7 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat, PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { getInvoicePaymentPresentation } from '../../utils/paymentMethods';
 import { getSalesAdditionalCharges, normalizeSalesExtraCharges } from '../../utils/salesCharges';
-import { normalizeCurrency } from '../../utils/currency';
+import { formatCurrencyAmount, normalizeCurrency } from '../../utils/currency';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { runWithReportRequestLimit } from '../../utils/report-request-limiter';
 import { toast } from '@/app/services/toast';
@@ -699,7 +699,7 @@ export function CustomerDetailDrawer({
                 <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
                 <MetricCard label="Saldo pendiente" value={formatConvertedAmount(customerDebt, baseCurrency)} icon={DollarSign} accent="text-rose-600 dark:text-rose-400" loading={loading} />
                   <MetricCard label="Saldo a favor" value={formatConvertedAmount(customerFavor, baseCurrency)} icon={Banknote} accent="text-emerald-600 dark:text-emerald-400" loading={loading} />
-                  <MetricCard label={`Límite Crédito (${creditLimitCurrency})`} value={formatConvertedAmount(creditLimit, creditLimitCurrency, exchangeRate)} icon={CreditCard} accent="text-primary" loading={loading} />
+                  <MetricCard label={`Límite Crédito (${creditLimitCurrency})`} value={formatCurrencyAmount(creditLimit, creditLimitCurrency)} icon={CreditCard} accent="text-primary" loading={loading} />
                   <MetricCard label="Tipo Cliente" value={typeInfo.label} icon={TypeIcon} accent="text-primary" loading={loading} />
                     <MetricCard label="Estado" value={statusInfo.label} icon={CheckCircle2} accent="text-primary" loading={loading} />
                 </div>
@@ -747,7 +747,7 @@ export function CustomerDetailDrawer({
                     </div>
                     <div className="flex min-w-0 min-h-[100px] flex-col rounded-xl border border-border/50 bg-muted/10 p-2.5">
                       <p className="min-h-[2rem] text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Límite de crédito ({creditLimitCurrency})</p>
-                      <p className="mt-1 min-h-[1.25rem] text-sm font-black tabular-nums text-primary">{formatConvertedAmount(creditLimit, creditLimitCurrency, exchangeRate)}</p>
+                      <p className="mt-1 min-h-[1.25rem] text-sm font-black tabular-nums text-primary">{formatCurrencyAmount(creditLimit, creditLimitCurrency)}</p>
                       <div className="mt-1 min-h-[1.5rem]" aria-hidden="true" />
                     </div>
                   </div>
@@ -813,7 +813,7 @@ export function CustomerDetailDrawer({
                     <InfoField label={customerTaxLabel} value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
                     <InfoField label="Régimen Fiscal" value={customer?.fiscalRegime || 'No registrado'} icon={ShieldAlert} muted={!customer?.fiscalRegime} />
                     <InfoField label="Lista de Precios" value={customer?.priceList?.name || 'Sin lista asignada'} icon={Tag} muted={!customer?.priceList} />
-                    <InfoField label={`Límite de Crédito Concedido (${creditLimitCurrency})`} value={formatConvertedAmount(creditLimit, creditLimitCurrency, exchangeRate)} icon={DollarSign} mono />
+                    <InfoField label={`Límite de Crédito Concedido (${creditLimitCurrency})`} value={formatCurrencyAmount(creditLimit, creditLimitCurrency)} icon={DollarSign} mono />
                     <InfoField label="Plazo de Crédito" value={creditDays == null ? 'Sin plazo configurado' : creditDays === 0 ? 'Vence el mismo día (0 días)' : `${creditDays} días`} icon={Clock} mono />
                     <InfoField label="Saldo pendiente" value={formatConvertedAmount(customerDebt, baseCurrency)} icon={DollarSign} mono />
                     <InfoField label="Saldo a favor" value={formatConvertedAmount(customerFavor, baseCurrency)} icon={Banknote} mono />

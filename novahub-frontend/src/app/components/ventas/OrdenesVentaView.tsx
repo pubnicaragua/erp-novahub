@@ -29,7 +29,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
-import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
+import { getCatalogUnitPrice, formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
@@ -1201,8 +1201,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                             if (selectedProd) {
                               newItems[idx].description = selectedProd.name;
                               newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
-                              const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
-                              newItems[idx].unitPrice = priceInCurrency(baseSalePrice, localDoc?.currency || 'NIO', Number(localDoc?.exchangeRate || globalRate || 1));
+                              newItems[idx].unitPrice = getCatalogUnitPrice(selectedProd, localDoc?.currency || 'NIO', Number(localDoc?.exchangeRate || globalRate || 1));
                               newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
                             } else {
                               newItems[idx].description = 'Producto Customizado';

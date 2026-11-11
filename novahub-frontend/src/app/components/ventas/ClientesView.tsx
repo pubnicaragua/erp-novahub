@@ -36,7 +36,7 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { normalizeCustomerImportDate } from '../../utils/customer-import-date';
-import { convertCreditLimitAmount, normalizeCurrency, preserveCreditLimitCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { normalizeCurrency, preserveCreditLimitCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerImportPhoneValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
@@ -178,7 +178,7 @@ const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
 ];
 
 export function ClientesView({ data, loading, error, onRefresh, pagination, onSearchChange, dateFrom, dateTo, onDateRangeChange, summaryData, summaryLoading, summaryError, isSidebarCollapsed = true }: ClientesViewProps) {
-  const { baseCurrency, displayCurrency, exchangeRate, displayMode, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
   const { canPerform, user } = useAuth();
   const { countries, defaultCountryCode } = useCustomerFormOptions();
   const tenantKey = user?.tenantId || 'anonymous';
@@ -871,16 +871,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const changeCreditLimitCurrency = (draft: CustomerDraft, nextCurrency: SupportedCurrency): CustomerDraft => ({
     ...draft,
     creditLimitCurrency: nextCurrency,
-    creditLimit: draft.creditLimit.trim() === ''
-      ? ''
-      : String(convertCreditLimitAmount(
-        Number(draft.creditLimit),
-        draft.creditLimitCurrency,
-        nextCurrency,
-        baseCurrency,
-        exchangeRate,
-      )),
-  });
+      });
 
   const handleUpdate = async (id: string | number, updates: CustomerUpdatePayload) => {
     try {

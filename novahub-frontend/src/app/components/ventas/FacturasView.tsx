@@ -37,7 +37,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { InvoiceDetailSheet } from './InvoiceDetailSheet';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
-import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
+import { getCatalogUnitPrice, formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
 import { getSalesInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
@@ -1511,10 +1511,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         ? product.variants?.find((candidate: any) => String(candidate.name || '').trim().toLowerCase() === String(line.variantName || '').trim().toLowerCase())
         : undefined;
       const itemType = getCatalogItemType(product);
-      const baseSalePrice = Number((product as any).salePrice ?? (product as any).price ?? 0);
-      const unitPrice = dictatedPrice ?? (localDoc.currency === 'USD'
-        ? baseSalePrice / Number(localDoc.exchangeRate || globalRate || 1)
-        : baseSalePrice);
+      const unitPrice = dictatedPrice ?? getCatalogUnitPrice(product, localDoc.currency, Number(localDoc.exchangeRate || globalRate || 1));
       const quantity = Math.max(1, Number(line.quantity || 1));
       return {
         id: `voice-${Date.now()}-${index}`,
@@ -2241,8 +2238,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
                           newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
-                          const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
-                          newItems[idx].unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
+                          newItems[idx].unitPrice = getCatalogUnitPrice(selectedProd, localDoc?.currency, Number(localDoc?.exchangeRate || globalRate || 1));
                           newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
                         }
                         const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);

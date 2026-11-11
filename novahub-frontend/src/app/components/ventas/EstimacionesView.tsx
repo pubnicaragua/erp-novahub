@@ -29,7 +29,7 @@ import { beginPdfBrowserPreview, closePdfBrowserPreview, showPdfInBrowserPreview
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
-import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
+import { getCatalogUnitPrice, formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
@@ -1178,8 +1178,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                           newItems[idx].description = selectedProd.name;
                           newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
                           newItems[idx].productCode = selectedProd.code;
-                          const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
-                          newItems[idx].unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
+                          newItems[idx].unitPrice = getCatalogUnitPrice(selectedProd, localDoc?.currency, Number(localDoc?.exchangeRate || globalRate || 1));
                           newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
                         } else {
                           newItems[idx].description = 'Producto Customizado';

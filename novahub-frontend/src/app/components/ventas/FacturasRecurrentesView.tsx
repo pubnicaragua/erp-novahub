@@ -22,7 +22,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { recurringExpensesService } from '../../services/finanzas.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
-import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
+import { getCatalogUnitPrice, formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
@@ -179,8 +179,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
       toast.error('Este producto ya está agregado con la misma lista de precios.');
       return;
     }
-    const baseSalePrice = Number(selectedProduct?.salePrice ?? selectedProduct?.price ?? 0);
-    const unitPrice = localDoc.currency === 'USD' ? baseSalePrice / Number(localDoc.exchangeRate || globalRate || 1) : baseSalePrice;
+    const unitPrice = getCatalogUnitPrice(selectedProduct, localDoc.currency, Number(localDoc.exchangeRate || globalRate || 1));
     newItems[idx] = {
       ...newItems[idx],
       itemType,

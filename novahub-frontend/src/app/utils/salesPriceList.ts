@@ -117,8 +117,26 @@ export function formatSalesAmount(value: unknown): string {
   });
 }
 
+/**
+ * Precio de catálogo de un producto expresado en la moneda del documento.
+ * Un producto registrado en dólares conserva su precio original cuando el documento también es en dólares: no se pasa
+ * por córdobas ni por la tasa del día (eso hacía perder centavos y cambiaba el precio que se registró).
+ */
+export function getCatalogUnitPrice(product: any, currency: unknown = 'NIO', exchangeRate: unknown = 1): number {
+  const docCurrency = String(currency || 'NIO').toUpperCase();
+  const productCurrency = String(product?.priceCurrency || 'NIO').toUpperCase();
+  const original = Number(product?.salePriceOriginal);
+  if (docCurrency === 'USD' && productCurrency === 'USD' && Number.isFinite(original) && original > 0) return original;
+  const rawBase = Number(product?.salePrice ?? product?.price ?? 0);
+  const base = Number.isFinite(rawBase) ? rawBase : 0;
+  return docCurrency === 'USD' ? base / Math.max(Number(exchangeRate) || 1, 0.000001) : base;
+}
+
 /** Devuelve el precio expresado en la moneda del documento. */
 export function getSalesUnitPrice(item: any, currency = 'NIO', exchangeRate = 1): number | undefined {
+  // Si el precio se registró en dólares y el documento es en dólares, se respeta tal cual (sin ida y vuelta por córdobas).
+  const ownPrice = Number(item?.price);
+  if (String(currency).toUpperCase() === 'USD' && String(item?.currency || 'NIO').toUpperCase() === 'USD' && Number.isFinite(ownPrice) && ownPrice > 0) return ownPrice;
   let basePrice = Number(item?.basePrice);
   if (!(basePrice > 0) && Number(item?.price) > 0) {
     const listCurrency = String(item?.currency || 'NIO').toUpperCase();

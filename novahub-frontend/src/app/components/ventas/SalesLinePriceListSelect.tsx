@@ -6,7 +6,7 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { filterAllowedPriceLists } from '../../utils/permissions';
-import { getSalesLinePriceListId, getSalesUnitPrice, hasConfiguredSalesPriceListPrice, hasSalesProductPriceListConflict, resolveVariantPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
+import { getCatalogUnitPrice, getSalesLinePriceListId, getSalesUnitPrice, hasConfiguredSalesPriceListPrice, hasSalesProductPriceListConflict, resolveVariantPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 
 
 interface SalesLinePriceListSelectProps {
@@ -143,9 +143,7 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
       );
       const catalogFallbackPrice = Number(matchedProduct?.salePrice ?? fallbackPrice);
       if (canUseRetailFallback && catalogFallbackPrice > 0) {
-        const unitPrice = String(currency).toUpperCase() === 'USD'
-          ? catalogFallbackPrice / Math.max(Number(exchangeRate) || 1, 0.000001)
-          : catalogFallbackPrice;
+        const unitPrice = getCatalogUnitPrice(matchedProduct ?? { salePrice: fallbackPrice }, currency, exchangeRate);
         return { unitPrice, priceMissing: false };
       }
       return { unitPrice: 0, priceMissing: true };
