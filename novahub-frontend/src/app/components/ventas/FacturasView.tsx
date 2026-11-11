@@ -29,6 +29,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSalesLineIncome } from '../../hooks/useSalesLineIncome';
 import { InvoiceLineIncomeFields } from './InvoiceLineIncomeFields';
+import { CreditTermDateField } from './CreditTermDateField';
 import { useTheme } from '../../contexts/ThemeContext';
 import { previewSalesTransactionPDF, printSalesPaymentTicket } from '../../utils/pdfGenerator';
 import { canShowInvoiceSubmitAction, getInvoicePaymentBalance, shouldSubmitExistingDraftBeforePayment } from '../../utils/invoicePaymentWorkflow';
@@ -48,6 +49,7 @@ import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/Purch
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { getCreditTermDeadline, getCreditTermExtensionDays } from '../../utils/creditTerms';
 import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { getInvoicePaymentPresentation, hasPaymentReferenceField, isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent, paymentMethodLabel } from '../../utils/paymentMethods';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
@@ -249,6 +251,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const [paymentLines, setPaymentLines] = useState<InvoicePaymentLine[]>([]);
   const [paymentDate, setPaymentDate] = useState('');
   const [paymentDueDate, setPaymentDueDate] = useState('');
+  const [paymentCreditTermOverrideConfirmed, setPaymentCreditTermOverrideConfirmed] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentVoucher, setPaymentVoucher] = useState<{ payment: PaymentReceived; invoice: Invoice; remaining: number; change: number } | null>(null);
   const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
@@ -259,6 +262,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const [submitLoadingId, setSubmitLoadingId] = useState<string | null>(null);
   const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
   const [creditDueDate, setCreditDueDate] = useState('');
+  const [creditTermOverrideConfirmed, setCreditTermOverrideConfirmed] = useState(false);
   const [creditLoading, setCreditLoading] = useState(false);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
   const [salesImportOpen, setSalesImportOpen] = useState(false);
@@ -694,7 +698,13 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     setPartialPaymentEnabled(false);
     setMixedPaymentEnabled(false);
     setPaymentDate(today);
-    setPaymentDueDate(existingDueDate && existingDueDate >= today ? existingDueDate : today);
+    const { deadline } = getInvoiceCreditTerm(invoice);
+    setPaymentDueDate(deadline && deadline >= today
+      ? deadline
+      : existingDueDate && existingDueDate >= today
+        ? existingDueDate
+        : today);
+    setPaymentCreditTermOverrideConfirmed(false);
     setCashRegisterId('');
     setCashSession(null);
     setPaymentDialogOpen(true);
@@ -770,6 +780,14 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const invoiceFitsAvailableCredit = (invoice: Invoice) =>
     getInvoiceCreditAvailable(invoice) + 0.01 >= getInvoiceBalanceInBase(invoice);
 
+  const getInvoiceCreditTerm = (invoice: Invoice) => {
+    const customer = invoice.customer || customers.find((item) => item.id === invoice.customerId);
+    return {
+      customer,
+      deadline: getCreditTermDeadline(invoice.date, customer?.creditDays, invoice.creditTermDeadline),
+    };
+  };
+
   const closeInvoicePayment = () => {
     if (paymentLoading) return;
     // Conserva el contenido durante la animación de salida. Los campos se
@@ -801,8 +819,15 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     }
     const today = new Date().toISOString().split('T')[0];
     const existingDueDate = invoice.dueDate ? String(invoice.dueDate).split('T')[0] : '';
+    const { deadline } = getInvoiceCreditTerm(actionInvoice);
+    const suggestedDueDate = deadline && deadline >= today
+      ? deadline
+      : existingDueDate && existingDueDate >= today
+        ? existingDueDate
+        : today;
     setCreditInvoice(actionInvoice);
-    setCreditDueDate(existingDueDate && existingDueDate >= today ? existingDueDate : today);
+    setCreditDueDate(suggestedDueDate);
+    setCreditTermOverrideConfirmed(false);
   };
 
   const handleSendInvoiceToCredit = async () => {
@@ -814,16 +839,27 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       toast.error('Selecciona la fecha de pago del crédito');
       return;
     }
+    const term = getInvoiceCreditTerm(creditInvoice);
+    if (getCreditTermExtensionDays(creditDueDate, term.deadline) > 0 && !creditTermOverrideConfirmed) {
+      toast.error('Confirma el aplazamiento del plazo de crédito para continuar.');
+      return;
+    }
     const invoice = creditInvoice;
     if (!invoice.id) {
       setCreditInvoice(null);
-      await handleSaveInvoice('CREDIT', { dueDate: new Date(`${creditDueDate}T12:00:00`).toISOString() });
+      await handleSaveInvoice('CREDIT', {
+        dueDate: new Date(`${creditDueDate}T12:00:00`).toISOString(),
+        creditTermOverrideConfirmed,
+      });
       return;
     }
     const creditToastId = toast.loading(`Enviando factura ${invoice.number} a crédito...`);
     try {
       setCreditLoading(true);
-      await invoicesService.sendToCredit(invoice.id, { dueDate: new Date(`${creditDueDate}T12:00:00`).toISOString() });
+      await invoicesService.sendToCredit(invoice.id, {
+        dueDate: new Date(`${creditDueDate}T12:00:00`).toISOString(),
+        creditTermOverrideConfirmed,
+      });
       toast.success(`Factura ${invoice.number} enviada a Créditos por su saldo pendiente`, { id: creditToastId });
       setCreditInvoice(null);
       if (localDoc?.id === invoice.id) {
@@ -947,6 +983,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           exchangeRate: paymentLineRate(paymentCurrency),
           paymentDate: new Date(`${paymentDate}T12:00:00`).toISOString(),
           dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
+          creditTermOverrideConfirmed: remaining > 0.01 ? paymentCreditTermOverrideConfirmed : undefined,
           cashRegisterId,
           cashSessionId: cashSession?.id,
         });
@@ -1017,6 +1054,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(line.method) ? line.cardCommissionPercent : undefined,
         })),
         dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
+        creditTermOverrideConfirmed: remaining > 0.01 ? paymentCreditTermOverrideConfirmed : undefined,
         cashRegisterId: cashControlAlreadyLinked ? undefined : cashRegisterId,
         cashSessionId: cashControlAlreadyLinked ? undefined : cashSession?.id,
         notes: `Cobro registrado desde Facturas (${invoice.number})`,
@@ -1091,7 +1129,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
 
   const handleSaveInvoice = async (
     action: InvoiceSaveAction = 'PENDING',
-    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; paymentDate?: string; dueDate?: string; cashRegisterId?: string; cashSessionId?: string },
+    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; paymentDate?: string; dueDate?: string; cashRegisterId?: string; cashSessionId?: string; creditTermOverrideConfirmed?: boolean },
   ) => {
     if (!localDoc) return;
     if (action === 'PENDING' && !canPerform('SALES_INVOICES', 'submit')) {
@@ -1235,6 +1273,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             cashSessionId: settlement?.cashSessionId,
           } : undefined,
           initialCreditDueDate: action === 'CREDIT' ? settlement?.dueDate : undefined,
+          creditTermOverrideConfirmed: settlement?.creditTermOverrideConfirmed ?? (localDoc as any).creditTermOverrideConfirmed,
           expectedDelivery: localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString() : undefined,
           notes: finalNotes,
           salesOrderId: localDoc.salesOrderId || undefined,
@@ -1252,12 +1291,13 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         delete invoiceUpdates.paymentMethod;
         delete invoiceUpdates.paymentDetails;
         delete invoiceUpdates.status;
-        const updates: Partial<Invoice> = {
+        const updates = {
           ...invoiceUpdates,
           items: localDoc.items,
           notes: finalNotes,
           pricingMode,
-        };
+          creditTermOverrideConfirmed: (localDoc as any).creditTermOverrideConfirmed === true,
+        } as Partial<Invoice> & { creditTermOverrideConfirmed?: boolean };
         if (action === 'DRAFT') updates.status = 'DRAFT';
         if (action === 'PENDING') updates.status = 'PENDING';
         await handleUpdate(localDoc.id, updates);
@@ -1292,6 +1332,12 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const paymentRemainingInInvoiceCurrency = paymentInvoice
     ? Math.max(0, getInvoiceBalance(paymentInvoice) - paymentTotalInInvoiceCurrency)
     : 0;
+  const paymentInvoiceTerm = paymentInvoice ? getInvoiceCreditTerm(paymentInvoice) : null;
+  const paymentTermOverrideRequired = Boolean(paymentInvoice && paymentRemainingInInvoiceCurrency > 0.01
+    && getCreditTermExtensionDays(paymentDueDate, paymentInvoiceTerm?.deadline) > 0);
+  const creditInvoiceTerm = creditInvoice ? getInvoiceCreditTerm(creditInvoice) : null;
+  const creditTermOverrideRequired = Boolean(creditInvoice
+    && getCreditTermExtensionDays(creditDueDate, creditInvoiceTerm?.deadline) > 0);
   const paymentInvoiceTotal = paymentInvoice ? Math.max(0, Number(paymentInvoice.total || 0)) : 0;
   const paymentInvoiceAlreadyPaid = paymentInvoice ? Math.max(0, Number(paymentInvoice.amountPaid || 0)) : 0;
   const paymentInvoiceCurrentBalance = paymentInvoice ? getInvoiceBalance(paymentInvoice) : 0;
@@ -1934,6 +1980,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
                     value={localDoc?.customerId || ''}
                     onChange={(val) => {
+                      const selectedCustomer = customers.find((customer) => customer.id === val);
                       const priceListId = getCustomerPriceListId(val);
                       const items = (localDoc.items || []).map((item: any) => item.productId
                         ? resolveItemType(item) === 'SERVICE'
@@ -1944,7 +1991,17 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                         toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.');
                         return;
                       }
-                      setLocalDoc({ ...localDoc, customerId: val, priceListId, items });
+                      const suggestedDueDate = isCreating
+                        ? getCreditTermDeadline(localDoc.date, selectedCustomer?.creditDays)
+                        : null;
+                      setLocalDoc({
+                        ...localDoc,
+                        customerId: val,
+                        priceListId,
+                        items,
+                        ...(suggestedDueDate ? { dueDate: suggestedDueDate } : {}),
+                        creditTermOverrideConfirmed: false,
+                      });
                       if (!isCreating) handleUpdate(localDoc!.id, { customerId: val, priceListId, items });
                     }}
                     placeholder="Seleccionar Cliente"
@@ -1982,13 +2039,28 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
                   <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''}
-                    onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" disabled={isInvoiceLocked} />
+                    onChange={(e) => {
+                      const date = e.target.value;
+                      const customer = customers.find((item) => item.id === localDoc?.customerId);
+                      const suggestedDueDate = isCreating ? getCreditTermDeadline(date, customer?.creditDays) : null;
+                      setLocalDoc({ ...localDoc, date, ...(suggestedDueDate ? { dueDate: suggestedDueDate } : {}), creditTermOverrideConfirmed: false });
+                    }} className="h-8 text-xs" disabled={isInvoiceLocked} />
                 </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Vencimiento</p>
-                  <Input type="date" value={localDoc?.dueDate ? (typeof localDoc.dueDate === 'string' && localDoc.dueDate.includes('T') ? localDoc.dueDate.split('T')[0] : localDoc.dueDate) : ''}
-                    onChange={(e) => setLocalDoc({ ...localDoc, dueDate: e.target.value })} className="h-8 text-xs" disabled={isInvoiceLocked} />
-                </div>
+                {(() => {
+                  const customer = customers.find((item) => item.id === localDoc?.customerId);
+                  return <CreditTermDateField
+                    issueDate={localDoc?.date}
+                    creditDays={customer?.creditDays}
+                    savedDeadline={localDoc?.creditTermDeadline}
+                    value={localDoc?.dueDate ? (typeof localDoc.dueDate === 'string' && localDoc.dueDate.includes('T') ? localDoc.dueDate.split('T')[0] : localDoc.dueDate) : ''}
+                    onChange={(dueDate) => setLocalDoc((current: any) => ({ ...current, dueDate, creditTermOverrideConfirmed: false }))}
+                    overrideConfirmed={Boolean((localDoc as any)?.creditTermOverrideConfirmed)}
+                    onOverrideConfirmedChange={(confirmed) => setLocalDoc((current: any) => ({ ...current, creditTermOverrideConfirmed: confirmed }))}
+                    label="Vencimiento"
+                    minDate={new Date().toISOString().split('T')[0]}
+                    disabled={isInvoiceLocked}
+                  />;
+                })()}
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Vendedor (Opcional)</p>
                   <Combobox
@@ -2793,16 +2865,23 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 <p className="mt-1 text-2xl font-black text-primary">Saldo a crédito: {formatInvoiceAmount(getInvoiceBalance(creditInvoice), creditInvoice.currency, creditInvoice.exchangeRate)}</p>
                 <p className="mt-2 text-[10px] font-bold text-muted-foreground">La factura conservará el estado A CRÉDITO y el registro aparecerá en la vista Créditos.</p>
               </div>
-              <div>
-                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha de pago *</p>
-                <Input type="date" value={creditDueDate} onChange={(event) => setCreditDueDate(event.target.value)} />
-                <p className="mt-1 text-[10px] text-muted-foreground">Se enviará una notificación interna un día antes.</p>
-              </div>
+              <CreditTermDateField
+                issueDate={creditInvoice.date}
+                creditDays={creditInvoiceTerm?.customer?.creditDays}
+                savedDeadline={creditInvoice.creditTermDeadline}
+                value={creditDueDate}
+                onChange={setCreditDueDate}
+                overrideConfirmed={creditTermOverrideConfirmed}
+                onOverrideConfirmedChange={setCreditTermOverrideConfirmed}
+                label="Fecha de pago *"
+                minDate={new Date().toISOString().split('T')[0]}
+              />
+              <p className="text-[10px] text-muted-foreground">Se enviará una notificación interna un día antes.</p>
             </div>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setCreditInvoice(null)} disabled={creditLoading}>Cancelar</Button>
-            <Button type="button" onClick={() => void handleSendInvoiceToCredit()} disabled={creditLoading || !creditDueDate} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
+            <Button type="button" onClick={() => void handleSendInvoiceToCredit()} disabled={creditLoading || !creditDueDate || (creditTermOverrideRequired && !creditTermOverrideConfirmed)} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
               {creditLoading ? 'Enviando...' : 'Confirmar crédito'}
             </Button>
           </DialogFooter>
@@ -3013,16 +3092,23 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 {paymentCustomerFavorAppliedBase > 0.01 && <p className="mt-2 border-t border-emerald-500/15 pt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Aplicado desde saldo a favor: {formatConvertedAmount(paymentCustomerFavorAppliedBase, baseCurrency)}{paymentCustomerFavorExceeded ? ' · supera el disponible' : ''}</p>}
               </div>
               {paymentRemainingInInvoiceCurrency > 0.01 && (
-                <div>
-                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha del saldo pendiente *</p>
-                  <Input type="date" value={paymentDueDate} onChange={(event) => setPaymentDueDate(event.target.value)} />
-                </div>
+                <CreditTermDateField
+                  issueDate={paymentInvoice.date}
+                  creditDays={paymentInvoiceTerm?.customer?.creditDays}
+                  savedDeadline={paymentInvoice.creditTermDeadline}
+                  value={paymentDueDate}
+                  onChange={setPaymentDueDate}
+                  overrideConfirmed={paymentCreditTermOverrideConfirmed}
+                  onOverrideConfirmedChange={setPaymentCreditTermOverrideConfirmed}
+                  label="Fecha del saldo pendiente *"
+                  minDate={new Date().toISOString().split('T')[0]}
+                />
               )}
             </div>
           )}
           <DialogFooter className="shrink-0">
             <Button type="button" variant="outline" onClick={closeInvoicePayment} disabled={paymentLoading}>Cancelar</Button>
-            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || cashLoading || paymentChangeUnsupported || paymentCustomerFavorExceeded || (!paymentHasActiveCredit && paymentRemainingBase > paymentCreditAvailableBase + 0.01) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))} className="bg-primary font-black">
+            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || cashLoading || paymentChangeUnsupported || paymentCustomerFavorExceeded || (paymentTermOverrideRequired && !paymentCreditTermOverrideConfirmed) || (!paymentHasActiveCredit && paymentRemainingBase > paymentCreditAvailableBase + 0.01) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))} className="bg-primary font-black">
               {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
             </Button>
           </DialogFooter>

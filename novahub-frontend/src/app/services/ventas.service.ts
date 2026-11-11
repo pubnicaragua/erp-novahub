@@ -163,6 +163,12 @@ export interface CustomerLoanPage extends CustomerAuditPage {
 }
 
 // ---- Customers ----
+type CustomerCreditCapacityLookup = Pick<Customer,
+  'id' | 'code' | 'name' | 'companyName' | 'status' | 'creditLimit' | 'creditLimitCurrency'
+  | 'creditDays' | 'priceListId' | 'balance' | 'balanceDue' | 'balanceFavor'
+  | 'openingBalanceDue' | 'openingBalanceFavor' | 'availableCredit'
+>;
+
 export const customersService = {
   getFormOptions: () => api.get<{ defaultCountryCode: string; countries: Array<{ code: string; name: string; phoneCode: string; taxIdLabel: string; rucLabel: string; strictIdentifiers: boolean; phoneNationalDigits?: number }> }>('/sales/customers/formats'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Customer>>('/sales/customers', { params: filters as any, signal }),
@@ -174,6 +180,12 @@ export const customersService = {
    */
   getAllLookup: (filters?: ApiFilters, signal?: AbortSignal) => fetchAllReportPages<Pick<Customer, 'id' | 'code' | 'name' | 'companyName' | 'status' | 'phone' | 'contactPhone' | 'openingBalanceDue' | 'openingBalanceFavor'>>(
     (page) => customersService.getLookup(page, signal),
+    { ...filters, pageSize: 200 },
+    signal,
+  ),
+  getCreditCapacityLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<CustomerCreditCapacityLookup>>('/sales/customers/credit-capacity/lookup', { params: filters as any, signal }),
+  getAllCreditCapacityLookup: (filters?: ApiFilters, signal?: AbortSignal) => fetchAllReportPages<CustomerCreditCapacityLookup>(
+    (page) => customersService.getCreditCapacityLookup(page, signal),
     { ...filters, pageSize: 200 },
     signal,
   ),
@@ -272,12 +284,12 @@ export const invoicesService = {
   getById: (id: string, signal?: AbortSignal) => api.get<Invoice>(`/sales/invoices/${id}`, signal ? { signal } : undefined),
   accountingPreflight: (data: { warehouseId?: string; items?: Array<{ productId?: string; warehouseId?: string }> }) =>
     api.post<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[]; warehouses?: any[] }>('/sales/invoices/accounting-preflight', data),
-  create: (data: Partial<Invoice>, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
-  createMixedPayment: (id: string, data: Partial<PaymentReceived> & { payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; cardCommissionPercent?: number; reference?: string; notes?: string }>; cashRegisterId?: string; cashSessionId?: string; dueDate?: string }, idempotencyKey?: string) =>
+  create: (data: Partial<Invoice> & { creditTermOverrideConfirmed?: boolean }, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
+  createMixedPayment: (id: string, data: Partial<PaymentReceived> & { payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; cardCommissionPercent?: number; reference?: string; notes?: string }>; cashRegisterId?: string; cashSessionId?: string; dueDate?: string; creditTermOverrideConfirmed?: boolean }, idempotencyKey?: string) =>
     api.idempotentPost<PaymentReceived & { payments?: PaymentReceived[] }>(`/sales/invoices/${id}/payments/mixed`, data, idempotencyKey),
   submit: (id: string, idempotencyKey?: string) => api.idempotentPost<Invoice>(`/sales/invoices/${id}/submit`, {}, idempotencyKey),
-  update: (id: string, data: Partial<Invoice>) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
-  sendToCredit: (id: string, data: { dueDate?: string }, idempotencyKey?: string) =>
+  update: (id: string, data: Partial<Invoice> & { creditTermOverrideConfirmed?: boolean }) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
+  sendToCredit: (id: string, data: { dueDate?: string; creditTermOverrideConfirmed?: boolean }, idempotencyKey?: string) =>
     api.idempotentPost<{ invoice: Invoice; credit: CreditNote }>(`/sales/invoices/${id}/send-to-credit`, data, idempotencyKey),
   sendToCash: (id: string, data?: { notes?: string }) =>
     api.post<any>(`/sales/invoices/${id}/send-to-cash`, data || {}),
@@ -335,8 +347,8 @@ export const paymentsService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentReceived>>('/sales/payments', { params: filters as any, signal }),
   getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaymentKpiSummary>('/sales/payments/summary', { params: filters as any, signal }),
   getById: (id: string, signal?: AbortSignal) => api.get<PaymentReceived>(`/sales/payments/${id}`, signal ? { signal } : undefined),
-  create: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string }, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),
-  createMixed: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string; payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; cardCommissionPercent?: number; reference?: string; notes?: string }> }, idempotencyKey?: string) =>
+  create: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string; creditTermOverrideConfirmed?: boolean }, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),
+  createMixed: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string; creditTermOverrideConfirmed?: boolean; payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; cardCommissionPercent?: number; reference?: string; notes?: string }> }, idempotencyKey?: string) =>
     api.idempotentPost<PaymentReceived & { payments?: PaymentReceived[] }>('/sales/payments/mixed', data, idempotencyKey),
   update: (id: string, data: Partial<PaymentReceived>) => api.patch<PaymentReceived>(`/sales/payments/${id}`, data),
   checkNumber: (number: string, excludeId?: string) =>

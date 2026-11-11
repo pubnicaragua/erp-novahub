@@ -56,6 +56,44 @@ export function normalizeCurrency(value: unknown, fallback: SupportedCurrency = 
   return normalized === 'USD' || normalized === 'NIO' ? normalized : fallback;
 }
 
+export function convertCreditLimitAmount(
+  amount: unknown,
+  sourceCurrency: unknown,
+  targetCurrency: unknown,
+  baseCurrency: unknown,
+  exchangeRate: unknown,
+) {
+  const parsedAmount = Number(amount);
+  if (!Number.isFinite(parsedAmount)) return 0;
+  const base = normalizeCurrency(baseCurrency);
+  const source = normalizeCurrency(sourceCurrency, base);
+  const target = normalizeCurrency(targetCurrency, base);
+  if (source === target) return roundCurrencyNumber(parsedAmount);
+
+  const rawRate = Number(exchangeRate);
+  const rate = Number.isFinite(rawRate) && rawRate > 0 ? rawRate : 1;
+  const baseAmount = source === base
+    ? parsedAmount
+    : source === 'USD'
+      ? parsedAmount * rate
+      : parsedAmount / rate;
+  const targetAmount = target === base
+    ? baseAmount
+    : target === 'USD'
+      ? base === 'NIO' ? baseAmount / rate : baseAmount
+      : base === 'USD' ? baseAmount * rate : baseAmount;
+  return roundCurrencyNumber(targetAmount);
+}
+
+export function preserveCreditLimitCurrency(nextCurrency: unknown, storedCurrency: unknown): SupportedCurrency | undefined {
+  if (nextCurrency === undefined || nextCurrency === null || String(nextCurrency).trim() === '') {
+    return storedCurrency === undefined || storedCurrency === null || String(storedCurrency).trim() === ''
+      ? undefined
+      : normalizeCurrency(storedCurrency);
+  }
+  return normalizeCurrency(nextCurrency, normalizeCurrency(storedCurrency));
+}
+
 export function getCurrencyMetadata(value: unknown, fallback: SupportedCurrency = 'NIO') {
   return CURRENCY_METADATA[normalizeCurrency(value, fallback)];
 }

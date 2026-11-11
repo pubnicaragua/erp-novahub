@@ -36,7 +36,7 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { normalizeCustomerImportDate } from '../../utils/customer-import-date';
-import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { convertCreditLimitAmount, normalizeCurrency, preserveCreditLimitCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerImportPhoneValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
@@ -176,7 +176,7 @@ const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
 ];
 
 export function ClientesView({ data, loading, error, onRefresh, pagination, onSearchChange, dateFrom, dateTo, onDateRangeChange, summaryData, summaryLoading, summaryError, isSidebarCollapsed = true }: ClientesViewProps) {
-  const { baseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, exchangeRate, displayMode, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
   const { canPerform, user } = useAuth();
   const { countries, defaultCountryCode } = useCustomerFormOptions();
   const tenantKey = user?.tenantId || 'anonymous';
@@ -866,6 +866,20 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     { value: 'COMPANY', label: 'Empresa', count: filtered.filter((c) => String(c.type || '').toUpperCase() === 'COMPANY').length },
   ];
 
+  const changeCreditLimitCurrency = (draft: CustomerDraft, nextCurrency: SupportedCurrency): CustomerDraft => ({
+    ...draft,
+    creditLimitCurrency: nextCurrency,
+    creditLimit: draft.creditLimit.trim() === ''
+      ? ''
+      : String(convertCreditLimitAmount(
+        Number(draft.creditLimit),
+        draft.creditLimitCurrency,
+        nextCurrency,
+        baseCurrency,
+        exchangeRate,
+      )),
+  });
+
   const handleUpdate = async (id: string | number, updates: CustomerUpdatePayload) => {
     try {
       if (updates.status !== undefined && Object.keys(updates).length === 1) {
@@ -874,13 +888,14 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         await onRefresh();
         return;
       }
-      const effectiveUpdates = updates.creditLimit !== undefined && updates.creditLimitCurrency === undefined
-        ? { ...updates, creditLimitCurrency: displayCurrency }
+      const currentCustomer = data.find((customer) => String(customer.id) === String(id));
+      const storedCreditLimitCurrency = preserveCreditLimitCurrency(updates.creditLimitCurrency, currentCustomer?.creditLimitCurrency);
+      const effectiveUpdates = updates.creditLimitCurrency === undefined && updates.creditLimit !== undefined && storedCreditLimitCurrency
+        ? { ...updates, creditLimitCurrency: storedCreditLimitCurrency }
         : updates;
       if (updates.email !== undefined && String(updates.email || '').trim() && !/^\S+@\S+\.\S+$/.test(String(updates.email).trim())) {
         throw new Error('El correo no es válido (ej. cliente@correo.com)');
       }
-      const currentCustomer = data.find((customer) => String(customer.id) === String(id));
       const countryCode = String(updates.countryCode || currentCustomer?.countryCode || countryCodeFromLegacy(currentCustomer?.country) || 'NI');
       if (updates.phone !== undefined && String(updates.phone || '').trim() && !isCustomerPhoneValid(String(updates.phone), countryCode)) throw new Error('El teléfono no es válido para el país seleccionado');
       if (updates.contactPhone !== undefined && String(updates.contactPhone || '').trim() && !isCustomerPhoneValid(String(updates.contactPhone), countryCode)) throw new Error('El teléfono del contacto no es válido para el país seleccionado');
@@ -891,9 +906,9 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       if (effectiveUpdates.creditLimitCurrency !== undefined && !['NIO', 'USD'].includes(String(effectiveUpdates.creditLimitCurrency).toUpperCase())) {
         throw new Error('La moneda del límite de crédito debe ser NIO o USD');
       }
-      if (updates.creditDays !== undefined) {
+      if (updates.creditDays !== undefined && updates.creditDays !== null) {
         const days = Number(updates.creditDays);
-        if (!Number.isFinite(days) || days < 0 || !Number.isInteger(days)) throw new Error('El plazo de crédito debe ser un número entero de días (0 = contado)');
+        if (!Number.isFinite(days) || days < 0 || !Number.isInteger(days)) throw new Error('El plazo de crédito debe ser un número entero de días (0 = vence el mismo día)');
       }
       const nextType = String(updates.type ?? currentCustomer?.type ?? '').toUpperCase();
       const nextRuc = String(updates.ruc ?? currentCustomer?.ruc ?? '').trim();
@@ -942,7 +957,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     }
   };
 
-  const buildCustomerPayload = (draft: CustomerDraft): Partial<Customer> => ({
+  const buildCustomerPayload = (draft: CustomerDraft, clearBlankCreditDays = false): Partial<Customer> => ({
     name: draft.name.trim(),
     companyName: draft.type === 'company' ? draft.companyName.trim() || null : null,
     type: draft.type,
@@ -960,7 +975,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     countryCode: draft.countryCode,
     creditLimit: draft.creditLimit === '' ? undefined : Number(draft.creditLimit),
     creditLimitCurrency: draft.creditLimitCurrency,
-    creditDays: draft.creditDays === '' ? undefined : Number(draft.creditDays),
+    creditDays: draft.creditDays === '' ? (clearBlankCreditDays ? null : undefined) : Number(draft.creditDays),
     notes: draft.notes.trim() || undefined,
     status: draft.status,
   });
@@ -1003,7 +1018,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       return false;
     }
     if (draft.creditDays !== '' && (!Number.isFinite(Number(draft.creditDays)) || Number(draft.creditDays) < 0 || !Number.isInteger(Number(draft.creditDays)))) {
-      toast.error('El plazo de crédito debe ser un número entero de días (0 = contado)');
+      toast.error('El plazo de crédito debe ser un número entero de días (0 = vence el mismo día)');
       return false;
     }
     return true;
@@ -1067,7 +1082,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       nextCreditLimitCurrency: editCustomer.creditLimitCurrency,
     });
     if (!validateCustomerDraft(editCustomer, String(editingCustomer.id), decision !== 'block')) return;
-    const updates = buildCustomerPayload(editCustomer);
+    const updates = buildCustomerPayload(editCustomer, true);
     if (decision === 'confirm') {
       setPendingMissingRucConfirmation({ customerId: editingCustomer.id, updates, closeEditOnSuccess: true });
       return;
@@ -1239,7 +1254,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     { key: 'phone', header: 'Teléfono', width: '175px', editable: canPerform('SALES_CLIENTS', 'edit'), render: (val, row) => <span className="whitespace-nowrap text-[13px] text-muted-foreground">{val ? formatCustomerPhoneForDisplay(String(val), row.countryCode || countryCodeFromLegacy(row.country) || 'NI') : '—'}</span> },
     { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'creditLimit', header: 'Límite de crédito', width: '160px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val, row) => <span className="text-xs font-bold tabular-nums">{formatCurrentAmount(Number(val || 0), normalizeCurrency(row.creditLimitCurrency, baseCurrency))}</span> },
-    { key: 'creditDays', header: 'Plazo crédito', width: '110px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="cell-nowrap text-xs font-bold tabular-nums">{(val ?? 0) === 0 || val == null ? 'Contado' : `${val} días`}</span> },
+    { key: 'creditDays', header: 'Plazo crédito', width: '110px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="cell-nowrap text-xs font-bold tabular-nums">{val == null ? 'Sin plazo' : Number(val) === 0 ? 'Mismo día' : `${val} días`}</span> },
     {
       key: 'balance',
       header: 'Saldos del cliente',
@@ -1704,8 +1719,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
                 <div><h3 className="text-sm font-black uppercase tracking-widest">Condiciones comerciales</h3><p className="text-xs text-muted-foreground">Estos cambios quedan registrados en el historial del cliente.</p></div>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Régimen fiscal</label><Select value={newCustomer.fiscalRegime} onValueChange={(v) => setNewCustomer({ ...newCustomer, fiscalRegime: v })}><SelectTrigger className="h-11 rounded-xl text-sm"><SelectValue placeholder="Seleccionar régimen" /></SelectTrigger><SelectContent>{FISCAL_REGIMES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito ({newCustomer.creditLimitCurrency})</label><Input type="number" min="0" value={newCustomer.creditLimit} onChange={(e) => setNewCustomer({ ...newCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" currencyPrecision /><p className="text-[10px] text-muted-foreground">Se guarda en la moneda seleccionada arriba.</p></div>
-                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Plazo de crédito (días)</label><Input type="number" min="0" value={newCustomer.creditDays} onChange={(e) => setNewCustomer({ ...newCustomer, creditDays: e.target.value })} placeholder="0 = contado" className="h-11 rounded-xl" /></div>
+                  <div className="min-w-0 space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito</label><div className="grid min-w-0 grid-cols-[minmax(0,1fr)_6.5rem] gap-2"><Input type="number" min="0" value={newCustomer.creditLimit} onChange={(e) => setNewCustomer({ ...newCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 min-w-0 rounded-xl" currencyPrecision /><Select value={newCustomer.creditLimitCurrency} onValueChange={(value) => setNewCustomer((current) => changeCreditLimitCurrency(current, value as SupportedCurrency))}><SelectTrigger aria-label="Moneda del límite de crédito" className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO · C$</SelectItem><SelectItem value="USD">USD · $</SelectItem></SelectContent></Select></div><p className="text-[10px] text-muted-foreground">Cambiar moneda convierte el límite con la tasa vigente.</p></div>
+                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Plazo de crédito (días)</label><Input type="number" min="0" value={newCustomer.creditDays} onChange={(e) => setNewCustomer({ ...newCustomer, creditDays: e.target.value })} placeholder="0 = vence el mismo día" className="h-11 rounded-xl" /></div>
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><Select value={newCustomer.priceListId || '__no_price_list__'} onValueChange={(value) => setNewCustomer({ ...newCustomer, priceListId: value === '__no_price_list__' ? '' : value })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent></Select></div>
                 </div>
               </section>
@@ -1771,8 +1786,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               <div><h3 className="text-sm font-black uppercase tracking-widest">Condiciones comerciales</h3><p className="text-xs text-muted-foreground">Estos cambios quedan registrados en el historial del cliente.</p></div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Régimen fiscal</label><Select value={editCustomer.fiscalRegime} onValueChange={(v) => setEditCustomer({ ...editCustomer, fiscalRegime: v })}><SelectTrigger className="h-11 rounded-xl text-sm"><SelectValue placeholder="Seleccionar régimen" /></SelectTrigger><SelectContent>{FISCAL_REGIMES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito ({editCustomer.creditLimitCurrency})</label><Input type="number" min="0" value={editCustomer.creditLimit} onChange={(e) => setEditCustomer({ ...editCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" currencyPrecision /><p className="text-[10px] text-muted-foreground">Moneda guardada para este cliente.</p></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Plazo de crédito (días)</label><Input type="number" min="0" value={editCustomer.creditDays} onChange={(e) => setEditCustomer({ ...editCustomer, creditDays: e.target.value })} placeholder="0 = contado" className="h-11 rounded-xl" /></div>
+                <div className="min-w-0 space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito</label><div className="grid min-w-0 grid-cols-[minmax(0,1fr)_6.5rem] gap-2"><Input type="number" min="0" value={editCustomer.creditLimit} onChange={(e) => setEditCustomer({ ...editCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 min-w-0 rounded-xl" currencyPrecision /><Select value={editCustomer.creditLimitCurrency} onValueChange={(value) => setEditCustomer((current) => changeCreditLimitCurrency(current, value as SupportedCurrency))}><SelectTrigger aria-label="Moneda del límite de crédito" className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO · C$</SelectItem><SelectItem value="USD">USD · $</SelectItem></SelectContent></Select></div><p className="text-[10px] text-muted-foreground">Cambiar moneda convierte el límite con la tasa vigente.</p></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Plazo de crédito (días)</label><Input type="number" min="0" value={editCustomer.creditDays} onChange={(e) => setEditCustomer({ ...editCustomer, creditDays: e.target.value })} placeholder="0 = vence el mismo día" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><Select value={editCustomer.priceListId || '__no_price_list__'} onValueChange={(value) => setEditCustomer({ ...editCustomer, priceListId: value === '__no_price_list__' ? '' : value })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent></Select></div>
               </div>
             </section>

@@ -486,6 +486,7 @@ export interface Invoice {
   warehouseId?: string;
   date: string;
   dueDate: string;
+  creditTermDeadline?: string | null;
   expectedDelivery?: string | null;
   subtotal: number;
   taxAmount: number;

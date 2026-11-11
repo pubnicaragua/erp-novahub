@@ -443,7 +443,7 @@ export function CustomerDetailDrawer({
   const customerFavor = getCustomerFavorAmount(customer);
   const customerDebtByCurrency = customer?.balanceDueOriginalCurrencyBreakdown || [];
   const customerFavorByCurrency = customer?.balanceFavorOriginalCurrencyBreakdown || [];
-  const creditDays = customer?.creditDays != null ? Number(customer.creditDays) : 0;
+  const creditDays = customer?.creditDays == null ? null : Number(customer.creditDays);
 
   const toBaseValue = (value: number, currency?: string, exchangeRate?: number) => {
     const amount = Number(value || 0);
@@ -721,7 +721,7 @@ export function CustomerDetailDrawer({
                       <CreditCard className="size-4 text-primary" /> Crédito del Cliente
                     </h3>
                     <Badge variant="outline" className="border-none bg-primary/10 text-[9px] font-black text-primary uppercase tracking-widest">
-                      Plazo: {creditDays > 0 ? `${creditDays} días` : 'Contado'}
+                      Plazo: {creditDays == null ? 'Sin plazo configurado' : creditDays === 0 ? 'Vence el mismo día' : `${creditDays} días`}
                     </Badge>
                   </div>
                   <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-5">
@@ -814,7 +814,7 @@ export function CustomerDetailDrawer({
                     <InfoField label="Régimen Fiscal" value={customer?.fiscalRegime || 'No registrado'} icon={ShieldAlert} muted={!customer?.fiscalRegime} />
                     <InfoField label="Lista de Precios" value={customer?.priceList?.name || 'Sin lista asignada'} icon={Tag} muted={!customer?.priceList} />
                     <InfoField label={`Límite de Crédito Concedido (${creditLimitCurrency})`} value={formatConvertedAmount(creditLimit, creditLimitCurrency, exchangeRate)} icon={DollarSign} mono />
-                    <InfoField label="Plazo de Crédito" value={creditDays > 0 ? `${creditDays} días` : 'Contado (0 días)'} icon={Clock} mono />
+                    <InfoField label="Plazo de Crédito" value={creditDays == null ? 'Sin plazo configurado' : creditDays === 0 ? 'Vence el mismo día (0 días)' : `${creditDays} días`} icon={Clock} mono />
                     <InfoField label="Saldo pendiente" value={formatConvertedAmount(customerDebt, baseCurrency)} icon={DollarSign} mono />
                     <InfoField label="Saldo a favor" value={formatConvertedAmount(customerFavor, baseCurrency)} icon={Banknote} mono />
                     <InfoField label="Código Interno" value={customer?.code || '—'} icon={Tag} mono />

@@ -43,7 +43,9 @@ import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentTotalBase, getPaymentTotalBaseForSettlement } from '../../utils/paymentSettlement';
 import { SalesPaymentReceiptDialog } from './SalesPaymentReceiptDialog';
+import { CreditTermDateField } from './CreditTermDateField';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { getCreditTermDeadline, getCreditTermExtensionDays } from '../../utils/creditTerms';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -176,6 +178,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
   const [paymentLines, setPaymentLines] = useState<ReceivedPaymentLine[]>([]);
   const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
   const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
+  const [creditTermOverrideConfirmed, setCreditTermOverrideConfirmed] = useState(false);
   const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
   const [cashRegisterId, setCashRegisterId] = useState('');
   const [cashSession, setCashSession] = useState<CashRegisterSession | null>(null);
@@ -306,6 +309,21 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     : localDoc?.creditNoteId
       ? credits.find((credit) => credit.id === localDoc.creditNoteId)
       : undefined;
+  const linkedInvoiceForTerm = localDoc?.invoiceId
+    ? invoices.find((invoice) => invoice.id === localDoc.invoiceId)
+    : localDoc?.creditNoteId
+      ? (() => {
+        const credit = credits.find((item) => item.id === localDoc.creditNoteId) as any;
+        return invoices.find((invoice) => invoice.id === credit?.invoiceId) || credit?.invoice;
+      })()
+      : undefined;
+  const linkedInvoiceCustomer = linkedInvoiceForTerm
+    ? customers.find((customer) => customer.id === linkedInvoiceForTerm.customerId) || linkedInvoiceForTerm.customer
+    : undefined;
+  const linkedInvoiceTermDeadline = linkedInvoiceForTerm
+    && String((linkedInvoiceForTerm as any).paymentMethod || '').toUpperCase() !== 'CUSTOMER_LOAN'
+    ? getCreditTermDeadline(linkedInvoiceForTerm.date, linkedInvoiceCustomer?.creditDays, (linkedInvoiceForTerm as any).creditTermDeadline)
+    : null;
   const linkedDocumentBalanceBase = linkedPaymentDocument
     ? toBaseAmount(
       Number((linkedPaymentDocument as any).balance ?? (linkedPaymentDocument as any).total ?? 0),
@@ -337,6 +355,8 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
   const paymentRemainingInDocumentCurrency = linkedPaymentDocument
     ? convertBetweenCurrencies(paymentRemainingBase, baseCurrency, linkedDocumentCurrency, 1, linkedDocumentRate)
     : 0;
+  const paymentTermOverrideRequired = Boolean(linkedInvoiceForTerm && paymentRemainingBase > 0.01
+    && getCreditTermExtensionDays(localDoc?.dueDate, linkedInvoiceTermDeadline) > 0);
   const paymentChangeInDocumentCurrency = linkedPaymentDocument
     ? convertBetweenCurrencies(paymentChangeBase, baseCurrency, linkedDocumentCurrency, 1, linkedDocumentRate)
     : 0;
@@ -471,6 +491,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     setPaymentLines([initialLine]);
     setMixedPaymentEnabled(false);
     setPartialPaymentEnabled(false);
+    setCreditTermOverrideConfirmed(false);
     commitLocalDoc({
       customerId: '',
       paymentTarget: 'ADVANCE',
@@ -543,6 +564,10 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
       toast.error('Indica la fecha límite para el saldo restante.');
       return;
     }
+    if (paymentTermOverrideRequired && !creditTermOverrideConfirmed) {
+      toast.error('Confirma el aplazamiento del plazo de crédito para continuar.');
+      return;
+    }
     const customerFavorAppliedBase = submittedLines
       .filter((line) => line.method === 'CUSTOMER_BALANCE')
       .reduce((sum, line) => sum + toBaseAmount(
@@ -576,6 +601,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
         reference: hasPaymentReferenceField(firstLine.method) ? firstLine.reference : undefined,
         notes: localDoc.notes || undefined,
         dueDate: remainingToApplyBase > 0.01 ? new Date(`${localDoc.dueDate}T12:00:00`).toISOString() : undefined,
+        creditTermOverrideConfirmed: remainingToApplyBase > 0.01 ? creditTermOverrideConfirmed : undefined,
         cashRegisterId: cashRegisterId || undefined,
         cashSessionId: cashSession?.id || undefined,
         cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionPercent || undefined : undefined,
@@ -733,8 +759,26 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     const nextLines = paymentLines.length
       ? paymentLines.map((line, index) => index === 0 ? { ...line, amount } : line)
       : [{ ...currentLine, amount }];
+    const credit = kind === 'creditNote' ? document as any : null;
+    const invoiceForTerm = kind === 'invoice'
+      ? document as Invoice | undefined
+      : invoices.find((invoice) => invoice.id === credit?.invoiceId) || credit?.invoice;
+    const customerForTerm = invoiceForTerm
+      ? customers.find((customer) => customer.id === invoiceForTerm.customerId) || invoiceForTerm.customer
+      : undefined;
+    const today = new Date().toISOString().split('T')[0];
+    const existingDueDate = String((document as any)?.dueDate || '').split('T')[0];
+    const termDeadline = invoiceForTerm && String((invoiceForTerm as any).paymentMethod || '').toUpperCase() !== 'CUSTOMER_LOAN'
+      ? getCreditTermDeadline(invoiceForTerm.date, customerForTerm?.creditDays, (invoiceForTerm as any).creditTermDeadline)
+      : null;
+    const dueDate = termDeadline && termDeadline >= today
+      ? termDeadline
+      : existingDueDate && existingDueDate >= today
+        ? existingDueDate
+        : today;
     setPaymentLines(nextLines);
     setPartialPaymentEnabled(false);
+    setCreditTermOverrideConfirmed(false);
     setLocalDoc({
       ...localDoc,
       paymentTarget: id ? kind === 'invoice' ? 'INVOICE' : 'CREDIT' : 'ADVANCE',
@@ -744,7 +788,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
       amount,
       currency: currentLine.currency,
       exchangeRate: currentLine.exchangeRate,
-      dueDate: '',
+      dueDate: id ? dueDate : '',
     });
   };
 
@@ -769,6 +813,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     setPaymentLines([nextLine]);
     setMixedPaymentEnabled(false);
     setPartialPaymentEnabled(false);
+    setCreditTermOverrideConfirmed(false);
     setLocalDoc({
       ...localDoc,
       paymentTarget: target,
@@ -897,7 +942,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="payments" context="form" />
             {canPerform('SALES_PAYMENTS', 'pay') && (
-            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={paymentCustomerFavorExceeded || paymentGeneralBalanceExceeded || paymentChangeUnsupported || Boolean(cashRegisterId && (cashLoading || !cashSession)) || (Boolean(linkedPaymentDocument) && paymentRemainingBase > 0.01 && (!partialPaymentEnabled || !paymentPartialCreditFits || !localDoc.dueDate)) || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || (salesAccountingRequired && paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))}>
+            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={paymentCustomerFavorExceeded || paymentGeneralBalanceExceeded || paymentChangeUnsupported || Boolean(cashRegisterId && (cashLoading || !cashSession)) || (paymentTermOverrideRequired && !creditTermOverrideConfirmed) || (Boolean(linkedPaymentDocument) && paymentRemainingBase > 0.01 && (!partialPaymentEnabled || !paymentPartialCreditFits || !localDoc.dueDate)) || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || (salesAccountingRequired && paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))}>
               Confirmar Pago
             </Button>
             )}
@@ -951,7 +996,17 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div><p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Liquidación del documento</p><p className="mt-1 text-xs text-muted-foreground">Puedes registrar solo una parte y completar el saldo después.</p></div>
                   </div>
-                  {partialPaymentEnabled && <div className="mt-3 max-w-xs"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fecha límite del saldo restante</p><Input type="date" value={localDoc.dueDate || ''} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-9 text-xs" /></div>}
+                  {partialPaymentEnabled && paymentRemainingBase > 0.01 && <div className="mt-3 max-w-lg"><CreditTermDateField
+                    issueDate={linkedInvoiceForTerm?.date}
+                    creditDays={linkedInvoiceCustomer?.creditDays}
+                    savedDeadline={(linkedInvoiceForTerm as any)?.creditTermDeadline}
+                    value={localDoc.dueDate || ''}
+                    onChange={(dueDate) => setLocalDoc((current: any) => ({ ...current, dueDate }))}
+                    overrideConfirmed={creditTermOverrideConfirmed}
+                    onOverrideConfirmedChange={setCreditTermOverrideConfirmed}
+                    label="Fecha límite del saldo restante"
+                    minDate={new Date().toISOString().split('T')[0]}
+                  /></div>}
                 </div>}
               </div>
             </CardContent>
