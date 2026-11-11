@@ -247,9 +247,29 @@ export interface BonusAward {
   payrollId: string | null;
 }
 
+export type AttendanceMark = 'LUNCH_START' | 'LUNCH_END' | 'CHECK_OUT';
+export interface MyAttendance {
+  registered: boolean;
+  reason?: string;
+  date?: string;
+  checkIn?: string | null;
+  breakStartAt?: string | null;
+  breakEndAt?: string | null;
+  checkOut?: string | null;
+  next?: AttendanceMark | null;
+}
+export interface TeamAttendance {
+  date: string;
+  members: Array<{ userId: string | null; name: string; checkIn: string | null; breakStartAt: string | null; breakEndAt: string | null; checkOut: string | null; hoursWorked: number | null }>;
+}
+
 export const performanceService = {
   // Entrada automática de asistencia al abrir el sistema
   registerAutoEntry: () => api.post<{ registered: boolean; reason?: string; checkIn?: string }>('/performance/attendance/auto-entry', {}),
+  // Mi jornada: marcas del día (entrada automática, almuerzo, regreso y salida) y asistencia del equipo
+  getMyAttendance: (signal?: AbortSignal) => api.get<MyAttendance>('/performance/attendance/today', { signal }),
+  markAttendance: (type: AttendanceMark) => api.post<MyAttendance>('/performance/attendance/mark', { type }),
+  getTeamAttendance: (params: { date?: string }, signal?: AbortSignal) => api.get<TeamAttendance>('/performance/attendance/team', { params, signal }),
   // Preguntas por hora: configuración
   getCheckinConfig: (signal?: AbortSignal) => api.get<CheckinConfigResponse>('/performance/checkins/config', { signal }),
   saveCheckinConfig: (data: Partial<CheckinConfig>) => api.put<CheckinConfig>('/performance/checkins/config', data),

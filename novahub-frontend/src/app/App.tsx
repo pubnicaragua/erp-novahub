@@ -22,6 +22,7 @@ import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAle
 import { BrowserNotificationPrompt } from './components/notificaciones/BrowserNotificationPrompt';
 import { CheckinPromptHost } from './components/seguimiento/CheckinPromptHost';
 import { AutoAttendanceEntry } from './components/seguimiento/AutoAttendanceEntry';
+import { JornadaWidget } from './components/seguimiento/JornadaWidget';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
 import { clearClientCaches, isDynamicImportLoadError, loadModuleWithChunkRecovery } from './utils/chunk-recovery';
 import { currentBuildId, fetchLatestBuildId } from './utils/app-version';
@@ -891,6 +892,7 @@ function AppContent() {
       <BrowserNotificationPrompt />
       <CheckinPromptHost />
       <AutoAttendanceEntry />
+      <JornadaWidget />
       {(user?.userType === 'manager' || user?.role === 'manager') && !user.isPlatformAdmin && !isImpersonating ? (
         <Suspense fallback={<PageLoader />}><ManagerPage key={`manager-${sessionStartVersion}-${user.id}-${user.clientTenantId || user.tenantId}`} /></Suspense>
       ) : <DashboardLayout key={`dashboard-${sessionStartVersion}-${user?.id || 'anonymous'}-${user?.clientTenantId || user?.tenantId || ''}`} />}

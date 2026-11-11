@@ -17,6 +17,8 @@ export function TeamHourlyTab() {
   const [date, setDate] = useState<string | null>(null);
   const team = useTenantQuery(['performance', 'team-hourly', date ?? 'today'], (signal) => performanceService.getTeamHourly({ date: date ?? undefined }, signal), { staleTime: 30_000 });
   const current = team.data?.date;
+  const attendance = useTenantQuery(['performance', 'team-attendance', current ?? 'today'], (signal) => performanceService.getTeamAttendance({ date: current ?? undefined }, signal), { staleTime: 30_000 });
+  const clock = (value?: string | null) => (value ? new Date(value).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : '—');
 
   const maxOpportunities = Math.max(1, ...(team.data?.hours.map((hour) => hour.opportunities) ?? [1]));
   const activeHours = team.data?.hours.filter((hour) => hour.opportunities || hour.visits || hour.messages || hour.invoices || hour.checkinsAnswered || hour.checkinsMissed || hour.workedMinutes) ?? [];
@@ -64,6 +66,28 @@ export function TeamHourlyTab() {
               <div className="mt-1 flex gap-1 text-[10px] text-muted-foreground" aria-hidden="true">
                 {team.data.hours.map((hour) => <span key={hour.hour} className="min-w-0 flex-1 text-center">{hour.hour % 3 === 0 ? hour.hour : ''}</span>)}
               </div>
+            </Panel>
+
+            <Panel title="Asistencia del día">
+              {attendance.isLoading ? <Skeleton className="h-24 w-full" aria-busy="true" />
+                : attendance.isError ? <ErrorState message={errorMessage(attendance.error, 'No se pudo cargar la asistencia')} onRetry={() => void attendance.refetch()} />
+                : !attendance.data || attendance.data.members.length === 0 ? <EmptyState title="Sin marcas" description="Nadie ha marcado entrada en este día." /> : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[520px] text-left text-[12px]">
+                      <thead className="text-muted-foreground"><tr>{['Persona', 'Entrada', 'Salió a almorzar', 'Regresó', 'Salida', 'Horas'].map((h) => <th key={h} scope="col" className="px-2 py-1.5 font-semibold">{h}</th>)}</tr></thead>
+                      <tbody>
+                        {attendance.data.members.map((m) => (
+                          <tr key={`${m.userId}-${m.name}`} className="border-t border-border">
+                            <th scope="row" className="px-2 py-1.5 font-semibold">{m.name}</th>
+                            <td className="px-2 py-1.5 tabular-nums">{clock(m.checkIn)}</td><td className="px-2 py-1.5 tabular-nums">{clock(m.breakStartAt)}</td>
+                            <td className="px-2 py-1.5 tabular-nums">{clock(m.breakEndAt)}</td><td className="px-2 py-1.5 tabular-nums">{clock(m.checkOut)}</td>
+                            <td className="px-2 py-1.5 tabular-nums">{m.hoursWorked ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
             </Panel>
 
             <div className="grid gap-4 xl:grid-cols-2">
