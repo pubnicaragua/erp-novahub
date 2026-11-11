@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { api, apiRequest } from './api';
+import { api, apiRequest, normalizeApiErrorMessage } from './api';
 import { notifyErpMutation } from '../utils/action-lock';
 import {
   MAX_OPTIMIZED_IMAGE_BYTES,
@@ -137,9 +137,10 @@ export const storageService = {
           } catch {
             // Keep the raw response when Storage does not return JSON.
           }
-          throw new Error(
-            `No se pudo subir el archivo al almacenamiento (${response.status}).${message ? ` ${message}` : ''}`,
-          );
+          const userMessage = response.status === 401
+            ? 'La autorización temporal para subir el archivo ya no está vigente. Selecciónalo nuevamente e inténtalo de nuevo.'
+            : normalizeApiErrorMessage(message, response.status, 'subir el archivo');
+          throw new Error(userMessage);
         }
       } else {
         // Compatibility fallback for an older backend response.
@@ -151,7 +152,7 @@ export const storageService = {
             cacheControl: '3600',
           });
         if (error) {
-          throw new Error(`No se pudo subir el archivo al almacenamiento. ${error.message}`);
+          throw new Error(normalizeApiErrorMessage(error.message, undefined, 'subir el archivo'));
         }
       }
     } finally {

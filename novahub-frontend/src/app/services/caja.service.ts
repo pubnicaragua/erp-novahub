@@ -1,4 +1,4 @@
-import { api, getApiUrl, getAuthHeaders } from './api';
+import { api, getApiUrl, getAuthHeaders, normalizeApiErrorMessage } from './api';
 import { resolveStorageReferences } from './storage.service';
 
 export type CashClosureMode = 'NORMAL' | 'BLIND';
@@ -828,7 +828,16 @@ export async function consumeInvoiceCashQueueEvents(
     cache: 'no-store',
     signal,
   });
-  if (!response.ok) throw new Error(`No se pudo abrir la sincronización en vivo (${response.status}).`);
+  if (!response.ok) {
+    let message = '';
+    let requestId = '';
+    try {
+      const detail = await response.clone().json() as { message?: unknown; requestId?: unknown };
+      message = Array.isArray(detail.message) ? detail.message.join('; ') : typeof detail.message === 'string' ? detail.message : '';
+      requestId = typeof detail.requestId === 'string' ? detail.requestId : '';
+    } catch { /* se usa el status HTTP */ }
+    throw new Error(normalizeApiErrorMessage(message, response.status, 'abrir la sincronización de cobros', requestId));
+  }
   if (!response.body) throw new Error('El navegador no habilitó el canal de sincronización en vivo.');
   onOpen?.();
 

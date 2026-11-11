@@ -1,4 +1,4 @@
-import { api, getApiUrl, getAuthHeaders } from './api';
+import { api, getApiUrl, getAuthHeaders, normalizeApiErrorMessage } from './api';
 import type { Notification } from '../types';
 import { streamReconnectDelayMs } from '../utils/stream-reconnect';
 
@@ -20,7 +20,7 @@ export interface NotificationStreamEvent {
 
 export class NotificationStreamError extends Error {
   constructor(public readonly status: number) {
-    super(`No se pudo abrir el stream de notificaciones (${status})`);
+    super(normalizeApiErrorMessage('', status, 'conectar con las notificaciones'));
     this.name = 'NotificationStreamError';
   }
 }

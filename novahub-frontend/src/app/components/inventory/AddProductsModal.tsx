@@ -250,6 +250,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const effectivePriceLists = resolveStandardProductPriceLists(priceLists && priceLists.length > 0 ? priceLists : internalPriceLists);
   const catalogItemType = itemType;
   const categoryRequired = catalogItemType !== 'SERVICE';
+  const canCreateServiceCategory = canPerform('INVENTORY_ATTRIBUTES', 'create');
   const isPagePresentation = presentation === 'page';
 
   const [productsList, setProductsList] = useState<any[]>([]);
@@ -1184,6 +1185,65 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   </Select>
                 </div>
               </>}
+              {catalogItemType === 'SERVICE' && (
+                <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-2 md:row-start-2 md:col-span-4' : 'col-span-1 sm:col-span-2 md:col-start-2 md:row-start-2 md:col-span-4'}>
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría del servicio (opcional)</label>
+                  {newCategoryOpen ? (
+                    <div className="mt-1 space-y-1.5 rounded-lg border border-primary/40 bg-primary/5 p-2">
+                      <Input
+                        value={newCategoryName}
+                        onChange={event => setNewCategoryName(event.target.value)}
+                        className="h-8 text-xs"
+                        placeholder="Nombre de la categoría"
+                        autoFocus
+                      />
+                      <Input
+                        value={newCategoryDesc}
+                        onChange={event => setNewCategoryDesc(event.target.value)}
+                        className="h-8 text-xs"
+                        placeholder="Descripción (opcional)"
+                      />
+                      <div className="flex gap-2">
+                        <Button type="button" size="sm" className="h-8 flex-1" onClick={handleCreateCategory} disabled={creatingCategory || !newCategoryName.trim()}>
+                          {creatingCategory ? 'Creando…' : 'Crear categoría'}
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => { setNewCategoryOpen(false); setNewCategoryName(''); setNewCategoryDesc(''); }}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1 flex min-w-0 gap-2">
+                      <div data-testid="inventory-service-category" className="min-w-0 flex-1">
+                        <Combobox
+                          value={draftProduct.categoryId}
+                          onChange={value => handleUpdateDraft('categoryId', value)}
+                          options={categoryOptions}
+                          searchPlaceholder="Buscar categoría de servicio…"
+                          emptyMessage="No se encontraron categorías de servicio."
+                          className="!h-8 w-full !rounded-none text-xs"
+                          contentClassName="!z-[70] min-w-[320px]"
+                          placeholder="Seleccionar categoría"
+                          ariaLabel="Categoría del servicio"
+                        />
+                      </div>
+                      {canCreateServiceCategory && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="size-8 shrink-0 rounded-lg border-primary/30 text-primary hover:bg-primary/10"
+                          onClick={() => setNewCategoryOpen(true)}
+                          title="Crear categoría de servicio"
+                          aria-label="Crear categoría de servicio"
+                        >
+                          <Plus className="size-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className={isPagePresentation
                 ? 'sm:col-span-2 md:col-start-1 md:row-start-3 md:col-span-12 md:grid md:grid-cols-2 md:gap-2'
                 : 'sm:col-span-2 md:col-start-1 md:row-start-3 md:col-span-8'}>

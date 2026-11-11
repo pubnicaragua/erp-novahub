@@ -99,8 +99,8 @@ function describeRequest(path: string, method: RequestOptions['method']) {
   const action = method || 'GET';
   const route = path.split('?')[0];
 
-  if (route === '/caja/sessions/open') return 'aperturar la caja';
-  if (route.startsWith('/caja/sessions/active/')) return 'consultar la sesion activa de caja';
+  if (route === '/caja/sessions/open') return 'abrir la caja';
+  if (route.startsWith('/caja/sessions/active/')) return 'consultar la sesión activa de caja';
   if (route === '/caja/sessions/history') return 'cargar el historial de caja';
   if (route.includes('/caja/sessions/') && route.endsWith('/close')) return 'cerrar la caja';
   if (route.includes('/caja/sessions/') && route.endsWith('/count')) return 'guardar el arqueo de caja';
@@ -117,11 +117,35 @@ function describeRequest(path: string, method: RequestOptions['method']) {
   if (route === '/caja/registers' && action === 'POST') return 'crear la caja';
   if (route.startsWith('/caja/registers/') && route.endsWith('/access')) return 'guardar los accesos de caja';
   if (route.startsWith('/caja/registers/') && action === 'PUT') return 'guardar la caja';
-  if (route === '/auth/login') return 'iniciar sesion';
+  if (route === '/auth/login') return 'iniciar sesión';
   if (route === '/auth/switch-context') return 'restaurar el contexto de trabajo';
-  if (action === 'GET') return 'cargar la informacion';
-  if (action === 'POST') return 'guardar la informacion';
-  if (action === 'PUT' || action === 'PATCH') return 'actualizar la informacion';
+
+  const requestModule = [
+    ['/hotel', 'Hotel'], ['/caja', 'Caja'], ['/sucursales', 'Sucursales'],
+    ['/inventory', 'Inventario'], ['/inventario', 'Inventario'],
+    ['/sales', 'Ventas'], ['/ventas', 'Ventas'], ['/purchases', 'Compras'], ['/compras', 'Compras'],
+    ['/accounting', 'Contabilidad'], ['/financials', 'Finanzas'], ['/finanzas', 'Finanzas'],
+    ['/hr', 'Recursos Humanos'], ['/force-sales', 'Fuerza Comercial'],
+    ['/activities', 'Actividades'], ['/actividades', 'Actividades'],
+    ['/admin', 'Administración'], ['/manager', 'Administración de sucursal'],
+    ['/reports', 'Reportes'], ['/reportes', 'Reportes'], ['/projects', 'Proyectos'],
+    ['/notifications', 'Notificaciones'], ['/audit', 'Auditoría'], ['/tickets', 'Tickets'],
+    ['/intl-imports', 'Importaciones'], ['/subscriptions', 'Suscripciones'],
+    ['/configuracion', 'Configuración'], ['/settings', 'Configuración'],
+    ['/restaurants', 'Restaurante POS'], ['/restaurant', 'Restaurante POS'],
+    ['/users', 'Usuarios'], ['/clients', 'Clientes'], ['/customers', 'Clientes'],
+  ].find(([prefix]) => route === prefix || route.startsWith(`${prefix}/`))?.[1];
+
+  if (requestModule) {
+    if (action === 'GET') return `cargar la información de ${requestModule}`;
+    if (action === 'POST') return `guardar información en ${requestModule}`;
+    if (action === 'PUT' || action === 'PATCH') return `actualizar información de ${requestModule}`;
+    if (action === 'DELETE') return `eliminar el registro de ${requestModule}`;
+  }
+
+  if (action === 'GET') return 'cargar la información';
+  if (action === 'POST') return 'guardar la información';
+  if (action === 'PUT' || action === 'PATCH') return 'actualizar la información';
   if (action === 'DELETE') return 'eliminar el registro';
   return 'procesar la solicitud';
 }
@@ -148,10 +172,28 @@ const PERMISSION_LABELS: Record<string, string> = {
   approve: 'aprobar',
 };
 
+const GENERIC_HTTP_ERROR_STATUS: Record<string, number> = {
+  'bad request': 400,
+  unauthorized: 401,
+  forbidden: 403,
+  'not found': 404,
+  conflict: 409,
+  'payload too large': 413,
+  'unsupported media type': 415,
+  'unprocessable entity': 422,
+  'too many requests': 429,
+  'bad gateway': 502,
+  'internal server error': 500,
+  'error interno del servidor': 500,
+  'service unavailable': 503,
+  'gateway timeout': 504,
+};
+const GENERIC_HTTP_ERROR_LABELS = new Set(Object.keys(GENERIC_HTTP_ERROR_STATUS));
+
 function humanize403Message(raw: string, context?: string): string {
   let msg = raw;
 
-  if (/RETAIL_CASH_CONTROL/i.test(raw) && /(?:permiso|permission).*['\"]?edit['\"]?/i.test(raw)) {
+  if (/RETAIL_CASH_CONTROL/i.test(raw) && /(?:permiso|permission).*['"]?edit['"]?/i.test(raw)) {
     return 'No tienes permiso para editar esta vista.';
   }
 
@@ -166,7 +208,7 @@ function humanize403Message(raw: string, context?: string): string {
     return MODULE_LABELS[code] || code;
   });
 
-  const technical = /forbidden|insufficient|permission denied|not authorized|unauthorized|access denied/i.test(msg);
+  const technical = /forbidden|insufficient|permission denied|not authorized|unauthorized|access denied|row-level security|violates? .*policy/i.test(msg);
   if (technical) {
     return context
       ? `No tienes acceso para ${context}. Solicita al administrador que habilite este permiso.`
@@ -175,28 +217,95 @@ function humanize403Message(raw: string, context?: string): string {
   return msg;
 }
 
-function normalizeErrorMessage(message?: string, status?: number, context?: string): string {
+function humanizeValidationMessage(raw: string): string {
+  let match = raw.match(/^property ([\w.-]+) should not exist$/i);
+  if (match) return `El campo «${match[1]}» no está permitido en esta solicitud.`;
+
+  match = raw.match(/^([\w.-]+) should not be empty$/i);
+  if (match) return `El campo «${match[1]}» es obligatorio.`;
+
+  const rules: Array<[RegExp, string]> = [
+    [/^([\w.-]+) must be an email$/i, 'El campo «$1» debe contener un correo válido.'],
+    [/^([\w.-]+) must be a string$/i, 'El campo «$1» debe contener texto.'],
+    [/^([\w.-]+) must be a number conforming to the specified constraints$/i, 'El campo «$1» debe contener un número válido.'],
+    [/^([\w.-]+) must be an integer number$/i, 'El campo «$1» debe contener un número entero.'],
+    [/^([\w.-]+) must be a UUID$/i, 'El campo «$1» no tiene un identificador válido.'],
+    [/^([\w.-]+) must be a boolean value$/i, 'El campo «$1» debe ser verdadero o falso.'],
+    [/^([\w.-]+) must be an array$/i, 'El campo «$1» debe contener una lista de valores.'],
+    [/^([\w.-]+) must be longer than or equal to (\d+) characters$/i, 'El campo «$1» debe tener al menos $2 caracteres.'],
+    [/^([\w.-]+) must be shorter than or equal to (\d+) characters$/i, 'El campo «$1» no puede superar $2 caracteres.'],
+    [/^([\w.-]+) must not be less than (\d+)$/i, 'El campo «$1» debe ser igual o mayor que $2.'],
+    [/^([\w.-]+) must not be greater than (\d+)$/i, 'El campo «$1» debe ser igual o menor que $2.'],
+  ];
+  for (const [pattern, replacement] of rules) {
+    if (pattern.test(raw)) return raw.replace(pattern, replacement);
+  }
+  return raw;
+}
+
+function normalizeErrorMessage(message?: string, status?: number, context?: string, requestId?: string): string {
   const raw = (message || '').trim();
   const lower = raw.toLowerCase();
   const prefix = context ? `No se pudo ${context}. ` : '';
 
+  // A duplicate hotel code is a direct notice to the user; do not frame it
+  // as a failed save or expose the HTTP 409 wording around it.
+  if (status === 409 && /^ya existe (?:una habitación|un tipo de habitación) con ese código\.?$/i.test(raw)) {
+    return raw;
+  }
+
+  const normalizedHttpLabel = lower.replace(/[.!?]+$/, '');
+  if (GENERIC_HTTP_ERROR_LABELS.has(normalizedHttpLabel)) {
+    return normalizeErrorMessage('', status, context, requestId);
+  }
+  if (status !== undefined && status >= 500 && /^(?:internal server error|error interno del servidor)(?:\b|[.:])/i.test(raw)) {
+    return normalizeErrorMessage('', status, context, requestId);
+  }
+  if (status === 400 && /^(?:bad request|bad request exception|invalid request)$/i.test(raw)) {
+    return normalizeErrorMessage('', status, context, requestId);
+  }
+  if (status === 404 && /not found|cannot (?:get|post|put|patch|delete)\b/i.test(raw)) {
+    return normalizeErrorMessage('', status, context, requestId);
+  }
+  if (status === 409 && /conflict|already exists|unique constraint/i.test(raw)) {
+    return normalizeErrorMessage('', status, context, requestId);
+  }
+  if (status === 413 && /payload too large|entity too large|request entity too large/i.test(raw)) {
+    return normalizeErrorMessage('', status, context, requestId);
+  }
+  if (status === 415 && /unsupported media type|unsupported file type/i.test(raw)) {
+    return normalizeErrorMessage('', status, context, requestId);
+  }
+  if (status === 429 && /too many requests|rate limit/i.test(raw)) {
+    return normalizeErrorMessage('', status, context, requestId);
+  }
+
+  if (status === 401 && /invalid credentials|bad credentials|credenciales? incorrectas?/i.test(raw)) {
+    return 'No se pudo iniciar sesión porque el correo o la contraseña no coinciden. Revísalos e inténtalo de nuevo.';
+  }
+  if (status === 404 && /cannot (?:get|post|put|patch|delete)\b/i.test(raw)) {
+    return normalizeErrorMessage('', status, context, requestId);
+  }
+
   // Always prefer the backend's message when available
   if (raw) {
     // Only use custom replacements for known technical messages
-    if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed')) {
-      return 'No se pudo conectar con el servidor. Revisa tu conexion o confirma que el backend este encendido.';
+    if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network error') || lower.includes('network request failed')) {
+      return context
+        ? `No se pudo ${context} porque no hay conexión con el servidor. Revisa tu conexión a internet e inténtalo de nuevo.`
+        : 'No se pudo conectar con el servidor. Revisa tu conexión a internet e inténtalo de nuevo.';
     }
     if (lower.includes('column') && lower.includes('does not exist')) {
-      return `${prefix}La base de datos no tiene una columna requerida por esta version del sistema. Aplica las migraciones pendientes.`;
+      return `${prefix}La base de datos no tiene una columna que esta operación necesita. Contacta al administrador para revisar la actualización del sistema.`;
     }
     if (lower.includes('relation') && lower.includes('does not exist') || lower.includes('table') && lower.includes('does not exist') || lower.includes('p2021')) {
-      return `${prefix}La base de datos todavía no tiene las tablas de este módulo. Ejecuta las migraciones pendientes y reinicia el backend.`;
+      return `${prefix}La base de datos no tiene una tabla que esta operación necesita. Contacta al administrador para revisar la actualización del sistema.`;
     }
     if (lower.includes('unique constraint failed') || lower.includes('already exists')) {
-      return `${prefix}Ya existe un registro con esos datos.`;
+      return `${prefix}Ya existe un registro con esos datos. Revisa el código o nombre e inténtalo nuevamente.`;
     }
     if (lower.startsWith('http error') && status) {
-      return normalizeErrorMessage('', status, context);
+      return normalizeErrorMessage('', status, context, requestId);
     }
     // Para errores 403, traducir terminos tecnicos a mensajes amigables
     if (status === 403 && raw) return humanize403Message(raw, context);
@@ -205,21 +314,62 @@ function normalizeErrorMessage(message?: string, status?: number, context?: stri
   }
 
   // Generic fallbacks when no backend message
-  if (status === 400) return `${prefix}Revisa los datos enviados; hay informacion incompleta o invalida.`;
-  if (status === 401) return 'Tu sesion expiro o no esta autorizada. Inicia sesion nuevamente.';
-  if (status === 403) return `${prefix}Tu usuario no tiene permisos para realizar esta accion.`;
-  if (status === 404) return `${prefix}No se encontro el registro solicitado o ya no esta disponible.`;
-  if (status === 409) return `${prefix}Hay un conflicto con un registro existente.`;
-  if (status === 422) return `${prefix}La informacion enviada no cumple las reglas de validacion.`;
+  if (status === 400) return `${prefix}Los datos enviados no se pudieron aceptar. Revisa los campos obligatorios y que los valores tengan el formato correcto.`;
+  if (status === 401) return 'Tu sesión expiró o ya no es válida. Inicia sesión nuevamente para continuar.';
+  if (status === 403) return `${prefix}Tu usuario no tiene permiso para realizar esta acción. Pide que revisen los permisos asignados a tu perfil.`;
+  if (status === 404) return `${prefix}No encontramos el registro solicitado. Puede haberse eliminado, cambiado de sucursal o ya no estar disponible.`;
+  if (status === 409) return `${prefix}La operación entra en conflicto con los datos actuales. Revisa si el registro ya existe o fue actualizado y vuelve a cargar la información.`;
+  if (status === 413) return `${prefix}El archivo o la cantidad de datos supera el tamaño permitido. Reduce el tamaño e inténtalo de nuevo.`;
+  if (status === 415) return `${prefix}El archivo o formato enviado no es compatible. Usa un formato admitido e inténtalo de nuevo.`;
+  if (status === 422) return `${prefix}Algunos datos no cumplen las reglas requeridas. Revisa los campos indicados y corrígelos.`;
+  if (status === 429) return `${prefix}Se recibieron demasiadas solicitudes seguidas. Espera un momento e inténtalo de nuevo.`;
+  if (status === 502 || status === 503) return `${prefix}El servicio que atiende esta operación no está disponible en este momento. Espera un momento e inténtalo de nuevo.`;
+  if (status === 504) return `${prefix}La solicitud tardó demasiado en responder. Comprueba si se guardó antes de repetirla.`;
   if ((status || 0) >= 500) {
-    return `${prefix}El servidor encontro un problema interno (HTTP ${status}). Si el modulo fue actualizado recientemente, verifica que las migraciones de base de datos esten aplicadas.`;
+    const nextStep = requestId
+      ? `Comparte el código de seguimiento ${requestId} con soporte para localizar el problema.`
+      : 'Inténtalo de nuevo; si vuelve a ocurrir, contacta a soporte.';
+    return `${prefix}El servidor no pudo completar la solicitud. ${nextStep}`;
   }
-  return `${prefix}Ocurrio un error inesperado.`;
+  return `${prefix}No se pudo completar la solicitud. Inténtalo de nuevo y, si continúa, contacta a soporte.`;
+}
+
+export { normalizeErrorMessage as normalizeApiErrorMessage };
+
+function improveFallbackMessage(fallback: string): string {
+  const message = fallback.trim();
+  if (!message) return 'No se pudo completar la acción. No se recibió el motivo del problema; inténtalo de nuevo y, si continúa, contacta a soporte.';
+
+  const errorAl = message.match(/^error al (.+)$/i);
+  if (errorAl) {
+    const action = errorAl[1].replace(/[.!?]+$/, '');
+    return `No se pudo ${action}. La aplicación no recibió el motivo del problema; inténtalo de nuevo y, si continúa, contacta a soporte.`;
+  }
+
+  const errorDe = message.match(/^error de (.+)$/i);
+  if (errorDe) {
+    const action = errorDe[1].replace(/[.!?]+$/, '');
+    return `No se pudo completar la operación de ${action}. La aplicación no recibió el motivo del problema; inténtalo de nuevo y, si continúa, contacta a soporte.`;
+  }
+
+  return message;
 }
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
+  if (error instanceof ApiRequestError) return error.message;
+  if (error instanceof Error && error.message) {
+    const status = Number((error as any).status);
+    if (status >= 400 && status <= 599) {
+      return normalizeErrorMessage(error.message, status);
+    }
+    const genericStatus = GENERIC_HTTP_ERROR_STATUS[error.message.trim().toLowerCase().replace(/[.!?]+$/, '')];
+    if (genericStatus) return normalizeErrorMessage('', genericStatus);
+    if (/failed to fetch|networkerror|network error|network request failed/i.test(error.message)) {
+      return normalizeErrorMessage(error.message);
+    }
+    return improveFallbackMessage(error.message);
+  }
+  return improveFallbackMessage(fallback);
 }
 
 function extractServerMessages(errorBody: ApiErrorBody | null) {
@@ -230,7 +380,7 @@ function extractServerMessages(errorBody: ApiErrorBody | null) {
   return [
     ...asTextList(Array.isArray(errorBody.message) ? errorBody.message : nestedMessage?.message || nestedMessage?.error || errorBody.message),
     ...asTextList(errorBody.details),
-    ...asTextList(errorBody.error),
+    ...asTextList(errorBody.error).filter((label) => !GENERIC_HTTP_ERROR_LABELS.has(label.trim().toLowerCase().replace(/[.!?]+$/, ''))),
   ];
 }
 
@@ -345,7 +495,12 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
       : errorBody?.message || '';
     const messages = extractServerMessages(rawMessage ? { ...errorBody, message: rawMessage } : errorBody);
     throw new ApiRequestError(
-      normalizeErrorMessage(messages.join('. '), response.status, context),
+      normalizeErrorMessage(
+        messages.map(humanizeValidationMessage).join('. '),
+        response.status,
+        context,
+        typeof errorBody?.requestId === 'string' ? errorBody.requestId : response.headers.get('X-Request-Id') || undefined,
+      ),
       response.status,
       path,
       errorBody?.code,

@@ -912,6 +912,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
         <div className="min-w-0">
           <CardTitle>Matriz de precios · {itemLabel}</CardTitle>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">Selecciona {itemLabel.toLowerCase()} para descargar una plantilla. La carga identifica cada registro por su código o SKU{activeItemType === 'PRODUCT' ? '. El costo permanece en Inventario.' : '.'}</p>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-[10px] text-muted-foreground" role="note"><Badge variant="secondary" className="opacity-60">Sin precio configurado</Badge><span>Las celdas atenuadas siguen disponibles para edición.</span></div>
         </div>
         <Badge variant="outline" className="shrink-0">{selectedCount} seleccionados</Badge>
       </CardHeader>
@@ -954,7 +955,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                     <TableCell className="text-xs text-muted-foreground">{product.category?.name || '-'}</TableCell>
                     {visibleLists.map((list) => {
                       const item = byList?.get(list.id);
-                      return <TableCell key={list.id} className="text-right">{isEditing ? <Input className="ml-auto h-8 w-32 text-right" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} currencyPrecision /> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'rounded-md bg-amber-500/10 font-medium italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio'}</div>}{!item && <span className="mt-1 block text-[10px] text-muted-foreground">Pendiente</span>}</TableCell>;
+                      return <TableCell key={list.id} className={`text-right ${!item ? 'opacity-60 focus-within:opacity-100' : ''}`}>{isEditing ? <div className="ml-auto flex w-32 flex-col items-end gap-1"><Input className="h-8 w-full text-right" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} aria-label={`Precio ${list.name} para ${product.name}`} currencyPrecision />{!item && <span className="text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}</div> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end rounded-md px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'bg-muted/40 font-medium italic text-muted-foreground' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio configurado'}</div>}</TableCell>;
                     })}
                       <TableCell className="text-right">
                       {isEditing ? <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="size-7 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id} aria-label={`Guardar precios de ${product.name}`}>{saving === product.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}</Button><Button variant="ghost" size="icon" className="size-7 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id}><X className="size-4" /></Button></div> : canEditPriceList && <Button variant="ghost" size="icon" className="size-7" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}
@@ -992,11 +993,10 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                 <div className="mt-3 divide-y divide-border/50 rounded-xl border border-border/50 bg-muted/10">
                   {visibleLists.map((list) => {
                     const item = byList?.get(list.id);
-                    return <div key={list.id} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2.5 first:rounded-t-xl last:rounded-b-xl">
+                    return <div key={list.id} className={`flex min-w-0 items-center justify-between gap-3 px-3 py-2.5 first:rounded-t-xl last:rounded-b-xl ${!item ? 'opacity-70 focus-within:opacity-100' : ''}`}>
                       <span className="min-w-0 break-words text-xs font-bold">{list.name}<span className="ml-1.5 font-mono text-[9px] font-normal text-muted-foreground">{list.code}</span></span>
                       <div className="flex min-w-0 shrink-0 flex-col items-end">
-                        {isEditing ? <Input className="h-8 w-32 max-w-[45vw] text-right text-xs" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} aria-label={`Precio ${list.name} para ${product.name}`} currencyPrecision /> : <span className={`text-sm font-bold tabular-nums ${!item ? 'italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio'}</span>}
-                        {!item && <span className="mt-0.5 text-[9px] text-muted-foreground">Pendiente</span>}
+                        {isEditing ? <><Input className="h-8 w-32 max-w-[45vw] text-right text-xs" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} aria-label={`Precio ${list.name} para ${product.name}`} currencyPrecision />{!item && <span className="mt-1 text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}</> : <span className={`text-right text-sm font-bold tabular-nums ${!item ? 'italic text-muted-foreground' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio configurado'}</span>}
                       </div>
                     </div>;
                   })}
@@ -1266,30 +1266,33 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                         if (isEditing) {
                           const editValue = editingVariantPrices[variant.id]?.[list.id] ?? '';
                           return (
-                            <TableCell key={list.id} className="w-36 min-w-36 text-right">
-                              <Input
-                                className="h-8 w-full max-w-full text-right text-xs"
-                                type="number"
-                                min="0"
-                                value={editValue}
-                                disabled={savingVariant === variant.id}
-                                aria-label={`Precio ${list.name} para la variante ${variant.sku}`}
-                                onChange={(e) => setEditingVariantPrices((current) => ({
-                                  ...current,
-                                  [variant.id]: { ...current[variant.id], [list.id]: e.target.value },
-                                }))} currencyPrecision />
+                            <TableCell key={list.id} className={`w-36 min-w-36 text-right ${!baseItem ? 'opacity-60 focus-within:opacity-100' : ''}`}>
+                              <div className="flex flex-col items-end gap-1">
+                                <Input
+                                  className="h-8 w-full max-w-full text-right text-xs"
+                                  type="number"
+                                  min="0"
+                                  value={editValue}
+                                  disabled={savingVariant === variant.id}
+                                  aria-label={`Precio ${list.name} para la variante ${variant.sku}`}
+                                  onChange={(e) => setEditingVariantPrices((current) => ({
+                                    ...current,
+                                    [variant.id]: { ...current[variant.id], [list.id]: e.target.value },
+                                  }))} currencyPrecision />
+                                {!baseItem && <span className="text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}
+                              </div>
                             </TableCell>
                           );
                         }
                         return (
-                          <TableCell key={list.id} className="text-right text-xs tabular-nums">
+                          <TableCell key={list.id} className={`text-right text-xs tabular-nums ${!baseItem ? 'opacity-60' : ''}`}>
                             {baseItem ? (
                               <span className={isFromParent ? 'text-muted-foreground italic' : ''}>
                                 {formatDisplayPrice(convertBaseToDisplay(Number(baseItem.basePrice)))}
                                 {isFromParent && <span className="ml-1 text-[9px]">(heredado)</span>}
                               </span>
                             ) : (
-                              <span className="text-rose-500 text-[10px]">Sin precio</span>
+                              <span className="text-[10px] text-muted-foreground">Sin precio configurado</span>
                             )}
                           </TableCell>
                         );

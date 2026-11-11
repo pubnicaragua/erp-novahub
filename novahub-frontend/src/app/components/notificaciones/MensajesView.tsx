@@ -361,29 +361,29 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   return (
     <>
       <section
-        className="flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-border/60 bg-card/60 shadow-sm"
+        className="grid min-h-0 min-w-0 flex-1 grid-cols-1 [grid-template-rows:minmax(0,1fr)] gap-2 overflow-hidden p-1 lg:grid-cols-[minmax(300px,370px)_minmax(0,1fr)]"
         aria-label="Mensajería interna"
         data-testid="messages-workspace"
         data-tour="notificaciones-mensajes"
       >
-        <aside className={cn('min-h-0 w-full flex-col overflow-hidden border-r border-border/60 bg-background/45 lg:flex lg:w-[370px] lg:shrink-0', mobileThreadOpen ? 'hidden' : 'flex')}>
-          <div className="border-b border-border/60 p-4">
-            <div className="mb-4 flex min-w-0 flex-col gap-2">
+        <aside className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm', mobileThreadOpen && 'hidden lg:flex')}>
+          <div className="shrink-0 border-b border-border/60 p-3">
+            <div className="mb-3 flex min-w-0 flex-col gap-2">
               <div className="min-w-0">
-                <h2 className="text-xl font-bold tracking-tight">Mensajes</h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <h2 className="text-sm font-black">Mensajes</h2>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
                   {loading ? 'Calculando conversaciones…' : `${searchFiltered.length} conversaciones · ${unreadTotal} sin leer`}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 self-end">
                 {canPerform('NOTIFICATIONS_MESSAGES', 'create') && (
-                  <Button onClick={() => openComposer('DIRECT')} size="sm" className="h-9 gap-2 rounded-lg px-3" data-testid="new-message-button">
+                  <Button onClick={() => openComposer('DIRECT')} size="sm" className="h-8 gap-2 rounded-lg px-3" data-testid="new-message-button">
                     <MailPlus className="size-4" />
                     <span>Nuevo</span>
                   </Button>
                 )}
                 {canCreateSupportConversation && (
-                  <Button onClick={() => openComposer('SUPPORT')} size="sm" variant="outline" className="h-9 gap-2 rounded-lg px-3" aria-label="Nuevo mensaje a soporte técnico" title="Nuevo mensaje a soporte técnico" data-testid="new-support-message-button">
+                  <Button onClick={() => openComposer('SUPPORT')} size="sm" variant="outline" className="h-8 gap-2 rounded-lg px-3" aria-label="Nuevo mensaje a soporte técnico" title="Nuevo mensaje a soporte técnico" data-testid="new-support-message-button">
                     <LifeBuoy className="size-4" />
                     <span>Soporte</span>
                   </Button>
@@ -399,7 +399,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                   onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder="Buscar conversaciones"
                   aria-label="Buscar conversaciones"
-                  className="h-10 rounded-lg bg-muted/30 pl-9"
+                  className="h-9 rounded-lg bg-muted/30 pl-9"
                 />
               </div>
               <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={onHelp} aria-label="Cómo usar Notificaciones" title="Cómo usar Notificaciones">
@@ -407,7 +407,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
               </Button>
             </div>
 
-            <div className="mt-3 flex gap-1" aria-label="Filtros de mensajes">
+            <div className="-mx-1 mt-2 flex min-w-0 gap-1 overflow-x-auto px-1 scrollbar-overlay" aria-label="Filtros de mensajes">
               {([
                 ['all', 'Todos'],
                 ['unread', `Sin leer${unreadTotal ? ` ${unreadTotal}` : ''}`],
@@ -420,7 +420,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                   aria-pressed={filter === value}
                   onClick={() => setFilter(value)}
                   className={cn(
-                    'min-h-8 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    'min-h-8 shrink-0 rounded-lg px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     filter === value ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
                   )}
                 >
@@ -430,9 +430,9 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-overlay" role="list" aria-label="Conversaciones" data-testid="message-inbox-list" tabIndex={0}>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1 scrollbar-overlay" role="list" aria-label="Conversaciones" data-testid="message-inbox-list" tabIndex={0}>
             {loading || supportConversationsQuery.isLoading ? (
-              <div className="space-y-2 p-3" aria-label="Cargando conversaciones">
+              <div className="space-y-2 p-2" aria-label="Cargando conversaciones">
                 {[1, 2, 3, 4].map((item) => <div key={item} className="h-20 animate-pulse rounded-xl bg-muted/40" />)}
               </div>
             ) : filtered.length === 0 ? (
@@ -460,8 +460,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                     exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
                     transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.18, ease: 'easeOut' }}
                     className={cn(
-                      'group flex w-full gap-3 border-b border-border/40 px-4 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-                      active ? 'bg-primary/8' : 'hover:bg-muted/35',
+                      'group mb-1 flex w-full min-w-0 gap-3 rounded-xl border border-transparent px-3 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                      active ? 'border-primary/15 bg-primary/10' : 'hover:bg-muted/60',
                     )}
                     data-testid={`message-thread-${thread.id}`}
                   >
@@ -495,7 +495,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
           </div>
         </aside>
 
-        <article className={cn('min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background/25 lg:flex', mobileThreadOpen ? 'flex' : 'hidden')}>
+        <article className={cn('h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm lg:flex', mobileThreadOpen ? 'flex' : 'hidden')}>
           {!selected ? (
             <div className="flex h-full flex-col items-center justify-center px-8 text-center">
               <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -518,12 +518,12 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
             </div>
           ) : (
             <>
-              <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-border/60 bg-background px-3 py-2 sm:px-5">
+              <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border/60 bg-card px-2 py-1.5 sm:px-3">
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="shrink-0 lg:hidden"
+                  className="size-8 shrink-0 lg:hidden"
                   aria-label="Volver a conversaciones"
                   onClick={() => setMobileThreadOpen(false)}
                 >
@@ -548,13 +548,13 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                   const element = event.currentTarget;
                   shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
                 }}
-                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 scrollbar-overlay sm:px-6"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 scrollbar-overlay sm:px-4"
                 data-testid="message-thread-body"
                 aria-live="polite"
                 aria-label="Historial de mensajes"
                 tabIndex={0}
               >
-                <div className="mx-auto flex max-w-3xl flex-col gap-3">
+                <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
                   <AnimatePresence initial={false}>
                   {(selected.messages || []).map((message) => {
                     const isSystem = selected.kind === 'SYSTEM';
@@ -615,17 +615,23 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
               </div>
 
               {selected.canReply ? (
-                <form onSubmit={sendReply} className="shrink-0 border-t border-border/60 bg-background/70 p-3 sm:p-4">
-                  <div className="mx-auto max-w-3xl">
+                <form onSubmit={sendReply} className="shrink-0 border-t border-border/60 bg-card/90 p-2 sm:px-3 sm:py-2" data-testid="message-reply-form">
+                  <div className="mx-auto max-w-4xl">
                     <label htmlFor="message-reply" className="sr-only">Responder mensaje</label>
-                    <div className="flex items-end gap-2 rounded-xl border border-border bg-muted/20 p-2 focus-within:ring-2 focus-within:ring-ring/40">
+                    <MessageAttachmentComposer
+                      ref={replyAttachmentComposerRef}
+                      key={`branch-reply-${selected.id}-${replyAttachmentResetKey}`}
+                      conversationId={selected.id}
+                      kind={selected.kind === 'SUPPORT' ? 'SUPPORT' : 'DIRECT'}
+                      density="compact"
+                      disabled={replying || !canPerform('NOTIFICATIONS_MESSAGES', 'create')}
+                      onChange={onReplyAttachmentsChange}
+                    >
                       <Textarea
                         id="message-reply"
                         value={reply}
                         onChange={(event) => setReply(event.target.value.slice(0, 4000))}
                         onPaste={(event) => pasteMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files))}
-                        onDragOver={allowMessageAttachmentDrop}
-                        onDrop={(event) => dropMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files))}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                             event.preventDefault();
@@ -633,36 +639,25 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                           }
                         }}
                         placeholder="Escribí una respuesta…"
-                        className="max-h-36 min-h-10 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
+                        aria-describedby="message-reply-help"
+                        className="field-sizing-content min-h-9 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto rounded-full border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
                         disabled={replying || !canPerform('NOTIFICATIONS_MESSAGES', 'create')}
                         data-testid="message-reply-input"
                       />
                       <Button
                         type="submit"
                         size="icon"
-                        className="size-10 shrink-0 rounded-lg"
+                        className="size-9 shrink-0 rounded-full"
                         disabled={replying || !canPerform('NOTIFICATIONS_MESSAGES', 'create') || replyAttachmentState.uploading || replyAttachmentState.hasError || (!reply.trim() && !replyAttachmentState.attachments.length)}
                         aria-label="Enviar respuesta"
                         data-testid="send-reply-button"
                       >
                         {replying ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                       </Button>
-                    </div>
-                    {selected.kind !== 'SYSTEM' && (
-                      <div className="mt-2">
-                        <MessageAttachmentComposer
-                          ref={replyAttachmentComposerRef}
-                          key={`branch-reply-${selected.id}-${replyAttachmentResetKey}`}
-                          conversationId={selected.id}
-                          kind={selected.kind}
-                          disabled={replying || !canPerform('NOTIFICATIONS_MESSAGES', 'create')}
-                          onChange={onReplyAttachmentsChange}
-                        />
-                      </div>
-                    )}
-                    <div className="mt-1.5 flex justify-between gap-3 px-1 text-[11px]">
+                    </MessageAttachmentComposer>
+                    <div className="mt-1.5 flex flex-wrap justify-between gap-x-3 gap-y-1 px-1 text-[11px]">
                       <span className="text-destructive" role={replyError ? 'alert' : undefined}>{replyError}</span>
-                      <span className="ml-auto text-muted-foreground">Enter para enviar · Shift+Enter para salto de línea</span>
+                      <span id="message-reply-help" className="ml-auto text-muted-foreground">Enter para enviar · Shift+Enter para salto de línea</span>
                     </div>
                   </div>
                 </form>

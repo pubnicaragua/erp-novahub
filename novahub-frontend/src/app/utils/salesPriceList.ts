@@ -23,6 +23,46 @@ export function sameSalesId(left: unknown, right: unknown): boolean {
 }
 
 /**
+ * Indica si la lista tiene un precio guardado para el producto/servicio.
+ * Para variantes, el precio del producto padre también cuenta como heredado.
+ * La existencia de la fila es suficiente: un precio explícito de cero también
+ * está configurado.
+ */
+export function hasConfiguredSalesPriceListPrice(
+  items: any[] = [],
+  priceListId: unknown,
+  productIds: unknown | unknown[],
+  variantId?: unknown,
+): boolean {
+  const candidateProductIds = new Set(
+    (Array.isArray(productIds) ? productIds : [productIds])
+      .filter(Boolean)
+      .map((id) => String(id)),
+  );
+  if (!priceListId || !candidateProductIds.size) return false;
+
+  const matchesListAndProduct = (item: any) => {
+    const itemProductId = item?.productId ?? item?.product?.id;
+    return sameSalesId(item?.priceListId, priceListId)
+      && candidateProductIds.has(String(itemProductId || ''));
+  };
+  const isParentPrice = (item: any) => {
+    const itemVariantId = item?.variantId ?? item?.variant?.id;
+    return itemVariantId === null || itemVariantId === undefined || itemVariantId === '';
+  };
+
+  if (variantId) {
+    const hasVariantPrice = items.some((item) =>
+      matchesListAndProduct(item)
+      && sameSalesId(item?.variantId ?? item?.variant?.id, variantId),
+    );
+    if (hasVariantPrice) return true;
+  }
+
+  return items.some((item) => matchesListAndProduct(item) && isParentPrice(item));
+}
+
+/**
  * Identifica la lista efectiva de una línea. Las líneas que no traen una
  * lista propia heredan la lista del documento o del cliente.
  */

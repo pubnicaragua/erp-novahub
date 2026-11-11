@@ -10,7 +10,7 @@ import { useBranchScope } from '../hooks/useBranchScope';
 import { useAuth } from '../contexts/AuthContext';
 import { inventoryService } from '../services/inventario.service';
 import { publicLinkUrl } from '../services/public-access.service';
-import { getApiErrorMessage } from '../services/api';
+import { ApiRequestError, getApiErrorMessage } from '../services/api';
 import { hotelService, type HotelCheckoutContext, type HotelReservation } from '../services/hotel.service';
 import { buildCustomerWhatsAppUrl } from './ventas/WhatsAppActionButton';
 import { HotelCalendarView } from './hospedaje/HotelCalendarView';
@@ -23,6 +23,14 @@ type HotelTab = 'calendario' | 'habitaciones' | 'reservas';
 const tabToSubmodule: Record<HotelTab, string> = { calendario: 'calendario-hospedaje', habitaciones: 'habitaciones', reservas: 'reservas' };
 const submoduleToTab: Record<string, HotelTab> = { 'calendario-hospedaje': 'calendario', habitaciones: 'habitaciones', reservas: 'reservas' };
 const statusLabel: Record<string, string> = { CONFIRMED: 'Confirmada', CHECKED_IN: 'En curso', CHECKED_OUT: 'Finalizada', CANCELLED: 'Cancelada', NO_SHOW: 'No llegó' };
+const isDuplicateHotelCodeNotice = (error: unknown) => error instanceof ApiRequestError
+  && error.status === 409
+  && /ya existe (?:una habitación|un tipo de habitación) con ese código/i.test(error.message);
+const notifyHotelSaveError = (error: unknown, fallback: string) => {
+  const message = getApiErrorMessage(error, fallback);
+  if (isDuplicateHotelCodeNotice(error)) toast.info(message);
+  else toast.error(message);
+};
 const money = (value: number, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
 const dateOnly = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const addCalendarDays = (value: string, days: number) => { const date = new Date(`${value}T00:00:00.000Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); };
@@ -108,8 +116,8 @@ export function HospedajePage({ activeSubModule, onSubModuleChange, isSidebarCol
   const selectedReservation = selectedQuery.data || reservations.find((item) => item.id === selectedReservationId) || null;
   const selectedCheckoutRegister = registers.find((register) => register.id === checkoutRegisterId) || null;
 
-  const roomTypeMutation = useMutation({ mutationFn: (body: { code: string; name: string; rateProductId: string; ratePriceListId?: string; capacity: number }) => { if (!canCreateRoomTypes) throw new Error('No tienes permiso para crear tipos de habitación.'); return hotelService.createRoomType({ branchId, ...body }); }, onSuccess: invalidateHotel, onError: (error) => toast.error(getApiErrorMessage(error, 'No se pudo crear el tipo de habitación.')) });
-  const roomMutation = useMutation({ mutationFn: (body: { roomTypeId: string; code: string; name: string; floor?: string }) => { if (!canCreateRooms) throw new Error('No tienes permiso para crear habitaciones.'); return hotelService.createRoom({ branchId, ...body }); }, onSuccess: invalidateHotel, onError: (error) => toast.error(getApiErrorMessage(error, 'No se pudo crear la habitación.')) });
+  const roomTypeMutation = useMutation({ mutationFn: (body: { code: string; name: string; rateProductId: string; ratePriceListId?: string; capacity: number }) => { if (!canCreateRoomTypes) throw new Error('No tienes permiso para crear tipos de habitación.'); return hotelService.createRoomType({ branchId, ...body }); }, onSuccess: invalidateHotel, onError: (error) => notifyHotelSaveError(error, 'No se pudo crear el tipo de habitación.') });
+  const roomMutation = useMutation({ mutationFn: (body: { roomTypeId: string; code: string; name: string; floor?: string }) => { if (!canCreateRooms) throw new Error('No tienes permiso para crear habitaciones.'); return hotelService.createRoom({ branchId, ...body }); }, onSuccess: invalidateHotel, onError: (error) => notifyHotelSaveError(error, 'No se pudo crear la habitación.') });
   const reservationMutation = useMutation({ mutationFn: (body: ReservationDraft) => { if (!canCreateReservation) throw new Error('No tienes permiso para crear reservas.'); return hotelService.createReservation({ branchId, ...body, guestEmail: body.guestEmail.trim() || undefined, guestPhone: body.guestPhone.trim() || undefined }); }, onSuccess: async (reservation) => { await invalidateHotel(); setReservationModal(false); setDraft(emptyDraft()); setSelectedReservationId(reservation.id); toast.success(`Reserva ${reservation.reservationNumber} creada.`); }, onError: (error) => toast.error(getApiErrorMessage(error, 'No se pudo crear la reserva. Revisa la disponibilidad.')) });
   const updateReservationMutation = useMutation({ mutationFn: (body: Partial<ReservationDraft>) => { if (!canEditReservation) throw new Error('No tienes permiso para editar reservas.'); return hotelService.updateReservation(selectedReservationId!, { ...body, ...(body.guestEmail !== undefined ? { guestEmail: body.guestEmail.trim() || null } : {}), ...(body.guestPhone !== undefined ? { guestPhone: body.guestPhone.trim() || null } : {}) }); }, onSuccess: async () => { await invalidateHotel(); setEditingReservation(false); toast.success('Estadía actualizada.'); }, onError: (error) => toast.error(getApiErrorMessage(error, 'No se pudo actualizar la estadía.')) });
   const actionMutation = useMutation({ mutationFn: async ({ action, id, active }: { action: 'check-in' | 'cancel' | 'no-show' | 'toggle-room' | 'toggle-type'; id: string; active?: boolean }) => {

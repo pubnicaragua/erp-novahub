@@ -1,4 +1,4 @@
-import { api, getApiUrl, getAuthHeaders } from './api';
+import { api, getApiUrl, getAuthHeaders, normalizeApiErrorMessage } from './api';
 import type { PdfAppearanceProfile, PdfAppearanceProfilePatch, PdfCuratedTemplateSelection } from './pdf-appearance';
 import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 
@@ -119,7 +119,7 @@ async function fetchPdfBlob(path: string, body: unknown) {
         ? resolved
         : candidates.find(Array.isArray)?.join(', ') || '';
     } catch { /* Se usa el error HTTP como reserva. */ }
-    throw new Error(message || `No se pudo generar el PDF (HTTP ${response.status}).`);
+    throw new Error(normalizeApiErrorMessage(message, response.status, 'generar el PDF'));
   }
   return response.blob();
 }

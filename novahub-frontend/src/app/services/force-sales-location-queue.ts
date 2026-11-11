@@ -1,3 +1,5 @@
+import { normalizeApiErrorMessage } from './api';
+
 export type LocationQueueIdentity = {
   userId: string;
   tenantId: string;
@@ -471,7 +473,7 @@ async function sendBatch(session: SessionRecord, points: QueueRecord[]) {
       const detail = await response.clone().json().catch(() => null) as { message?: unknown } | null;
       const serverMessage = Array.isArray(detail?.message) ? detail.message.join('; ') : detail?.message;
       const safeMessage = typeof serverMessage === 'string' ? serverMessage.slice(0, 240) : '';
-      throw new Error(`El servidor rechazó la sincronización (${response.status})${safeMessage ? `: ${safeMessage}` : '.'}`);
+      throw new Error(normalizeApiErrorMessage(safeMessage, response.status, 'sincronizar los puntos de ubicación'));
     }
     const result = await response.json() as { acceptedIds?: string[]; rejectedIds?: string[] };
     const accepted = new Set(Array.isArray(result.acceptedIds) ? result.acceptedIds : []);

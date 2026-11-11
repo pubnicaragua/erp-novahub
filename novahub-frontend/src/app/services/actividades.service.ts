@@ -1,4 +1,4 @@
-import { api, getAuthHeaders, getApiUrl } from './api';
+import { api, getAuthHeaders, getApiUrl, normalizeApiErrorMessage } from './api';
 import { resolveStorageReferences } from './storage.service';
 import type { ActivitySubtask, ActivityTimeEntry, Task, Event, Reminder, ActivityLog } from '../types';
 
@@ -94,12 +94,15 @@ export const eventsService = {
       },
     });
     if (!res.ok) {
-      let errMsg = 'No se pudo descargar el archivo .ics';
+      let errMsg = '';
+      let requestId = '';
       try {
         const json = await res.json();
-        if (json?.message) errMsg = typeof json.message === 'string' ? json.message : JSON.stringify(json.message);
-      } catch {}
-      throw new Error(errMsg);
+        const message = json?.message;
+        errMsg = Array.isArray(message) ? message.join('; ') : typeof message === 'string' ? message : '';
+        requestId = typeof json?.requestId === 'string' ? json.requestId : '';
+      } catch { /* se usa el mensaje genérico asociado al status HTTP */ }
+      throw new Error(normalizeApiErrorMessage(errMsg, res.status, 'descargar el archivo del evento', requestId));
     }
     const blob = await res.blob();
     const blobUrl = window.URL.createObjectURL(blob);

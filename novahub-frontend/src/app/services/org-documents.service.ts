@@ -1,4 +1,4 @@
-import { api, ApiRequestError, getApiUrl, getAuthHeaders } from './api';
+import { api, ApiRequestError, getApiUrl, getAuthHeaders, normalizeApiErrorMessage } from './api';
 
 export type OrgDocKind = 'DOC' | 'SHEET';
 export type OrgDocAudience = 'PRIVATE' | 'USERS' | 'DEPARTMENT' | 'TEAM';
@@ -99,9 +99,14 @@ export const orgDocumentsService = {
   async file(id: string, version?: number, signal?: AbortSignal): Promise<{ blob: Blob; version: number }> {
     const response = await fetch(getApiUrl(`/org-documents/${id}/file`, version ? { version } : undefined), { headers: getAuthHeaders(), signal });
     if (!response.ok) {
-      let message = 'No se pudo abrir el archivo';
-      try { const body = (await response.json()) as { message?: string }; if (body?.message) message = String(body.message); } catch { /* sin cuerpo */ }
-      throw new Error(message);
+      let message = '';
+      let requestId = '';
+      try {
+        const body = (await response.json()) as { message?: string | string[]; requestId?: string };
+        message = Array.isArray(body?.message) ? body.message.join('; ') : body?.message || '';
+        requestId = body?.requestId || '';
+      } catch { /* se usa el status HTTP */ }
+      throw new Error(normalizeApiErrorMessage(message, response.status, 'abrir el archivo', requestId));
     }
     return { blob: await response.blob(), version: Number(response.headers.get('X-Document-Version')) || version || 0 };
   },

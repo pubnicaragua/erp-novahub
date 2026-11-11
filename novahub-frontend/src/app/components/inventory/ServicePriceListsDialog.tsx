@@ -123,7 +123,7 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
             <span className="truncate">Listas de precios · {service?.name || 'Servicio'}</span>
           </DialogTitle>
           <DialogDescription>
-            Configura el precio que se aplicará a este servicio al venderlo con cada lista. Si una lista queda sin precio, se usará el precio del catálogo.
+            Configura el precio propio de este servicio para cada lista. Las filas atenuadas no tienen un precio guardado y siguen disponibles para edición.
           </DialogDescription>
         </DialogHeader>
 
@@ -145,10 +145,10 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
               };
               const isSaving = savePrice.isPending && savePrice.variables?.list.id === list.id && savePrice.variables?.serviceId === serviceId;
               return (
-                <div key={list.id} className="grid min-w-0 gap-3 rounded-xl border border-border/60 bg-card p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-end">
+                <div key={list.id} className={`grid min-w-0 gap-3 rounded-xl border border-border/60 bg-card p-3 transition-opacity sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-end ${configured ? '' : 'bg-muted/20 opacity-70 focus-within:opacity-100'}`}>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-foreground">{list.name}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{configured ? 'Precio configurado' : 'Usa el precio base del catálogo'}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{configured ? 'Precio configurado' : 'Sin precio configurado en esta lista'}</p>
                   </div>
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_5.5rem] gap-2">
                     <div className="min-w-0 space-y-1">

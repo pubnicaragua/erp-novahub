@@ -6,7 +6,7 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { filterAllowedPriceLists } from '../../utils/permissions';
-import { getSalesLinePriceListId, getSalesUnitPrice, hasSalesProductPriceListConflict, resolveVariantPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
+import { getSalesLinePriceListId, getSalesUnitPrice, hasConfiguredSalesPriceListPrice, hasSalesProductPriceListConflict, resolveVariantPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 
 
 interface SalesLinePriceListSelectProps {
@@ -107,15 +107,24 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
       ? preferredListId
       : lists.find((list: any) => !blockedPriceListIds.has(String(list.id)))?.id || '';
 
+  const hasConfiguredListPrice = (priceListId: string) => hasConfiguredSalesPriceListPrice(
+    matrixItems,
+    priceListId,
+    [productId, matrixProduct?.id],
+    variantId,
+  );
+  const selectedListHasConfiguredPrice = Boolean(resolvedListId && hasConfiguredListPrice(resolvedListId));
+
   /** Calcula el precio para un producto/variant+lista dados */
   const calcPrice = (priceListId: string, pid: string | null | undefined): { unitPrice?: number; priceMissing: boolean } => {
     if (!pid) return { priceMissing: false };
+    if (!hasConfiguredListPrice(priceListId)) return { unitPrice: 0, priceMissing: true };
 
     if (variantId) {
-      const resolved = resolveVariantPrice(matrixItems, priceListId, pid, variantId);
+      const resolved = resolveVariantPrice(matrixItems, priceListId, matrixProduct?.id || pid, variantId, true);
       if (resolved) {
         const unitPrice = getSalesUnitPrice(resolved, currency, exchangeRate);
-        if (unitPrice !== undefined && unitPrice > 0) return { unitPrice, priceMissing: false };
+        if (unitPrice !== undefined) return { unitPrice, priceMissing: false };
       }
     }
 
@@ -157,12 +166,14 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
   useEffect(() => {
     const isPriceQuerySuccess = isService ? serviceQuery.isSuccess : query.isSuccess;
     if (!isPriceQuerySuccess || !lists.length || !productId || !resolvedListId) return;
+    if (!hasConfiguredListPrice(resolvedListId)) return;
 
-    const configuredEntry = matrixItems.find((item: any) =>
-      sameSalesId(item.priceListId, resolvedListId)
-      && sameSalesId(item.productId ?? item.product?.id, productId)
-      && (!item.variantId || sameSalesId(item.variantId, variantId)),
-    );
+    const configuredEntry = matrixItems.find((item: any) => {
+      const itemVariantId = item.variantId ?? item.variant?.id;
+      return sameSalesId(item.priceListId, resolvedListId)
+        && (sameSalesId(item.productId ?? item.product?.id, productId) || sameSalesId(item.productId ?? item.product?.id, matrixProduct?.id))
+        && (sameSalesId(itemVariantId, variantId) || itemVariantId === null || itemVariantId === undefined || itemVariantId === '');
+    });
     const key = `${productId}_${variantId || ''}_${resolvedListId}_${currency}_${Math.round((exchangeRate || 1) * 10000)}_${configuredEntry?.price ?? ''}_${configuredEntry?.basePrice ?? ''}_${matrixProduct?.salePrice ?? ''}`;
     if (initialAppliedRef.current === key) return;
     initialAppliedRef.current = key;
@@ -174,6 +185,7 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
 
   /** Cuando el usuario elige explícitamente un tipo de precio */
   const handleUserSelect = (priceListId: string) => {
+    if (!hasConfiguredListPrice(priceListId)) return;
     if (hasSalesProductPriceListConflict(lineItems, productId, priceListId, lineIndex, inheritedPriceListId, variantId)) return;
     const result = calcPrice(priceListId, productId);
     latestOnChange.current(priceListId, result, 'user');
@@ -181,7 +193,7 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
 
   const isStacked = labelLayout === 'stacked';
   return (
-    <div className={cn(isStacked ? 'w-full min-w-0 space-y-1' : 'flex w-[7rem] min-w-0 shrink-0 items-center gap-1', className)}>
+    <div className={cn(isStacked ? 'w-full min-w-0 space-y-1' : 'w-[7rem] min-w-0 shrink-0 space-y-1', className)}>
       {isStacked && <span className="block truncate text-[9px] font-black uppercase tracking-[0.14em] text-muted-foreground">{labelText}</span>}
       <Select value={resolvedListId || ''} onValueChange={handleUserSelect} disabled={disabled || (isService ? serviceQuery.isLoading : query.isLoading) || !lists.length}>
         <SelectTrigger className={cn('min-w-0 truncate px-2 text-[9px]', isStacked ? 'h-8 w-full' : 'h-7 w-[7rem]')} aria-label={labelText}>
@@ -190,12 +202,14 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
         <SelectContent>
           {lists.map((list) => {
             const blocked = blockedPriceListIds.has(String(list.id)) && !sameSalesId(list.id, resolvedListId);
-            return <SelectItem key={list.id} value={list.id} disabled={blocked}>
-              {list.name}{blocked ? ' · Ya utilizada para este producto' : ''}
+            const configured = hasConfiguredListPrice(list.id);
+            return <SelectItem key={list.id} value={list.id} className={!configured ? 'text-muted-foreground opacity-50' : undefined} disabled={blocked || !configured}>
+              {list.name}{blocked ? ' · Ya utilizada para este producto' : !configured ? ' · Sin precio configurado' : ''}
             </SelectItem>;
           })}
         </SelectContent>
       </Select>
+      {productId && resolvedListId && !selectedListHasConfiguredPrice && <span role="status" className="block max-w-full break-words text-[9px] leading-3 text-muted-foreground">Sin precio configurado en esta lista</span>}
     </div>
   );
 }
@@ -204,7 +218,7 @@ export function PriceMissingBadge({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-black uppercase text-rose-500 bg-rose-500/10 border border-rose-500/20", className)}>
       <AlertTriangle className="size-3 shrink-0" />
-      Sin precio en esta lista · selecciona otra
+      Sin precio configurado en esta lista
     </span>
   );
 }

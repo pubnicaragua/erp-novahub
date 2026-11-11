@@ -59,10 +59,11 @@ export interface HotelRatePriceListOption {
   id: string;
   code: string;
   name: string;
-  price: number;
-  currency: string;
-  exchangeRate: number;
-  source: 'CATALOG' | 'CONFIGURED';
+  configured: boolean;
+  price?: number;
+  currency?: string;
+  exchangeRate?: number;
+  source: 'CATALOG' | 'CONFIGURED' | 'UNCONFIGURED';
 }
 
 export const hotelService = {

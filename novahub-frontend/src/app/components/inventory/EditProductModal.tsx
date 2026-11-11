@@ -5,10 +5,11 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
 import { ProductImagePicker } from '../ui/ProductImage';
+import { useAuth } from '../../contexts/AuthContext';
 import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
 import { toast } from '@/app/services/toast';
-import { Package, Check, Tag, X } from 'lucide-react';
+import { Package, Check, Tag, X, Plus } from 'lucide-react';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { ProductStockIncreaseSection } from './ProductStockIncreaseSection';
@@ -24,10 +25,17 @@ interface EditProductModalProps {
 }
 
 export function EditProductModal({ product, categories, itemType = 'PRODUCT', baseCurrency, exchangeRate, onClose, onRefresh }: EditProductModalProps) {
+  const { canPerform } = useAuth();
   const [draft, setDraft] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
+  const [createdCategories, setCreatedCategories] = useState<any[]>([]);
+  const [newCategoryOpen, setNewCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryDescription, setNewCategoryDescription] = useState('');
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const isService = itemType === 'SERVICE' || String(product?.itemType || product?.type || '').toUpperCase() === 'SERVICE';
+  const canCreateServiceCategory = canPerform('INVENTORY_ATTRIBUTES', 'create');
   const tenantBaseCurrency = String(baseCurrency || 'NIO').toUpperCase();
 
   useEffect(() => {
@@ -80,6 +88,10 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
         });
       } else {
         setDraft(null);
+        setCreatedCategories([]);
+        setNewCategoryOpen(false);
+        setNewCategoryName('');
+        setNewCategoryDescription('');
       }
     }, 0);
     return () => clearTimeout(timer);
@@ -114,6 +126,51 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
 
   const handleUpdate = (field: string, value: any) => {
     setDraft((prev: any) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreateServiceCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      toast.error('Ingresa un nombre para la categoría');
+      return;
+    }
+
+    setIsCreatingCategory(true);
+    const actionToken = beginNotificationAction();
+    try {
+      const response = await inventoryService.createCategory({
+        name,
+        description: newCategoryDescription.trim() || undefined,
+        type: 'SERVICE',
+      });
+      const created = (response as any)?.data || response;
+      setCreatedCategories((previous) => [...previous.filter((category) => category.id !== created.id), created]);
+      handleUpdate('categoryId', created.id);
+      setNewCategoryName('');
+      setNewCategoryDescription('');
+      setNewCategoryOpen(false);
+      toast.success('Categoría de servicio creada y seleccionada');
+      completeNotificationAction(actionToken);
+      onRefresh();
+    } catch (error: any) {
+      const existingCategory = error?.data?.category;
+      const isDuplicate = error?.code === 'CATEGORY_DUPLICATE'
+        || Boolean(existingCategory?.id)
+        || /ya existe la categoría|categor[ií]a.*duplic/i.test(String(error?.message || ''));
+      if (isDuplicate && existingCategory?.id) {
+        setCreatedCategories((previous) => [...previous.filter((category) => category.id !== existingCategory.id), existingCategory]);
+        handleUpdate('categoryId', existingCategory.id);
+        setNewCategoryName('');
+        setNewCategoryDescription('');
+        setNewCategoryOpen(false);
+        toast.warning(`La categoría "${existingCategory.name}" ya existe. Se seleccionó la existente.`);
+      } else {
+        toast.error(error?.message || 'No se pudo crear la categoría de servicio');
+      }
+      failNotificationAction(actionToken);
+    } finally {
+      setIsCreatingCategory(false);
+    }
   };
 
   const toggleAttribute = (attrId: string) => {
@@ -328,13 +385,70 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
               </div>
 
               <div className="sm:col-span-2 md:col-span-5">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría</label>
-                <Select value={draft.categoryId} onValueChange={v => handleUpdate('categoryId', v)} disabled={isSaving}>
-                  <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>
-                    {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">{isService ? 'Categoría del servicio' : 'Categoría'}</label>
+                {isService ? (
+                  <>
+                    <div className="mt-1 flex min-w-0 gap-2">
+                      <Select value={draft.categoryId || ''} onValueChange={value => handleUpdate('categoryId', value)} disabled={isSaving}>
+                        <SelectTrigger className="h-8 min-w-0 flex-1 text-xs"><SelectValue placeholder="Seleccionar categoría" /></SelectTrigger>
+                        <SelectContent>
+                          {[...categories, ...createdCategories]
+                            .filter((category, index, all) => all.findIndex(candidate => candidate.id === category.id) === index)
+                            .map(category => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      {canCreateServiceCategory && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="mt-0.5 size-8 shrink-0 rounded-lg border-primary/30 text-primary hover:bg-primary/10"
+                          onClick={() => setNewCategoryOpen((open) => !open)}
+                          disabled={isSaving || isCreatingCategory}
+                          title="Crear categoría de servicio"
+                          aria-label="Crear categoría de servicio"
+                        >
+                          <Plus className="size-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                    {newCategoryOpen && canCreateServiceCategory && (
+                      <div className="mt-2 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                        <Input
+                          value={newCategoryName}
+                          onChange={event => setNewCategoryName(event.target.value)}
+                          className="h-9 text-xs"
+                          placeholder="Nombre de la categoría"
+                          aria-label="Nombre de la categoría de servicio"
+                          disabled={isCreatingCategory}
+                        />
+                        <Input
+                          value={newCategoryDescription}
+                          onChange={event => setNewCategoryDescription(event.target.value)}
+                          className="h-9 text-xs"
+                          placeholder="Descripción (opcional)"
+                          aria-label="Descripción de la categoría de servicio"
+                          disabled={isCreatingCategory}
+                        />
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => { setNewCategoryOpen(false); setNewCategoryName(''); setNewCategoryDescription(''); }} disabled={isCreatingCategory}>
+                            Cancelar
+                          </Button>
+                          <Button type="button" size="sm" onClick={handleCreateServiceCategory} disabled={isCreatingCategory || !newCategoryName.trim()}>
+                            {isCreatingCategory ? 'Creando…' : 'Crear y seleccionar'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <Select value={draft.categoryId} onValueChange={v => handleUpdate('categoryId', v)} disabled={isSaving}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                    <SelectContent>
+                      {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {isService && (
