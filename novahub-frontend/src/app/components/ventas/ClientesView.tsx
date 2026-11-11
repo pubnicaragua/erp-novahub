@@ -81,6 +81,8 @@ type CustomerDraft = {
   creditDays: string;
   notes: string;
   status: 'ACTIVE' | 'INACTIVE';
+  /** Fecha de ingreso (AAAA-MM-DD) al crear; vacía = hoy. Permite registrar clientes anteriores. */
+  createdAt?: string;
 };
 
 type CustomerUpdatePayload = Partial<Customer> & { confirmMissingRuc?: boolean };
@@ -114,7 +116,7 @@ type CustomerHistorySource = { headers: string[]; rows: Array<{ rowNumber: numbe
 const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO', countryCode = 'NI', country = 'Nicaragua'): CustomerDraft => ({
   name: '', companyName: '', type: 'individual', fiscalRegime: '', priceListId: '',
   taxId: '', ruc: '', email: '', phone: '', contactPhone: '', address: '', city: '', department: '',
-  country, countryCode, creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE',
+  country, countryCode, creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE', createdAt: '',
 });
 
 const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'customerLoans', 'createdAt', 'status'];
@@ -958,6 +960,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   };
 
   const buildCustomerPayload = (draft: CustomerDraft, forUpdate = false): Partial<Customer> => ({
+    ...(!forUpdate && draft.createdAt ? { createdAt: draft.createdAt } : {}),
     name: draft.name.trim(),
     companyName: draft.type === 'company' ? draft.companyName.trim() || null : null,
     type: draft.type,
@@ -1705,6 +1708,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               <section className="space-y-3 border-t border-border/40 pt-5" data-tour="sales-form-summary">
                 <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto y ubicación</h3><p className="text-xs text-muted-foreground">Completa la información esencial del cliente.</p></div>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha de ingreso</label><Input type="date" max={new Date().toISOString().slice(0, 10)} value={newCustomer.createdAt || ''} onChange={(e) => setNewCustomer({ ...newCustomer, createdAt: e.target.value })} aria-label="Fecha de ingreso del cliente" title="Déjala vacía para usar hoy; elige una fecha anterior para registrar un cliente antiguo" className="h-11 rounded-xl" /></div>
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Correo</label><Input type="email" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} placeholder="correo@ejemplo.com" className="h-11 rounded-xl" /></div>
                   <CustomerPhoneInput id="new-customer-phone" value={newCustomer.phone} onChange={(value) => setNewCustomer({ ...newCustomer, phone: value })} countryCode={newCustomer.countryCode} />
                   <CustomerPhoneInput id="new-customer-contact-phone" label="Teléfono del contacto" value={newCustomer.contactPhone} onChange={(value) => setNewCustomer({ ...newCustomer, contactPhone: value })} countryCode={newCustomer.countryCode} />
