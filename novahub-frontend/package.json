@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "check:names": "node scripts/check-undefined-names.mjs",
+    "test:sales-unit-price": "node scripts/test-sales-unit-price.mjs",
     "test:input-step": "node scripts/test-input-step.mjs",
     "audit:inputs": "node scripts/audit-inputs.mjs",
-    "audit": "npm run check:names && npm run audit:inputs && npm run test:input-step",
+    "audit": "npm run check:names && npm run audit:inputs && npm run test:input-step && npm run test:sales-unit-price",
     "build": "npm run check:names && node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
     "test:api-error-normalization": "node --experimental-strip-types --test scripts/test-api-error-normalization.mjs",
     "test:module-subnavigation": "node scripts/test-module-subnavigation.mjs",
