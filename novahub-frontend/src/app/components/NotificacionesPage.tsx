@@ -138,10 +138,16 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   }, [canPerform, messagesCacheKey, queryClient, supportCacheKey, tenantKey, user?.id, user?.isPlatformSupportAgent]);
 
   return (
-    <div className="notifications-module min-h-full bg-background">
-      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+    <div className={cn(
+      'notifications-module bg-background',
+      activeTab === 'mensajes' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'min-h-full',
+    )}>
+      <div className={cn(
+        'mx-auto w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4',
+        activeTab === 'mensajes' ? 'flex min-h-0 flex-1 flex-col' : 'min-h-[calc(100vh-5rem)]',
+      )}>
         {activeQuery.isError && (
-          <div role="alert" className="mb-6 flex flex-col gap-3 rounded-2xl border border-destructive/20 bg-destructive/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div role="alert" className="mb-6 flex shrink-0 flex-col gap-3 rounded-2xl border border-destructive/20 bg-destructive/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
               <div>
@@ -155,13 +161,13 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
 
         <Tabs
           value={activeTab}
-          className="w-full"
+          className={cn('w-full', activeTab === 'mensajes' && 'flex min-h-0 flex-1 flex-col')}
           onValueChange={(value) => {
             setLocalActiveTab(value);
             onSubModuleChange?.(value);
           }}
         >
-          <div data-tour="notificaciones-title">
+          <div data-tour="notificaciones-title" className={activeTab === 'mensajes' ? 'shrink-0' : undefined}>
             <ModuleSubnavigation
               items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
               value={activeTab}
@@ -178,6 +184,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
+              className={activeTab === 'mensajes' ? 'flex min-h-0 flex-1 flex-col' : undefined}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}

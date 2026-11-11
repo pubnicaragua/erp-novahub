@@ -173,7 +173,6 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   const onReplyAttachmentsChange = useCallback((state: AttachmentComposerState) => setReplyAttachmentState(state), []);
   const onComposeAttachmentsChange = useCallback((state: AttachmentComposerState) => setComposeAttachmentState(state), []);
   const messageBodyRef = useRef<HTMLDivElement>(null);
-  const messageEndRef = useRef<HTMLDivElement>(null);
   const replyAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
   const composeAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -284,7 +283,13 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
     }
     if (!shouldAutoScrollRef.current) return undefined;
     const frame = window.requestAnimationFrame(() => {
-      messageEndRef.current?.scrollIntoView({ behavior: shouldReduceMotion ? 'auto' : 'smooth', block: 'end' });
+      const messageBody = messageBodyRef.current;
+      if (messageBody) {
+        messageBody.scrollTo({
+          top: messageBody.scrollHeight,
+          behavior: shouldReduceMotion ? 'auto' : 'smooth',
+        });
+      }
     });
     return () => window.cancelAnimationFrame(frame);
   }, [selectedId, selected?.messages.length, shouldReduceMotion]);
@@ -401,12 +406,12 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   return (
     <>
       <section
-        className="flex h-[calc(100dvh-13rem)] min-h-[520px] overflow-hidden rounded-2xl border border-border/60 bg-card/60 shadow-sm"
+        className="flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-border/60 bg-card/60 shadow-sm"
         aria-label="Mensajería interna"
         data-testid="messages-workspace"
         data-tour="notificaciones-mensajes"
       >
-        <aside className={cn('w-full flex-col border-r border-border/60 bg-background/45 lg:flex lg:w-[370px] lg:shrink-0', mobileThreadOpen ? 'hidden' : 'flex')}>
+        <aside className={cn('min-h-0 w-full flex-col overflow-hidden border-r border-border/60 bg-background/45 lg:flex lg:w-[370px] lg:shrink-0', mobileThreadOpen ? 'hidden' : 'flex')}>
           <div className="border-b border-border/60 p-4">
             <div className="mb-4 flex min-w-0 flex-col gap-2">
               <div className="min-w-0">
@@ -470,7 +475,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto" role="list" aria-label="Conversaciones">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-overlay" role="list" aria-label="Conversaciones" data-testid="message-inbox-list">
             {loading || supportConversationsQuery.isLoading ? (
               <div className="space-y-2 p-3" aria-label="Cargando conversaciones">
                 {[1, 2, 3, 4].map((item) => <div key={item} className="h-20 animate-pulse rounded-xl bg-muted/40" />)}
@@ -535,7 +540,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
           </div>
         </aside>
 
-        <article className={cn('min-w-0 flex-1 flex-col bg-background/25 lg:flex', mobileThreadOpen ? 'flex' : 'hidden')}>
+        <article className={cn('min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background/25 lg:flex', mobileThreadOpen ? 'flex' : 'hidden')}>
           {!selected ? (
             <div className="flex h-full flex-col items-center justify-center px-8 text-center">
               <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -558,7 +563,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
             </div>
           ) : (
             <>
-              <header className="sticky top-0 z-20 flex min-h-16 shrink-0 items-center gap-3 border-b border-border/60 bg-background px-3 py-2 shadow-sm sm:px-5">
+              <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-border/60 bg-background px-3 py-2 sm:px-5">
                 <Button
                   type="button"
                   variant="ghost"
@@ -588,7 +593,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                   const element = event.currentTarget;
                   shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
                 }}
-                className="min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 scrollbar-overlay sm:px-6"
                 data-testid="message-thread-body"
                 aria-live="polite"
               >
@@ -649,12 +654,11 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                     );
                   })}
                   </AnimatePresence>
-                  <div ref={messageEndRef} aria-hidden="true" />
                 </div>
               </div>
 
               {selected.canReply ? (
-                <form onSubmit={sendReply} className="border-t border-border/60 bg-background/70 p-3 sm:p-4">
+                <form onSubmit={sendReply} className="shrink-0 border-t border-border/60 bg-background/70 p-3 sm:p-4">
                   <div className="mx-auto max-w-3xl">
                     <label htmlFor="message-reply" className="sr-only">Responder mensaje</label>
                     <div className="flex items-end gap-2 rounded-xl border border-border bg-muted/20 p-2 focus-within:ring-2 focus-within:ring-ring/40">
@@ -666,7 +670,10 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                         onDragOver={allowMessageAttachmentDrop}
                         onDrop={(event) => dropMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files))}
                         onKeyDown={(event) => {
-                          if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') void sendReply();
+                          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                            event.preventDefault();
+                            void sendReply();
+                          }
                         }}
                         placeholder="Escribí una respuesta…"
                         className="max-h-36 min-h-10 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
@@ -698,7 +705,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                     )}
                     <div className="mt-1.5 flex justify-between gap-3 px-1 text-[11px]">
                       <span className="text-destructive" role={replyError ? 'alert' : undefined}>{replyError}</span>
-                      <span className="ml-auto text-muted-foreground">Ctrl + Enter para enviar</span>
+                      <span className="ml-auto text-muted-foreground">Enter para enviar · Shift+Enter para salto de línea</span>
                     </div>
                   </div>
                 </form>
