@@ -983,12 +983,12 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
         const displayStatus = getReceiptDisplayStatus(row);
         const receiptStatus = statusOpts.find((option) => option.value === displayStatus);
         const paymentStatus = getReceiptPaymentStatus(row);
-        const paymentStatusLabel = paymentStatus === 'CREDIT' ? 'A crédito' : paymentStatus === 'PARTIAL' ? 'Pago parcial' : paymentStatus === 'OVERDUE' ? 'Vencida' : '';
+        const paymentStatusLabel = paymentStatus === 'CREDIT' ? 'Crédito' : paymentStatus === 'PARTIAL' ? 'Pago parcial' : paymentStatus === 'OVERDUE' ? 'Vencida' : '';
         const paymentStatusClass = paymentStatus === 'OVERDUE' ? 'bg-destructive/10 text-destructive' : paymentStatus === 'PARTIAL' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-primary/10 text-primary';
         return (
           <div className="flex min-w-0 flex-col items-center gap-1">
             {paymentStatusLabel && <Badge variant="outline" className={cn('max-w-full whitespace-normal break-words border-none px-2 py-0.5 text-center text-[9px] font-black uppercase leading-tight', paymentStatusClass)}>{paymentStatusLabel}</Badge>}
-            <Badge title={receiptStatus?.label || displayStatus} variant="outline" className={cn('max-w-full whitespace-normal break-words border-none px-2 py-1 text-center text-[9px] font-black uppercase leading-tight', receiptStatus?.color || 'bg-muted/20 text-muted-foreground')}>{receiptStatus?.label || displayStatus}</Badge>
+            {paymentStatus !== 'CREDIT' && <Badge title={receiptStatus?.label || displayStatus} variant="outline" className={cn('max-w-full whitespace-normal break-words border-none px-2 py-1 text-center text-[9px] font-black uppercase leading-tight', receiptStatus?.color || 'bg-muted/20 text-muted-foreground')}>{receiptStatus?.label || displayStatus}</Badge>}
           </div>
         );
       } },
