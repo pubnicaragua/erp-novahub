@@ -301,7 +301,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     return match ? row[match] : '';
   };
 
-  const emptyImportRow = (): CustomerImportRow => ({ name: '', type: 'INDIVIDUAL', companyName: '', fiscalRegime: '', priceListCode: '', taxId: '', ruc: '', email: '', phone: '', contactPhone: '', address: '', city: '', department: '', country: countryNameForForm(defaultCountryCode, countries), countryCode: defaultCountryCode, creditLimit: '', creditLimitCurrency: displayCurrency, openingBalanceType: '', openingBalanceAmount: '', openingBalanceCurrency: baseCurrency, status: 'ACTIVE', notes: '', createdAt: '' });
+  const emptyImportRow = (): CustomerImportRow => ({ name: '', type: 'INDIVIDUAL', companyName: '', fiscalRegime: '', priceListCode: '', taxId: '', ruc: '', email: '', phone: '', contactPhone: '', address: '', city: '', department: '', country: countryNameForForm(defaultCountryCode, countries), countryCode: defaultCountryCode, creditLimit: '', creditLimitCurrency: baseCurrency, openingBalanceType: '', openingBalanceAmount: '', openingBalanceCurrency: baseCurrency, status: 'ACTIVE', notes: '', createdAt: '' });
 
   const validateImportRows = (rows: CustomerImportRow[]) => {
     const existingTaxIds = new Set(data.flatMap((customer) => [customer.taxId, customer.ruc]).map(identifierComparisonKey).filter(Boolean));
@@ -514,7 +514,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         .trim().toUpperCase();
       if (creditLimitCurrency) {
         const acceptedCreditLimitCurrencies = ['NIO', 'USD', 'US$', '$', 'C$', 'CORDOBA', 'CORDOBAS'];
-        row.creditLimitCurrency = creditLimitCurrency === 'USD' || creditLimitCurrency === 'US$' || creditLimitCurrency === '$' ? 'USD' : creditLimitCurrency === 'NIO' || creditLimitCurrency === 'C$' || creditLimitCurrency === 'CORDOBA' || creditLimitCurrency === 'CORDOBAS' ? 'NIO' : displayCurrency;
+        row.creditLimitCurrency = creditLimitCurrency === 'USD' || creditLimitCurrency === 'US$' || creditLimitCurrency === '$' ? 'USD' : creditLimitCurrency === 'NIO' || creditLimitCurrency === 'C$' || creditLimitCurrency === 'CORDOBA' || creditLimitCurrency === 'CORDOBAS' ? 'NIO' : baseCurrency;
         if (!acceptedCreditLimitCurrencies.includes(creditLimitCurrency)) row.creditLimitCurrencyError = true;
       }
       const openingBalanceAmount = getCell(source, ['saldoinicial', 'openingbalanceamount', 'importeapertura', 'saldoapertura']);
@@ -553,7 +553,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     const defaultCountry = countries.find((country) => country.code === defaultCountryCode);
     const taxIdHeader = defaultCountry?.taxIdLabel || 'Identificación fiscal';
     const headers = ['Nombre', 'Fecha de ingreso', 'Tipo', 'Nombre de empresa', taxIdHeader, 'RUC', 'Correo', 'Teléfono', 'Teléfono contacto', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Código país', 'Régimen fiscal', 'Límite de crédito', 'Moneda límite de crédito', 'Lista de precios', 'Tipo saldo inicial', 'Saldo inicial', 'Moneda saldo inicial', 'Estado', 'Notas'];
-    const example = ['Cliente Ejemplo', '', 'PARTICULAR', '', defaultCountryCode === 'NI' ? '001-010190-1000A' : '', '', 'cliente@correo.com', defaultCountryCode === 'NI' ? '88888888' : '', '', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', countryNameForForm(defaultCountryCode, countries), defaultCountryCode, 'Régimen general', 0, displayCurrency, importablePriceLists[0]?.code || '', '', '', baseCurrency, 'ACTIVO', ''];
+    const example = ['Cliente Ejemplo', '', 'PARTICULAR', '', defaultCountryCode === 'NI' ? '001-010190-1000A' : '', '', 'cliente@correo.com', defaultCountryCode === 'NI' ? '88888888' : '', '', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', countryNameForForm(defaultCountryCode, countries), defaultCountryCode, 'Régimen general', 0, baseCurrency, importablePriceLists[0]?.code || '', '', '', baseCurrency, 'ACTIVO', ''];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const historyHeaders = includeHistory ? buildCustomerHistoryTemplateHeaders(historyProfile) : [];
@@ -581,8 +581,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         ['Número de documento', 'Opcional. Si el mismo documento aparece más de una vez con el mismo importe, se cuenta una sola vez y el importe no se duplica.'],
         ['TipoActividad', `Opcional. Puedes separar los antecedentes por tipo y moneda. Si dejas la celda vacía, se usa “${historyProfile.activityType}”.`],
       ] : []),
-      ['Límite de crédito', 'Opcional. Usa un número mayor o igual a cero. El importe se guarda en la moneda indicada en la columna Moneda límite de crédito.'],
-      ['Moneda límite de crédito', `Obligatoria si capturas un límite. Usa NIO o USD. Si el archivo no trae esta columna, se usará ${displayCurrency}, la moneda seleccionada arriba al preparar la importación.`],
+      ['Límite de crédito', 'Opcional. Usa un número mayor o igual a cero. El importe se interpreta y guarda en la moneda indicada en la columna Moneda límite de crédito; no se convierte a la moneda base.'],
+      ['Moneda límite de crédito', `Si capturas un límite, indica NIO o USD. También se aceptan C$, US$ y $. Si el archivo no trae esta columna o la celda está vacía, se usará ${baseCurrency}, la moneda base de la empresa.`],
       ['Tipo saldo inicial y saldo inicial', 'Opcional. Indica PENDIENTE para una deuda general que el cliente tiene con tu empresa o A FAVOR para un saldo disponible. Deja el importe vacío si no hay saldo inicial.'],
       ['Moneda saldo inicial', `Usa NIO o USD; si no se indica, se usará ${baseCurrency}, la moneda base de la empresa. La tasa vigente se conservará al importar.`],
       ['Estado', 'Usa ACTIVO o INACTIVO. Los clientes inactivos no podrán utilizarse en nuevas operaciones.'],
@@ -1162,7 +1162,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   };
 
   if (importPreviewOpen) {
-    return <CustomerImportPreview rows={importRows} fileName={importFile?.name || ''} priceLists={priceLists} defaultCreditLimitCurrency={displayCurrency} defaultOpeningBalanceCurrency={baseCurrency} countryOptions={countries} isSidebarCollapsed={isSidebarCollapsed} historyOnly={isHistoryOnlyImport} historicalImport={isHistoricalImport} importNotice={historyImportNotice} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
+    return <CustomerImportPreview rows={importRows} fileName={importFile?.name || ''} priceLists={priceLists} defaultCreditLimitCurrency={baseCurrency} defaultOpeningBalanceCurrency={baseCurrency} countryOptions={countries} isSidebarCollapsed={isSidebarCollapsed} historyOnly={isHistoryOnlyImport} historicalImport={isHistoricalImport} importNotice={historyImportNotice} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
   }
 
   const renderCustomerAmount = (

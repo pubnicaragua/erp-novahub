@@ -223,7 +223,7 @@ export const customersService = {
       amount: number;
       currency: 'NIO' | 'USD';
     }>;
-    rows: Array<Partial<Customer> & { fiscalRegime?: string; customerClass?: string; priceListCode?: string; openingBalanceType?: 'PENDING' | 'FAVOR'; openingBalanceAmount?: number; openingBalanceCurrency?: 'NIO' | 'USD' }>;
+    rows: Array<Partial<Customer> & { fiscalRegime?: string; customerClass?: string; priceListCode?: string; creditLimitCurrency?: 'NIO' | 'USD'; openingBalanceType?: 'PENDING' | 'FAVOR'; openingBalanceAmount?: number; openingBalanceCurrency?: 'NIO' | 'USD' }>;
   }) => api.post<{ total: number; created: number; historicalSummariesCreated?: number; historicalSummariesSkipped?: number; historicalSummariesUnmatched?: number; skipped: number; errors: string[]; warnings: string[] }>('/sales/customers/import', data),
   update: (id: string, data: Partial<Customer> & { confirmMissingRuc?: boolean }) => api.patch<Customer>(`/sales/customers/${id}`, data),
   setStatus: (id: string, status: Customer['status']) => api.patch<Customer>(`/sales/customers/${id}/status`, { status }),
