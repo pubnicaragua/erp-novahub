@@ -83,7 +83,7 @@ import { publicAccessService, publicLinkUrl } from '../../services/public-access
 import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
+import type { PdfDownloadFormat, PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { getInvoicePaymentPresentation } from '../../utils/paymentMethods';
 import { getSalesAdditionalCharges, normalizeSalesExtraCharges } from '../../utils/salesCharges';
 import { normalizeCurrency } from '../../utils/currency';

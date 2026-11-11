@@ -1253,7 +1253,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {!resolvedSummaryRows ? <PurchaseKpiCard title="Total del Mes" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" /> : displayMode === 'ORIGINAL'
+        {!hasExpenseSummary ? <PurchaseKpiCard title="Total del Mes" value="—" icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" /> : displayMode === 'ORIGINAL'
           ? originalMonthlyAmounts.map((summary) => <PurchaseKpiCard key={`month-${summary.currency}`} title={`Total del Mes (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" />)
           : <PurchaseKpiCard title={`Total del Mes (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(monthlyTotalInDisplayCurrency, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" />}
         {kpis.map((k, i) => {

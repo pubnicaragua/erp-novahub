@@ -16,7 +16,7 @@ import { preparePdfDocumentFonts, renderPdfTemplateToPdf, type PdfTemplateRender
 import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
-import { isEstimateCustomFieldExpired, normalizeEstimateImages } from '../types';
+import { isEstimateCustomFieldExpired, normalizeEstimateImages, type EstimateCustomField } from '../types';
 import { resolvePdfDesignAppearance, type PdfAppearanceProfile, type PdfCuratedTemplateSelection } from '../services/pdf-appearance';
 import { closePdfBrowserPreview, ensurePdfBrowserPreview, showPdfInBrowserPreview } from './pdfBrowserPreview';
 

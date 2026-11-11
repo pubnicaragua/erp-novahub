@@ -652,7 +652,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
         ? { ...linkedPaymentDocument, balance: paymentRemainingInDocumentCurrency }
         : undefined);
       const savedCredit = savedPayment.creditNote || (localDoc.creditNoteId && linkedPaymentDocument
-        ? { ...linkedPaymentDocument, balance: paymentRemainingInCreditCurrency }
+        ? { ...linkedPaymentDocument, balance: paymentRemainingInDocumentCurrency }
         : undefined);
       setPaymentReceipt({
         ...savedPayment,

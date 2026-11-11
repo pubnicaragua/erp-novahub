@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from 'react';
 import {
   ClipboardCheck, Plus, Trash2, Eye, Paperclip, Upload, UserCheck, Warehouse as WarehouseIcon, X, ChevronLeft,
-  PauseCircle, CheckCircle2, RotateCcw, XCircle, ListPlus, AlertTriangle, Loader2, Search, SlidersHorizontal,
+  PauseCircle, PlayCircle, CheckCircle2, RotateCcw, XCircle, ListPlus, AlertTriangle, Loader2, Search, SlidersHorizontal,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';

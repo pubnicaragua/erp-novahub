@@ -581,6 +581,17 @@ function DashboardLayout() {
 
   const renderContent = () => {
     if (currentModule === 'overview') {
+      // Sin permiso sobre el Dashboard no se monta: así tampoco se ejecutan sus consultas ni se ve un tablero vacío.
+      if (!hasAccess('dashboard')) {
+        return (
+          <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6">
+            <div className="text-center">
+              <h1 className="text-2xl font-semibold tracking-tight">Sin módulos disponibles</h1>
+              <p className="mt-2 text-muted-foreground">Tu rol no tiene módulos habilitados. Pide a un administrador que te asigne acceso.</p>
+            </div>
+          </div>
+        );
+      }
       if (user?.role === 'partner') {
         return <PartnerDashboard onNavigate={handleNavigate} />;
       }

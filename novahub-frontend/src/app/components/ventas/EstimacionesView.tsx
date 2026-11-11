@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { estimatesService, type EstimateKpiSummary } from '../../services/ventas.service';
+import { customersService, estimatesService, type EstimateKpiSummary } from '../../services/ventas.service';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';

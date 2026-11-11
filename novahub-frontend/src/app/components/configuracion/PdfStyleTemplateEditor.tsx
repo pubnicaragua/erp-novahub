@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Check, Download, FileCode2, Palette, Type, Upload } from 'lucide-react';
 import type { PdfStyleConfigV1, PdfStylePalette } from '../../services/pdf-document-style';
 import { getPdfTableCellBorders, getPdfTableHeaderCellBorders, getPdfTablePresentation, normalizePdfFontFamily, parsePdfHtmlShell, PDF_STYLE_FONTS, PDF_STYLE_PRESETS, resolvePdfTableRowBackground, sanitizePdfHtmlFragment, sanitizePdfTemplateCss, type PdfStylePresetId } from '../../services/pdf-document-style';

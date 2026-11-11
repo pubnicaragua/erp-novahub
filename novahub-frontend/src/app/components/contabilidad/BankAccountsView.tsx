@@ -35,7 +35,7 @@ const SUBTYPE_LABELS: Record<string, string> = {
 };
 
 export function BankAccountsView() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canCreateBankAccount = canPerform('FINANCIAL_ACCOUNTS', 'create');
   const canEditBankAccount = canPerform('FINANCIAL_ACCOUNTS', 'edit');
   const canDeleteBankAccount = canPerform('FINANCIAL_ACCOUNTS', 'delete');
