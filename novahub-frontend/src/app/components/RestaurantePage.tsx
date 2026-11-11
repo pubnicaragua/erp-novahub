@@ -256,7 +256,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange, isSidebarC
   const canViewKitchen = canPerform('RESTAURANT_KITCHEN', 'view');
   const canViewMenu = canPerform('RESTAURANT_MENU', 'view');
   const canViewReports = canPerform('RESTAURANT_REPORTS', 'view');
-  const canConfigureRestaurant = Boolean(user?.isTenantAdmin || user?.isPlatformAdmin) || canPerform('RESTAURANT', 'configureRestaurant');
+  const canConfigureRestaurant = Boolean(user?.isTenantAdmin || user?.isPlatformAdmin || user?.managerCanAdminBranch) || canPerform('RESTAURANT', 'configureRestaurant');
   const canViewRestaurant = canConfigureRestaurant || canPerform('RESTAURANT', 'view') || [canViewTables, canViewOrders, canViewKitchen, canViewMenu, canViewReports].some(Boolean);
   const canCreateTables = canPerform('RESTAURANT_SALON', 'create');
   const canEditTables = canPerform('RESTAURANT_SALON', 'edit');

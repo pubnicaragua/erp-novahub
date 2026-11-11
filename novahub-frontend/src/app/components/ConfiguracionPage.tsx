@@ -626,7 +626,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
   const canDeletePdf = canPerform('CONFIG_PDF', 'delete');
   const canEditNovaPulse = canPerform('CONFIG_NOVA_PULSE', 'edit');
   const canSendNovaPulse = canPerform('CONFIG_NOVA_PULSE', 'send');
-  const canEditProjects = canPerform('PROJECTS', 'edit') || canPerform('CONFIG_COMPANY', 'edit') || Boolean(user?.isTenantAdmin);
+  const canEditProjects = canPerform('PROJECTS', 'edit') || canPerform('CONFIG_COMPANY', 'edit') || Boolean(user?.isTenantAdmin || user?.managerCanAdminBranch);
 
   // La API de suscripciones devuelve el alcance efectivo de la sucursal
   // (grupo + unidad). Mientras carga, usamos el alcance de la sesión para no
@@ -653,7 +653,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
 
     return ALL_PERM_MODULES
       .filter(m => !HIDDEN_PERMISSION_MODULE_IDS.has(String(m.id).toUpperCase()))
-      .filter((m) => canAccessModuleView(user.moduleAccessPolicies, m.id))
+      .filter((m) => user.managerCanAdminBranch || canAccessModuleView(user.moduleAccessPolicies, m.id))
       .filter(m => {
         const moduleId = normalize(m.id);
         const parentMod = 'parent' in m ? normalize((m as any).parent) : null;
@@ -669,12 +669,12 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
         // sucursal aunque no tengan una fila de suscripción operativa.
         if (moduleId === 'DASHBOARD') return true;
         if (parentMod === 'CONFIGURATION' && (
-          user.isTenantAdmin
+          user.isTenantAdmin || user.managerCanAdminBranch
           || enabled.has('CONFIGURATION')
         )) return true;
         if (parentMod === 'MY_COMPANY' && (
           enabled.has('MY_COMPANY')
-          || user.isTenantAdmin
+          || user.isTenantAdmin || user.managerCanAdminBranch
         )) return true;
 
         // Las vistas marcadas como internas comparten el alcance del módulo
@@ -1026,7 +1026,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
         // La matriz de roles necesita el alcance completo de la sucursal,
         // aunque quien administra roles no tenga permiso para editar el plan.
         // El endpoint solo permite consultar el tenant propio.
-        tenantId && (user?.isTenantAdmin || canViewRoles)
+        tenantId && (user?.isTenantAdmin || user?.managerCanAdminBranch || canViewRoles)
           ? subscriptionsService.getEnabledModules(tenantId, undefined, signal)
           : Promise.resolve(user?.enabledModules || []),
       ]);

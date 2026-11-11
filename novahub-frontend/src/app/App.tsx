@@ -291,7 +291,7 @@ function DashboardLayout() {
     if (!module || !subModule) return true;
     if (HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subModule)) return false;
     if (module === 'restaurante' && subModule === 'configuracion') {
-      return Boolean(user?.isTenantAdmin || user?.isPlatformAdmin) && canPerform('RESTAURANT', 'view');
+      return Boolean(user?.isTenantAdmin || user?.isPlatformAdmin || user?.managerCanAdminBranch) && canPerform('RESTAURANT', 'view');
     }
     const requiredModules = SIDEBAR_SUBMENU_MODULE_REQUIREMENTS[`${module}:${subModule}`]
       || SIDEBAR_SUBMENU_MODULE_REQUIREMENTS[subModule];

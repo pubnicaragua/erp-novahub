@@ -642,6 +642,7 @@ export const PLATFORM_SIDEBAR_MODULE_ORDER: Array<Module | 'overview'> = platfor
 
 export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview }: SidebarProps) {
   const { hasAccess, canPerform, user } = useAuth();
+  const managerCanAdminBranch = Boolean(user?.managerMode && user.managerCanAdminBranch);
   const { themeConfig } = useTheme();
   // «Leads y red» es una función por empresa: el acceso del sidebar la respeta.
   const leadCapabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0, enabled: canPerform('SALES_LEADS', 'view') });
@@ -807,9 +808,9 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       return canPerform('RESTAURANT_ORDERS', 'view') || canPerform('RESTAURANT', 'view');
     }
     if (parentId === 'restaurante' && subId === 'configuracion') {
-      return Boolean(user.isTenantAdmin || user.isPlatformAdmin) && canPerform('RESTAURANT', 'view');
+      return Boolean(user.isTenantAdmin || user.isPlatformAdmin || managerCanAdminBranch) && canPerform('RESTAURANT', 'view');
     }
-    if (!user.isPlatformAdmin && !user.isTenantAdmin && !canAccessModuleView(user.moduleAccessPolicies, subId)) return false;
+    if (!user.isPlatformAdmin && !user.isTenantAdmin && !managerCanAdminBranch && !canAccessModuleView(user.moduleAccessPolicies, subId)) return false;
     const parentMod = PARENT_MODULE_MAP[parentId] || (parentId === 'inventario' ? 'INVENTORY' : null);
     const isForceSalesPlatformUser = parentId === 'fuerza-comercial'
       && (user.isPlatformAdmin || user.platformPermissions.includes('PLATFORM_FORCE_SALES') || user.platformPermissions.includes('PLATFORM_QUOTES'));

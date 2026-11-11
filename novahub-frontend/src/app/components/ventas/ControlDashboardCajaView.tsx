@@ -80,6 +80,7 @@ export function ControlDashboardCajaView({
   const canReadTeamUsers = canPerform('CONFIG_USERS', 'view');
   const canSelectAllRegisters = Boolean(
     user?.isTenantAdmin
+      || user?.managerCanAdminBranch
       || user?.isPlatformAdmin
       || ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()),
   );

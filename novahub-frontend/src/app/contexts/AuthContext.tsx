@@ -223,6 +223,8 @@ export interface User {
   isTenantAdmin: boolean;
   /** Sesión temporal de trabajo de un Manager dentro de una sucursal. */
   managerMode?: boolean;
+  /** El Manager es propietario principal del grupo y administra esta sucursal. */
+  managerCanAdminBranch?: boolean;
   /** La política efectiva de sucursal permite todos sus módulos operativos activos. */
   managerFullBranchAccess?: boolean;
   /** Módulos con suscripción activa en la sucursal de la sesión Manager. */
@@ -275,6 +277,7 @@ const TENANT_SYSTEM_PERMISSION_MODULES = new Set([
   'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF', 'CONFIG_SECURITY',
   'CONFIG_CURRENCY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DOMAINS',
   'CONFIG_DEPARTMENTS', 'CONFIG_NOVA_PULSE', 'AUDIT_LOGS',
+  'SUSCRIPCIONES', 'CONFIGURACION', 'ROLES', 'USUARIOS',
 ]);
 
 const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
@@ -329,7 +332,8 @@ function tenantPermissionSubscriptionCandidates(module: string): string[] {
 
 function tenantAdminHasModuleEnabled(user: User, module: string): boolean {
   const normalized = String(module || '').toUpperCase();
-  if (TENANT_SYSTEM_PERMISSION_MODULES.has(normalized) && (!user.managerMode || normalized === 'DASHBOARD')) return true;
+  if (TENANT_SYSTEM_PERMISSION_MODULES.has(normalized)
+    && (!user.managerMode || user.managerCanAdminBranch || normalized === 'DASHBOARD')) return true;
   const sourceModules = user.managerMode && Array.isArray(user.managerEnabledModules)
     ? user.managerEnabledModules
     : user.enabledModules || [];
@@ -724,6 +728,7 @@ const createUserObject = (apiPayload: any): User => {
       && userType !== 'customer_portal'
       && (userType === 'admin' || role === 'admin'),
     managerMode: Boolean(apiUser.managerMode),
+    managerCanAdminBranch: apiUser.managerCanAdminBranch === true,
     managerFullBranchAccess: apiUser.managerFullBranchAccess === true,
     managerEnabledModules: Array.isArray(apiUser.managerEnabledModules)
       ? apiUser.managerEnabledModules.map((module: unknown) => String(module).toUpperCase())
@@ -896,7 +901,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasAccess = useCallback((module: string): boolean => {
     if (!user) return false;
-    if (!user.isPlatformAdmin && !user.isTenantAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
+    const managerCanAdminBranch = Boolean(user.managerMode && user.managerCanAdminBranch);
+    if (!user.isPlatformAdmin && !user.isTenantAdmin && !managerCanAdminBranch && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
 
     // Audit is a separate tenant surface. The legacy AUDIT_LOGS permission
     // remains available for configuration logs, but it must not implicitly
@@ -906,7 +912,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (module === 'fuerza-comercial') {
       return user.isPlatformAdmin ? user.role === 'superadmin' : tenantAdminHasModuleEnabled(user, 'FORCE_SALES');
     }
-    if (!user.isPlatformAdmin && !user.isTenantAdmin && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
+    if (!user.isPlatformAdmin && !user.isTenantAdmin && !managerCanAdminBranch && !canAccessModuleShell(user.moduleAccessPolicies, module)) return false;
 
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
@@ -1071,7 +1077,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       : user.enabledModules;
     const cashViewHasSalesScope = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(backendModuleName)
       && tenantEnabledModules.some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
-    let isSubscribed = (user.managerMode ? module === 'dashboard' : coreModules.includes(module))
+    let isSubscribed = (user.managerMode
+      ? module === 'dashboard' || (managerCanAdminBranch && coreModules.includes(module))
+      : coreModules.includes(module))
       || (!user.managerMode && isAdminControlModule)
       || cashViewHasSalesScope
       || subscriptionCandidates.some((candidate) => tenantEnabledModules.includes(candidate))
@@ -1145,7 +1153,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return false;
     const normalizedModule = String(module || '');
     const upperModule = normalizedModule.toUpperCase();
-    if (!user.isPlatformAdmin && !user.isTenantAdmin && !canAccessModuleView(user.moduleAccessPolicies, module)) return false;
+    const managerCanAdminBranch = Boolean(user.managerMode && user.managerCanAdminBranch);
+    if (!user.isPlatformAdmin && !user.isTenantAdmin && !managerCanAdminBranch && !canAccessModuleView(user.moduleAccessPolicies, module)) return false;
     if (user.managerMode && !tenantAdminHasModuleEnabled(user, module)) return false;
     if (user.managerMode && user.managerFullBranchAccess) {
       if (action !== 'viewCost') return tenantAdminHasModuleEnabled(user, module);

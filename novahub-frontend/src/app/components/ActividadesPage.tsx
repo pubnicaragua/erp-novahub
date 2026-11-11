@@ -80,7 +80,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
     const fetchBitacora = asList(logsQuery.data);
 
     // Mantener la visibilidad existente para usuarios que no son administradores.
-    if (user && user.role !== 'admin' && !user.isPlatformAdmin) {
+    if (user && user.role !== 'admin' && !user.isPlatformAdmin && !user.managerCanAdminBranch) {
       fetchTareas = fetchTareas.filter((t: any) =>
         t.createdBy === user.id || t.assignments?.some((a: any) => a.userId === user.id)
       );

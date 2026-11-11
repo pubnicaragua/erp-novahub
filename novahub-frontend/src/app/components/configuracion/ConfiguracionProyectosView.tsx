@@ -1096,7 +1096,7 @@ export function ConfiguracionProyectosView({ canEdit = true }: { canEdit?: boole
           </div>
         </CardContent>
       </Card>
-      {user?.isTenantAdmin && canPerform('PROJECTS', 'read') && (
+      {(user?.isTenantAdmin || user?.managerCanAdminBranch) && canPerform('PROJECTS', 'read') && (
         <ProjectCostTemplatesSection canEdit={canEdit && canPerform('PROJECTS', 'edit')} />
       )}
     </div>
