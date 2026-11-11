@@ -1,3 +1,31 @@
+/**
+ * Redondeo de dinero IDÉNTICO al del backend (Prisma.Decimal con ROUND_HALF_CEIL sobre el valor decimal visible).
+ *
+ * Por qué no `Math.round(x * 100) / 100`: en binario 1264.725 es 1264.72499999…, así que esa fórmula da 1264.72 mientras
+ * el servidor, que trabaja con decimales exactos, guarda 1264.73. Esa diferencia deja «centavitos sueltos» entre lo que
+ * se ve en pantalla y lo que queda guardado. Aquí el número se toma como el decimal más corto que lo representa, se
+ * desplaza la coma con notación exponencial (sin multiplicar en coma flotante) y los empates suben (hacia +∞).
+ */
+export function roundDecimal(value: unknown, places = 2): number {
+  const number = typeof value === 'string' ? Number(value.replace(/,/g, '').trim()) : Number(value);
+  if (!Number.isFinite(number)) return 0;
+  const digits = Math.min(10, Math.max(0, Math.trunc(places)));
+  if (number === 0) return 0;
+  const negative = number < 0;
+  const text = String(Math.abs(number));
+  if (/e/i.test(text)) {
+    const factor = 10 ** digits;
+    return Math.round(number * factor) / factor;
+  }
+  const shifted = Number(`${text}e${digits}`);
+  const floor = Math.floor(shifted);
+  const isTie = shifted - floor === 0.5;
+  // ROUND_HALF_CEIL: un empate sube hacia +∞ (en negativos, hacia cero).
+  const magnitude = isTie ? (negative ? floor : floor + 1) : Math.round(shifted);
+  const result = Number(`${magnitude}e-${digits}`);
+  return negative ? (result === 0 ? 0 : -result) : result;
+}
+
 export type SupportedCurrency = 'NIO' | 'USD';
 
 export const CURRENCY_METADATA: Record<SupportedCurrency, {
@@ -31,9 +59,7 @@ export function roundCurrencyNumber(value: unknown, decimalPlaces = getCurrencyD
   const amount = Number(value || 0);
   if (!Number.isFinite(amount)) return 0;
 
-  const digits = normalizeCurrencyDecimalPlaces(decimalPlaces);
-  const factor = 10 ** digits;
-  return Math.round((amount + Number.EPSILON * Math.sign(amount)) * factor) / factor;
+  return roundDecimal(amount, normalizeCurrencyDecimalPlaces(decimalPlaces));
 }
 
 export function setCurrencyDecimalPlaces(value: unknown) {

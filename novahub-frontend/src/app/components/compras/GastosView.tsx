@@ -1218,7 +1218,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   );
 
   const kpis = [
-    { key: 'all', title: 'Gastos Operativos', value: hasExpenseSummary ? countSummaryRows() : '—', icon: Wallet, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { key: 'all', title: 'Gastos Operativos', value: hasExpenseSummary ? countSummaryRows() : '—', icon: Wallet, color: 'text-blue-500', bg: 'bg-blue-500/10', interactive: true },
     { key: 'draft', title: 'Borradores', value: hasExpenseSummary ? countSummaryRows('DRAFT') : '—', icon: FileText, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
     { key: 'pending', title: 'Pendientes', value: hasExpenseSummary ? countSummaryRows('PENDING') : '—', icon: Clock, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
     { key: 'category', title: 'Por Categoría', value: hasExpenseSummary ? categoryCount : '—', icon: Tag, color: 'text-purple-500', bg: 'bg-purple-500/10', interactive: true },
@@ -1259,6 +1259,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           : <PurchaseKpiCard title={`Total del Mes (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(monthlyTotalInDisplayCurrency, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" />}
         {kpis.map((k, i) => {
           const isActive =
+            (k.key === 'all' && activeKpiFilter.type === 'none') ||
             (k.key === 'pending' && activeKpiFilter.type === 'pending') ||
             (k.key === 'draft' && activeKpiFilter.type === 'draft') ||
             (k.key === 'category' && activeKpiFilter.type === 'category');
@@ -1274,6 +1275,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
             active={isActive}
             onClick={k.interactive ? () => {
               if (!k.interactive) return;
+              if (k.key === 'all') {
+                setActiveKpiFilter({ type: 'none' });
+                return;
+              }
               if (k.key === 'pending') {
                 setActiveKpiFilter(prev => prev.type === 'pending' ? { type: 'none' } : { type: 'pending' });
                 return;
