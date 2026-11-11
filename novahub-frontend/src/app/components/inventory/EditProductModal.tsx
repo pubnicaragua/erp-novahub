@@ -11,6 +11,7 @@ import { toast } from '@/app/services/toast';
 import { Package, Check, Tag, X } from 'lucide-react';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { ProductStockIncreaseSection } from './ProductStockIncreaseSection';
 
 interface EditProductModalProps {
   product: any | null;
@@ -521,6 +522,14 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
               </div>
             )}
           </div>
+        )}
+
+        {!isService && (
+          <ProductStockIncreaseSection
+            product={product}
+            baseCurrency={tenantBaseCurrency}
+            onStockIncreased={onRefresh}
+          />
         )}
 
         <DialogFooter className="mt-2 pt-4 border-t" data-tour="inventory-product-edit-actions">

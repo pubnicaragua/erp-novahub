@@ -114,6 +114,19 @@ export const inventoryService = {
   getReplenishment: (filters?: Record<string, string | number | boolean | undefined>, signal?: AbortSignal) =>
     api.get<ReplenishmentResponse>('/inventory/replenishment', { params: filters as any, signal }),
   getIntegrationPolicy: () => api.get<{ accountingEnabled: boolean; accountingRequired: boolean; routes: Record<string, any> }>('/inventory/integration-policy'),
+  getManualProductStockIncreaseSetting: () => api.get<{ enabled: boolean }>('/inventory/manual-stock-increase/config'),
+  updateManualProductStockIncreaseSetting: (enabled: boolean) =>
+    api.patch<{ enabled: boolean }>('/inventory/manual-stock-increase/config', { enabled }),
+  increaseProductStock: (productId: string, data: {
+    warehouseId: string;
+    variantId?: string;
+    quantity: number;
+    unitCost?: number;
+    currency?: string;
+    lot?: { number: string; manufactureDate?: string; expirationDate?: string };
+    seriesNumbers?: string[];
+  }, idempotencyKey?: string) =>
+    api.idempotentPost<any>(`/inventory/products/${encodeURIComponent(productId)}/stock-increases`, data, idempotencyKey),
   // ==================== PRODUCTS ====================
   getBrandCustomerMappings: (signal?: AbortSignal) => api.get<{ brands: any[]; customers: Array<{ id: string; name: string; code?: string | null }> }>('/inventory/brands/customer-mappings', { signal }),
   assignBrandCustomer: (brandId: string, customerId: string | null) => api.patch<any>(`/inventory/brands/${brandId}/customer`, { customerId }),

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import {
-  Settings2, Building2, Link2, Activity, Factory, RefreshCw,
+  Settings2, Building2, Link2, Activity, Factory, RefreshCw, PackagePlus,
   Loader2, Sparkles, Plus, CircleHelp, Warehouse, CheckCircle2, AlertTriangle, GitBranch,
   ChevronRight, ChevronDown, Unlink, Info,
 } from 'lucide-react'
@@ -157,6 +157,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const [refreshing, setRefreshing] = useState(false)
   const [controlAccountId, setControlAccountId] = useState('')
   const [requiresPerWarehouse, setRequiresPerWarehouse] = useState(false)
+  const [manualStockIncreaseEnabled, setManualStockIncreaseEnabled] = useState(false)
+  const [manualStockSettingLoaded, setManualStockSettingLoaded] = useState(false)
+  const [savingManualStockSetting, setSavingManualStockSetting] = useState(false)
   const [configLoading, setConfigLoading] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
   const [collapsedBranches, setCollapsedBranches] = useState<Set<string>>(new Set())
@@ -222,6 +225,23 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   useEffect(() => { void fetchAll() }, [fetchAll])
 
+  useEffect(() => {
+    if (!canViewInventory) return
+    let active = true
+    setManualStockSettingLoaded(false)
+    inventoryService.getManualProductStockIncreaseSetting()
+      .then((setting) => {
+        if (active) setManualStockIncreaseEnabled(setting.enabled === true)
+      })
+      .catch(() => {
+        if (active) setManualStockIncreaseEnabled(false)
+      })
+      .finally(() => {
+        if (active) setManualStockSettingLoaded(true)
+      })
+    return () => { active = false }
+  }, [canViewInventory, tenantId])
+
   useNotificationDomainRefresh({
     module: 'inventario',
     subModules: ['configuracion'],
@@ -240,6 +260,22 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     await fetchAll()
     await queryClient.invalidateQueries({ queryKey: ['accounting'] })
     setRefreshing(false)
+  }
+
+  const updateManualStockIncreaseSetting = async (enabled: boolean) => {
+    if (!canEditInventoryConfig || savingManualStockSetting) return
+    const previous = manualStockIncreaseEnabled
+    setManualStockIncreaseEnabled(enabled)
+    setSavingManualStockSetting(true)
+    try {
+      await inventoryService.updateManualProductStockIncreaseSetting(enabled)
+      toast.success(enabled ? 'Aumento manual de stock habilitado' : 'Aumento manual de stock deshabilitado')
+    } catch (error: any) {
+      setManualStockIncreaseEnabled(previous)
+      toast.error(getApiErrorMessage(error, 'No se pudo guardar la configuración de Inventario'))
+    } finally {
+      setSavingManualStockSetting(false)
+    }
   }
 
   const flatAccounts = flattenAccounts(accounts);
@@ -513,6 +549,32 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
           Inventario→Contabilidad está desconectado. Puedes crear y usar bodegas sin configurar cuentas contables.
         </Card>
       ) : null}
+
+      {canViewInventory && (
+        <Card className="mb-4 flex flex-col gap-4 border-border/50 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <PackagePlus className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold">Aumento manual de existencias desde productos</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Permite agregar stock desde la edición del producto, con registro en el historial y un asiento de Débito a Inventario y Crédito a Sobrantes. Requiere la generación contable activa y las cuentas configuradas.
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-3 sm:pl-4">
+            <span className="text-xs font-medium text-muted-foreground">{manualStockIncreaseEnabled ? 'Habilitado' : 'Deshabilitado'}</span>
+            <Switch
+              checked={manualStockIncreaseEnabled}
+              onCheckedChange={(enabled) => { void updateManualStockIncreaseSetting(enabled) }}
+              disabled={!canEditInventoryConfig || savingManualStockSetting || !manualStockSettingLoaded}
+              aria-label="Permitir aumento manual de existencias desde productos"
+            />
+            {savingManualStockSetting && <Loader2 className="size-4 animate-spin text-primary" aria-label="Guardando configuración" />}
+          </div>
+        </Card>
+      )}
 
       <Tabs value={visibleActiveTab} onValueChange={setActiveTab}>
         <TabsList className="flex h-auto w-full max-w-full flex-nowrap justify-start gap-1.5 overflow-x-auto rounded-2xl border border-border/40 bg-muted/40 p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
