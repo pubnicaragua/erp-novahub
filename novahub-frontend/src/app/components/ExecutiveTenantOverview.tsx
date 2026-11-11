@@ -552,7 +552,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       return;
     }
     const target: Record<string, unknown> = definition.id === 'totalExpenses'
-      ? { subModule: 'egresos' }
+      ? { subModule: 'gastos' }
       : ['operatingResult', 'operatingMargin', 'grossMargin', 'commercialMargin', 'netMargin', 'profitability', 'netProfit'].includes(definition.id)
         ? { subModule: 'resumen-financiero' }
         : definition.id === 'registersWithSales' || definition.id === 'topRegister'
@@ -560,7 +560,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
           : definition.id === 'ordersCount' || definition.id === 'pendingOrders'
             ? { subModule: 'ordenes-venta' }
             : { subModule: 'facturas' };
-    navigate(definition.id === 'totalExpenses' || ['operatingResult', 'operatingMargin', 'grossMargin', 'commercialMargin', 'netMargin', 'profitability', 'netProfit'].includes(definition.id) ? 'finanzas' : 'ventas', target);
+    navigate(definition.id === 'totalExpenses' ? 'compras' : ['operatingResult', 'operatingMargin', 'grossMargin', 'commercialMargin', 'netMargin', 'profitability', 'netProfit'].includes(definition.id) ? 'finanzas' : 'ventas', target);
   };
 
   const askNova = (message = '¿Cómo va mi negocio en este período?') => {
