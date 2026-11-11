@@ -47,7 +47,7 @@ const NOTIFICACIONES_TOUR_STEPS: GuidedTourStep[] = [
     target: '[data-tour="notificaciones-tab-mensajes"]',
     title: 'Mensajería Interna',
     description: 'Conversaciones entre usuarios del sistema. Los mensajes directos permiten respuestas; los del sistema son informativos.',
-    tip: 'Usá Ctrl+Enter para enviar rápido una respuesta.',
+    tip: 'Usá Enter para enviar y Shift+Enter para agregar una línea.',
     placement: 'top',
   },
   {

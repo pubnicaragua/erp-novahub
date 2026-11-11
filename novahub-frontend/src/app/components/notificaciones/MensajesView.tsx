@@ -475,7 +475,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-overlay" role="list" aria-label="Conversaciones" data-testid="message-inbox-list">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-overlay" role="list" aria-label="Conversaciones" data-testid="message-inbox-list" tabIndex={0}>
             {loading || supportConversationsQuery.isLoading ? (
               <div className="space-y-2 p-3" aria-label="Cargando conversaciones">
                 {[1, 2, 3, 4].map((item) => <div key={item} className="h-20 animate-pulse rounded-xl bg-muted/40" />)}
@@ -596,6 +596,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 scrollbar-overlay sm:px-6"
                 data-testid="message-thread-body"
                 aria-live="polite"
+                aria-label="Historial de mensajes"
+                tabIndex={0}
               >
                 <div className="mx-auto flex max-w-3xl flex-col gap-3">
                   <AnimatePresence initial={false}>
