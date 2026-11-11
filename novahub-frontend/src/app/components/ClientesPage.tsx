@@ -25,6 +25,7 @@ import { ExportMenu } from './ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { fetchAllPaginatedRows } from '../utils/export-utils';
 import { createReportWorkbook } from '../utils/reportWorkbook';
+import { firstReadable } from '../utils/displayText';
 
 export function ClientesPage() {
   const { user, canPerform } = useAuth();
@@ -305,7 +306,7 @@ export function ClientesPage() {
                         <div className="flex flex-col">
                            <span className="font-semibold text-foreground">{c.name}</span>
                           {String(c.type || '').toUpperCase() === 'COMPANY' && c.companyName && <span className="text-xs text-muted-foreground">{c.companyName}</span>}
-                          <span className="text-xs text-muted-foreground">{c.code || c.id} • {(c.type || '').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Individual'}</span>
+                          <span className="text-xs text-muted-foreground">{firstReadable(c.code)} • {(c.type || '').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Individual'}</span>
                         </div>
                       </TableCell>
                       <TableCell>

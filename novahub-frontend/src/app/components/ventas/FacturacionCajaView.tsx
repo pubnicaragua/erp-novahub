@@ -77,6 +77,7 @@ import { formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 import { VoiceSaleComposer } from './VoiceSaleComposer';
 import { SalesImportWizard } from './importacion/SalesImportWizard';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { firstReadable } from '../../utils/displayText';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -2391,7 +2392,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                         <SelectItem value="__none__">Sin vendedor</SelectItem>
                         {employees.map((employee) => (
                           <SelectItem key={employee.id} value={employee.id}>
-                            {employee.name || `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.id}
+                            {firstReadable(employee.name, `${employee.firstName || ''} ${employee.lastName || ''}`.trim(), employee.id)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -3269,7 +3270,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
               </div>
               {createdTicketCart.map((item) => (
                 <div key={item.productId} className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-border/30 px-4 py-3 text-sm last:border-0">
-                  <span className="min-w-0"><span className="block font-bold">{item.description}</span>{item.variantId && <span className="block truncate text-[10px] font-mono font-semibold text-primary">SKU variante: {item.variant?.sku || item.variantId}</span>}{item.commercialNoteSnapshot && <span className="block truncate text-[10px] font-normal text-muted-foreground" title={item.commercialNoteSnapshot}>Nota: {item.commercialNoteSnapshot}</span>}</span>
+                  <span className="min-w-0"><span className="block font-bold">{item.description}</span>{item.variantId && <span className="block truncate text-[10px] font-mono font-semibold text-primary">SKU variante: {firstReadable(item.variant?.sku, item.variantId)}</span>}{item.commercialNoteSnapshot && <span className="block truncate text-[10px] font-normal text-muted-foreground" title={item.commercialNoteSnapshot}>Nota: {item.commercialNoteSnapshot}</span>}</span>
                   <span className="font-mono text-muted-foreground">{item.quantity}</span>
                   <span className="font-mono font-bold">{formatCurrency(item.lineTotal)}</span>
                 </div>

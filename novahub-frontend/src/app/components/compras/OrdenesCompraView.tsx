@@ -61,6 +61,7 @@ import { resolveStandardProductPriceLists } from '../../utils/product-price-list
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
+import { firstReadable } from '../../utils/displayText';
 
 interface Props {
   data: PurchaseOrder[];
@@ -3168,7 +3169,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
                         </div>
                         {item.variantId && (
                           <Badge variant="secondary" className="mt-1 max-w-full truncate font-mono text-[9px]">
-                            Variante · {item.code || item.variantId}
+                            Variante · {firstReadable(item.code, item.variantId)}
                           </Badge>
                         )}
                       </div>

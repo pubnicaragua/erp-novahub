@@ -40,6 +40,7 @@ import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { formatDateOnly, formatInstant } from '../../utils/dateFormat';
+import { firstReadable } from '../../utils/displayText';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -1085,8 +1086,8 @@ export function DiarioView() {
                                   <div className={cn('mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg', line.debit > 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10')}>
                                     {line.debit > 0 ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
                                   </div>
-                                  <p className="min-w-0 truncate text-xs font-semibold" title={line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}>
-                                    {line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}
+                                  <p className="min-w-0 truncate text-xs font-semibold" title={line.account ? `${line.account.code} - ${line.account.name}` : firstReadable(line.accountId)}>
+                                    {line.account ? `${line.account.code} - ${line.account.name}` : firstReadable(line.accountId)}
                                   </p>
                                 </div>
                                 {line.description && <p className="ml-8 mt-1 truncate text-[10px] text-muted-foreground" title={accountingDescriptionLabel(line.description)}>{accountingDescriptionLabel(line.description)}</p>}

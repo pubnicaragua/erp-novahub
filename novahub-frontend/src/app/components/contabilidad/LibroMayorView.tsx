@@ -26,6 +26,7 @@ import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { formatDateOnly } from '../../utils/dateFormat';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { firstReadable } from '../../utils/displayText';
 // import { motion } from 'motion/react';
 
 interface LedgerEntry {
@@ -685,7 +686,7 @@ export function LibroMayorView() {
                     {(selectedJournal.lines || []).map((line: { id: string; account?: { code?: string; name?: string }; accountId?: string; description?: string; debit?: number; credit?: number }) => (
                       <div key={line.id} className="grid grid-cols-[minmax(0,1fr)_minmax(88px,auto)_minmax(88px,auto)] items-center gap-3 px-4 py-3">
                         <div className="min-w-0">
-                          <p className="truncate text-xs font-bold" title={line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}>{line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}</p>
+                          <p className="truncate text-xs font-bold" title={line.account ? `${line.account.code} - ${line.account.name}` : firstReadable(line.accountId)}>{line.account ? `${line.account.code} - ${line.account.name}` : firstReadable(line.accountId)}</p>
                           {line.description && <p className="mt-1 truncate text-[10px] text-muted-foreground" title={line.description}>{line.description}</p>}
                         </div>
                         <p className="text-right font-mono text-[11px] font-black tabular-nums text-emerald-600">{Number(line.debit) > 0 ? formatCurrency(Number(line.debit)) : '—'}</p>

@@ -24,6 +24,7 @@ import {
 } from '../ui/table';
 import { Checkbox } from '../ui/checkbox';
 import { qaService, QaCheck, QaFinding, QaModuleSummary, QaStepResult, QaSummary } from '../../services/qa.service';
+import { firstReadable } from '../../utils/displayText';
 
 const STATUS_META: Record<string, { label: string; className: string; icon: any }> = {
   FUNCIONAL: { label: 'Funcional', className: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30', icon: CheckCircle2 },
@@ -503,7 +504,7 @@ export function QaConsoleView({ activeSubModule, onSubModuleChange, isSidebarCol
                   {findings.map((f) => (
                     <TableRow key={f.id}>
                       <TableCell className="max-w-md"><p className="line-clamp-2">{f.description}</p></TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{f.check?.title || f.checkId}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{firstReadable(f.check?.title, f.checkId)}</TableCell>
                       <TableCell><PriorityBadge priority={f.severity} /></TableCell>
                       <TableCell>
                         <Select

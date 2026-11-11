@@ -48,6 +48,7 @@ import { VoiceSaleComposer } from '../ventas/VoiceSaleComposer';
 import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-parser';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
+import { firstReadable } from '../../utils/displayText';
 
 interface Props { data: PurchaseReceipt[]; summaryData?: PurchaseReceiptSummary; summaryLoading?: boolean; summaryError?: boolean; summarySearch?: string; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
@@ -1827,7 +1828,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                         />
                         {item.variantId && (
                           <Badge variant="secondary" className="mt-1 max-w-full truncate font-mono text-[9px]">
-                            Variante · {item.code || item.variantId}
+                            Variante · {firstReadable(item.code, item.variantId)}
                           </Badge>
                         )}
                       </div>

@@ -1,0 +1,17 @@
+[
+  "src/app/components/AuditAcceptanceView.tsx|e87dea46",
+  "src/app/components/AuditFindingsView.tsx|e87dea46",
+  "src/app/components/AuditPbcView.tsx|6d491e81",
+  "src/app/components/AuditPbcView.tsx|e87dea46",
+  "src/app/components/AuditRisksView.tsx|e87dea46",
+  "src/app/components/RHPage.tsx|134edbfb",
+  "src/app/components/admin/EnterpriseGroupSetupView.tsx|7548a349",
+  "src/app/components/configuracion/PdfDocumentCustomizer.tsx|75f4e4c3",
+  "src/app/components/hr/EmployeeDetailDrawer.tsx|683c7939",
+  "src/app/components/inventory/InventoryAuditsView.tsx|f938783e",
+  "src/app/components/inventory/InventoryDetailPanel.tsx|137e7a7a",
+  "src/app/components/manager/ManagerBranchAccessEditor.tsx|f09f7df1",
+  "src/app/components/manager/ManagerInventoryModule.tsx|e5a1eb34",
+  "src/app/components/proyectos/ProyectoCotizacionExportView.tsx|40e1448f",
+  "src/app/components/ventas/PoketAppToAppDialog.tsx|36d21587"
+]
