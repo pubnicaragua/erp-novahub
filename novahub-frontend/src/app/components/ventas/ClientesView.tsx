@@ -957,7 +957,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     }
   };
 
-  const buildCustomerPayload = (draft: CustomerDraft, clearBlankCreditDays = false): Partial<Customer> => ({
+  const buildCustomerPayload = (draft: CustomerDraft, forUpdate = false): Partial<Customer> => ({
     name: draft.name.trim(),
     companyName: draft.type === 'company' ? draft.companyName.trim() || null : null,
     type: draft.type,
@@ -966,8 +966,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     taxId: draft.taxId.trim() || undefined,
     ruc: draft.ruc.trim() || undefined,
     email: draft.email.trim() || undefined,
-    phone: draft.phone.trim() ? normalizeCustomerPhone(draft.phone, draft.countryCode) || draft.phone.trim() : undefined,
-    contactPhone: draft.contactPhone.trim() ? normalizeCustomerPhone(draft.contactPhone, draft.countryCode) || draft.contactPhone.trim() : undefined,
+    phone: draft.phone.trim() ? normalizeCustomerPhone(draft.phone, draft.countryCode) || draft.phone.trim() : forUpdate ? null : undefined,
+    contactPhone: draft.contactPhone.trim() ? normalizeCustomerPhone(draft.contactPhone, draft.countryCode) || draft.contactPhone.trim() : forUpdate ? null : undefined,
     address: draft.address.trim() || undefined,
     city: draft.city.trim() || undefined,
     department: draft.department.trim() || undefined,
@@ -975,7 +975,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     countryCode: draft.countryCode,
     creditLimit: draft.creditLimit === '' ? undefined : Number(draft.creditLimit),
     creditLimitCurrency: draft.creditLimitCurrency,
-    creditDays: draft.creditDays === '' ? (clearBlankCreditDays ? null : undefined) : Number(draft.creditDays),
+    creditDays: draft.creditDays === '' ? (forUpdate ? null : undefined) : Number(draft.creditDays),
     notes: draft.notes.trim() || undefined,
     status: draft.status,
   });
