@@ -249,8 +249,8 @@ export function PlatformSupportWorkspace() {
   };
 
   return (
-    <main className="min-h-screen min-w-0 overflow-x-hidden bg-background text-foreground">
-      <header className="flex flex-col gap-4 border-b border-border/70 bg-card/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <main className="flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background text-foreground">
+      <header className="flex shrink-0 flex-col gap-4 border-b border-border/70 bg-card/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><ShieldCheck className="size-5" /></div>
           <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">NovaHub · Soporte externo</p><h1 className="break-words text-xl font-black sm:text-2xl">Bandeja de soporte</h1><p className="text-xs text-muted-foreground">{conversations.length} conversaciones · {unreadTotal} sin leer</p></div>
@@ -261,13 +261,13 @@ export function PlatformSupportWorkspace() {
         </div>
       </header>
 
-      <div className="mx-auto grid min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 grid-cols-1 gap-4 p-3 sm:p-5 lg:grid-cols-[340px_minmax(0,1fr)] lg:p-8">
-        <Card className={cn('min-w-0 overflow-hidden rounded-2xl border-border/70 shadow-sm', mobileThreadOpen && 'hidden lg:block')}>
-          <div className="border-b border-border/60 p-4">
+      <div className="mx-auto grid min-h-0 w-full max-w-[1700px] min-w-0 flex-1 grid-cols-1 [grid-template-rows:minmax(0,1fr)] gap-4 overflow-hidden p-3 sm:p-5 lg:grid-cols-[340px_minmax(0,1fr)] lg:p-8">
+        <Card className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 shadow-sm', mobileThreadOpen && 'hidden lg:flex')}>
+          <div className="shrink-0 border-b border-border/60 p-4">
             <div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="font-black">Conversaciones</h2><p className="text-xs text-muted-foreground">Cada hilo corresponde a una sucursal.</p></div><Badge variant="secondary">{conversations.length}</Badge></div>
             <label className="relative block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar conversaciones" className="h-10 rounded-xl pl-9" /></label>
           </div>
-          <div className="max-h-[calc(100vh-14rem)] overflow-y-auto p-2">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
             {conversationsQuery.isLoading ? <div className="flex justify-center p-12"><Loader2 className="size-5 animate-spin text-primary" /></div>
               : conversationsQuery.isError ? <div className="p-6 text-center text-sm text-destructive">No pudimos cargar la bandeja. Revisa tu conexión y vuelve a intentar.</div>
                 : filtered.length === 0 ? <div className="px-5 py-14 text-center"><MessageSquare className="mx-auto size-8 text-muted-foreground/60" /><p className="mt-3 text-sm font-bold">{conversations.length ? 'Sin coincidencias' : 'Aún no hay conversaciones'}</p><p className="mt-1 text-xs text-muted-foreground">{conversations.length ? 'Prueba con otro texto.' : 'Envía un mensaje para iniciar un hilo por sucursal.'}</p></div>
@@ -281,9 +281,9 @@ export function PlatformSupportWorkspace() {
           </div>
         </Card>
 
-        <Card className={cn('flex min-h-[68vh] min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 shadow-sm', !mobileThreadOpen && 'hidden lg:flex')}>
+        <Card className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 shadow-sm', !mobileThreadOpen && 'hidden lg:flex')}>
           {selected ? <>
-            <div className="flex min-w-0 items-center gap-3 border-b border-border/60 px-4 py-3 sm:px-6">
+            <div className="flex min-w-0 shrink-0 items-center gap-3 border-b border-border/60 px-4 py-3 sm:px-6">
               <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={() => setMobileThreadOpen(false)} aria-label="Volver a conversaciones"><ArrowLeft className="size-4" /></Button>
               <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Building2 className="size-4" /></div>
               <div className="min-w-0 flex-1"><h2 className="break-words font-black">{selected.participant.name}</h2><p className="truncate text-xs text-muted-foreground">{selected.title}</p></div>
@@ -295,7 +295,7 @@ export function PlatformSupportWorkspace() {
                 const element = event.currentTarget;
                 shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
               }}
-              className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6"
+              className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6"
               aria-live="polite"
             >
               <AnimatePresence initial={false}>
@@ -305,7 +305,7 @@ export function PlatformSupportWorkspace() {
               </AnimatePresence>
               <div ref={messageEndRef} aria-hidden="true" />
             </div>
-            <form onSubmit={submitReply} className="border-t border-border/60 p-3 sm:p-4">
+            <form onSubmit={submitReply} className="shrink-0 border-t border-border/60 p-3 sm:p-4">
               <div className="mx-auto max-w-3xl">
                 <label htmlFor="support-agent-reply" className="sr-only">Responder a la sucursal</label>
                 <div className="flex items-end gap-2 rounded-xl border border-border bg-muted/20 p-2 focus-within:ring-2 focus-within:ring-ring/40">
@@ -316,7 +316,12 @@ export function PlatformSupportWorkspace() {
                     onPaste={(event) => pasteMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files))}
                     onDragOver={allowMessageAttachmentDrop}
                     onDrop={(event) => dropMessageAttachmentFiles(event, (files) => replyAttachmentComposerRef.current?.addFiles(files))}
-                    onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') void submitReply(); }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        void submitReply();
+                      }
+                    }}
                     placeholder="Escribe una respuesta…"
                     className="max-h-36 min-h-10 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
                     disabled={replying}
@@ -343,7 +348,7 @@ export function PlatformSupportWorkspace() {
                 </div>
                 <div className="mt-1.5 flex justify-between gap-3 px-1 text-[11px]">
                   <span className="text-destructive" role={replyError ? 'alert' : undefined}>{replyError}</span>
-                  <span className="ml-auto text-muted-foreground">Ctrl + Enter para enviar</span>
+                  <span className="ml-auto text-muted-foreground">Enter para enviar · Shift + Enter para nueva línea</span>
                 </div>
               </div>
             </form>
