@@ -43,6 +43,7 @@ import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { formatDateEs } from '../../utils/dateFormat';
 import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { ExportMenu } from '../ui/ExportMenu';
+import { Checkbox } from '../ui/checkbox';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 interface AccountNode {
@@ -141,7 +142,7 @@ function accountGridTemplate(visibleKeys: AccountColumnKey[]) {
   const columns = ACCOUNT_COLUMN_DEFS
     .filter((column) => visibleKeys.includes(column.key))
     .map((column) => column.width);
-  return ['56px', ...columns, '64px'].join(' ');
+  return ['96px', ...columns, '64px'].join(' ');
 }
 
 const ACCOUNT_TYPES: { value: AccountType; label: string; color: string }[] = [
@@ -220,7 +221,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
   const { canPerform, user } = useAuth();
   const canExportAccounts = canPerform('ACCOUNTING_CHART', 'export');
   const [costCentersOpen, setCostCentersOpen] = useState(false);
-  const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { baseCurrency, formatConvertedAmount, convertAmount, displayCurrency } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
 
   // Filtro por mes o rango de fechas: saldo inicial, débitos, créditos y saldo final.
@@ -244,6 +245,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [selectedAccount, setSelectedAccount] = useState<AccountNode | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  // Cuentas elegidas con la casilla para exportar sus saldos a Excel.
+  const [exportIds, setExportIds] = useState<Set<string>>(new Set());
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [transactionsPageSize, setTransactionsPageSize] = useState(50);
   const [selectedTransaction, setSelectedTransaction] = useState<AccountTransaction | null>(null);
@@ -409,6 +412,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
   };
 
   const flatList = useMemo(() => flattenTree(accounts), [accounts]);
+
 
   const colFilters = useColumnFilters();
   const typeOptionsForFilter = ACCOUNT_TYPES.map((t) => ({ value: t.value, label: t.label, count: flatList.filter((a) => a.type === t.value).length }));
@@ -796,7 +800,15 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
           style={{ gridTemplateColumns: accountGridColumns }}
           onClick={() => selectAccount(account)}
         >
-          <div className="flex min-w-0 items-center" style={{ paddingLeft: `${Math.min(account.level * 16, 32)}px` }}>
+          <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: `${Math.min(account.level * 16, 32)}px` }}>
+            <span onClick={(e) => e.stopPropagation()} className="flex shrink-0 items-center">
+              <Checkbox
+                checked={exportIds.has(account.id)}
+                onCheckedChange={() => toggleExportAccount(account.id)}
+                aria-label={`Elegir ${account.code} ${account.name} para exportar`}
+                className="size-4"
+              />
+            </span>
             <button
               onClick={(e) => { e.stopPropagation(); toggleExpand(account.id); }}
               className={cn('flex size-5 shrink-0 items-center justify-center rounded', hasChildren ? 'visible hover:bg-muted' : 'invisible')}
@@ -852,6 +864,74 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     );
   }
 
+  // Cuentas elegidas con la casilla para exportar sus saldos a Excel (por cobrar, por pagar o las que se quiera).
+  const toggleExportAccount = (id: string) => setExportIds((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  /** Marca el grupo de cuentas por cobrar o por pagar con todas sus hijas; después se puede ajustar a mano. */
+  const selectReceivablePayable = (kind: 'receivable' | 'payable') => {
+    const pattern = kind === 'receivable' ? /cuentas?\s+por\s+cobrar/i : /cuentas?\s+por\s+pagar|proveedores/i;
+    const type: AccountType = kind === 'receivable' ? 'ASSET' : 'LIABILITY';
+    const childrenByParent = new Map<string, string[]>();
+    flatList.forEach((account) => { if (account.parentId) childrenByParent.set(account.parentId, [...(childrenByParent.get(account.parentId) || []), account.id]); });
+    const ids = new Set<string>();
+    const collect = (id: string) => { if (ids.has(id)) return; ids.add(id); (childrenByParent.get(id) || []).forEach(collect); };
+    flatList.filter((account) => account.type === type && pattern.test(account.name)).forEach((account) => collect(account.id));
+    if (!ids.size) {
+      toast.error(kind === 'receivable' ? 'No encontré cuentas por cobrar en este plan. Elige las cuentas con las casillas.' : 'No encontré cuentas por pagar en este plan. Elige las cuentas con las casillas.');
+      return;
+    }
+    setExportIds(ids);
+    setExpandedIds((current) => new Set([...current, ...flatList.filter((account) => ids.has(account.id) && (childrenByParent.get(account.id) || []).length > 0).map((account) => account.id)]));
+  };
+  const handleExportSelected = () => {
+    const byId = new Map(flatList.map((account) => [account.id, account]));
+    const chosen = flatList.filter((account) => exportIds.has(account.id)).sort((a, b) => a.code.localeCompare(b.code, 'es', { numeric: true }));
+    if (!chosen.length) { toast.error('Elige al menos una cuenta con su casilla.'); return; }
+    // El total suma solo las cuentas principales elegidas: una cuenta agrupadora ya incluye a sus hijas.
+    const hasChosenAncestor = (account: AccountNode) => {
+      let parentId = account.parentId;
+      for (let depth = 0; parentId && depth < 20; depth += 1) {
+        if (exportIds.has(parentId)) return true;
+        parentId = byId.get(parentId)?.parentId ?? null;
+      }
+      return false;
+    };
+    const top = chosen.filter((account) => !hasChosenAncestor(account));
+    const money = (value: number | undefined) => Math.round(convertAmount(Number(value ?? 0), baseCurrency) * 100) / 100;
+    const minLevel = Math.min(...chosen.map((account) => account.level));
+    const header = periodActive
+      ? ['Código', 'Cuenta', 'Tipo', 'Saldo inicial', 'Débitos', 'Créditos', 'Saldo final']
+      : ['Código', 'Cuenta', 'Tipo', 'Saldo'];
+    const lineOf = (account: AccountNode) => periodActive
+      ? [account.code, `${'   '.repeat(Math.max(0, account.level - minLevel))}${account.name}`, getTypeLabel(account.type), money(account.openingBalance), money(account.periodDebit), money(account.periodCredit), money(account.balance)]
+      : [account.code, `${'   '.repeat(Math.max(0, account.level - minLevel))}${account.name}`, getTypeLabel(account.type), money(account.balance)];
+    const sum = (pick: (account: AccountNode) => number | undefined) => Math.round(top.reduce((total, account) => total + money(pick(account)), 0) * 100) / 100;
+    const totalLine = periodActive
+      ? ['', 'TOTAL (cuentas principales elegidas)', '', sum((a) => a.openingBalance), sum((a) => a.periodDebit), sum((a) => a.periodCredit), sum((a) => a.balance)]
+      : ['', 'TOTAL (cuentas principales elegidas)', '', sum((a) => a.balance)];
+    const periodLabel = periodActive ? `Del ${periodFrom || 'inicio'} al ${periodTo || 'hoy'}` : `Saldo al ${new Date().toLocaleDateString('es-NI')}`;
+    const companyName = user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub ERP';
+    const sheetRows: (string | number)[][] = [[companyName], ['Saldos de cuentas'], [periodLabel], [`Moneda: ${displayCurrency}`], [], header, ...chosen.map(lineOf), [], totalLine];
+    const sheet = XLSX.utils.aoa_to_sheet(sheetRows);
+    const firstDataRow = 6;
+    const lastRow = sheetRows.length - 1;
+    for (let row = firstDataRow; row <= lastRow; row += 1) {
+      for (let col = 3; col < header.length; col += 1) {
+        const cell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
+        if (cell && typeof cell.v === 'number') cell.z = '#,##0.00;[Red]-#,##0.00';
+      }
+    }
+    sheet['!cols'] = [{ wch: 18 }, { wch: 46 }, { wch: 12 }, ...header.slice(3).map(() => ({ wch: 18 }))];
+    sheet['!freeze'] = { xSplit: 0, ySplit: 6 } as any;
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, 'Saldos');
+    XLSX.writeFile(book, `saldos_cuentas_${periodActive ? `${periodFrom || 'inicio'}_${periodTo || 'hoy'}` : 'actual'}.xlsx`);
+    toast.success(`Excel generado con ${chosen.length} cuenta(s)`);
+  };
+
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
       <CostCentersDialog open={costCentersOpen} onOpenChange={setCostCentersOpen} canEdit={canPerform('ACCOUNTING_CONFIG', 'edit')} />
@@ -864,6 +944,24 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
         <div className="erp-toolbar-primary-group flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {helpTrigger}
           {canExportAccounts && <ExportMenu onPdf={(format) => void handleExportPdf(format)} onExcel={() => void handleExport()} />}
+          {canExportAccounts && (
+            <>
+              <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => selectReceivablePayable('receivable')} title="Marca las cuentas por cobrar y sus hijas para exportar sus saldos">
+                Por cobrar
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => selectReceivablePayable('payable')} title="Marca las cuentas por pagar y sus hijas para exportar sus saldos">
+                Por pagar
+              </Button>
+              {exportIds.size > 0 && (
+                <>
+                  <Button size="sm" className="gap-1.5 rounded-xl" onClick={handleExportSelected}>
+                    <FileDown className="size-4 shrink-0" /> Excel de saldos ({exportIds.size})
+                  </Button>
+                  <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => setExportIds(new Set())}>Quitar selección</Button>
+                </>
+              )}
+            </>
+          )}
           <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => setCostCentersOpen(true)}>
             <FolderTree className="size-4 shrink-0 text-primary" /> Centros de costo
           </Button>
