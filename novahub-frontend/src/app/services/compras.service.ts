@@ -4,7 +4,7 @@ import type {
   Supplier, PurchaseOrder, PurchaseReceipt, SupplierInvoice,
   RecurringSupplierInvoice, PaymentMade, SupplierCredit,
   Expense, RecurringExpense, PurchaseRequest, PurchaseManagement,
-  PaginatedResponse, ApiFilters,
+  PaginatedResponse, ApiFilters, Currency,
 } from '../types';
 
 export const suppliersService = {
@@ -72,11 +72,32 @@ export interface PurchaseReceiptSummary {
   incidentRejectedQuantity: number;
 }
 
+export interface SupplierInvoicePaymentLookup {
+  id: string;
+  number: string;
+  supplierId: string;
+  supplierName: string;
+  total: number;
+  balance: number;
+  currency: Currency;
+  exchangeRate: number;
+  dueDate: string;
+  status: string;
+  receiptNumber?: string | null;
+  receiptDate?: string | null;
+  detailSummary?: string;
+}
+
 export const supplierInvoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<SupplierInvoice>>('/purchases/invoices', { params: filters as any, signal }),
   getSummary: (filters?: ApiFilters & { summarySearch?: string }, signal?: AbortSignal) =>
     api.get<SupplierInvoiceSummary>('/purchases/invoices/summary', { params: filters as any, signal }),
-  getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<{ id: string; number: string; supplierId: string; supplierName: string; balance: number; status: string }>>('/purchases/lookups/invoices', { params: filters as any, signal }),
+  getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<SupplierInvoicePaymentLookup>>('/purchases/lookups/invoices', { params: filters as any, signal }),
+  getAllLookup: (filters?: ApiFilters, signal?: AbortSignal) => fetchAllReportPages<SupplierInvoicePaymentLookup>(
+    (page) => supplierInvoicesService.getLookup(page, signal),
+    { ...filters, pageSize: 200 },
+    signal,
+  ),
   getById: (id: string) => api.get<SupplierInvoice>(`/purchases/invoices/${id}`),
   create: (data: Partial<SupplierInvoice>) => api.post<SupplierInvoice>('/purchases/invoices', data),
   update: (id: string, data: Partial<SupplierInvoice>) => api.patch<SupplierInvoice>(`/purchases/invoices/${id}`, data),

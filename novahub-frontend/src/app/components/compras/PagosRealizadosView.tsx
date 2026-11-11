@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
 import { paymentsService, supplierInvoicesService } from '../../services/compras.service';
-import type { PaymentMadeSummary } from '../../services/compras.service';
+import type { PaymentMadeSummary, SupplierInvoicePaymentLookup } from '../../services/compras.service';
 import { fetchAllReportPages } from '../../utils/reportPagination';
 import { storageService } from '../../services/storage.service';
 import type { PaymentMade, Supplier, SupplierInvoice } from '../../types';
@@ -156,6 +156,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PaymentMade> | null>(null);
+  const [paymentApplicationTarget, setPaymentApplicationTarget] = useState<'ADVANCE' | 'INVOICE' | 'GENERAL_BALANCE'>('ADVANCE');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [pendingCancelGroup, setPendingCancelGroup] = useState<PaymentMade | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -217,6 +218,9 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
          if (!draftPaymentFromInvoice && consumedInvoiceDraftRef.current) return;
          setPartialPaymentEnabled(false);
          const prefilled = draftPaymentFromInvoice || {};
+         setPaymentApplicationTarget(prefilled.balanceApplicationType === 'GENERAL_BALANCE'
+           ? 'GENERAL_BALANCE'
+           : prefilled.supplierInvoiceId ? 'INVOICE' : 'ADVANCE');
          const prefilledMethod = normalizeMethod(prefilled.method as any);
          const prefilledCurrency = String(prefilled.currency || displayCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
          const initialCurrency = displayCurrency;
@@ -256,6 +260,9 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
           setPartialPaymentEnabled(false);
           const found = data.find(x => x.id === editingId);
           setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+          setPaymentApplicationTarget(found?.balanceApplicationType === 'GENERAL_BALANCE'
+            ? 'GENERAL_BALANCE'
+            : found?.supplierInvoiceId ? 'INVOICE' : 'ADVANCE');
           const existingLines = Array.isArray((found as any)?.payments) && (found as any).payments.length > 0
             ? (found as any).payments
             : found ? [found] : [];
@@ -271,6 +278,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
     } else {
       consumedInvoiceDraftRef.current = null;
       setLocalDoc(null);
+      setPaymentApplicationTarget('ADVANCE');
       setPaymentLines([paymentLine('CASH')]);
       setPaymentEvidenceFiles([]);
     }
@@ -307,6 +315,22 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
   const colFilters = useColumnFilters();
   const hasValueColumnFilters = Object.values(colFilters.state).some((filter) => (filter.values || []).length > 0);
   const tenantQueryKey = String((user as any)?.clientTenantId || (user as any)?.tenantId || 'current');
+  const paymentInvoiceLookupQuery = useQuery({
+    queryKey: ['purchases', 'payment-invoice-lookup', tenantQueryKey, localDoc?.supplierId || '', selectedBranchId, paymentApplicationTarget],
+    queryFn: ({ signal }) => supplierInvoicesService.getAllLookup({
+      supplierId: localDoc?.supplierId || undefined,
+      branchId: selectedBranchId || undefined,
+      pageSize: 200,
+    }, signal),
+    enabled: editingId === 'NEW' && paymentApplicationTarget === 'INVOICE' && Boolean(localDoc?.supplierId),
+    staleTime: 30_000,
+  });
+  const availableInvoices = useMemo(() => {
+    const invoices = new Map<string, SupplierInvoice | SupplierInvoicePaymentLookup>();
+    bills.forEach((invoice) => invoices.set(invoice.id, invoice));
+    (paymentInvoiceLookupQuery.data || []).forEach((invoice) => invoices.set(invoice.id, invoice));
+    return invoices;
+  }, [bills, paymentInvoiceLookupQuery.data]);
   const filteredSummaryReportQuery = useQuery({
     queryKey: ['purchases', 'payments-kpi-filtered-report', tenantQueryKey, searchTerm.trim(), selectedBranchId],
     queryFn: ({ signal }) => fetchAllReportPages<PaymentMade>(
@@ -334,14 +358,17 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
     && (hasValueColumnFilters ? Array.isArray(filteredSummaryReportQuery.data) : Boolean(summaryData));
 
   const linkedInvoiceForPayment = (payment: PaymentMade) =>
-    payment.supplierInvoice || bills.find((bill) => bill.id === payment.supplierInvoiceId) || null;
+    payment.supplierInvoice || (payment.supplierInvoiceId ? availableInvoices.get(payment.supplierInvoiceId) : null) || null;
   const selectedInvoice = localDoc?.supplierInvoiceId
-    ? bills.find((bill) => bill.id === localDoc.supplierInvoiceId) || (localDoc as any).supplierInvoice || null
+    ? availableInvoices.get(localDoc.supplierInvoiceId) || (localDoc as any).supplierInvoice || null
     : null;
+  const selectedInvoiceReceiptNumber = selectedInvoice
+    ? ('receiptNumber' in selectedInvoice ? selectedInvoice.receiptNumber : (selectedInvoice as any).purchaseReceipt?.number)
+    : null;
+  const selectedInvoiceDetailSummary = selectedInvoice && 'detailSummary' in selectedInvoice
+    ? selectedInvoice.detailSummary
+    : '';
   const selectedSupplier = suppliers.find((supplier) => supplier.id === localDoc?.supplierId) || null;
-  const paymentApplicationTarget = localDoc?.balanceApplicationType === 'GENERAL_BALANCE'
-    ? 'GENERAL_BALANCE'
-    : localDoc?.supplierInvoiceId ? 'INVOICE' : 'ADVANCE';
   const getPaymentLineBase = (line: PurchasePaymentLine) => toBaseAmount(
     Number(line.amount || 0),
     line.currency,
@@ -687,7 +714,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
     }
   };
 
-  const currentBills = bills.filter((b) => {
+  const currentBills = paymentInvoiceLookupQuery.data || bills.filter((b) => {
     if (!localDoc?.supplierId) return false;
     const sameSupplier = String(b.supplierId || '') === String(localDoc.supplierId || '');
     const isOpen = ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(String(b.status || '').toUpperCase());
@@ -780,7 +807,12 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                         .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                         .map(s => ({ label: s.name, value: s.id, description: [s.companyName, s.code ? `[${s.code}]` : '', s.phone || ''].filter(Boolean).join(' · ') || 'Sin datos adicionales' }))}
                       value={localDoc.supplierId || ''}
-                      onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val, supplierInvoiceId: '', balanceApplicationType: null })}
+                      onChange={(val) => setLocalDoc({
+                        ...localDoc,
+                        supplierId: val,
+                        supplierInvoiceId: '',
+                        balanceApplicationType: paymentApplicationTarget === 'GENERAL_BALANCE' ? 'GENERAL_BALANCE' : null,
+                      })}
                       placeholder="Seleccionar proveedor..."
                     />
                   </div>
@@ -791,6 +823,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                       value={paymentApplicationTarget}
                       onValueChange={(value) => {
                         setPartialPaymentEnabled(false);
+                        setPaymentApplicationTarget(value as 'ADVANCE' | 'INVOICE' | 'GENERAL_BALANCE');
                         setLocalDoc({
                           ...localDoc,
                           supplierInvoiceId: '',
@@ -807,10 +840,25 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                     </Select>
                   </div>
                   {paymentApplicationTarget === 'INVOICE' && <div className="col-span-2">
-                    <p className="text-[10px] text-muted-foreground mb-1">Factura a pagar</p>
+                    <p className="text-[10px] text-muted-foreground mb-1">Recepción / factura a pagar</p>
+                    <p className="mb-2 text-[10px] text-muted-foreground">Seleccione el documento del proveedor. Si proviene de una recepción, se muestra su número y el detalle asociado.</p>
                     <Combobox
-                      disabled={isNew ? !canCreatePayment : !canEditPayment}
-                      options={currentBills.map(s => ({ label: `${s.number} (Saldo: ${s.balance ?? s.total})`, value: s.id }))}
+                      disabled={(isNew ? !canCreatePayment : !canEditPayment) || paymentInvoiceLookupQuery.isFetching}
+                      options={currentBills.map((s) => {
+                        const receiptNumber = 'receiptNumber' in s ? s.receiptNumber : null;
+                        const detailSummary = 'detailSummary' in s ? s.detailSummary : '';
+                        const invoiceCurrency = String(s.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
+                        return {
+                          label: [
+                            `Factura ${s.number}`,
+                            receiptNumber ? `Recepción ${receiptNumber}` : 'Sin recepción vinculada',
+                            detailSummary,
+                            `Saldo ${formatExplicitAmount(Number(s.balance ?? s.total ?? 0), invoiceCurrency)}`,
+                          ].filter(Boolean).join(' · '),
+                          description: `Vence ${s.dueDate ? formatDateEs(s.dueDate) : 'sin fecha'}`,
+                          value: s.id,
+                        };
+                      })}
                       value={localDoc.supplierInvoiceId || ''}
                       onChange={(val) => {
                           const b = currentBills.find(x => x.id === val);
@@ -833,9 +881,10 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                             amount: b ? Number(convertBetweenCurrencies(nextAmount, b.currency || baseCurrency, line.currency, Number(b.exchangeRate || 1), Number(line.exchangeRate || paymentLineRate(line.currency))).toFixed(getCurrencyDecimalPlaces())) : nextAmountInPaymentCurrency,
                           } : line));
                       }}
-                      placeholder={localDoc.supplierId ? "Seleccionar factura abierta" : "Primero seleccione un proveedor"}
-                      emptyMessage="No hay facturas abiertas para este proveedor."
+                      placeholder={!localDoc.supplierId ? 'Primero seleccione un proveedor' : paymentInvoiceLookupQuery.isFetching ? 'Cargando documentos...' : 'Seleccionar recepción o factura abierta'}
+                      emptyMessage={paymentInvoiceLookupQuery.isError ? 'No se pudieron cargar los documentos de este proveedor.' : 'No hay facturas abiertas para este proveedor.'}
                     />
+                    {paymentInvoiceLookupQuery.isError && <p role="alert" className="mt-1 text-[10px] font-medium text-destructive">No fue posible consultar las facturas. Intente actualizar la vista.</p>}
                   </div>}
                   {paymentApplicationTarget === 'GENERAL_BALANCE' && <div className="col-span-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-3">
                     <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Abono al saldo general</p>
@@ -940,6 +989,10 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Liquidación de la factura</p>
                         <p className="mt-1 text-[10px] text-muted-foreground">Puede pagarla completa o registrar un abono para continuar después.</p>
+                        {(selectedInvoiceReceiptNumber || selectedInvoiceDetailSummary) && <p className="mt-1 text-[10px] font-semibold text-foreground">{[
+                          selectedInvoiceReceiptNumber ? `Recepción ${selectedInvoiceReceiptNumber}` : '',
+                          selectedInvoiceDetailSummary,
+                        ].filter(Boolean).join(' · ')}</p>}
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">

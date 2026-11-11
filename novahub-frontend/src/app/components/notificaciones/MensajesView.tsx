@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
@@ -9,6 +9,7 @@ import {
   LifeBuoy,
   Loader2,
   MailPlus,
+  MapPin,
   MessageCircle,
   Search,
   Send,
@@ -81,6 +82,52 @@ const messageTime = (value: string) => {
   if (Number.isNaN(date.getTime())) return '';
   return format(date, "d MMM, HH:mm", { locale: es });
 };
+
+const MESSAGE_URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+
+function renderMessageText(content: string, mine: boolean): ReactNode {
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  let linkIndex = 0;
+
+  for (const match of content.matchAll(MESSAGE_URL_PATTERN)) {
+    const rawUrl = match[0];
+    const start = match.index ?? cursor;
+    const url = rawUrl.replace(/[.,!?;:]+$/, '');
+    if (!url) continue;
+
+    const destination = /^www\./i.test(url) ? `https://${url}` : url;
+    try {
+      const { protocol } = new URL(destination);
+      if (protocol !== 'http:' && protocol !== 'https:') continue;
+    } catch {
+      continue;
+    }
+
+    parts.push(content.slice(cursor, start));
+    parts.push(
+      <a
+        key={`message-link-${linkIndex++}`}
+        href={destination}
+        target="_blank"
+        rel="noopener noreferrer"
+        referrerPolicy="no-referrer"
+        aria-label={`Abrir enlace ${url} en una pestaña nueva`}
+        className={cn(
+          'break-all font-medium underline underline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+          mine ? 'text-primary-foreground' : 'text-primary hover:text-primary/80',
+        )}
+      >
+        {url}
+      </a>,
+    );
+    if (rawUrl.length > url.length) parts.push(rawUrl.slice(url.length));
+    cursor = start + rawUrl.length;
+  }
+
+  parts.push(content.slice(cursor));
+  return parts;
+}
 
 const participantName = (value?: Partial<MessageParticipant> | null, fallback = 'Sistema') =>
   String(value?.name || fallback);
@@ -199,6 +246,18 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   }, [threads, selectedId, markingReadId, queryClient, directMessagesCacheKey, supportConversationsCacheKey, refreshInbox]);
 
   const selected = threads.find((thread) => thread.id === selectedId) || null;
+  const selectedOrigin = selected?.kind === 'SUPPORT' && user?.isPlatformSupportAgent
+    ? participantName(selected.participant, 'Sucursal')
+    : user?.tenantName || user?.sessionBranding?.name || 'Sucursal actual';
+  const selectedContext = selected
+    ? selected.kind === 'SYSTEM'
+      ? 'Aviso automático'
+      : selected.kind === 'SUPPORT' && !user?.isPlatformSupportAgent
+        ? 'Soporte técnico'
+        : selected.kind === 'SUPPORT'
+          ? 'Conversación de soporte'
+          : participantName(selected.participant, 'Participante')
+    : '';
   const searchFiltered = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     return threads.filter((thread) => {
@@ -499,7 +558,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
             </div>
           ) : (
             <>
-              <header className="flex min-h-16 items-center gap-3 border-b border-border/60 px-3 py-2 sm:px-5">
+              <header className="sticky top-0 z-20 flex min-h-16 shrink-0 items-center gap-3 border-b border-border/60 bg-background px-3 py-2 shadow-sm sm:px-5">
                 <Button
                   type="button"
                   variant="ghost"
@@ -513,8 +572,11 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                 <ParticipantAvatar participant={selected.participant} system={selected.kind === 'SYSTEM'} />
                 <div className="min-w-0 flex-1">
                   <h3 className="break-words text-sm font-bold sm:text-base">{selected.title}</h3>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {selected.kind === 'SYSTEM' ? 'Aviso automático de NovaHub' : participantName(selected.participant, 'Participante')}
+                  <p className="flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground" data-testid="message-thread-context">
+                    <MapPin className="size-3 shrink-0" aria-hidden="true" />
+                    <span className="truncate">Origen: {selectedOrigin}</span>
+                    <span className="shrink-0">·</span>
+                    <span className="truncate">{selectedContext}</span>
                   </p>
                 </div>
                 {markingReadId === selected.id ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <CheckCheck className="size-4 text-muted-foreground/60" aria-label="Conversación leída" />}
@@ -559,7 +621,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                               {participantName(message.sender, isSystem ? 'Sistema' : participantName(selected.participant, 'Participante'))}
                             </p>
                           )}
-                          {content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</p>}
+                          {content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{renderMessageText(content, message.mine)}</p>}
                           {(selected.kind === 'SUPPORT' || selected.kind === 'DIRECT') && (
                             <MessageAttachments
                               threadId={selected.id}
