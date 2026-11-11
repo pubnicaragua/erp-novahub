@@ -70,6 +70,8 @@ interface AccountNode {
 interface AccountTransaction {
   id: string;
   accountId: string;
+  /** Cuenta del movimiento; llega cuando se consulta una cuenta agrupadora junto con sus hijas. */
+  account?: { code: string; name: string } | null;
   date: string;
   description?: string | null;
   reference?: string | null;
@@ -251,7 +253,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
   const accountTransactionsQuery = useAccountingQuery<any>(
     ['account-transactions', selectedAccount?.id ?? null, transactionsPage, transactionsPageSize],
     async (signal) => selectedAccount
-      ? contabilidadService.getAccountTransactions(selectedAccount.id, { page: transactionsPage, pageSize: transactionsPageSize }, signal)
+      ? contabilidadService.getAccountTransactions(selectedAccount.id, { page: transactionsPage, pageSize: transactionsPageSize, includeChildren: true }, signal)
       : { data: [], meta: { total: 0, page: 1, pageSize: transactionsPageSize, totalPages: 1 } },
     {
       enabled: Boolean(selectedAccount),
@@ -1161,6 +1163,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                                 <p className="mt-1 truncate text-[10px] text-muted-foreground">
                                   {formatDateOnly(transaction.date)} · {transaction.reference || 'Sin referencia'}
                                 </p>
+                                {transaction.account && transaction.accountId !== selectedAccount.id && (
+                                  <p className="truncate text-[10px] text-muted-foreground" title={`${transaction.account.code} ${transaction.account.name}`}>{transaction.account.code} · {transaction.account.name}</p>
+                                )}
                               </div>
                               <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">
                                 {debit > 0 && <p className="text-emerald-600">+{formatConvertedAmount(debit, baseCurrency)}</p>}
