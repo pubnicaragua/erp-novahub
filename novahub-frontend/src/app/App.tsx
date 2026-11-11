@@ -365,6 +365,10 @@ function DashboardLayout() {
 
   const mainRef = useRef<HTMLElement | null>(null);
   const mainScrollStorageKey = `erp-scroll-position:${user?.id || 'anonymous'}:${activeModule}:${activeSubModule || ''}`;
+  const isMessagesWorkspace = activeModule === 'notificaciones'
+    && activeSubModule === 'mensajes'
+    && hasAccess('notificaciones')
+    && canPerform('NOTIFICATIONS_MESSAGES', 'view');
 
   useEffect(() => {
     const isVisibleGuideTrigger = (element: HTMLElement) => {
@@ -412,6 +416,10 @@ function DashboardLayout() {
   useEffect(() => {
     const main = mainRef.current;
     if (!main) return;
+    if (isMessagesWorkspace) {
+      main.scrollTop = 0;
+      return;
+    }
 
     const initialSaved = Number(safeGetItem(mainScrollStorageKey) || 0);
     let restorePending = Number.isFinite(initialSaved) && initialSaved > 0;
@@ -476,7 +484,7 @@ function DashboardLayout() {
       if (saveFrame) window.cancelAnimationFrame(saveFrame);
       if (!restorePending) safeSetItem(mainScrollStorageKey, String(main.scrollTop));
     };
-  }, [mainScrollStorageKey]);
+  }, [isMessagesWorkspace, mainScrollStorageKey]);
 
   useEffect(() => {
     const handleImportPreviewOpened = () => {
@@ -659,7 +667,7 @@ function DashboardLayout() {
         />
         <main
           ref={mainRef}
-          className={`scrollbar-overlay module-${currentModule} min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto`}
+          className={`scrollbar-overlay module-${currentModule} min-h-0 min-w-0 flex-1 overflow-x-hidden ${isMessagesWorkspace ? 'overflow-y-hidden' : 'overflow-y-auto'}`}
           style={{ overflowAnchor: 'none' }}
         >
           <Suspense fallback={<PageLoader />}>
