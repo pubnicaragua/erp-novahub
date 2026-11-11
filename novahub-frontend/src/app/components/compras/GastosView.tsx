@@ -343,9 +343,6 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     }
   };
 
-  const categoryOptions = Array.from(new Set(filtered.map((g) => String(g.category || '').toUpperCase()).filter(Boolean)))
-    .map((value) => ({ value, label: expenseCategoryLabel(value), count: filtered.filter((g) => String(g.category || '').toUpperCase() === value).length }));
-
   const normalizeImportHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_/-]+/g, '');
   const getImportCell = (row: Record<string, any>, aliases: string[]) => {
     const match = aliases.map(normalizeImportHeader).find((alias) => Object.prototype.hasOwnProperty.call(row, alias));
@@ -376,6 +373,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     const lower = code.toLowerCase().replace(/_/g, ' ');
     return lower.charAt(0).toUpperCase() + lower.slice(1);
   };
+
+  // Se arma después de expenseCategoryLabel: usarla antes de su declaración revienta la pantalla («Cannot access … before initialization»).
+  const categoryOptions = Array.from(new Set(filtered.map((g) => String(g.category || '').toUpperCase()).filter(Boolean)))
+    .map((value) => ({ value, label: expenseCategoryLabel(value), count: filtered.filter((g) => String(g.category || '').toUpperCase() === value).length }));
 
   const normalizeExpenseCategory = (raw: string) => {
     const category = String(raw || '').trim().toUpperCase();
