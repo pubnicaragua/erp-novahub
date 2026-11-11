@@ -3242,8 +3242,8 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const handleDownloadTemplate = useCallback(() => {
     const wb = XLSX.utils.book_new();
     if (isServiceView) {
-      const headers = ['Código', 'Nombre', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad', 'Duración estimada (min)', 'Precio', ...(canViewInventoryCost ? ['Costo del servicio'] : []), 'Disponible'];
-      const sampleRow: any[] = ['SRV-001', 'Ejemplo de servicio', 'Descripción que aparecerá en ventas y documentos', 'Detalle comercial opcional', categories[0]?.name || 'Categoría de servicios', 'servicio', 60, 150, ...(canViewInventoryCost ? [80] : []), 'SI'];
+      const headers = ['Código', 'Nombre', 'Marca', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad', 'Duración estimada (min)', 'Precio', ...(canViewInventoryCost ? ['Costo del servicio'] : []), 'Disponible'];
+      const sampleRow: any[] = ['SRV-001', 'Ejemplo de servicio', '', 'Descripción que aparecerá en ventas y documentos', 'Detalle comercial opcional', categories[0]?.name || 'Categoría de servicios', 'servicio', 60, 150, ...(canViewInventoryCost ? [80] : []), 'SI'];
       const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
       ws['!cols'] = headers.map((header) => ({ wch: Math.max(12, Math.min(28, header.length + 2)) }));
       XLSX.utils.book_append_sheet(wb, ws, 'Servicios');
@@ -3253,6 +3253,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
         ['Campo', 'Regla'],
         ['Código', 'Obligatorio y único dentro de la sucursal.'],
         ['Nombre', 'Obligatorio.'],
+        ['Marca', 'Opcional. Se guarda con el servicio al crear o actualizar la importación.'],
         ['Descripción', 'Opcional. Texto descriptivo del servicio.'],
         ['Nota comercial', 'Opcional; máximo 100 caracteres. Se muestra en ventas y documentos.'],
         ['Categoría', 'Debe existir y ser de tipo servicio.'],
@@ -3287,6 +3288,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const handleDownloadImportErrors = useCallback(() => {
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
       [isServiceView ? 'Código' : 'Código/Sku']: row.code || '', Nombre: row.name || '', ...(isServiceView ? {
+        Marca: row.brand || '',
         Descripción: row.description || '',
         'Nota comercial': row.commercialNote || '',
         Categoría: row.category || '',
@@ -3510,7 +3512,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
             category: String(get('category') || '').trim(),
             itemType: catalogItemType,
             commercialNote: String(get('commercialNote') || '').trim(),
-            description: String(get('description') || '').trim(), taxRate: catalogItemType === 'SERVICE' ? 0 : (toNumber('taxRate') ?? 0.15), isActive: !['NO', 'N', '0', 'FALSE', 'INACTIVO', 'NO DISPONIBLE'].includes(String(get('isActive') ?? 'SI').trim().toUpperCase()), brand: String(get('brand') || '').trim() || undefined, estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', trackSeries: String(get('trackSeries') || '').toUpperCase() === 'SI', attributes,
+            description: String(get('description') || '').trim(), taxRate: catalogItemType === 'SERVICE' ? 0 : (toNumber('taxRate') ?? 0.15), isActive: !['NO', 'N', '0', 'FALSE', 'INACTIVO', 'NO DISPONIBLE'].includes(String(get('isActive') ?? 'SI').trim().toUpperCase()), brand: colMap.brand === undefined ? undefined : (String(get('brand') ?? '').trim() || null), estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', attributes,
             unit: String(get('unit') ?? '').trim().toLowerCase(),
             salePrice: catalogItemType === 'SERVICE'
               ? servicePrice

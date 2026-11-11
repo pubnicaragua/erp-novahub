@@ -1186,7 +1186,24 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                 </div>
               </>}
               {catalogItemType === 'SERVICE' && (
-                <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-2 md:row-start-2 md:col-span-4' : 'col-span-1 sm:col-span-2 md:col-start-2 md:row-start-2 md:col-span-4'}>
+                <div className="col-span-1 md:col-start-1 md:row-start-2 md:col-span-3">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Marca (opcional)</label>
+                  <Combobox
+                    value={draftProduct.brand}
+                    onChange={value => handleUpdateDraft('brand', value)}
+                    options={brandOptions}
+                    allowCustomValue
+                    searchPlaceholder="Buscar o escribir una marca..."
+                    emptyMessage="No hay marcas registradas. Puedes escribir una nueva."
+                    className="mt-1 !h-8 !rounded-none text-xs"
+                    contentClassName="!z-[70] min-w-[320px]"
+                    placeholder="Marca del servicio"
+                    ariaLabel="Marca del servicio"
+                  />
+                </div>
+              )}
+              {catalogItemType === 'SERVICE' && (
+                <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-4 md:row-start-2 md:col-span-4' : 'col-span-1 sm:col-span-2 md:col-start-4 md:row-start-2 md:col-span-4'}>
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría del servicio (opcional)</label>
                   {newCategoryOpen ? (
                     <div className="mt-1 space-y-1.5 rounded-lg border border-primary/40 bg-primary/5 p-2">

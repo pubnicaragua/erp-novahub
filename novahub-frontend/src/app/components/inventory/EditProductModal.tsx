@@ -276,7 +276,7 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
         isVariable: Boolean(draft.isVariable),
         ...(draft.isActive !== (product.isActive !== false) ? { isActive: draft.isActive !== false } : {}),
         unit: draft.unit,
-        brand: draft.brand || '',
+        ...(!isService ? { brand: draft.brand || '' } : {}),
         trackBatch: Boolean(draft.trackBatch),
         imageUrl: nextImageUrl,
         ...(isService ? {
@@ -353,15 +353,17 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
                 />
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Marca</label>
-                <Input
-                  value={draft.brand || ''}
-                  onChange={e => handleUpdate('brand', e.target.value)}
-                  className="h-8 text-xs mt-1"
-                  placeholder="Marca del producto"
-                />
-              </div>
+              {!isService && (
+                <div className="sm:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Marca</label>
+                  <Input
+                    value={draft.brand || ''}
+                    onChange={e => handleUpdate('brand', e.target.value)}
+                    className="h-8 text-xs mt-1"
+                    placeholder="Marca del producto"
+                  />
+                </div>
+              )}
 
               <div className="sm:col-span-2 md:col-span-5">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Descripción</label>
