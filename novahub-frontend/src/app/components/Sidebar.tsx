@@ -12,6 +12,7 @@ import {
   DollarSign,
   Users,
   Truck,
+  Route,
   FolderOpen,
   FolderKanban,
   Activity,
@@ -419,6 +420,17 @@ const menuItems: MenuItem[] = [
     ]
   },
   {
+    id: 'flota',
+    label: 'Flota y fletes',
+    icon: <Truck className="size-5" />,
+    section: 'Herramientas',
+    submenu: [
+      { id: 'vehiculos', label: 'Vehículos', icon: <Truck className="size-4" /> },
+      { id: 'tarifas', label: 'Tarifas y rutas', icon: <Route className="size-4" /> },
+      { id: 'parametros', label: 'Parámetros y costos', icon: <Settings className="size-4" /> },
+    ]
+  },
+  {
     id: 'asana',
     label: 'Asana',
     icon: <ClipboardPen className="size-5" />,
@@ -766,6 +778,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     actividades: 'ACTIVITIES',
     organizacion: 'ORGANIZATION',
     marketing: 'MARKETING',
+    flota: 'FLEET',
     asana: 'ASANA',
     tickets: 'TICKETS',
     notificaciones: 'NOTIFICATIONS',

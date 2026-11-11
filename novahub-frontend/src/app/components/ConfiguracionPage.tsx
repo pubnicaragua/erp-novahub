@@ -10,7 +10,7 @@ import {
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings, ChevronDown,
   BookOpen, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe, MessageCircle, CreditCard,
-  FolderKanban, ClipboardPen, BedDouble, MapPinned, Megaphone
+  FolderKanban, ClipboardPen, BedDouble, MapPinned, Megaphone, Truck
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -84,6 +84,7 @@ const AVAILABLE_MODULES = [
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
   { id: 'ORGANIZATION', label: 'Organización', icon: CalendarDays, description: 'Mi agenda y eventos compartidos' },
   { id: 'MARKETING', label: 'Marketing', icon: Megaphone, description: 'Campañas, contenidos y resultados' },
+  { id: 'FLEET', label: 'Flota y fletes', icon: Truck, description: 'Vehículos, tarifas y costos de transporte' },
   { id: 'ASANA', label: 'Asana', icon: ClipboardPen, description: 'Tableros y tareas colaborativas' },
   { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'HR_TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
@@ -196,6 +197,9 @@ export const LEGACY_SUBMODULES_FOR_PERMS = [
   { id: 'MARKETING_ASSETS', label: 'Biblioteca de activos', parent: 'MARKETING' },
   { id: 'MARKETING_ANALYTICS', label: 'Analítica', parent: 'MARKETING' },
   { id: 'MARKETING_SETTINGS', label: 'Configuración', parent: 'MARKETING' },
+  { id: 'FLEET_VEHICLES', label: 'Vehículos', parent: 'FLEET' },
+  { id: 'FLEET_RATES', label: 'Tarifas y rutas', parent: 'FLEET' },
+  { id: 'FLEET_SETTINGS', label: 'Parámetros y costos', parent: 'FLEET' },
 
   // Asana
   { id: 'ASANA_TASKS', label: 'Tareas de Asana', parent: 'ASANA' },

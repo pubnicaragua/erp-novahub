@@ -7,7 +7,7 @@ import { motion } from 'motion/react';
 import { cn } from './ui/utils';
 import {
   Building2, Users, CheckCircle2, XCircle, Clock, Plus, Search, Edit2, Trash2,
-  UserPlus, TrendingUp, DollarSign, Zap, HandCoins, Headphones, BellRing, Settings, FileText, CalendarDays, Package, Users as UserIcon, BarChart3, Megaphone
+  UserPlus, TrendingUp, DollarSign, Zap, HandCoins, Headphones, BellRing, Settings, FileText, CalendarDays, Package, Users as UserIcon, BarChart3, Megaphone, Truck
 } from 'lucide-react';
 import { subscriptionsService } from '../services/subscriptions.service';
 import { tenantsService } from '../services/tenants.service';
@@ -31,6 +31,7 @@ const AVAILABLE_MODULES = [
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
   { id: 'ORGANIZATION', label: 'Organización', icon: CalendarDays, description: 'Mi agenda y eventos compartidos' },
   { id: 'MARKETING', label: 'Marketing', icon: Megaphone, description: 'Campañas, contenidos y resultados' },
+  { id: 'FLEET', label: 'Flota y fletes', icon: Truck, description: 'Vehículos, tarifas y costos de transporte' },
   { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
   { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },

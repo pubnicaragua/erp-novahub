@@ -73,6 +73,7 @@ const ProveedoresPage = lazyWithChunkRecovery(() => import('./components/Proveed
 const ActividadesPage = lazyWithChunkRecovery(() => import('./components/ActividadesPage').then(m => ({ default: m.ActividadesPage })), 'actividades');
 const OrganizacionPage = lazyWithChunkRecovery(() => import('./components/organizacion/OrganizacionPage').then(m => ({ default: m.OrganizacionPage })), 'organizacion');
 const MarketingPage = lazyWithChunkRecovery(() => import('./components/marketing/MarketingPage').then(m => ({ default: m.MarketingPage })), 'marketing');
+const FlotaPage = lazyWithChunkRecovery(() => import('./components/flota/FlotaPage').then(m => ({ default: m.FlotaPage })), 'flota');
 const AsanaPage = lazyWithChunkRecovery(() => import('./components/AsanaPage').then(m => ({ default: m.AsanaPage })), 'asana');
 const ProyectosPage = lazyWithChunkRecovery(() => import('./components/ProyectosPage').then(m => ({ default: m.ProyectosPage })), 'proyectos');
 const FuerzaComercialPage = lazyWithChunkRecovery(() => import('./components/FuerzaComercialPage').then(m => ({ default: m.FuerzaComercialPage })), 'fuerza-comercial');
@@ -627,6 +628,7 @@ function DashboardLayout() {
       case 'proveedores': return <ProveedoresPage />;
       case 'actividades': return <ActividadesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'organizacion': return <ModuleErrorBoundary moduleName="Organización"><OrganizacionPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
+      case 'flota': return <ModuleErrorBoundary moduleName="Flota y fletes"><FlotaPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'marketing': return <ModuleErrorBoundary moduleName="Marketing"><MarketingPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'asana': return <ModuleErrorBoundary moduleName="Asana"><AsanaPage /></ModuleErrorBoundary>;
       case 'proyectos': return <ModuleErrorBoundary moduleName="Proyectos"><ProyectosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;

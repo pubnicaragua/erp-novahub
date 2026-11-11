@@ -436,6 +436,10 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   MARKETING_ANALYTICS: ['read', 'create', 'edit', 'delete'],
   MARKETING_SETTINGS: ['read', 'edit'],
 
+  FLEET_VEHICLES: ['read', 'create', 'edit', 'delete'],
+  FLEET_RATES: ['read', 'create', 'edit', 'delete'],
+  FLEET_SETTINGS: ['read', 'create', 'edit', 'delete'],
+
   PROJECTS_LIST: ['read', 'create', 'edit', 'delete', 'complete', 'cancel', 'changeStatus', 'manageMembers', 'comment', 'export'],
   PROJECTS_TASKS: ['read', 'create', 'edit', 'delete', 'complete', 'cancel', 'changeStatus', 'reorder', 'comment', 'react', 'linkErp', 'autoPlan', 'export'],
   PROJECTS_MILESTONES: ['read', 'create', 'edit', 'delete', 'complete', 'cancel', 'changeStatus', 'updateProgress', 'export'],

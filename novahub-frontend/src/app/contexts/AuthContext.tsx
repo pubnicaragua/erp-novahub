@@ -94,6 +94,7 @@ export type Module =
   | 'actividades'
   | 'organizacion'
   | 'marketing'
+  | 'flota'
   | 'asana'
   | 'proyectos'
   | 'tickets'
@@ -324,7 +325,7 @@ function tenantPermissionSubscriptionCandidates(module: string): string[] {
   const normalized = String(module || '').toUpperCase();
   const candidates = new Set(TENANT_PERMISSION_SUBSCRIPTION_ALIASES[normalized] || [normalized]);
   const parent = normalized.split('_')[0];
-  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'ORGANIZATION', 'MARKETING', 'ASANA', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'HOTEL', 'FINANCING', 'IMPORT', 'PROJECTS'].includes(parent)) {
+  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'ORGANIZATION', 'MARKETING', 'FLEET', 'ASANA', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'HOTEL', 'FINANCING', 'IMPORT', 'PROJECTS'].includes(parent)) {
     candidates.add(parent);
   }
   return [...candidates];
@@ -390,7 +391,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ALL_MODULES: Module[] = [
   'dashboard', 'inventario', 'ventas', 'restaurante', 'compras', 'finanzas', 'rh',
-  'clientes', 'proveedores', 'actividades', 'organizacion', 'marketing', 'proyectos', 'tickets',
+  'clientes', 'proveedores', 'actividades', 'organizacion', 'marketing', 'flota', 'proyectos', 'tickets',
   'documentos', 'notificaciones', 'transferencias',
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
   'auditoria',
@@ -548,6 +549,7 @@ const createUserObject = (apiPayload: any): User => {
     'ACTIVITIES': 'actividades',
     'ORGANIZATION': 'organizacion',
     'MARKETING': 'marketing',
+    'FLEET': 'flota',
     'ASANA': 'asana',
     'DOCUMENTS': 'documentos',
     'NOVACHAT': 'novachat',
@@ -967,6 +969,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'actividades': 'ACTIVITIES',
       'organizacion': 'ORGANIZATION',
       'marketing': 'MARKETING',
+      'flota': 'FLEET',
       'asana': 'ASANA',
       'tickets': 'TOOLS',
       'documentos': 'DOCUMENTS',
@@ -1028,6 +1031,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'MARKETING_OVERVIEW', 'MARKETING_CLIENTS', 'MARKETING_CAMPAIGNS', 'MARKETING_CONTENT',
         'MARKETING_APPROVALS', 'MARKETING_ASSETS', 'MARKETING_ANALYTICS', 'MARKETING_SETTINGS',
       ],
+      flota: ['FLEET', 'FLEET_VEHICLES', 'FLEET_RATES', 'FLEET_SETTINGS'],
       asana: ['ASANA', 'ASANA_TASKS'],
       proyectos: [
         'PROJECTS', 'PROYECTOS',
@@ -1200,6 +1204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'ACTIVITIES_': 'ACTIVITIES',
       'ORGANIZATION_': 'ORGANIZATION',
       'MARKETING_': 'MARKETING',
+      'FLEET_': 'FLEET',
       'ASANA_': 'ASANA',
       'PROVIDERS_': 'PROVIDERS',
       'CLIENTS_': 'CLIENTS',
@@ -1239,6 +1244,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'actividades': 'ACTIVITIES',
         'organizacion': 'ORGANIZATION',
         'marketing': 'MARKETING',
+        'flota': 'FLEET',
         'asana': 'ASANA',
         'documentos': 'DOCUMENTS',
       'notificaciones': 'NOTIFICATIONS',

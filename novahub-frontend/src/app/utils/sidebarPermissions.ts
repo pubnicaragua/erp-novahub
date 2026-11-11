@@ -31,6 +31,7 @@ export const SIDEBAR_PERMISSION_PARENT_ORDER = [
   'ACTIVITIES',
   'ORGANIZATION',
   'MARKETING',
+  'FLEET',
   'ASANA',
   'PROJECTS',
   'TICKETS',
@@ -171,6 +172,11 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'MARKETING_ASSETS', label: 'Biblioteca de activos', parent: 'MARKETING' },
   { id: 'MARKETING_ANALYTICS', label: 'Analítica', parent: 'MARKETING' },
   { id: 'MARKETING_SETTINGS', label: 'Configuración', parent: 'MARKETING' },
+
+  // Flota y fletes
+  { id: 'FLEET_VEHICLES', label: 'Vehículos', parent: 'FLEET' },
+  { id: 'FLEET_RATES', label: 'Tarifas y rutas', parent: 'FLEET' },
+  { id: 'FLEET_SETTINGS', label: 'Parámetros y costos', parent: 'FLEET' },
 
   // Asana
   { id: 'ASANA_TASKS', label: 'Tareas de Asana', parent: 'ASANA' },
@@ -397,6 +403,9 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'marketing:activos': ['MARKETING_ASSETS'],
   'marketing:analitica': ['MARKETING_ANALYTICS'],
   'marketing:configuracion': ['MARKETING_SETTINGS'],
+  'flota:vehiculos': ['FLEET_VEHICLES'],
+  'flota:tarifas': ['FLEET_RATES'],
+  'flota:parametros': ['FLEET_SETTINGS'],
 
   asana: ['ASANA'],
 
@@ -569,7 +578,7 @@ export const PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
 
 export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
   'SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'ACCOUNTING', 'HR',
-  'ACTIVITIES', 'ORGANIZATION', 'MARKETING', 'ASANA', 'ASANA_TASKS', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
+  'ACTIVITIES', 'ORGANIZATION', 'MARKETING', 'FLEET', 'ASANA', 'ASANA_TASKS', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
   'FINANCING', 'LEGAL', 'HR_TRAINING', 'SUPPORT_TECH', 'NOVACHAT',
   // Identificadores históricos y módulos administrables que no son vistas raíz.
   'PROJECTS', 'FORCE_SALES', 'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT',
