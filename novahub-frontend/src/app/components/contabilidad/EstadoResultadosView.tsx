@@ -20,6 +20,7 @@ import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { ExportMenu } from '../ui/ExportMenu';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { formatDateOnly } from '../../utils/dateFormat';
+import { normalizeSearchText } from '../../utils/searchText';
 
 interface PnLAccount {
   accountId: string;
@@ -188,10 +189,10 @@ export function EstadoResultadosView() {
   };
 
   const filterAccounts = (accounts: PnLAccount[]) => {
-    if (!searchTerm.trim()) return accounts;
-    const term = searchTerm.trim().toLowerCase();
+    const term = normalizeSearchText(searchTerm);
+    if (!term) return accounts;
     return accounts.filter(a =>
-      a.cuenta.toLowerCase().includes(term) || a.codigo.toLowerCase().includes(term),
+      normalizeSearchText(a.cuenta).includes(term) || normalizeSearchText(a.codigo).includes(term),
     );
   };
 

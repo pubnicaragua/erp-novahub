@@ -21,6 +21,7 @@ import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { ExportMenu } from '../ui/ExportMenu';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { formatDateOnly, todayIso } from '../../utils/dateFormat';
+import { normalizeSearchText } from '../../utils/searchText';
 
 const BALANCE_SHEET_SECTIONS: ReportSection[] = [
   { id: 'activos-corrientes', label: 'Activos corrientes', sign: 'ASSET', accountIds: [] },
@@ -151,10 +152,10 @@ export function BalanceGeneralView() {
   const fmt = (n: number) => formatCurrentAmount(n, baseCurrency);
 
   const filterAccounts = (accounts: BSAccount[]) => {
-    if (!searchTerm.trim()) return accounts;
-    const term = searchTerm.trim().toLowerCase();
+    const term = normalizeSearchText(searchTerm);
+    if (!term) return accounts;
     return accounts.filter(a =>
-      a.cuenta.toLowerCase().includes(term) || a.codigo.toLowerCase().includes(term),
+      normalizeSearchText(a.cuenta).includes(term) || normalizeSearchText(a.codigo).includes(term),
     );
   };
 

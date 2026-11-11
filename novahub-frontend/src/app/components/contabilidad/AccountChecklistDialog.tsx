@@ -7,6 +7,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { normalizeSearchText } from '../../utils/searchText';
 
 interface ChartAccount {
   id: string;
@@ -126,9 +127,9 @@ export function AccountChecklistDialog({
   }, [open, configLoaded, hasSavedConfig, candidates]);
 
   const visible = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
+    const term = normalizeSearchText(searchTerm);
     return term
-      ? candidates.filter((a) => a.code.toLowerCase().includes(term) || a.name.toLowerCase().includes(term))
+      ? candidates.filter((a) => normalizeSearchText(a.code).includes(term) || normalizeSearchText(a.name).includes(term))
       : candidates;
   }, [candidates, searchTerm]);
 

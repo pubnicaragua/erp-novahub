@@ -24,6 +24,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { normalizeSearchText } from '../../utils/searchText';
 import { formatCurrencyNumber } from '../../utils/currency';
 import { AccountMovementsDetail } from './AccountMovementsDetail';
 import { AccountChecklistDialog } from './AccountChecklistDialog';
@@ -391,12 +392,12 @@ export function BalanceComprobacionView() {
     if (!searchTerm.trim()) {
       return treeData.tree;
     }
-    const q = searchTerm.toLowerCase().trim();
+    const q = normalizeSearchText(searchTerm);
 
     const filterNodes = (nodes: TrialBalanceTreeNode[]): TrialBalanceTreeNode[] => {
       const res: TrialBalanceTreeNode[] = [];
       for (const node of nodes) {
-        const matchSelf = node.codigo.toLowerCase().includes(q) || node.cuenta.toLowerCase().includes(q);
+        const matchSelf = normalizeSearchText(node.codigo).includes(q) || normalizeSearchText(node.cuenta).includes(q);
         const matchedChildren = filterNodes(node.children);
 
         if (matchSelf || matchedChildren.length > 0) {

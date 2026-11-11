@@ -516,9 +516,13 @@ function DashboardLayout() {
     }
   };
 
-  const handleNavigate = (module: Module) => {
-    setActiveModule(module === 'roles' ? 'suscripciones' : module);
-    setActiveSubModule(undefined);
+  const handleNavigate = (module: Module, subModule?: string) => {
+    if (subModule !== undefined) {
+      handleModuleChange(module, subModule);
+    } else {
+      setActiveModule(module === 'roles' ? 'suscripciones' : module);
+      setActiveSubModule(undefined);
+    }
     setSidebarOpen(false);
   };
 

@@ -33,6 +33,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { formatDateOnly } from '../../utils/dateFormat';
 import { AccountImportPreview } from './AccountImportPreview';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { normalizeSearchText } from '../../utils/searchText';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CostCentersDialog } from './CostCentersDialog';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
@@ -423,7 +424,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
   ];
 
   const filteredList = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
+    const q = normalizeSearchText(searchTerm);
     const selectedTypes = colFilters.state.type?.values || [];
     const selectedSubtypes = colFilters.state.subtype?.values || [];
     const selectedStatuses = colFilters.state.status?.values || [];
@@ -442,7 +443,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     const statusFiltered = flatList.filter(a => matchesStatus(a) && matchesColumns(a));
     const matched = new Set<string>();
     const byNameOrCode = q
-      ? statusFiltered.filter(a => a.name.toLowerCase().includes(q) || a.code.toLowerCase().includes(q))
+      ? statusFiltered.filter(a => normalizeSearchText(a.name).includes(q) || normalizeSearchText(a.code).includes(q))
       : statusFiltered;
     for (const a of byNameOrCode) {
       matched.add(a.id);

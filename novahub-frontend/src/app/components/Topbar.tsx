@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import {
   Search,
   Bell,
+  MessageSquare,
   Menu,
   LogOut,
   Settings as SettingsIcon,
@@ -62,7 +63,7 @@ import { getCurrencyDecimalPlaces } from '../utils/currency';
 
 interface TopbarProps {
   onMenuClick: () => void;
-  onNavigate: (module: Module) => void;
+  onNavigate: (module: Module, subModule?: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -205,6 +206,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
 
   const overdueInvoices = billingHistory?.history;
   const hasConfigurationAccess = hasAccess('configuracion');
+  const canOpenMessages = hasAccess('notificaciones') && canPerform('NOTIFICATIONS_MESSAGES', 'view');
 
   const SEARCH_CATALOG = [
     { label: 'Facturas de Venta', description: 'Emisión, cobro y anulación de facturas', module: 'ventas', subModule: 'facturas', keywords: ['factura', 'venta', 'cobro', 'cliente'], group: 'Ventas' },
@@ -730,6 +732,19 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         >
           {isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
         </Button>
+
+        {canOpenMessages && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onNavigate('notificaciones', 'mensajes')}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Abrir mensajes"
+            title="Mensajes"
+          >
+            <MessageSquare className="size-5" />
+          </Button>
+        )}
 
         {/* Notifications */}
         <Popover

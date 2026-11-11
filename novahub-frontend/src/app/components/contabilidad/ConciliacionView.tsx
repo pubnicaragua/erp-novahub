@@ -17,6 +17,7 @@ import {
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { DateField } from '../ui/DateField';
+import { normalizeSearchText } from '../../utils/searchText';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '../ui/table';
@@ -135,13 +136,13 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
   }, [detail]);
 
   const filtered = reconciliations.filter((r) => {
-    const q = searchTerm.toLowerCase();
+    const q = normalizeSearchText(searchTerm);
     return (
-      (r.account?.name || '').toLowerCase().includes(q) ||
-      (r.account?.code || '').toLowerCase().includes(q) ||
-      (r.bank?.bankName || '').toLowerCase().includes(q) ||
-      (r.bank?.accountNumber || '').toLowerCase().includes(q) ||
-      (r.period || '').toLowerCase().includes(q)
+      normalizeSearchText(r.account?.name).includes(q) ||
+      normalizeSearchText(r.account?.code).includes(q) ||
+      normalizeSearchText(r.bank?.bankName).includes(q) ||
+      normalizeSearchText(r.bank?.accountNumber).includes(q) ||
+      normalizeSearchText(r.period).includes(q)
     );
   });
 

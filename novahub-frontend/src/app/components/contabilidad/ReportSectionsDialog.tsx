@@ -7,6 +7,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { normalizeSearchText } from '../../utils/searchText';
 
 export interface ReportSection {
   id: string;
@@ -240,10 +241,10 @@ export function ReportSectionsDialog({ open, onOpenChange, onSaved, configKey = 
             <div className="space-y-5">
               {sections.map((section, index) => {
                 const candidates = candidatesBySign[section.sign];
-                const term = (searchTerms[section.id] || '').trim().toLowerCase();
+                const term = normalizeSearchText(searchTerms[section.id]);
                 const visible = term
                   ? candidates.filter((a) =>
-                      a.code.toLowerCase().includes(term) || a.name.toLowerCase().includes(term))
+                      normalizeSearchText(a.code).includes(term) || normalizeSearchText(a.name).includes(term))
                   : candidates;
                 const isCollapsed = collapsed[section.id];
                 return (

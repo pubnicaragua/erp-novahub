@@ -19,6 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DateField } from '../ui/DateField';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { formatDateOnly } from '../../utils/dateFormat';
+import { normalizeSearchText } from '../../utils/searchText';
 
 interface CashFlowTx {
   id: string;
@@ -160,10 +161,10 @@ export function FlujoEfectivoView() {
   }, [flatAccounts]);
 
   const settingsVisibleAccounts = useMemo(() => {
-    const term = settingsSearch.trim().toLowerCase();
+    const term = normalizeSearchText(settingsSearch);
     if (!term) return leafAccounts;
     return leafAccounts.filter((a: any) =>
-      a.code.toLowerCase().includes(term) || a.name.toLowerCase().includes(term));
+      normalizeSearchText(a.code).includes(term) || normalizeSearchText(a.name).includes(term));
   }, [leafAccounts, settingsSearch]);
 
   useEffect(() => {

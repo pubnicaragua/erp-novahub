@@ -11,6 +11,7 @@ import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { DateField } from '../ui/DateField';
 import { formatDateOnly } from '../../utils/dateFormat';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { normalizeSearchText } from '../../utils/searchText';
 
 interface EquityRow {
   accountId: string;
@@ -105,10 +106,10 @@ export function CambiosPatrimonioView() {
 
   const filteredRows = useMemo(() => {
     if (!data) return [];
-    const term = searchTerm.trim().toLowerCase();
+    const term = normalizeSearchText(searchTerm);
     if (!term) return data.rows;
     return data.rows.filter(r =>
-      r.accountName.toLowerCase().includes(term) || r.accountCode.toLowerCase().includes(term),
+      normalizeSearchText(r.accountName).includes(term) || normalizeSearchText(r.accountCode).includes(term),
     );
   }, [data, searchTerm]);
 

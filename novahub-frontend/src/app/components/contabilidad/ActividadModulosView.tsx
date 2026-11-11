@@ -11,6 +11,7 @@ import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { formatDateOnly } from '../../utils/dateFormat';
 import { formatCurrencyNumber } from '../../utils/currency';
+import { normalizeSearchText } from '../../utils/searchText';
 
 interface ActivityLine {
   accountId: string | null;
@@ -71,17 +72,18 @@ export function ActividadModulosView() {
 
   const items = useMemo(() => {
     if (!query.data?.items) return [];
-    const term = search.trim().toLowerCase();
+    const term = normalizeSearchText(search);
     return query.data.items.filter(item => {
       if (moduleFilter !== 'todos' && item.module !== moduleFilter) return false;
       if (!term) return true;
-      return (
-        item.description.toLowerCase().includes(term) ||
-        item.typeLabel.toLowerCase().includes(term) ||
-        item.number.toLowerCase().includes(term) ||
-        (item.documentLabel || '').toLowerCase().includes(term) ||
-        item.lines.some(l => l.accountName.toLowerCase().includes(term) || l.accountCode.toLowerCase().includes(term))
-      );
+      const searchableText = normalizeSearchText([
+        item.description,
+        item.typeLabel,
+        item.number,
+        item.documentLabel || '',
+        ...item.lines.flatMap((line) => [line.accountName, line.accountCode]),
+      ].join(' '));
+      return searchableText.includes(term);
     });
   }, [query.data, search, moduleFilter]);
 

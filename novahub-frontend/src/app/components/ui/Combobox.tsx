@@ -5,6 +5,7 @@ import { Check, ChevronsUpDown, Plus } from "lucide-react"
 
 import { cn } from "./utils"
 import { Button } from "./button"
+import { normalizeSearchText } from "../../utils/searchText"
 import {
   Command,
   CommandEmpty,
@@ -59,12 +60,12 @@ export function Combobox({
   const wheelFrame = React.useRef<number | null>(null)
 
   const visibleOptions = React.useMemo(() => {
-    const query = search.trim().toLowerCase()
+    const query = normalizeSearchText(search)
     if (!query) return options.slice(0, maxVisibleOptions)
     // Con búsqueda activa se muestran todos los resultados,
     // para que cualquier opción del listado sea alcanzable buscando.
     return options
-      .filter((option) => `${option.label} ${option.description || ''}`.toLowerCase().includes(query))
+      .filter((option) => normalizeSearchText(`${option.label} ${option.description || ''}`).includes(query))
   }, [maxVisibleOptions, options, search])
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -82,9 +83,9 @@ export function Combobox({
 
   const customValue = search.trim()
   const hasExactOption = React.useMemo(() => {
-    const normalizedValue = customValue.toLowerCase()
+    const normalizedValue = normalizeSearchText(customValue)
     return Boolean(normalizedValue) && options.some((option) =>
-      option.label.trim().toLowerCase() === normalizedValue || option.value.trim().toLowerCase() === normalizedValue,
+      normalizeSearchText(option.label) === normalizedValue || normalizeSearchText(option.value) === normalizedValue,
     )
   }, [customValue, options])
   const canUseCustomValue = allowCustomValue && Boolean(customValue) && !hasExactOption
