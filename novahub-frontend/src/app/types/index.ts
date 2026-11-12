@@ -199,10 +199,10 @@ export interface CustomerLoan {
   interestMode?: 'NONE' | 'FIXED_AMOUNT' | 'PERCENTAGE' | string;
   interestRate?: number | string | null;
   total: number | string;
-  frequency: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+  frequency: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | null;
   dueDate: string;
   firstInstallmentDate?: string | null;
-  planCalculationMode?: 'AMOUNT' | 'DEADLINE' | null;
+  planCalculationMode?: 'AMOUNT' | 'DEADLINE' | 'MANUAL' | null;
   planEnabled?: boolean;
   installmentAmount?: number | string | null;
   principalBalance?: number | string;
@@ -792,10 +792,11 @@ export interface CreditNote {
   date: string;
   dueDate?: string | null;
   firstInstallmentDate?: string | null;
-  planCalculationMode?: 'AMOUNT' | 'DEADLINE' | null;
+  planCalculationMode?: 'AMOUNT' | 'DEADLINE' | 'MANUAL' | null;
   planEnabled?: boolean;
   frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | null;
   installmentAmount?: number | string | null;
+  installments?: CustomerCreditInstallment[];
   subtotal?: number;
   taxAmount?: number;
   discountAmount?: number;
@@ -821,6 +822,10 @@ export interface CreditNote {
   status: 'draft' | 'issued' | 'partial' | 'applied' | 'paid' | 'overdue' | 'voided' | 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'APPLIED' | 'PAID' | 'OVERDUE' | 'VOIDED';
   reason: string;
   accountId?: string;
+  sellerEmployeeId?: string | null;
+  commissionType?: 'PERCENTAGE' | 'FIXED' | null;
+  commissionRate?: number | string | null;
+  commissionAmount?: number | string | null;
   items: CreditNoteItem[];
   createdAt: string;
   updatedAt: string;
@@ -829,7 +834,7 @@ export interface CreditNote {
 /** A normal credit note or a customer loan surfaced in the unified Credits view. */
 export interface CreditDocument extends CreditNote {
   kind: 'CREDIT_NOTE' | 'CUSTOMER_LOAN';
-  frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+  frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | null;
   principal?: number | string;
   interest?: number | string;
   moraType?: { id: string; name: string; description?: string } | null;

@@ -20,6 +20,7 @@
     "check:force-sales-map": "node scripts/build-force-sales-map.mjs --check",
     "build": "npm run build:force-sales-map && npm run check:names && npm run check:init && node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
     "test:api-error-normalization": "node --experimental-strip-types --test scripts/test-api-error-normalization.mjs",
+    "test:customer-credit-manual-plan": "node scripts/test-customer-credit-manual-plan.mjs",
     "test:module-subnavigation": "node scripts/test-module-subnavigation.mjs",
     "test:force-sales-map-location": "node scripts/test-force-sales-map-location.mjs",
     "test:force-sales-customer-link": "node scripts/test-force-sales-customer-link.mjs",

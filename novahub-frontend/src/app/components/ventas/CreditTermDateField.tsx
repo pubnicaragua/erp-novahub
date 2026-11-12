@@ -14,6 +14,7 @@ interface CreditTermDateFieldProps {
   label?: string;
   minDate?: string;
   disabled?: boolean;
+  readOnly?: boolean;
 }
 
 export function CreditTermDateField({
@@ -27,6 +28,7 @@ export function CreditTermDateField({
   label = 'Fecha de pago',
   minDate,
   disabled = false,
+  readOnly = false,
 }: CreditTermDateFieldProps) {
   const id = useId();
   const deadline = getCreditTermDeadline(issueDate, creditDays, savedDeadline);
@@ -39,10 +41,12 @@ export function CreditTermDateField({
       </label>
       <Input
         id={`${id}-date`}
-        type="date"
-        min={minDate}
-        value={value}
+        type={readOnly ? 'text' : 'date'}
+        min={readOnly ? undefined : minDate}
+        value={readOnly ? formatCreditTermDate(value) : value}
         disabled={disabled}
+        readOnly={readOnly}
+        aria-readonly={readOnly || undefined}
         onChange={(event) => {
           onOverrideConfirmedChange(false);
           onChange(event.target.value);

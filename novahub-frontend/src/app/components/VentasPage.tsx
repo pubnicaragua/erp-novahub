@@ -404,14 +404,14 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     queryKey: ['sales', 'employees', tenantKey],
     // RRHH admite como máximo 200 por página; pedir 500 dejaba fuera a los demás vendedores.
     queryFn: ({ signal }) => fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), { status: 'ACTIVE', isSeller: true, pageSize: 200 }, signal),
-    enabled: canReadHr && ['ordenes-venta', 'facturas'].includes(activeSection),
+    enabled: canReadHr && ['ordenes-venta', 'facturas', 'notas-credito'].includes(activeSection),
     placeholderData: keepPreviousData,
   });
   const sellerLookupQuery = useQuery({
     queryKey: ['sales', 'seller-lookup', tenantKey, activeSection],
     queryFn: ({ signal }) => sellersService.getLookup({ page: 1, pageSize: 500 }, signal),
-    enabled: ['ordenes-venta', 'facturas', 'facturacion-caja'].includes(activeSection)
-      && (canPerform('SALES_ORDERS', 'view') || canPerform('SALES_INVOICES', 'view') || canPerform('RETAIL_POS', 'view') || canPerform('SALES', 'view')),
+    enabled: ['ordenes-venta', 'facturas', 'notas-credito', 'facturacion-caja'].includes(activeSection)
+      && (canPerform('SALES_ORDERS', 'view') || canPerform('SALES_INVOICES', 'view') || canPerform('SALES_CREDIT_NOTES', 'view') || canPerform('RETAIL_POS', 'view') || canPerform('SALES', 'view')),
     placeholderData: keepPreviousData,
   });
 
@@ -691,7 +691,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <DevolucionesView data={filteredData.devoluciones} summaryData={returnsSummaryQuery.data} summaryLoading={returnsSummaryQuery.isPending || returnsSummaryQuery.isFetching} summaryError={returnsSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} products={data.productos} warehouses={data.warehouses} pagination={pagination.devoluciones} onSearchChange={(value) => updateSearch('devoluciones-venta', value)} dateFrom={returnsDates.dateFrom} dateTo={returnsDates.dateTo} selectedBranchId={selectedBranchId || ''} onDateRangeChange={(from, to) => updateDateRange('devoluciones-venta', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'notas-credito' && (
-                <NotasCreditoView data={filteredData.documentosCredito} summaryData={creditNotesSummaryQuery.data} summaryLoading={creditNotesSummaryQuery.isPending || creditNotesSummaryQuery.isFetching} summaryError={creditNotesSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} customersError={customersCreditCapacityQuery.isError} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} dateFrom={creditNotesDates.dateFrom} dateTo={creditNotesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('notas-credito', from, to)} salesAlert={salesAlert || undefined} />
+                <NotasCreditoView data={filteredData.documentosCredito} summaryData={creditNotesSummaryQuery.data} summaryLoading={creditNotesSummaryQuery.isPending || creditNotesSummaryQuery.isFetching} summaryError={creditNotesSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} customersError={customersCreditCapacityQuery.isError} employees={salesEmployees} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} dateFrom={creditNotesDates.dateFrom} dateTo={creditNotesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('notas-credito', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'leads' && <LeadsPanel />}
               {activeSection === 'listas-precios' && (
