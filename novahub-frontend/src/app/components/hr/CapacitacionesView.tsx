@@ -355,7 +355,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
         >
         <div className="space-y-1" data-tour="hr-training-form-shell">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2" data-tour="hr-training-form-title">
-            <h3 className="text-lg font-semibold text-primary">Nueva Capacitación</h3>
+            <h3 className="nh-module-title text-primary">Nueva Capacitación</h3>
             <HRViewTutorial label="Cómo crear capacitación" targetPrefix="hr-training-form" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Completa título, descripción, instructor, fechas, capacidad, costo y modalidad.' }, items: { title: 'Empleados participantes', description: 'Selecciona los empleados que participarán sin superar la capacidad definida.' }, actions: { description: 'Guarda la capacitación para comenzar a gestionar sus participantes.' } }} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-tour="hr-training-form-data">

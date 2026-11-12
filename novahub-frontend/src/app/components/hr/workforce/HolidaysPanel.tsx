@@ -36,7 +36,7 @@ export function HolidaysPanel() {
   return (
     <section className="space-y-4" aria-label="Feriados">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h3 className="text-base font-black">Feriados del año</h3><p className="text-xs text-muted-foreground">Se avisa a Recursos Humanos una semana antes y la víspera. Marca los que la empresa trabaja para saber cuánto cuestan.</p></div>
+        <div><h3 className="nh-module-title">Feriados del año</h3><p className="text-xs text-muted-foreground">Se avisa a Recursos Humanos una semana antes y la víspera. Marca los que la empresa trabaja para saber cuánto cuestan.</p></div>
         <div className="flex items-center gap-1" role="group" aria-label="Año">
           <Button type="button" variant="outline" size="sm" onClick={() => setYear(year - 1)} aria-label="Año anterior">‹</Button>
           <span className="w-14 text-center text-sm font-black tabular-nums">{year}</span>

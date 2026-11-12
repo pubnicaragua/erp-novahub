@@ -118,7 +118,7 @@ export function OvertimePanel({ employees }: { employees: EmployeeOption[] }) {
 
   return (
     <section className="space-y-5" aria-label="Horas extra">
-      <div><h3 className="text-base font-black">¿Vale la pena habilitar horas extra o abrir un feriado?</h3><p className="text-xs text-muted-foreground">Suma el pago de las horas, la luz y los demás costos por hora, la cena y el transporte, y lo compara con lo que normalmente se vende en esa franja (o con lo que se vendió, si la fecha ya pasó).</p></div>
+      <div><h3 className="nh-module-title">¿Vale la pena habilitar horas extra o abrir un feriado?</h3><p className="text-xs text-muted-foreground">Suma el pago de las horas, la luz y los demás costos por hora, la cena y el transporte, y lo compara con lo que normalmente se vende en esa franja (o con lo que se vendió, si la fecha ya pasó).</p></div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-3 rounded-2xl border border-border/60 p-4">

@@ -316,7 +316,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
         >
         <div className="space-y-1" data-tour="hr-review-form-shell">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2" data-tour="hr-review-form-title">
-            <h3 className="text-lg font-semibold text-primary">Nueva Evaluación de Desempeño</h3>
+            <h3 className="nh-module-title text-primary">Nueva Evaluación de Desempeño</h3>
             <HRViewTutorial label="Cómo crear evaluación de desempeño" targetPrefix="hr-review-form" stepKeys={['title', 'data', 'summary', 'actions']} copy={{ data: { description: 'Selecciona empleado, evaluador, período y calificación inicial.' }, summary: { title: 'Objetivos y comentarios', description: 'Documenta objetivos, logros, áreas de mejora y comentarios de la evaluación.' }, actions: { description: 'Guarda la evaluación cuando el período y los comentarios estén completos.' } }} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-tour="hr-review-form-data">

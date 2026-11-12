@@ -458,7 +458,7 @@ export function AlmacenesView({ warehouses, onRefresh, accountingConnectionEnabl
       <Card className="p-4 border bg-card rounded-xl">
       <div className="flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-          <h3 className="font-black text-lg uppercase tracking-tight italic" data-tour="almacenes-title">Bodegas</h3>
+          <h3 className="nh-module-title" data-tour="almacenes-title">Bodegas</h3>
           <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
             {warehouses.length} bodegas operativas
           </p>

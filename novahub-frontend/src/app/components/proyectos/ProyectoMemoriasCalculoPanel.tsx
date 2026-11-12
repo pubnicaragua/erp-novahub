@@ -968,7 +968,7 @@ function ProjectCalculationMemoryEditor({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black tracking-tight">Memorias de Cálculo Técnicas</h2>
+                <h2 className="nh-module-title">Memorias de Cálculo Técnicas</h2>
                 <Badge variant="outline" className="border-primary/40 bg-primary/5 text-primary text-[10px] font-bold">
                   Ingeniería & Despiece Universal
                 </Badge>

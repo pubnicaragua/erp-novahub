@@ -536,7 +536,7 @@ export function ProyectoCotizacionesPanel({ projectId, project: _project }: Proy
           <div>
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs font-bold text-primary">{currentQuotation.code}</span>
-              <h2 className="text-lg font-black tracking-tight">{currentQuotation.name}</h2>
+              <h2 className="nh-module-title">{currentQuotation.name}</h2>
               <Badge
                 variant="outline"
                 className={

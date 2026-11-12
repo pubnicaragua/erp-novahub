@@ -396,7 +396,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
         >
         <div className="space-y-1" data-tour="hr-leave-form-shell">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2" data-tour="hr-leave-form-title">
-            <h3 className="text-lg font-semibold text-primary">{editingRequest ? 'Editar Solicitud de Ausencia' : 'Nueva Solicitud de Ausencia'}</h3>
+            <h3 className="nh-module-title text-primary">{editingRequest ? 'Editar Solicitud de Ausencia' : 'Nueva Solicitud de Ausencia'}</h3>
             <HRViewTutorial label="Cómo crear solicitud de ausencia" targetPrefix="hr-leave-form" copy={{ data: { description: 'Selecciona empleado, tipo de ausencia, fechas, días y razón.' }, actions: { description: 'Guarda la solicitud para que pueda ser revisada y aprobada.' } }} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-tour="hr-leave-form-data">

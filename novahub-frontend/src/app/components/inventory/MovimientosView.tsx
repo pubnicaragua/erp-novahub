@@ -125,7 +125,7 @@ function MovementDetailsPanel({ movement, onClose, canViewInventoryCost }: { mov
       <div className="flex items-start justify-between gap-3 border-b border-border/50 px-4 py-4">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Movimiento seleccionado</p>
-          <h3 className="mt-1 break-words text-base font-black uppercase italic tracking-tight">Detalle del movimiento</h3>
+          <h3 className="nh-module-title mt-1 break-words">Detalle del movimiento</h3>
           <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
             {isEntry ? <ArrowDownLeft className="size-3.5 text-success" /> : <ArrowUpRight className="size-3.5 text-destructive" />}
             <Badge variant="outline" className="text-[10px]">{typeLabel}</Badge>

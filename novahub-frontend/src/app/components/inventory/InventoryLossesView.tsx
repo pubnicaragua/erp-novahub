@@ -96,7 +96,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
             <TrendingDown className="size-5 text-destructive" />
           </div>
           <div>
-            <h3 className="text-sm font-black uppercase tracking-widest">Pérdidas de Inventario</h3>
+            <h3 className="nh-module-title">Pérdidas de Inventario</h3>
           </div>
         </div>
         <div className="erp-list-toolbar flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-tour="inventory-losses-actions">

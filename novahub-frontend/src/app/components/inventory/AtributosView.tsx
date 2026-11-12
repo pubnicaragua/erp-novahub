@@ -62,7 +62,7 @@ export function AtributosView() {
             <Tags className="size-5 text-primary" />
           </div>
           <div>
-            <h2 className="text-base font-black uppercase tracking-tight">Atributos y Categoría</h2>
+            <h2 className="nh-module-title">Atributos y Categoría</h2>
             <p className="text-xs text-muted-foreground">Define variantes (Talla, Color, etc.) y organiza productos por categoría.</p>
           </div>
         </div>

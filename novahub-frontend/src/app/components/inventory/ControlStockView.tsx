@@ -656,7 +656,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     <Card className="p-4 border bg-card rounded-xl">
       <div className="flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="font-semibold" data-tour="stock-title">Ajustes de Inventario</h3>
+          <h3 className="nh-module-title" data-tour="stock-title">Ajustes de Inventario</h3>
           <p className="text-sm text-muted-foreground">{pagination?.total ?? filteredData.length} ajustes registrados</p>
         </div>
         <div className="erp-list-toolbar flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">

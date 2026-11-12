@@ -47,7 +47,7 @@ export function RecurringLeavePanel({ employees }: { employees: EmployeeOption[]
 
   return (
     <section className="space-y-4" aria-label="Vacaciones de todos los sábados">
-      <div><h3 className="text-base font-black">Vacaciones en días fijos (por ejemplo todos los sábados)</h3><p className="text-xs text-muted-foreground">Apruebas el período completo en un solo paso, sin ir día por día. Los feriados no se descuentan y el descuento sigue la regla del horario de la empresa.</p></div>
+      <div><h3 className="nh-module-title">Vacaciones en días fijos (por ejemplo todos los sábados)</h3><p className="text-xs text-muted-foreground">Apruebas el período completo en un solo paso, sin ir día por día. Los feriados no se descuentan y el descuento sigue la regla del horario de la empresa.</p></div>
 
       <fieldset disabled={busy} className="grid gap-3 rounded-2xl border border-border/60 p-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="rl-employee">Empleado</Label>

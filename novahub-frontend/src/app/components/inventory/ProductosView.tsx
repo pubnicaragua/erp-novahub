@@ -4163,7 +4163,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       <div className="mb-4" data-tour="inventory-products-title">
         <div className="mb-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h2 className="text-xl font-black tracking-tight">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
+            <h2 className="nh-module-title">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
             <p className="mt-1 text-xs font-medium text-muted-foreground">{isServiceView ? 'Catálogo de servicios' : `${displayWarehouseOptions.length} bodegas visibles`}</p>
           </div>
           <div className="erp-toolbar-primary-group flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">

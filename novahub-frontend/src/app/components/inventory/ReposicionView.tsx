@@ -164,7 +164,7 @@ export function ReposicionView({ warehouses }: Props) {
   return (
     <div className="min-w-0 space-y-4" data-testid="inventory-replenishment">
       <div>
-        <h2 className="flex items-center gap-2 text-xl font-black uppercase tracking-tight"><Sparkles className="size-5 text-primary" aria-hidden /> Reposición inteligente</h2>
+        <h2 className="nh-module-title flex items-center gap-2"><Sparkles className="size-5 text-primary" aria-hidden /> Reposición inteligente</h2>
         <p className="mt-1 text-xs text-muted-foreground">
           Calcula qué comprar y cuánto con tus ventas de los últimos 90 días (sin contar los días en que el producto estuvo agotado), el plazo real de tu proveedor y un stock de seguridad según la variabilidad de la demanda.
         </p>

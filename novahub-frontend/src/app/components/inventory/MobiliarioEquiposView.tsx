@@ -697,7 +697,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
             <Building2 className="size-5 text-primary" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-sm font-black uppercase tracking-widest">Mobiliario y Equipos</h2>
+            <h2 className="nh-module-title">Mobiliario y Equipos</h2>
             <p className="mt-1 max-w-3xl text-[10px] leading-relaxed text-muted-foreground">
               Controla los bienes de la empresa, su ubicación, responsable, respaldo y estado operativo.
             </p>

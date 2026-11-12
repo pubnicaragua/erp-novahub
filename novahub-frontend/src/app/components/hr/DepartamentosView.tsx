@@ -211,7 +211,7 @@ export function DepartamentosView({ departments = [], employees = [], positions 
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end" data-tour="hr-departments-title">
         <div>
-          <div className="flex items-center gap-2"><Building2 className="size-5 text-primary" /><h2 className="text-xl font-black uppercase tracking-tight">Departamentos</h2></div>
+          <div className="flex items-center gap-2"><Building2 className="size-5 text-primary" /><h2 className="nh-module-title">Departamentos</h2></div>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Organiza empleados por áreas. Cada empleado conserva un cargo y puede pertenecer a varios departamentos.</p>
         </div>
         <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="hr-departments-actions">
