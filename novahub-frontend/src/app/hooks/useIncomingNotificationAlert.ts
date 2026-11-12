@@ -198,13 +198,21 @@ async function presentNotificationGroup(
   if (shouldSound) playNotificationSound();
 
   const navigation = getNotificationNavigation(group);
+  const metadata = notificationMetadata(group);
+  const isDirectMessage = metadata.kind === 'DIRECT_MESSAGE';
+  const title = isDirectMessage ? 'Mensaje nuevo' : group.title || 'Nueva notificación';
+  const description = isDirectMessage
+    ? [metadata.senderName ? `De ${String(metadata.senderName)}` : '', group.title ? `Asunto: ${group.title}` : '', group.message]
+      .filter(Boolean)
+      .join(' · ')
+    : group.message || 'Tienes una novedad pendiente de revisar.';
   const openLatestNotification = () => {
     void markAsRead(latestId);
     navigateToNotification(group);
   };
-  toast.info(group.title || 'Nueva notificación', {
+  toast.info(title, {
     id: `notification-group:${groupId}`,
-    description: group.message || 'Tienes una novedad pendiente de revisar.',
+    description,
     action: {
       label: navigation.module === 'tickets' ? 'Abrir ticket' : 'Abrir',
       onClick: openLatestNotification,
@@ -213,8 +221,8 @@ async function presentNotificationGroup(
 
   if (typeof document !== 'undefined' && document.hidden) {
     void showPersistentBrowserNotification({
-      title: group.title || 'Nueva notificación',
-      body: group.message || 'Tienes una novedad pendiente de revisar.',
+      title,
+      body: description,
       tag: `notification-group:${groupId}`,
       notificationId: latestId,
       renotify: shouldSound,

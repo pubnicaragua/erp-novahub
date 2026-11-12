@@ -192,6 +192,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   const { unreadCount, markAsRead, markGroupAsRead, notifications } = useNotifications();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [messagesOpen, setMessagesOpen] = useState(false);
+  const [markingAllMessagesRead, setMarkingAllMessagesRead] = useState(false);
   const [selectedMessageThread, setSelectedMessageThread] = useState<Message | null>(null);
   const [selectedNotificationGroup, setSelectedNotificationGroup] = useState<Notification | null>(null);
   const [billingHistory, setBillingHistory] = useState<{ history?: TenantBillingInvoice[] } | null>(null);
@@ -435,6 +436,49 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     window.dispatchEvent(new CustomEvent('navigate-module', {
       detail: { module: 'notificaciones', subModule: 'mensajes', messageId: thread.id },
     }));
+  };
+
+  const markAllMessagesAsRead = async () => {
+    const unreadThreads = messageThreads.filter((thread) => thread.unreadCount > 0);
+    if (!unreadThreads.length || markingAllMessagesRead) return;
+
+    setMarkingAllMessagesRead(true);
+    const queue = [...unreadThreads];
+    const completed: Message[] = [];
+    const failed: Message[] = [];
+    const workers = Array.from({ length: Math.min(5, queue.length) }, async () => {
+      while (queue.length) {
+        const thread = queue.shift();
+        if (!thread) return;
+        try {
+          if (thread.kind === 'SUPPORT') await supportConversationsService.markRead(thread.id);
+          else await messagesService.markRead(thread.id);
+          completed.push(thread);
+        } catch {
+          failed.push(thread);
+        }
+      }
+    });
+
+    await Promise.all(workers);
+    const completedIds = new Set(completed.map((thread) => thread.id));
+    completed.forEach((thread) => {
+      const cacheKey = thread.kind === 'SUPPORT'
+        ? ['tenant-module', messageTenantKey, 'support-conversations', messageUserKey, 'branch-inbox']
+        : ['tenant-module', messageTenantKey, 'notifications', messageUserKey, 'messages'];
+      queryClient.setQueryData<Message[]>(cacheKey, (current) => updateMessageThread(current, thread.id, (item) => ({
+        ...item,
+        unreadCount: 0,
+        messages: item.messages.map((message) => ({ ...message, isRead: true })),
+      })));
+    });
+    setSelectedMessageThread((current) => current && completedIds.has(current.id)
+      ? { ...current, unreadCount: 0, messages: current.messages.map((message) => ({ ...message, isRead: true })) }
+      : current);
+    setMarkingAllMessagesRead(false);
+
+    if (failed.length) toast.error(`No se pudieron marcar ${failed.length} conversación${failed.length === 1 ? '' : 'es'} como leída${failed.length === 1 ? '' : 's'}.`);
+    else toast.success('Todos los mensajes quedaron marcados como leídos.');
   };
 
   const [isDark, setIsDark] = useState(getSavedDarkMode);
@@ -858,6 +902,19 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                 {!messagesLoading && messagesError && <div role="alert" className="rounded-xl border border-dashed border-destructive/30 px-4 py-7 text-center text-sm text-muted-foreground">No se pudieron cargar los mensajes.</div>}
                 {!messagesLoading && !messagesError && messageThreads.length === 0 && <div className="rounded-xl border border-dashed border-border/70 px-4 py-7 text-center text-sm text-muted-foreground">No hay conversaciones recientes.</div>}
               </div>
+              {unreadMessagesCount > 0 && (
+                <div className="border-t border-border/60 bg-muted/10 p-2">
+                  <button
+                    type="button"
+                    disabled={markingAllMessagesRead}
+                    className="topbar-notifications-more flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-60"
+                    onClick={() => void markAllMessagesAsRead()}
+                  >
+                    {markingAllMessagesRead ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                    {markingAllMessagesRead ? 'Marcando como leídos…' : 'Marcar todos como leídos'}
+                  </button>
+                </div>
+              )}
             </PopoverContent>
           </Popover>
         )}
