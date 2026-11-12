@@ -690,6 +690,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
       <CurrencyValuationBanner />
 
+      <h2 className="nh-module-title" data-tour="finance-page-title">{tabs.find((tab) => tab.id === activeTab)?.label || 'Finanzas'}</h2>
+
       {/* Filter bar */}
       <div className="grid min-w-0 grid-cols-2 gap-2 rounded-xl border border-border/40 bg-card/50 p-3 sm:flex sm:flex-wrap sm:items-center">
         <CalendarDays className="col-span-2 size-5 text-primary sm:col-span-1" aria-hidden="true" />
