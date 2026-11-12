@@ -291,18 +291,6 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
     );
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
-  const handleDeleteEvent = async (id: string | number) => {
-    const event = data.find((candidate) => String(candidate.id) === String(id));
-    if (!event || !canPerformEventAction(event, 'delete')) return;
-    try {
-      await eventsService.delete(String(id));
-      toast.success(event.type === 'MEETING' || (!event.type && isMeetingMode) ? 'Reunión eliminada' : 'Evento eliminado');
-      if (selectedEvent?.id === event.id) setSelectedEvent(null);
-      onRefresh();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'Error al eliminar');
-    }
-  };
   const accountsQuery = useTenantQuery<any[]>(['finance', 'accounts-lookup'], () => fetchAllReportPages((filters) => accountsService.getLookup(filters), { page: 1, pageSize: 200 }), {
     enabled: canViewAccounts,
   });
@@ -772,8 +760,6 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
           onRowUpdate={filtered.some((row) => canPerformEventAction(row, 'edit')) ? handleUpdate : undefined}
           onRowClick={(row) => setSelectedEvent(row)}
           isLoading={loading} 
-          onRowDelete={filtered.some((row) => canPerformEventAction(row, 'delete')) ? handleDeleteEvent : undefined}
-          canDeleteRow={(row: Event) => canPerformEventAction(row, 'delete')}
           actions={(row: Event) => {
             const isClosed = completedEventIds.has(String(row.id)) || ['COMPLETED', 'CANCELLED'].includes(String(row.status || '').toUpperCase());
             return (
@@ -818,7 +804,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
                   </Button>
                 )}
                 {!isClosed && canPerformEventAction(row, 'cancel') && (
-                  <Button type="button" variant="ghost" size="icon" title={isMeetingMode ? 'Cancelar reunión' : 'Cancelar evento'} aria-label={isMeetingMode ? 'Cancelar reunión' : 'Cancelar evento'} className="size-8 rounded-lg text-destructive hover:bg-destructive/10" onClick={() => void handleCancelEvent(row)}>
+                  <Button type="button" variant="ghost" size="icon" title={isMeetingMode ? 'Cancelar reunión' : 'Cancelar evento'} aria-label={isMeetingMode ? 'Cancelar reunión' : 'Cancelar evento'} className="size-8 rounded-lg text-amber-600 hover:bg-amber-500/10 dark:text-amber-400" onClick={() => void handleCancelEvent(row)}>
                     <Ban className="size-4" />
                   </Button>
                 )}
@@ -894,14 +880,13 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
               {!completedEventIds.has(String(selectedEvent.id)) &&
                 !['COMPLETED', 'CANCELLED'].includes(String(selectedEvent.status || '').toUpperCase()) &&
                 canPerformEventAction(selectedEvent, 'cancel') && (
-                  <Button type="button" variant="destructive" className="rounded-xl" onClick={() => void handleCancelEvent(selectedEvent)}>
+                  <Button type="button" variant="outline" className="rounded-xl border-amber-500/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300" onClick={() => void handleCancelEvent(selectedEvent)}>
                     <Ban className="mr-2 size-4" /> {isMeetingMode ? 'Cancelar reunión' : 'Cancelar evento'}
                   </Button>
                 )}
             </div>
           ) : undefined
         }
-        onDelete={selectedEvent && canPerformEventAction(selectedEvent, 'delete') ? () => handleDeleteEvent(selectedEvent.id) : undefined}
         onOpenChange={(open) => { if (!open) setSelectedEvent(null); }}
       />
 

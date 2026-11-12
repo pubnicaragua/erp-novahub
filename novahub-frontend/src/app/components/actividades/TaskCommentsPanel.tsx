@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, Send, Trash2 } from 'lucide-react';
+import { Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -12,20 +12,17 @@ import type { ActivityComment } from '../../types';
 
 interface TaskCommentsPanelProps {
   taskId: string;
-  /** Quien puede aprobar tareas modera: puede borrar comentarios de otros. */
-  canModerate: boolean;
   onChanged?: () => void;
 }
 
 /** Conversación del equipo sobre una tarea. No cambia su estado; avisa a quienes la comparten. */
-export function TaskCommentsPanel({ taskId, canModerate, onChanged }: TaskCommentsPanelProps) {
+export function TaskCommentsPanel({ taskId, onChanged }: TaskCommentsPanelProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const commentsQuery = useTenantQuery<ActivityComment[]>(['activities', 'task-comments', taskId], () => tasksService.getComments(taskId));
   const comments = asList(commentsQuery.data) as ActivityComment[];
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const refresh = () => {
     void invalidateTenantQueries(queryClient);
@@ -48,19 +45,6 @@ export function TaskCommentsPanel({ taskId, canModerate, onChanged }: TaskCommen
     }
   };
 
-  const remove = async (commentId: string) => {
-    try {
-      setDeletingId(commentId);
-      await tasksService.deleteComment(taskId, commentId);
-      refresh();
-    } catch (e: unknown) {
-      const failure = e as { response?: { data?: { message?: string } }; message?: string } | null;
-      toast.error(failure?.response?.data?.message || failure?.message || 'No se pudo eliminar el comentario');
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
   return (
     <div className="space-y-3">
       {commentsQuery.isLoading ? (
@@ -80,18 +64,6 @@ export function TaskCommentsPanel({ taskId, canModerate, onChanged }: TaskCommen
                     {comment.author?.name || 'Compañero'}{mine ? ' (tú)' : ''}
                     <span className="ml-2 font-medium text-muted-foreground">{formatReportDate(comment.createdAt)}</span>
                   </p>
-                  {(mine || canModerate) && (
-                    <button
-                      type="button"
-                      aria-label="Eliminar comentario"
-                      title="Eliminar comentario"
-                      disabled={deletingId === comment.id}
-                      onClick={() => void remove(comment.id)}
-                      className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-rose-500/10 hover:text-destructive disabled:opacity-50"
-                    >
-                      {deletingId === comment.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                    </button>
-                  )}
                 </div>
                 <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{comment.body}</p>
               </li>

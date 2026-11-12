@@ -175,7 +175,6 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
           onRowUpdate={canPerform('ACTIVITIES_REMINDERS', 'edit') || canPerform('ACTIVITIES_REMINDERS', 'changeStatus') ? handleUpdate : undefined}
           onRowClick={(row) => setSelectedReminder(row)}
           isLoading={loading} 
-          onRowDelete={canPerform('ACTIVITIES_REMINDERS', 'delete') ? async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar recordatorio'); } } : undefined} 
           actions={(row: Reminder) => (
             <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
               <Button type="button" variant="ghost" size="icon" title="Ver detalle del recordatorio" aria-label="Ver detalle del recordatorio" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedReminder(row)}><Eye className="size-4" /></Button>
@@ -188,16 +187,6 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
         kind="reminder"
         item={selectedReminder}
         users={availableUsers}
-        onDelete={canPerform('ACTIVITIES_REMINDERS', 'delete') && selectedReminder ? async () => {
-          try {
-            await remindersService.delete(String(selectedReminder.id));
-            toast.success('Recordatorio eliminado');
-            onRefresh();
-            setSelectedReminder(null);
-          } catch (e: any) {
-            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar recordatorio');
-          }
-        } : undefined}
         onOpenChange={(open) => { if (!open) setSelectedReminder(null); }}
       />
 

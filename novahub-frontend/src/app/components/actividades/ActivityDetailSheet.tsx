@@ -9,7 +9,6 @@ import { ScrollArea } from '../ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { cn } from '../ui/utils';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { SubtasksManager } from './SubtasksManager';
 import { TaskReportsPanel } from './TaskReportsPanel';
 import { TaskCommentsPanel } from './TaskCommentsPanel';
@@ -44,7 +43,6 @@ interface ActivityDetailSheetProps {
   linkedIncomeJournal?: any;
   extraActions?: ReactNode;
   onUpdate?: () => void;
-  onDelete?: () => void | Promise<void>;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -463,7 +461,7 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
       </DetailSection>
 
       <DetailSection title="Comentarios del equipo" icon={Users}>
-        <TaskCommentsPanel taskId={String(item.id)} canModerate={canReview} onChanged={() => onUpdate?.()} />
+        <TaskCommentsPanel taskId={String(item.id)} onChanged={() => onUpdate?.()} />
       </DetailSection>
 
       <DetailSection title="Checklist y Subtareas" icon={CheckCircle2}>
@@ -866,8 +864,7 @@ function DetailSection({ title, icon: Icon, children }: { title: string; icon: a
   return <Card className="space-y-3 rounded-2xl border-border/50 bg-card/80 p-4 shadow-sm"><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><Icon className="size-4 text-primary" /> {title}</h3>{children}</Card>;
 }
 
-export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense, linkedIncome, linkedExpenseAccount, linkedIncomeAccount, linkedExpenseJournal, linkedIncomeJournal, extraActions, onUpdate, onDelete, onOpenChange }: ActivityDetailSheetProps) {
-  const [deleteOpen, setDeleteOpen] = useState(false);
+export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense, linkedIncome, linkedExpenseAccount, linkedIncomeAccount, linkedExpenseJournal, linkedIncomeJournal, extraActions, onUpdate, onOpenChange }: ActivityDetailSheetProps) {
   const [reassignOpen, setReassignOpen] = useState(false);
   const { canPerform, user } = useAuth();
   const isTask = kind === 'task';
@@ -897,13 +894,12 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
             <div className="min-w-0 flex-1"><SheetTitle className="truncate text-lg font-black tracking-tight">{title}</SheetTitle><SheetDescription className="mt-1 truncate text-xs">{config.singular} · {description}</SheetDescription></div>
           </div>
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>
-          {(extraActions || onDelete) && <div className="flex flex-wrap gap-2" data-tour="activity-detail-actions">{extraActions}{onDelete && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => setDeleteOpen(true)}><Trash2 className="mr-2 size-4" />Eliminar</Button>}</div>}
+          {extraActions && <div className="flex flex-wrap gap-2" data-tour="activity-detail-actions">{extraActions}</div>}
         </SheetHeader>
         <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} canEdit={canEditTask} canReassign={canReassignTask} canManageSubtasks={canManageSubtasks} canStartTimeTracking={canStartTimeTracking} canStopTimeTracking={canStopTimeTracking} canAddManualTimeEntry={canAddManualTimeEntry} canRate={canRateTask} canReport={canReportTask} canReview={canReviewTask} onReassign={() => setReassignOpen(true)} />}{item && (kind === 'event' || kind === 'meeting') && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
         <SheetFooter className="border-t border-border/50 px-5 py-3 sm:px-6"><Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}><XCircle className="mr-2 size-4" />Cerrar</Button></SheetFooter>
       </SheetContent>
     </Sheet>
-    <ConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} title={`¿Eliminar ${config.singular.toLowerCase()}?`} description="Esta acción eliminará el registro y no se puede deshacer." confirmLabel="Eliminar" onConfirm={async () => { await onDelete?.(); setDeleteOpen(false); }} />
     {canReassignTask && (
       <ReassignTaskModal
         open={reassignOpen}

@@ -1936,13 +1936,24 @@ export interface ActivityTimeEntry {
   updatedAt: string;
 }
 
-/** Catálogo cerrado de categorías de tarea (§4 del contrato Aranda ITSM). */
-export type ActivityCategory =
-  | 'INFRAESTRUCTURA'
-  | 'SISTEMAS'
-  | 'OPERACIONES'
-  | 'MANTENIMIENTO'
-  | 'RECURSOS_HUMANOS';
+/**
+ * Clave de la categoría de una tarea. Las cinco originales (SISTEMAS, OPERACIONES…) se conservan y cada
+ * empresa puede crear las suyas (CAT_…): ver ActivityCategoryItem.
+ */
+export type ActivityCategory = string;
+
+/** Categoría de tareas editable por empresa (vista estilo Notion). Nunca se borra: se archiva. */
+export interface ActivityCategoryItem {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  position: number;
+  isArchived: boolean;
+  isDefault: boolean;
+}
 
 /** Entrada del historial de reasignaciones / auto-asignaciones (§3). */
 export interface ActivityReassignmentEntry {

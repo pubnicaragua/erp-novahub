@@ -1,13 +1,13 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Clock, Eye, CheckCircle2, Send, XCircle, Paperclip, Users, Flag, HandHelping, UserCog, Loader2, RotateCcw } from 'lucide-react';
+import { Clock, Eye, CheckCircle2, Send, Undo2, Paperclip, Users, Flag, HandHelping, UserCog, Loader2, RotateCcw } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import type { Task } from '../../types';
 import { SlaBadge } from './SlaBadge';
-import { getActivityCategoryLabel } from './actividades.constants';
+import { useActivityCategories } from './useActivityCategories';
 import { format } from 'date-fns';
 
 interface TareasCardsViewProps {
@@ -79,6 +79,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
   onClaimTask,
   onReassignTask,
 }) => {
+  const { labelOf: categoryLabelOf } = useActivityCategories();
   if (data.length === 0) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-border/50 p-8 text-center">
@@ -160,7 +161,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                           isCategoryFiltered && 'border-primary/40 text-primary'
                         )}
                       >
-                        {getActivityCategoryLabel(categoryId)}
+                        {categoryLabelOf(categoryId)}
                       </Badge>
                     )}
                   </div>
@@ -304,11 +305,12 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                               type="button"
                               variant="ghost"
                               size="icon"
-                              title="Rechazar tarea"
-                              className="size-8 rounded-lg text-rose-600 hover:bg-rose-500/10"
+                              title="Rechazar y devolver la tarea (no la elimina)"
+                              aria-label="Rechazar y devolver la tarea"
+                              className="size-8 rounded-lg text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
                               onClick={() => onReject(task)}
                             >
-                              <XCircle className="size-4" />
+                              <Undo2 className="size-4" />
                             </Button>
                           )}
                         </>

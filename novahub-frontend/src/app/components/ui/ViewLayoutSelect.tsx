@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from './select';
 
-export type ViewLayoutMode = 'table' | 'cards' | 'kanban';
+export type ViewLayoutMode = 'table' | 'cards' | 'kanban' | 'categories';
 export const TABLE_LAYOUT_BREAKPOINT = 1280;
 
 function readCompactTableViewport() {
@@ -38,6 +38,8 @@ interface ViewLayoutSelectProps {
   onChange: (value: ViewLayoutMode) => void;
   /** Only views with a real Kanban renderer should expose this option. */
   showKanban?: boolean;
+  /** Only views that group their records by category should expose this option. */
+  showCategories?: boolean;
   ariaLabel?: string;
   className?: string;
   dataTour?: string;
@@ -47,11 +49,12 @@ export function ViewLayoutSelect({
   value,
   onChange,
   showKanban = false,
+  showCategories = false,
   ariaLabel = 'Elegir distribución',
   className,
   dataTour,
 }: ViewLayoutSelectProps) {
-  const effectiveValue = !showKanban && value === 'kanban' ? 'table' : value;
+  const effectiveValue = (!showKanban && value === 'kanban') || (!showCategories && value === 'categories') ? 'table' : value;
 
   return (
     <Select
@@ -73,6 +76,7 @@ export function ViewLayoutSelect({
         <SelectItem value="table">Lista</SelectItem>
         <SelectItem value="cards">Tarjetas</SelectItem>
         {showKanban && <SelectItem value="kanban">Kanban</SelectItem>}
+        {showCategories && <SelectItem value="categories">Por categoría</SelectItem>}
       </SelectContent>
     </Select>
   );

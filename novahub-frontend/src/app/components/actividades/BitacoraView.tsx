@@ -295,16 +295,6 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, summa
           onRowUpdate={canPerform('ACTIVITIES_LOGS', 'edit') ? handleUpdate : undefined}
           onRowClick={(row) => setSelectedLog(row)}
           isLoading={loading}
-          canDeleteRow={(row: any) => row.origin === 'MANUAL'}
-          onRowDelete={canPerform('ACTIVITIES_LOGS', 'delete') ? async (id) => {
-            try {
-              await activityLogsService.delete(String(id));
-              toast.success('Registro eliminado');
-              onRefresh();
-            } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar registro');
-            }
-          } : undefined}
           actions={(row: any) => (
             <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
               <Button type="button" variant="ghost" size="icon" title="Ver detalle del registro" aria-label="Ver detalle del registro" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedLog(row)}><Eye className="size-4" /></Button>
@@ -319,16 +309,6 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, summa
       <ActivityDetailSheet
         kind="log"
         item={selectedLog ? { ...selectedLog, details: selectedLog.detailText } : null}
-        onDelete={canPerform('ACTIVITIES_LOGS', 'delete') && selectedLog?.origin === 'MANUAL' ? async () => {
-          try {
-            await activityLogsService.delete(String(selectedLog.id));
-            toast.success('Registro eliminado');
-            onRefresh();
-            setSelectedLog(null);
-          } catch (e: any) {
-            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar registro');
-          }
-        } : undefined}
         onOpenChange={(open) => { if (!open) setSelectedLog(null); }}
       />
 

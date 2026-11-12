@@ -22,6 +22,8 @@ import {
   AlignLeft,
   Send,
   XCircle,
+  Undo2,
+  Star,
   Loader2,
   Filter,
   RotateCcw,
@@ -31,7 +33,7 @@ import {
   UserCheck,
   Gauge,
 } from 'lucide-react';
-import { tasksService } from '../../services/actividades.service';
+import { activityFavoritesService, tasksService } from '../../services/actividades.service';
 import { usersService } from '../../services/users.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
@@ -46,14 +48,15 @@ import { ActivityDetailSheet } from './ActivityDetailSheet';
 import { TABLE_LAYOUT_BREAKPOINT, ViewLayoutSelect, useCardsOnlyBelowTableBreakpoint, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { TareasKanban } from './TareasKanban';
 import { TareasCardsView } from './TareasCardsView';
+import { TareasCategoriasView } from './TareasCategoriasView';
+import { CategoryManagerDialog } from './CategoryManagerDialog';
+import { useActivityCategories } from './useActivityCategories';
 import { SlaBadge } from './SlaBadge';
 import { ReassignTaskModal } from './ReassignTaskModal';
 import {
-  ACTIVITY_CATEGORIES,
   CUSTOM_FIELD_PRESETS,
   MAX_CUSTOM_FIELD_LENGTH,
   MAX_CUSTOM_FIELDS,
-  getActivityCategoryLabel,
   toCustomFieldsRecord,
 } from './actividades.constants';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -112,7 +115,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const filtersContainerRef = useRef<HTMLDivElement>(null);
   const isCardsLayout = viewLayout === 'cards' || (viewLayout === 'table' && (isCompactViewport || isCompactContainer));
   const effectiveViewLayout = viewLayout === 'table' && isCardsLayout ? 'cards' : viewLayout;
-  const filterUsesCompactGrid = isCardsLayout || viewLayout === 'kanban';
+  const filterUsesCompactGrid = isCardsLayout || viewLayout === 'kanban' || viewLayout === 'categories';
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [assignedFilter, setAssignedFilter] = useState<string>('ALL');
@@ -120,6 +123,11 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [mineOnly, setMineOnly] = useState<boolean>(false);
+  const [favoritesOnly, setFavoritesOnly] = useState<boolean>(false);
+  /** Subtareas escritas al crear la tarea: una por línea. */
+  const [newSubtasksText, setNewSubtasksText] = useState('');
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+  const [togglingFavoriteId, setTogglingFavoriteId] = useState<string | null>(null);
   const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCompleteOpen, setIsCompleteOpen] = useState(false);
@@ -156,6 +164,37 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const queryClient = useQueryClient();
   const currentUserId = user?.id ? String(user.id) : null;
   const slaNow = useMemo(() => new Date(currentTime), [currentTime]);
+
+  const categoriesApi = useActivityCategories();
+  const favoritesQuery = useTenantQuery<string[]>(['activities', 'favorites'], (signal) => activityFavoritesService.list(signal));
+  const favoriteIds = useMemo(() => new Set(asList(favoritesQuery.data).map((id) => String(id))), [favoritesQuery.data]);
+  const categoryTaskCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of data) {
+      const key = String(task.categoryId || '').trim().toUpperCase();
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return counts;
+  }, [data]);
+
+  const toggleFavorite = async (task: Task) => {
+    const id = String(task.id);
+    try {
+      setTogglingFavoriteId(id);
+      await activityFavoritesService.set(id, !favoriteIds.has(id));
+      await favoritesQuery.refetch();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo actualizar la favorita');
+    } finally {
+      setTogglingFavoriteId(null);
+    }
+  };
+
+  /** Abre «Nueva tarea» con la categoría ya elegida (botón + de cada categoría). */
+  const openCreateInCategory = (categoryKey: string | null) => {
+    setNewTask((prev) => ({ ...prev, categoryId: categoryKey ?? CATEGORY_NONE }));
+    setIsAddOpen(true);
+  };
 
   useEffect(() => {
     const element = filtersContainerRef.current;
@@ -262,6 +301,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       customFields: {},
       assignedTo: [],
     });
+    setNewSubtasksText('');
   };
 
   const resetFilters = () => {
@@ -270,6 +310,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     setPriorityFilter('ALL');
     setAssignedFilter('ALL');
     setCategoryFilter('ALL');
+    setFavoritesOnly(false);
     setDateFrom('');
     setDateTo('');
     setMineOnly(false);
@@ -306,7 +347,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   ];
 
   const categoryOpts = [
-    ...ACTIVITY_CATEGORIES.map((category) => ({ value: category.value as string, label: category.label, color: '' })),
+    ...categoriesApi.active.map((category) => ({ value: category.key, label: category.name, color: '' })),
     { value: '', label: 'Sin categoría', color: '' },
   ];
 
@@ -340,7 +381,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     }
     try {
       setIsCreating(true);
-      await tasksService.create({
+      const created = await tasksService.create({
         title: newTask.title,
         description: newTask.description,
         dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : new Date().toISOString(),
@@ -349,6 +390,17 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         categoryId: (newTask.categoryId === CATEGORY_NONE ? null : newTask.categoryId) as ActivityCategory | null,
         customFields: buildCustomFieldsPayload(newTask.customFields),
       });
+      // Título + subpuntos: cada línea del campo «Subtareas» queda como una subtarea de la tarea recién creada.
+      const subtaskTitles = newSubtasksText.split(String.fromCharCode(10)).map((line) => line.trim().replace(/^[-*• ]+/, '').trim()).filter(Boolean).slice(0, 30);
+      let failedSubtasks = 0;
+      for (const title of subtaskTitles) {
+        try {
+          await tasksService.addSubtask(String((created as any)?.id), { title: title.slice(0, 200) });
+        } catch {
+          failedSubtasks += 1;
+        }
+      }
+      if (failedSubtasks > 0) toast.warning(`La tarea se creó, pero ${failedSubtasks} ${failedSubtasks === 1 ? 'subtarea no se pudo guardar' : 'subtareas no se pudieron guardar'}. Agrégalas desde el detalle.`);
       toast.success('Tarea creada exitosamente');
       setIsAddOpen(false);
       resetNewTaskForm();
@@ -517,7 +569,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         if (!val) return <span className="text-muted-foreground text-xs">—</span>;
         return (
           <Badge variant="outline" className="min-w-0 max-w-full truncate bg-secondary/40 text-[9px] font-bold uppercase">
-            {getActivityCategoryLabel(val)}
+            {categoriesApi.labelOf(val)}
           </Badge>
         );
       },
@@ -604,6 +656,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     // «Mis tareas»: solo las que tengo asignadas.
     const matchesMine = !mineOnly || isTaskMine(t);
 
+    // «Favoritas»: las que marqué con la estrella.
+    const matchesFavorite = !favoritesOnly || favoriteIds.has(String(t.id));
+
     // Date range filter
     const dueDate = t.dueDate ? new Date(t.dueDate).toISOString().slice(0, 10) : null;
     const matchesDateFrom = !dateFrom || (dueDate && dueDate >= dateFrom);
@@ -616,6 +671,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       matchesAssigned &&
       matchesCategory &&
       matchesMine &&
+      matchesFavorite &&
       matchesDateFrom &&
       matchesDateTo
     );
@@ -642,7 +698,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     (categoryFilter !== 'ALL' ? 1 : 0) +
     (dateFrom ? 1 : 0) +
     (dateTo ? 1 : 0) +
-    (mineOnly ? 1 : 0);
+    (mineOnly ? 1 : 0) +
+    (favoritesOnly ? 1 : 0);
   const filterFieldLayout = filterUsesCompactGrid ? 'sm:col-span-1' : 'sm:col-span-1 lg:col-span-3';
 
   return (
@@ -714,11 +771,23 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           >
             <UserCheck className="size-3.5" /> Mis tareas
           </Button>
+          <Button
+            type="button"
+            variant={favoritesOnly ? 'default' : 'outline'}
+            data-toolbar-role="filters"
+            data-testid="activities-task-favorites"
+            aria-pressed={favoritesOnly}
+            onClick={() => setFavoritesOnly((value) => !value)}
+            className="h-10 shrink-0 gap-2 rounded-xl px-3 text-xs font-bold"
+          >
+            <Star className={favoritesOnly ? 'size-3.5 fill-current' : 'size-3.5'} /> Favoritas
+          </Button>
           <TaskSavedViews userId={currentUserId} current={currentFilters} onApply={applyFilters} />
           <ViewLayoutSelect
             value={effectiveViewLayout}
             onChange={(val) => setViewLayout(val)}
             showKanban={true}
+            showCategories={true}
           />
           {activeFiltersCount > 0 && (
             <Button
@@ -804,9 +873,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">Todas las categorías</SelectItem>
-                  {ACTIVITY_CATEGORIES.map((category) => (
-                    <SelectItem key={category.value} value={category.value}>
-                      {category.label}
+                  {categoriesApi.active.map((category) => (
+                    <SelectItem key={category.key} value={category.key}>
+                      {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -863,6 +932,20 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               setSelectedTask(task);
               setIsCompleteOpen(true);
             }}
+          />
+        ) : viewLayout === 'categories' ? (
+          <TareasCategoriasView
+            tasks={filtered}
+            categories={categoriesApi.categories}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={(task) => void toggleFavorite(task)}
+            togglingFavoriteId={togglingFavoriteId}
+            onOpenTask={(task) => setDetailTask(task)}
+            onCreateInCategory={canPerform('ACTIVITIES_TASKS', 'create') ? openCreateInCategory : undefined}
+            onManageCategories={canPerform('ACTIVITIES_TASKS', 'create') && canPerform('ACTIVITIES_TASKS', 'edit') ? () => setIsCategoryManagerOpen(true) : undefined}
+            people={employees.map((person: any) => ({ id: String(person.id), name: String(person.name || person.email || 'Usuario') }))}
+            now={slaNow}
+            loading={loading}
           />
         ) : isCardsLayout ? (
           <TareasCardsView
@@ -963,19 +1046,6 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                 )}
               </div>
             )}
-            onRowDelete={
-              canPerform('ACTIVITIES_TASKS', 'delete')
-                ? async (id) => {
-                    try {
-                      await tasksService.delete(id as string);
-                      toast.success('Tarea eliminada');
-                      onRefresh();
-                    } catch (e: any) {
-                      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar tarea');
-                    }
-                  }
-                : undefined
-            }
             actions={(row: any) => {
               const status = String(row.status || '').toUpperCase();
               return (
@@ -1070,15 +1140,15 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                         type="button"
                         variant="ghost"
                         size="icon"
-                        title="Rechazar tarea"
-                        aria-label="Rechazar tarea"
-                        className="size-8 rounded-lg text-rose-600 hover:bg-rose-500/10"
+                        title="Rechazar y devolver la tarea (no la elimina)"
+                        aria-label="Rechazar y devolver la tarea"
+                        className="size-8 rounded-lg text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
                         onClick={() => {
                           setSelectedTask(row);
                           setIsRejectOpen(true);
                         }}
                       >
-                        <XCircle className="size-4" />
+                        <Undo2 className="size-4" />
                       </Button>}
                     </>
                   )}
@@ -1125,6 +1195,14 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           </div>
         )}
       </Card>
+
+      <CategoryManagerDialog
+        open={isCategoryManagerOpen}
+        onOpenChange={setIsCategoryManagerOpen}
+        categories={categoriesApi.categories}
+        taskCounts={categoryTaskCounts}
+        onChanged={() => void categoriesApi.refetch()}
+      />
 
       <ActivityDetailSheet
         kind="task"
@@ -1217,20 +1295,6 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             </div>
           )
         }
-        onDelete={
-          canPerform('ACTIVITIES_TASKS', 'delete') && detailTask
-            ? async () => {
-                try {
-                  await tasksService.delete(String(detailTask.id));
-                  toast.success('Tarea eliminada');
-                  onRefresh();
-                  setDetailTask(null);
-                } catch (e: any) {
-                  toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar tarea');
-                }
-              }
-            : undefined
-        }
         onOpenChange={(open) => {
           if (!open) setDetailTask(null);
         }}
@@ -1279,6 +1343,21 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                 className="min-h-28 resize-y rounded-xl bg-background"
               />
             </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-xs font-bold text-foreground" htmlFor="activities-task-subtasks">
+                <ListTodo className="size-3.5 text-primary" />
+                Subtareas <span className="font-normal text-muted-foreground">(opcional, una por línea)</span>
+              </Label>
+              <Textarea
+                id="activities-task-subtasks"
+                data-testid="activities-task-subtasks"
+                placeholder={['No cuadra el saldo de la cuenta', 'Falta cargar el cierre del mes'].join(String.fromCharCode(10))}
+                value={newSubtasksText}
+                onChange={(e) => setNewSubtasksText(e.target.value)}
+                className="min-h-20 resize-y rounded-xl bg-background"
+              />
+              <p className="text-[11px] text-muted-foreground">Cada línea se guarda como un punto de la tarea y suma al avance.</p>
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-xs font-bold text-foreground">
@@ -1326,9 +1405,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={CATEGORY_NONE}>Sin categoría</SelectItem>
-                    {ACTIVITY_CATEGORIES.map((category) => (
-                      <SelectItem key={category.value} value={category.value}>
-                        {category.label}
+                    {categoriesApi.active.map((category) => (
+                      <SelectItem key={category.key} value={category.key}>
+                        {category.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

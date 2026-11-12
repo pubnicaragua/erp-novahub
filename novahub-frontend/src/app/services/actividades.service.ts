@@ -1,6 +1,6 @@
 import { api, getAuthHeaders, getApiUrl, normalizeApiErrorMessage } from './api';
 import { resolveStorageReferences } from './storage.service';
-import type { ActivityComment, ActivityReport, ActivityReportsResponse, ActivitySubtask, ActivityTimeEntry, Task, Event, Reminder, ActivityLog } from '../types';
+import type { ActivityCategoryItem, ActivityComment, ActivityReport, ActivityReportsResponse, ActivitySubtask, ActivityTimeEntry, Task, Event, Reminder, ActivityLog } from '../types';
 
 const createCrudService = <T>(endpoint: string) => ({
   getAll: async (signal?: AbortSignal, params?: Record<string, unknown>) => {
@@ -104,6 +104,22 @@ export const activityReportsService = {
   review: async (reportId: string, data: { incomplete: boolean; note?: string }) => {
     return await api.patch(`/activities/reports/${reportId}/review`, data) as ActivityReport;
   },
+};
+
+/** Categorías de tareas editables por empresa. No hay borrado: se archivan. */
+export const activityCategoriesService = {
+  list: async (signal?: AbortSignal) => await api.get('/activities/categories', { signal }) as ActivityCategoryItem[],
+  create: async (data: { name: string; description?: string | null; icon?: string | null; color?: string | null }) =>
+    await api.post('/activities/categories', data) as ActivityCategoryItem,
+  update: async (id: string, data: Partial<Pick<ActivityCategoryItem, 'name' | 'description' | 'icon' | 'color' | 'isArchived' | 'position'>>) =>
+    await api.patch(`/activities/categories/${id}`, data) as ActivityCategoryItem,
+  reorder: async (ids: string[]) => await api.patch('/activities/categories/reorder', { ids }) as ActivityCategoryItem[],
+};
+
+/** Tareas favoritas de la persona que inició sesión. */
+export const activityFavoritesService = {
+  list: async (signal?: AbortSignal) => await api.get('/activities/favorites', { signal }) as string[],
+  set: async (taskId: string, favorite: boolean) => await api.patch(`/activities/tasks/${taskId}/favorite`, { favorite }) as { activityId: string; favorite: boolean },
 };
 
 export const eventsService = {
