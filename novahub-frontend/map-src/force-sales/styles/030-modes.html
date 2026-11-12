@@ -32,4 +32,36 @@
 .visit-history .visit-row{display:grid;gap:1px;padding:5px 0;border-bottom:1px solid var(--nova-ui-border,#dce8e3);font-size:11px}
 .visit-history .visit-row small{color:var(--nova-ui-muted-foreground,#6c7c77)}
 .visit-outcome{min-height:34px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:8px;background:var(--nova-ui-card,#fff);color:inherit;font-size:11px}
+
+/* Control de zoom debajo de los botones flotantes (antes quedaba tapado por «Nuevo punto»). */
+.leaflet-top.leaflet-left{top:58px}
+@media(max-width:820px){.leaflet-top.leaflet-left{top:70px}}
+/* Estado de conexión: se lee completo y solo muestra el detalle cuando hay un problema. */
+body.embedded-view .panel-status{flex-wrap:wrap;row-gap:2px}
+body.embedded-view .panel-status #liveStatus,body.embedded-view .panel-status #offlineStatusText{white-space:normal;overflow:visible;text-overflow:clip;flex:1 1 100%;font-size:11px;line-height:1.35}
+.panel-status[data-ok="true"] #offlineStatusText,.panel-status[data-ok="true"] .panel-status-separator{display:none}
+/* Visitas: filtros, tarjetas de cliente y estado vacío. */
+.visit-chips{display:flex;gap:6px}
+.visit-chips .chip{flex:1;min-height:34px;font-size:12px}
+.visit-item .itemtop{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.visit-item .itemname{font-size:14px;font-weight:800}
+.visit-item .meta{font-size:12px;margin-top:2px}
+.visit-pill{flex:none;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
+.visit-pill.pending{background:#fff4d6;color:#7a5200}
+.visit-pill.done{background:#dcf5e8;color:#075c3a}
+.visit-item .item-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.visit-item .item-actions button{min-height:36px;font-size:12px}
+.visit-item .item-actions .visit-action{flex:1 1 100%;background:var(--nova-ui-primary,#08785a);color:#fff;border-color:transparent;font-weight:800}
+.visit-item .item-actions button:not(.visit-action){flex:1}
+.empty-list{display:grid;gap:4px;padding:16px 12px;border:1px dashed var(--nova-ui-border,#dce8e3);border-radius:12px;text-align:center;font-size:12px;color:var(--nova-ui-muted-foreground,#6c7c77)}
+.empty-list b{font-size:13px;color:inherit;color:var(--nova-ui-foreground,#11241f)}
+/* Entregas: guía de tres pasos. */
+.delivery-guide{padding:12px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:12px;background:var(--nova-ui-card,#fff)}
+.delivery-guide b{font-size:13px}
+.delivery-guide ol{margin:0;padding-left:18px;display:grid;gap:4px;font-size:12px;line-height:1.4}
+.delivery-new-route{min-height:40px;border:0;border-radius:10px;background:var(--nova-ui-primary,#08785a);color:#fff;font-weight:800;font-size:13px;cursor:pointer}
+.visit-item .itemtop:has(.check){justify-content:flex-start;align-items:center;gap:10px}
+.visit-item .itemtop:has(.check) .itemname{text-align:left}
+body.embedded-view .panel-status #liveStatus{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mode-block .search-meta{display:none}
 </style>

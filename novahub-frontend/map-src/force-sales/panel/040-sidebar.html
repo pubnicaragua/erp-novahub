@@ -43,10 +43,24 @@
    </details>
   </section>
 
-  <!-- Modo Visitas y zonas: zonas de trabajo con gestor responsable. -->
-  <section class="mode-block work-zones" data-mode-only="visits" aria-label="Zonas de trabajo">
-   <div class="work-zones-head"><b>Zonas de trabajo</b><button id="workZoneNew" type="button" hidden>+ Nueva zona</button></div>
-   <div id="workZoneList" class="work-zone-list" role="list"><div class="meta">Cargando zonas…</div></div>
+  <!-- Modo Visitas y zonas: estado de la visita. -->
+  <section class="mode-block visit-tools" data-mode-only="visits" aria-label="Filtrar clientes por visita">
+   <div class="chips visit-chips" id="visitChips" role="group" aria-label="Estado de la visita">
+    <button class="chip active" type="button" data-visit-filter="all">Todos</button>
+    <button class="chip" type="button" data-visit-filter="pending">Por visitar</button>
+    <button class="chip" type="button" data-visit-filter="visited">Visitados</button>
+   </div>
+  </section>
+
+  <!-- Modo Entregas: guía corta y acción principal. -->
+  <section class="mode-block delivery-guide" data-mode-only="delivery" aria-label="Cómo armar una entrega">
+   <b>Arma tu ruta de entregas</b>
+   <ol>
+    <li>Marca con la casilla los puntos de la entrega y pulsa <b>Nueva ruta</b>; ordena las paradas como las vas a visitar.</li>
+    <li>Inicia la ruta: el mapa marca la siguiente parada.</li>
+    <li>Abre la parada en Google Maps o Waze y marca cada entrega al llegar.</li>
+   </ol>
+   <button type="button" class="delivery-new-route" id="deliveryNewRoute">Nueva ruta</button>
   </section>
 
   <!-- Acciones de trabajo: cada tarjeta se muestra solo en los modos que la usan y si el rol tiene permiso. -->
@@ -82,6 +96,13 @@
   <div class="list" id="list"></div>
   <div class="kanban-board" id="kanbanBoard" hidden></div>
   <div class="history-list" id="historyView" hidden></div>
+
+  <!-- Modo Visitas y zonas (debajo de la lista): zonas de trabajo con gestor responsable. -->
+  <section class="mode-block work-zones" data-mode-only="visits" aria-label="Zonas de trabajo">
+   <div class="work-zones-head"><b>Zonas de trabajo</b><button id="workZoneNew" type="button" hidden>+ Nueva zona</button></div>
+   <div id="workZoneList" class="work-zone-list" role="list"><div class="meta">Cargando zonas…</div></div>
+  </section>
+
 
   <!-- Herramientas poco frecuentes, en un solo menú. -->
   <details class="more-tools" id="moreToolsPanel">

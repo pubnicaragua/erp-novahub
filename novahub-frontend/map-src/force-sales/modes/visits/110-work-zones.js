@@ -215,3 +215,52 @@ if(ACTIVE_MODE === 'visits'){
   document.getElementById('workZoneReassignConfirm')?.addEventListener('click', () => void confirmWorkZoneReassign());
   document.getElementById('workZoneReassignCancel')?.addEventListener('click', closeWorkZoneReassign);
 }
+
+// ----- Lista de clientes del modo visitas ------------------------------------------------------------------------
+function visitItemHtml(b){
+  const visited=isVisited(b);
+  const at=stateOf(b).visitedAt;
+  const when=visited&&at&&!Number.isNaN(new Date(at).getTime())?' · '+new Date(at).toLocaleDateString('es-NI',{day:'numeric',month:'short'}):'';
+  return '<div class="item visit-item" data-id="'+esc(b.id)+'">'
+    +'<div class="itemtop"><div><div class="itemname">'+esc(b.name)+'</div><div class="meta">'+esc(b.address||b.zone||'Sin dirección')+'</div></div>'
+    +'<span class="visit-pill '+(visited?'done':'pending')+'">'+(visited?'Visitado'+when:'Por visitar')+'</span></div>'
+    +'<div class="item-actions">'
+    +(canForceSales('registerVisit')?'<button class="visit-action" data-action="visit" data-id="'+esc(b.id)+'">Registrar visita</button>':'')
+    +'<button data-action="navigate-google" data-id="'+esc(b.id)+'">Google Maps</button>'
+    +'<button data-action="navigate-waze" data-id="'+esc(b.id)+'">Waze</button>'
+    +'</div></div>';
+}
+function emptyListHtml(totalInMap){
+  let title='Sin resultados';
+  let hint='Cambia los filtros o la búsqueda.';
+  if(ACTIVE_MODE==='visits'&&!totalInMap){title='Todavía no hay clientes en tu mapa';hint='Importa tus clientes con «Importar clientes» o marca uno con «Nuevo punto».'}
+  else if(ACTIVE_MODE==='delivery'&&!totalInMap){title='Sin puntos para la ruta';hint='Pulsa «Nueva ruta» o marca un punto con «Nuevo punto».'}
+  else if(ACTIVE_MODE==='prospecting'&&!totalInMap){title='Aún no hay negocios';hint='Usa «Cerca de mí» o «Buscar vista» para encontrar negocios cercanos.'}
+  return '<div class="empty-list"><b>'+title+'</b><span>'+hint+'</span></div>';
+}
+function openNavigationToBusiness(id,app){
+  const b=businesses.find(item=>String(item.id)===String(id));
+  if(!b||!Number.isFinite(b.lat)||!Number.isFinite(b.lng))return;
+  const url=app==='waze'
+    ?'https://waze.com/ul?ll='+b.lat+','+b.lng+'&navigate=yes'
+    :'https://www.google.com/maps/dir/?api=1&destination='+b.lat+','+b.lng+'&travelmode=driving';
+  window.open(url,'_blank','noopener');
+}
+function fitMapToBusinessesOnce(items){
+  const points=items.filter(b=>Number.isFinite(b.lat)&&Number.isFinite(b.lng));
+  if(!points.length)return;
+  initialFitDone=true;
+  if(points.length===1){map.flyTo([points[0].lat,points[0].lng],15,{duration:.4});return}
+  const bounds=new google.maps.LatLngBounds();
+  points.forEach(b=>bounds.extend({lat:b.lat,lng:b.lng}));
+  googleMap.fitBounds(bounds,64);
+}
+function syncVisitChips(){
+  document.querySelectorAll('[data-visit-filter]').forEach(chip=>chip.classList.toggle('active',chip.dataset.visitFilter===visitFilter));
+}
+document.querySelectorAll('[data-visit-filter]').forEach(chip=>chip.addEventListener('click',()=>{
+  visitFilter=chip.dataset.visitFilter||'all';
+  syncVisitChips();
+  render();
+}));
+document.getElementById('deliveryNewRoute')?.addEventListener('click',()=>openRoutePlanner(selectedBusinesses()));

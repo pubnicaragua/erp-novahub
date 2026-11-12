@@ -86,6 +86,8 @@ document.getElementById('showAllBusinesses').addEventListener('click',()=>{
   document.getElementById('category').value='all';
   document.getElementById('source').value='all';
   document.getElementById('state').value='all';
+  visitFilter='all';
+  syncVisitChips();
   document.getElementById('search').value='';
   activeNearbyCenter=null;
   activeNearbyRadius=null;
@@ -112,6 +114,7 @@ function updateOfflineStatus(){
   const label=document.getElementById('offlineStatusText');
   if(!label)return;
   const firstError=forceSalesSyncErrors.entries().next().value;
+  document.getElementById('panelStatus')?.setAttribute('data-ok',String(navigator.onLine&&!firstError));
   label.textContent=!navigator.onLine
     ? 'Sin sincronizar · sin conexión; el catálogo compartido no está confirmado'
     : firstError

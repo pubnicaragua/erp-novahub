@@ -545,6 +545,38 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
 .visit-history .visit-row{display:grid;gap:1px;padding:5px 0;border-bottom:1px solid var(--nova-ui-border,#dce8e3);font-size:11px}
 .visit-history .visit-row small{color:var(--nova-ui-muted-foreground,#6c7c77)}
 .visit-outcome{min-height:34px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:8px;background:var(--nova-ui-card,#fff);color:inherit;font-size:11px}
+
+/* Control de zoom debajo de los botones flotantes (antes quedaba tapado por «Nuevo punto»). */
+.leaflet-top.leaflet-left{top:58px}
+@media(max-width:820px){.leaflet-top.leaflet-left{top:70px}}
+/* Estado de conexión: se lee completo y solo muestra el detalle cuando hay un problema. */
+body.embedded-view .panel-status{flex-wrap:wrap;row-gap:2px}
+body.embedded-view .panel-status #liveStatus,body.embedded-view .panel-status #offlineStatusText{white-space:normal;overflow:visible;text-overflow:clip;flex:1 1 100%;font-size:11px;line-height:1.35}
+.panel-status[data-ok="true"] #offlineStatusText,.panel-status[data-ok="true"] .panel-status-separator{display:none}
+/* Visitas: filtros, tarjetas de cliente y estado vacío. */
+.visit-chips{display:flex;gap:6px}
+.visit-chips .chip{flex:1;min-height:34px;font-size:12px}
+.visit-item .itemtop{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.visit-item .itemname{font-size:14px;font-weight:800}
+.visit-item .meta{font-size:12px;margin-top:2px}
+.visit-pill{flex:none;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
+.visit-pill.pending{background:#fff4d6;color:#7a5200}
+.visit-pill.done{background:#dcf5e8;color:#075c3a}
+.visit-item .item-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.visit-item .item-actions button{min-height:36px;font-size:12px}
+.visit-item .item-actions .visit-action{flex:1 1 100%;background:var(--nova-ui-primary,#08785a);color:#fff;border-color:transparent;font-weight:800}
+.visit-item .item-actions button:not(.visit-action){flex:1}
+.empty-list{display:grid;gap:4px;padding:16px 12px;border:1px dashed var(--nova-ui-border,#dce8e3);border-radius:12px;text-align:center;font-size:12px;color:var(--nova-ui-muted-foreground,#6c7c77)}
+.empty-list b{font-size:13px;color:inherit;color:var(--nova-ui-foreground,#11241f)}
+/* Entregas: guía de tres pasos. */
+.delivery-guide{padding:12px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:12px;background:var(--nova-ui-card,#fff)}
+.delivery-guide b{font-size:13px}
+.delivery-guide ol{margin:0;padding-left:18px;display:grid;gap:4px;font-size:12px;line-height:1.4}
+.delivery-new-route{min-height:40px;border:0;border-radius:10px;background:var(--nova-ui-primary,#08785a);color:#fff;font-weight:800;font-size:13px;cursor:pointer}
+.visit-item .itemtop:has(.check){justify-content:flex-start;align-items:center;gap:10px}
+.visit-item .itemtop:has(.check) .itemname{text-align:left}
+body.embedded-view .panel-status #liveStatus{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mode-block .search-meta{display:none}
 </style>
 </head>
 <body>
@@ -599,10 +631,24 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
    </details>
   </section>
 
-  <!-- Modo Visitas y zonas: zonas de trabajo con gestor responsable. -->
-  <section class="mode-block work-zones" data-mode-only="visits" aria-label="Zonas de trabajo">
-   <div class="work-zones-head"><b>Zonas de trabajo</b><button id="workZoneNew" type="button" hidden>+ Nueva zona</button></div>
-   <div id="workZoneList" class="work-zone-list" role="list"><div class="meta">Cargando zonas…</div></div>
+  <!-- Modo Visitas y zonas: estado de la visita. -->
+  <section class="mode-block visit-tools" data-mode-only="visits" aria-label="Filtrar clientes por visita">
+   <div class="chips visit-chips" id="visitChips" role="group" aria-label="Estado de la visita">
+    <button class="chip active" type="button" data-visit-filter="all">Todos</button>
+    <button class="chip" type="button" data-visit-filter="pending">Por visitar</button>
+    <button class="chip" type="button" data-visit-filter="visited">Visitados</button>
+   </div>
+  </section>
+
+  <!-- Modo Entregas: guía corta y acción principal. -->
+  <section class="mode-block delivery-guide" data-mode-only="delivery" aria-label="Cómo armar una entrega">
+   <b>Arma tu ruta de entregas</b>
+   <ol>
+    <li>Marca con la casilla los puntos de la entrega y pulsa <b>Nueva ruta</b>; ordena las paradas como las vas a visitar.</li>
+    <li>Inicia la ruta: el mapa marca la siguiente parada.</li>
+    <li>Abre la parada en Google Maps o Waze y marca cada entrega al llegar.</li>
+   </ol>
+   <button type="button" class="delivery-new-route" id="deliveryNewRoute">Nueva ruta</button>
   </section>
 
   <!-- Acciones de trabajo: cada tarjeta se muestra solo en los modos que la usan y si el rol tiene permiso. -->
@@ -638,6 +684,13 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
   <div class="list" id="list"></div>
   <div class="kanban-board" id="kanbanBoard" hidden></div>
   <div class="history-list" id="historyView" hidden></div>
+
+  <!-- Modo Visitas y zonas (debajo de la lista): zonas de trabajo con gestor responsable. -->
+  <section class="mode-block work-zones" data-mode-only="visits" aria-label="Zonas de trabajo">
+   <div class="work-zones-head"><b>Zonas de trabajo</b><button id="workZoneNew" type="button" hidden>+ Nueva zona</button></div>
+   <div id="workZoneList" class="work-zone-list" role="list"><div class="meta">Cargando zonas…</div></div>
+  </section>
+
 
   <!-- Herramientas poco frecuentes, en un solo menú. -->
   <details class="more-tools" id="moreToolsPanel">
@@ -1865,8 +1918,12 @@ function applyModeVisibility(){
     const allowed = String(node.dataset.modeOnly || '').split(' ').filter(Boolean);
     node.toggleAttribute('data-mode-hidden', !allowed.includes(ACTIVE_MODE));
   });
+  const listTitle=document.getElementById('resultsTitle');
+  if(listTitle)listTitle.textContent={visits:'Clientes',prospecting:'Negocios encontrados',delivery:'Puntos para armar la ruta'}[ACTIVE_MODE]||listTitle.textContent;
 }
 applyModeVisibility();
+let visitFilter='all';
+let initialFitDone=false;
 let forceSalesPermissions = {};
 try {
   const parsedPermissions = JSON.parse(mapQuery.get('permissions') || '{}');
@@ -2895,6 +2952,55 @@ if(ACTIVE_MODE === 'visits'){
   document.getElementById('workZoneReassignConfirm')?.addEventListener('click', () => void confirmWorkZoneReassign());
   document.getElementById('workZoneReassignCancel')?.addEventListener('click', closeWorkZoneReassign);
 }
+
+// ----- Lista de clientes del modo visitas ------------------------------------------------------------------------
+function visitItemHtml(b){
+  const visited=isVisited(b);
+  const at=stateOf(b).visitedAt;
+  const when=visited&&at&&!Number.isNaN(new Date(at).getTime())?' · '+new Date(at).toLocaleDateString('es-NI',{day:'numeric',month:'short'}):'';
+  return '<div class="item visit-item" data-id="'+esc(b.id)+'">'
+    +'<div class="itemtop"><div><div class="itemname">'+esc(b.name)+'</div><div class="meta">'+esc(b.address||b.zone||'Sin dirección')+'</div></div>'
+    +'<span class="visit-pill '+(visited?'done':'pending')+'">'+(visited?'Visitado'+when:'Por visitar')+'</span></div>'
+    +'<div class="item-actions">'
+    +(canForceSales('registerVisit')?'<button class="visit-action" data-action="visit" data-id="'+esc(b.id)+'">Registrar visita</button>':'')
+    +'<button data-action="navigate-google" data-id="'+esc(b.id)+'">Google Maps</button>'
+    +'<button data-action="navigate-waze" data-id="'+esc(b.id)+'">Waze</button>'
+    +'</div></div>';
+}
+function emptyListHtml(totalInMap){
+  let title='Sin resultados';
+  let hint='Cambia los filtros o la búsqueda.';
+  if(ACTIVE_MODE==='visits'&&!totalInMap){title='Todavía no hay clientes en tu mapa';hint='Importa tus clientes con «Importar clientes» o marca uno con «Nuevo punto».'}
+  else if(ACTIVE_MODE==='delivery'&&!totalInMap){title='Sin puntos para la ruta';hint='Pulsa «Nueva ruta» o marca un punto con «Nuevo punto».'}
+  else if(ACTIVE_MODE==='prospecting'&&!totalInMap){title='Aún no hay negocios';hint='Usa «Cerca de mí» o «Buscar vista» para encontrar negocios cercanos.'}
+  return '<div class="empty-list"><b>'+title+'</b><span>'+hint+'</span></div>';
+}
+function openNavigationToBusiness(id,app){
+  const b=businesses.find(item=>String(item.id)===String(id));
+  if(!b||!Number.isFinite(b.lat)||!Number.isFinite(b.lng))return;
+  const url=app==='waze'
+    ?'https://waze.com/ul?ll='+b.lat+','+b.lng+'&navigate=yes'
+    :'https://www.google.com/maps/dir/?api=1&destination='+b.lat+','+b.lng+'&travelmode=driving';
+  window.open(url,'_blank','noopener');
+}
+function fitMapToBusinessesOnce(items){
+  const points=items.filter(b=>Number.isFinite(b.lat)&&Number.isFinite(b.lng));
+  if(!points.length)return;
+  initialFitDone=true;
+  if(points.length===1){map.flyTo([points[0].lat,points[0].lng],15,{duration:.4});return}
+  const bounds=new google.maps.LatLngBounds();
+  points.forEach(b=>bounds.extend({lat:b.lat,lng:b.lng}));
+  googleMap.fitBounds(bounds,64);
+}
+function syncVisitChips(){
+  document.querySelectorAll('[data-visit-filter]').forEach(chip=>chip.classList.toggle('active',chip.dataset.visitFilter===visitFilter));
+}
+document.querySelectorAll('[data-visit-filter]').forEach(chip=>chip.addEventListener('click',()=>{
+  visitFilter=chip.dataset.visitFilter||'all';
+  syncVisitChips();
+  render();
+}));
+document.getElementById('deliveryNewRoute')?.addEventListener('click',()=>openRoutePlanner(selectedBusinesses()));
 function norm(s=''){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function safeId(s){return String(s).replace(/[^a-zA-Z0-9_-]/g,'_')}
@@ -3078,7 +3184,7 @@ function applyOperatingMode(){
   applyModeVisibility();
   if(activeView==='kanban' && ACTIVE_MODE!=='prospecting')activeView='map';
   const title=document.getElementById('resultsTitle');
-  if(title)title.textContent=window.NovaForceSalesModes.titleFor(ACTIVE_MODE);
+  if(title)title.textContent={visits:'Clientes',prospecting:'Negocios encontrados',delivery:'Puntos para armar la ruta'}[ACTIVE_MODE]||window.NovaForceSalesModes.titleFor(ACTIVE_MODE);
   mergeBusinesses();
   populateFilters();
   render();
@@ -4068,6 +4174,7 @@ function pass(b){
   if(st === 'all' && isDiscarded(b)) return false;
   if(activeNearbyCenter && activeNearbyRadius && distanceMetersFromActive(b)>activeNearbyRadius) return false;
   if(st !== 'all' && statusOf(b) !== st) return false;
+  if(ACTIVE_MODE==='visits'&&visitFilter!=='all'&&(visitFilter==='visited')!==isVisited(b)) return false;
   if(pipelineFilter === 'found' && !isGoogleFound(b)) return false;
   if(pipelineFilter === 'selected' && !isSelected(b)) return false;
   if(pipelineFilter === 'kanban' && !isKanban(b)) return false;
@@ -5800,6 +5907,7 @@ function render(){
   }
   if(currentPopupBusinessId)refreshBusinessDetailOverlay();
   applyLabels();
+  if(!initialFitDone&&ACTIVE_MODE!=='prospecting'&&!hasRestoredCamera&&filtered.length)fitMapToBusinessesOnce(filtered);
 
   updatePipelineKpis(layerVisibleBusinesses);
   document.getElementById('resultText').textContent = `${filtered.length} de ${layerVisibleBusinesses.length}`;
@@ -5808,7 +5916,7 @@ function render(){
   const sourceFilter=document.getElementById('source');
   const stateFilter=document.getElementById('state');
   const searchFilter=document.getElementById('search');
-  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
+  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||visitFilter!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
   showAllBusinesses.hidden=!hasActiveFilters;
   const selectedCount=selectedBusinesses().length;
   const routeTop=document.getElementById('routeTop');
@@ -5817,7 +5925,7 @@ function render(){
 
   const list = document.getElementById('list');
   const visibleResults = filtered.slice(0, listLimit);
-  list.innerHTML = visibleResults.map(b => `
+  list.innerHTML = visibleResults.map(b => ACTIVE_MODE==='visits' ? visitItemHtml(b) : ACTIVE_MODE==='delivery' ? deliveryItemHtml(b) : `
     <div class="item ${isSelected(b)?'selected-item ':''}${isKanban(b)?'kanban-item':''}" data-id="${esc(b.id)}">
       <div class="itemtop">
         <input class="check" type="checkbox" data-action="select" data-id="${esc(b.id)}" ${isSelected(b)?'checked':''} aria-label="Seleccionar ${esc(b.name)}">
@@ -5833,7 +5941,7 @@ function render(){
          ${canForceSales('registerVisit') ? `<button class="visit-action" data-action="visit" data-id="${esc(b.id)}">Visitar</button>` : ''}
          ${CAN_DELETE_TEST ? `<button data-action="delete" data-id="${esc(b.id)}">Eliminar</button>` : ''}
        </div>
-    </div>`).join('') + (filtered.length > listLimit ? `<div class="item"><button class="show-more-results" id="showMoreResults" type="button">Mostrar más resultados (${filtered.length - listLimit} disponibles)</button></div>` : '');
+    </div>`).join('') + (!filtered.length ? emptyListHtml(layerVisibleBusinesses.length) : '') + (filtered.length > listLimit ? `<div class="item"><button class="show-more-results" id="showMoreResults" type="button">Mostrar más resultados (${filtered.length - listLimit} disponibles)</button></div>` : '');
   document.querySelectorAll('.item[data-id]').forEach(el => el.addEventListener('click', () => {
     const b = businesses.find(x => x.id === el.dataset.id);
     if(!b) return;
@@ -5846,6 +5954,8 @@ function render(){
   document.querySelectorAll('[data-action="select"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();toggleSelected(el.dataset.id)}));
   document.querySelectorAll('[data-action="kanban"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();addToKanban(el.dataset.id)}));
   document.querySelectorAll('[data-action="visit"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();registerVisit(el.dataset.id)}));
+  document.querySelectorAll('[data-action="navigate-google"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();openNavigationToBusiness(el.dataset.id,'google')}));
+  document.querySelectorAll('[data-action="navigate-waze"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();openNavigationToBusiness(el.dataset.id,'waze')}));
   document.querySelectorAll('[data-action="delete"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();deleteBusiness(el.dataset.id)}));
   document.getElementById('showMoreResults')?.addEventListener('click', () => {listLimit += 140; render()});
   updateView();
@@ -7223,6 +7333,8 @@ document.getElementById('showAllBusinesses').addEventListener('click',()=>{
   document.getElementById('category').value='all';
   document.getElementById('source').value='all';
   document.getElementById('state').value='all';
+  visitFilter='all';
+  syncVisitChips();
   document.getElementById('search').value='';
   activeNearbyCenter=null;
   activeNearbyRadius=null;
@@ -7249,6 +7361,7 @@ function updateOfflineStatus(){
   const label=document.getElementById('offlineStatusText');
   if(!label)return;
   const firstError=forceSalesSyncErrors.entries().next().value;
+  document.getElementById('panelStatus')?.setAttribute('data-ok',String(navigator.onLine&&!firstError));
   label.textContent=!navigator.onLine
     ? 'Sin sincronizar · sin conexión; el catálogo compartido no está confirmado'
     : firstError
@@ -7429,6 +7542,19 @@ window.NovaForceSalesModes.register({
     input.dispatchEvent(new Event('input',{bubbles:true}));
   },
 });
+
+// Tarjeta de un punto en la lista de entregas: marcarlo para la ruta y abrir la navegación.
+function deliveryItemHtml(b){
+  const picked=isSelected(b);
+  return '<div class="item visit-item'+(picked?' selected-item':'')+'" data-id="'+esc(b.id)+'">'
+    +'<div class="itemtop"><input class="check" type="checkbox" data-action="select" data-id="'+esc(b.id)+'"'+(picked?' checked':'')+' aria-label="Agregar '+esc(b.name)+' a la ruta">'
+    +'<div><div class="itemname">'+esc(b.name)+'</div><div class="meta">'+esc(b.address||b.zone||'Sin dirección')+'</div></div></div>'
+    +'<div class="item-actions">'
+    +'<button class="visit-action" data-action="select" data-id="'+esc(b.id)+'">'+(picked?'✓ En la ruta':'Agregar a la ruta')+'</button>'
+    +'<button data-action="navigate-google" data-id="'+esc(b.id)+'">Google Maps</button>'
+    +'<button data-action="navigate-waze" data-id="'+esc(b.id)+'">Waze</button>'
+    +'</div></div>';
+}
 if(innerWidth > 820) sheet.classList.remove('collapsed');
 updateToggle();
 

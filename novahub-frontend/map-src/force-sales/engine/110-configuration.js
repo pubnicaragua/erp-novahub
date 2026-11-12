@@ -32,7 +32,7 @@ function applyOperatingMode(){
   applyModeVisibility();
   if(activeView==='kanban' && ACTIVE_MODE!=='prospecting')activeView='map';
   const title=document.getElementById('resultsTitle');
-  if(title)title.textContent=window.NovaForceSalesModes.titleFor(ACTIVE_MODE);
+  if(title)title.textContent={visits:'Clientes',prospecting:'Negocios encontrados',delivery:'Puntos para armar la ruta'}[ACTIVE_MODE]||window.NovaForceSalesModes.titleFor(ACTIVE_MODE);
   mergeBusinesses();
   populateFilters();
   render();

@@ -42,6 +42,7 @@ function pass(b){
   if(st === 'all' && isDiscarded(b)) return false;
   if(activeNearbyCenter && activeNearbyRadius && distanceMetersFromActive(b)>activeNearbyRadius) return false;
   if(st !== 'all' && statusOf(b) !== st) return false;
+  if(ACTIVE_MODE==='visits'&&visitFilter!=='all'&&(visitFilter==='visited')!==isVisited(b)) return false;
   if(pipelineFilter === 'found' && !isGoogleFound(b)) return false;
   if(pipelineFilter === 'selected' && !isSelected(b)) return false;
   if(pipelineFilter === 'kanban' && !isKanban(b)) return false;

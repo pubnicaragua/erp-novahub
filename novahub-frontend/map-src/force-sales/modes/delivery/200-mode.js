@@ -24,3 +24,16 @@ window.NovaForceSalesModes.register({
     input.dispatchEvent(new Event('input',{bubbles:true}));
   },
 });
+
+// Tarjeta de un punto en la lista de entregas: marcarlo para la ruta y abrir la navegación.
+function deliveryItemHtml(b){
+  const picked=isSelected(b);
+  return '<div class="item visit-item'+(picked?' selected-item':'')+'" data-id="'+esc(b.id)+'">'
+    +'<div class="itemtop"><input class="check" type="checkbox" data-action="select" data-id="'+esc(b.id)+'"'+(picked?' checked':'')+' aria-label="Agregar '+esc(b.name)+' a la ruta">'
+    +'<div><div class="itemname">'+esc(b.name)+'</div><div class="meta">'+esc(b.address||b.zone||'Sin dirección')+'</div></div></div>'
+    +'<div class="item-actions">'
+    +'<button class="visit-action" data-action="select" data-id="'+esc(b.id)+'">'+(picked?'✓ En la ruta':'Agregar a la ruta')+'</button>'
+    +'<button data-action="navigate-google" data-id="'+esc(b.id)+'">Google Maps</button>'
+    +'<button data-action="navigate-waze" data-id="'+esc(b.id)+'">Waze</button>'
+    +'</div></div>';
+}

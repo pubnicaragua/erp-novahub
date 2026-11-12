@@ -17,8 +17,12 @@ function applyModeVisibility(){
     const allowed = String(node.dataset.modeOnly || '').split(' ').filter(Boolean);
     node.toggleAttribute('data-mode-hidden', !allowed.includes(ACTIVE_MODE));
   });
+  const listTitle=document.getElementById('resultsTitle');
+  if(listTitle)listTitle.textContent={visits:'Clientes',prospecting:'Negocios encontrados',delivery:'Puntos para armar la ruta'}[ACTIVE_MODE]||listTitle.textContent;
 }
 applyModeVisibility();
+let visitFilter='all';
+let initialFitDone=false;
 let forceSalesPermissions = {};
 try {
   const parsedPermissions = JSON.parse(mapQuery.get('permissions') || '{}');

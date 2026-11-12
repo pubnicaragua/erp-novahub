@@ -97,6 +97,7 @@ function render(){
   }
   if(currentPopupBusinessId)refreshBusinessDetailOverlay();
   applyLabels();
+  if(!initialFitDone&&ACTIVE_MODE!=='prospecting'&&!hasRestoredCamera&&filtered.length)fitMapToBusinessesOnce(filtered);
 
   updatePipelineKpis(layerVisibleBusinesses);
   document.getElementById('resultText').textContent = `${filtered.length} de ${layerVisibleBusinesses.length}`;
@@ -105,7 +106,7 @@ function render(){
   const sourceFilter=document.getElementById('source');
   const stateFilter=document.getElementById('state');
   const searchFilter=document.getElementById('search');
-  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
+  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||visitFilter!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
   showAllBusinesses.hidden=!hasActiveFilters;
   const selectedCount=selectedBusinesses().length;
   const routeTop=document.getElementById('routeTop');
@@ -114,7 +115,7 @@ function render(){
 
   const list = document.getElementById('list');
   const visibleResults = filtered.slice(0, listLimit);
-  list.innerHTML = visibleResults.map(b => `
+  list.innerHTML = visibleResults.map(b => ACTIVE_MODE==='visits' ? visitItemHtml(b) : ACTIVE_MODE==='delivery' ? deliveryItemHtml(b) : `
     <div class="item ${isSelected(b)?'selected-item ':''}${isKanban(b)?'kanban-item':''}" data-id="${esc(b.id)}">
       <div class="itemtop">
         <input class="check" type="checkbox" data-action="select" data-id="${esc(b.id)}" ${isSelected(b)?'checked':''} aria-label="Seleccionar ${esc(b.name)}">
@@ -130,7 +131,7 @@ function render(){
          ${canForceSales('registerVisit') ? `<button class="visit-action" data-action="visit" data-id="${esc(b.id)}">Visitar</button>` : ''}
          ${CAN_DELETE_TEST ? `<button data-action="delete" data-id="${esc(b.id)}">Eliminar</button>` : ''}
        </div>
-    </div>`).join('') + (filtered.length > listLimit ? `<div class="item"><button class="show-more-results" id="showMoreResults" type="button">Mostrar más resultados (${filtered.length - listLimit} disponibles)</button></div>` : '');
+    </div>`).join('') + (!filtered.length ? emptyListHtml(layerVisibleBusinesses.length) : '') + (filtered.length > listLimit ? `<div class="item"><button class="show-more-results" id="showMoreResults" type="button">Mostrar más resultados (${filtered.length - listLimit} disponibles)</button></div>` : '');
   document.querySelectorAll('.item[data-id]').forEach(el => el.addEventListener('click', () => {
     const b = businesses.find(x => x.id === el.dataset.id);
     if(!b) return;
@@ -143,6 +144,8 @@ function render(){
   document.querySelectorAll('[data-action="select"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();toggleSelected(el.dataset.id)}));
   document.querySelectorAll('[data-action="kanban"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();addToKanban(el.dataset.id)}));
   document.querySelectorAll('[data-action="visit"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();registerVisit(el.dataset.id)}));
+  document.querySelectorAll('[data-action="navigate-google"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();openNavigationToBusiness(el.dataset.id,'google')}));
+  document.querySelectorAll('[data-action="navigate-waze"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();openNavigationToBusiness(el.dataset.id,'waze')}));
   document.querySelectorAll('[data-action="delete"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();deleteBusiness(el.dataset.id)}));
   document.getElementById('showMoreResults')?.addEventListener('click', () => {listLimit += 140; render()});
   updateView();
