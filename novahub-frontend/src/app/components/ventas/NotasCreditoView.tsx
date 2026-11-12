@@ -1114,42 +1114,60 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         </div>
         <div className="flex justify-end" data-tour="sales-form-actions"><SalesViewTutorial view="credit-notes" context="form" /></div>
         <Card className="rounded-2xl border-border/50">
-          <CardContent className="space-y-4 p-5">
-            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Interés y calendario opcionales</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="flex items-end leading-tight sm:min-h-10">Interés</Label>
+          <CardContent className="space-y-4 p-4 sm:p-5">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Interés y calendario opcionales</p>
+              <p className="text-[10px] text-muted-foreground">Configura el costo financiado y los abonos cuando aplique.</p>
+            </div>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-12">
+              <div className={`min-w-0 space-y-1.5 ${interestMode === 'NONE' ? 'lg:col-span-4' : 'lg:col-span-3'}`}>
+                <Label htmlFor="credit-interest-mode" className="text-xs font-semibold">Interés</Label>
                 <Select value={interestMode} onValueChange={(value) => setLocalDoc({ ...localDoc, interestMode: value, interestValue: value === 'NONE' ? 0 : localDoc.interestValue || '' })}>
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="credit-interest-mode" className="h-10 w-full"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="NONE">Sin interés</SelectItem><SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem><SelectItem value="PERCENTAGE">Porcentaje único</SelectItem></SelectContent>
                 </Select>
               </div>
-              {interestMode !== 'NONE' && <div className="space-y-1.5">
-                <Label htmlFor="credit-interest-value" className="flex items-end leading-tight sm:min-h-10">{interestMode === 'PERCENTAGE' ? 'Porcentaje sobre el crédito (%)' : 'Interés fijo'}</Label>
-                <Input id="credit-interest-value" type="number" min="0" step="0.01" max={interestMode === 'PERCENTAGE' ? 100 : undefined} value={localDoc.interestValue ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, interestValue: event.target.value })} />
+              {interestMode !== 'NONE' && <div className="min-w-0 space-y-1.5 lg:col-span-3">
+                <Label htmlFor="credit-interest-value" className="text-xs font-semibold">{interestMode === 'PERCENTAGE' ? 'Porcentaje sobre el crédito (%)' : 'Interés fijo'}</Label>
+                <Input id="credit-interest-value" type="number" min="0" step="0.01" max={interestMode === 'PERCENTAGE' ? 100 : undefined} value={localDoc.interestValue ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, interestValue: event.target.value })} className="h-10" />
+              </div>}
+              <div className={`min-w-0 ${interestMode === 'NONE' ? 'lg:col-span-8' : 'lg:col-span-6'}`}>
+                <div className="grid h-full min-w-0 gap-2 sm:grid-cols-2">
+                  <div className="flex min-w-0 flex-col justify-center rounded-xl border border-border/50 bg-muted/10 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Interés estimado</p>
+                    <p className="mt-1 break-words text-sm font-bold tabular-nums text-foreground">{formatExplicitAmount(interestPreview, localDoc.currency || displayCurrency)}</p>
+                  </div>
+                  <div className="flex min-w-0 flex-col justify-center rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Total financiado</p>
+                    <p className="mt-1 break-words text-sm font-bold tabular-nums text-foreground">{formatExplicitAmount(Number(localDoc.total || 0) + interestPreview, localDoc.currency || displayCurrency)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="min-w-0 rounded-xl border border-border/60 bg-muted/10 p-3 sm:p-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <input id="credit-plan-enabled" type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={Boolean(localDoc.planEnabled)} onChange={(event) => setLocalDoc({ ...localDoc, planEnabled: event.target.checked, planCalculationMode: localDoc.planCalculationMode || 'AMOUNT', firstInstallmentDate: event.target.checked ? (localDoc.firstInstallmentDate || localDoc.date) : localDoc.firstInstallmentDate, frequency: localDoc.frequency || 'WEEKLY' })} />
+                <div className="min-w-0 flex-1">
+                  <Label htmlFor="credit-plan-enabled" className="cursor-pointer text-xs font-semibold">Definir un plan de abonos</Label>
+                  <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Con el monto por abono se estima la fecha final; con la fecha final se calcula el abono aproximado. Se permiten pagos parciales y anticipos; un pago mayor al saldo no se acepta.</p>
+                </div>
+              </div>
+              {localDoc.planEnabled && <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="min-w-0 space-y-1.5">
+                  <Label className="text-xs font-semibold">Frecuencia</Label>
+                  <Select value={localDoc.frequency || 'WEEKLY'} onValueChange={(value) => setLocalDoc({ ...localDoc, frequency: value })}>
+                    <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-0 space-y-1.5"><Label className="text-xs font-semibold">Método de cálculo</Label><Select value={planCalculationMode} onValueChange={(value) => { const mode = value as typeof planCalculationMode; setLocalDoc({ ...localDoc, planCalculationMode: mode, ...(mode === 'DEADLINE' && installmentPlanEstimate ? { dueDate: installmentPlanEstimate.finalDueDate } : {}) }); }}><SelectTrigger className="h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem></SelectContent></Select></div>
+                <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-first-installment" className="text-xs font-semibold">Fecha del primer abono</Label><Input id="credit-first-installment" type="date" required value={localDoc.firstInstallmentDate || isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, firstInstallmentDate: event.target.value })} className="h-10" /></div>
+                {planCalculationMode === 'AMOUNT' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-installment-amount" className="text-xs font-semibold">Monto por abono</Label><Input id="credit-installment-amount" type="number" min="0.01" step="0.01" value={localDoc.installmentAmount ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, planCalculationMode: 'AMOUNT', installmentAmount: event.target.value })} currencyPrecision className="h-10" /></div>}
+                {installmentPlanEstimate && <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed sm:col-span-2 xl:col-span-4"><p className="font-bold text-foreground">{planCalculationMode === 'AMOUNT' ? 'Fecha estimada de cancelación' : 'Abono estimado'}</p><p className="mt-1 text-muted-foreground">{planCalculationMode === 'AMOUNT'
+                  ? formatDateEs(installmentPlanEstimate.finalDueDate) + ' · ' + installmentPlanEstimate.installmentCount + ' abonos de ' + formatExplicitAmount(installmentPlanEstimate.installmentAmount, localDoc.currency) + ' aprox.'
+                  : installmentPlanEstimate.installmentCount + ' abonos de ' + formatExplicitAmount(installmentPlanEstimate.installmentAmount, localDoc.currency) + ' aprox. hasta ' + formatDateEs(installmentPlanEstimate.finalDueDate) + '.'} La última cuota puede ajustarse por redondeo.</p></div>}
               </div>}
             </div>
-            <p className="text-[10px] text-muted-foreground">Interés estimado: {formatExplicitAmount(interestPreview, localDoc.currency || displayCurrency)} · Total financiado: {formatExplicitAmount(Number(localDoc.total || 0) + interestPreview, localDoc.currency || displayCurrency)}. El porcentaje queda convertido a un monto fijo al emitir.</p>
-            <div className="flex items-start gap-2 border-t border-border/40 pt-3">
-              <input id="credit-plan-enabled" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={Boolean(localDoc.planEnabled)} onChange={(event) => setLocalDoc({ ...localDoc, planEnabled: event.target.checked, planCalculationMode: localDoc.planCalculationMode || 'AMOUNT', firstInstallmentDate: event.target.checked ? (localDoc.firstInstallmentDate || localDoc.date) : localDoc.firstInstallmentDate, frequency: localDoc.frequency || 'WEEKLY' })} />
-              <Label htmlFor="credit-plan-enabled" className="cursor-pointer text-xs">Definir un plan de abonos</Label>
-            </div>
-            {localDoc.planEnabled && <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="flex items-end leading-tight sm:min-h-10">Frecuencia</Label>
-                <Select value={localDoc.frequency || 'WEEKLY'} onValueChange={(value) => setLocalDoc({ ...localDoc, frequency: value })}>
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5"><Label className="flex items-end leading-tight sm:min-h-10">Método de cálculo</Label><Select value={planCalculationMode} onValueChange={(value) => { const mode = value as typeof planCalculationMode; setLocalDoc({ ...localDoc, planCalculationMode: mode, ...(mode === 'DEADLINE' && installmentPlanEstimate ? { dueDate: installmentPlanEstimate.finalDueDate } : {}) }); }}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem></SelectContent></Select></div>
-              <div className="space-y-1.5"><Label htmlFor="credit-first-installment" className="flex items-end leading-tight sm:min-h-10">Fecha del primer abono</Label><Input id="credit-first-installment" type="date" required value={localDoc.firstInstallmentDate || isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, firstInstallmentDate: event.target.value })} /></div>
-              {planCalculationMode === 'AMOUNT' && <div className="space-y-1.5"><Label htmlFor="credit-installment-amount" className="flex items-end leading-tight sm:min-h-10">Monto por abono</Label><Input id="credit-installment-amount" type="number" min="0.01" step="0.01" value={localDoc.installmentAmount ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, planCalculationMode: 'AMOUNT', installmentAmount: event.target.value })} currencyPrecision /></div>}
-              {installmentPlanEstimate && <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed sm:col-span-2"><p className="font-bold text-foreground">{planCalculationMode === 'AMOUNT' ? 'Fecha estimada de cancelación' : 'Abono estimado'}</p><p className="mt-1 text-muted-foreground">{planCalculationMode === 'AMOUNT'
-                ? formatDateEs(installmentPlanEstimate.finalDueDate) + ' · ' + installmentPlanEstimate.installmentCount + ' abonos de ' + formatExplicitAmount(installmentPlanEstimate.installmentAmount, localDoc.currency) + ' aprox.'
-                : installmentPlanEstimate.installmentCount + ' abonos de ' + formatExplicitAmount(installmentPlanEstimate.installmentAmount, localDoc.currency) + ' aprox. hasta ' + formatDateEs(installmentPlanEstimate.finalDueDate) + '.'} La última cuota puede ajustarse por redondeo.</p></div>}
-            </div>}
-            <p className="text-[10px] text-muted-foreground">Con el monto por abono se estima la fecha final; con la fecha final se calcula el abono aproximado. Se permiten pagos parciales y anticipos; un pago mayor al saldo no se acepta.</p>
           </CardContent>
         </Card>
         {!isCreating && Array.isArray(localDoc.installments) && localDoc.installments.length > 0 && <Card className="rounded-2xl border-border/50">
