@@ -42,7 +42,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
 import { updateMessageThread, upsertMessageThread } from './message-thread-cache';
 import {
-  allowMessageAttachmentDrop,
   dropMessageAttachmentFiles,
   hasMessageAttachmentFiles,
   pasteMessageAttachmentFiles,
@@ -786,8 +785,6 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                 value={content}
                 onChange={(event) => setContent(event.target.value.slice(0, 4000))}
                 onPaste={(event) => pasteMessageAttachmentFiles(event, (files) => composeAttachmentComposerRef.current?.addFiles(files))}
-                onDragOver={allowMessageAttachmentDrop}
-                onDrop={(event) => dropMessageAttachmentFiles(event, (files) => composeAttachmentComposerRef.current?.addFiles(files))}
                 placeholder={composeMode === 'SUPPORT' ? 'Describe el problema o la ayuda que necesitas…' : 'Escribí el mensaje con el contexto necesario…'}
                 className="min-h-36"
                 disabled={sending}

@@ -46,10 +46,9 @@ export function useMessageAttachmentDrop<T extends HTMLElement>(onFiles: (files:
       if (disabled) reset();
       return;
     }
-    const alreadyHandled = event.defaultPrevented;
     event.preventDefault();
     reset();
-    if (disabled || alreadyHandled) return;
+    if (disabled) return;
     const files = getMessageAttachmentFiles(event.dataTransfer);
     if (files.length) onFiles(files);
   };

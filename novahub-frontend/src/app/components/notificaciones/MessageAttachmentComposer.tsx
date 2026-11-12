@@ -142,6 +142,7 @@ export const MessageAttachmentComposer = forwardRef<MessageAttachmentComposerHan
   const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
     if (disabled || !hasMessageAttachmentFiles(event.dataTransfer)) return;
     event.preventDefault();
+    event.stopPropagation();
     dragDepthRef.current = 0;
     setIsDragging(false);
     addFiles(getMessageAttachmentFiles(event.dataTransfer));
