@@ -113,6 +113,8 @@ function popupHtml(b){
     </div>
     <div class="route-point-memberships"><b>Rutas que incluyen este punto</b>${prospectRoutes.length?prospectRoutes.map(route=>`<span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</div>
     ${customerLinkPanel}
+    ${customerDebtHtml(b)}
+    ${visitHistoryHtml(b)}
     ${routePlanningMode&&isCurrentRouteStop?`<div class="meta">Parada de la ruta: ${esc(selectedRouteName)}</div>`:''}
     ${CAN_ASSIGN_PROSPECT_OWNER&&canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Responsable del punto</label><select id="point-assignee-${sid}" ${assigneeLoading?'disabled':''}><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status" aria-live="polite">${esc(assigneeNotice)}</div>`:''}${assigneesLoadState==='error'?'<button class="assignee-retry" type="button">Reintentar carga de usuarios</button>':''}<button type="button" onclick="saveProspectAssignee('${b.id}')" ${assigneeLoading?'disabled':''}>Guardar responsable</button></div>` : ''}
     <div class="warn">${esc(b.precision)}. Validar actividad, ubicación y persona de contacto antes de la visita.</div>
@@ -125,6 +127,7 @@ function popupHtml(b){
     <div class="popquick">
       <button class="${c.selected?'primary-action':''}" onclick="toggleSelected('${b.id}')">${c.selected?'✓ Seleccionado':'Seleccionar'}</button>
       ${canForceSales('changeStage') ? (c.kanban ? '<button disabled>✓ Ya en Fuerza Comercial</button>' : `<button class="primary-action" onclick="addToKanban('${b.id}')">Agregar al Kanban</button>`) : ''}
+      ${visitOutcomeSelectHtml(sid)}
       ${canForceSales('registerVisit') ? `<button class="visit-action" onclick="registerVisit('${b.id}')">⌖ Registrar visita</button>` : ''}
       ${canForceSales('discardProspect') ? `<button onclick="discardBusiness('${b.id}')">Descartar</button>` : ''}
       ${CAN_DELETE_TEST ? `<button onclick="deleteBusiness('${b.id}')">Eliminar negocio</button>` : ''}
@@ -211,6 +214,7 @@ async function saveCustomerLink(rawBusinessId,customerId,customerSnapshot){
     business.customer=linkedCustomer;
     business.customerLinkedAt=state.customerLinkedAt;
     business.customerLinkedBy=state.customerLinkedBy;
+    forgetPointExtras(business);
     persistCommercial();
     rerenderKeepingPopup(business);
     toast(customerId?'Cliente vinculado al punto comercial':'Vínculo de cliente retirado');

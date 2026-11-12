@@ -61,7 +61,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [mapFrameError, setMapFrameError] = useState(false);
   const [mapFrameLoadVersion, setMapFrameLoadVersion] = useState(0);
-  const [customerLinkPointId, setCustomerLinkPointId] = useState('');
+  const [customerLinkPoint, setCustomerLinkPoint] = useState<{ id: string; name: string; address: string; phone: string } | null>(null);
   const [summary, setSummary] = useState<ForceSalesSummary | null>(null);
   if (previousSubModule !== activeSubModule) {
     setPreviousSubModule(activeSubModule);
@@ -173,6 +173,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     canAssignTeam,
     canAssignProspectOwner,
     canLinkCustomer,
+    canViewCustomerSummary: canPerform('SALES_CLIENTS', 'read'),
     canOperateAssignedRoutes: canPerform('FORCE_SALES', 'view'),
     permissions: workflowPermissions,
     mapId: googleMapsMapId,
@@ -208,7 +209,8 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
       if (event.data?.type === 'force-sales-open-customer-link') {
         const pointId = String(event.data.pointId || '').trim();
         if (!canLinkCustomer || !pointId) return;
-        setCustomerLinkPointId(pointId);
+        const point = (event.data.point || {}) as Record<string, unknown>;
+        setCustomerLinkPoint({ id: pointId, name: String(point.name || ''), address: String(point.address || ''), phone: String(point.phone || '') });
       }
       if (event.data?.type === 'force-sales-summary') {
         const next = parseForceSalesSummary(event.data);
@@ -225,9 +227,9 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   }, [canLinkCustomer]);
 
   const selectCustomer = (customer: ForceSalesCustomerOption) => {
-    if (!customerLinkPointId) return;
-    sendToMap('force-sales-customer-link-selected', { pointId: customerLinkPointId, customer });
-    setCustomerLinkPointId('');
+    if (!customerLinkPoint) return;
+    sendToMap('force-sales-customer-link-selected', { pointId: customerLinkPoint.id, customer });
+    setCustomerLinkPoint(null);
   };
 
   if (!isAuthorizedUser) {
@@ -296,8 +298,10 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         {!mapConfig && <div className="flex h-full items-center justify-center text-sm font-semibold text-[#123f35]">Cargando configuración de mapas…</div>}
       </div>
       <ForceSalesCustomerLinkDialog
-        open={Boolean(customerLinkPointId)}
-        onClose={() => setCustomerLinkPointId('')}
+        open={Boolean(customerLinkPoint)}
+        point={customerLinkPoint}
+        canCreate={canPerform('SALES_CLIENTS', 'create')}
+        onClose={() => setCustomerLinkPoint(null)}
         onSelect={selectCustomer}
       />
       <input

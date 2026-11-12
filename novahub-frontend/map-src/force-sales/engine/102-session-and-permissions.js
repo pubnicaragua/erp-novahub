@@ -32,6 +32,7 @@ function requireForceSales(action){
 }
 const API_BASE = (mapQuery.get('api') || localStorage.getItem('novaApiBase') || 'http://localhost:3000/api').replace(/\/$/, '');
 const CAN_LINK_CUSTOMER = mapQuery.get('canLinkCustomer') === 'true' && canForceSales('updateProspect');
+const CAN_VIEW_CUSTOMER_SUMMARY = mapQuery.get('canViewCustomerSummary') === 'true';
 const EXTERNAL_DURABLE_TRACKING = mapQuery.get('durableTracking') === 'true';
 const NOVAHUB_ISOTIPO_URL = mapQuery.get('isotipo') || '';
 let ROUTE_LOGO_URI = mapQuery.get('companyLogo') || NOVAHUB_ISOTIPO_URL;

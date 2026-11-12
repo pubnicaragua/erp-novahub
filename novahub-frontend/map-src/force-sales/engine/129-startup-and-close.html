@@ -17,6 +17,7 @@ setTimeout(() => {
       else if(ACTIVE_MODE==='delivery')setSearchStatus('Modo entregas activo. Planifica una ruta con una o varias paradas.');
       else setSearchStatus('Modo visitas y zonas activo. Solo se muestran los puntos de tu empresa.');
       loadSellerPresence();
+      if(ACTIVE_MODE==='visits')void loadWorkZones();
     });
   });
 }, 450);

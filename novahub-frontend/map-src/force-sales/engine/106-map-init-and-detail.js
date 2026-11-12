@@ -122,6 +122,7 @@ function refreshBusinessDetailOverlay(){
   const content=document.getElementById('businessDetailContent');
   if(!business||!overlay||!content){closeBusinessDetailPopup();return}
   overlay.hidden=false;
+  ensurePointExtras(business);
   const html=popupHtml(business);
   const active=document.activeElement;
   const editing=content.contains(active)&&/^(INPUT|SELECT|TEXTAREA)$/.test(active?.tagName||'');
@@ -191,6 +192,7 @@ googleMap.addListener('bounds_changed',scheduleBusinessDetailPosition);
 googleMap.addListener('dragstart',()=>clearFocusedQuickPoint());
 googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
+  if(handleWorkZoneMapClick(event))return;
   if(routePlanningMode){toast('Pulsa un marcador comercial existente para agregar ese punto a la ruta');return}
   openQuickPointAt(event.latLng.lat(), event.latLng.lng(), 'mapa');
 });

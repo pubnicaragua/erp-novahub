@@ -70,6 +70,7 @@ function scheduleForceSalesRefresh(){
   const work=[];
   if(scope.has('prospects'))work.push(loadRemoteProspects());
   if(scope.has('routes'))work.push(loadRemoteRoutes());
+  if(scope.has('routes')&&ACTIVE_MODE==='visits')work.push(loadWorkZones());
   if(scope.has('presence'))work.push(loadSellerPresence());
   if(scope.has('trail')&&shouldLoadLocationTrail())work.push(loadLocationTrail({fitCamera:false}));
   void Promise.all(work).catch(()=>undefined).finally(()=>{
@@ -119,7 +120,7 @@ function requestCustomerLinkSelection(trigger){
   if(!CAN_LINK_CUSTOMER||!canForceSales('updateProspect'))return requireForceSales('updateProspect');
   if(!navigator.onLine||!state.remoteId||state.syncPending){setCustomerLookupAvailability(panel);return}
   setCustomerLookupStatus(panel,'Selecciona un cliente activo.');
-  window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-open-customer-link',pointId},location.origin);
+  window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-open-customer-link',pointId,point:{name:String(business?.name||''),address:String(business?.address||''),phone:String(business?.phone||'')}},location.origin);
 }
 document.addEventListener('click',event=>{
   const trigger=event.target?.closest?.('[data-customer-link-trigger]');

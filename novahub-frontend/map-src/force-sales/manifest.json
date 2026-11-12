@@ -27,6 +27,8 @@
     "engine/106-map-init-and-detail.js",
     "engine/107-markers.js",
     "modes/visits/108-zones.js",
+    "modes/visits/109-customer-debt.js",
+    "modes/visits/110-work-zones.js",
     "engine/109-helpers-and-api.js",
     "engine/110-configuration.js",
     "routes/111-saved-routes.js",

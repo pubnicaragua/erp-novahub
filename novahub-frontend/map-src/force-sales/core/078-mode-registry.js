@@ -8,9 +8,9 @@ window.NovaForceSalesModes=(()=>{
   const LAYER_KEYS=Object.freeze(['users','manualPoints','catalog','plannedRoutes','gpsTrail','basePlaces']);
   // Valores de respaldo; el ERP envía las capas efectivas de la empresa en ?layerDefaults=.
   const FALLBACK_LAYERS=Object.freeze({
-    visits:Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:false,gpsTrail:false,basePlaces:false}),
+    visits:Object.freeze({users:true,manualPoints:true,catalog:true,plannedRoutes:false,gpsTrail:false,basePlaces:false}),
     prospecting:Object.freeze({users:true,manualPoints:true,catalog:true,plannedRoutes:false,gpsTrail:false,basePlaces:true}),
-    delivery:Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:true,gpsTrail:false,basePlaces:true}),
+    delivery:Object.freeze({users:true,manualPoints:true,catalog:true,plannedRoutes:true,gpsTrail:false,basePlaces:true}),
   });
   const MODE_ID=/^[a-z][a-z0-9-]{1,30}$/;
   const definitions=new Map();

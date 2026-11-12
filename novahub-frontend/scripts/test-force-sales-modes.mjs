@@ -135,7 +135,7 @@ assert.deepEqual(parsed.primaryAction, { label: 'Nuevo punto', disabled: false }
 const { buildForceSalesMapUrl } = await import(new URL('../src/app/components/force-sales/forceSalesMapUrl.ts', import.meta.url));
 const url = new URL(buildForceSalesMapUrl({
   mapUrl: '/maps/mapa.html', apiBase: 'https://api.test/api', logo: '/logo.png', view: 'map', userId: 'u1', tenantId: 't1',
-  platformAdmin: false, canAssignTeam: true, canAssignProspectOwner: false, canLinkCustomer: true, canOperateAssignedRoutes: true,
+  platformAdmin: false, canAssignTeam: true, canAssignProspectOwner: false, canLinkCustomer: true, canViewCustomerSummary: true, canOperateAssignedRoutes: true,
   permissions: { registerVisit: true }, mapId: 'MAIN', cleanMapId: 'CLEAN', mapProvider: 'GOOGLE', mapSearchMode: 'EXTERNAL',
   mapsKey: 'k', mode: 'visits', modes: ['visits', 'delivery'], layerDefaults: { basePlaces: false },
 }), 'https://novahub.test');
@@ -144,6 +144,28 @@ assert.equal(url.searchParams.get('modes'), 'visits,delivery');
 assert.deepEqual(JSON.parse(url.searchParams.get('layerDefaults')), { basePlaces: false });
 assert.equal(url.searchParams.get('cleanMapId'), 'CLEAN', 'El Map ID limpio viaja al mapa');
 assert.equal(url.searchParams.get('embedded'), '1');
+assert.equal(url.searchParams.get('canViewCustomerSummary'), 'true', 'El mapa sabe si el rol puede ver el estado de cuenta del cliente');
 assert.equal(url.searchParams.get('mapTileUrl'), null, 'Los parámetros opcionales vacíos no se envían');
+
+// --- Fase B: zonas, ficha de deuda y visitas --------------------------------------------------------------------------
+assert.ok(manifest.parts.includes('modes/visits/109-customer-debt.js') && manifest.parts.includes('modes/visits/110-work-zones.js'), 'Zonas y ficha de deuda pertenecen al modo Visitas y zonas');
+assert.match(sidebar, /<section class="mode-block work-zones" data-mode-only="visits"/, 'Las zonas de trabajo solo se ven en el modo Visitas y zonas');
+assert.match(sidebar, /id="zoneManager" type="button" data-mode-only="prospecting"/, 'El reparto hexagonal de Prospección ya no aparece en Visitas');
+for (const id of ['workZoneModal', 'workZoneReassignModal', 'workZoneMovePoints']) assert.ok(published.includes('id="' + id + '"'), id + ' existe en el marcado');
+assert.match(published, /function handleWorkZoneMapClick\(event\)/, 'Marcar el centro de una zona pasa por el único manejador de clic del mapa');
+assert.match(published, /if\(handleWorkZoneMapClick\(event\)\)return;/, 'El clic del mapa no abre «Nuevo negocio» mientras se marca una zona');
+assert.ok(published.includes('/force-sales/zones/${encodeURIComponent(workZoneReassignId)}/reassign'), 'Reasignar una zona llama al endpoint de reasignación');
+assert.ok(published.includes('/force-sales/prospects/${id}/customer-summary'), 'La ficha del punto consulta el estado de cuenta del cliente');
+assert.ok(published.includes("const CAN_VIEW_CUSTOMER_SUMMARY = mapQuery.get('canViewCustomerSummary') === 'true'"), 'El estado de cuenta solo se pide si el rol puede leer clientes de Ventas');
+assert.ok(published.includes('${customerDebtHtml(b)}'), 'El punto muestra cuánto debe el cliente y cuánto lleva al día');
+assert.ok(published.includes('${visitHistoryHtml(b)}'), 'El punto muestra las últimas visitas con quién las hizo');
+assert.ok(published.includes('visitedAt,...(outcome?{outcome}:{})'), 'La visita envía su resultado al servidor');
+assert.ok(published.includes("if(scope.has('routes')&&ACTIVE_MODE==='visits')work.push(loadWorkZones())"), 'Las zonas se actualizan en vivo cuando el servidor avisa un cambio');
+const visitsKpis = await read(sourceDir, 'modes', 'visits', '200-mode.js');
+assert.match(visitsKpis, /zonesNoOwner/, 'Visitas muestra cuántas zonas están sin gestor');
+assert.equal(modes.layerDefaults('visits', '').catalog, true, 'En Visitas los clientes importados (catálogo propio) se ven desde el primer momento');
+const dialog = await read(root, 'src', 'app', 'components', 'force-sales', 'ForceSalesCustomerLinkDialog.tsx');
+assert.match(dialog, /customersService\.create\(/, 'Si el cliente no existe se crea en Ventas desde el mismo punto');
+assert.match(dialog, /canCreate/, 'Crear cliente exige el permiso de Ventas');
 
 console.log('force-sales modes: assembled map, mode registry, per-mode panels, mode permissions, layers, navigation links and shell wiring passed');

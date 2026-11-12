@@ -56,8 +56,10 @@ function registerVisit(id){
     googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
     googleMap.setZoom(17);
     const visitedAt=new Date().toISOString();
-    void persistProspectAction(b,'registerVisit','/visit',{visitLat:position.coords.latitude,visitLng:position.coords.longitude,visitedAt}).then(saved=>{
+    const outcome=document.getElementById(`visit-outcome-${safeId(id)}`)?.value||'';
+    void persistProspectAction(b,'registerVisit','/visit',{visitLat:position.coords.latitude,visitLng:position.coords.longitude,visitedAt,...(outcome?{outcome}:{})}).then(saved=>{
       if(!saved)return;
+      forgetPointExtras(b);
       const c=stateOf(b);c.visitedAt=visitedAt;c.visitLat=position.coords.latitude;c.visitLng=position.coords.longitude;c.stage='Visitado';c.kanban=true;
       followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:visitedAt};
       localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();rerenderKeepingPopup(b);

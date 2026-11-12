@@ -524,6 +524,27 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
 .zone-section[open]>summary:after{transform:rotate(180deg)}
 .zone-heading-actions{display:flex;justify-content:flex-end;margin:0 0 4px}
 .zone-heading-actions button{border:0;background:transparent;color:var(--nova-ui-primary,#08785a);font-size:11px;font-weight:700;cursor:pointer;padding:2px 0}
+.work-zones-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.work-zones-head b{font-size:12px}
+.work-zones-head button{border:0;background:transparent;color:var(--nova-ui-primary,#08785a);font-size:11px;font-weight:800;cursor:pointer;padding:4px 2px}
+.work-zone-list{display:grid;gap:6px}
+.work-zone-item{display:grid;grid-template-columns:10px minmax(0,1fr);gap:4px 8px;align-items:center;padding:7px 8px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);cursor:pointer}
+.work-zone-item.active{border-color:var(--nova-ui-primary,#08785a)}
+.work-zone-swatch{width:10px;height:10px;border-radius:50%}
+.work-zone-copy{display:grid;min-width:0}
+.work-zone-copy b{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.work-zone-copy small{font-size:10px;color:var(--nova-ui-muted-foreground,#6c7c77)}
+.work-zone-actions{grid-column:2;display:flex;flex-wrap:wrap;gap:4px}
+.work-zone-actions button{min-height:28px;padding:3px 9px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:8px;background:transparent;color:inherit;font-size:10px;font-weight:700;cursor:pointer}
+#map.drawing-zone{cursor:crosshair}
+.customer-debt .debt-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 6px}
+.debt-cell{display:grid;gap:1px;padding:6px 8px;border-radius:9px;background:var(--nova-ui-muted,#edf5f1)}
+.debt-cell span{font-size:9px;color:var(--nova-ui-muted-foreground,#6c7c77)}
+.debt-cell b{font-size:12px}
+.debt-overdue,.debt-overdue b{color:#b42318}
+.visit-history .visit-row{display:grid;gap:1px;padding:5px 0;border-bottom:1px solid var(--nova-ui-border,#dce8e3);font-size:11px}
+.visit-history .visit-row small{color:var(--nova-ui-muted-foreground,#6c7c77)}
+.visit-outcome{min-height:34px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:8px;background:var(--nova-ui-card,#fff);color:inherit;font-size:11px}
 </style>
 </head>
 <body>
@@ -576,6 +597,12 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
      <select id="state" aria-label="Seguimiento"><option value="all">Todo seguimiento</option><option>Nuevo</option><option>Contactado</option><option>Visitado</option><option>Interesado</option><option>Demo</option><option>Cliente</option><option>Descartado</option></select>
     </div>
    </details>
+  </section>
+
+  <!-- Modo Visitas y zonas: zonas de trabajo con gestor responsable. -->
+  <section class="mode-block work-zones" data-mode-only="visits" aria-label="Zonas de trabajo">
+   <div class="work-zones-head"><b>Zonas de trabajo</b><button id="workZoneNew" type="button" hidden>+ Nueva zona</button></div>
+   <div id="workZoneList" class="work-zone-list" role="list"><div class="meta">Cargando zonas…</div></div>
   </section>
 
   <!-- Acciones de trabajo: cada tarjeta se muestra solo en los modos que la usan y si el rol tiene permiso. -->
@@ -653,7 +680,7 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
      <button class="btn secondary" id="mapConfigurationButton" type="button" hidden>Configuración del mapa</button>
      <button class="btn secondary" id="clearCatalog" type="button" hidden>⌫ Limpiar base</button>
      <button class="btn secondary" id="locationSettings" type="button" hidden>Privacidad de ubicación</button>
-     <button class="btn secondary" id="zoneManager" type="button" data-mode-only="visits prospecting">▦ Zonas y vendedores</button>
+     <button class="btn secondary" id="zoneManager" type="button" data-mode-only="prospecting">▦ Zonas y vendedores</button>
      <button class="btn secondary" id="opportunities" type="button" data-mode-only="prospecting">✦ Ver oportunidades</button>
      <button class="btn secondary" id="kanbanToggle" type="button" data-mode-only="prospecting">▦ Ver Kanban</button>
      <button class="btn secondary" id="historyToggle" type="button">◷ Ver historial</button>
@@ -837,6 +864,30 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
   <h2 id="deleteTitle">Eliminar negocio</h2>
   <p id="deleteDescription">El negocio se quitará del mapa y, si ya está sincronizado, también del registro comercial. Esta acción solo está disponible para el Super Admin principal.</p>
   <div class="confirm-modal-actions"><button class="cancel" id="deleteCancel" type="button">Cancelar</button><button class="danger" id="deleteConfirm" type="button">Eliminar definitivamente</button></div>
+ </div>
+</div>
+<div class="modal-backdrop" id="workZoneModal" hidden>
+ <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="workZoneTitle">
+  <h2 id="workZoneTitle">Nueva zona de trabajo</h2>
+  <p id="workZoneEditorStatus" role="status" aria-live="polite">Centro de la zona</p>
+  <label for="workZoneName">Nombre de la zona</label>
+  <input id="workZoneName" type="text" maxlength="120" placeholder="Ej. Zona Mercado Oriental" autocomplete="off">
+  <label for="workZoneRadius">Radio</label>
+  <select id="workZoneRadius"><option value="300">300 m</option><option value="500">500 m</option><option value="1000" selected>1 km</option><option value="2000">2 km</option><option value="3000">3 km</option><option value="5000">5 km</option><option value="10000">10 km</option></select>
+  <label for="workZoneAssignee">Gestor responsable</label>
+  <select id="workZoneAssignee"><option value="">Sin gestor</option></select>
+  <div class="confirm-modal-actions"><button class="cancel" id="workZoneCancel" type="button">Cancelar</button><button class="save" id="workZoneSave" type="button">Guardar zona</button></div>
+ </div>
+</div>
+<div class="modal-backdrop" id="workZoneReassignModal" hidden>
+ <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="workZoneReassignTitle">
+  <h2 id="workZoneReassignTitle">Reasignar zona</h2>
+  <p id="workZoneReassignInfo">Elige quién recibe la zona.</p>
+  <label for="workZoneReassignAssignee">Nuevo gestor</label>
+  <select id="workZoneReassignAssignee"><option value="">Elige un gestor…</option></select>
+  <label class="route-transfer-option"><input id="workZoneMovePoints" type="checkbox" checked><span class="route-transfer-copy"><span class="route-transfer-title">Pasar también los puntos de la zona</span><small class="route-transfer-help">Los clientes de la zona que eran del gestor anterior, o no tenían gestor, pasan al nuevo. Los que otro gestor tiene asignados no se tocan.</small></span></label>
+  <p id="workZoneReassignStatus" class="meta" role="status" aria-live="polite"></p>
+  <div class="confirm-modal-actions"><button class="cancel" id="workZoneReassignCancel" type="button">Cancelar</button><button class="save" id="workZoneReassignConfirm" type="button">Reasignar</button></div>
  </div>
 </div>
 
@@ -1704,9 +1755,9 @@ window.NovaForceSalesModes=(()=>{
   const LAYER_KEYS=Object.freeze(['users','manualPoints','catalog','plannedRoutes','gpsTrail','basePlaces']);
   // Valores de respaldo; el ERP envía las capas efectivas de la empresa en ?layerDefaults=.
   const FALLBACK_LAYERS=Object.freeze({
-    visits:Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:false,gpsTrail:false,basePlaces:false}),
+    visits:Object.freeze({users:true,manualPoints:true,catalog:true,plannedRoutes:false,gpsTrail:false,basePlaces:false}),
     prospecting:Object.freeze({users:true,manualPoints:true,catalog:true,plannedRoutes:false,gpsTrail:false,basePlaces:true}),
-    delivery:Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:true,gpsTrail:false,basePlaces:true}),
+    delivery:Object.freeze({users:true,manualPoints:true,catalog:true,plannedRoutes:true,gpsTrail:false,basePlaces:true}),
   });
   const MODE_ID=/^[a-z][a-z0-9-]{1,30}$/;
   const definitions=new Map();
@@ -1829,6 +1880,7 @@ function requireForceSales(action){
 }
 const API_BASE = (mapQuery.get('api') || localStorage.getItem('novaApiBase') || 'http://localhost:3000/api').replace(/\/$/, '');
 const CAN_LINK_CUSTOMER = mapQuery.get('canLinkCustomer') === 'true' && canForceSales('updateProspect');
+const CAN_VIEW_CUSTOMER_SUMMARY = mapQuery.get('canViewCustomerSummary') === 'true';
 const EXTERNAL_DURABLE_TRACKING = mapQuery.get('durableTracking') === 'true';
 const NOVAHUB_ISOTIPO_URL = mapQuery.get('isotipo') || '';
 let ROUTE_LOGO_URI = mapQuery.get('companyLogo') || NOVAHUB_ISOTIPO_URL;
@@ -2256,6 +2308,7 @@ function refreshBusinessDetailOverlay(){
   const content=document.getElementById('businessDetailContent');
   if(!business||!overlay||!content){closeBusinessDetailPopup();return}
   overlay.hidden=false;
+  ensurePointExtras(business);
   const html=popupHtml(business);
   const active=document.activeElement;
   const editing=content.contains(active)&&/^(INPUT|SELECT|TEXTAREA)$/.test(active?.tagName||'');
@@ -2325,6 +2378,7 @@ googleMap.addListener('bounds_changed',scheduleBusinessDetailPosition);
 googleMap.addListener('dragstart',()=>clearFocusedQuickPoint());
 googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
+  if(handleWorkZoneMapClick(event))return;
   if(routePlanningMode){toast('Pulsa un marcador comercial existente para agregar ese punto a la ruta');return}
   openQuickPointAt(event.latLng.lat(), event.latLng.lng(), 'mapa');
 });
@@ -2538,6 +2592,309 @@ async function assignZoneProspects(){
   toast(`${assignedCount} de ${selected.length} prospectos asignados · ${cell || 'zona completa'}`);
 }
 
+// Modo «Visitas y zonas»: ficha del cliente en el punto (cuánto debe y cuánto lleva al día) y últimas visitas con
+// quién las hizo. Los datos se piden al abrir el punto y se guardan un minuto para no consultar en cada repintado.
+const pointExtras = new Map();
+const POINT_EXTRAS_TTL_MS = 60000;
+const VISIT_OUTCOMES = [['VISITADO', 'Visitado'], ['PAGO', 'Pago recibido'], ['PROMESA', 'Promesa de pago'], ['NO_ESTABA', 'No estaba'], ['NO_PAGA', 'Se negó a pagar']];
+const VISIT_OUTCOME_LABELS = Object.fromEntries(VISIT_OUTCOMES);
+
+function pointExtrasFor(business){
+  const remoteId = stateOf(business).remoteId;
+  return remoteId ? pointExtras.get(String(remoteId)) : null;
+}
+function forgetPointExtras(business){
+  const remoteId = business ? stateOf(business).remoteId : '';
+  if(remoteId)pointExtras.delete(String(remoteId));
+}
+function ensurePointExtras(business){
+  if(ACTIVE_MODE !== 'visits' || !business)return;
+  const state = stateOf(business);
+  const remoteId = String(state.remoteId || '');
+  if(!remoteId || state.syncPending || !navigator.onLine || !localStorage.getItem('nh-auth-token'))return;
+  const current = pointExtras.get(remoteId);
+  if(current && (current.loading || Date.now() - current.loadedAt < POINT_EXTRAS_TTL_MS))return;
+  pointExtras.set(remoteId, {...(current || {}), loading:true, loadedAt:current?.loadedAt || 0});
+  const hasCustomer = Boolean(state.customerId || state.customer?.id);
+  const id = encodeURIComponent(remoteId);
+  Promise.allSettled([
+    hasCustomer && CAN_VIEW_CUSTOMER_SUMMARY ? forceSalesRequest(`/force-sales/prospects/${id}/customer-summary`) : Promise.resolve(null),
+    forceSalesRequest(`/force-sales/prospects/${id}/visits?limit=5`),
+  ]).then(([debt, visits]) => {
+    pointExtras.set(remoteId, {
+      loading:false, loadedAt:Date.now(),
+      debt:debt.status === 'fulfilled' ? debt.value : null, debtError:debt.status === 'rejected',
+      visits:visits.status === 'fulfilled' && Array.isArray(visits.value) ? visits.value : [], visitsError:visits.status === 'rejected',
+    });
+    if(currentPopupBusinessId && String(stateOf(activeBusinessDetail() || {}).remoteId || '') === remoteId)refreshBusinessDetailOverlay();
+  });
+}
+function debtMoney(amount, currency){
+  const symbol = ({NIO:'C$', USD:'US$'})[String(currency || '').toUpperCase()] || `${currency || ''} `;
+  return `${symbol}${Number(amount || 0).toLocaleString('es-NI', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+}
+function debtDate(value){
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('es-NI', {day:'2-digit', month:'short', year:'numeric'});
+}
+function customerDebtHtml(business){
+  if(ACTIVE_MODE !== 'visits' || !CAN_VIEW_CUSTOMER_SUMMARY)return '';
+  const state = stateOf(business);
+  if(!(state.customerId || state.customer?.id))return '';
+  const extras = pointExtrasFor(business);
+  const wrap = body => `<section class="crm customer-debt" aria-label="Estado de cuenta del cliente"><div class="quick-heading">Estado de cuenta</div>${body}</section>`;
+  if(!extras || (extras.loading && !extras.debt))return wrap('<div class="meta" role="status">Consultando el saldo del cliente…</div>');
+  if(extras.debtError)return wrap('<div class="meta" role="alert">No se pudo consultar el saldo del cliente. Reintenta al reabrir el punto.</div>');
+  const debt = extras.debt;
+  if(!debt || !debt.linked)return '';
+  const rows = (debt.byCurrency || []).length
+    ? debt.byCurrency.map(row => `<div class="debt-grid" data-currency="${esc(row.currency)}">
+        <div class="debt-cell"><span>Debe</span><b>${esc(debtMoney(row.owed, row.currency))}</b></div>
+        <div class="debt-cell ${row.overdue > 0 ? 'debt-overdue' : ''}"><span>Vencido</span><b>${esc(debtMoney(row.overdue, row.currency))}</b></div>
+        <div class="debt-cell"><span>Al día</span><b>${esc(debtMoney(row.upToDate, row.currency))}</b></div>
+        <div class="debt-cell"><span>Cobrado en 30 días</span><b>${esc(debtMoney(row.paidLast30Days, row.currency))}</b></div>
+      </div>`).join('')
+    : '<div class="meta">Sin saldo pendiente. El cliente está al día.</div>';
+  const facts = [
+    debt.oldestOverdue ? `<div class="meta debt-overdue">Factura ${esc(debt.oldestOverdue.number)} con ${esc(debt.oldestOverdue.daysLate)} ${debt.oldestOverdue.daysLate === 1 ? 'día' : 'días'} de atraso · ${esc(debtMoney(debt.oldestOverdue.balance, debt.oldestOverdue.currency))}</div>` : '',
+    debt.nextDue ? `<div class="meta">Próximo vencimiento: factura ${esc(debt.nextDue.number)} el ${esc(debtDate(debt.nextDue.dueDate))} · ${esc(debtMoney(debt.nextDue.balance, debt.nextDue.currency))}</div>` : '',
+    debt.lastPayment ? `<div class="meta">Último pago: ${esc(debtMoney(debt.lastPayment.amount, debt.lastPayment.currency))} el ${esc(debtDate(debt.lastPayment.date))}</div>` : '<div class="meta">Sin pagos registrados en el último año.</div>',
+    ...(debt.loans || []).slice(0, 3).map(loan => `<div class="meta">Préstamo ${esc(loan.number)} · ${esc(debtMoney(loan.total, loan.currency))} · pendiente ${esc(debtMoney(loan.pending, loan.currency))}</div>`),
+  ].join('');
+  return wrap(`${rows}${facts}`);
+}
+function visitHistoryHtml(business){
+  if(ACTIVE_MODE !== 'visits')return '';
+  const extras = pointExtrasFor(business);
+  if(!extras || extras.loading && !extras.visits)return '';
+  if(extras.visitsError)return '';
+  const visits = extras.visits || [];
+  const body = visits.length
+    ? visits.map(visit => `<div class="visit-row"><b>${esc(new Date(visit.visitedAt).toLocaleString('es-NI', {dateStyle:'short', timeStyle:'short'}))}</b><span>${esc(visit.visitedByName || 'Responsable no disponible')}${visit.outcome ? ` · ${esc(VISIT_OUTCOME_LABELS[visit.outcome] || visit.outcome)}` : ''}</span>${visit.notes ? `<small>${esc(visit.notes)}</small>` : ''}</div>`).join('')
+    : '<div class="meta">Todavía no hay visitas registradas a este punto.</div>';
+  return `<section class="crm visit-history" aria-label="Últimas visitas"><div class="quick-heading">Últimas visitas</div>${body}</section>`;
+}
+function visitOutcomeSelectHtml(sid){
+  if(ACTIVE_MODE !== 'visits' || !canForceSales('registerVisit'))return '';
+  return `<select id="visit-outcome-${sid}" class="visit-outcome" aria-label="Resultado de la visita"><option value="">Resultado…</option>${VISIT_OUTCOMES.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select>`;
+}
+// Modo «Visitas y zonas»: zonas de trabajo circulares con un gestor responsable. Se pueden crear, ajustar y reasignar
+// a otro gestor (por enfermedad o salida de la empresa); al reasignar, los puntos de la zona pasan con ella.
+let workZones = [];
+let workZoneCircles = new Map();
+let workZonesLoading = false;
+let workZoneDraft = null;
+let workZoneDrawing = false;
+let workZoneReassignId = '';
+const WORK_ZONE_COLORS = ['#2364d2', '#08785a', '#cb5a2b', '#8557b8', '#b18a00', '#167d8d', '#b63872'];
+
+function workZoneColor(zone){
+  const key = String(zone.assignedToId || zone.id);
+  let hash = 0;
+  for(const char of key)hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return zone.assignedToId ? WORK_ZONE_COLORS[hash % WORK_ZONE_COLORS.length] : '#83928d';
+}
+function workZoneRadiusLabel(meters){
+  return meters >= 1000 ? `${(meters / 1000).toLocaleString('es-NI', {maximumFractionDigits:1})} km` : `${meters} m`;
+}
+function canManageWorkZones(){return canForceSales('createRoute') && CAN_ASSIGN_TEAM}
+function workZoneAssigneeName(zone){
+  return zone.assignedTo?.name || assignees.find(item => String(item.id) === String(zone.assignedToId || ''))?.name || '';
+}
+function clearWorkZoneCircles(){
+  workZoneCircles.forEach(circle => circle.setMap(null));
+  workZoneCircles.clear();
+}
+function renderWorkZoneCircles(){
+  clearWorkZoneCircles();
+  if(ACTIVE_MODE !== 'visits' || !window.google?.maps?.Circle || !googleMap)return;
+  workZones.forEach(zone => {
+    const color = workZoneColor(zone);
+    const circle = new google.maps.Circle({map:googleMap, center:{lat:zone.centerLat, lng:zone.centerLng}, radius:zone.radiusMeters, strokeColor:color, strokeOpacity:.75, strokeWeight:2, fillColor:color, fillOpacity:.08, clickable:true, zIndex:1});
+    circle.addListener?.('click', () => focusWorkZone(zone.id));
+    workZoneCircles.set(zone.id, circle);
+  });
+}
+function renderWorkZoneList(){
+  const list = document.getElementById('workZoneList');
+  const newButton = document.getElementById('workZoneNew');
+  if(newButton)newButton.hidden = !canManageWorkZones();
+  if(!list)return;
+  if(workZonesLoading && !workZones.length){list.innerHTML = '<div class="meta" role="status">Cargando zonas…</div>';return}
+  if(!workZones.length){
+    list.innerHTML = `<div class="meta">${canManageWorkZones() ? 'Todavía no hay zonas. Crea una con «Nueva zona»: toca el mapa para marcar el centro.' : 'No tienes zonas asignadas.'}</div>`;
+    return;
+  }
+  list.innerHTML = workZones.map(zone => {
+    const owner = workZoneAssigneeName(zone);
+    return `<div class="work-zone-item" role="listitem" data-work-zone="${esc(zone.id)}">
+      <span class="work-zone-swatch" style="background:${workZoneColor(zone)}" aria-hidden="true"></span>
+      <div class="work-zone-copy"><b>${esc(zone.name)}</b><small>${esc(workZoneRadiusLabel(zone.radiusMeters))} · ${owner ? esc(owner) : '<em>Sin gestor</em>'}</small></div>
+      <div class="work-zone-actions">
+        <button type="button" data-work-zone-action="focus" aria-label="Ver la zona ${esc(zone.name)} en el mapa">Ver</button>
+        ${canForceSales('assignRoute') && CAN_ASSIGN_TEAM ? `<button type="button" data-work-zone-action="reassign" aria-label="Reasignar la zona ${esc(zone.name)}">Reasignar</button>` : ''}
+        ${canForceSales('editRoute') && CAN_ASSIGN_TEAM ? `<button type="button" data-work-zone-action="delete" aria-label="Quitar la zona ${esc(zone.name)}">Quitar</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+async function loadWorkZones(){
+  if(ACTIVE_MODE !== 'visits' || !localStorage.getItem('nh-auth-token'))return;
+  if(workZonesLoading)return;
+  workZonesLoading = true;
+  renderWorkZoneList();
+  try{
+    const rows = await forceSalesRequest('/force-sales/zones');
+    workZones = Array.isArray(rows) ? rows : [];
+    forceSalesSyncErrors.delete('zonas');
+  }catch(error){
+    setForceSalesSyncError('zonas', error);
+  }finally{
+    workZonesLoading = false;
+    renderWorkZoneList();
+    renderWorkZoneCircles();
+    window.NovaForceSalesModes.requestSummary();
+  }
+}
+function focusWorkZone(id){
+  const zone = workZones.find(item => item.id === id);
+  if(!zone || !googleMap)return;
+  googleMap.panTo({lat:zone.centerLat, lng:zone.centerLng});
+  googleMap.setZoom(Math.max(10, Math.min(18, Math.round(15 - Math.log2(Math.max(zone.radiusMeters, 100) / 500)))));
+  document.querySelectorAll('[data-work-zone]').forEach(node => node.classList.toggle('active', node.dataset.workZone === id));
+}
+function fillAssigneeSelect(select, selected){
+  if(!select)return;
+  select.innerHTML = `<option value="">Sin gestor</option>${assignees.map(item => `<option value="${esc(item.id)}" ${String(item.id) === String(selected || '') ? 'selected' : ''}>${esc(item.name || item.email || item.id)}</option>`).join('')}`;
+}
+function startWorkZoneDrawing(){
+  if(!canManageWorkZones()){requireForceSales('createRoute');return}
+  workZoneDrawing = true;
+  toast('Toca el mapa para marcar el centro de la zona');
+  document.getElementById('map')?.classList.add('drawing-zone');
+}
+function stopWorkZoneDrawing(){
+  workZoneDrawing = false;
+  document.getElementById('map')?.classList.remove('drawing-zone');
+}
+function openWorkZoneEditor(center){
+  workZoneDraft = {centerLat:center.lat, centerLng:center.lng};
+  const modal = document.getElementById('workZoneModal');
+  if(!modal)return;
+  document.getElementById('workZoneName').value = '';
+  document.getElementById('workZoneRadius').value = '1000';
+  fillAssigneeSelect(document.getElementById('workZoneAssignee'), '');
+  document.getElementById('workZoneEditorStatus').textContent = `Centro: ${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`;
+  modal.hidden = false;
+  document.getElementById('workZoneName').focus();
+}
+function closeWorkZoneEditor(){
+  workZoneDraft = null;
+  const modal = document.getElementById('workZoneModal');
+  if(modal)modal.hidden = true;
+}
+async function saveWorkZone(){
+  if(!workZoneDraft)return;
+  if(!requireForceSales('createRoute'))return;
+  const name = document.getElementById('workZoneName').value.trim();
+  const radiusMeters = Number(document.getElementById('workZoneRadius').value);
+  const assignedToId = document.getElementById('workZoneAssignee').value || null;
+  const status = document.getElementById('workZoneEditorStatus');
+  if(!name){status.textContent = 'Escribe el nombre de la zona.';return}
+  if(!Number.isFinite(radiusMeters) || radiusMeters < 50 || radiusMeters > 50000){status.textContent = 'El radio debe estar entre 50 m y 50 km.';return}
+  if(!navigator.onLine){status.textContent = 'Conéctate para guardar la zona. Esta acción no se guarda sin conexión.';return}
+  try{
+    const saved = await forceSalesRequest('/force-sales/zones', {method:'POST', body:JSON.stringify({name, centerLat:workZoneDraft.centerLat, centerLng:workZoneDraft.centerLng, radiusMeters, assignedToId})});
+    workZones = [...workZones.filter(item => item.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    closeWorkZoneEditor();
+    renderWorkZoneList();
+    renderWorkZoneCircles();
+    window.NovaForceSalesModes.requestSummary();
+    toast(`Zona «${saved.name}» creada`);
+  }catch(error){
+    status.textContent = String(error?.message || 'No se pudo guardar la zona.');
+  }
+}
+function openWorkZoneReassign(id){
+  const zone = workZones.find(item => item.id === id);
+  const modal = document.getElementById('workZoneReassignModal');
+  if(!zone || !modal)return;
+  workZoneReassignId = id;
+  document.getElementById('workZoneReassignTitle').textContent = `Reasignar «${zone.name}»`;
+  const owner = workZoneAssigneeName(zone);
+  document.getElementById('workZoneReassignInfo').textContent = owner ? `Gestor actual: ${owner}. Elige quién la recibe.` : 'La zona no tiene gestor. Elige quién la recibe.';
+  const select = document.getElementById('workZoneReassignAssignee');
+  select.innerHTML = `<option value="">Elige un gestor…</option>${assignees.filter(item => String(item.id) !== String(zone.assignedToId || '')).map(item => `<option value="${esc(item.id)}">${esc(item.name || item.email || item.id)}</option>`).join('')}`;
+  document.getElementById('workZoneMovePoints').checked = true;
+  document.getElementById('workZoneReassignStatus').textContent = '';
+  modal.hidden = false;
+  select.focus();
+}
+function closeWorkZoneReassign(){
+  workZoneReassignId = '';
+  const modal = document.getElementById('workZoneReassignModal');
+  if(modal)modal.hidden = true;
+}
+async function confirmWorkZoneReassign(){
+  if(!workZoneReassignId || !requireForceSales('assignRoute'))return;
+  const assigneeId = document.getElementById('workZoneReassignAssignee').value;
+  const movePoints = document.getElementById('workZoneMovePoints').checked;
+  const status = document.getElementById('workZoneReassignStatus');
+  if(!assigneeId){status.textContent = 'Elige el gestor que recibe la zona.';return}
+  if(!navigator.onLine){status.textContent = 'Conéctate para reasignar. Esta acción no se guarda sin conexión.';return}
+  try{
+    const result = await forceSalesRequest(`/force-sales/zones/${encodeURIComponent(workZoneReassignId)}/reassign`, {method:'POST', body:JSON.stringify({assigneeId, movePoints})});
+    workZones = workZones.map(item => item.id === result.zone.id ? result.zone : item);
+    closeWorkZoneReassign();
+    renderWorkZoneList();
+    renderWorkZoneCircles();
+    toast(`Zona reasignada a ${result.zone.assignedTo?.name || 'el nuevo gestor'}${movePoints ? ` · ${result.movedPoints} ${result.movedPoints === 1 ? 'punto pasó' : 'puntos pasaron'} con ella` : ''}`);
+    void loadRemoteProspects();
+  }catch(error){
+    status.textContent = String(error?.message || 'No se pudo reasignar la zona.');
+  }
+}
+async function removeWorkZone(id){
+  const zone = workZones.find(item => item.id === id);
+  if(!zone || !requireForceSales('editRoute'))return;
+  if(!window.confirm(`¿Quitar la zona «${zone.name}»? Los puntos conservan su gestor.`))return;
+  try{
+    await forceSalesRequest(`/force-sales/zones/${encodeURIComponent(id)}`, {method:'DELETE'});
+    workZones = workZones.filter(item => item.id !== id);
+    renderWorkZoneList();
+    renderWorkZoneCircles();
+    window.NovaForceSalesModes.requestSummary();
+    toast('Zona quitada');
+  }catch(error){toast(String(error?.message || 'No se pudo quitar la zona'))}
+}
+// El motor tiene un solo manejador de clic en el mapa: mientras se marca el centro de una zona lo atiende esta función.
+function handleWorkZoneMapClick(event){
+  if(!workZoneDrawing)return false;
+  const lat = typeof event?.latLng?.lat === 'function' ? event.latLng.lat() : Number(event?.latLng?.lat);
+  const lng = typeof event?.latLng?.lng === 'function' ? event.latLng.lng() : Number(event?.latLng?.lng);
+  if(Number.isFinite(lat) && Number.isFinite(lng)){
+    stopWorkZoneDrawing();
+    openWorkZoneEditor({lat, lng});
+  }
+  return true;
+}
+if(ACTIVE_MODE === 'visits'){
+  document.getElementById('workZoneNew')?.addEventListener('click', startWorkZoneDrawing);
+  document.getElementById('workZoneList')?.addEventListener('click', event => {
+    const button = event.target?.closest?.('[data-work-zone-action]');
+    const id = event.target?.closest?.('[data-work-zone]')?.dataset.workZone;
+    if(!id)return;
+    if(!button){focusWorkZone(id);return}
+    const action = button.dataset.workZoneAction;
+    if(action === 'focus')focusWorkZone(id);
+    if(action === 'reassign')openWorkZoneReassign(id);
+    if(action === 'delete')void removeWorkZone(id);
+  });
+  document.getElementById('workZoneSave')?.addEventListener('click', () => void saveWorkZone());
+  document.getElementById('workZoneCancel')?.addEventListener('click', closeWorkZoneEditor);
+  document.getElementById('workZoneReassignConfirm')?.addEventListener('click', () => void confirmWorkZoneReassign());
+  document.getElementById('workZoneReassignCancel')?.addEventListener('click', closeWorkZoneReassign);
+}
 function norm(s=''){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function safeId(s){return String(s).replace(/[^a-zA-Z0-9_-]/g,'_')}
@@ -2610,6 +2967,7 @@ function scheduleForceSalesRefresh(){
   const work=[];
   if(scope.has('prospects'))work.push(loadRemoteProspects());
   if(scope.has('routes'))work.push(loadRemoteRoutes());
+  if(scope.has('routes')&&ACTIVE_MODE==='visits')work.push(loadWorkZones());
   if(scope.has('presence'))work.push(loadSellerPresence());
   if(scope.has('trail')&&shouldLoadLocationTrail())work.push(loadLocationTrail({fitCamera:false}));
   void Promise.all(work).catch(()=>undefined).finally(()=>{
@@ -2659,7 +3017,7 @@ function requestCustomerLinkSelection(trigger){
   if(!CAN_LINK_CUSTOMER||!canForceSales('updateProspect'))return requireForceSales('updateProspect');
   if(!navigator.onLine||!state.remoteId||state.syncPending){setCustomerLookupAvailability(panel);return}
   setCustomerLookupStatus(panel,'Selecciona un cliente activo.');
-  window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-open-customer-link',pointId},location.origin);
+  window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-open-customer-link',pointId,point:{name:String(business?.name||''),address:String(business?.address||''),phone:String(business?.phone||'')}},location.origin);
 }
 document.addEventListener('click',event=>{
   const trigger=event.target?.closest?.('[data-customer-link-trigger]');
@@ -3781,6 +4139,8 @@ function popupHtml(b){
     </div>
     <div class="route-point-memberships"><b>Rutas que incluyen este punto</b>${prospectRoutes.length?prospectRoutes.map(route=>`<span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</div>
     ${customerLinkPanel}
+    ${customerDebtHtml(b)}
+    ${visitHistoryHtml(b)}
     ${routePlanningMode&&isCurrentRouteStop?`<div class="meta">Parada de la ruta: ${esc(selectedRouteName)}</div>`:''}
     ${CAN_ASSIGN_PROSPECT_OWNER&&canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Responsable del punto</label><select id="point-assignee-${sid}" ${assigneeLoading?'disabled':''}><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status" aria-live="polite">${esc(assigneeNotice)}</div>`:''}${assigneesLoadState==='error'?'<button class="assignee-retry" type="button">Reintentar carga de usuarios</button>':''}<button type="button" onclick="saveProspectAssignee('${b.id}')" ${assigneeLoading?'disabled':''}>Guardar responsable</button></div>` : ''}
     <div class="warn">${esc(b.precision)}. Validar actividad, ubicación y persona de contacto antes de la visita.</div>
@@ -3793,6 +4153,7 @@ function popupHtml(b){
     <div class="popquick">
       <button class="${c.selected?'primary-action':''}" onclick="toggleSelected('${b.id}')">${c.selected?'✓ Seleccionado':'Seleccionar'}</button>
       ${canForceSales('changeStage') ? (c.kanban ? '<button disabled>✓ Ya en Fuerza Comercial</button>' : `<button class="primary-action" onclick="addToKanban('${b.id}')">Agregar al Kanban</button>`) : ''}
+      ${visitOutcomeSelectHtml(sid)}
       ${canForceSales('registerVisit') ? `<button class="visit-action" onclick="registerVisit('${b.id}')">⌖ Registrar visita</button>` : ''}
       ${canForceSales('discardProspect') ? `<button onclick="discardBusiness('${b.id}')">Descartar</button>` : ''}
       ${CAN_DELETE_TEST ? `<button onclick="deleteBusiness('${b.id}')">Eliminar negocio</button>` : ''}
@@ -3879,6 +4240,7 @@ async function saveCustomerLink(rawBusinessId,customerId,customerSnapshot){
     business.customer=linkedCustomer;
     business.customerLinkedAt=state.customerLinkedAt;
     business.customerLinkedBy=state.customerLinkedBy;
+    forgetPointExtras(business);
     persistCommercial();
     rerenderKeepingPopup(business);
     toast(customerId?'Cliente vinculado al punto comercial':'Vínculo de cliente retirado');
@@ -4381,8 +4743,10 @@ function registerVisit(id){
     googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
     googleMap.setZoom(17);
     const visitedAt=new Date().toISOString();
-    void persistProspectAction(b,'registerVisit','/visit',{visitLat:position.coords.latitude,visitLng:position.coords.longitude,visitedAt}).then(saved=>{
+    const outcome=document.getElementById(`visit-outcome-${safeId(id)}`)?.value||'';
+    void persistProspectAction(b,'registerVisit','/visit',{visitLat:position.coords.latitude,visitLng:position.coords.longitude,visitedAt,...(outcome?{outcome}:{})}).then(saved=>{
       if(!saved)return;
+      forgetPointExtras(b);
       const c=stateOf(b);c.visitedAt=visitedAt;c.visitLat=position.coords.latitude;c.visitLng=position.coords.longitude;c.stage='Visitado';c.kanban=true;
       followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:visitedAt};
       localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();rerenderKeepingPopup(b);
@@ -7003,6 +7367,7 @@ window.NovaForceSalesModes.register({
       {id:'visitedToday',label:'Visitados hoy',value:visitedToday},
       {id:'pending',label:'Por visitar',value:Math.max(0,points.length-visitedToday)},
       {id:'onField',label:'Gestores en campo',value:onField},
+      {id:'zonesNoOwner',label:'Zonas sin gestor',value:workZones.filter(zone=>!zone.assignedToId).length},
     ];
   },
   search:(query)=>{
@@ -7083,6 +7448,7 @@ setTimeout(() => {
       else if(ACTIVE_MODE==='delivery')setSearchStatus('Modo entregas activo. Planifica una ruta con una o varias paradas.');
       else setSearchStatus('Modo visitas y zonas activo. Solo se muestran los puntos de tu empresa.');
       loadSellerPresence();
+      if(ACTIVE_MODE==='visits')void loadWorkZones();
     });
   });
 }, 450);

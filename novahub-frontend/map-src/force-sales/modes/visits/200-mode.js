@@ -16,6 +16,7 @@ window.NovaForceSalesModes.register({
       {id:'visitedToday',label:'Visitados hoy',value:visitedToday},
       {id:'pending',label:'Por visitar',value:Math.max(0,points.length-visitedToday)},
       {id:'onField',label:'Gestores en campo',value:onField},
+      {id:'zonesNoOwner',label:'Zonas sin gestor',value:workZones.filter(zone=>!zone.assignedToId).length},
     ];
   },
   search:(query)=>{

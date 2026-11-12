@@ -11,4 +11,25 @@
 .zone-section[open]>summary:after{transform:rotate(180deg)}
 .zone-heading-actions{display:flex;justify-content:flex-end;margin:0 0 4px}
 .zone-heading-actions button{border:0;background:transparent;color:var(--nova-ui-primary,#08785a);font-size:11px;font-weight:700;cursor:pointer;padding:2px 0}
+.work-zones-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.work-zones-head b{font-size:12px}
+.work-zones-head button{border:0;background:transparent;color:var(--nova-ui-primary,#08785a);font-size:11px;font-weight:800;cursor:pointer;padding:4px 2px}
+.work-zone-list{display:grid;gap:6px}
+.work-zone-item{display:grid;grid-template-columns:10px minmax(0,1fr);gap:4px 8px;align-items:center;padding:7px 8px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);cursor:pointer}
+.work-zone-item.active{border-color:var(--nova-ui-primary,#08785a)}
+.work-zone-swatch{width:10px;height:10px;border-radius:50%}
+.work-zone-copy{display:grid;min-width:0}
+.work-zone-copy b{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.work-zone-copy small{font-size:10px;color:var(--nova-ui-muted-foreground,#6c7c77)}
+.work-zone-actions{grid-column:2;display:flex;flex-wrap:wrap;gap:4px}
+.work-zone-actions button{min-height:28px;padding:3px 9px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:8px;background:transparent;color:inherit;font-size:10px;font-weight:700;cursor:pointer}
+#map.drawing-zone{cursor:crosshair}
+.customer-debt .debt-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 6px}
+.debt-cell{display:grid;gap:1px;padding:6px 8px;border-radius:9px;background:var(--nova-ui-muted,#edf5f1)}
+.debt-cell span{font-size:9px;color:var(--nova-ui-muted-foreground,#6c7c77)}
+.debt-cell b{font-size:12px}
+.debt-overdue,.debt-overdue b{color:#b42318}
+.visit-history .visit-row{display:grid;gap:1px;padding:5px 0;border-bottom:1px solid var(--nova-ui-border,#dce8e3);font-size:11px}
+.visit-history .visit-row small{color:var(--nova-ui-muted-foreground,#6c7c77)}
+.visit-outcome{min-height:34px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:8px;background:var(--nova-ui-card,#fff);color:inherit;font-size:11px}
 </style>
