@@ -232,7 +232,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, summa
         dataDescription="Cada línea dice qué pasó, cuándo, a qué tarea o evento se refiere y qué detalle tiene. «Nota» la escribió una persona; «Sistema» se registró automáticamente y no se edita."
         actionsTitle="Para qué sirve"
         actionsDescription="Para tener constancia y poder reconstruir qué se acordó y quién tenía cada tarea. Para ver todos los cambios técnicos de datos (quién editó qué campo) usa Auditoría."
-        purpose="Constancia de lo que pasó en tareas y eventos: notas y archivos que dejas tú, y hitos que el sistema anota solo (reasignaciones, plazos vencidos). No es la auditoría técnica del sistema."
+        purpose="Constancia de lo que pasó: notas que dejas tú e hitos que el sistema anota solo."
       />
 
       <div className="space-y-2" data-tour="bitacora-tutorial-data" aria-busy={loading}>
@@ -289,7 +289,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, summa
       </div>
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
-        <EditableDataTable
+        <EditableDataTable layoutMode="table"
           data={filtered}
           columns={columns}
           onRowUpdate={canPerform('ACTIVITIES_LOGS', 'edit') ? handleUpdate : undefined}

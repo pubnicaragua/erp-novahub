@@ -733,6 +733,9 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
         dataDescription={isMeetingMode
           ? 'Haz clic en "Nueva Reunión". Define título, fechas, enlace de videollamada o sala, e invitados.'
           : 'Haz clic en "Nuevo Evento". Define título, ubicación, fechas de inicio/fin, y opcionalmente costos e ingresos.'}
+        purpose={isMeetingMode
+          ? 'Citas de trabajo y videollamadas: quién asiste, cuándo es y con qué enlace.'
+          : 'Ferias, talleres y actividades programadas, con su costo e ingreso.'}
         actionsTitle="Seguimiento"
         actionsDescription={isMeetingMode
           ? 'Accede al enlace virtual directo, comparte por WhatsApp o descarga la invitación en formato .ics.'
@@ -763,7 +766,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
       </div>
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
-        <EditableDataTable 
+        <EditableDataTable layoutMode="table" 
           data={filtered} 
           columns={columns} 
           onRowUpdate={filtered.some((row) => canPerformEventAction(row, 'edit')) ? handleUpdate : undefined}
@@ -822,7 +825,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
               </div>
             );
           }}
-          actionsWidth="w-72"
+          actionsWidth="w-80"
         />
       </Card>
 

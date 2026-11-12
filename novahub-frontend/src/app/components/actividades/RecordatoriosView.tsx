@@ -147,6 +147,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
         helpDescription="Los recordatorios envían alertas automáticas en la fecha y hora que indiques. Pueden ser globales (para todo el equipo), departamentales o personales."
         dataTitle="Crear recordatorio"
         dataDescription='Haz clic en "Nuevo Aviso". Define el título, mensaje, fecha de envío y alcance (global/departamento/personal).'
+        purpose="Avisos automáticos para una persona, un departamento o toda la empresa, en la fecha y hora que indiques."
         actionsTitle="Gestionar"
         actionsDescription="Revisa el estado (Pendiente/Enviado/Cancelado), edita o elimina avisos que ya no necesites."
       />
@@ -168,7 +169,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
       </div>
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
-        <EditableDataTable 
+        <EditableDataTable layoutMode="table" 
           data={filtered} 
           columns={columns} 
           onRowUpdate={canPerform('ACTIVITIES_REMINDERS', 'edit') || canPerform('ACTIVITIES_REMINDERS', 'changeStatus') ? handleUpdate : undefined}

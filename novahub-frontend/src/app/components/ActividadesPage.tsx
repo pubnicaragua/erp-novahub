@@ -196,7 +196,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
           <CurrencyValuationBanner className="mb-3" />
 
           <Tabs value={activeTab} className="relative w-full min-w-0" onValueChange={handleTabChange}>
-            <div className={cn('flex w-full min-w-0 max-w-full items-center gap-2', canExportActive ? 'mb-4 sm:absolute sm:right-0 sm:top-0 sm:z-10 sm:mb-0 sm:w-auto' : 'mb-0')}>
+            <div className={cn('flex w-full min-w-0 max-w-full items-center gap-2', canExportActive ? 'mb-4 sm:absolute sm:right-0 sm:top-0 sm:z-10 sm:mb-0 sm:w-auto' : 'mb-0 sm:hidden')}>
             <ModuleSubnavigation
               items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
               value={activeTab}

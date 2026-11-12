@@ -144,7 +144,7 @@ export function ReportesActividadesView() {
         dataDescription="Elige una persona y un periodo (hoy, últimos 7 o 30 días, o fechas propias) para ver qué reportó cada quien, sin buscar archivos uno por uno."
         actionsTitle="Revisa y marca"
         actionsDescription="Abre un reporte, descarga sus archivos y, si falta algo, márcalo como incompleto: quien lo hizo recibe un aviso para complementarlo."
-        purpose="Todo lo que se reporta en las tareas, en un solo lugar: revisa tarea por tarea, filtra por persona y fecha, descarga los documentos y marca lo que quedó incompleto."
+        purpose="Todo lo que se reporta en las tareas, en un solo lugar: por tarea, por persona y por fecha."
       />
 
       <div className="space-y-2" data-tour="reportes-tutorial-data" aria-busy={loading}>
