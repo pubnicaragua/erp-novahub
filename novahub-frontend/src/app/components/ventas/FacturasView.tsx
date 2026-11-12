@@ -69,7 +69,8 @@ import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { VoiceSaleComposer } from './VoiceSaleComposer';
 import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-parser';
 import { SalesImportWizard } from './importacion/SalesImportWizard';
-import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { getCurrencyDecimalPlaces, roundCurrencyNumber } from '../../utils/currency';
+import { calculateCustomerCreditPlanEstimate } from '../../utils/customerCreditInstallmentPlan';
 import { TripCostBlock } from '../flota/TripCostBlock';
 
 interface FacturasViewProps {
@@ -263,9 +264,11 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const [submitLoadingId, setSubmitLoadingId] = useState<string | null>(null);
   const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
   const [creditDueDate, setCreditDueDate] = useState('');
+  const [creditFirstInstallmentDate, setCreditFirstInstallmentDate] = useState('');
   const [creditInterestMode, setCreditInterestMode] = useState<'NONE' | 'FIXED_AMOUNT' | 'PERCENTAGE'>('NONE');
   const [creditInterestValue, setCreditInterestValue] = useState('');
   const [creditPlanEnabled, setCreditPlanEnabled] = useState(false);
+  const [creditPlanCalculationMode, setCreditPlanCalculationMode] = useState<'AMOUNT' | 'DEADLINE'>('AMOUNT');
   const [creditFrequency, setCreditFrequency] = useState<'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'>('WEEKLY');
   const [creditInstallmentAmount, setCreditInstallmentAmount] = useState('');
   const [creditTermOverrideConfirmed, setCreditTermOverrideConfirmed] = useState(false);
@@ -833,10 +836,12 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         : today;
     setCreditInvoice(actionInvoice);
     setCreditDueDate(suggestedDueDate);
+    setCreditFirstInstallmentDate(today);
     setCreditTermOverrideConfirmed(false);
     setCreditInterestMode('NONE');
     setCreditInterestValue('');
     setCreditPlanEnabled(false);
+    setCreditPlanCalculationMode('AMOUNT');
     setCreditInstallmentAmount('');
   };
 
@@ -845,12 +850,16 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       toast.error('No tienes permiso para enviar facturas a crédito');
       return;
     }
-    if (!creditInvoice || !creditDueDate) {
+    if (!creditInvoice || !effectiveCreditDueDate) {
       toast.error('Selecciona la fecha de pago del crédito');
       return;
     }
+    if (creditPlanEnabled && (!creditPlanEstimate || !creditFirstInstallmentDate)) {
+      toast.error('Completa los datos del plan para calcular sus abonos y vencimiento.');
+      return;
+    }
     const term = getInvoiceCreditTerm(creditInvoice);
-    if (getCreditTermExtensionDays(creditDueDate, term.deadline) > 0 && !creditTermOverrideConfirmed) {
+    if (getCreditTermExtensionDays(effectiveCreditDueDate, term.deadline) > 0 && !creditTermOverrideConfirmed) {
       toast.error('Confirma el aplazamiento del plazo de crédito para continuar.');
       return;
     }
@@ -858,13 +867,15 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     if (!invoice.id) {
       setCreditInvoice(null);
       await handleSaveInvoice('CREDIT', {
-        dueDate: new Date(`${creditDueDate}T12:00:00`).toISOString(),
+        dueDate: new Date(`${effectiveCreditDueDate}T12:00:00`).toISOString(),
         creditTermOverrideConfirmed,
         initialCreditInterestMode: creditInterestMode,
         initialCreditInterestValue: Number(creditInterestValue || 0),
         initialCreditPlanEnabled: creditPlanEnabled,
+        initialCreditPlanCalculationMode: creditPlanCalculationMode,
+        initialCreditFirstInstallmentDate: creditPlanEnabled ? creditFirstInstallmentDate : undefined,
         initialCreditFrequency: creditFrequency,
-        initialCreditInstallmentAmount: Number(creditInstallmentAmount || 0),
+        initialCreditInstallmentAmount: creditPlanEstimate?.installmentAmount || Number(creditInstallmentAmount || 0),
       });
       return;
     }
@@ -872,13 +883,15 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     try {
       setCreditLoading(true);
       await invoicesService.sendToCredit(invoice.id, {
-        dueDate: new Date(`${creditDueDate}T12:00:00`).toISOString(),
+        dueDate: new Date(`${effectiveCreditDueDate}T12:00:00`).toISOString(),
+        firstInstallmentDate: creditPlanEnabled ? creditFirstInstallmentDate : undefined,
         creditTermOverrideConfirmed,
         interestMode: creditInterestMode,
         interestValue: Number(creditInterestValue || 0),
         planEnabled: creditPlanEnabled,
+        planCalculationMode: creditPlanCalculationMode,
         frequency: creditFrequency,
-        installmentAmount: Number(creditInstallmentAmount || 0),
+        installmentAmount: creditPlanEstimate?.installmentAmount || Number(creditInstallmentAmount || 0),
       });
       toast.success(`Factura ${invoice.number} enviada a Créditos por su saldo pendiente`, { id: creditToastId });
       setCreditInvoice(null);
@@ -1149,7 +1162,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
 
   const handleSaveInvoice = async (
     action: InvoiceSaveAction = 'PENDING',
-    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; paymentDate?: string; dueDate?: string; cashRegisterId?: string; cashSessionId?: string; creditTermOverrideConfirmed?: boolean; initialCreditInterestMode?: string; initialCreditInterestValue?: number; initialCreditPlanEnabled?: boolean; initialCreditFrequency?: string; initialCreditInstallmentAmount?: number },
+    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; paymentDate?: string; dueDate?: string; cashRegisterId?: string; cashSessionId?: string; creditTermOverrideConfirmed?: boolean; initialCreditInterestMode?: string; initialCreditInterestValue?: number; initialCreditPlanEnabled?: boolean; initialCreditPlanCalculationMode?: 'AMOUNT' | 'DEADLINE'; initialCreditFirstInstallmentDate?: string; initialCreditFrequency?: string; initialCreditInstallmentAmount?: number },
   ) => {
     if (!localDoc) return;
     if (action === 'PENDING' && !canPerform('SALES_INVOICES', 'submit')) {
@@ -1296,6 +1309,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           initialCreditInterestMode: action === 'CREDIT' ? settlement?.initialCreditInterestMode || 'NONE' : undefined,
           initialCreditInterestValue: action === 'CREDIT' ? settlement?.initialCreditInterestValue || 0 : undefined,
           initialCreditPlanEnabled: action === 'CREDIT' ? Boolean(settlement?.initialCreditPlanEnabled) : undefined,
+          initialCreditPlanCalculationMode: action === 'CREDIT' ? settlement?.initialCreditPlanCalculationMode || 'AMOUNT' : undefined,
+          initialCreditFirstInstallmentDate: action === 'CREDIT' ? settlement?.initialCreditFirstInstallmentDate : undefined,
           initialCreditFrequency: action === 'CREDIT' ? settlement?.initialCreditFrequency || 'WEEKLY' : undefined,
           initialCreditInstallmentAmount: action === 'CREDIT' ? settlement?.initialCreditInstallmentAmount || 0 : undefined,
           creditTermOverrideConfirmed: settlement?.creditTermOverrideConfirmed ?? (localDoc as any).creditTermOverrideConfirmed,
@@ -1361,8 +1376,26 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const paymentTermOverrideRequired = Boolean(paymentInvoice && paymentRemainingInInvoiceCurrency > 0.01
     && getCreditTermExtensionDays(paymentDueDate, paymentInvoiceTerm?.deadline) > 0);
   const creditInvoiceTerm = creditInvoice ? getInvoiceCreditTerm(creditInvoice) : null;
+  const creditPrincipal = creditInvoice ? getInvoiceBalance(creditInvoice) : 0;
+  const creditInterestAmount = creditInterestMode === 'NONE' ? 0 : creditInterestMode === 'PERCENTAGE'
+    ? roundCurrencyNumber(creditPrincipal * Number(creditInterestValue || 0) / 100)
+    : roundCurrencyNumber(Number(creditInterestValue || 0));
+  const creditPlanEstimate = creditPlanEnabled
+    ? calculateCustomerCreditPlanEstimate({
+      principal: creditPrincipal,
+      interest: creditInterestAmount,
+      frequency: creditFrequency,
+      firstInstallmentDate: creditFirstInstallmentDate,
+      calculationMode: creditPlanCalculationMode,
+      installmentAmount: creditInstallmentAmount,
+      finalDueDate: creditDueDate,
+    })
+    : null;
+  const effectiveCreditDueDate = creditPlanEnabled && creditPlanCalculationMode === 'AMOUNT'
+    ? creditPlanEstimate?.finalDueDate || ''
+    : creditDueDate;
   const creditTermOverrideRequired = Boolean(creditInvoice
-    && getCreditTermExtensionDays(creditDueDate, creditInvoiceTerm?.deadline) > 0);
+    && getCreditTermExtensionDays(effectiveCreditDueDate, creditInvoiceTerm?.deadline) > 0);
   const paymentInvoiceTotal = paymentInvoice ? Math.max(0, Number(paymentInvoice.total || 0)) : 0;
   const paymentInvoiceAlreadyPaid = paymentInvoice ? Math.max(0, Number(paymentInvoice.amountPaid || 0)) : 0;
   const paymentInvoiceCurrentBalance = paymentInvoice ? getInvoiceBalance(paymentInvoice) : 0;
@@ -2893,20 +2926,24 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 issueDate={creditInvoice.date}
                 creditDays={creditInvoiceTerm?.customer?.creditDays}
                 savedDeadline={creditInvoice.creditTermDeadline}
-                value={creditDueDate}
-                onChange={setCreditDueDate}
+                value={creditPlanEnabled && creditPlanCalculationMode === 'AMOUNT' ? creditPlanEstimate?.finalDueDate || creditDueDate : creditDueDate}
+                onChange={(value) => {
+                  setCreditDueDate(value);
+                  setCreditTermOverrideConfirmed(false);
+                  if (creditPlanEnabled && creditPlanCalculationMode === 'AMOUNT') setCreditPlanCalculationMode('DEADLINE');
+                }}
                 overrideConfirmed={creditTermOverrideConfirmed}
                 onOverrideConfirmedChange={setCreditTermOverrideConfirmed}
-                label={creditPlanEnabled ? 'Fecha del primer abono *' : 'Fecha de pago *'}
+                label={creditPlanEnabled ? (creditPlanCalculationMode === 'AMOUNT' ? 'Vencimiento estimado' : 'Fecha final de vencimiento *') : 'Fecha de pago *'}
                 minDate={new Date().toISOString().split('T')[0]}
               />
               <div className="space-y-3 rounded-2xl border border-border/50 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Interés opcional</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label>Interés del crédito</Label>
+                    <Label className="flex items-end leading-tight sm:min-h-10">Interés del crédito</Label>
                     <Select value={creditInterestMode} onValueChange={(value) => setCreditInterestMode(value as typeof creditInterestMode)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="NONE">Sin interés</SelectItem>
                         <SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem>
@@ -2915,35 +2952,37 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                     </Select>
                   </div>
                   {creditInterestMode !== 'NONE' && <div className="space-y-1.5">
-                    <Label htmlFor="invoice-credit-interest">{creditInterestMode === 'PERCENTAGE' ? 'Porcentaje sobre el saldo (%)' : 'Interés fijo'}</Label>
+                    <Label htmlFor="invoice-credit-interest" className="flex items-end leading-tight sm:min-h-10">{creditInterestMode === 'PERCENTAGE' ? 'Porcentaje sobre el saldo (%)' : 'Interés fijo'}</Label>
                     <Input id="invoice-credit-interest" type="number" min="0" step="0.01" max={creditInterestMode === 'PERCENTAGE' ? 100 : undefined} value={creditInterestValue} onChange={(event) => setCreditInterestValue(event.target.value)} />
                   </div>}
                 </div>
                 <p className="text-[10px] text-muted-foreground">El interés se calcula una sola vez sobre el saldo trasladado. El saldo original de la factura no cambia.</p>
                 <div className="flex items-start gap-2 border-t border-border/40 pt-3">
-                  <input id="invoice-credit-plan" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={creditPlanEnabled} onChange={(event) => setCreditPlanEnabled(event.target.checked)} />
+                  <input id="invoice-credit-plan" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={creditPlanEnabled} onChange={(event) => { setCreditPlanEnabled(event.target.checked); setCreditTermOverrideConfirmed(false); if (event.target.checked && !creditFirstInstallmentDate) setCreditFirstInstallmentDate(new Date().toISOString().split('T')[0]); }} />
                   <Label htmlFor="invoice-credit-plan" className="cursor-pointer text-xs">Definir un plan de abonos</Label>
                 </div>
                 {creditPlanEnabled && <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label>Frecuencia</Label>
-                    <Select value={creditFrequency} onValueChange={(value) => setCreditFrequency(value as typeof creditFrequency)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Label className="flex items-end leading-tight sm:min-h-10">Frecuencia</Label>
+                    <Select value={creditFrequency} onValueChange={(value) => { setCreditFrequency(value as typeof creditFrequency); setCreditTermOverrideConfirmed(false); }}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                       <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="invoice-credit-installment">Monto por abono</Label>
-                    <Input id="invoice-credit-installment" type="number" min="0.01" step="0.01" value={creditInstallmentAmount} onChange={(event) => setCreditInstallmentAmount(event.target.value)} />
-                  </div>
+                  <div className="space-y-1.5"><Label className="flex items-end leading-tight sm:min-h-10">Método de cálculo</Label><Select value={creditPlanCalculationMode} onValueChange={(value) => { const mode = value as typeof creditPlanCalculationMode; if (mode === 'DEADLINE' && creditPlanEstimate) setCreditDueDate(creditPlanEstimate.finalDueDate); setCreditPlanCalculationMode(mode); setCreditTermOverrideConfirmed(false); }}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem></SelectContent></Select></div>
+                  <div className="space-y-1.5"><Label htmlFor="invoice-credit-first-installment" className="flex items-end leading-tight sm:min-h-10">Fecha del primer abono</Label><Input id="invoice-credit-first-installment" type="date" min={new Date().toISOString().split('T')[0]} value={creditFirstInstallmentDate} onChange={(event) => { setCreditFirstInstallmentDate(event.target.value); setCreditTermOverrideConfirmed(false); }} /></div>
+                  {creditPlanCalculationMode === 'AMOUNT' && <div className="space-y-1.5"><Label htmlFor="invoice-credit-installment" className="flex items-end leading-tight sm:min-h-10">Monto por abono</Label><Input id="invoice-credit-installment" type="number" min="0.01" step="0.01" value={creditInstallmentAmount} onChange={(event) => { setCreditInstallmentAmount(event.target.value); setCreditTermOverrideConfirmed(false); }} currencyPrecision /></div>}
+                  {creditPlanEstimate && <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed sm:col-span-2"><p className="font-bold text-foreground">{creditPlanCalculationMode === 'AMOUNT' ? 'Fecha estimada de cancelación' : 'Abono estimado'}</p><p className="mt-1 text-muted-foreground">{creditPlanCalculationMode === 'AMOUNT'
+                    ? formatDateEs(creditPlanEstimate.finalDueDate) + ' · ' + creditPlanEstimate.installmentCount + ' abonos de ' + formatInvoiceAmount(creditPlanEstimate.installmentAmount, creditInvoice.currency, creditInvoice.exchangeRate) + ' aprox.'
+                    : creditPlanEstimate.installmentCount + ' abonos de ' + formatInvoiceAmount(creditPlanEstimate.installmentAmount, creditInvoice.currency, creditInvoice.exchangeRate) + ' aprox. hasta ' + formatDateEs(creditPlanEstimate.finalDueDate) + '.'} La última cuota puede ajustarse por redondeo.</p></div>}
                 </div>}
-                <p className="text-[10px] text-muted-foreground">La fecha elegida será el primer vencimiento. Cada abono cubre primero intereses de la cuota más antigua y después capital; la última cuota ajusta el residuo.</p>
+                <p className="text-[10px] text-muted-foreground">El monto y la frecuencia estiman el vencimiento final; si indicas la fecha final, se calcula el monto aproximado por abono. Cada cuota se registra con su desglose de capital e interés.</p>
               </div>
             </div>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setCreditInvoice(null)} disabled={creditLoading}>Cancelar</Button>
-            <Button type="button" onClick={() => void handleSendInvoiceToCredit()} disabled={creditLoading || !creditDueDate || (creditTermOverrideRequired && !creditTermOverrideConfirmed) || (creditInterestMode !== 'NONE' && !Number.isFinite(Number(creditInterestValue))) || (creditPlanEnabled && (!Number.isFinite(Number(creditInstallmentAmount)) || Number(creditInstallmentAmount) <= 0))} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
+            <Button type="button" onClick={() => void handleSendInvoiceToCredit()} disabled={creditLoading || !effectiveCreditDueDate || (creditTermOverrideRequired && !creditTermOverrideConfirmed) || (creditInterestMode !== 'NONE' && !Number.isFinite(Number(creditInterestValue))) || (creditPlanEnabled && (!creditPlanEstimate || !creditFirstInstallmentDate))} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
               {creditLoading ? 'Enviando...' : 'Confirmar crédito'}
             </Button>
           </DialogFooter>

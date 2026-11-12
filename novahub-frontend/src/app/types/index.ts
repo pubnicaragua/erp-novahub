@@ -201,6 +201,8 @@ export interface CustomerLoan {
   total: number | string;
   frequency: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
   dueDate: string;
+  firstInstallmentDate?: string | null;
+  planCalculationMode?: 'AMOUNT' | 'DEADLINE' | null;
   planEnabled?: boolean;
   installmentAmount?: number | string | null;
   principalBalance?: number | string;
@@ -789,6 +791,11 @@ export interface CreditNote {
   warehouse?: { id: string; name: string } | null;
   date: string;
   dueDate?: string | null;
+  firstInstallmentDate?: string | null;
+  planCalculationMode?: 'AMOUNT' | 'DEADLINE' | null;
+  planEnabled?: boolean;
+  frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | null;
+  installmentAmount?: number | string | null;
   subtotal?: number;
   taxAmount?: number;
   discountAmount?: number;

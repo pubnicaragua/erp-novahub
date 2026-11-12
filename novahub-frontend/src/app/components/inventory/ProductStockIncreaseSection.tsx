@@ -208,9 +208,9 @@ export function ProductStockIncreaseSection({ product, baseCurrency, onStockIncr
         <div className="mt-4 space-y-4 border-t border-border/50 pt-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-1.5">
-              <Label htmlFor="manual-stock-warehouse">Bodega</Label>
+              <Label htmlFor="manual-stock-warehouse" className="flex items-end leading-tight sm:min-h-10">Bodega</Label>
               <Select value={warehouseId} onValueChange={setWarehouseId} disabled={saving || loadingWarehouses}>
-                <SelectTrigger id="manual-stock-warehouse"><SelectValue placeholder={loadingWarehouses ? 'Cargando bodegas…' : 'Seleccionar bodega'} /></SelectTrigger>
+                <SelectTrigger id="manual-stock-warehouse" className="h-9"><SelectValue placeholder={loadingWarehouses ? 'Cargando bodegas…' : 'Seleccionar bodega'} /></SelectTrigger>
                 <SelectContent>
                   {warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={String(warehouse.id)}>{warehouse.name}</SelectItem>)}
                 </SelectContent>
@@ -220,9 +220,9 @@ export function ProductStockIncreaseSection({ product, baseCurrency, onStockIncr
 
             {variants.length > 1 && (
               <div className="space-y-1.5">
-                <Label htmlFor="manual-stock-variant">Variante</Label>
+                <Label htmlFor="manual-stock-variant" className="flex items-end leading-tight sm:min-h-10">Variante</Label>
                 <Select value={variantId} onValueChange={setVariantId} disabled={saving}>
-                  <SelectTrigger id="manual-stock-variant"><SelectValue placeholder="Seleccionar variante" /></SelectTrigger>
+                  <SelectTrigger id="manual-stock-variant" className="h-9"><SelectValue placeholder="Seleccionar variante" /></SelectTrigger>
                   <SelectContent>
                     {variants.map((variant: any) => <SelectItem key={variant.id} value={String(variant.id)}>{variant.sku}{variant.name ? ` · ${variant.name}` : ''}</SelectItem>)}
                   </SelectContent>
@@ -231,20 +231,20 @@ export function ProductStockIncreaseSection({ product, baseCurrency, onStockIncr
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="manual-stock-quantity">Cantidad a agregar</Label>
+              <Label htmlFor="manual-stock-quantity" className="flex items-end leading-tight sm:min-h-10">Cantidad a agregar</Label>
               <Input id="manual-stock-quantity" type="number" min="0.0000001" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} disabled={saving} inputMode="decimal" />
             </div>
 
             {canOverrideCost && (
               <>
                 <div className="space-y-1.5">
-                  <Label htmlFor="manual-stock-unit-cost">Costo unitario de esta entrada (opcional)</Label>
+                  <Label htmlFor="manual-stock-unit-cost" className="flex items-end leading-tight sm:min-h-10">Costo unitario de esta entrada (opcional)</Label>
                   <Input id="manual-stock-unit-cost" type="number" min="0" step="any" value={unitCost} onChange={(event) => setUnitCost(event.target.value)} disabled={saving} inputMode="decimal" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="manual-stock-cost-currency">Moneda del costo indicado</Label>
+                  <Label htmlFor="manual-stock-cost-currency" className="flex items-end leading-tight sm:min-h-10">Moneda del costo indicado</Label>
                   <Select value={costCurrency} onValueChange={setCostCurrency} disabled={saving}>
-                    <SelectTrigger id="manual-stock-cost-currency"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="manual-stock-cost-currency" className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>{currencyOptions.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
@@ -259,15 +259,15 @@ export function ProductStockIncreaseSection({ product, baseCurrency, onStockIncr
               <div className="mb-3 flex items-center gap-2 text-xs font-bold"><Warehouse className="size-3.5 text-primary" /> Datos del lote</div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-1">
-                  <Label htmlFor="manual-stock-lot-number">Número de lote</Label>
+                  <Label htmlFor="manual-stock-lot-number" className="flex items-end leading-tight sm:min-h-10">Número de lote</Label>
                   <Input id="manual-stock-lot-number" value={lotNumber} onChange={(event) => setLotNumber(event.target.value)} disabled={saving} maxLength={128} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="manual-stock-lot-manufactured">Fecha de fabricación</Label>
+                  <Label htmlFor="manual-stock-lot-manufactured" className="flex items-end leading-tight sm:min-h-10">Fecha de fabricación</Label>
                   <Input id="manual-stock-lot-manufactured" type="date" value={manufactureDate} onChange={(event) => setManufactureDate(event.target.value)} disabled={saving} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="manual-stock-lot-expiration">Fecha de vencimiento</Label>
+                  <Label htmlFor="manual-stock-lot-expiration" className="flex items-end leading-tight sm:min-h-10">Fecha de vencimiento</Label>
                   <Input id="manual-stock-lot-expiration" type="date" value={expirationDate} onChange={(event) => setExpirationDate(event.target.value)} disabled={saving} />
                 </div>
               </div>

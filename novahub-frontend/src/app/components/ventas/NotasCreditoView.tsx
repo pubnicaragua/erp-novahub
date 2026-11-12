@@ -44,7 +44,8 @@ import { CurrencySelector } from '../ui/CurrencySelector';
 import { Switch } from '../ui/switch';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
-import { formatCurrencyAmount, normalizeCurrency, summarizeAmountsByCurrency } from '../../utils/currency';
+import { formatCurrencyAmount, normalizeCurrency, roundCurrencyNumber, summarizeAmountsByCurrency } from '../../utils/currency';
+import { calculateCustomerCreditPlanEstimate } from '../../utils/customerCreditInstallmentPlan';
 import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getSingleSalesVariant } from '../../utils/sales-stock';
@@ -602,6 +603,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       customerId: '',
       date: new Date().toISOString().split('T')[0],
       dueDate: addDays(new Date(), 30),
+      firstInstallmentDate: '',
+      planCalculationMode: 'AMOUNT',
       reason: '',
       items: [],
       subtotal: 0,
@@ -631,12 +634,35 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     if (localDoc.items.some((item: any) => !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1)) return void toast.error('Las cantidades deben ser enteros mayores que cero');
     const customer = customerFor(localDoc.customerId);
     if (Number(customer?.creditLimit || 0) <= 0) return void showCreditLimitRequired();
+    const interestModeForPlan = String(localDoc.interestMode || 'NONE');
+    const interestValueForPlan = Number(localDoc.interestValue || 0);
+    const planInterest = interestModeForPlan === 'PERCENTAGE'
+      ? roundCurrencyNumber(Number(localDoc.total || 0) * interestValueForPlan / 100)
+      : interestModeForPlan === 'FIXED_AMOUNT' ? roundCurrencyNumber(interestValueForPlan) : 0;
+    const planCalculationMode = localDoc.planCalculationMode || (localDoc.firstInstallmentDate ? 'DEADLINE' : 'AMOUNT');
+    const firstInstallmentDate = localDoc.firstInstallmentDate || isoDate(localDoc.dueDate);
+    const installmentPlanEstimate = localDoc.planEnabled
+      ? calculateCustomerCreditPlanEstimate({
+        principal: Number(localDoc.total || 0),
+        interest: planInterest,
+        frequency: localDoc.frequency || 'WEEKLY',
+        firstInstallmentDate,
+        calculationMode: planCalculationMode,
+        installmentAmount: localDoc.installmentAmount,
+        finalDueDate: isoDate(localDoc.dueDate),
+      })
+      : null;
+    if (localDoc.planEnabled && (!firstInstallmentDate || !installmentPlanEstimate)) {
+      return void toast.error('Completa el primer abono y los datos del plan para calcular el vencimiento.');
+    }
+    const effectiveDueDate = localDoc.planEnabled ? installmentPlanEstimate!.finalDueDate : isoDate(localDoc.dueDate);
     const saveToastId = toast.loading(isCreating ? 'Creando crédito...' : 'Guardando crédito...');
     try {
       const payload: any = {
         customerId: localDoc.customerId,
         date: new Date(localDoc.date).toISOString(),
-        dueDate: new Date(localDoc.dueDate).toISOString(),
+        dueDate: new Date(effectiveDueDate).toISOString(),
+        firstInstallmentDate: localDoc.planEnabled ? new Date(firstInstallmentDate).toISOString() : undefined,
         reason: String(localDoc.reason).trim(),
         priceListId: localDoc.priceListId || undefined,
         items: localDoc.items.map((item: any) => ({
@@ -659,8 +685,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         interestMode: localDoc.interestMode || 'NONE',
         interestValue: Number(localDoc.interestValue || 0),
         planEnabled: Boolean(localDoc.planEnabled),
+        planCalculationMode,
         frequency: localDoc.planEnabled ? (localDoc.frequency || 'WEEKLY') : undefined,
-        installmentAmount: localDoc.planEnabled ? Number(localDoc.installmentAmount || 0) : undefined,
+        installmentAmount: localDoc.planEnabled ? installmentPlanEstimate?.installmentAmount : undefined,
         currency: localDoc.currency || displayCurrency,
         exchangeRate: Number(localDoc.exchangeRate || globalRate),
         warehouseId: localDoc.warehouseId || localDoc.invoice?.warehouseId || null,
@@ -1059,6 +1086,19 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     const interestPreview = interestMode === 'PERCENTAGE'
       ? principalForInterest * interestValue / 100
       : interestMode === 'FIXED_AMOUNT' ? interestValue : 0;
+    const planCalculationMode = localDoc.planCalculationMode || (localDoc.firstInstallmentDate ? 'DEADLINE' : 'AMOUNT');
+    const firstInstallmentDate = localDoc.firstInstallmentDate || isoDate(localDoc.dueDate);
+    const installmentPlanEstimate = localDoc.planEnabled
+      ? calculateCustomerCreditPlanEstimate({
+        principal: principalForInterest,
+        interest: roundCurrencyNumber(interestPreview),
+        frequency: localDoc.frequency || 'WEEKLY',
+        firstInstallmentDate,
+        calculationMode: planCalculationMode,
+        installmentAmount: localDoc.installmentAmount,
+        finalDueDate: isoDate(localDoc.dueDate),
+      })
+      : null;
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1069,7 +1109,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         {customersError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-700 dark:text-rose-300"><span>No se pudieron cargar los clientes ni sus límites de crédito.</span><Button type="button" variant="outline" size="sm" onClick={onRefresh}>Reintentar</Button></div>}
         <fieldset disabled={!canEditDocument} className="contents">
         <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]" data-tour="sales-form-data">
-           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] text-muted-foreground">Cliente</p><Combobox options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), normalizeCurrency(customer.creditLimitCurrency, baseCurrency), globalRate)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const priceListId = getCustomerPriceListId(value); const items = (localDoc.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); if (hasSalesProductPriceListConflicts(items, priceListId)) { toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.'); return; } setLocalDoc({ ...localDoc, customerId: value, priceListId, ...recalculateItems(items) }); }} placeholder="Seleccionar cliente" /></div><SalesWarehouseSelect warehouses={warehouses} value={localDoc.warehouseId} onChange={(warehouseId) => setLocalDoc({ ...localDoc, warehouseId })} required helpText="Se usará al emitir el crédito y devolver productos al inventario." /><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</p><Input type="date" value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha límite de pago</p><Input type="date" value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Moneda de la transacción</p><Select value={localDoc.currency || 'NIO'} onValueChange={(value) => handleCurrencyChange(value as 'NIO' | 'USD')}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent></Select><p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc.currency === 'NIO' ? '1.00' : Number(localDoc.exchangeRate || globalRate || 1).toFixed(2)}</span></p></div>{!isCreating && <div><p className="mb-1 text-[10px] text-muted-foreground">Estado</p><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-black', statusOption?.color)}>{statusOption?.label || localDoc.status}</span></div>}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Descripción / motivo</p><textarea value={localDoc.reason || ''} onChange={(event) => setLocalDoc({ ...localDoc, reason: event.target.value })} className="h-20 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ej. Venta de productos con pago a 30 días..." /></div></CardContent></Card>
+           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] text-muted-foreground">Cliente</p><Combobox options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), normalizeCurrency(customer.creditLimitCurrency, baseCurrency), globalRate)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const priceListId = getCustomerPriceListId(value); const items = (localDoc.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); if (hasSalesProductPriceListConflicts(items, priceListId)) { toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.'); return; } setLocalDoc({ ...localDoc, customerId: value, priceListId, ...recalculateItems(items) }); }} placeholder="Seleccionar cliente" /></div><SalesWarehouseSelect warehouses={warehouses} value={localDoc.warehouseId} onChange={(warehouseId) => setLocalDoc({ ...localDoc, warehouseId })} required helpText="Se usará al emitir el crédito y devolver productos al inventario." /><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</p><Input type="date" value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">{localDoc.planEnabled ? (planCalculationMode === 'AMOUNT' ? 'Fecha estimada de cancelación' : 'Fecha final de vencimiento') : 'Fecha límite de pago'}</p><Input type="date" value={localDoc.planEnabled && planCalculationMode === 'AMOUNT' ? installmentPlanEstimate?.finalDueDate || isoDate(localDoc.dueDate) : isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value, ...(localDoc.planEnabled ? { planCalculationMode: 'DEADLINE' } : {}) })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Moneda de la transacción</p><Select value={localDoc.currency || 'NIO'} onValueChange={(value) => handleCurrencyChange(value as 'NIO' | 'USD')}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent></Select><p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc.currency === 'NIO' ? '1.00' : Number(localDoc.exchangeRate || globalRate || 1).toFixed(2)}</span></p></div>{!isCreating && <div><p className="mb-1 text-[10px] text-muted-foreground">Estado</p><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-black', statusOption?.color)}>{statusOption?.label || localDoc.status}</span></div>}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Descripción / motivo</p><textarea value={localDoc.reason || ''} onChange={(event) => setLocalDoc({ ...localDoc, reason: event.target.value })} className="h-20 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ej. Venta de productos con pago a 30 días..." /></div></CardContent></Card>
           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Capacidad de pago</p><div className="grid grid-cols-2 gap-3"><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Límite ({normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency)})</p><p className="mt-1 text-lg font-black">{formatCurrencyAmount(Number(selectedCustomer?.creditLimit || 0), normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency))}</p>{normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency) !== baseCurrency && <p className="text-[10px] text-muted-foreground">Equivale a {formatConvertedAmount(Number(selectedCustomer?.creditLimit || 0), normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency), globalRate)}</p>}</div><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Disponible</p><p className={cn('mt-1 text-lg font-black', availableCredit > 0 ? 'text-emerald-500' : 'text-rose-500')}>{formatConvertedAmount(availableCredit, baseCurrency)}</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">Saldo pendiente</p><p className="mt-1 text-2xl font-black text-rose-600 dark:text-rose-400">{formatConvertedAmount(getCustomerDebtAmount(selectedCustomer), baseCurrency)}</p></div><div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Saldo a favor</p><p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(getCustomerFavorAmount(selectedCustomer), baseCurrency)}</p></div></div>{selectedCustomer && Number(selectedCustomer.creditLimit || 0) <= 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] text-amber-700 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span>Este cliente no tiene límite de crédito. {customerCreditLimitInstruction()}</span></div>}<div className="flex items-start gap-2 text-[10px] text-muted-foreground"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />La emisión valida que el total no supere el límite disponible.</div></CardContent></Card>
         </div>
         <div className="flex justify-end" data-tour="sales-form-actions"><SalesViewTutorial view="credit-notes" context="form" /></div>
@@ -1078,36 +1118,38 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
             <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Interés y calendario opcionales</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Interés</Label>
+                <Label className="flex items-end leading-tight sm:min-h-10">Interés</Label>
                 <Select value={interestMode} onValueChange={(value) => setLocalDoc({ ...localDoc, interestMode: value, interestValue: value === 'NONE' ? 0 : localDoc.interestValue || '' })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="NONE">Sin interés</SelectItem><SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem><SelectItem value="PERCENTAGE">Porcentaje único</SelectItem></SelectContent>
                 </Select>
               </div>
               {interestMode !== 'NONE' && <div className="space-y-1.5">
-                <Label htmlFor="credit-interest-value">{interestMode === 'PERCENTAGE' ? 'Porcentaje sobre el crédito (%)' : 'Interés fijo'}</Label>
+                <Label htmlFor="credit-interest-value" className="flex items-end leading-tight sm:min-h-10">{interestMode === 'PERCENTAGE' ? 'Porcentaje sobre el crédito (%)' : 'Interés fijo'}</Label>
                 <Input id="credit-interest-value" type="number" min="0" step="0.01" max={interestMode === 'PERCENTAGE' ? 100 : undefined} value={localDoc.interestValue ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, interestValue: event.target.value })} />
               </div>}
             </div>
             <p className="text-[10px] text-muted-foreground">Interés estimado: {formatExplicitAmount(interestPreview, localDoc.currency || displayCurrency)} · Total financiado: {formatExplicitAmount(Number(localDoc.total || 0) + interestPreview, localDoc.currency || displayCurrency)}. El porcentaje queda convertido a un monto fijo al emitir.</p>
             <div className="flex items-start gap-2 border-t border-border/40 pt-3">
-              <input id="credit-plan-enabled" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={Boolean(localDoc.planEnabled)} onChange={(event) => setLocalDoc({ ...localDoc, planEnabled: event.target.checked, frequency: localDoc.frequency || 'WEEKLY' })} />
+              <input id="credit-plan-enabled" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={Boolean(localDoc.planEnabled)} onChange={(event) => setLocalDoc({ ...localDoc, planEnabled: event.target.checked, planCalculationMode: localDoc.planCalculationMode || 'AMOUNT', firstInstallmentDate: event.target.checked ? (localDoc.firstInstallmentDate || localDoc.date) : localDoc.firstInstallmentDate, frequency: localDoc.frequency || 'WEEKLY' })} />
               <Label htmlFor="credit-plan-enabled" className="cursor-pointer text-xs">Definir un plan de abonos</Label>
             </div>
             {localDoc.planEnabled && <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Frecuencia</Label>
+                <Label className="flex items-end leading-tight sm:min-h-10">Frecuencia</Label>
                 <Select value={localDoc.frequency || 'WEEKLY'} onValueChange={(value) => setLocalDoc({ ...localDoc, frequency: value })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="credit-installment-amount">Monto por abono</Label>
-                <Input id="credit-installment-amount" type="number" min="0.01" step="0.01" value={localDoc.installmentAmount ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, installmentAmount: event.target.value })} />
-              </div>
+              <div className="space-y-1.5"><Label className="flex items-end leading-tight sm:min-h-10">Método de cálculo</Label><Select value={planCalculationMode} onValueChange={(value) => { const mode = value as typeof planCalculationMode; setLocalDoc({ ...localDoc, planCalculationMode: mode, ...(mode === 'DEADLINE' && installmentPlanEstimate ? { dueDate: installmentPlanEstimate.finalDueDate } : {}) }); }}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1.5"><Label htmlFor="credit-first-installment" className="flex items-end leading-tight sm:min-h-10">Fecha del primer abono</Label><Input id="credit-first-installment" type="date" required value={localDoc.firstInstallmentDate || isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, firstInstallmentDate: event.target.value })} /></div>
+              {planCalculationMode === 'AMOUNT' && <div className="space-y-1.5"><Label htmlFor="credit-installment-amount" className="flex items-end leading-tight sm:min-h-10">Monto por abono</Label><Input id="credit-installment-amount" type="number" min="0.01" step="0.01" value={localDoc.installmentAmount ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, planCalculationMode: 'AMOUNT', installmentAmount: event.target.value })} currencyPrecision /></div>}
+              {installmentPlanEstimate && <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed sm:col-span-2"><p className="font-bold text-foreground">{planCalculationMode === 'AMOUNT' ? 'Fecha estimada de cancelación' : 'Abono estimado'}</p><p className="mt-1 text-muted-foreground">{planCalculationMode === 'AMOUNT'
+                ? formatDateEs(installmentPlanEstimate.finalDueDate) + ' · ' + installmentPlanEstimate.installmentCount + ' abonos de ' + formatExplicitAmount(installmentPlanEstimate.installmentAmount, localDoc.currency) + ' aprox.'
+                : installmentPlanEstimate.installmentCount + ' abonos de ' + formatExplicitAmount(installmentPlanEstimate.installmentAmount, localDoc.currency) + ' aprox. hasta ' + formatDateEs(installmentPlanEstimate.finalDueDate) + '.'} La última cuota puede ajustarse por redondeo.</p></div>}
             </div>}
-            <p className="text-[10px] text-muted-foreground">La fecha de pago indicada arriba será la primera cuota. Se permiten pagos parciales y anticipos; un pago mayor al saldo no se acepta.</p>
+            <p className="text-[10px] text-muted-foreground">Con el monto por abono se estima la fecha final; con la fecha final se calcula el abono aproximado. Se permiten pagos parciales y anticipos; un pago mayor al saldo no se acepta.</p>
           </CardContent>
         </Card>
         {!isCreating && Array.isArray(localDoc.installments) && localDoc.installments.length > 0 && <Card className="rounded-2xl border-border/50">
