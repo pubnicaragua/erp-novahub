@@ -524,7 +524,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const [productSearch, setProductSearch] = useState('');
   const skipInitialProductSearchRef = useRef(false);
   const [catalogItemFilter, setCatalogItemFilter] = useState<CatalogItemFilter>('ALL');
-  const [catalogAvailabilityFilter, setCatalogAvailabilityFilter] = useState<CatalogAvailabilityFilter>('ALL');
+  const [catalogAvailabilityFilter, setCatalogAvailabilityFilter] = useState<CatalogAvailabilityFilter>('AVAILABLE');
   const [catalogBrandFilter, setCatalogBrandFilter] = useState('all');
   const [catalogCategoryFilter, setCatalogCategoryFilter] = useState('all');
   const [cart, setCart] = useState<CartItem[]>([]);

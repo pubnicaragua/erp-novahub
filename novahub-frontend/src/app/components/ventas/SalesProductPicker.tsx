@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { inventoryService } from '../../services/inventario.service';
 import { toast } from '../../services/toast';
@@ -42,6 +42,10 @@ export type SalesCatalogVariant = NonNullable<SalesStockProduct['variants']>[num
 type PickerView = 'cards' | 'list';
 type AvailabilityFilter = 'all' | 'available' | 'empty';
 const PICKER_PAGE_SIZE = 200;
+
+function getDefaultAvailabilityFilter(warehouseId?: string | null): AvailabilityFilter {
+  return String(warehouseId || '').trim() ? 'available' : 'all';
+}
 
 type SalesProductPickerProps = {
   products: SalesCatalogItem[];
@@ -141,7 +145,7 @@ export function SalesProductPicker({
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
-  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>('all');
+  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>(() => getDefaultAvailabilityFilter(warehouseId));
   const [currentPage, setCurrentPage] = useState(1);
   const [view, setView] = useState<PickerView>('cards');
   const [variantProductSelection, setVariantProductSelection] = useState<SalesCatalogItem | null>(null);
@@ -149,6 +153,10 @@ export function SalesProductPicker({
   const selectedProduct = products.find((product) => String(product.id) === String(value || ''));
   const selectedVariant = selectedProduct?.variants?.find((variant) => variant.id === variantId);
   const selectedVariantId = variantId || getSingleSalesVariant(selectedProduct)?.id;
+
+  useEffect(() => {
+    setAvailabilityFilter(getDefaultAvailabilityFilter(warehouseId));
+  }, [warehouseId]);
 
   const categories = useMemo(() => {
     const values = new Map<string, string>();
@@ -220,7 +228,7 @@ export function SalesProductPicker({
       setSearch('');
       setCategoryFilter('all');
       setBrandFilter('all');
-      setAvailabilityFilter('all');
+      setAvailabilityFilter(getDefaultAvailabilityFilter(warehouseId));
       setCurrentPage(1);
       setVariantProductSelection(null);
       setOtherLocationsProduct(null);
