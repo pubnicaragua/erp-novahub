@@ -23,6 +23,7 @@ import { ProyectoCosteo6DPanel } from './ProyectoCosteo6DPanel';
 import { ProyectoEVMControlPanel } from './ProyectoEVMControlPanel';
 import { ProyectoCotizacionExportView } from './ProyectoCotizacionExportView';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 
 interface ProyectoDetalleViewProps {
   projectId: string;
@@ -200,15 +201,7 @@ export function ProyectoDetalleView({ projectId, onBack, initialTab, onTabChange
 }
 
 function KpiCard({ label, value, hint, tone = 'default' }: { label: string; value: string; hint?: string; tone?: 'default' | 'good' | 'bad' | 'warn' }) {
-  return (
-    <Card className="rounded-2xl border-border/60 shadow-sm">
-      <CardContent className="p-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
-        <p className={cn('mt-1 text-xl font-black tracking-tight', tone === 'good' && 'text-emerald-600', tone === 'bad' && 'text-rose-600', tone === 'warn' && 'text-amber-600')}>{value}</p>
-        {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
-      </CardContent>
-    </Card>
-  );
+  return <SalesKpiCard title={label} value={value} sub={hint} tone={tone} />;
 }
 
 export function ProyectoResumenPanel({ project, canViewCosts, canViewProgress, canViewTasks, canViewMilestones }: {

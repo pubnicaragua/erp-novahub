@@ -20,6 +20,7 @@ import { GoalsPanel } from './GoalsPanel';
 import { OffersPanel } from './OffersPanel';
 import { ProspectPanel } from './ProspectPanel';
 import { ReviewInbox } from './ReviewInbox';
+import { SalesKpiCard } from '../SalesKpiCard';
 
 type View = 'table' | 'today' | 'pipeline' | 'network' | 'review' | 'offers' | 'goals' | 'connect' | 'prospect' | 'assistant';
 const LIST_VIEWS: View[] = ['table', 'today', 'pipeline'];
@@ -99,7 +100,7 @@ export function LeadsPanel() {
         {canCreate && <Button type="button" onClick={() => setDialog({ id: null })}><Plus className="mr-1.5 size-4" /> Nuevo lead</Button>}
       </div>
 
-      {summary && LIST_VIEWS.includes(view) && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{kpis.map((card) => <div key={card.label} className="min-w-0 rounded-xl border border-border/60 bg-card p-3 shadow-sm"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className={cn('mt-1 break-words text-xl font-black tabular-nums', card.tone)}>{card.value}</p>{card.hint && <p className="text-[10px] text-muted-foreground">{card.hint}</p>}</div>)}</div>}
+      {summary && LIST_VIEWS.includes(view) && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{kpis.map((card) => <SalesKpiCard key={card.label} title={card.label} value={card.value} sub={card.hint} tone={/destructive|rose|red/.test(String(card.tone || '')) ? 'bad' : /amber|warning|orange/.test(String(card.tone || '')) ? 'warn' : 'default'} />)}</div>}
 
       {LIST_VIEWS.includes(view) && summary?.team && summary.team.length > 0 && (
         <details className="rounded-xl border border-border/60 bg-card p-3 text-sm">

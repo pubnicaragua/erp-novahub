@@ -15,6 +15,7 @@ import { sourceDocumentsService, accountsService } from '../../services/finanzas
 import { toast } from '@/app/services/toast';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard, financeCategoryLabel } from './financeChartTheme';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 
 interface Props {
   incomes: any[];
@@ -393,21 +394,6 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   );
 }
 
-function KpiCard({ icon: Icon, label, value, sub, onClick }: { icon: any; label: string; value: string; sub?: string; onClick?: () => void }) {
-  return (
-    <Card className={`rounded-xl border-border/40 bg-card shadow-sm ${onClick ? 'cursor-pointer hover:border-primary/40 hover:shadow-md transition-all' : ''}`} onClick={onClick}>
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between">
-          <div className="space-y-0.5 min-w-0 flex-1">
-            <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground truncate">{label}</p>
-            <p className="text-sm font-black tabular-nums text-foreground truncate">{value}</p>
-            {sub && <p className="text-[7px] text-muted-foreground/60 truncate">{sub}</p>}
-          </div>
-          <div className="p-1.5 rounded-lg bg-primary/10 text-primary shrink-0 ml-1">
-            <Icon className="size-3.5" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function KpiCard({ icon, label, value, sub, onClick }: { icon: any; label: string; value: string; sub?: string; onClick?: () => void }) {
+  return <SalesKpiCard title={label} value={value} icon={icon} sub={sub} onClick={onClick} />;
 }

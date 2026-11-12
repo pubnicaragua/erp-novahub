@@ -143,6 +143,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
   const [detailCredit, setDetailCredit] = useState<CreditDocument | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  // Borrador sin terminar de una visita anterior: se ofrece retomarlo, no se reabre solo.
+  const [pendingDraft, setPendingDraft] = useState<any | null>(null);
   const [paymentCredit, setPaymentCredit] = useState<CreditDocument | null>(null);
   const [paymentLines, setPaymentLines] = useState<CreditPaymentLine[]>([]);
   const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceived | null>(null);
@@ -168,11 +170,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     hydratedDraftKeyRef.current = salesDraftStorageKey;
     const stored = readSalesEditorDraft<any>(salesDraftStorageKey);
     const timer = window.setTimeout(() => {
-      if (stored) {
-        if (stored.document) commitLocalDoc(stored.document);
-        if (stored.editingId) setEditingId(stored.editingId);
-        setIsCreating(Boolean(stored.isCreating));
-      }
+      if (stored?.document) setPendingDraft(stored);
       setDraftHydrated(true);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -180,12 +178,25 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
 
   useEffect(() => {
     if (!draftHydrated || !salesDraftStorageKey) return;
+    if (pendingDraft) return;
     if (!localDoc || (!editingId && !isCreating)) {
       clearSalesEditorDraft(salesDraftStorageKey);
       return;
     }
     writeSalesEditorDraft(salesDraftStorageKey, { editingId, isCreating, document: localDoc });
-  }, [draftHydrated, editingId, isCreating, localDoc, salesDraftStorageKey]);
+  }, [draftHydrated, editingId, isCreating, localDoc, pendingDraft, salesDraftStorageKey]);
+
+  const resumePendingDraft = () => {
+    if (!pendingDraft) return;
+    commitLocalDoc(pendingDraft.document);
+    if (pendingDraft.editingId) setEditingId(pendingDraft.editingId);
+    setIsCreating(Boolean(pendingDraft.isCreating));
+    setPendingDraft(null);
+  };
+  const discardPendingDraft = () => {
+    if (salesDraftStorageKey) clearSalesEditorDraft(salesDraftStorageKey);
+    setPendingDraft(null);
+  };
 
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
   const paymentLine = (method: CreditPaymentLine['method'], amount = '', currency: 'NIO' | 'USD' = displayCurrency): CreditPaymentLine => ({
@@ -1098,6 +1109,15 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      {pendingDraft && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+          <p className="text-sm font-semibold">Tienes un crédito sin terminar. Puedes retomarlo donde lo dejaste o descartarlo.</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={discardPendingDraft}>Descartar</Button>
+            <Button size="sm" onClick={resumePendingDraft}>Continuar borrador</Button>
+          </div>
+        </div>
+      )}
       <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

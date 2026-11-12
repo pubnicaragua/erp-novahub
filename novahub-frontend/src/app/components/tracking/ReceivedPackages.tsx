@@ -46,6 +46,7 @@ import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 
 type View = 'list' | 'quick' | 'import';
 
@@ -334,13 +335,8 @@ export function ReceivedPackages() {
   );
 }
 
-function KpiCard({ label, value, icon, suffix }: { label: string; value?: number; icon: React.ReactNode; suffix?: string }) {
-  return (
-    <Card className="rounded-2xl border-border/60 bg-card p-3 shadow-sm">
-      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">{icon}{label}</div>
-      <p className="mt-1 text-xl font-black">{value ?? '—'}{suffix ? <span className="text-xs font-semibold text-muted-foreground"> {suffix}</span> : null}</p>
-    </Card>
-  );
+function KpiCard({ label, value, suffix }: { label: string; value?: number; icon?: React.ReactNode; suffix?: string }) {
+  return <SalesKpiCard title={label} value={<>{value ?? '—'}{suffix ? <span className="text-xs font-semibold text-muted-foreground"> {suffix}</span> : null}</>} />;
 }
 
 function DetailRow({ label, value }: { label: string; value?: string | number }) {
