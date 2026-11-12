@@ -229,7 +229,7 @@ export function ControlDashboardCajaView({
         
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-black tracking-tight flex items-center gap-2" data-tour="cash-control-title">
+            <h2 className="nh-module-title flex items-center gap-2" data-tour="cash-control-title">
               <Coins className="size-5 text-primary" /> Control de Caja
             </h2>
             <Button type="button" variant="ghost" size="icon" onClick={() => setShowTutorial(true)} className="size-8 shrink-0 rounded-lg text-muted-foreground" aria-label="Cómo controlar caja" title="Cómo controlar caja">

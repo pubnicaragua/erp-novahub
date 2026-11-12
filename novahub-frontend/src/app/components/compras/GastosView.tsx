@@ -1251,7 +1251,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div><h2 className="nh-module-title" data-tour="purchases-list-title">Gastos</h2></div>
+      <div><div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title" data-tour="purchases-list-title">Gastos</h2><PurchaseViewTutorial view="expenses" /></div></div>
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -1304,7 +1304,6 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="erp-list-toolbar grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
-            <PurchaseViewTutorial view="expenses" />
             {canExportExpenseList && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}

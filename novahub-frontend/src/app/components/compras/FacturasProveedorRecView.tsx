@@ -771,7 +771,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-      <h2 className="nh-module-title" data-tour="purchases-list-title">Compras Recurrentes</h2>
+      <div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title" data-tour="purchases-list-title">Compras Recurrentes</h2><PurchaseViewTutorial view="recurring-invoices" /></div>
       <p className="mt-1 text-xs text-muted-foreground">Cada programación crea una orden y una recepción pendiente por ciclo.</p>
       </div>
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
@@ -788,7 +788,6 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
-            <PurchaseViewTutorial view="recurring-invoices" />
             {canPerform('PURCHASES_INVOICES_REC', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de compras recurrentes" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs w-full sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>

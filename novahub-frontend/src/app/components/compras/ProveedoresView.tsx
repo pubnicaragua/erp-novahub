@@ -657,7 +657,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-      <h2 className="nh-module-title" data-tour="purchases-list-title">Proveedores</h2>
+      <div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title" data-tour="purchases-list-title">Proveedores</h2><PurchaseViewTutorial view="suppliers" /></div>
       </div>
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
         <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
@@ -671,7 +671,6 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
-            <PurchaseViewTutorial view="suppliers" />
             {canPerform('PURCHASES_PROVIDERS', 'export') && <PdfDownloadButton
               label="Exportar"
               includePageSizes

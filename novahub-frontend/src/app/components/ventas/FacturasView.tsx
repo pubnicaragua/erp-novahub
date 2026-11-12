@@ -2549,7 +2549,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-      <h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Control de Facturación</h2>
+      <div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Control de Facturación</h2><SalesViewTutorial view="invoices" /></div>
       </div>
       <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
         <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
@@ -2571,7 +2571,6 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
-            <SalesViewTutorial view="invoices" />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">

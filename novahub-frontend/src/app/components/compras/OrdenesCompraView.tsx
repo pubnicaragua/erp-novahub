@@ -3486,7 +3486,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div><h2 className="nh-module-title" data-tour="purchases-list-title">Órdenes de Compra</h2></div>
+      <div><div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title" data-tour="purchases-list-title">Órdenes de Compra</h2><PurchaseViewTutorial view="orders" /></div></div>
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -3514,7 +3514,6 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
               onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
               onExcel={(scope, filter) => void handleExportListExcel(scope, filter)}
             />}
-            <PurchaseViewTutorial view="orders" />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes de compra" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}

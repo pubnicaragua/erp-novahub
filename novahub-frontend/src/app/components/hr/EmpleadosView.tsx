@@ -997,7 +997,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             />
           </div>
           <Select value={filterDept} onValueChange={setFilterDept}>
-            <SelectTrigger className="w-[210px] text-xs" aria-label="Filtrar por departamento">
+            <SelectTrigger className="w-[190px] text-xs" aria-label="Filtrar por departamento">
               <Filter className="size-4 mr-2" />
               <SelectValue placeholder="Departamento" />
             </SelectTrigger>
@@ -1009,7 +1009,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             </SelectContent>
           </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-[170px] text-xs" aria-label="Filtrar por estado">
+            <SelectTrigger className="w-[150px] text-xs" aria-label="Filtrar por estado">
               <SelectValue placeholder="Estado" />
             </SelectTrigger>
             <SelectContent>
@@ -1036,7 +1036,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             aria-label="Elegir distribución"
             data-tour="empleados-layout"
             data-toolbar-role="layout"
-            className="h-10 w-32 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary"
+            className="h-10 w-28 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary"
           >
             <option value="table">Lista</option>
             <option value="cards">Tarjetas</option>
@@ -1050,7 +1050,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
           {canPerform('HR_EMPLOYEES', 'create') && (
             <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload className="size-4 mr-2" />
-              Importar Excel
+              Importar
             </Button>
           )}
           <HRViewTutorial label="Cómo gestionar empleados" targetPrefix="hr-employees" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Busca, filtra y cambia entre lista y tarjetas para revisar el expediente laboral.' }, actions: { description: 'Configura columnas, agrega empleados, importa Excel o abre las acciones de cada registro.' } }} />

@@ -490,7 +490,18 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
       <CurrencyValuationBanner />
 
       {/* Navegación principal compartida con el resto de módulos */}
-      <h2 className="nh-module-title" data-tour="hr-page-title">{visibleHrTabs.find((tab) => tab.id === activeTab)?.label || 'Recursos humanos'}</h2>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <h2 className="nh-module-title" data-tour="hr-page-title">{visibleHrTabs.find((tab) => tab.id === activeTab)?.label || 'Recursos humanos'}</h2>
+        {canExportActiveHr && (
+            <ExportMenu
+              onPdf={(paperFormat) => void exportHr('pdf', paperFormat)}
+              onExcel={() => void exportHr('xlsx')}
+              className="shrink-0"
+              pdfDescription="Plantilla configurada para esta vista"
+              excelDescription="Todos los registros autorizados"
+            />
+          )}
+      </div>
 
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
         <div className="mb-4 flex min-w-0 items-center gap-2">
@@ -502,15 +513,6 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             ariaLabel="Navegación de Recursos Humanos"
             className="mb-0 min-w-0 flex-1"
           />
-          {canExportActiveHr && (
-            <ExportMenu
-              onPdf={(paperFormat) => void exportHr('pdf', paperFormat)}
-              onExcel={() => void exportHr('xlsx')}
-              className="ml-auto shrink-0"
-              pdfDescription="Plantilla configurada para esta vista"
-              excelDescription="Todos los registros autorizados"
-            />
-          )}
         </div>
 
         <motion.div

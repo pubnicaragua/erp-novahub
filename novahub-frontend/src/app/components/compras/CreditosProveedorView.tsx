@@ -1225,9 +1225,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="nh-module-title" data-tour="purchases-list-title">Créditos del proveedor</h2></div>
+          <div><div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title" data-tour="purchases-list-title">Créditos del proveedor</h2><PurchaseViewTutorial view="credits" /></div></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
-            <PurchaseViewTutorial view="credits" />
             {canPerform('PURCHASES_RETURNS', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos del proveedor" />
             <div className="max-w-md rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-[10px] font-semibold text-muted-foreground">

@@ -592,7 +592,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
     <div className="space-y-6">
       <div className="flex items-center gap-3">
       <ClipboardList className="size-6 text-primary" />
-      <h2 className="nh-module-title" data-tour="purchases-list-title">Solicitudes de Compra</h2>
+      <div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title" data-tour="purchases-list-title">Solicitudes de Compra</h2><PurchaseViewTutorial view="requests" /></div>
       <Badge variant="secondary" className="text-xs">{data.length}</Badge>
       </div>
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
@@ -648,7 +648,6 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
           onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
           onExcel={(scope, filter) => void handleExportListExcel(scope, filter)}
         />
-        <PurchaseViewTutorial view="requests" />
         <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de solicitudes de compra" />
       </div>
 

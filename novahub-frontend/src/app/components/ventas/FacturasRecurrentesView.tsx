@@ -880,7 +880,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div><h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Facturación Recurrente</h2>
+      <div><div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Facturación Recurrente</h2><SalesViewTutorial view="recurring" /></div>
       </div>
       <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
@@ -894,7 +894,6 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
-            <SalesViewTutorial view="recurring" />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas recurrentes" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />

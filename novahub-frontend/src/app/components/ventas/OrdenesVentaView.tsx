@@ -1497,7 +1497,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-      <h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Órdenes de Venta</h2>
+      <div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Órdenes de Venta</h2><SalesViewTutorial view="orders" /></div>
       </div>
       <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
         <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
@@ -1515,7 +1515,6 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
-            <SalesViewTutorial view="orders" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as OrderStatusFilter)}>
               <SelectTrigger className="h-10 w-full rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest sm:w-44"><SelectValue placeholder="Estado" /></SelectTrigger>

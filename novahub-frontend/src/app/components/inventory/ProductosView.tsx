@@ -4163,7 +4163,9 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       <div className="mb-4" data-tour="inventory-products-title">
         <div className="mb-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h2 className="nh-module-title">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
+            <div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2><Button type="button" size="icon" variant="ghost" data-tutorial-trigger="true" aria-label={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} title={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)}>
+          <CircleHelp className="size-4" />
+        </Button><Button type="button" size="icon" variant="ghost" onClick={onRefresh} disabled={isRefreshing} className="size-8 shrink-0 rounded-lg text-muted-foreground" aria-label={`Actualizar ${isServiceView ? 'servicios' : 'productos'}`} title={`Actualizar ${isServiceView ? 'servicios' : 'productos'}`}><RefreshCw className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} /></Button></div>
             <p className="mt-1 text-xs font-medium text-muted-foreground">{isServiceView ? 'Catálogo de servicios' : `${displayWarehouseOptions.length} bodegas visibles`}</p>
           </div>
         </div>
@@ -4479,25 +4481,13 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none"
-              title={`Actualizar ${isServiceView ? 'servicios' : 'productos'}`}
-            >
-              <RefreshCw className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Actualizar
-            </Button>
             {onExport && canPerform(catalogPermissionModule, 'export') && (
-              <ExportMenu onPdf={(paperFormat) => void handleProductPdfExport(paperFormat)} onExcel={openProductExportDialog} className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" label={`Exportar ${isServiceView ? 'servicios' : 'productos'}`} />
+              <ExportMenu onPdf={(paperFormat) => void handleProductPdfExport(paperFormat)} onExcel={openProductExportDialog} className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" label="Exportar" />
             )}
           </div>
         {canPerform(catalogPermissionModule, 'import') && (
           <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title={`Importar ${isServiceView ? 'servicios' : 'el catálogo inicial'} desde una plantilla`}>
-            <Upload className="mr-2 size-4" /> Importar {isServiceView ? 'servicios' : 'productos'}
+            <Upload className="mr-2 size-4" /> Importar
           </Button>
         )}
         {!isServiceView && canPerform(catalogPermissionModule, 'edit') && (
@@ -4520,9 +4510,6 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
             <Plus className="mr-2 size-4" /> Nuevo
           </Button>
         )}
-        <Button type="button" size="icon" variant="ghost" data-toolbar-role="help" data-tutorial-trigger="true" aria-label={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} title={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)}>
-          <CircleHelp className="size-4" />
-        </Button>
       </div>
 
       {!isServiceView && selectedCatalogProducts.length > 0 && (
