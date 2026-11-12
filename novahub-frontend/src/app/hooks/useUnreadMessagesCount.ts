@@ -4,7 +4,7 @@ import { useTenantQuery } from './useTenantQuery';
 import { messagesService } from '../services/notificaciones.service';
 import { supportConversationsService, type SupportConversation } from '../services/support-conversations.service';
 
-export function useUnreadMessagesCount(enabled: boolean) {
+export function useMessageInboxPreview(enabled: boolean) {
   const { user } = useAuth();
   const authUser = user as (typeof user & { clientTenantId?: string; tenantId?: string }) | null;
   const tenantKey = authUser?.clientTenantId || authUser?.tenantId || 'current';
@@ -38,5 +38,13 @@ export function useUnreadMessagesCount(enabled: boolean) {
     0,
   );
 
-  return directUnreadCount + supportUnreadCount;
+  const threads = [...(directMessagesQuery.data || []), ...(supportConversationsQuery.data || [])]
+    .sort((left, right) => new Date(right.lastMessageAt).getTime() - new Date(left.lastMessageAt).getTime());
+
+  return {
+    unreadCount: directUnreadCount + supportUnreadCount,
+    threads,
+    isLoading: directMessagesQuery.isLoading || supportConversationsQuery.isLoading,
+    isError: directMessagesQuery.isError || supportConversationsQuery.isError,
+  };
 }

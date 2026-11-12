@@ -560,9 +560,9 @@ function DashboardLayout() {
         // no existía cuando se disparó el evento original. Reproducimos una
         // sola vez el contexto después del render para que pueda enfocar el
         // registro exacto (factura, comanda, producto, etc.).
-        const targetKeys = ['targetId', 'invoiceId', 'orderId', 'creditNoteId', 'taskId', 'reminderId', 'eventId', 'requestId', 'queueId', 'sessionId', 'productId', 'expenseId', 'holdId'];
+        const targetKeys = ['targetId', 'invoiceId', 'orderId', 'creditNoteId', 'taskId', 'reminderId', 'eventId', 'requestId', 'queueId', 'sessionId', 'productId', 'expenseId', 'holdId', 'messageId'];
         const hasTarget = targetKeys.some((key) => Boolean(detail[key]));
-        if (hasTarget && !detail.__replayed && targetModule !== currentModule) {
+        if (hasTarget && !detail.__replayed && (targetModule !== currentModule || Boolean(detail.messageId))) {
           window.setTimeout(() => {
             window.dispatchEvent(new CustomEvent('navigate-module', {
               detail: { ...detail, __replayed: true },

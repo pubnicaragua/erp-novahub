@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { flushSync } from 'react-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Search,
   Bell,
@@ -43,7 +44,10 @@ import { useAuth, type Module } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { storageService } from '../services/storage.service';
 import { useNotifications } from '../hooks/useNotifications';
-import { useUnreadMessagesCount } from '../hooks/useUnreadMessagesCount';
+import { useMessageInboxPreview } from '../hooks/useUnreadMessagesCount';
+import { messagesService } from '../services/notificaciones.service';
+import { supportConversationsService } from '../services/support-conversations.service';
+import { updateMessageThread } from './notificaciones/message-thread-cache';
 import { navigateToNotification } from '../utils/notificationNavigation';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { persistThemeMode, readPersistedDarkMode } from '../utils/theme-mode';
@@ -59,7 +63,7 @@ import { PasswordRequirements } from './PasswordRequirements';
 import { useImpersonation } from '../contexts/ImpersonationContext';
 import { tenantsService, type TenantBillingInvoice } from '../services/tenants.service';
 import { NotificationGroupDetailsDialog } from './notifications/NotificationGroupDetailsDialog';
-import type { Notification } from '../types';
+import type { Message, Notification } from '../types';
 import { getCurrencyDecimalPlaces } from '../utils/currency';
 
 interface TopbarProps {
@@ -117,6 +121,23 @@ function formatInvoiceTotal(value?: number | string | null) {
     : null;
 }
 
+function getMessageThreadPreview(thread: Message) {
+  const latest = thread.messages?.[thread.messages.length - 1];
+  const content = String(latest?.content || '').trim();
+  if (content) return content;
+  const attachments = latest?.attachments || [];
+  if (attachments.length === 1) return `📎 ${attachments[0].fileName}`;
+  if (attachments.length > 1) return `📎 ${attachments.length} archivos adjuntos`;
+  return thread.preview || 'Abre esta conversación para ver los mensajes.';
+}
+
+function formatMessageTimestamp(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('es-NI', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
 function getNotificationDetail(
   notification: { title?: string | null; message?: string | null },
   options: { overdueInvoices?: TenantBillingInvoice[]; billingLoading?: boolean; billingLoaded?: boolean } = {},
@@ -148,7 +169,11 @@ function getNotificationDetail(
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
   const { user, logout, hasAccess, canPerform, refreshProfile } = useAuth();
   const canOpenMessages = hasAccess('notificaciones') && canPerform('NOTIFICATIONS_MESSAGES', 'view');
-  const unreadMessagesCount = useUnreadMessagesCount(canOpenMessages);
+  const { unreadCount: unreadMessagesCount, threads: messageThreads, isLoading: messagesLoading, isError: messagesError } = useMessageInboxPreview(canOpenMessages);
+  const queryClient = useQueryClient();
+  const authUser = user as (typeof user & { clientTenantId?: string; tenantId?: string }) | null;
+  const messageTenantKey = authUser?.clientTenantId || authUser?.tenantId || 'current';
+  const messageUserKey = user?.id || 'current';
   const { isImpersonating, branch, manager, exitBranch } = useImpersonation();
   const isBranchManagerSession = Boolean(isImpersonating && branch);
   const [dismissedSupervisorBranchId, setDismissedSupervisorBranchId] = useState<string | null>(null);
@@ -166,6 +191,8 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   const hasPosAccess = canPerform('RETAIL_POS', 'view');
   const { unreadCount, markAsRead, markGroupAsRead, notifications } = useNotifications();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  const [selectedMessageThread, setSelectedMessageThread] = useState<Message | null>(null);
   const [selectedNotificationGroup, setSelectedNotificationGroup] = useState<Notification | null>(null);
   const [billingHistory, setBillingHistory] = useState<{ history?: TenantBillingInvoice[] } | null>(null);
   const [billingHistoryLoading, setBillingHistoryLoading] = useState(false);
@@ -376,6 +403,38 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
 
   const handleSettings = () => {
     onNavigate('configuracion');
+  };
+
+  const openMessagePreview = (thread: Message) => {
+    setMessagesOpen(false);
+    setSelectedMessageThread(thread);
+    if (thread.unreadCount <= 0) return;
+
+    const markRead = thread.kind === 'SUPPORT'
+      ? supportConversationsService.markRead(thread.id)
+      : messagesService.markRead(thread.id);
+    void markRead.then(() => {
+      const cacheKey = thread.kind === 'SUPPORT'
+        ? ['tenant-module', messageTenantKey, 'support-conversations', messageUserKey, 'branch-inbox']
+        : ['tenant-module', messageTenantKey, 'notifications', messageUserKey, 'messages'];
+      queryClient.setQueryData<Message[]>(cacheKey, (current) => updateMessageThread(current, thread.id, (item) => ({
+        ...item,
+        unreadCount: 0,
+        messages: item.messages.map((message) => ({ ...message, isRead: true })),
+      })));
+      setSelectedMessageThread((current) => current?.id === thread.id
+        ? { ...current, unreadCount: 0, messages: current.messages.map((message) => ({ ...message, isRead: true })) }
+        : current);
+    }).catch((error: any) => {
+      toast.error(error?.response?.data?.message || 'No se pudo marcar la conversación como leída.');
+    });
+  };
+
+  const openMessageInPanel = (thread: Message) => {
+    setSelectedMessageThread(null);
+    window.dispatchEvent(new CustomEvent('navigate-module', {
+      detail: { module: 'notificaciones', subModule: 'mensajes', messageId: thread.id },
+    }));
   };
 
   const [isDark, setIsDark] = useState(getSavedDarkMode);
@@ -736,21 +795,71 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         </Button>
 
         {canOpenMessages && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => onNavigate('notificaciones', 'mensajes')}
-            className="relative text-muted-foreground hover:text-foreground"
-            aria-label={unreadMessagesCount > 0 ? `Mensajes, ${unreadMessagesCount} sin leer` : 'Abrir mensajes'}
-            title={unreadMessagesCount > 0 ? `Mensajes · ${unreadMessagesCount} sin leer` : 'Mensajes'}
-          >
-            <MessageSquare className="size-5" />
-            {unreadMessagesCount > 0 && (
-              <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center rounded-full p-0 text-[10px]">
-                {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
-              </Badge>
-            )}
-          </Button>
+          <Popover open={messagesOpen} onOpenChange={setMessagesOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative text-muted-foreground hover:text-foreground"
+                aria-label={unreadMessagesCount > 0 ? `Mensajes, ${unreadMessagesCount} sin leer` : 'Mensajes'}
+                title={unreadMessagesCount > 0 ? `Mensajes · ${unreadMessagesCount} sin leer` : 'Mensajes'}
+              >
+                <MessageSquare className="size-5" />
+                {unreadMessagesCount > 0 && (
+                  <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center rounded-full p-0 text-[10px]">
+                    {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              sideOffset={8}
+              className="topbar-notifications-panel w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border-border/70 bg-popover/95 p-0 shadow-2xl backdrop-blur-xl"
+              style={{ maxHeight: 'var(--radix-popover-content-available-height)' }}
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-foreground">Mensajes</p>
+                  <p className="topbar-notifications-meta mt-0.5 text-[11px]">
+                    {unreadMessagesCount ? `${unreadMessagesCount} sin leer` : 'Conversaciones recientes'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="topbar-notifications-action shrink-0 rounded-md px-1 text-xs font-medium transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  onClick={() => { setMessagesOpen(false); onNavigate('notificaciones', 'mensajes'); }}
+                >
+                  Ver todos
+                </button>
+              </div>
+              <div className="topbar-notifications-scroll flex flex-col gap-1.5 overflow-y-auto overscroll-contain p-2.5" style={{ maxHeight: 'min(360px, calc(var(--radix-popover-content-available-height) - 7rem))' }}>
+                {messageThreads.slice(0, 5).map((thread) => (
+                  <button
+                    type="button"
+                    key={thread.id}
+                    className="topbar-notification-item group flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    onClick={() => openMessagePreview(thread)}
+                    aria-label={`Leer conversación: ${thread.title}`}
+                  >
+                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${thread.unreadCount ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center justify-between gap-2">
+                        <span className="truncate text-sm font-semibold leading-5">{thread.kind === 'SUPPORT' ? 'Soporte técnico' : thread.participant?.name || 'Conversación'}</span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">{formatMessageTimestamp(thread.lastMessageAt)}</span>
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs font-medium text-foreground/80">{thread.title}</span>
+                      <span className="topbar-notifications-detail mt-1 block whitespace-pre-line break-words text-xs leading-4">{getMessageThreadPreview(thread)}</span>
+                    </span>
+                    {thread.unreadCount > 0 && <Badge variant="destructive" className="h-5 min-w-5 shrink-0 justify-center rounded-full px-1 text-[10px]">{thread.unreadCount > 9 ? '9+' : thread.unreadCount}</Badge>}
+                  </button>
+                ))}
+                {messagesLoading && <div className="rounded-xl border border-dashed border-border/70 px-4 py-7 text-center text-sm text-muted-foreground">Cargando conversaciones…</div>}
+                {!messagesLoading && messagesError && <div role="alert" className="rounded-xl border border-dashed border-destructive/30 px-4 py-7 text-center text-sm text-muted-foreground">No se pudieron cargar los mensajes.</div>}
+                {!messagesLoading && !messagesError && messageThreads.length === 0 && <div className="rounded-xl border border-dashed border-border/70 px-4 py-7 text-center text-sm text-muted-foreground">No hay conversaciones recientes.</div>}
+              </div>
+            </PopoverContent>
+          </Popover>
         )}
 
         {/* Notifications */}
@@ -865,6 +974,31 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           }}
           onMarkGroupRead={markGroupAsRead}
         />
+
+        <Dialog open={Boolean(selectedMessageThread)} onOpenChange={(open) => { if (!open) setSelectedMessageThread(null); }}>
+          <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{selectedMessageThread?.title || 'Conversación'}</DialogTitle>
+              <DialogDescription>
+                {selectedMessageThread?.kind === 'SUPPORT' ? 'Conversación con Soporte Técnico' : `Conversación con ${selectedMessageThread?.participant?.name || 'usuario'}`}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex max-h-[min(50dvh,28rem)] flex-col gap-2 overflow-y-auto rounded-xl border border-border/60 bg-muted/10 p-3">
+              {(selectedMessageThread?.messages || []).slice(-5).map((message) => (
+                <div key={message.id} className={`max-w-[90%] rounded-xl px-3 py-2 ${message.mine ? 'ml-auto bg-primary/10' : 'mr-auto bg-background'}`}>
+                  <p className="text-[10px] font-semibold text-muted-foreground">{message.mine ? 'Vos' : message.sender?.name || selectedMessageThread?.participant?.name || 'Usuario'} · {formatMessageTimestamp(message.createdAt)}</p>
+                  {message.content && <p className="mt-1 whitespace-pre-wrap break-words text-sm">{message.content}</p>}
+                  {!!message.attachments?.length && <p className="mt-1 break-words text-xs text-primary">📎 {message.attachments.map((attachment) => attachment.fileName).join(', ')}</p>}
+                </div>
+              ))}
+              {!selectedMessageThread?.messages?.length && <p className="text-sm text-muted-foreground">{selectedMessageThread ? getMessageThreadPreview(selectedMessageThread) : ''}</p>}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSelectedMessageThread(null)}>Cerrar</Button>
+              {selectedMessageThread && <Button onClick={() => openMessageInPanel(selectedMessageThread)}>Ver conversación en Mensajes</Button>}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* User Menu */}
         <DropdownMenu>

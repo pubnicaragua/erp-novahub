@@ -178,6 +178,17 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   }, [threads, selectedId]);
 
   useEffect(() => {
+    const handleOpenMessageThread = (event: Event) => {
+      const detail = (event as CustomEvent<{ module?: string; subModule?: string; messageId?: string }>).detail;
+      if (detail?.module !== 'notificaciones' || detail.subModule !== 'mensajes' || !detail.messageId) return;
+      setSelectedId(detail.messageId);
+      setMobileThreadOpen(true);
+    };
+    window.addEventListener('navigate-module', handleOpenMessageThread);
+    return () => window.removeEventListener('navigate-module', handleOpenMessageThread);
+  }, []);
+
+  useEffect(() => {
     const visibleThread = threads.find((thread) => thread.id === selectedId);
     if (!visibleThread || visibleThread.unreadCount === 0 || markingReadId === visibleThread.id) return;
 
