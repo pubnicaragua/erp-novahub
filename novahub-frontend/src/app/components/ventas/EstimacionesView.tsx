@@ -1015,7 +1015,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
             </CardContent>
           </Card>
           {!isLocalEstimate(localDoc?.id) && (
-            <TripCostBlock sourceType="ESTIMATE" sourceId={String(localDoc?.id)} revenue={toBaseAmount(Number(localDoc?.subtotal ?? localDoc?.total ?? 0), localDoc?.currency, Number(localDoc?.exchangeRate || 0) || undefined)} currency={baseCurrency} />
+            <TripCostBlock sourceType="ESTIMATE" sourceId={String(localDoc?.id)} revenue={toBaseAmount(Number(localDoc?.subtotal ?? localDoc?.total ?? 0), localDoc?.currency, Number(localDoc?.exchangeRate || 0) || undefined)} quantity={Number(localDoc?.items?.[0]?.quantity) || undefined} currency={baseCurrency} />
           )}
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="p-6 space-y-3">
