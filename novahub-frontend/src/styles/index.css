@@ -1703,7 +1703,8 @@ th .column-filter-menu .column-filter-icon,
   }
   .erp-list-toolbar > * { order: 30; }
   .erp-list-toolbar > .relative:has(> input),
-  .erp-list-toolbar > label:has(> input) { order: 10; }
+  .erp-list-toolbar > label:has(> input),
+  .erp-list-toolbar > input { order: 10; }
   .erp-list-toolbar > [data-toolbar-role="filters"],
   .erp-list-toolbar > [data-slot="select-trigger"],
   .erp-list-toolbar > select { order: 20; }

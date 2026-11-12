@@ -263,7 +263,7 @@ function AtributosTab({ active }: { active: boolean }) {
         <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
           Los atributos se vinculan al crear un producto variable
         </p>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+        <div className="erp-list-toolbar flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <Input
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
@@ -589,7 +589,7 @@ function CategoriasTab({ active }: { active: boolean }) {
         <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
           Organiza tus productos por categoría
         </p>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+        <div className="erp-list-toolbar flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <Input
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
