@@ -35,6 +35,18 @@ export function useNotifications() {
             void queryClient.invalidateQueries({
                 queryKey: ['tenant-module', tenantKey, 'notifications', userKey, 'inbox'],
             });
+
+            const messagesResync = event.eventId.startsWith('reconnected:');
+            if (messagesResync || event.messageThreadId) {
+                void queryClient.invalidateQueries({
+                    queryKey: ['tenant-module', tenantKey, 'notifications', userKey, 'messages'],
+                });
+            }
+            if (messagesResync || event.supportConversationId) {
+                void queryClient.invalidateQueries({
+                    queryKey: ['tenant-module', tenantKey, 'support-conversations', userKey, 'branch-inbox'],
+                });
+            }
         });
     }, [authUser?.id, tenantKey, userKey, queryClient]);
     const inbox = notificationsQuery.data;

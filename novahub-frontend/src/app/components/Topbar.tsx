@@ -43,6 +43,7 @@ import { useAuth, type Module } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { storageService } from '../services/storage.service';
 import { useNotifications } from '../hooks/useNotifications';
+import { useUnreadMessagesCount } from '../hooks/useUnreadMessagesCount';
 import { navigateToNotification } from '../utils/notificationNavigation';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { persistThemeMode, readPersistedDarkMode } from '../utils/theme-mode';
@@ -146,6 +147,8 @@ function getNotificationDetail(
 
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
   const { user, logout, hasAccess, canPerform, refreshProfile } = useAuth();
+  const canOpenMessages = hasAccess('notificaciones') && canPerform('NOTIFICATIONS_MESSAGES', 'view');
+  const unreadMessagesCount = useUnreadMessagesCount(canOpenMessages);
   const { isImpersonating, branch, manager, exitBranch } = useImpersonation();
   const isBranchManagerSession = Boolean(isImpersonating && branch);
   const [dismissedSupervisorBranchId, setDismissedSupervisorBranchId] = useState<string | null>(null);
@@ -206,7 +209,6 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
 
   const overdueInvoices = billingHistory?.history;
   const hasConfigurationAccess = hasAccess('configuracion');
-  const canOpenMessages = hasAccess('notificaciones') && canPerform('NOTIFICATIONS_MESSAGES', 'view');
 
   const SEARCH_CATALOG = [
     { label: 'Facturas de Venta', description: 'Emisión, cobro y anulación de facturas', module: 'ventas', subModule: 'facturas', keywords: ['factura', 'venta', 'cobro', 'cliente'], group: 'Ventas' },
@@ -738,11 +740,16 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             variant="ghost"
             size="icon"
             onClick={() => onNavigate('notificaciones', 'mensajes')}
-            className="text-muted-foreground hover:text-foreground"
-            aria-label="Abrir mensajes"
-            title="Mensajes"
+            className="relative text-muted-foreground hover:text-foreground"
+            aria-label={unreadMessagesCount > 0 ? `Mensajes, ${unreadMessagesCount} sin leer` : 'Abrir mensajes'}
+            title={unreadMessagesCount > 0 ? `Mensajes · ${unreadMessagesCount} sin leer` : 'Mensajes'}
           >
             <MessageSquare className="size-5" />
+            {unreadMessagesCount > 0 && (
+              <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center rounded-full p-0 text-[10px]">
+                {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
+              </Badge>
+            )}
           </Button>
         )}
 
