@@ -126,7 +126,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
           >
             <Card
               className={cn(
-                'flex flex-col justify-between rounded-3xl border-border/60 bg-card/90 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-md',
+                'flex flex-col justify-between rounded-3xl border-border/80 bg-card/90 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-md',
                 isCategoryFiltered && 'border-primary/40'
               )}
             >
@@ -167,14 +167,14 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
 
                   {/* Title & Description */}
                   <h3
-                    className="text-base font-bold text-foreground hover:text-primary cursor-pointer transition-colors line-clamp-2"
+                    className="min-w-0 max-w-full cursor-pointer whitespace-normal break-words text-base font-bold leading-6 text-foreground transition-colors hover:text-primary [overflow-wrap:anywhere]"
                     onClick={() => onViewDetail(task)}
                   >
                     {task.title}
                   </h3>
 
                   {task.description && (
-                    <p className="mt-1.5 text-xs text-muted-foreground line-clamp-2">
+                    <p className="mt-1.5 min-w-0 max-w-full whitespace-normal break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
                       {task.description}
                     </p>
                   )}
@@ -198,8 +198,8 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                   )}
 
                   {/* Assignees */}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1 font-semibold">
+                  <div className="flex min-w-0 flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                    <span className="flex min-w-0 items-center gap-1 font-semibold">
                       <Users className="size-3.5 text-primary" />
                       {assignments.length > 0 ? (
                         <span className="flex min-w-0 items-center gap-1">
@@ -217,7 +217,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                       )}
                     </span>
 
-                    <span className={cn('flex items-center gap-1 font-medium', displayStatus === 'OVERDUE' && 'font-bold text-rose-600')}>
+                    <span className={cn('flex min-w-0 items-center gap-1 font-medium sm:shrink-0', displayStatus === 'OVERDUE' && 'font-bold text-rose-600')}>
                       <Clock className="size-3.5" />
                       {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yy HH:mm') : '—'}
                     </span>

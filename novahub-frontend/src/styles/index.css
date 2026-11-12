@@ -2905,6 +2905,41 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   }
 }
 
+/* Tareas: mantiene títulos legibles y tarjetas bien delimitadas cuando la
+   tabla compartida cambia a tarjetas, sin alterar las demás vistas. */
+.activities-module [data-activities-task-table="true"] [data-slot="table-cell"] {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.activities-module [data-activities-task-table="true"] [data-slot="table-cell"] > div:not([data-action-group]) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.activities-module [data-activities-task-table="true"] [data-slot="table-body"] > [data-slot="table-row"] {
+  border-bottom-color: hsl(var(--border) / 0.62);
+}
+
+.activities-module [data-activities-task-table="true"] article {
+  border-color: hsl(var(--border) / 0.78);
+  background-color: hsl(var(--card) / 0.9);
+}
+
+@media (max-width: 767px) {
+  /* The generic toolbar stacks filter buttons as grids. In Tareas they need
+     to remain compact flex buttons in a two-column mobile toolbar. */
+  .activities-task-toolbar > [data-toolbar-role="filters"] {
+    display: flex !important;
+    grid-column: auto !important;
+    align-items: center;
+    justify-content: center;
+    white-space: normal;
+  }
+}
+
 /* Historial de cotizaciones: cada dato secundario debe permanecer junto a su
    valor, y los importes deben compartir una fila en teléfonos pequeños. */
 @media (max-width: 1279px) {

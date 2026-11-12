@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { Task } from '../../types';
@@ -43,7 +43,7 @@ import { Textarea } from '../ui/textarea';
 import { storageService } from '../../services/storage.service';
 import { asList, invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
-import { ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
+import { TABLE_LAYOUT_BREAKPOINT, ViewLayoutSelect, useCardsOnlyBelowTableBreakpoint, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { TareasKanban } from './TareasKanban';
 import { TareasCardsView } from './TareasCardsView';
 import { SlaBadge } from './SlaBadge';
@@ -107,6 +107,11 @@ const getTaskAssigneeId = (task?: TaskLike | null): string => {
 export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryError = false, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewLayout, setViewLayout] = useState<ViewLayoutMode>('table');
+  const isCompactViewport = useCardsOnlyBelowTableBreakpoint();
+  const [isCompactContainer, setIsCompactContainer] = useState(false);
+  const filtersContainerRef = useRef<HTMLDivElement>(null);
+  const isCardsLayout = viewLayout === 'cards' || (viewLayout === 'table' && (isCompactViewport || isCompactContainer));
+  const filterUsesCompactGrid = isCardsLayout || viewLayout === 'kanban';
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [assignedFilter, setAssignedFilter] = useState<string>('ALL');
@@ -150,6 +155,22 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const queryClient = useQueryClient();
   const currentUserId = user?.id ? String(user.id) : null;
   const slaNow = useMemo(() => new Date(currentTime), [currentTime]);
+
+  useEffect(() => {
+    const element = filtersContainerRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return undefined;
+    const updateCompactState = () => {
+      const isCompact = element.getBoundingClientRect().width < TABLE_LAYOUT_BREAKPOINT;
+      setIsCompactContainer((current) => current === isCompact ? current : isCompact);
+    };
+    const observer = new ResizeObserver(updateCompactState);
+    observer.observe(element);
+    const frame = window.requestAnimationFrame(updateCompactState);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     const interval = window.setInterval(() => setCurrentTime(Date.now()), 30_000);
@@ -438,19 +459,29 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   };
 
   const columns = [
-    { key: 'title', header: 'Título', width: '25%', editable: canPerform('ACTIVITIES_TASKS', 'edit') },
+    {
+      key: 'title',
+      header: 'Título',
+      width: '380px',
+      editable: canPerform('ACTIVITIES_TASKS', 'edit'),
+      render: (value: unknown) => (
+        <span className="block min-w-0 max-w-full whitespace-normal break-words leading-5 [overflow-wrap:anywhere]">
+          {String(value || '—')}
+        </span>
+      ),
+    },
     {
       key: 'assignments',
       header: 'Asignados',
-      width: '20%',
+      width: '250px',
       editable: false,
       render: (_val: any, row: any) => {
         const asgs = row.assignments || [];
         if (asgs.length === 0) return <span className="text-muted-foreground text-xs">Sin asignar</span>;
         return (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex min-w-0 max-w-full flex-wrap gap-1">
             {asgs.map((a: any) => (
-              <Badge key={a.id} variant="outline" className="text-[9px] bg-secondary/50">
+              <Badge key={a.id} variant="outline" className="max-w-full whitespace-normal break-words bg-secondary/50 text-left leading-4 [overflow-wrap:anywhere]">
                 {a.user ? a.user.name : 'Usuario'}
               </Badge>
             ))}
@@ -461,7 +492,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     {
       key: 'priority',
       header: 'Prioridad',
-      width: '100px',
+      width: '115px',
       editable: false,
       type: 'select' as const,
       options: priorityOpts,
@@ -477,7 +508,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     {
       key: 'categoryId',
       header: 'Categoría',
-      width: '130px',
+      width: '145px',
       editable: canPerform('ACTIVITIES_TASKS', 'edit'),
       type: 'select' as const,
       options: categoryOpts,
@@ -493,7 +524,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     {
       key: 'slaDueAt',
       header: 'SLA',
-      width: '130px',
+      width: '150px',
       editable: false,
       render: (val: string | null | undefined, row: Task) => (
         <div className="flex min-w-0 flex-wrap gap-1">
@@ -504,7 +535,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     {
       key: 'dueDate',
       header: 'Vencimiento',
-      width: '100px',
+      width: '155px',
       editable: canPerform('ACTIVITIES_TASKS', 'edit'),
       type: 'datetime-local' as const,
       render: (val: any) => (val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-'),
@@ -512,7 +543,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     {
       key: 'status',
       header: 'Estado',
-      width: '130px',
+      width: '140px',
       editable: false,
       type: 'select' as const,
       options: statusOpts,
@@ -538,7 +569,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     {
       key: 'progress',
       header: 'Avance',
-      width: '160px',
+      width: '165px',
       editable: false,
       render: (_val: unknown, row: any) => <TaskProgressCell task={row} />,
     },
@@ -611,6 +642,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     (dateFrom ? 1 : 0) +
     (dateTo ? 1 : 0) +
     (mineOnly ? 1 : 0);
+  const filterFieldLayout = filterUsesCompactGrid ? 'sm:col-span-1' : 'sm:col-span-1 lg:col-span-3';
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
@@ -646,9 +678,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3" data-tour="tareas-tutorial-actions">
-          <div className="relative">
+      <div ref={filtersContainerRef} className="min-w-0 space-y-3">
+        <div className="erp-list-toolbar activities-task-toolbar flex min-w-0 flex-wrap items-center gap-3" data-tour="tareas-tutorial-actions" data-layout-mode={filterUsesCompactGrid && viewLayout === 'table' ? 'cards' : viewLayout}>
+          <div className="relative min-w-0 flex-1 basis-[16rem]">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input
               data-testid="activities-task-search"
@@ -663,7 +695,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             variant="outline"
             data-toolbar-role="filters"
             onClick={() => setShowFilterPanel(!showFilterPanel)}
-            className="h-10 gap-2 rounded-xl px-3 text-xs font-bold"
+            className="h-10 shrink-0 gap-2 rounded-xl px-3 text-xs font-bold"
           >
             <Filter className="size-3.5 text-primary" /> Filtros
             {activeFiltersCount > 0 && (
@@ -677,7 +709,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             data-testid="activities-task-mine"
             aria-pressed={mineOnly}
             onClick={() => setMineOnly((value) => !value)}
-            className="h-10 gap-2 rounded-xl px-3 text-xs font-bold"
+            className="h-10 shrink-0 gap-2 rounded-xl px-3 text-xs font-bold"
           >
             <UserCheck className="size-3.5" /> Mis tareas
           </Button>
@@ -713,9 +745,16 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         </div>
 
         {showFilterPanel && (
-          <div className="grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-border/50 bg-muted/30 p-4 sm:grid-cols-2 lg:grid-cols-12">
+          <div
+            className={cn(
+              'grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-border/60 bg-muted/30 p-4',
+              filterUsesCompactGrid ? 'sm:grid-cols-2 xl:grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-12',
+            )}
+            data-activities-task-filters="true"
+            data-layout-mode={filterUsesCompactGrid && viewLayout === 'table' ? 'cards' : viewLayout}
+          >
             {/* Priority Filter */}
-            <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <div className={cn('flex min-w-0 flex-col gap-1.5', filterFieldLayout)}>
               <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Prioridad
               </label>
@@ -734,7 +773,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             </div>
 
             {/* Assigned To Filter */}
-            <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <div className={cn('flex min-w-0 flex-col gap-1.5', filterFieldLayout)}>
               <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Responsable
               </label>
@@ -754,7 +793,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             </div>
 
             {/* Category / Department Filter */}
-            <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <div className={cn('flex min-w-0 flex-col gap-1.5', filterFieldLayout)}>
               <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Categoría / Departamento
               </label>
@@ -774,7 +813,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             </div>
 
             {/* Date From */}
-            <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <div className={cn('flex min-w-0 flex-col gap-1.5', filterFieldLayout)}>
               <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Vencimiento Desde
               </label>
@@ -788,7 +827,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             </div>
 
             {/* Date To */}
-            <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <div className={cn('flex min-w-0 flex-col gap-1.5', filterFieldLayout)}>
               <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Vencimiento Hasta
               </label>
@@ -804,7 +843,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         )}
       </div>
 
-      <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
+      <Card className="min-w-0 overflow-hidden rounded-3xl border-border/70 bg-card/80 shadow-sm">
         {viewLayout === 'kanban' ? (
           <TareasKanban
             data={filtered}
@@ -860,6 +899,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             onReassignTask={handleOpenReassign}
           />
         ) : (
+          <div className="min-w-0" data-activities-task-table="true">
           <EditableDataTable
             data={filtered}
             columns={columns}
@@ -1077,7 +1117,10 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               );
             }}
             actionsWidth="w-72"
+            fitContent
+            showHorizontalControls
           />
+          </div>
         )}
       </Card>
 
