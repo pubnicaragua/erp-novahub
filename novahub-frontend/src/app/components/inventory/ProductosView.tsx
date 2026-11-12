@@ -4166,120 +4166,6 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
             <h2 className="nh-module-title">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
             <p className="mt-1 text-xs font-medium text-muted-foreground">{isServiceView ? 'Catálogo de servicios' : `${displayWarehouseOptions.length} bodegas visibles`}</p>
           </div>
-          <div className="erp-toolbar-primary-group flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
-            <ViewLayoutSelect
-              value={layoutMode}
-              onChange={setLayoutMode}
-              ariaLabel={`Elegir distribución de ${isServiceView ? 'servicios' : 'productos'}`}
-              dataTour="inventory-products-layout"
-            />
-            {effectiveLayoutMode === 'table' && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none"
-                    title="Personalizar visibilidad de columnas de la tabla"
-                  >
-                    <Columns className="size-4 text-primary" />
-                    Columnas
-                    <ChevronDown className="size-3.5 text-muted-foreground" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 space-y-1">
-                  <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/50">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                      Columnas Visibles
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        className="text-[10px] font-bold text-primary hover:underline"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          const allTrue: Record<string, boolean> = {};
-                          COLUMN_DEFINITIONS.forEach((col: any) => { allTrue[col.key] = true; });
-                          setVisibleColumns(allTrue);
-                        }}
-                      >
-                        Mostrar todas
-                      </button>
-                      <span className="text-[10px] text-muted-foreground">•</span>
-                      <button
-                        type="button"
-                        className="text-[10px] font-bold text-muted-foreground hover:text-foreground hover:underline"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          const basicKeys = new Set(['code', 'name', 'brand', 'stock', 'price', 'priceStatus']);
-                          const minimal: Record<string, boolean> = {};
-                          COLUMN_DEFINITIONS.forEach((col: any) => { minimal[col.key] = basicKeys.has(col.key); });
-                          setVisibleColumns(minimal);
-                        }}
-                      >
-                        Solo básicas
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="max-h-72 overflow-y-auto py-1 space-y-0.5">
-                    {COLUMN_DEFINITIONS.filter((col: any) => {
-                      if (col.productOnly && isServiceView) return false;
-                      if (col.costOnly && !canViewInventoryCost) return false;
-                      return true;
-                    }).map((col: any) => {
-                      const isChecked = visibleColumns[col.key] !== false;
-                      return (
-                        <DropdownMenuItem
-                          key={col.key}
-                          onSelect={(e) => e.preventDefault()}
-                          onClick={() => toggleColumnVisibility(col.key)}
-                          className="flex items-center gap-2.5 text-xs font-semibold rounded-xl cursor-pointer px-2 py-1.5 hover:bg-accent"
-                        >
-                          <Checkbox
-                            checked={isChecked}
-                            onCheckedChange={() => toggleColumnVisibility(col.key)}
-                            className="size-4 rounded border-primary/40 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
-                          />
-                          <span className="flex-1 select-none">{col.label}</span>
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </div>
-
-                  <DropdownMenuSeparator className="my-1" />
-                  <DropdownMenuItem
-                    className="text-xs font-bold text-primary justify-center rounded-xl cursor-pointer py-1.5"
-                    onSelect={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
-                      try {
-                        localStorage.removeItem('novahub_product_visible_columns');
-                      } catch {}
-                    }}
-                  >
-                    Restablecer por defecto
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none"
-              title={`Actualizar ${isServiceView ? 'servicios' : 'productos'}`}
-            >
-              <RefreshCw className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Actualizar
-            </Button>
-            {onExport && canPerform(catalogPermissionModule, 'export') && (
-              <ExportMenu onPdf={(paperFormat) => void handleProductPdfExport(paperFormat)} onExcel={openProductExportDialog} className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" label={`Exportar ${isServiceView ? 'servicios' : 'productos'}`} />
-            )}
-          </div>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-tour="inventory-products-kpis">
         {inventoryKpis.map((item) => (
@@ -4495,6 +4381,120 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
 
       {/* ─── Acciones secundarias y primarias ─── */}
       <div className="erp-list-toolbar mb-4 flex flex-wrap items-center justify-start gap-2" data-tour="inventory-products-actions">
+<div className="erp-toolbar-primary-group flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
+            <ViewLayoutSelect
+              value={layoutMode}
+              onChange={setLayoutMode}
+              ariaLabel={`Elegir distribución de ${isServiceView ? 'servicios' : 'productos'}`}
+              dataTour="inventory-products-layout"
+            />
+            {effectiveLayoutMode === 'table' && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none"
+                    title="Personalizar visibilidad de columnas de la tabla"
+                  >
+                    <Columns className="size-4 text-primary" />
+                    Columnas
+                    <ChevronDown className="size-3.5 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 space-y-1">
+                  <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/50">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                      Columnas Visibles
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        className="text-[10px] font-bold text-primary hover:underline"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          const allTrue: Record<string, boolean> = {};
+                          COLUMN_DEFINITIONS.forEach((col: any) => { allTrue[col.key] = true; });
+                          setVisibleColumns(allTrue);
+                        }}
+                      >
+                        Mostrar todas
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">•</span>
+                      <button
+                        type="button"
+                        className="text-[10px] font-bold text-muted-foreground hover:text-foreground hover:underline"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          const basicKeys = new Set(['code', 'name', 'brand', 'stock', 'price', 'priceStatus']);
+                          const minimal: Record<string, boolean> = {};
+                          COLUMN_DEFINITIONS.forEach((col: any) => { minimal[col.key] = basicKeys.has(col.key); });
+                          setVisibleColumns(minimal);
+                        }}
+                      >
+                        Solo básicas
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto py-1 space-y-0.5">
+                    {COLUMN_DEFINITIONS.filter((col: any) => {
+                      if (col.productOnly && isServiceView) return false;
+                      if (col.costOnly && !canViewInventoryCost) return false;
+                      return true;
+                    }).map((col: any) => {
+                      const isChecked = visibleColumns[col.key] !== false;
+                      return (
+                        <DropdownMenuItem
+                          key={col.key}
+                          onSelect={(e) => e.preventDefault()}
+                          onClick={() => toggleColumnVisibility(col.key)}
+                          className="flex items-center gap-2.5 text-xs font-semibold rounded-xl cursor-pointer px-2 py-1.5 hover:bg-accent"
+                        >
+                          <Checkbox
+                            checked={isChecked}
+                            onCheckedChange={() => toggleColumnVisibility(col.key)}
+                            className="size-4 rounded border-primary/40 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                          />
+                          <span className="flex-1 select-none">{col.label}</span>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </div>
+
+                  <DropdownMenuSeparator className="my-1" />
+                  <DropdownMenuItem
+                    className="text-xs font-bold text-primary justify-center rounded-xl cursor-pointer py-1.5"
+                    onSelect={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+                      try {
+                        localStorage.removeItem('novahub_product_visible_columns');
+                      } catch {}
+                    }}
+                  >
+                    Restablecer por defecto
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none"
+              title={`Actualizar ${isServiceView ? 'servicios' : 'productos'}`}
+            >
+              <RefreshCw className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Actualizar
+            </Button>
+            {onExport && canPerform(catalogPermissionModule, 'export') && (
+              <ExportMenu onPdf={(paperFormat) => void handleProductPdfExport(paperFormat)} onExcel={openProductExportDialog} className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none" label={`Exportar ${isServiceView ? 'servicios' : 'productos'}`} />
+            )}
+          </div>
         {canPerform(catalogPermissionModule, 'import') && (
           <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title={`Importar ${isServiceView ? 'servicios' : 'el catálogo inicial'} desde una plantilla`}>
             <Upload className="mr-2 size-4" /> Importar {isServiceView ? 'servicios' : 'productos'}

@@ -506,7 +506,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             <ExportMenu
               onPdf={(paperFormat) => void exportHr('pdf', paperFormat)}
               onExcel={() => void exportHr('xlsx')}
-              className="shrink-0"
+              className="ml-auto shrink-0"
               pdfDescription="Plantilla configurada para esta vista"
               excelDescription="Todos los registros autorizados"
             />
