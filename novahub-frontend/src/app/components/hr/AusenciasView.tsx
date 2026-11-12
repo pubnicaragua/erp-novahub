@@ -360,7 +360,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
               value={search}
               onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
               placeholder="Buscar empleado, razón o tipo..."
-              className="pl-8 h-9 w-56 bg-background"
+              className="pl-8 h-9 bg-background w-full sm:w-80"
             />
           </div>
           {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map(s => (

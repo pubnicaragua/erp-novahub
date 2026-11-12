@@ -661,7 +661,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         </div>
         <div className="erp-list-toolbar flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {pagination && <>
-            <Input placeholder="Buscar ajuste..." className="h-9 w-full sm:w-44" onChange={(event) => onSearchChange?.(event.target.value)} />
+            <Input placeholder="Buscar ajuste..." className="h-9 w-full sm:w-80" onChange={(event) => onSearchChange?.(event.target.value)} />
             <Select defaultValue="ALL" onValueChange={(value) => onStatusChange?.(value)}>
               <SelectTrigger className="h-9 w-full sm:w-32"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent><SelectItem value="ALL">Todos</SelectItem><SelectItem value="DRAFT">Borrador</SelectItem><SelectItem value="APPROVED">Aprobado</SelectItem></SelectContent>

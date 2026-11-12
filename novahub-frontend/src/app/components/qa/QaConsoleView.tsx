@@ -414,7 +414,7 @@ export function QaConsoleView({ activeSubModule, onSubModuleChange, isSidebarCol
               value={filters.search || ''}
               onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
               onKeyDown={(e) => e.key === 'Enter' && loadChecks()}
-              className="max-w-xs"
+              className="w-full sm:w-80"
             />
             <Select value={filters.module || 'all'} onValueChange={(v) => { setFilters((f) => ({ ...f, module: v === 'all' ? undefined : v })); }}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Módulo" /></SelectTrigger>

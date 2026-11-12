@@ -306,7 +306,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
               value={search}
               onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
               placeholder="Buscar título, instructor, ubicación..."
-              className="pl-8 h-9 w-64 bg-background"
+              className="pl-8 h-9 bg-background w-full sm:w-80"
             />
           </div>
           <ColumnFilterMenu

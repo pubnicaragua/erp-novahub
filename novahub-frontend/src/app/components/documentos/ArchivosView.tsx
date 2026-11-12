@@ -80,7 +80,7 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, error
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div><h2 className="nh-module-title">Archivos</h2></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs w-full sm:w-80" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
             {canPerform('DOCUMENTS_FILES', 'create') && (
               <Button data-toolbar-role="primary" disabled={uploading} onClick={() => fileInputRef.current?.click()} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> {uploading ? 'Subiendo...' : 'Subir Archivo'}</Button>

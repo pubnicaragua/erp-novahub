@@ -4269,7 +4269,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input
               placeholder={`Buscar ${isServiceView ? 'servicio' : 'producto'} o SKU...`}
-              className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest sm:w-64"
+              className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest sm:w-80"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
             />

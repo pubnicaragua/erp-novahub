@@ -1156,7 +1156,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar crédito..." className="h-10 w-64 rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest" value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); onSearchChange?.(event.target.value); }} />
+              <Input placeholder="Buscar crédito..." className="h-10 rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest w-full sm:w-80" value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); onSearchChange?.(event.target.value); }} />
             </div>
             {canPerform('SALES_CREDIT_NOTES', 'create') && <Button data-toolbar-role="primary" onClick={startNew} className="h-10 rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground"><Plus className="mr-2 size-4" /> Nuevo Crédito</Button>}
           </div>

@@ -87,7 +87,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input
               placeholder="Buscar agente..."
-              className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs"
+              className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs w-full sm:w-80"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />

@@ -1371,7 +1371,7 @@ export function PrismaSchemaPage({ activeSubModule, onSubModuleChange }: { activ
           <div className="flex gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Buscar modelos..." className="pl-9 w-60" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              <Input placeholder="Buscar modelos..." className="pl-9 w-full sm:w-80" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
             <Button variant="outline" size="sm" onClick={expandAll}>Expandir</Button>
             <Button variant="outline" size="sm" onClick={collapseAll}>Colapsar</Button>

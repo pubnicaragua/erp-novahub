@@ -151,7 +151,7 @@ export const InboxView: React.FC<InboxViewProps> = ({ data, loading, onRefresh }
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input 
               placeholder="Buscar evento..." 
-              className="pl-9 h-11 w-full md:w-64 bg-background/50 border-border/50 rounded-2xl text-xs focus:ring-primary/20" 
+              className="pl-9 h-11 w-full bg-background/50 border-border/50 rounded-2xl text-xs focus:ring-primary/20 sm:w-80" 
               value={searchTerm} 
               onChange={e => setSearchTerm(e.target.value)} 
             />

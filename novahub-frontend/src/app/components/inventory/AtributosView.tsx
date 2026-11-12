@@ -268,7 +268,7 @@ function AtributosTab({ active }: { active: boolean }) {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Buscar atributo..."
-            className="h-9 w-full rounded-xl sm:w-44"
+            className="h-9 w-full rounded-xl sm:w-80"
           />
           {canCreateAttribute && <Button onClick={openCreate} size="sm" className="h-10 w-full rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <Plus className="mr-1 size-3.5" /> Nuevo
@@ -594,7 +594,7 @@ function CategoriasTab({ active }: { active: boolean }) {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Buscar categoría..."
-            className="h-9 w-full rounded-xl sm:w-44"
+            className="h-9 w-full rounded-xl sm:w-80"
           />
           {canCreateCategory && <Button onClick={openCreate} size="sm" className="h-10 w-full rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <Plus className="mr-1 size-3.5" /> Nuevo

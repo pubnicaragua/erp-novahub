@@ -249,7 +249,7 @@ export function ActivosFijosDepreciationTab() {
                 placeholder="Buscar activo..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-8 w-56 pl-8 text-xs"
+                className="h-8 pl-8 text-xs w-full sm:w-80"
               />
             </div>
           </CardTitle>

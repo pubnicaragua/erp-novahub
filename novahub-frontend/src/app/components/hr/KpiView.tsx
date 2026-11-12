@@ -397,7 +397,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
                   value={defSearch}
                   onChange={(e) => setDefSearch(e.target.value)}
                   placeholder="Buscar definición..."
-                  className="pl-8 h-9 w-56 bg-background"
+                  className="pl-8 h-9 bg-background w-full sm:w-80"
                 />
               </div>
               <ColumnFilterMenu
@@ -529,7 +529,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
                   value={resultSearch}
                   onChange={(e) => { setResultSearch(e.target.value); setCurrentPage(1); }}
                   placeholder="Buscar empleado, indicador, comentario..."
-                  className="pl-8 h-9 w-64 bg-background"
+                  className="pl-8 h-9 bg-background w-full sm:w-80"
                 />
               </div>
               <ColumnFilterMenu

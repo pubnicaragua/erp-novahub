@@ -2578,7 +2578,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input
                 placeholder="Buscar factura..."
-                className="pl-9 h-10 w-full sm:w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
+                className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest sm:w-80"
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />

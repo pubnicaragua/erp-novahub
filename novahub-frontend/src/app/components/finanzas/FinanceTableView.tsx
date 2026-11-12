@@ -632,7 +632,7 @@ export function FinanceTableView({
         <div className="erp-list-toolbar grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
           <div className="relative col-span-2 w-full sm:flex-1 lg:w-auto">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-            <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-10 w-full sm:w-56 md:w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" />
+            <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest sm:w-80" />
           </div>
           {canExport && <ExportMenu onPdf={(paperFormat) => void exportPDF(paperFormat)} onExcel={() => void exportExcel()} className="h-10 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto" />}
           {canCreate && (

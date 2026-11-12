@@ -237,7 +237,7 @@ export function RecursosHumanosFinal() {
             <div className="flex items-center gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                <Input placeholder="Buscar empleados..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 w-64" />
+                <Input placeholder="Buscar empleados..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 w-full sm:w-80" />
               </div>
             </div>
           </div>

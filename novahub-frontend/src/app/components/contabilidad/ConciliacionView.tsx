@@ -563,7 +563,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input
               placeholder="Buscar conciliación..."
-              className="h-10 w-full bg-background/50 pl-9 border-border/50 rounded-xl text-xs font-bold tracking-widest sm:w-64"
+              className="h-10 w-full bg-background/50 pl-9 border-border/50 rounded-xl text-xs font-bold tracking-widest sm:w-80"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
