@@ -1200,7 +1200,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       .filter((charge) => Number(charge.amount || 0) > 0)
       .map((charge) => `${charge.description}: ${formatAmount(Number(charge.amount || 0), estimate.currency, estimate.exchangeRate)}`);
     const configuredNotes = documentType === 'payment'
-      ? paymentVariantDetails(estimate)
+      ? [paymentFinancingDetails(estimate, formatAmount), paymentVariantDetails(estimate)].filter(Boolean).join('\n')
       : estimate.notes || design.defaultNotes || '';
     const configuredExtra = documentType === 'payment' ? '' : [
         estimate.expiryDate || estimate.validUntil ? `Validez: ${new Date(estimate.expiryDate || estimate.validUntil).toLocaleDateString('es-NI')}` : '',
@@ -1516,13 +1516,56 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   });
 
   // 7. Resumen Financiero
-  const finalY = (doc as any).lastAutoTable.finalY || 90;
+  let finalY = (doc as any).lastAutoTable.finalY || 90;
+  if (documentType === 'credit') {
+    const currency = String(estimate.currency || 'NIO').toUpperCase();
+    const rate = Number(estimate.exchangeRate || 1) || 1;
+    const interest = Number(estimate.interestAmount ?? estimate.interest ?? 0);
+    const principal = Number(estimate.principalAmount ?? estimate.principal ?? Math.max(0, Number(estimate.total || 0) - interest));
+    const financingRows: string[][] = [
+      ['Capital financiado', formatAmount(principal, currency, rate)],
+      ['Interés', interest > 0 ? formatAmount(interest, currency, rate) : 'Sin interés'],
+      ['Total acordado', formatAmount(Number(estimate.total || principal + interest), currency, rate)],
+    ];
+    const installments = Array.isArray(estimate.installments) ? estimate.installments : [];
+    const frequencyLabels: Record<string, string> = { DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Cada 15 días', MONTHLY: 'Mensual' };
+    if (estimate.planEnabled) {
+      financingRows.push(['Frecuencia', frequencyLabels[String(estimate.frequency || '').toUpperCase()] || 'Según calendario']);
+      if (Number(estimate.installmentAmount) > 0) financingRows.push(['Monto objetivo por abono', formatAmount(Number(estimate.installmentAmount), currency, rate)]);
+      installments.forEach((installment: any) => {
+        const dueDate = installment?.dueDate ? new Date(installment.dueDate).toLocaleDateString('es-NI') : '—';
+        financingRows.push([
+          `Cuota ${installment.installmentNumber} · ${dueDate}`,
+          `${formatAmount(Number(installment.totalAmount || 0), currency, rate)} (capital ${formatAmount(Number(installment.principalAmount || 0), currency, rate)}; interés ${formatAmount(Number(installment.interestAmount || 0), currency, rate)})`,
+        ]);
+      });
+    } else {
+      const dueDate = installments[0]?.dueDate || estimate.dueDate;
+      financingRows.push(['Vencimiento único', dueDate ? new Date(dueDate).toLocaleDateString('es-NI') : 'Según fecha acordada']);
+    }
+    autoTable(doc, {
+      startY: finalY + 7,
+      head: [['Términos de crédito', 'Detalle']],
+      body: financingRows,
+      theme: 'plain',
+      headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
+      styles: { font: fontName, fontSize: baseFontSize, cellPadding: 3, overflow: 'linebreak', lineColor, lineWidth: 0.15 },
+      columnStyles: { 0: { cellWidth: 58, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+      margin: { left: margin, right: margin },
+      tableWidth: pageWidth - margin * 2,
+    });
+    finalY = (doc as any).lastAutoTable?.finalY || finalY;
+  }
   const rightX = rightEdge;
   const summaryX = Math.max(margin + 82, rightEdge - 72);
-  const summaryTop = finalY + 7;
+  let summaryTop = finalY + 7;
   const additionalChargeLines = getSalesPdfAdditionalCharges(estimate);
   const summaryRows = 2 + (Number(estimate.discountAmount) > 0 ? 1 : 0) + (Number(estimate.taxAmount) > 0 ? 1 : 0) + additionalChargeLines.length;
   const summaryHeight = summaryRows * 6 + 14;
+  if (summaryTop + summaryHeight > doc.internal.pageSize.height - 28) {
+    doc.addPage();
+    summaryTop = margin;
+  }
   doc.setFillColor(247, 251, 249);
   doc.setDrawColor(...lineColor);
   doc.roundedRect(summaryX - 6, summaryTop, rightEdge - summaryX + 12, summaryHeight, 2.5, 2.5, 'FD');
@@ -1689,6 +1732,73 @@ function paymentVariantDetails(transaction: any) {
     .map((item: any) => commercialItemDescription(item, item?.description || 'Producto', false))
     .filter(Boolean);
   return lines.length ? `Detalle de variantes del documento aplicado:\n${lines.join('\n')}` : '';
+}
+
+function customerCreditFinancingDetails(document: any, formatAmount: (amount: number, currency?: string, rate?: number) => string) {
+  const currency = String(document?.currency || 'NIO').toUpperCase();
+  const exchangeRate = Number(document?.exchangeRate || 1) || 1;
+  const interest = Number(document?.interestAmount ?? document?.interest ?? 0);
+  const principal = Number(document?.principalAmount ?? document?.principal ?? Math.max(0, Number(document?.total || 0) - interest));
+  const total = Number(document?.total || principal + interest);
+  const frequencyLabels: Record<string, string> = { DAILY: 'diaria', WEEKLY: 'semanal', BIWEEKLY: 'cada 15 días', MONTHLY: 'mensual' };
+  const interestMode = String(document?.interestMode || (interest > 0 ? 'FIXED_AMOUNT' : 'NONE')).toUpperCase();
+  const interestDescription = interest <= 0
+    ? 'Sin interés'
+    : interestMode === 'PERCENTAGE' && Number(document?.interestRate) > 0
+      ? `${Number(document.interestRate)}% calculado una vez (${formatAmount(interest, currency, exchangeRate)})`
+      : `Fijo: ${formatAmount(interest, currency, exchangeRate)}`;
+  const lines = [
+    `Capital financiado: ${formatAmount(principal, currency, exchangeRate)}`,
+    `Interés: ${interestDescription}`,
+    `Total acordado: ${formatAmount(total, currency, exchangeRate)}`,
+  ];
+  const installments = Array.isArray(document?.installments) ? document.installments : [];
+  const planEnabled = Boolean(document?.planEnabled);
+  if (planEnabled) {
+    const frequency = frequencyLabels[String(document?.frequency || '').toUpperCase()] || 'según calendario';
+    lines.push(`Plan: abonos ${frequency}; el monto indicado incluye capital e interés.`);
+    if (Number(document?.installmentAmount) > 0) {
+      lines.push(`Monto objetivo por abono: ${formatAmount(Number(document.installmentAmount), currency, exchangeRate)}.`);
+    }
+    lines.push('Calendario de abonos:');
+    if (installments.length) {
+      for (const installment of installments) {
+        const date = installment?.dueDate ? new Date(installment.dueDate).toLocaleDateString('es-NI') : '—';
+        lines.push(`Cuota ${installment.installmentNumber}: ${date} · ${formatAmount(Number(installment.totalAmount || 0), currency, exchangeRate)} (capital ${formatAmount(Number(installment.principalAmount || 0), currency, exchangeRate)}; interés ${formatAmount(Number(installment.interestAmount || 0), currency, exchangeRate)})`);
+      }
+    } else {
+      lines.push('Consulta el calendario de cuotas en el detalle del contrato.');
+    }
+  } else {
+    const dueDate = installments[0]?.dueDate || document?.dueDate;
+    lines.push(`Vencimiento único: ${dueDate ? new Date(dueDate).toLocaleDateString('es-NI') : 'según fecha acordada'}.`);
+  }
+  return lines.join('\n');
+}
+
+function paymentFinancingDetails(transaction: any, formatAmount: (amount: number, currency?: string, rate?: number) => string) {
+  const rows = getPaymentVoucherRows(transaction);
+  const appliedRows = rows.filter((row: any) => row?.appliedPrincipal != null || row?.appliedInterest != null);
+  if (!appliedRows.length) return '';
+  const lines = ['Desglose del abono:'];
+  if (appliedRows.some((row: any) => (row.installmentAllocations || []).some((allocation: any) => allocation.reversedAt))) {
+    lines.push('Algunas asignaciones fueron revertidas al anular el pago.');
+  }
+  for (const row of appliedRows) {
+    const currency = String(row.appliedCurrency || row.currency || transaction?.currency || 'NIO').toUpperCase();
+    const rate = Number(row.creditNote?.exchangeRate || row.invoice?.exchangeRate || row.exchangeRate || transaction?.exchangeRate || 1) || 1;
+    const principal = Number(row.appliedPrincipal || 0);
+    const interest = Number(row.appliedInterest || 0);
+    lines.push(`Capital aplicado: ${formatAmount(principal, currency, rate)} · Interés aplicado: ${formatAmount(interest, currency, rate)}`);
+    if (row.remainingPrincipal != null || row.remainingInterest != null) {
+      lines.push(`Saldo resultante: capital ${formatAmount(Number(row.remainingPrincipal || 0), currency, rate)} · intereses ${formatAmount(Number(row.remainingInterest || 0), currency, rate)}`);
+    }
+    for (const allocation of row.installmentAllocations || []) {
+      const installment = allocation.installment || {};
+      lines.push(`Cuota ${installment.installmentNumber || '—'}: capital ${formatAmount(Number(allocation.principalAmount || 0), currency, rate)} · interés ${formatAmount(Number(allocation.interestAmount || 0), currency, rate)}${allocation.reversedAt ? ' · asignación revertida' : ''}`);
+    }
+  }
+  return lines.join('\n');
 }
 
 function getPaymentVoucherContext(transaction: any) {
@@ -1904,7 +2014,7 @@ async function generateSalesPaymentVoucherPDF({
     };
     const logoSize = logo ? fitPdfImage(probe, logo, width === 58 ? 30 : 38, 16) : { width: 0, height: 0 };
     const customerName = transaction?.customer?.name || transaction?.customerName || 'Cliente general';
-    const paymentDetails = paymentVariantDetails(transaction);
+    const paymentDetails = [paymentFinancingDetails(transaction, formatAmount), paymentVariantDetails(transaction)].filter(Boolean).join('\n');
     const headerHeight = logoSize.height + countLines(companyName, width === 58 ? 9 : 10) * 4 + (settings.slogan ? 4 : 0) + (settings.fiscalInfo ? 4 : 0) + 16;
     const metaHeight = 5 * 4.2 + countLines(customerName, 7.2) * 3.5 + 12;
     const detailHeight = 10 + methodRows.reduce((total: number, row: any) => total + 10 + countLines(`${row.method} · ${row.reference}${row.bank ? ` · ${row.bank}` : ''}`, 6.5) * 3.2, 0);
@@ -2191,7 +2301,7 @@ async function generateSalesPaymentVoucherPDF({
     margin: { left: rightEdge - Math.min(95, pageWidth - margin * 2) },
   });
   currentY = ((doc as any).lastAutoTable?.finalY || currentY + 25) + 7;
-  const paymentDetails = paymentVariantDetails(transaction);
+  const paymentDetails = [paymentFinancingDetails(transaction, formatAmount), paymentVariantDetails(transaction)].filter(Boolean).join('\n');
   if (paymentDetails) {
     doc.setFont(fontName, 'bold');
     doc.setFontSize(8);
@@ -2233,6 +2343,13 @@ async function generateSalesTicketPDF({
   save?: boolean;
 }) {
   if (save) ensurePdfBrowserPreview(SALES_TRANSACTION_TITLES[documentType]);
+  if (documentType === 'credit') {
+    const financingDetails = customerCreditFinancingDetails(transaction, formatAmount);
+    transaction = {
+      ...transaction,
+      notes: [transaction?.notes || transaction?.reason, financingDetails].filter(Boolean).join('\n\n'),
+    };
+  }
   const width = format === 'roll-58' ? 58 : 80;
   const margin = width === 58 ? 3 : 4;
   const contentWidth = width - margin * 2;
@@ -2240,11 +2357,15 @@ async function generateSalesTicketPDF({
     ? transaction.items
     : [{ description: transaction.description || 'Sin líneas de detalle', quantity: 1, unitPrice: Number(transaction.total || 0), total: Number(transaction.total || 0) }];
   const additionalChargeLines = getSalesPdfAdditionalCharges(transaction);
+  const financingDetails = documentType === 'credit' ? customerCreditFinancingDetails(transaction, formatAmount) : '';
+  const financingDetailsHeight = financingDetails
+    ? 12 + financingDetails.split('\n').reduce((height, line) => height + Math.max(1, Math.ceil(line.length / (width === 58 ? 30 : 44))) * 3.2, 0)
+    : 0;
   const estimatedItemHeight = items.reduce((height: number, item: any) => {
     const descriptionLines = Math.max(1, commercialItemDescription(item, 'Producto', false).split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / (width === 58 ? 24 : 36))), 0));
     return height + 8 + descriptionLines * 3.6;
   }, 0);
-  const pageHeight = Math.max(140, 94 + estimatedItemHeight + additionalChargeLines.length * 3.5);
+  const pageHeight = Math.max(140, 94 + estimatedItemHeight + additionalChargeLines.length * 3.5 + financingDetailsHeight);
   const doc = new jsPDF({ unit: 'mm', format: [width, pageHeight], orientation: 'portrait' });
   // Un rollo térmico debe ser monocromático independientemente de la paleta
   // configurada para los documentos normales.
@@ -2359,6 +2480,19 @@ async function generateSalesTicketPDF({
   drawTotal('TOTAL', transaction.total, true);
 
   y += 4;
+  if (financingDetails) {
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text('TÉRMINOS Y CALENDARIO DE ABONOS', margin, y);
+    y += 4;
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(6.2);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    const detailLines = doc.splitTextToSize(financingDetails, contentWidth);
+    doc.text(detailLines, margin, y);
+    y += detailLines.length * 3.2 + 3;
+  }
   doc.setFont(fontName, 'normal');
   doc.setFontSize(6);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
@@ -2510,6 +2644,13 @@ export async function generateSalesTransactionPDF({
   withImages?: boolean;
 }) {
   if (save) ensurePdfBrowserPreview(SALES_TRANSACTION_TITLES[documentType]);
+  if (documentType === 'credit') {
+    const financingDetails = customerCreditFinancingDetails(transaction, formatAmount);
+    transaction = {
+      ...transaction,
+      notes: [transaction?.notes || transaction?.reason, financingDetails].filter(Boolean).join('\n\n'),
+    };
+  }
   // Los documentos comerciales de NovaHub comparten el mismo cuerpo
   // semántico; el antiguo formato independiente era otra fuente de
   // encabezados/tablas diferentes y dejaba fuera este patrón.
@@ -2535,7 +2676,7 @@ export async function generateSalesTransactionPDF({
         fileName: buildSalesPdfFileName(documentType, transaction?.number, renderFormat),
         data: {
           company: { name: tenantName, logo: tenantLogo },
-          document: { title: SALES_TRANSACTION_TITLES[documentType], number: getPaymentVoucherNumber(transaction), date: transaction?.date || new Date().toLocaleDateString('es-NI'), status: paymentContext.statusLabel, extra: paymentContext.operation, notes: [transaction?.notes || paymentContext.settlementLabel, paymentVariantDetails(transaction)].filter(Boolean).join('\n') },
+          document: { title: SALES_TRANSACTION_TITLES[documentType], number: getPaymentVoucherNumber(transaction), date: transaction?.date || new Date().toLocaleDateString('es-NI'), status: paymentContext.statusLabel, extra: paymentContext.operation, notes: [transaction?.notes || paymentContext.settlementLabel, paymentFinancingDetails(transaction, formatAmount), paymentVariantDetails(transaction)].filter(Boolean).join('\n') },
           party: { name: transaction?.customer?.name || transaction?.customerName || 'Cliente general' },
           customer: { name: transaction?.customer?.name || transaction?.customerName || 'Cliente general', taxId: transaction?.customer?.taxId || transaction?.customer?.ruc || '', address: transaction?.customer?.address || '', phone: transaction?.customer?.phone || '' },
           rows: paymentRows,

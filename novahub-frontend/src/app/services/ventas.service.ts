@@ -289,7 +289,7 @@ export const invoicesService = {
     api.idempotentPost<PaymentReceived & { payments?: PaymentReceived[] }>(`/sales/invoices/${id}/payments/mixed`, data, idempotencyKey),
   submit: (id: string, idempotencyKey?: string) => api.idempotentPost<Invoice>(`/sales/invoices/${id}/submit`, {}, idempotencyKey),
   update: (id: string, data: Partial<Invoice> & { creditTermOverrideConfirmed?: boolean }) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
-  sendToCredit: (id: string, data: { dueDate?: string; creditTermOverrideConfirmed?: boolean }, idempotencyKey?: string) =>
+  sendToCredit: (id: string, data: { dueDate?: string; creditTermOverrideConfirmed?: boolean; interestMode?: 'NONE' | 'FIXED_AMOUNT' | 'PERCENTAGE'; interestValue?: number; planEnabled?: boolean; frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'; installmentAmount?: number }, idempotencyKey?: string) =>
     api.idempotentPost<{ invoice: Invoice; credit: CreditNote }>(`/sales/invoices/${id}/send-to-credit`, data, idempotencyKey),
   sendToCash: (id: string, data?: { notes?: string }) =>
     api.post<any>(`/sales/invoices/${id}/send-to-cash`, data || {}),
@@ -390,6 +390,14 @@ export const creditDocumentsService = {
 export const customerLoansService = {
   applyPayment: (id: string, data: Record<string, unknown>, idempotencyKey?: string) =>
     api.idempotentPost<any>(`/sales/customer-loans/${id}/payments`, data, idempotencyKey),
+};
+
+export const customerCreditRemindersService = {
+  getConfig: () => api.get<any>('/sales/credit-reminders/config'),
+  saveConfig: (data: Record<string, unknown>) => api.put<any>('/sales/credit-reminders/config', data),
+  list: () => api.get<any[]>('/sales/credit-reminders'),
+  openDraft: (id: string, channel: 'WHATSAPP' | 'EMAIL') => api.idempotentPost<any>(`/sales/credit-reminders/${id}/open`, { channel }),
+  confirmSent: (id: string) => api.idempotentPatch<any>(`/sales/credit-reminders/${id}/confirm-sent`, {}),
 };
 
 export const reportsService = {

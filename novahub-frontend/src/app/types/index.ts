@@ -196,9 +196,17 @@ export interface CustomerLoan {
   customerId: string;
   principal: number | string;
   interest: number | string;
+  interestMode?: 'NONE' | 'FIXED_AMOUNT' | 'PERCENTAGE' | string;
+  interestRate?: number | string | null;
   total: number | string;
   frequency: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
   dueDate: string;
+  planEnabled?: boolean;
+  installmentAmount?: number | string | null;
+  principalBalance?: number | string;
+  interestBalance?: number | string;
+  remindersEligibleAtIssue?: boolean;
+  installments?: CustomerCreditInstallment[];
   currency: string;
   moraTypeId?: string | null;
   moraTypeNameSnapshot?: string | null;
@@ -627,6 +635,19 @@ export interface RecurringInvoiceItem {
 }
 
 // ---- Payments Received ----
+export interface CustomerCreditInstallment {
+  id: string;
+  installmentNumber: number;
+  dueDate: string;
+  principalAmount: number | string;
+  interestAmount: number | string;
+  totalAmount: number | string;
+  principalPaid: number | string;
+  interestPaid: number | string;
+  remindersEnabled?: boolean;
+  allocations?: Array<{ id: string; principalAmount: number | string; interestAmount: number | string }>;
+}
+
 export interface PaymentReceived {
   id: string;
   tenantId: string;
@@ -640,6 +661,12 @@ export interface PaymentReceived {
   creditNote?: CreditNote;
   balanceApplicationType?: 'GENERAL_BALANCE' | null;
   openingBalanceAppliedAmount?: number | null;
+  appliedPrincipal?: number | string | null;
+  appliedInterest?: number | string | null;
+  appliedCurrency?: string | null;
+  remainingPrincipal?: number | string | null;
+  remainingInterest?: number | string | null;
+  installmentAllocations?: Array<{ id: string; principalAmount: number | string; interestAmount: number | string; installment?: CustomerCreditInstallment }>;
   sourceType?: 'SALES_ORDER' | 'CASH_SALE' | string;
   sourceLabel?: string | null;
   date: string;
@@ -694,6 +721,17 @@ export interface SalesReturn {
   taxAmount?: number;
   discountAmount?: number;
   total: number;
+  principalAmount?: number | string;
+  interestAmount?: number | string;
+  interestMode?: 'NONE' | 'FIXED_AMOUNT' | 'PERCENTAGE' | string;
+  interestRate?: number | string | null;
+  planEnabled?: boolean;
+  frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | null;
+  installmentAmount?: number | string | null;
+  principalBalance?: number | string;
+  interestBalance?: number | string;
+  remindersEligibleAtIssue?: boolean;
+  installments?: CustomerCreditInstallment[];
   selectedCharges?: SelectedSalesReturnCharge[] | null;
   baseTotal?: number;
   currency?: Currency;

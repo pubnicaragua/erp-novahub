@@ -79,6 +79,15 @@ export function SalesPaymentReceiptDialog({
                 <p className="shrink-0 text-sm font-black tabular-nums">
                   {formatAmount(Number(row.amount || 0), row.currency || payment.currency, row.exchangeRate || payment.exchangeRate)}
                 </p>
+                {(row.appliedPrincipal != null || row.appliedInterest != null) && <div className="grid w-full grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-muted-foreground sm:grid-cols-4">
+                  <span>Capital aplicado: <strong className="text-foreground">{formatAmount(Number(row.appliedPrincipal || 0), row.appliedCurrency || row.currency)}</strong></span>
+                  <span>Interés aplicado: <strong className="text-foreground">{formatAmount(Number(row.appliedInterest || 0), row.appliedCurrency || row.currency)}</strong></span>
+                  <span>Capital restante: <strong className="text-foreground">{formatAmount(Number(row.remainingPrincipal || 0), row.appliedCurrency || row.currency)}</strong></span>
+                  <span>Interés restante: <strong className="text-foreground">{formatAmount(Number(row.remainingInterest || 0), row.appliedCurrency || row.currency)}</strong></span>
+                  {(row as any).installmentAllocations?.map((allocation: any) => <span key={allocation.id} className="col-span-2 sm:col-span-4">
+                    Cuota #{allocation.installment?.installmentNumber}: {formatAmount(Number(allocation.principalAmount || 0), row.appliedCurrency || row.currency)} a capital y {formatAmount(Number(allocation.interestAmount || 0), row.appliedCurrency || row.currency)} a intereses.
+                  </span>)}
+                </div>}
               </div>
             ))}
           </div>

@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   BadgeDollarSign, Plus, Search, TrendingUp, Clock, CheckCircle2, CircleDollarSign,
-  Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle, Ban,
+  Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle, Ban, Bell, Mail, MessageCircle,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { creditNotesService, customerLoansService } from '../../services/ventas.service';
+import { creditNotesService, customerCreditRemindersService, customerLoansService } from '../../services/ventas.service';
 import { createIdempotencyKey } from '../../services/api';
 import { useSalesIntegrationPolicy } from '../../hooks/useSalesIntegrationPolicy';
 import { toast } from '@/app/services/toast';
@@ -86,6 +87,153 @@ const statusOptions = [
   { label: 'Cancelado', value: 'VOIDED', color: SALES_WORKFLOW_STATUS_COLORS.CANCELLED },
 ];
 
+function CustomerCreditReminderDialog({
+  open,
+  onOpenChange,
+  canConfigure,
+  canSend,
+  formatAmount,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  canConfigure: boolean;
+  canSend: boolean;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+}) {
+  const defaults = {
+    enabled: false,
+    beforeDays: [] as number[],
+    dueDayEnabled: true,
+    firstOverdueDays: 1,
+    repeatOverdueEveryDays: null as number | null,
+    upcomingMessage: 'Hola {{cliente}}, el abono {{cuota}} del documento {{documento}} vence el {{fecha}}. Saldo de capital: {{saldo_capital}}; intereses: {{saldo_intereses}}.',
+    dueTodayMessage: 'Hola {{cliente}}, hoy vence el abono {{cuota}} del documento {{documento}}. Saldo de capital: {{saldo_capital}}; intereses: {{saldo_intereses}}.',
+    overdueMessage: 'Hola {{cliente}}, el abono {{cuota}} del documento {{documento}} venció el {{fecha}}. Atraso: {{dias_atraso}} día(s). Saldo de capital: {{saldo_capital}}; intereses: {{saldo_intereses}}.',
+  };
+  const [config, setConfig] = useState<any>(defaults);
+  const [beforeDaysText, setBeforeDaysText] = useState('1');
+  const [reminders, setReminders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [busyReminderId, setBusyReminderId] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const [nextConfig, nextReminders] = await Promise.all([
+        customerCreditRemindersService.getConfig(),
+        customerCreditRemindersService.list(),
+      ]);
+      const normalized = { ...defaults, ...(nextConfig || {}) };
+      setConfig(normalized);
+      setBeforeDaysText(Array.isArray(normalized.beforeDays) ? normalized.beforeDays.join(', ') : '');
+      setReminders(Array.isArray(nextReminders) ? nextReminders : []);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudieron cargar los recordatorios.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (open) void refresh();
+  }, [open]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const beforeDays = beforeDaysText.split(',').map((item) => Number(item.trim())).filter((item) => Number.isFinite(item) && item > 0);
+      const result = await customerCreditRemindersService.saveConfig({ ...config, beforeDays });
+      setConfig({ ...defaults, ...(result || {}), beforeDays });
+      toast.success('Configuración de recordatorios guardada. Aplica a contratos nuevos.');
+      await refresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo guardar la configuración.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openDraft = async (reminder: any, channel: 'WHATSAPP' | 'EMAIL') => {
+    const draftWindow = window.open('about:blank', '_blank');
+    if (draftWindow) draftWindow.opener = null;
+    setBusyReminderId(reminder.id);
+    try {
+      const draft = await customerCreditRemindersService.openDraft(reminder.id, channel);
+      const url = channel === 'WHATSAPP'
+        ? `https://wa.me/${String(draft.recipient || '').replace(/\D/g, '')}?text=${encodeURIComponent(draft.message || '')}`
+        : `mailto:${encodeURIComponent(draft.recipient || '')}?subject=${encodeURIComponent(`Recordatorio de pago ${draft.documentNumber || ''}`)}&body=${encodeURIComponent(draft.message || '')}`;
+      if (draftWindow) draftWindow.location.href = url;
+      else window.open(url, '_blank', 'noopener,noreferrer');
+      await refresh();
+      toast.success('Borrador preparado. Confirma el envío después de enviarlo desde la aplicación.');
+    } catch (error: any) {
+      draftWindow?.close();
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo preparar el borrador.');
+    } finally {
+      setBusyReminderId(null);
+    }
+  };
+
+  const confirmSent = async (reminderId: string) => {
+    setBusyReminderId(reminderId);
+    try {
+      await customerCreditRemindersService.confirmSent(reminderId);
+      toast.success('Se registró tu confirmación. La entrega no se verifica desde NovaHub.');
+      await refresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo registrar la confirmación.');
+    } finally {
+      setBusyReminderId(null);
+    }
+  };
+
+  return <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="!flex !max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] !max-w-3xl !flex-col !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-2rem)] sm:p-6">
+      <DialogHeader><DialogTitle className="flex items-center gap-2 nh-module-title"><Bell className="size-5 text-primary" /> Recordatorios de pago</DialogTitle><DialogDescription>NovaHub prepara alertas internas y borradores de WhatsApp o correo. El envío siempre se confirma manualmente.</DialogDescription></DialogHeader>
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
+        {canConfigure && <section className="space-y-4 rounded-2xl border border-border/50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-xs font-black uppercase tracking-widest">Configuración de sucursal</h3><p className="mt-1 text-[10px] text-muted-foreground">Solo se copia a créditos y préstamos emitidos mientras esté activa.</p></div><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" className="size-4 accent-primary" checked={Boolean(config.enabled)} onChange={(event) => setConfig({ ...config, enabled: event.target.checked })} /> Activa</label></div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5"><Label htmlFor="credit-reminder-before">Avisar antes (días, separados por coma)</Label><Input id="credit-reminder-before" value={beforeDaysText} onChange={(event) => setBeforeDaysText(event.target.value)} placeholder="3, 1" /></div>
+            <div className="space-y-1.5"><Label htmlFor="credit-reminder-first-overdue">Primer aviso de atraso (días)</Label><Input id="credit-reminder-first-overdue" type="number" min="1" max="90" value={config.firstOverdueDays} onChange={(event) => setConfig({ ...config, firstOverdueDays: Number(event.target.value) })} /></div>
+            <div className="space-y-1.5"><Label htmlFor="credit-reminder-repeat">Repetir atraso cada (días, opcional)</Label><Input id="credit-reminder-repeat" type="number" min="1" max="90" value={config.repeatOverdueEveryDays ?? ''} onChange={(event) => setConfig({ ...config, repeatOverdueEveryDays: event.target.value ? Number(event.target.value) : null })} placeholder="Sin repetición" /></div>
+            <label className="flex items-center gap-2 self-end rounded-xl border border-border/50 p-3 text-xs font-bold"><input type="checkbox" className="size-4 accent-primary" checked={Boolean(config.dueDayEnabled)} onChange={(event) => setConfig({ ...config, dueDayEnabled: event.target.checked })} /> Avisar el día de vencimiento</label>
+          </div>
+          {([
+            ['upcomingMessage', 'Mensaje previo'],
+            ['dueTodayMessage', 'Mensaje del día'],
+            ['overdueMessage', 'Mensaje de atraso'],
+          ] as const).map(([key, label]) => <div key={key} className="space-y-1.5"><Label htmlFor={`credit-reminder-${key}`}>{label}</Label><textarea id={`credit-reminder-${key}`} rows={3} maxLength={1500} value={config[key]} onChange={(event) => setConfig({ ...config, [key]: event.target.value })} className="min-h-20 w-full max-w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>)}
+          <p className="text-[10px] text-muted-foreground">Variables: {'{{cliente}}'}, {'{{documento}}'}, {'{{cuota}}'}, {'{{fecha}}'}, {'{{saldo_capital}}'}, {'{{saldo_intereses}}'}, {'{{dias_atraso}}'}.</p>
+          <Button type="button" onClick={() => void save()} disabled={saving || loading} className="rounded-xl">{saving ? 'Guardando…' : 'Guardar configuración'}</Button>
+        </section>}
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-black uppercase tracking-widest">Alertas y envíos confirmados</h3><Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>{loading ? 'Actualizando…' : 'Actualizar'}</Button></div>
+          {!reminders.length && <p className="rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground">No hay alertas para contratos elegibles.</p>}
+          {reminders.map((reminder) => {
+            const installment = reminder.installment || {};
+            const contract = installment.creditNote || installment.customerLoan || {};
+            const customer = contract.customer || {};
+            const overdue = String(reminder.ruleKey || '').startsWith('OVERDUE');
+            const currency = contract.currency || 'NIO';
+            const opened = reminder.status === 'OPENED';
+            const sent = reminder.status === 'SENT';
+            const hasPhone = Boolean(customer.contactPhone || customer.phone);
+            const hasEmail = Boolean(customer.contactEmail || customer.email);
+            return <article key={reminder.id} className="space-y-3 rounded-xl border border-border/50 bg-muted/10 p-3">
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="break-words text-xs font-black">{customer.name || 'Cliente'} · {contract.number || contract.invoice?.number || 'Crédito'}</p><p className={cn('mt-1 text-[10px] font-bold', overdue ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}>{overdue ? `Atrasado ${Math.max(1, Number(reminder.daysOverdue || String(reminder.ruleKey).split('_')[1] || 1))} día(s)` : `Cuota #${installment.installmentNumber} · ${new Date(installment.dueDate).toLocaleDateString('es-NI')}`}</p><p className="mt-1 text-[10px] text-muted-foreground">Capital {formatAmount(Number(contract.principalBalance || 0), currency)} · Intereses {formatAmount(Number(contract.interestBalance || 0), currency)}</p></div><span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[9px] font-black uppercase text-primary">{sent ? 'Envío confirmado' : opened ? 'Borrador abierto' : 'Pendiente'}</span></div>
+              <p className="whitespace-pre-wrap break-words rounded-lg bg-background/70 p-3 text-xs text-muted-foreground">{reminder.messageSnapshot}</p>
+              {canSend && !sent && <div className="flex flex-wrap gap-2">{hasPhone && <Button type="button" variant="outline" size="sm" disabled={busyReminderId === reminder.id} onClick={() => void openDraft(reminder, 'WHATSAPP')}><MessageCircle className="mr-2 size-3.5" /> WhatsApp</Button>}{hasEmail && <Button type="button" variant="outline" size="sm" disabled={busyReminderId === reminder.id} onClick={() => void openDraft(reminder, 'EMAIL')}><Mail className="mr-2 size-3.5" /> Correo</Button>}{opened && <Button type="button" size="sm" disabled={busyReminderId === reminder.id} onClick={() => void confirmSent(reminder.id)}><CheckCircle2 className="mr-2 size-3.5" /> Confirmar que lo envié</Button>}{!hasPhone && !hasEmail && <p className="text-[10px] text-muted-foreground">Agrega un teléfono o correo al cliente para preparar el recordatorio.</p>}</div>}
+            </article>;
+          })}
+        </section>
+      </div>
+      <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button></DialogFooter>
+    </DialogContent>
+  </Dialog>;
+}
+
 const methodOptions = [
   { label: 'Transferencia', value: 'TRANSFER' },
   { label: 'Efectivo', value: 'CASH' },
@@ -148,6 +296,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const [paymentCredit, setPaymentCredit] = useState<CreditDocument | null>(null);
   const [paymentLines, setPaymentLines] = useState<CreditPaymentLine[]>([]);
   const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceived | null>(null);
+  const [remindersOpen, setRemindersOpen] = useState(false);
   const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
   const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -440,7 +589,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     clearSalesEditorDraft(salesDraftStorageKey);
     setEditingId(id);
     setIsCreating(false);
-    commitLocalDoc(JSON.parse(JSON.stringify(record)));
+    const draft = JSON.parse(JSON.stringify(record));
+    draft.interestValue = draft.interestMode === 'PERCENTAGE' ? Number(draft.interestRate || 0) : Number(draft.interestAmount || 0);
+    commitLocalDoc(draft);
   };
 
   const startNew = () => {
@@ -505,6 +656,11 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         extraCharges: getSalesExtraChargesPayload(localDoc),
         deliveryDescription: String(localDoc.deliveryDescription || '').trim() || null,
         deliveryAmount: Math.max(0, Number(localDoc.deliveryAmount || 0)),
+        interestMode: localDoc.interestMode || 'NONE',
+        interestValue: Number(localDoc.interestValue || 0),
+        planEnabled: Boolean(localDoc.planEnabled),
+        frequency: localDoc.planEnabled ? (localDoc.frequency || 'WEEKLY') : undefined,
+        installmentAmount: localDoc.planEnabled ? Number(localDoc.installmentAmount || 0) : undefined,
         currency: localDoc.currency || displayCurrency,
         exchangeRate: Number(localDoc.exchangeRate || globalRate),
         warehouseId: localDoc.warehouseId || localDoc.invoice?.warehouseId || null,
@@ -711,8 +867,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     }
   };
 
-  const handleExportPDF = async (row: CreditNote, format: PdfDownloadFormat = 'configured') => {
-    const previewToastId = toast.loading('Preparando la previsualización del crédito...');
+  const handleExportPDF = async (row: CreditDocument, format: PdfDownloadFormat = 'configured') => {
+    const previewToastId = toast.loading('Preparando el comprobante de crédito o préstamo...');
     try {
       await previewSalesTransactionPDF({ document: { ...row, customer: row.customer || customerFor(row.customerId) }, tenantName: user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'credit', format });
       toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
@@ -897,6 +1053,12 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     const canEditDocument = isCreating || normalizeStatus(localDoc.status) === 'DRAFT';
     const selectedCustomer = customerFor(localDoc.customerId);
     const availableCredit = availableCreditFor(selectedCustomer);
+    const interestMode = String(localDoc.interestMode || 'NONE');
+    const interestValue = Number(localDoc.interestValue ?? (interestMode === 'PERCENTAGE' ? localDoc.interestRate : localDoc.interestAmount) ?? 0);
+    const principalForInterest = Number(localDoc.principalAmount || (Number(localDoc.total || 0) - Number(localDoc.interestAmount || 0)));
+    const interestPreview = interestMode === 'PERCENTAGE'
+      ? principalForInterest * interestValue / 100
+      : interestMode === 'FIXED_AMOUNT' ? interestValue : 0;
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -911,6 +1073,56 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Capacidad de pago</p><div className="grid grid-cols-2 gap-3"><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Límite ({normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency)})</p><p className="mt-1 text-lg font-black">{formatCurrencyAmount(Number(selectedCustomer?.creditLimit || 0), normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency))}</p>{normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency) !== baseCurrency && <p className="text-[10px] text-muted-foreground">Equivale a {formatConvertedAmount(Number(selectedCustomer?.creditLimit || 0), normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency), globalRate)}</p>}</div><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Disponible</p><p className={cn('mt-1 text-lg font-black', availableCredit > 0 ? 'text-emerald-500' : 'text-rose-500')}>{formatConvertedAmount(availableCredit, baseCurrency)}</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">Saldo pendiente</p><p className="mt-1 text-2xl font-black text-rose-600 dark:text-rose-400">{formatConvertedAmount(getCustomerDebtAmount(selectedCustomer), baseCurrency)}</p></div><div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Saldo a favor</p><p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(getCustomerFavorAmount(selectedCustomer), baseCurrency)}</p></div></div>{selectedCustomer && Number(selectedCustomer.creditLimit || 0) <= 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] text-amber-700 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span>Este cliente no tiene límite de crédito. {customerCreditLimitInstruction()}</span></div>}<div className="flex items-start gap-2 text-[10px] text-muted-foreground"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />La emisión valida que el total no supere el límite disponible.</div></CardContent></Card>
         </div>
         <div className="flex justify-end" data-tour="sales-form-actions"><SalesViewTutorial view="credit-notes" context="form" /></div>
+        <Card className="rounded-2xl border-border/50">
+          <CardContent className="space-y-4 p-5">
+            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Interés y calendario opcionales</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Interés</Label>
+                <Select value={interestMode} onValueChange={(value) => setLocalDoc({ ...localDoc, interestMode: value, interestValue: value === 'NONE' ? 0 : localDoc.interestValue || '' })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="NONE">Sin interés</SelectItem><SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem><SelectItem value="PERCENTAGE">Porcentaje único</SelectItem></SelectContent>
+                </Select>
+              </div>
+              {interestMode !== 'NONE' && <div className="space-y-1.5">
+                <Label htmlFor="credit-interest-value">{interestMode === 'PERCENTAGE' ? 'Porcentaje sobre el crédito (%)' : 'Interés fijo'}</Label>
+                <Input id="credit-interest-value" type="number" min="0" step="0.01" max={interestMode === 'PERCENTAGE' ? 100 : undefined} value={localDoc.interestValue ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, interestValue: event.target.value })} />
+              </div>}
+            </div>
+            <p className="text-[10px] text-muted-foreground">Interés estimado: {formatExplicitAmount(interestPreview, localDoc.currency || displayCurrency)} · Total financiado: {formatExplicitAmount(Number(localDoc.total || 0) + interestPreview, localDoc.currency || displayCurrency)}. El porcentaje queda convertido a un monto fijo al emitir.</p>
+            <div className="flex items-start gap-2 border-t border-border/40 pt-3">
+              <input id="credit-plan-enabled" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={Boolean(localDoc.planEnabled)} onChange={(event) => setLocalDoc({ ...localDoc, planEnabled: event.target.checked, frequency: localDoc.frequency || 'WEEKLY' })} />
+              <Label htmlFor="credit-plan-enabled" className="cursor-pointer text-xs">Definir un plan de abonos</Label>
+            </div>
+            {localDoc.planEnabled && <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Frecuencia</Label>
+                <Select value={localDoc.frequency || 'WEEKLY'} onValueChange={(value) => setLocalDoc({ ...localDoc, frequency: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="credit-installment-amount">Monto por abono</Label>
+                <Input id="credit-installment-amount" type="number" min="0.01" step="0.01" value={localDoc.installmentAmount ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, installmentAmount: event.target.value })} />
+              </div>
+            </div>}
+            <p className="text-[10px] text-muted-foreground">La fecha de pago indicada arriba será la primera cuota. Se permiten pagos parciales y anticipos; un pago mayor al saldo no se acepta.</p>
+          </CardContent>
+        </Card>
+        {!isCreating && Array.isArray(localDoc.installments) && localDoc.installments.length > 0 && <Card className="rounded-2xl border-border/50">
+          <CardContent className="space-y-3 p-5">
+            <div><p className="text-xs font-black uppercase tracking-widest">Calendario de abonos</p><p className="mt-1 text-[10px] text-muted-foreground">El saldo pendiente de cada cuota se paga primero a intereses y después a capital.</p></div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {localDoc.installments.map((installment: any) => <div key={installment.id} className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cuota #{installment.installmentNumber} · {formatDateEs(installment.dueDate)}</p>
+                <p className="mt-1 text-sm font-black">Total {formatExplicitAmount(Number(installment.totalAmount || 0), localDoc.currency)}</p>
+                <p className="mt-1 break-words text-[10px] text-muted-foreground">Capital {formatExplicitAmount(Number(installment.principalAmount || 0), localDoc.currency)} · Intereses {formatExplicitAmount(Number(installment.interestAmount || 0), localDoc.currency)}</p>
+                <p className="mt-1 break-words text-[10px] text-muted-foreground">Pagado {formatExplicitAmount(Number(installment.principalPaid || 0) + Number(installment.interestPaid || 0), localDoc.currency)} · Pendiente {formatExplicitAmount(Math.max(0, Number(installment.totalAmount || 0) - Number(installment.principalPaid || 0) - Number(installment.interestPaid || 0)), localDoc.currency)}</p>
+              </div>)}
+            </div>
+          </CardContent>
+        </Card>}
         <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
           <CardContent className="p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1140,6 +1352,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       <div className="flex flex-col gap-4">
         <div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+            {(canPerform('SALES_CREDIT_NOTES', 'edit') || canPerform('SALES_CREDIT_NOTES', 'send')) && <Button type="button" variant="outline" onClick={() => setRemindersOpen(true)} className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest"><Bell className="mr-2 size-4" /> Recordatorios</Button>}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos" />
             <div className="w-full max-w-full shrink-0 sm:w-[11rem]">
               <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
@@ -1219,7 +1432,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           {canPerform('SALES_CREDIT_NOTES', 'pay') && isPayableStatus(detailCredit.status) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => openPayment(detailCredit)}><CreditCard className="mr-2 size-4" />{detailCredit.kind === 'CUSTOMER_LOAN' ? 'Registrar abono' : 'Registrar pago'}</Button>}
           {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailCredit(null); setPendingDeleteId(detailCredit.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
-        onDownloadPdf={detailCredit?.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'export') ? (format) => { if (detailCredit) void handleExportPDF(detailCredit, format); } : undefined}
+        onDownloadPdf={detailCredit && canPerform('SALES_CREDIT_NOTES', 'export') ? (format) => { if (detailCredit) void handleExportPDF(detailCredit, format); } : undefined}
       />
 
       <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="¿Cancelar crédito?" description="El crédito quedará cancelado y se conservará el registro. Solo pueden cancelarse créditos pendientes de aprobación; los emitidos, aplicados o pagados no se modifican." confirmLabel="Cancelar crédito" variant="destructive" loading={deleteLoading} onConfirm={async () => { if (!canPerform('SALES_CREDIT_NOTES', 'cancel') || !pendingDeleteId) return; const id = toast.loading('Cancelando crédito...'); try { setDeleteLoading(true); await creditNotesService.cancel(pendingDeleteId); toast.success('Crédito cancelado', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar', { id }); } finally { setDeleteLoading(false); setPendingDeleteId(null); } }} />
@@ -1328,6 +1541,13 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         formatAmount={formatConvertedAmount}
         onPrint={() => paymentReceipt && handlePrintPaymentTicket(paymentReceipt)}
         title="Pago del crédito registrado"
+      />
+      <CustomerCreditReminderDialog
+        open={remindersOpen}
+        onOpenChange={setRemindersOpen}
+        canConfigure={canPerform('SALES_CREDIT_NOTES', 'edit')}
+        canSend={canPerform('SALES_CREDIT_NOTES', 'send')}
+        formatAmount={formatExplicitAmount}
       />
     </div>
   );

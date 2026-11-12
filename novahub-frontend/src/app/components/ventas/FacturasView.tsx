@@ -263,6 +263,11 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const [submitLoadingId, setSubmitLoadingId] = useState<string | null>(null);
   const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
   const [creditDueDate, setCreditDueDate] = useState('');
+  const [creditInterestMode, setCreditInterestMode] = useState<'NONE' | 'FIXED_AMOUNT' | 'PERCENTAGE'>('NONE');
+  const [creditInterestValue, setCreditInterestValue] = useState('');
+  const [creditPlanEnabled, setCreditPlanEnabled] = useState(false);
+  const [creditFrequency, setCreditFrequency] = useState<'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'>('WEEKLY');
+  const [creditInstallmentAmount, setCreditInstallmentAmount] = useState('');
   const [creditTermOverrideConfirmed, setCreditTermOverrideConfirmed] = useState(false);
   const [creditLoading, setCreditLoading] = useState(false);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
@@ -829,6 +834,10 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     setCreditInvoice(actionInvoice);
     setCreditDueDate(suggestedDueDate);
     setCreditTermOverrideConfirmed(false);
+    setCreditInterestMode('NONE');
+    setCreditInterestValue('');
+    setCreditPlanEnabled(false);
+    setCreditInstallmentAmount('');
   };
 
   const handleSendInvoiceToCredit = async () => {
@@ -851,6 +860,11 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       await handleSaveInvoice('CREDIT', {
         dueDate: new Date(`${creditDueDate}T12:00:00`).toISOString(),
         creditTermOverrideConfirmed,
+        initialCreditInterestMode: creditInterestMode,
+        initialCreditInterestValue: Number(creditInterestValue || 0),
+        initialCreditPlanEnabled: creditPlanEnabled,
+        initialCreditFrequency: creditFrequency,
+        initialCreditInstallmentAmount: Number(creditInstallmentAmount || 0),
       });
       return;
     }
@@ -860,6 +874,11 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       await invoicesService.sendToCredit(invoice.id, {
         dueDate: new Date(`${creditDueDate}T12:00:00`).toISOString(),
         creditTermOverrideConfirmed,
+        interestMode: creditInterestMode,
+        interestValue: Number(creditInterestValue || 0),
+        planEnabled: creditPlanEnabled,
+        frequency: creditFrequency,
+        installmentAmount: Number(creditInstallmentAmount || 0),
       });
       toast.success(`Factura ${invoice.number} enviada a Créditos por su saldo pendiente`, { id: creditToastId });
       setCreditInvoice(null);
@@ -1130,7 +1149,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
 
   const handleSaveInvoice = async (
     action: InvoiceSaveAction = 'PENDING',
-    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; paymentDate?: string; dueDate?: string; cashRegisterId?: string; cashSessionId?: string; creditTermOverrideConfirmed?: boolean },
+    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; paymentDate?: string; dueDate?: string; cashRegisterId?: string; cashSessionId?: string; creditTermOverrideConfirmed?: boolean; initialCreditInterestMode?: string; initialCreditInterestValue?: number; initialCreditPlanEnabled?: boolean; initialCreditFrequency?: string; initialCreditInstallmentAmount?: number },
   ) => {
     if (!localDoc) return;
     if (action === 'PENDING' && !canPerform('SALES_INVOICES', 'submit')) {
@@ -1274,6 +1293,11 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             cashSessionId: settlement?.cashSessionId,
           } : undefined,
           initialCreditDueDate: action === 'CREDIT' ? settlement?.dueDate : undefined,
+          initialCreditInterestMode: action === 'CREDIT' ? settlement?.initialCreditInterestMode || 'NONE' : undefined,
+          initialCreditInterestValue: action === 'CREDIT' ? settlement?.initialCreditInterestValue || 0 : undefined,
+          initialCreditPlanEnabled: action === 'CREDIT' ? Boolean(settlement?.initialCreditPlanEnabled) : undefined,
+          initialCreditFrequency: action === 'CREDIT' ? settlement?.initialCreditFrequency || 'WEEKLY' : undefined,
+          initialCreditInstallmentAmount: action === 'CREDIT' ? settlement?.initialCreditInstallmentAmount || 0 : undefined,
           creditTermOverrideConfirmed: settlement?.creditTermOverrideConfirmed ?? (localDoc as any).creditTermOverrideConfirmed,
           expectedDelivery: localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString() : undefined,
           notes: finalNotes,
@@ -2862,6 +2886,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
               <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{creditInvoice.number} · {creditInvoice.customer?.name || 'Cliente'}</p>
                 <p className="mt-1 text-2xl font-black text-primary">Saldo a crédito: {formatInvoiceAmount(getInvoiceBalance(creditInvoice), creditInvoice.currency, creditInvoice.exchangeRate)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Interés estimado: {formatInvoiceAmount(creditInterestMode === 'NONE' ? 0 : creditInterestMode === 'PERCENTAGE' ? getInvoiceBalance(creditInvoice) * Number(creditInterestValue || 0) / 100 : Number(creditInterestValue || 0), creditInvoice.currency, creditInvoice.exchangeRate)} · Total pactado: {formatInvoiceAmount(getInvoiceBalance(creditInvoice) + (creditInterestMode === 'NONE' ? 0 : creditInterestMode === 'PERCENTAGE' ? getInvoiceBalance(creditInvoice) * Number(creditInterestValue || 0) / 100 : Number(creditInterestValue || 0)), creditInvoice.currency, creditInvoice.exchangeRate)}</p>
                 <p className="mt-2 text-[10px] font-bold text-muted-foreground">La factura conservará el estado A CRÉDITO y el registro aparecerá en la vista Créditos.</p>
               </div>
               <CreditTermDateField
@@ -2872,15 +2897,53 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 onChange={setCreditDueDate}
                 overrideConfirmed={creditTermOverrideConfirmed}
                 onOverrideConfirmedChange={setCreditTermOverrideConfirmed}
-                label="Fecha de pago *"
+                label={creditPlanEnabled ? 'Fecha del primer abono *' : 'Fecha de pago *'}
                 minDate={new Date().toISOString().split('T')[0]}
               />
-              <p className="text-[10px] text-muted-foreground">Se enviará una notificación interna un día antes.</p>
+              <div className="space-y-3 rounded-2xl border border-border/50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Interés opcional</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Interés del crédito</Label>
+                    <Select value={creditInterestMode} onValueChange={(value) => setCreditInterestMode(value as typeof creditInterestMode)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NONE">Sin interés</SelectItem>
+                        <SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem>
+                        <SelectItem value="PERCENTAGE">Porcentaje único</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {creditInterestMode !== 'NONE' && <div className="space-y-1.5">
+                    <Label htmlFor="invoice-credit-interest">{creditInterestMode === 'PERCENTAGE' ? 'Porcentaje sobre el saldo (%)' : 'Interés fijo'}</Label>
+                    <Input id="invoice-credit-interest" type="number" min="0" step="0.01" max={creditInterestMode === 'PERCENTAGE' ? 100 : undefined} value={creditInterestValue} onChange={(event) => setCreditInterestValue(event.target.value)} />
+                  </div>}
+                </div>
+                <p className="text-[10px] text-muted-foreground">El interés se calcula una sola vez sobre el saldo trasladado. El saldo original de la factura no cambia.</p>
+                <div className="flex items-start gap-2 border-t border-border/40 pt-3">
+                  <input id="invoice-credit-plan" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={creditPlanEnabled} onChange={(event) => setCreditPlanEnabled(event.target.checked)} />
+                  <Label htmlFor="invoice-credit-plan" className="cursor-pointer text-xs">Definir un plan de abonos</Label>
+                </div>
+                {creditPlanEnabled && <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Frecuencia</Label>
+                    <Select value={creditFrequency} onValueChange={(value) => setCreditFrequency(value as typeof creditFrequency)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="invoice-credit-installment">Monto por abono</Label>
+                    <Input id="invoice-credit-installment" type="number" min="0.01" step="0.01" value={creditInstallmentAmount} onChange={(event) => setCreditInstallmentAmount(event.target.value)} />
+                  </div>
+                </div>}
+                <p className="text-[10px] text-muted-foreground">La fecha elegida será el primer vencimiento. Cada abono cubre primero intereses de la cuota más antigua y después capital; la última cuota ajusta el residuo.</p>
+              </div>
             </div>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setCreditInvoice(null)} disabled={creditLoading}>Cancelar</Button>
-            <Button type="button" onClick={() => void handleSendInvoiceToCredit()} disabled={creditLoading || !creditDueDate || (creditTermOverrideRequired && !creditTermOverrideConfirmed)} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
+            <Button type="button" onClick={() => void handleSendInvoiceToCredit()} disabled={creditLoading || !creditDueDate || (creditTermOverrideRequired && !creditTermOverrideConfirmed) || (creditInterestMode !== 'NONE' && !Number.isFinite(Number(creditInterestValue))) || (creditPlanEnabled && (!Number.isFinite(Number(creditInstallmentAmount)) || Number(creditInstallmentAmount) <= 0))} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
               {creditLoading ? 'Enviando...' : 'Confirmar crédito'}
             </Button>
           </DialogFooter>
