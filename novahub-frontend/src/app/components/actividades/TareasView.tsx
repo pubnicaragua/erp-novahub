@@ -864,7 +864,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               setIsCompleteOpen(true);
             }}
           />
-        ) : viewLayout === 'cards' ? (
+        ) : isCardsLayout ? (
           <TareasCardsView
             data={filtered}
             onViewDetail={(task) => setDetailTask(task)}
