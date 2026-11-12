@@ -739,7 +739,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <h2 className="break-words text-xl font-black uppercase tracking-tight">Tareas</h2>
+            <h2 className="nh-module-title break-words">Tareas</h2>
           </div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial

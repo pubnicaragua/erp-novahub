@@ -152,7 +152,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="min-w-0"><h2 className="break-words text-xl font-black uppercase tracking-tight">Recordatorios</h2></div>
+          <div className="min-w-0"><h2 className="nh-module-title break-words">Recordatorios</h2></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué son los Recordatorios" targetPrefix="recordatorios-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Recordatorios', description: 'Los recordatorios envían alertas automáticas en la fecha y hora que indiques. Pueden ser globales (para todo el equipo), departamentales o personales.' }, data: { title: 'Crear recordatorio', description: 'Haz clic en "Nuevo Aviso". Define el título, mensaje, fecha de envío y alcance (global/departamento/personal).' }, actions: { title: 'Gestionar', description: 'Revisa el estado (Pendiente/Enviado/Cancelado), edita o elimina avisos que ya no necesites.' } }} />
             <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>

@@ -65,7 +65,7 @@ export function FaqView() {
             <HelpCircle className="size-6" />
           </div>
           <div>
-            <h2 className="text-lg font-black tracking-tighter">Preguntas Frecuentes</h2>
+            <h2 className="nh-module-title">Preguntas Frecuentes</h2>
           </div>
         </div>
         <div className="relative max-w-md">

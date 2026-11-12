@@ -185,7 +185,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, summa
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="min-w-0"><h2 className="break-words text-xl font-black uppercase tracking-tight">Bitácora de Auditoría</h2></div>
+          <div className="min-w-0"><h2 className="nh-module-title break-words">Bitácora de Auditoría</h2></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué es la Bitácora" targetPrefix="bitacora-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Bitácora de Auditoría', description: 'La bitácora registra automáticamente todas las acciones del sistema: creaciones, ediciones, eliminaciones y subidas de archivos. Sirve para auditoría y seguimiento.' }, data: { title: 'Consulta', description: 'Usa la búsqueda y los filtros para encontrar acciones específicas por usuario, módulo o fecha.' }, actions: { title: 'Exportar', description: 'Puedes exportar el registro completo para auditorías externas o reportes.' } }} />
             <div className="relative w-full sm:w-64"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar evento..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
