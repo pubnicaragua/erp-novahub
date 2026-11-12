@@ -2548,6 +2548,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      <div>
+      <h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Control de Facturación</h2>
+      </div>
       <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
         <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -2567,9 +2570,6 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
-          <div>
-            <h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Control de Facturación</h2>
-          </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="invoices" />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas" />

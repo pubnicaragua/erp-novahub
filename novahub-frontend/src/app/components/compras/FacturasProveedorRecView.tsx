@@ -770,6 +770,10 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      <div>
+      <h2 className="nh-module-title" data-tour="purchases-list-title">Compras Recurrentes</h2>
+      <p className="mt-1 text-xs text-muted-foreground">Cada programación crea una orden y una recepción pendiente por ciclo.</p>
+      </div>
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -783,10 +787,6 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h2 className="nh-module-title" data-tour="purchases-list-title">Compras Recurrentes</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Cada programación crea una orden y una recepción pendiente por ciclo.</p>
-          </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-invoices" />
             {canPerform('PURCHASES_INVOICES_REC', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}

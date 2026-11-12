@@ -2067,6 +2067,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
+      <div><h2 className="nh-module-title" data-tour="purchases-list-title">Recepciones</h2></div>
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(isSummaryLoading)}>
         <KpiSummaryNotice loading={isSummaryLoading} error={isSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2077,7 +2078,6 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="nh-module-title" data-tour="purchases-list-title">Recepciones</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="receipts" />
             {canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} filterSelector={{ label: 'Estado de recepciones', defaultValue: 'all', options: [{ value: 'all', label: 'Todas las recepciones', description: 'Incluye todos los estados' }, { value: 'paid', label: 'Solo pagadas', description: 'Incluye únicamente estado Pagada' }] }} onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)} onExcel={() => void handleExportExcel()} />}

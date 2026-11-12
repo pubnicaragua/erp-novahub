@@ -52,8 +52,8 @@ export function SalesKpiCard({ title, value, icon: Icon = Activity, onClick, act
     >
       <CardContent className="p-3.5">
         <div className="flex items-center gap-3">
-          <div className="shrink-0 rounded-[10px] bg-[color-mix(in_srgb,var(--accent)_82%,var(--card))] p-2.5 text-primary">
-            <Icon className="size-[18px]" />
+          <div className="shrink-0 rounded-[10px] bg-[var(--accent)] p-2.5 text-[var(--accent-foreground)]">
+            <Icon className="size-[18px]" strokeWidth={2.4} />
           </div>
           <div className="min-w-0">
             <p className="break-words text-[13px] font-semibold italic leading-tight text-muted-foreground" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>{title}</p>

@@ -590,6 +590,11 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-3">
+      <ClipboardList className="size-6 text-primary" />
+      <h2 className="nh-module-title" data-tour="purchases-list-title">Solicitudes de Compra</h2>
+      <Badge variant="secondary" className="text-xs">{data.length}</Badge>
+      </div>
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -614,11 +619,6 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
       </div>
       <div className="flex flex-col gap-4">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <ClipboardList className="size-6 text-primary" />
-          <h2 className="nh-module-title" data-tour="purchases-list-title">Solicitudes de Compra</h2>
-          <Badge variant="secondary" className="text-xs">{data.length}</Badge>
-        </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
         <PdfDownloadButton
           label="Exportar"

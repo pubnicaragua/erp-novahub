@@ -3486,6 +3486,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
+      <div><h2 className="nh-module-title" data-tour="purchases-list-title">Órdenes de Compra</h2></div>
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -3496,7 +3497,6 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="nh-module-title" data-tour="purchases-list-title">Órdenes de Compra</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             {canPerform('PURCHASES_ORDERS', 'export') && <PdfDownloadButton
               label="Exportar"

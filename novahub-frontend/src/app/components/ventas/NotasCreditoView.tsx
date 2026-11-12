@@ -1118,6 +1118,10 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           </div>
         </div>
       )}
+      <div>
+      <h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Créditos</h2>
+      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">Productos y servicios entregados con límite y fecha de pago.</p>
+      </div>
       <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(summaryLoading)}>
         <KpiSummaryNotice loading={summaryLoading} error={summaryError} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1135,10 +1139,6 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center">
-          <div>
-            <h2 className="nh-module-title text-foreground" data-tour="sales-list-title">Créditos</h2>
-            <p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">Productos y servicios entregados con límite y fecha de pago.</p>
-          </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="credit-notes" />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos" />

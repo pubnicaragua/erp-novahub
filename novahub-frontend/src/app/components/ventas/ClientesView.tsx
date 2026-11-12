@@ -1367,6 +1367,19 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* KPIs Section */}
+      <div className="flex min-w-0 items-center gap-2">
+      <h2 className="nh-module-title text-foreground" data-tour="customers-title">Directorio de clientes</h2>
+      <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => setShowTutorial(true)}
+      className="size-8 shrink-0 text-muted-foreground"
+      aria-label="Cómo gestionar clientes"
+      title="Cómo gestionar clientes"
+      >
+      <CircleHelp className="size-4" />
+      </Button>
+      </div>
       <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
         <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1386,22 +1399,9 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       {/* Main Content */}
       <div className="flex flex-col gap-4">
         <Collapsible defaultOpen={false} className="min-w-0 space-y-3">
-        <div className="grid min-w-0 gap-3 py-2 lg:grid-cols-[minmax(220px,1fr)_minmax(300px,1.1fr)_auto] lg:items-center lg:gap-4" data-tour="sales-list-actions">
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="nh-module-title text-foreground" data-tour="customers-title">Directorio de clientes</h2>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowTutorial(true)}
-              className="size-8 shrink-0 text-muted-foreground"
-              aria-label="Cómo gestionar clientes"
-              title="Cómo gestionar clientes"
-            >
-              <CircleHelp className="size-4" />
-            </Button>
-          </div>
-          <div className="customer-search-group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:flex-nowrap">
-            <div className="relative min-w-0 flex-1">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3 py-2" data-tour="sales-list-actions">
+          <div className="customer-search-group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:w-auto sm:flex-none sm:flex-nowrap">
+            <div className="relative min-w-0 flex-1 sm:w-80 sm:flex-none">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input 
                 placeholder="Buscar cliente..." 

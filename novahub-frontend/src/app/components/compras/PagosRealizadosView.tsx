@@ -1097,6 +1097,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      <div><h2 className="nh-module-title" data-tour="purchases-list-title">Pagos Realizados</h2></div>
       <div className="space-y-2" data-tour="purchases-list-kpis" aria-busy={kpiSummaryLoading}>
         <KpiSummaryNotice loading={kpiSummaryLoading} error={kpiSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1110,7 +1111,6 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="nh-module-title" data-tour="purchases-list-title">Pagos Realizados</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="payments" />
             {canPerform('PURCHASES_PAYMENTS', 'export') && <PdfDownloadButton

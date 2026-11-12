@@ -1700,6 +1700,8 @@ th .column-filter-menu .column-filter-icon,
     align-items: center;
     justify-content: flex-end;
     gap: 0.75rem;
+    /* Ocupa lo que quede de la fila: con título al lado queda a su derecha; sola bajo las tarjetas, a todo lo ancho. */
+    flex: 1 1 auto;
   }
   .erp-list-toolbar > * { order: 30; }
   .erp-list-toolbar > .relative:has(> input),
@@ -3318,4 +3320,31 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   line-height: 1.2;
   text-transform: none;
   overflow-wrap: break-word;
+}
+
+/*
+ * Voz editorial en módulos: las reglas globales de arriba fuerzan h1–h4 a texto normal de 22–32px con !important,
+ * lo que anulaba .nh-module-title y dejaba los títulos distintos al «Resumen de gestión». Aquí se restituye.
+ */
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(h1, h2, h3, h4).nh-module-title {
+  font-family: 'Playfair Display', Georgia, serif !important;
+  font-style: italic !important;
+  font-size: 1.75rem !important;
+  font-weight: 600 !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.01em !important;
+}
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(h2, h3, h4).nh-section-title {
+  font-family: 'Playfair Display', Georgia, serif !important;
+  font-style: italic !important;
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+}
+
+/* Buscador de lista: un solo ancho en todas las vistas (antes se estiraba a toda la fila). */
+@media (min-width: 768px) {
+  .erp-list-toolbar > .relative:has(> input),
+  .erp-list-toolbar > label:has(> input),
+  .erp-list-toolbar > input { flex: 0 1 20rem; width: 20rem; max-width: 100%; }
 }
