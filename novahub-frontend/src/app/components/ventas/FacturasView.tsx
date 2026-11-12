@@ -70,6 +70,7 @@ import { VoiceSaleComposer } from './VoiceSaleComposer';
 import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-parser';
 import { SalesImportWizard } from './importacion/SalesImportWizard';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { TripCostBlock } from '../flota/TripCostBlock';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -2100,6 +2101,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             </CardContent>
           </Card>
 
+          {!isCreating && (
+            <TripCostBlock sourceType="INVOICE" sourceId={String(localDoc?.id)} revenue={toBaseAmount(Number(localDoc?.subtotal ?? localDoc?.total ?? 0), localDoc?.currency, Number(localDoc?.exchangeRate || 0) || undefined)} currency={baseCurrency} readOnly={['PAID', 'CANCELLED', 'REFUNDED'].includes(String(localDoc?.status || '').toUpperCase())} />
+          )}
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="min-w-0 p-4 space-y-3 sm:p-6">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>

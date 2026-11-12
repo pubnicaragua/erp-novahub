@@ -53,6 +53,7 @@ import { SalesVariantSelect } from './SalesVariantSelect';
 import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
+import { TripCostBlock } from '../flota/TripCostBlock';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -1013,6 +1014,9 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
               </div>
             </CardContent>
           </Card>
+          {!isLocalEstimate(localDoc?.id) && (
+            <TripCostBlock sourceType="ESTIMATE" sourceId={String(localDoc?.id)} revenue={toBaseAmount(Number(localDoc?.subtotal ?? localDoc?.total ?? 0), localDoc?.currency, Number(localDoc?.exchangeRate || 0) || undefined)} currency={baseCurrency} />
+          )}
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>

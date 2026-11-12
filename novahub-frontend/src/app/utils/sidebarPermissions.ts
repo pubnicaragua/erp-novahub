@@ -177,6 +177,8 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'FLEET_VEHICLES', label: 'Vehículos', parent: 'FLEET' },
   { id: 'FLEET_RATES', label: 'Tarifas y rutas', parent: 'FLEET' },
   { id: 'FLEET_SETTINGS', label: 'Parámetros y costos', parent: 'FLEET' },
+  { id: 'FLEET_COSTS', label: 'Costo interno del viaje', parent: 'FLEET' },
+  { id: 'FLEET_REPORTS', label: 'Rentabilidad de flota', parent: 'FLEET' },
 
   // Asana
   { id: 'ASANA_TASKS', label: 'Tareas de Asana', parent: 'ASANA' },
@@ -406,6 +408,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'flota:vehiculos': ['FLEET_VEHICLES'],
   'flota:tarifas': ['FLEET_RATES'],
   'flota:parametros': ['FLEET_SETTINGS'],
+  'flota:rentabilidad': ['FLEET_REPORTS'],
 
   asana: ['ASANA'],
 

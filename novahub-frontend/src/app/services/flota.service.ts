@@ -38,6 +38,8 @@ export interface FleetSettings {
   defaultKmPerGallon: string | number;
   linkFixedAssets: boolean;
   commissionTiers: CommissionTier[];
+  /** Fórmula opcional de tarifa de la empresa (p. ej. «km * factor_km / capacidad»). */
+  rateFormula?: string | null;
 }
 
 export interface CostFieldDefinition {
@@ -56,6 +58,36 @@ export interface IndustryTemplate { id: string; code: string; name: string; desc
 
 export interface RateImportRow { origin: string; destination: string; zone?: string; distanceKm?: number | null; rate: number }
 export interface RateImportResult { preview: boolean; total: number; toCreate?: number; toUpdate?: number; created?: number; updated?: number }
+
+export type TripSourceType = 'INVOICE' | 'ORDER' | 'ESTIMATE';
+export type DriverType = 'PAYROLL' | 'SUBCONTRACTED' | 'PER_TRIP';
+
+export interface TripCostLine { code: string; label: string; kind: string; amount: number; visibleToCustomer: boolean; error?: string }
+export interface TripCostResult {
+  km: number; rate: number; rateSource: 'MANUAL' | 'ROUTE' | 'FORMULA' | 'NONE'; revenue: number; kmPerGallon: number;
+  consumptionGallons: number; commissionPercent: number; lines: TripCostLine[]; totalCost: number; profit: number;
+  marginPercent: number; warnings: string[];
+}
+export interface TripCostInput {
+  vehicleId?: string; driverType?: DriverType; driverEmployeeId?: string; driverName?: string;
+  origin?: string; destination?: string; km?: number | string; quantity?: number | string; revenue?: number | string; rate?: number | string;
+  kmPerGallon?: number | string; dieselPrice?: number | string; commissionPercent?: number | string;
+  viatico?: number | string; driverPay?: number | string; depreciation?: number | string; otherCosts?: number | string; extraStop?: number | string;
+  custom?: Record<string, number | string>; lineId?: string; tripDate?: string; currency?: string;
+}
+export interface SavedTripCost {
+  id: string; lineId: string; vehicleId?: string | null; driverType: DriverType; driverEmployeeId?: string | null; driverName?: string | null;
+  origin?: string | null; destination?: string | null; distanceKm: string | number; quantity: string | number; revenue: string | number;
+  inputs: Record<string, unknown>; breakdown: TripCostLine[]; totalCost: string | number; profit: string | number;
+}
+export interface FormulaHelp { variables: Array<{ name: string; description: string }>; functions: string[]; operators: string[]; example: string }
+export interface FormulaCheck { ok: boolean; error?: string; variables: string[]; unknown: string[] }
+export interface ProfitabilityRow { key: string; label: string; trips: number; revenue: number; cost: number; profit: number; km: number; marginPercent: number; lines: Record<string, number> }
+export interface ProfitabilityReport {
+  from: string; to: string; groupBy: string; truncated: boolean;
+  totals: { trips: number; revenue: number; cost: number; profit: number; km: number; marginPercent: number; lines: Record<string, number> };
+  rows: ProfitabilityRow[];
+}
 
 export const flotaService = {
   getSettings: (signal?: AbortSignal) => api.get<FleetSettings>('/fleet/settings', { signal }),
@@ -76,6 +108,14 @@ export const flotaService = {
   createCostField: (data: Record<string, unknown>) => api.post<CostFieldDefinition>('/fleet/cost-fields', data),
   updateCostField: (id: string, data: Record<string, unknown>) => api.patch<CostFieldDefinition>(`/fleet/cost-fields/${id}`, data),
   removeCostField: (id: string) => api.delete<{ id: string; deleted: boolean }>(`/fleet/cost-fields/${id}`),
+
+  formulaHelp: (signal?: AbortSignal) => api.get<FormulaHelp>('/fleet/trips/formula-help', { signal }),
+  checkFormula: (formula: string) => api.post<FormulaCheck>('/fleet/trips/formula-check', { formula }),
+  previewTrip: (data: TripCostInput) => api.post<TripCostResult>('/fleet/trips/preview', data),
+  listTrips: (sourceType: TripSourceType, sourceId: string, signal?: AbortSignal) => api.get<SavedTripCost[]>(`/fleet/trips/${sourceType}/${sourceId}`, { signal }),
+  saveTrip: (sourceType: TripSourceType, sourceId: string, data: TripCostInput) => api.put<SavedTripCost & { summary: TripCostResult }>(`/fleet/trips/${sourceType}/${sourceId}`, data),
+  removeTrip: (sourceType: TripSourceType, sourceId: string, lineId = '') => api.delete<{ deleted: number }>(`/fleet/trips/${sourceType}/${sourceId}?lineId=${encodeURIComponent(lineId)}`),
+  profitability: (params: { from?: string; to?: string; groupBy?: string; vehicleId?: string }, signal?: AbortSignal) => api.get<ProfitabilityReport>('/fleet/reports/profitability', { params, signal }),
 
   listTemplates: (signal?: AbortSignal) => api.get<IndustryTemplate[]>('/fleet/templates', { signal }),
   applyTemplate: (code: string) => api.post<{ template: string; createdFields: number; skippedFields: number; settingsCreated: boolean }>(`/fleet/templates/${code}/apply`, {}),

@@ -1,24 +1,26 @@
 import { Suspense, type ReactNode } from 'react';
-import { Route, Settings, Truck } from 'lucide-react';
+import { BarChart3, Route, Settings, Truck } from 'lucide-react';
 import { Skeleton } from '../ui/skeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 import { VehiculosView } from './VehiculosView';
 import { TarifasView } from './TarifasView';
 import { ParametrosView } from './ParametrosView';
+import { RentabilidadView } from './RentabilidadView';
 
 interface Props { activeSubModule?: string; onSubModuleChange?: (sub: string) => void; isSidebarCollapsed?: boolean }
 
-const VIEWS = ['vehiculos', 'tarifas', 'parametros'] as const;
+const VIEWS = ['vehiculos', 'tarifas', 'parametros', 'rentabilidad'] as const;
 type View = (typeof VIEWS)[number];
-const PERMISSION: Record<View, string> = { vehiculos: 'FLEET_VEHICLES', tarifas: 'FLEET_RATES', parametros: 'FLEET_SETTINGS' };
+const PERMISSION: Record<View, string> = { vehiculos: 'FLEET_VEHICLES', tarifas: 'FLEET_RATES', parametros: 'FLEET_SETTINGS', rentabilidad: 'FLEET_REPORTS' };
 const VIEW_TABS: Array<{ id: View; label: string; icon: ReactNode }> = [
   { id: 'vehiculos', label: 'Vehículos', icon: <Truck className="size-4" /> },
   { id: 'tarifas', label: 'Tarifas y rutas', icon: <Route className="size-4" /> },
   { id: 'parametros', label: 'Parámetros y costos', icon: <Settings className="size-4" /> },
+  { id: 'rentabilidad', label: 'Rentabilidad', icon: <BarChart3 className="size-4" /> },
 ];
 
-/** Flota y fletes: tres vistas con permisos propios; cada acción se vuelve a validar en el backend. */
+/** Flota y fletes: cuatro vistas con permisos propios; cada acción se vuelve a validar en el backend. */
 export function FlotaPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: Props) {
   const { canPerform } = useAuth();
   const allowed = VIEWS.filter((v) => canPerform(PERMISSION[v], 'view'));
@@ -41,6 +43,7 @@ export function FlotaPage({ activeSubModule, onSubModuleChange, isSidebarCollaps
         {view === 'vehiculos' && <VehiculosView />}
         {view === 'tarifas' && <TarifasView />}
         {view === 'parametros' && <ParametrosView />}
+        {view === 'rentabilidad' && <RentabilidadView />}
       </Suspense>
     </div>
   );

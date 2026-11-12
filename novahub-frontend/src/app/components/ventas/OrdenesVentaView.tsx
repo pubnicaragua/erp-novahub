@@ -53,6 +53,7 @@ import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, wr
 import { getSalesOrderOriginBadge } from '../../utils/document-origin-badges';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { TripCostBlock } from '../flota/TripCostBlock';
 
 const paymentMethodOptions = [
   { label: 'Efectivo', value: 'CASH' },
@@ -1038,6 +1039,9 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
               </div>
             </CardContent>
           </Card>
+          {!String(localDoc?.id || '').startsWith('local-') && (
+            <TripCostBlock sourceType="ORDER" sourceId={String(localDoc?.id)} revenue={toBaseAmount(Number(localDoc?.subtotal ?? localDoc?.total ?? 0), localDoc?.currency, Number(localDoc?.exchangeRate || 0) || undefined)} currency={baseCurrency} />
+          )}
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>

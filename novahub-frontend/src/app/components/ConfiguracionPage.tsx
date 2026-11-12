@@ -200,6 +200,8 @@ export const LEGACY_SUBMODULES_FOR_PERMS = [
   { id: 'FLEET_VEHICLES', label: 'Vehículos', parent: 'FLEET' },
   { id: 'FLEET_RATES', label: 'Tarifas y rutas', parent: 'FLEET' },
   { id: 'FLEET_SETTINGS', label: 'Parámetros y costos', parent: 'FLEET' },
+  { id: 'FLEET_COSTS', label: 'Costo interno del viaje', parent: 'FLEET' },
+  { id: 'FLEET_REPORTS', label: 'Rentabilidad de flota', parent: 'FLEET' },
 
   // Asana
   { id: 'ASANA_TASKS', label: 'Tareas de Asana', parent: 'ASANA' },

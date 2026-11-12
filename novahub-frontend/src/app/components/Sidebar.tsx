@@ -428,6 +428,7 @@ const menuItems: MenuItem[] = [
       { id: 'vehiculos', label: 'Vehículos', icon: <Truck className="size-4" /> },
       { id: 'tarifas', label: 'Tarifas y rutas', icon: <Route className="size-4" /> },
       { id: 'parametros', label: 'Parámetros y costos', icon: <Settings className="size-4" /> },
+      { id: 'rentabilidad', label: 'Rentabilidad', icon: <BarChart3 className="size-4" /> },
     ]
   },
   {

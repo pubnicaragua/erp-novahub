@@ -12,6 +12,7 @@ import { toast } from '../../services/toast';
 import { ErrorState, Field, PageTitle, Panel } from '../organizacion/OrgBits';
 import { errorMessage } from '../organizacion/organizacion.utils';
 import { COST_KIND_LABEL, useFleetRefresh } from './flota.helpers';
+import { FormulaField } from './FormulaField';
 
 export function ParametrosView() {
   const settings = useTenantQuery(['fleet', 'settings'], (signal) => flotaService.getSettings(signal));
@@ -35,6 +36,7 @@ function SettingsForm({ initial }: { initial: FleetSettings }) {
   const [factor, setFactor] = useState(String(initial.kmFactor ?? 0));
   const [kmPerGallon, setKmPerGallon] = useState(String(initial.defaultKmPerGallon ?? 10));
   const [linkAssets, setLinkAssets] = useState(Boolean(initial.linkFixedAssets));
+  const [rateFormula, setRateFormula] = useState(initial.rateFormula || '');
   const [tiers, setTiers] = useState<Array<{ upToGallons: string; percent: string }>>((initial.commissionTiers || []).map((tier) => ({ upToGallons: String(tier.upToGallons), percent: String(tier.percent) })));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -43,7 +45,7 @@ function SettingsForm({ initial }: { initial: FleetSettings }) {
     setSaving(true); setError('');
     try {
       await flotaService.saveSettings({
-        dieselPrice: diesel, kmFactor: factor, defaultKmPerGallon: kmPerGallon, linkFixedAssets: linkAssets,
+        dieselPrice: diesel, kmFactor: factor, defaultKmPerGallon: kmPerGallon, linkFixedAssets: linkAssets, rateFormula,
         commissionTiers: tiers.filter((tier) => tier.upToGallons || tier.percent).map((tier) => ({ upToGallons: Number(tier.upToGallons), percent: Number(tier.percent) })),
       } as unknown as Partial<FleetSettings>);
       toast.success('Parámetros guardados');
@@ -62,6 +64,11 @@ function SettingsForm({ initial }: { initial: FleetSettings }) {
         <Field label="Precio del diésel (por galón)" htmlFor="fl-diesel" hint="Operaciones asume el flete a precio de bomba."><Input id="fl-diesel" inputMode="decimal" disabled={!canEdit} value={diesel} onChange={(event) => setDiesel(event.target.value)} /></Field>
         <Field label="Factor de kilómetros" htmlFor="fl-factor" hint="Para derivar la tarifa a partir de los km."><Input id="fl-factor" inputMode="decimal" disabled={!canEdit} value={factor} onChange={(event) => setFactor(event.target.value)} /></Field>
         <Field label="Rendimiento por defecto (km por galón)" htmlFor="fl-kmg"><Input id="fl-kmg" inputMode="decimal" disabled={!canEdit} value={kmPerGallon} onChange={(event) => setKmPerGallon(event.target.value)} /></Field>
+      </div>
+      <div className="mt-4">
+        <Field label="Fórmula de la tarifa (opcional)" htmlFor="fl-rate-formula" hint="Se usa cuando el viaje no tiene tarifa manual ni de ruta. Por ejemplo: km * factor_km / capacidad. Cada empresa escribe la suya.">
+          <FormulaField id="fl-rate-formula" value={rateFormula} onChange={setRateFormula} disabled={!canEdit} />
+        </Field>
       </div>
       <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border p-3">
         <div className="min-w-0">
@@ -153,7 +160,7 @@ function CostFields() {
               <SelectContent>{Object.entries(COST_KIND_LABEL).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <Field label="Fórmula" htmlFor="cf-formula"><Input id="cf-formula" value={draft.formula} disabled={draft.kind !== 'FORMULA'} onChange={(event) => setDraft({ ...draft, formula: event.target.value })} placeholder="consumo * precioDiesel" /></Field>
+          <Field label="Fórmula" htmlFor="cf-formula"><FormulaField id="cf-formula" value={draft.formula} disabled={draft.kind !== 'FORMULA'} onChange={(value) => setDraft({ ...draft, formula: value })} placeholder="costo_diesel * 0.05" /></Field>
           <div className="flex items-end"><Button type="button" className="w-full" onClick={() => void add()} disabled={adding || !draft.code || !draft.label}>{adding ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" aria-hidden="true" />}Agregar</Button></div>
           {error && <div className="sm:col-span-2 lg:col-span-5"><ErrorState message={error} /></div>}
         </div>

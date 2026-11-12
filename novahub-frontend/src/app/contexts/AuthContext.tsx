@@ -1031,7 +1031,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'MARKETING_OVERVIEW', 'MARKETING_CLIENTS', 'MARKETING_CAMPAIGNS', 'MARKETING_CONTENT',
         'MARKETING_APPROVALS', 'MARKETING_ASSETS', 'MARKETING_ANALYTICS', 'MARKETING_SETTINGS',
       ],
-      flota: ['FLEET', 'FLEET_VEHICLES', 'FLEET_RATES', 'FLEET_SETTINGS'],
+      flota: ['FLEET', 'FLEET_VEHICLES', 'FLEET_RATES', 'FLEET_SETTINGS', 'FLEET_COSTS', 'FLEET_REPORTS'],
       asana: ['ASANA', 'ASANA_TASKS'],
       proyectos: [
         'PROJECTS', 'PROYECTOS',
