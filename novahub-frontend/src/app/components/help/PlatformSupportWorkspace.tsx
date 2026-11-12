@@ -19,6 +19,7 @@ import {
   MessageAttachmentComposer,
   type MessageAttachmentComposerHandle,
 } from '../notificaciones/MessageAttachmentComposer';
+import { useMessageAttachmentDrop } from '../notificaciones/useMessageAttachmentDrop';
 import { MessageAttachments } from '../notificaciones/MessageAttachments';
 import { MessageText } from '../notificaciones/MessageText';
 import { toast } from '@/app/services/toast';
@@ -88,6 +89,10 @@ export function PlatformSupportWorkspace() {
   const messageEndRef = useRef<HTMLDivElement>(null);
   const replyAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
   const composeAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
+  const composeDrop = useMessageAttachmentDrop<HTMLDivElement>(
+    (files) => composeAttachmentComposerRef.current?.addFiles(files),
+    sendingBroadcast,
+  );
   const historyDropDepthRef = useRef(0);
   const shouldAutoScrollRef = useRef(true);
   const lastSelectedIdRef = useRef<string | null>(null);
@@ -258,6 +263,7 @@ export function PlatformSupportWorkspace() {
   };
 
   const openComposer = () => {
+    composeDrop.reset();
     setComposeOpen(true);
     setSelectedTargets([]);
     setComposeAttachmentState(emptyAttachmentState);
@@ -268,6 +274,7 @@ export function PlatformSupportWorkspace() {
     if (sendingBroadcast) return;
     setComposeOpen(open);
     if (!open) {
+      composeDrop.reset();
       setComposeTitle('');
       setComposeContent('');
       setSelectedTargets([]);
@@ -282,7 +289,7 @@ export function PlatformSupportWorkspace() {
       <header className="flex shrink-0 flex-col gap-2 border-b border-border/70 bg-card/80 px-2 py-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"><ShieldCheck className="size-4" /></div>
-          <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.16em] text-primary">NovaHub · Soporte externo</p><h1 className="break-words text-lg font-black">Bandeja de soporte</h1><p className="text-[11px] text-muted-foreground">{conversations.length} conversaciones · {unreadTotal} sin leer</p></div>
+          <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.16em] text-primary">NovaHub · Soporte externo</p><h1 className="nh-module-title break-words">Bandeja de soporte</h1><p className="text-[11px] text-muted-foreground"><span className="nh-indicator-value">{conversations.length}</span> conversaciones · <span className="nh-indicator-value">{unreadTotal}</span> sin leer</p></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={openComposer} className="h-9 gap-2 rounded-lg"><MailPlus className="size-4" /> Nuevo envío</Button>
@@ -293,7 +300,7 @@ export function PlatformSupportWorkspace() {
       <div className="grid min-h-0 w-full min-w-0 flex-1 grid-cols-1 [grid-template-rows:minmax(0,1fr)] gap-1 overflow-hidden p-1 lg:grid-cols-[340px_minmax(0,1fr)]">
         <Card className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border-border/70 shadow-sm', mobileThreadOpen && 'hidden lg:flex')}>
           <div className="shrink-0 border-b border-border/60 p-2">
-            <div className="mb-2 flex items-center justify-between gap-2"><div><h2 className="text-sm font-black">Conversaciones</h2><p className="text-[11px] text-muted-foreground">Cada hilo corresponde a una sucursal.</p></div><Badge variant="secondary">{conversations.length}</Badge></div>
+            <div className="mb-2 flex items-center justify-between gap-2"><div><h2 className="nh-section-title">Conversaciones</h2><p className="text-[11px] text-muted-foreground">Cada hilo corresponde a una sucursal.</p></div><Badge variant="secondary">{conversations.length}</Badge></div>
             <label className="relative block"><Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar conversaciones" className="h-9 rounded-lg pl-8" /></label>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1" data-testid="support-chat-inbox">
@@ -315,7 +322,7 @@ export function PlatformSupportWorkspace() {
             <div className="flex min-w-0 shrink-0 items-center gap-2 border-b border-border/60 px-2 py-1.5" data-testid="support-chat-header">
               <Button variant="ghost" size="icon" className="size-8 shrink-0 lg:hidden" onClick={() => setMobileThreadOpen(false)} aria-label="Volver a conversaciones"><ArrowLeft className="size-4" /></Button>
               <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Building2 className="size-4" /></div>
-              <div className="min-w-0 flex-1"><h2 className="break-words font-black">{selected.participant.name}</h2><p className="truncate text-xs text-muted-foreground">{selected.title}</p></div>
+              <div className="min-w-0 flex-1"><h2 className="nh-section-title break-words">{selected.participant.name}</h2><p className="truncate text-xs text-muted-foreground">{selected.title}</p></div>
               <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">Sucursal</Badge>
             </div>
             <div className="relative min-h-0 min-w-0 flex-1">
@@ -392,13 +399,20 @@ export function PlatformSupportWorkspace() {
                 </div>}
               </div>
             </form>
-          </> : <div className="flex flex-1 flex-col items-center justify-center p-8 text-center"><div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><CircleHelp className="size-6" /></div><h2 className="mt-4 font-black">Selecciona una conversación</h2><p className="mt-1 max-w-sm text-sm text-muted-foreground">Los mensajes enviados a varias sucursales se separan en hilos privados.</p></div>}
+          </> : <div className="flex flex-1 flex-col items-center justify-center p-8 text-center"><div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><CircleHelp className="size-6" /></div><h2 className="nh-section-title mt-4">Selecciona una conversación</h2><p className="mt-1 max-w-sm text-sm text-muted-foreground">Los mensajes enviados a varias sucursales se separan en hilos privados.</p></div>}
         </Card>
       </div>
 
       <Dialog open={composeOpen} onOpenChange={closeComposer}>
-        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto rounded-2xl p-4 sm:p-6">
-          <DialogHeader><DialogTitle className="flex items-center gap-2 text-xl font-black"><MailPlus className="size-5 text-primary" /> Nuevo mensaje de soporte</DialogTitle><DialogDescription>Selecciona un grupo completo, rubros o sucursales concretas. Marcar un nivel superior incluye sus descendientes; desmárcalo para limitar el envío. Se abrirá un hilo privado por sucursal con usuarios autorizados.</DialogDescription></DialogHeader>
+        <DialogContent
+          className={cn('max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto rounded-2xl p-4 sm:p-6', composeDrop.isDragging && 'outline outline-2 outline-dashed outline-primary outline-offset-2')}
+          onDragEnter={composeDrop.onDragEnter}
+          onDragLeave={composeDrop.onDragLeave}
+          onDragOver={composeDrop.onDragOver}
+          onDrop={composeDrop.onDrop}
+        >
+          {composeDrop.isDragging && <span className="sr-only" role="status" aria-live="polite">Suelta los archivos en cualquier parte del formulario para adjuntarlos.</span>}
+          <DialogHeader><DialogTitle className="nh-module-title flex items-center gap-2"><MailPlus className="size-5 shrink-0 text-primary" /> Nuevo mensaje de soporte</DialogTitle><DialogDescription>Selecciona un grupo completo, rubros o sucursales concretas. Marcar un nivel superior incluye sus descendientes; desmárcalo para limitar el envío. Se abrirá un hilo privado por sucursal con usuarios autorizados.</DialogDescription></DialogHeader>
           <div className="space-y-5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-xs font-bold">Asunto <span className="text-muted-foreground">({composeTitle.length}/140)</span><Input value={composeTitle} maxLength={140} onChange={(event) => setComposeTitle(event.target.value)} className="mt-1.5 rounded-xl" placeholder="Actualización de soporte" /></label><div className="flex items-end text-xs text-muted-foreground"><Users className="mr-2 size-4 shrink-0" />El destino se resolverá a sucursales activas.</div></div>
             <label className="block text-xs font-bold">
@@ -415,7 +429,7 @@ export function PlatformSupportWorkspace() {
               />
             </label>
             <MessageAttachmentComposer ref={composeAttachmentComposerRef} key={`broadcast-${composeAttachmentResetKey}`} kind="SUPPORT" disabled={sendingBroadcast} onChange={onComposeAttachmentsChange} />
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-3 sm:p-4"><div className="mb-3"><h3 className="text-sm font-black">Destinos seleccionados</h3><p className="text-xs text-muted-foreground">{targetsLoading(targetsQuery.isLoading, targetsQuery.isFetching) ? 'Cargando alcances…' : `${selectedTargets.length} destino${selectedTargets.length === 1 ? '' : 's'} seleccionado${selectedTargets.length === 1 ? '' : 's'}`}</p></div>
+            <div className="rounded-2xl border border-border/70 bg-muted/20 p-3 sm:p-4"><div className="mb-3"><h3 className="nh-section-title">Destinos seleccionados</h3><p className="text-xs text-muted-foreground">{targetsLoading(targetsQuery.isLoading, targetsQuery.isFetching) ? 'Cargando alcances…' : `${selectedTargets.length} destino${selectedTargets.length === 1 ? '' : 's'} seleccionado${selectedTargets.length === 1 ? '' : 's'}`}</p></div>
               {targetsQuery.isError ? <p className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive">No pudimos cargar tus alcances.</p> : targetsLoading(targetsQuery.isLoading, targetsQuery.isFetching) ? <div className="flex justify-center p-6"><Loader2 className="size-5 animate-spin" /></div> : <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
                 {targets.groups.map((group) => <SupportTargetGroup key={group.id} group={group} selected={selectedTargets} onChange={toggleTarget} />)}
                 {!targets.groups.length && <p className="py-5 text-center text-sm text-muted-foreground">SuperAdmin todavía no asigna destinos a tu cuenta.</p>}

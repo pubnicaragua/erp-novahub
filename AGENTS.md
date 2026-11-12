@@ -9,6 +9,7 @@ Estas reglas complementan el [`AGENTS.md`](../AGENTS.md) del workspace cuando es
 - Leer `../docs/ai/README.md` y [`novahub-frontend/DESIGN_GUIDE.md`](novahub-frontend/DESIGN_GUIDE.md) antes de crear o renovar una vista.
 - Leer `novahub-frontend/DESIGN_GUIDE.md` antes de crear o renovar una vista. Conserva la intención visual, pero sus ejemplos de Framer Motion, hex y radios no siempre coinciden con el código; en caso de conflicto, mandan `src/styles/theme.css`, `src/styles/index.css`, los componentes compartidos y los módulos operativos vecinos.
 - `../docs/ai/` no existe en este checkout: no asumir sus reglas ni inventarlas; marcar cualquier dependencia documental como `NO CONFIRMADO`. Usar `novahub-frontend/TEST_RULES.md`, `novahub-frontend/e2e/README.md` y `novahub-frontend/e2e/COVERAGE_MATRIX.md` como autoridades de pruebas y cobertura.
+- Cuando el usuario solicite cambiar fuentes, consultar `docs/ai/guia-tipografia-interfaz.md` y usar sus clases semánticas sin cambiar la tipografía global por una petición local.
 
 ## Entorno y verificación estática
 

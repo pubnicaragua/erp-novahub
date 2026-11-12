@@ -154,6 +154,7 @@ export const MessageAttachmentComposer = forwardRef<MessageAttachmentComposerHan
 
   return (
     <div
+      data-message-attachment-composer="true"
       className={cn(
         compact
           ? 'relative min-w-0 rounded-2xl border border-border bg-muted/20 p-1.5 transition-colors focus-within:ring-2 focus-within:ring-ring/40'
@@ -198,7 +199,7 @@ export const MessageAttachmentComposer = forwardRef<MessageAttachmentComposerHan
         </label>
         {compact ? children : <span className="text-[11px] text-muted-foreground">Hasta 5 archivos · 10 MB cada uno · 25 MB por mensaje</span>}
       </div>
-      <p id={attachmentHelpId} className={cn('text-[11px] text-muted-foreground', compact && 'sr-only')}>Hasta 5 archivos · 10 MB cada uno · 25 MB por mensaje. También puedes arrastrar archivos o pegar archivos e imágenes desde el portapapeles.</p>
+      <p id={attachmentHelpId} className={cn('text-[11px] text-muted-foreground', compact && 'sr-only')}>Hasta 5 archivos · 10 MB cada uno · 25 MB por mensaje. También puedes arrastrar archivos al formulario o pegarlos desde el portapapeles.</p>
 
       {selectionError && <p className={cn('text-xs text-destructive', compact && 'mt-1 px-2')} role="alert">{selectionError}</p>}
 

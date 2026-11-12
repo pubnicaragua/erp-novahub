@@ -3350,3 +3350,10 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   .erp-list-toolbar > label:has(> input),
   .erp-list-toolbar > input { flex: 0 1 20rem; width: 20rem; max-width: 100%; }
 }
+
+.nh-indicator-value {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.08em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

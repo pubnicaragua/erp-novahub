@@ -51,6 +51,7 @@ import {
   MessageAttachmentComposer,
   type MessageAttachmentComposerHandle,
 } from './MessageAttachmentComposer';
+import { useMessageAttachmentDrop } from './useMessageAttachmentDrop';
 import { MessageAttachments } from './MessageAttachments';
 import { MessageText } from './MessageText';
 
@@ -135,6 +136,10 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   const historyDropDepthRef = useRef(0);
   const replyAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
   const composeAttachmentComposerRef = useRef<MessageAttachmentComposerHandle>(null);
+  const composeDrop = useMessageAttachmentDrop<HTMLDivElement>(
+    (files) => composeAttachmentComposerRef.current?.addFiles(files),
+    sending,
+  );
   const shouldAutoScrollRef = useRef(true);
   const lastSelectedIdRef = useRef<string | null>(null);
   const supportCreateAttemptRef = useRef<{ signature: string; key: string } | null>(null);
@@ -226,6 +231,12 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
     || (filter === 'direct' && thread.kind === 'DIRECT')
     || (filter === 'support' && thread.kind === 'SUPPORT')),
   [searchFiltered, filter]);
+  const filterItems: Array<{ value: MessageFilter; label: string; count: number }> = [
+    { value: 'all', label: 'Todos', count: 0 },
+    { value: 'unread', label: 'Sin leer', count: unreadTotal },
+    { value: 'direct', label: 'Personas', count: directTotal },
+    { value: 'support', label: 'Soporte', count: supportTotal },
+  ];
 
   const handleHistoryDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
     if (!hasMessageAttachmentFiles(event.dataTransfer)) return;
@@ -281,6 +292,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   };
 
   const openComposer = (mode: ComposeMode = 'DIRECT') => {
+    composeDrop.reset();
     setComposeAttachmentState(EMPTY_ATTACHMENT_STATE);
     setComposeAttachmentResetKey((current) => current + 1);
     setComposeMode(mode);
@@ -290,6 +302,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
   };
 
   const resetComposer = () => {
+    composeDrop.reset();
     setRecipientId('');
     setSubject('');
     setContent('');
@@ -393,9 +406,9 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
           <div className="shrink-0 border-b border-border/60 p-2">
             <div className="mb-2 flex min-w-0 flex-col gap-2">
               <div className="min-w-0">
-                <h2 className="text-sm font-black">Mensajes</h2>
+                <h2 className="nh-section-title">Mensajes</h2>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {loading ? 'Calculando conversaciones…' : `${searchFiltered.length} conversaciones · ${unreadTotal} sin leer`}
+                  {loading ? 'Calculando conversaciones…' : <><span className="nh-indicator-value">{searchFiltered.length}</span> conversaciones · <span className="nh-indicator-value">{unreadTotal}</span> sin leer</>}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 self-end">
@@ -431,12 +444,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
             </div>
 
             <div className="-mx-1 mt-1.5 flex min-w-0 gap-1 overflow-x-auto px-1 scrollbar-overlay" aria-label="Filtros de mensajes">
-              {([
-                ['all', 'Todos'],
-                ['unread', `Sin leer${unreadTotal ? ` ${unreadTotal}` : ''}`],
-                ['direct', `Personas${directTotal ? ` ${directTotal}` : ''}`],
-                ['support', `Soporte${supportTotal ? ` ${supportTotal}` : ''}`],
-              ] as Array<[MessageFilter, string]>).map(([value, label]) => (
+              {filterItems.map(({ value, label, count }) => (
                 <button
                   key={value}
                   type="button"
@@ -447,7 +455,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                     filter === value ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
                   )}
                 >
-                  {label}
+                  {label}{count > 0 && <span className="ml-1 nh-indicator-value">{count}</span>}
                 </button>
               ))}
             </div>
@@ -554,7 +562,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                 </Button>
                 <ParticipantAvatar participant={selected.participant} system={selected.kind === 'SYSTEM'} />
                 <div className="min-w-0 flex-1">
-                  <h3 className="break-words text-sm font-black sm:text-base">{participantName(selected.participant, selected.kind === 'SUPPORT' ? 'Soporte técnico' : 'Participante')}</h3>
+                  <h3 className="nh-section-title break-words">{participantName(selected.participant, selected.kind === 'SUPPORT' ? 'Soporte técnico' : 'Participante')}</h3>
                   <p className="flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground" data-testid="message-thread-context">
                     <span className="truncate">{selected.title}</span>
                     <span className="shrink-0">·</span>
@@ -710,10 +718,17 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
           if (!open && !sending) resetComposer();
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
+        <DialogContent
+          className={cn('max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl', composeDrop.isDragging && 'outline outline-2 outline-dashed outline-primary outline-offset-2')}
+          onDragEnter={composeDrop.onDragEnter}
+          onDragLeave={composeDrop.onDragLeave}
+          onDragOver={composeDrop.onDragOver}
+          onDrop={composeDrop.onDrop}
+        >
+          {composeDrop.isDragging && <span className="sr-only" role="status" aria-live="polite">Suelta los archivos en cualquier parte del formulario para adjuntarlos.</span>}
           <form onSubmit={sendNewMessage} className="space-y-5" data-testid="new-message-form">
             <DialogHeader>
-              <DialogTitle>{composeMode === 'SUPPORT' ? 'Nuevo mensaje a Soporte Técnico' : 'Nuevo mensaje'}</DialogTitle>
+              <DialogTitle className="nh-module-title">{composeMode === 'SUPPORT' ? 'Nuevo mensaje a Soporte Técnico' : 'Nuevo mensaje'}</DialogTitle>
               <DialogDescription>
                 {composeMode === 'SUPPORT'
                   ? 'Iniciá una conversación privada que recibirán los agentes asignados a esta sucursal.'
