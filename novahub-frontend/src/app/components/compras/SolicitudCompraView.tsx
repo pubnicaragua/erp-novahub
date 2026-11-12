@@ -618,8 +618,20 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         </div>
       </div>
       <div className="flex flex-col gap-4">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center justify-end gap-3">
+
+      <div className="erp-list-toolbar flex flex-col sm:flex-row gap-3" data-tour="purchases-list-actions">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input placeholder="Buscar por número, solicitante, proveedor, bodega..." value={search} onChange={e => { setSearch(e.target.value); onSearchChange?.(e.target.value); }} className="pl-9" />
+        </div>
+        {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
+        <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); onStatusChange?.(value); }}>
+          <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filtrar por estado" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los estados</SelectItem>
+            {REQUEST_STATUS_OPTIONS.map(s => (<SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>))}
+          </SelectContent>
+        </Select>
         <PdfDownloadButton
           label="Exportar"
           includePageSizes
@@ -638,22 +650,6 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         />
         <PurchaseViewTutorial view="requests" />
         <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de solicitudes de compra" />
-        </div>
-      </div>
-
-      <div className="erp-list-toolbar flex flex-col sm:flex-row gap-3" data-tour="purchases-list-actions">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input placeholder="Buscar por número, solicitante, proveedor, bodega..." value={search} onChange={e => { setSearch(e.target.value); onSearchChange?.(e.target.value); }} className="pl-9" />
-        </div>
-        {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
-        <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); onStatusChange?.(value); }}>
-          <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filtrar por estado" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los estados</SelectItem>
-            {REQUEST_STATUS_OPTIONS.map(s => (<SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>))}
-          </SelectContent>
-        </Select>
       </div>
 
       {loading ? (

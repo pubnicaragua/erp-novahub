@@ -985,8 +985,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, validando los datos y preparando los empleados para revisión." />
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between" data-tour="hr-employees-title">
-        <div className="flex items-center gap-2 flex-1">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               placeholder="Buscar empleados..."
@@ -997,23 +997,23 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             />
           </div>
           <Select value={filterDept} onValueChange={setFilterDept}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[210px] text-xs" aria-label="Filtrar por departamento">
               <Filter className="size-4 mr-2" />
               <SelectValue placeholder="Departamento" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="all">Todos los departamentos</SelectItem>
               {departments.map((dept: any) => (
                 <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-[150px]">
+            <SelectTrigger className="w-[170px] text-xs" aria-label="Filtrar por estado">
               <SelectValue placeholder="Estado" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="all">Todos los estados</SelectItem>
               <SelectItem value="ACTIVE">Activos</SelectItem>
               <SelectItem value="INACTIVE">Inactivos</SelectItem>
               <SelectItem value="ON_LEAVE">En ausencia</SelectItem>

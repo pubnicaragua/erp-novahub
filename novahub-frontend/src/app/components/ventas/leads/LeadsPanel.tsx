@@ -97,7 +97,6 @@ export function LeadsPanel() {
     <div className="min-w-0 space-y-4" data-testid="business-leads">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><h2 className="nh-module-title flex items-center gap-2"><Target className="size-5 text-primary" aria-hidden /> Leads y red de contactos</h2><p className="text-xs text-muted-foreground">Registra cada día a quién le podemos vender, cuánto podría representar y cómo entrarle.</p></div>
-        {canCreate && <Button type="button" onClick={() => setDialog({ id: null })}><Plus className="mr-1.5 size-4" /> Nuevo lead</Button>}
       </div>
 
       {summary && LIST_VIEWS.includes(view) && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{kpis.map((card) => <SalesKpiCard key={card.label} title={card.label} value={card.value} sub={card.hint} tone={/destructive|rose|red/.test(String(card.tone || '')) ? 'bad' : /amber|warning|orange/.test(String(card.tone || '')) ? 'warn' : 'default'} />)}</div>}
@@ -125,12 +124,13 @@ export function LeadsPanel() {
         </div>
         {LIST_VIEWS.includes(view) && (
           <>
-            <div className="relative min-w-[180px] flex-1 sm:max-w-xs"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input aria-label="Buscar lead" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Empresa, contacto o línea" /></div>
+            <div className="relative w-full sm:w-80"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input aria-label="Buscar lead" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Empresa, contacto o línea" /></div>
             {lines.length > 0 && <select aria-label="Línea de negocio" className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm" value={line} onChange={(e) => setLine(e.target.value)}><option value="">Todas las líneas</option>{lines.map((name) => <option key={name} value={name}>{name}</option>)}</select>}
             {countryNames.length > 0 && <select aria-label="País" className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm" value={country} onChange={(e) => setCountry(e.target.value)}><option value="">Todos los países</option>{countryNames.map((name) => <option key={name} value={name}>{name}</option>)}</select>}
             {capabilities.data?.canManageAll && <label className="inline-flex items-center gap-1.5 text-xs font-semibold"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />Solo los míos</label>}
           </>
         )}
+        {canCreate && <Button type="button" data-toolbar-role="primary" className="ml-auto" onClick={() => setDialog({ id: null })}><Plus className="mr-1.5 size-4" /> Nuevo lead</Button>}
       </div>
 
       {view === 'prospect' ? <ProspectPanel isAdmin={isAdmin} onNavigate={(next) => setView(next)} />

@@ -490,6 +490,8 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
       <CurrencyValuationBanner />
 
       {/* Navegación principal compartida con el resto de módulos */}
+      <h2 className="nh-module-title" data-tour="hr-page-title">{visibleHrTabs.find((tab) => tab.id === activeTab)?.label || 'Recursos humanos'}</h2>
+
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
         <div className="mb-4 flex min-w-0 items-center gap-2">
           <ModuleSubnavigation

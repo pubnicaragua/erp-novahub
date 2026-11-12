@@ -1698,7 +1698,7 @@ th .column-filter-menu .column-filter-icon,
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.75rem;
     /* Ocupa lo que quede de la fila: con título al lado queda a su derecha; sola bajo las tarjetas, a todo lo ancho. */
     flex: 1 1 auto;
@@ -1715,7 +1715,7 @@ th .column-filter-menu .column-filter-icon,
   .erp-list-toolbar > [data-toolbar-role="print"],
   .erp-list-toolbar > [data-toolbar-role="alerts"] { order: 50; }
   .erp-list-toolbar > [data-toolbar-role="primary"],
-  .erp-list-toolbar > button[class~="bg-primary"] { order: 99; }
+  .erp-list-toolbar > button[class~="bg-primary"] { order: 99; margin-left: auto; }
 }
 
 @media (min-width: 768px) and (max-width: 1799px) {

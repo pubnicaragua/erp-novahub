@@ -2254,7 +2254,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
     ? [
         { title: 'Servicios', value: inventorySummary.total, icon: Package, color: 'text-primary', bg: 'bg-primary/10', kind: 'indicator' as const },
         { title: 'Categorías', value: serviceSummary.categories, icon: PackageSearch, color: 'text-info', bg: 'bg-info/10', kind: 'indicator' as const },
-        { title: 'Promedio semanal', value: serviceSummary.weeklyAverage.toFixed(1), icon: CheckCircle2, color: 'text-success', bg: 'bg-success/10', kind: 'indicator' as const },
+        { title: 'Servicios nuevos por semana', sub: 'Promedio de las últimas 12 semanas', value: serviceSummary.weeklyAverage.toFixed(1), icon: CheckCircle2, color: 'text-success', bg: 'bg-success/10', kind: 'indicator' as const },
         { title: 'Precio promedio', value: formatAmount(serviceSummary.averagePrice), icon: Barcode, color: 'text-warning', bg: 'bg-warning/10', kind: 'indicator' as const },
       ]
     : [
@@ -4291,6 +4291,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
               color={item.color}
               bg={item.bg}
               kind={item.kind}
+              sub={'sub' in item ? (item as any).sub : undefined}
               active={'filter' in item ? stockFilter === item.filter : false}
               onClick={'filter' in item ? () => {
                 const nextFilter = item.filter;
@@ -4493,7 +4494,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       </div>
 
       {/* ─── Acciones secundarias y primarias ─── */}
-      <div className="mb-4 flex flex-wrap items-center justify-start gap-2" data-tour="inventory-products-actions">
+      <div className="erp-list-toolbar mb-4 flex flex-wrap items-center justify-start gap-2" data-tour="inventory-products-actions">
         {canPerform(catalogPermissionModule, 'import') && (
           <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title={`Importar ${isServiceView ? 'servicios' : 'el catálogo inicial'} desde una plantilla`}>
             <Upload className="mr-2 size-4" /> Importar {isServiceView ? 'servicios' : 'productos'}
@@ -4519,7 +4520,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
             <Plus className="mr-2 size-4" /> Nuevo
           </Button>
         )}
-        <Button type="button" size="icon" variant="ghost" data-tutorial-trigger="true" aria-label={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} title={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)}>
+        <Button type="button" size="icon" variant="ghost" data-toolbar-role="help" data-tutorial-trigger="true" aria-label={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} title={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)}>
           <CircleHelp className="size-4" />
         </Button>
       </div>
