@@ -93,7 +93,7 @@ export function ExpenseImportPreviewView({
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3 sm:pb-4">
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary sm:text-xs">Importación masiva</p>
-            <h1 className="mt-1 flex items-center gap-2 text-xl font-black tracking-tight sm:text-3xl"><Wallet className="size-5 shrink-0 text-primary sm:size-7" /> Revisar gastos</h1>
+            <h1 className="nh-module-title mt-1 flex items-center gap-2"><Wallet className="size-5 shrink-0 text-primary sm:size-7" /> Revisar gastos</h1>
             <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Revisa cada fila y corrige sus datos; la vista se actualiza automáticamente antes de confirmar.</p>
           </div>
         </header>

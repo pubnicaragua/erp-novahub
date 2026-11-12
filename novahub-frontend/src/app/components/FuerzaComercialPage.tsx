@@ -266,7 +266,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background p-6">
         <div className="max-w-md rounded-3xl border border-border/60 bg-card p-8 text-center shadow-xl">
           <ShieldAlert className="mx-auto mb-4 size-10 text-destructive" />
-          <h1 className="text-2xl font-black tracking-tight">Acceso restringido</h1>
+          <h1 className="nh-module-title">Acceso restringido</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Esta herramienta no está habilitada para tu empresa o tu rol.
           </p>

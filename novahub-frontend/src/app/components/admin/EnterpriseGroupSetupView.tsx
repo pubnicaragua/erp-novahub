@@ -1269,7 +1269,7 @@ export function EnterpriseGroupSetupView({
                 Configuración avanzada ·{" "}
                 {mode === "create" ? "Nuevo grupo" : "Grupo empresarial"}
               </p>
-              <h1 className="truncate text-3xl font-black uppercase italic tracking-tighter sm:text-4xl">
+              <h1 className="nh-module-title truncate">
                 {group?.name || "Crear grupo empresarial"}
               </h1>
             </div>
@@ -1820,7 +1820,7 @@ function GroupConfigurationView({
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">
                 Configuración del grupo
               </p>
-              <h1 className="truncate text-3xl font-black uppercase italic tracking-tighter sm:text-4xl">
+              <h1 className="nh-module-title truncate">
                 {group.name}
               </h1>
             </div>
@@ -3681,7 +3681,7 @@ function SummaryStep({
                 <p className="text-xs font-black uppercase tracking-widest text-primary">
                   Grupo empresarial
                 </p>
-                <h2 className="text-2xl font-black">{group?.name}</h2>
+                <h2 className="nh-module-title">{group?.name}</h2>
               </div>
             </div>
             <div className="my-6 h-px bg-border/60" />

@@ -70,7 +70,7 @@ export default function TwilioPage({ activeSubModule, onSubModuleChange }: Twili
           </div>
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-4xl sm:text-6xl font-black tracking-tighter uppercase italic leading-none">
+              <h1 className="nh-module-title">
                 WhatsApp <span className="text-primary drop-shadow-sm">Twilio</span>
               </h1>
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">v2.0 Beta</Badge>

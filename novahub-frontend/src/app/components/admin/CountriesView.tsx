@@ -77,7 +77,7 @@ export function CountriesView({ canEdit = true }: { canEdit?: boolean }) {
               Super Admin
             </Badge>
             <div>
-              <h2 className="text-2xl font-black uppercase italic tracking-tight sm:text-3xl">
+              <h2 className="nh-module-title">
                 Configuración por <span className="text-primary">País</span>
               </h2>
             </div>

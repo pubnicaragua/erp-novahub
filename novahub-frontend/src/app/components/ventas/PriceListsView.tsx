@@ -119,7 +119,7 @@ function PriceImportPreviewPage({
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Actualización masiva</p>
-            <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar precios</h1>
+            <h1 className="nh-module-title mt-1">Previsualizar precios</h1>
             <p className="mt-1 text-sm text-muted-foreground">Revisa y corrige los precios de {itemLabel.toLowerCase()} antes de actualizar las listas seleccionadas.</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
@@ -1016,7 +1016,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
 
   return <div className="space-y-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div><h2 className="text-2xl font-black tracking-tight" data-tour="price-lists-title">Listas de Precios</h2></div>
+      <div><h2 className="nh-module-title" data-tour="price-lists-title">Listas de Precios</h2></div>
       <div className="flex flex-wrap gap-2"><Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo actualizar precios" title="Cómo actualizar precios"><CircleHelp className="size-4" /></Button>{canCreatePriceList && <Button variant="outline" className="rounded-xl" onClick={() => setNewListOpen(true)} data-tour="price-lists-new"><Plus className="mr-2 size-4" /> Nueva lista</Button>}{canExportPriceLists && <Button variant="outline" className="rounded-xl" onClick={() => openDownload([...selectedProductIds])} disabled={!selectedCount} data-tour="price-lists-template"><Download className="mr-2 size-4" /> Plantilla ({selectedCount})</Button>}{canImportPriceLists && <Button className="rounded-xl" onClick={() => openImport([...selectedProductIds])} disabled={!catalogProducts.length || !importLists.length} data-tour="price-lists-import"><Upload className="mr-2 size-4" /> Importar precios</Button>}</div>
     </div>
 

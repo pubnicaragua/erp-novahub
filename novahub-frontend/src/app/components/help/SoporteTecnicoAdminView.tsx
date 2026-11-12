@@ -201,7 +201,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
       ) : (
         <div className="flex flex-col items-center justify-center py-20 text-center bg-muted/10 rounded-[40px] border-2 border-dashed border-border/40">
           <div className="size-24 rounded-full bg-muted flex items-center justify-center mb-6 shadow-inner"><LifeBuoy className="size-12 text-muted-foreground/30" /></div>
-          <h2 className="text-2xl font-black tracking-tight uppercase italic">Sin solicitudes</h2>
+          <h2 className="nh-module-title">Sin solicitudes</h2>
           <p className="text-muted-foreground mt-2 text-sm">No hay tickets de soporte pendientes</p>
         </div>
       )}

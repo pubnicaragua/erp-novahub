@@ -635,7 +635,7 @@ export function ManagerPage() {
     >
       <div className="min-w-0 space-y-6">
         {section !== 'inventory' && section !== 'sales' && section !== 'purchases' && section !== 'finances' && section !== 'accounting' && section !== 'reports' && section !== 'hr' && !MANAGER_OPERATION_BY_SECTION[section] && <div className="flex min-w-0 justify-end">
-          <div className="hidden min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2></div>
+          <div className="hidden min-w-0"><h2 className="nh-module-title truncate">{activeTitle}</h2></div>
           {canExportOverview && <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(buildDownloadFileName(['resumen', activeTitle || section], 'csv'), (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar CSV</Button>}
         </div>}
 

@@ -214,7 +214,7 @@ export function ConfigNominaView() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4" data-tour="hr-payroll-config-title">
         <div>
-          <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
+          <h2 className="nh-module-title flex items-center gap-2">
             <Settings2 className="size-6 text-primary" />
             Configuración de Nómina
           </h2>

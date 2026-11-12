@@ -302,7 +302,7 @@ export function SuscripcionesPageFinal() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gestión de Suscripciones</h1>
+          <h1 className="nh-module-title">Gestión de Suscripciones</h1>
           <p className="text-muted-foreground mt-1">{tenants.length} empresas registradas</p>
         </div>
         <Button onClick={() => { setSelectedTenant(null); resetTenantForm(); setIsTenantDialogOpen(true); }} className="bg-emerald-600 hover:bg-emerald-700">

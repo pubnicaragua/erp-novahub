@@ -155,7 +155,7 @@ export function DepartmentsView({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <Button variant="outline" size="icon" onClick={onBack} aria-label="Volver a Mi Equipo"><ArrowLeft className="size-4" /></Button>
-          <div className="min-w-0"><h2 className="break-words text-2xl font-black uppercase italic tracking-tight">Departamentos</h2><p className="text-xs text-muted-foreground">Agrupa usuarios para organizar el equipo. No modifica sus permisos ni accesos.</p></div>
+          <div className="min-w-0"><h2 className="nh-module-title break-words">Departamentos</h2><p className="text-xs text-muted-foreground">Agrupa usuarios para organizar el equipo. No modifica sus permisos ni accesos.</p></div>
         </div>
         <Badge variant="outline" className="w-fit gap-1.5 border-primary/20 text-primary"><Users className="size-3.5" /> {departments.length} {departments.length === 1 ? 'departamento' : 'departamentos'}</Badge>
       </div>

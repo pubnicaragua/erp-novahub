@@ -2180,7 +2180,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           <div className="size-20 rounded-full bg-rose-500/10 flex items-center justify-center mb-6">
             <CreditCard className="size-10 text-rose-500" />
           </div>
-          <h2 className="text-2xl font-black tracking-tight text-foreground mb-2 uppercase">{availabilityMessage.title}</h2>
+          <h2 className="nh-module-title text-foreground mb-2">{availabilityMessage.title}</h2>
           <p className="text-muted-foreground max-w-md mb-6">
             {availabilityMessage.description}
           </p>
@@ -2281,7 +2281,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           <div className="size-24 rounded-full bg-destructive/10 flex items-center justify-center mb-6">
             <AlertCircle className="size-12 text-destructive" />
           </div>
-          <h2 className="text-3xl font-black tracking-tight text-foreground mb-3 uppercase">
+          <h2 className="nh-module-title text-foreground mb-3">
             {isAutoClosePending ? 'Arqueo pendiente de cierre automático' : activeSession?.status === 'COUNTING' ? 'Caja en arqueo manual' : 'Caja Cerrada'}
           </h2>
           <p className="text-muted-foreground max-w-lg mb-8 text-sm">

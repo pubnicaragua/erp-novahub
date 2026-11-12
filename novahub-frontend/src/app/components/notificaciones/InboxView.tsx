@@ -141,7 +141,7 @@ export const InboxView: React.FC<InboxViewProps> = ({ data, loading, onRefresh }
             <Bell className="size-6 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="text-2xl font-black uppercase tracking-tighter leading-none">Bandeja de Entrada</h2>
+            <h2 className="nh-module-title">Bandeja de Entrada</h2>
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mt-1 italic">Stream de actividad unificada</p>
           </div>
         </div>

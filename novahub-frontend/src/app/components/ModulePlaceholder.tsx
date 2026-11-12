@@ -29,7 +29,7 @@ export function ModulePlaceholder({ module }: ModulePlaceholderProps) {
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6">
       <div className="text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">{info.title}</h1>
+        <h1 className="nh-module-title">{info.title}</h1>
       </div>
     </div>
   );

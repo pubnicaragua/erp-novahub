@@ -148,7 +148,7 @@ export function ActivosFijosView() {
         <TabsContent value="activos" className="m-0 mt-4 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
+          <h2 className="nh-module-title">
             Activos <span className="text-primary">Fijos</span>
           </h2>
         </div>

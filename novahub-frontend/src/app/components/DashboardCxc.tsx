@@ -134,7 +134,7 @@ function DashboardCxc() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-2 relative">
         <div className="absolute -left-10 -top-10 size-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10">
-          <h1 className="text-3xl md:text-4xl tracking-tight text-foreground mb-2 font-bold">
+          <h1 className="nh-module-title text-foreground mb-2">
             Cuentas por{' '}
             <span className="bg-primary text-primary-foreground px-3 py-1 rounded-md inline-block transform -rotate-2 shadow-lg font-semibold mx-1 border border-primary/50">Cobrar / Pagar</span>
           </h1>

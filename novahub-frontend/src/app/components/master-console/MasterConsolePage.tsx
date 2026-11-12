@@ -253,7 +253,7 @@ export function MasterConsolePage() {
                   <Building2 className="size-6" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Master Console</h1>
+                  <h1 className="nh-module-title text-foreground">Master Console</h1>
                   <p className="mt-1 text-sm text-muted-foreground">Empresas y estado de servicio</p>
                 </div>
               </div>

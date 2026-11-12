@@ -276,7 +276,7 @@ export function SolicitudesPagoRRHHView() {
             <div className="mb-1.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-primary">
               <Inbox className="size-4" /> Cola de autorización · RR. HH.
             </div>
-            <h2 className="text-2xl font-black tracking-tight sm:text-3xl">Solicitudes de pago</h2>
+            <h2 className="nh-module-title">Solicitudes de pago</h2>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-primary/15 bg-background/60 px-3 py-2 text-xs font-bold text-muted-foreground backdrop-blur">

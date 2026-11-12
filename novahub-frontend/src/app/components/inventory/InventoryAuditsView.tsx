@@ -1193,7 +1193,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             </Button>
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">Nueva auditoría</p>
-              <h2 className="break-words text-xl font-black uppercase tracking-tight sm:text-2xl">Acta de inspección · Inventario selectivo</h2>
+              <h2 className="nh-module-title break-words">Acta de inspección · Inventario selectivo</h2>
             </div>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-tour="inventory-audit-form-actions">

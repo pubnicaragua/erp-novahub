@@ -267,7 +267,7 @@ export function CustomerImportPreview({
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación masiva</p>
-            <h1 className="mt-1 text-xl font-black tracking-tight sm:text-3xl">{historyOnly ? 'Vincular historial a clientes existentes' : hasHistoricalImport ? 'Previsualizar clientes e historial' : 'Previsualizar clientes'}</h1>
+            <h1 className="nh-module-title mt-1">{historyOnly ? 'Vincular historial a clientes existentes' : hasHistoricalImport ? 'Previsualizar clientes e historial' : 'Previsualizar clientes'}</h1>
             <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">{historyOnly ? 'Se guardarán resúmenes informativos solo cuando la identificación coincida con un cliente único de este tenant. No se crearán ni modificarán clientes.' : hasHistoricalImport ? 'Verifica el cliente y su resumen histórico acumulado. El resumen es informativo y permanece separado de facturas, pagos, saldos y movimientos.' : `Edita los datos antes de crear los clientes. El número de cliente se genera automáticamente. La moneda del límite usa ${defaultCreditLimitCurrency} si no se indica; el saldo inicial usa la moneda base ${defaultOpeningBalanceCurrency}.`}</p>
           </div>
         </div>

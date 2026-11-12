@@ -249,7 +249,7 @@ export function ForceSalesReportsView({ activeSubModule, onSubModuleChange, isSi
         <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-primary"><Route className="size-3.5" /> Fuerza Comercial</div>
-            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Reportes de gestores de cobro</h1>
+            <h1 className="nh-module-title">Reportes de gestores de cobro</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Consulta la actividad de campo por día, semana o rango personalizado: gestores, rutas, clientes, visitas, ubicaciones y evidencias.</p>
           </div>
           <div className="flex flex-wrap gap-2">

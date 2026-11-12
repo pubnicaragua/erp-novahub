@@ -2,7 +2,46 @@
 
 import * as React from "react";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
 import { cn } from "./utils";
+
+/** Lo provee DataTableViewport: dentro de él las flechas de desplazamiento ya existen y no se duplican. */
+export const TableViewportContext = React.createContext(false);
+
+/**
+ * Flechas de desplazamiento horizontal estándar para toda tabla ancha: aparecen solo cuando la tabla
+ * no cabe en pantalla y se comportan igual en todo el sistema (mismo botón, mismo paso, misma ubicación).
+ */
+function useHorizontalOverflow(ref: React.RefObject<HTMLDivElement | null>) {
+  const [state, setState] = React.useState({ overflow: false, left: false, right: false });
+  React.useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    let frame: number | null = null;
+    const measure = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        const overflow = element.scrollWidth > element.clientWidth + 4;
+        const left = element.scrollLeft > 4;
+        const right = element.scrollLeft + element.clientWidth < element.scrollWidth - 4;
+        setState((current) => (current.overflow === overflow && current.left === left && current.right === right ? current : { overflow, left, right }));
+      });
+    };
+    measure();
+    element.addEventListener("scroll", measure, { passive: true });
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    return () => {
+      element.removeEventListener("scroll", measure);
+      observer.disconnect();
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [ref]);
+  return state;
+}
 
 function textFromNode(node: React.ReactNode): string {
   if (node === null || node === undefined || typeof node === "boolean") return "";
@@ -59,12 +98,22 @@ function addResponsiveCellLabels(children: React.ReactNode, labels: string[]): R
 }
 
 function Table({ className, containerClassName, containerStyle, responsiveCards = true, viewport = false, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; containerStyle?: React.CSSProperties; responsiveCards?: boolean; viewport?: boolean }) {
+  const insideViewport = React.useContext(TableViewportContext);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const scrollState = useHorizontalOverflow(containerRef);
+  const showControls = !insideViewport && scrollState.overflow;
+  const scrollBy = (direction: "left" | "right") => {
+    const element = containerRef.current;
+    if (!element) return;
+    element.scrollBy({ left: (direction === "right" ? 1 : -1) * Math.max(240, Math.floor(element.clientWidth * 0.78)), behavior: "smooth" });
+  };
   const responsiveChildren = responsiveCards
     ? addResponsiveCellLabels(props.children, getResponsiveHeaderLabels(props.children))
     : props.children;
 
-  return (
+  const container = (
     <div
+      ref={containerRef}
       data-slot="table-container"
       data-responsive-cards-container={responsiveCards ? "true" : undefined}
       data-table-viewport-scroll={viewport ? "true" : undefined}
@@ -83,6 +132,19 @@ function Table({ className, containerClassName, containerStyle, responsiveCards 
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
        >{responsiveChildren}</table>
+    </div>
+  );
+
+  if (insideViewport) return container;
+  return (
+    <div className="w-full min-w-0 max-w-full">
+      {showControls && (
+        <div className="mb-1 flex items-center justify-end gap-1" data-table-scroll-controls="true">
+          <button type="button" onClick={() => scrollBy("left")} disabled={!scrollState.left} aria-label="Desplazar una columna a la izquierda" className="inline-flex size-7 items-center justify-center rounded-lg border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"><ChevronLeft className="size-4" /></button>
+          <button type="button" onClick={() => scrollBy("right")} disabled={!scrollState.right} aria-label="Desplazar una columna a la derecha" className="inline-flex size-7 items-center justify-center rounded-lg border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"><ChevronRight className="size-4" /></button>
+        </div>
+      )}
+      {container}
     </div>
   );
 }

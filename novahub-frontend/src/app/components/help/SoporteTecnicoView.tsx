@@ -227,7 +227,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange, isSideb
       ) : (
         <div className="flex flex-col items-center justify-center py-20 text-center bg-muted/10 rounded-[40px] border-2 border-dashed border-border/40">
           <div className="size-24 rounded-full bg-muted flex items-center justify-center mb-6 shadow-inner"><LifeBuoy className="size-12 text-muted-foreground/30" /></div>
-          <h2 className="text-2xl font-black tracking-tight uppercase italic">No hay tickets</h2>
+          <h2 className="nh-module-title">No hay tickets</h2>
           {canCreateSupport && <Button variant="outline" onClick={() => setShowCreateModal(true)} className="mt-6 rounded-2xl font-black uppercase tracking-widest text-[10px]"><Plus className="size-4 mr-2" /> Crear Ticket</Button>}
         </div>
       )}

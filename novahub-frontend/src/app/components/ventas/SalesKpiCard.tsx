@@ -32,20 +32,20 @@ export function SalesKpiCard({ title, value, icon: Icon, onClick, active = false
       onClick={onClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        'relative overflow-hidden rounded-lg border-border/60 bg-card shadow-none transition-[border-color,background-color,transform]',
-        interactive ? 'cursor-pointer hover:border-primary/50 hover:bg-muted/20' : 'cursor-default',
+        'relative overflow-hidden rounded-[13px] border-border/60 bg-card shadow-[0_8px_25px_color-mix(in_srgb,var(--foreground)_3%,transparent)] transition-[border-color,box-shadow,transform] duration-200',
+        interactive ? 'cursor-pointer hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_13px_30px_color-mix(in_srgb,var(--primary)_8%,transparent)]' : 'cursor-default',
         active && 'border-primary ring-2 ring-primary/20',
       )}
     >
       <CardContent className="p-3.5">
         <div className="flex items-center gap-3">
-          {/* Misma identidad que el dashboard: fondo verde Nova suave y ícono verde bosque, sin importar el color que pida cada vista. */}
-          <div className="shrink-0 rounded-[10px] bg-[color-mix(in_srgb,var(--accent)_22%,var(--card))] p-2 text-primary">
-            <Icon className="size-4" />
+          {/* Misma identidad que el dashboard («Resumen de gestión»): mosaico verde Nova intenso, ícono verde bosque y cifra en verde Nova, sin importar el color que pida cada vista. */}
+          <div className="shrink-0 rounded-[10px] bg-[color-mix(in_srgb,var(--accent)_82%,var(--card))] p-2.5 text-primary">
+            <Icon className="size-[18px]" />
           </div>
           <div className="min-w-0">
             <p className="break-words text-[13px] font-semibold italic leading-tight text-muted-foreground" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>{title}</p>
-            <p className="text-xl font-bold text-foreground tabular-nums">{value}</p>
+            <p className="text-xl font-extrabold tracking-tight text-accent tabular-nums">{value}</p>
           </div>
         </div>
       </CardContent>

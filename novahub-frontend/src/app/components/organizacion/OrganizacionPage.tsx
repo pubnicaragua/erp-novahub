@@ -56,7 +56,7 @@ export function OrganizacionPage({ activeSubModule, onSubModuleChange, isSidebar
   if (!view) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center p-6">
-        <div className="text-center"><h1 className="text-2xl font-semibold">Acceso denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para ver Organización.</p></div>
+        <div className="text-center"><h1 className="nh-module-title">Acceso denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para ver Organización.</p></div>
       </div>
     );
   }

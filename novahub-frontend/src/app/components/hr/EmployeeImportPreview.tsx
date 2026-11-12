@@ -172,7 +172,7 @@ export function EmployeeImportPreview({
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4" data-tour="hr-employee-import-preview-title">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación recurrente</p>
-            <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar empleados</h1>
+            <h1 className="nh-module-title mt-1">Previsualizar empleados</h1>
             <p className="mt-1 max-w-4xl text-sm text-muted-foreground">Corrige cada fila antes de importarla. El departamento y el puesto se validan juntos; los empleados que estén en un departamento vendedor podrán utilizarse para comisiones.</p>
           </div>
           <HRViewTutorial label="Cómo revisar importación de empleados" targetPrefix="hr-employee-import-preview" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Revisa el archivo, filas válidas, errores y advertencias antes de continuar.' }, items: { title: 'Filas y catálogos', description: 'Corrige datos directamente en la tabla y crea departamentos o puestos faltantes.' }, actions: { description: 'Vuelve a la carga o inicia la importación después de validar las filas.' } }} />

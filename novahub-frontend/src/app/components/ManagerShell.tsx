@@ -1602,7 +1602,7 @@ function ManagerThemeSettings({
     <div className="min-w-0 space-y-6">
       <div className="flex min-w-0 flex-col gap-2">
         <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">Panel de Control</p>
-        <h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">Configuración</h2>
+        <h2 className="nh-module-title truncate">Configuración</h2>
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
         <div className="space-y-6">

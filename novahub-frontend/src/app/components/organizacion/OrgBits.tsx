@@ -30,7 +30,7 @@ export function PageTitle({ eyebrow, title, subtitle, actions, guide }: { eyebro
     <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
       <div className="min-w-0" data-tour="page-title">
         <p className="text-[12px] font-semibold text-accent-foreground/80"><span className="text-primary">{eyebrow}</span></p>
-        <h1 className="mt-1 text-4xl leading-tight text-primary dark:text-foreground" style={serifStyle}>{title}</h1>
+        <h1 className="nh-module-title mt-1 text-primary dark:text-foreground" style={serifStyle}>{title}</h1>
         <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">{subtitle}</p>
       </div>
       {(actions || guide) && (

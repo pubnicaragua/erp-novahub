@@ -566,7 +566,7 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><PackagePlus className="size-5" /></div>
         <div className="min-w-0">
           <p className="text-[9px] font-black uppercase tracking-[0.18em] text-primary">Productos · carga masiva</p>
-          <h1 className="mt-0.5 text-xl font-black uppercase italic tracking-tight sm:text-2xl">Importar inventario</h1>
+          <h1 className="nh-module-title mt-0.5">Importar inventario</h1>
           <p className="mt-1 text-xs text-muted-foreground">Distribuye productos entre ubicaciones activas del rubro.</p>
         </div>
       </div>

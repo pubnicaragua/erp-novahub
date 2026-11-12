@@ -342,7 +342,7 @@ export function RHPage({ activeSubModule }: RHPageProps) {
         </Alert>
       )}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+        <h1 className="nh-module-title flex items-center gap-2">
           <Users className="size-6 text-primary" />
           Recursos Humanos
         </h1>

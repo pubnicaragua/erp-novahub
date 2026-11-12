@@ -201,7 +201,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
     <div className="space-y-6">
       <div className={cn('flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4', showForm && 'hidden')} data-tour="hr-absence-types-title">
         <div>
-          <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
+          <h2 className="nh-module-title flex items-center gap-2">
             <Settings2 className="size-6 text-primary" />
             Configuración de Tipos de Ausencia
           </h2>

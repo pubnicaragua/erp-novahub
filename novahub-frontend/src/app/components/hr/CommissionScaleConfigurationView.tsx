@@ -154,7 +154,7 @@ export function CommissionScaleConfigurationView({ onBack }: { onBack?: () => vo
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div className="min-w-0">
           <div className="mb-1 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-primary"><BriefcaseBusiness className="size-3.5" /> Configuración de comisiones</div>
-          <h2 className="text-xl font-black tracking-tight sm:text-2xl">Escalas de vendedores</h2>
+          <h2 className="nh-module-title">Escalas de vendedores</h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Se aplica al subtotal neto antes de IVA y cargos. Una escala particular prevalece solo para ese vendedor; la escala global continúa activa como respaldo para los demás.</p>
         </div>
         {onBack && <Button variant="outline" onClick={onBack} className="h-10 shrink-0 gap-2 rounded-xl"><ArrowLeft className="size-4" /> Volver al reporte</Button>}

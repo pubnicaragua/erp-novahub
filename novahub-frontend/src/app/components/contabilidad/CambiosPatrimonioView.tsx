@@ -120,7 +120,7 @@ export function CambiosPatrimonioView() {
     <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
+          <h2 className="nh-module-title">
             Cambios en el <span className="text-primary">Patrimonio</span>
           </h2>
         </div>

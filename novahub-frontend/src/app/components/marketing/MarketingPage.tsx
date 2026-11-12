@@ -51,7 +51,7 @@ export function MarketingPage({ activeSubModule, onSubModuleChange, isSidebarCol
   };
 
   if (!view) {
-    return <div className="flex min-h-[50vh] items-center justify-center p-6 text-center"><div><h1 className="text-2xl font-semibold">Acceso denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para ver Marketing.</p></div></div>;
+    return <div className="flex min-h-[50vh] items-center justify-center p-6 text-center"><div><h1 className="nh-module-title">Acceso denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para ver Marketing.</p></div></div>;
   }
   return (
     <div className="marketing-module mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">

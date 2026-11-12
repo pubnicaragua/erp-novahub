@@ -940,7 +940,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">Plan de Cuentas</h1>
+          <h1 className="nh-module-title">Plan de Cuentas</h1>
         </div>
         <div className="erp-toolbar-primary-group flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {helpTrigger}

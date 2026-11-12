@@ -359,7 +359,7 @@ export function QaConsoleView({ activeSubModule, onSubModuleChange, isSidebarCol
     <div className="mx-auto w-full max-w-7xl space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
+          <h1 className="nh-module-title flex items-center gap-2">
             <ShieldCheck className="size-6 text-primary" /> Validador ERP (Super Admin)
           </h1>
         </div>

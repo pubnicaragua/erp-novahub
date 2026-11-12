@@ -58,7 +58,7 @@ export function CrearProductoView({ categories, warehouses, brands, onBack, onRe
     <>
       <AddProductsModal
         open={createFormOpen}
-        presentation="page"
+        presentation="dialog"
         onOpenChange={(open) => {
           if (open) {
             editorHandoffComplete.current = false;

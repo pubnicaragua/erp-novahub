@@ -15,7 +15,7 @@ import {
 } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './button';
-import { Table, TableHeader, TableHead, TableRow } from './table';
+import { Table, TableHeader, TableHead, TableRow, TableViewportContext } from './table';
 import { cn } from './utils';
 
 export interface DataTableViewportProps {
@@ -178,6 +178,7 @@ export function DataTableViewport({
   };
 
   return (
+    <TableViewportContext.Provider value>
     <div
       className={cn('data-table-viewport flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-2xl border bg-card shadow-sm', className)}
       data-table-viewport="true"
@@ -226,5 +227,6 @@ export function DataTableViewport({
       </div>
       {footer && <div className="data-table-viewport__footer shrink-0">{footer}</div>}
     </div>
+    </TableViewportContext.Provider>
   );
 }

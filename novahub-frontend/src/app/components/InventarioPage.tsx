@@ -752,7 +752,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           ) : (
             <>
               <TabsContent value="productos" className="m-0">
-                {createProductViewOpen ? (
+                {createProductViewOpen && (
                   <CrearProductoView
                     categories={data.categories}
                     warehouses={scopedWarehouses}
@@ -760,7 +760,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     onBack={() => setCreateProductViewOpen(false)}
                     onRefresh={() => fetchData('products')}
                   />
-                ) : (
+                )}
+                <>
                 <Tabs value={productScope} onValueChange={(value) => setProductScope(value as 'branch' | 'linkedWarehouses')} className="w-full">
                   <div className="mb-5 w-full max-w-full">
                     <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-2xl border border-border/40 bg-muted/20 p-1 sm:p-1.5">
@@ -835,7 +836,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     </motion.div>
                   </TabsContent>
                 </Tabs>
-                )}
+                </>
               </TabsContent>
               <TabsContent value="reposicion" className="m-0">
                 <ReposicionView warehouses={scopedWarehouses} />

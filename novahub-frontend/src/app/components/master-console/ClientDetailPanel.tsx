@@ -197,7 +197,7 @@ export function ClientDetailPanel({ data, onBack, onRefresh }: Props) {
               <Building2 className="size-6 text-primary" />
             </div>
             <div>
-              <h2 className="text-2xl font-black tracking-tighter">{data.name}</h2>
+              <h2 className="nh-module-title">{data.name}</h2>
               <p className="text-xs text-muted-foreground font-medium">{data.slug}.novahub.io • {data.industry}</p>
             </div>
           </div>

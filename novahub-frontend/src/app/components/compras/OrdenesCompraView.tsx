@@ -444,7 +444,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
         <div className="flex flex-col gap-2 border-b border-border/50 pb-2.5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Importación de ítems</p>
-            <h2 className="mt-1 text-2xl font-black tracking-tight">Previsualizar productos</h2>
+            <h2 className="nh-module-title mt-1">Previsualizar productos</h2>
             <p className="mt-1 text-sm text-muted-foreground">Revisa y corrige los productos antes de agregarlos a esta orden de compra.</p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl border-2 border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[11px] shadow-sm">

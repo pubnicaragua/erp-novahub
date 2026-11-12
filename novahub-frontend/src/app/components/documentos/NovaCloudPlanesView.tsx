@@ -78,7 +78,7 @@ export const NovaCloudPlanesView = () => {
           <div className="inline-flex p-4 bg-cyan-500/10 rounded-3xl">
             <Cloud className="size-12 text-cyan-500" />
           </div>
-          <h2 className="text-3xl font-black uppercase tracking-tight">
+          <h2 className="nh-module-title">
             Almacenamiento en la Nube
           </h2>
         </div>

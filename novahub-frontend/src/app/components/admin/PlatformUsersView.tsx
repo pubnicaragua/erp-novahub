@@ -156,7 +156,7 @@ export function PlatformUsersView() {
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
               <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-primary"><ShieldCheck className="size-3.5" /> NovaHub Platform</p>
-              <h1 className="mt-2 break-words text-2xl font-black uppercase italic tracking-tight sm:text-3xl">Usuarios de plataforma</h1>
+              <h1 className="nh-module-title mt-2 break-words">Usuarios de plataforma</h1>
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Crea accesos restringidos para colaboradores de Superadmin. El permiso se mantiene como selector para agregar más capacidades después.</p>
             </div>
             <Badge variant="outline" className="w-fit shrink-0 rounded-lg px-3 py-1.5"><Users className="mr-1.5 size-3.5 text-primary" /> {usersQuery.data?.length || 0} usuarios</Badge>

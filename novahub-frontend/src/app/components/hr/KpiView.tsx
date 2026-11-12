@@ -327,7 +327,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4" data-tour="hr-kpi-title">
         <div>
-          <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
+          <h2 className="nh-module-title flex items-center gap-2">
             <BarChart3 className="size-6 text-primary" />
             Gestión de KPI
           </h2>

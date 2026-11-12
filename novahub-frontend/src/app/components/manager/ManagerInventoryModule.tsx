@@ -221,7 +221,7 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10"><Boxes className="size-9 text-primary" /></div>
         <div className="min-w-0">
-          <h1 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">Inventario <span className="text-primary">de Mercancías</span></h1>
+          <h1 className="nh-module-title flex flex-wrap items-center gap-x-3 gap-y-1">Inventario <span className="text-primary">de Mercancías</span></h1>
           <div className="mt-2 flex items-center gap-2"><Badge className="rounded-md border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">{branches.length} sucursales · {branchWarehouseCount} bodegas · {corporateWarehouseCount} almacenes corporativos · vista Manager</Badge></div>
         </div>
       </div>
@@ -235,7 +235,7 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
     </div>}
 
     {!showImportSubview && <div className="flex min-w-0 flex-col gap-1 px-1">
-      <h2 className="text-2xl font-black uppercase italic leading-none tracking-tight">{activeViewLabel}</h2>
+      <h2 className="nh-module-title">{activeViewLabel}</h2>
     </div>}
 
     {showImportSubview ? <ManagerInventoryImportView onBack={() => setImportOpen(false)} groupId={groupId} businessUnitId={businessUnitId} businessUnits={businessUnits} onImported={() => { setRefreshKey((current) => current + 1); void moduleQuery.refetch(); }} /> : view === 'corporateWarehouses' ? corporateWarehouseContent : view === 'adjustments' ? <><ManagerInventoryAdjustmentsView groupId={groupId} businessUnitId={businessUnitId} branchId={branchId} branches={branches} warehouses={warehouses} canViewInventoryCost={canViewInventoryCost} canApproveAdjustments={canApproveAdjustments} canExport={canExport} onDetail={setDetail} embedded refreshKey={refreshKey} /><InventoryDetailSheet view={view} row={detail} canViewInventoryCost={canViewInventoryCost} groupId={groupId} onEnterBranch={onEnterBranch} enterableBranchIds={enterableBranchIds} onClose={() => setDetail(null)} /></> : <>

@@ -609,7 +609,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-2 relative">
         <div className="absolute -left-10 -top-10 size-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10">
-          <h1 className="text-3xl font-bold leading-tight text-primary">Resumen operativo</h1>
+          <h1 className="nh-module-title text-primary">Resumen operativo</h1>
         </div>
         <div className="flex items-center gap-2 z-10 shrink-0 flex-wrap">
           <Select value={period} onValueChange={(val) => {

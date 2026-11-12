@@ -1619,7 +1619,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <h1 className="nh-module-title flex items-center gap-2">
             <Settings2 className="size-6 text-primary" />
             Configuración Contable
           </h1>

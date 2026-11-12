@@ -127,7 +127,7 @@ export function SupplierImportPreview({
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4" data-tour="supplier-import-title">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación masiva</p>
-            <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar proveedores</h1>
+            <h1 className="nh-module-title mt-1">Previsualizar proveedores</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Edita los datos antes de crear proveedores.</p>
             <div className="mt-3"><PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo importar proveedores" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-import" /></div>
           </div>

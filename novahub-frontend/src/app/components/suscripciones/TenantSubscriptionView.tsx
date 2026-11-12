@@ -835,7 +835,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                 <div className="flex min-w-0 items-center gap-4 sm:gap-6">
                   <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted/20 sm:size-20"><Building2 className="size-8 text-primary sm:size-10" /></div>
                   <div className="min-w-0">
-                    <h2 className="break-words text-xl font-black tracking-tight sm:text-2xl">{tenant.name}</h2>
+                    <h2 className="nh-module-title break-words">{tenant.name}</h2>
                     <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                       <span className="flex min-w-0 items-center gap-1.5"><Globe className="size-4 shrink-0" /> <span className="truncate">{tenant.slug}.novahub.io</span></span>
                       <span className="flex items-center gap-1.5"><Users className="size-4" /> {operationalUsers.length} usuarios activos</span>
