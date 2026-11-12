@@ -3,17 +3,18 @@ import { readFile } from 'node:fs/promises';
 
 const map = await readFile(new URL('../public/maps/diseñoui_mapas_freelancers.html', import.meta.url), 'utf8');
 const shell = await readFile(new URL('../src/app/components/FuerzaComercialPage.tsx', import.meta.url), 'utf8');
+const dialog = await readFile(new URL('../src/app/components/force-sales/ForceSalesCustomerLinkDialog.tsx', import.meta.url), 'utf8');
 const customerView = await readFile(new URL('../src/app/components/ventas/ClientesView.tsx', import.meta.url), 'utf8');
 const salesService = await readFile(new URL('../src/app/services/ventas.service.ts', import.meta.url), 'utf8');
 
-assert.match(shell, /import \{ customersService \} from '\.\.\/services\/ventas\.service'/, 'El mapa usa el servicio tipado de clientes desde el shell React');
+assert.match(dialog, /import \{ customersService \} from '\.\.\/\.\.\/services\/ventas\.service'/, 'El mapa usa el servicio tipado de clientes desde el shell React');
 assert.match(shell, /canPerform\('SALES_CLIENTS',\s*'read'\)/, 'La búsqueda del cliente requiere permiso de lectura de Ventas');
 assert.match(shell, /canPerform\('FORCE_SALES',\s*'updateProspect'\)/, 'El vínculo requiere permiso para editar prospectos');
-assert.match(shell, /customersService\.getLookup/, 'La búsqueda reutiliza el endpoint de lookup de clientes');
-assert.match(shell, /import \{ Combobox \} from '\.\/ui\/Combobox'/, 'La selección reutiliza el Combobox compartido');
+assert.match(dialog, /customersService\.getLookup/, 'La búsqueda reutiliza el endpoint de lookup de clientes');
+assert.match(dialog, /import \{ Combobox \} from '\.\.\/ui\/Combobox'/, 'La selección reutiliza el Combobox compartido');
 assert.match(shell, /force-sales-open-customer-link/, 'El shell abre el selector solicitado por el mapa');
 assert.match(shell, /force-sales-customer-link-selected/, 'El shell devuelve el cliente seleccionado al mapa');
-assert.match(shell, /onSearchChange=\{searchCustomerLinkCustomers\}/, 'La búsqueda del Combobox consulta clientes en el servidor');
+assert.match(dialog, /onSearchChange=\{searchCustomers\}/, 'La búsqueda del Combobox consulta clientes en el servidor');
 
 assert.match(map, /force-sales-open-customer-link/, 'El mapa solicita al shell abrir el selector');
 assert.match(map, /force-sales-customer-link-selected/, 'El mapa consume el cliente seleccionado por el shell');

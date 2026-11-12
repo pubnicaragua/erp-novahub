@@ -1,0 +1,127 @@
+<div class="modal-backdrop" id="locationModal" hidden>
+ <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="locationTitle">
+  <h2 id="locationTitle">Ubicación y privacidad</h2>
+  <p id="locationHelpText">La ubicación del teléfono puede estar activa, pero el navegador tiene bloqueado el permiso para este sitio.</p>
+  <ol class="location-steps" id="locationSteps"><li>Abre el candado o el icono de ajustes junto a la dirección.</li><li>En <b>Ubicación</b> selecciona <b>Permitir</b>.</li><li>Recarga NovaHub y vuelve a intentarlo.</li></ol>
+  <div class="location-privacy" id="locationPrivacy" hidden><b>Compartir mi ubicación con el equipo</b><span>Esta opción solo controla tu última ubicación visible para vendedores autorizados. No cambia el permiso del teléfono.</span><button id="togglePresence" type="button">Ocultar mi ubicación</button></div>
+  <div class="location-privacy" id="mapConfigurationSettings" hidden><b>Proveedor y fuente del mapa</b><span>Super Admin o administrador puede elegir Google Maps, OpenStreetMap o una fuente propia. Las URLs deben ser HTTPS y las claves permanecen fuera de la base de datos.</span><label for="mapProviderSelect">Proveedor</label><select id="mapProviderSelect"><option value="GOOGLE">Google Maps</option><option value="OPENSTREETMAP">OpenStreetMap</option><option value="CUSTOM">Mapa propio</option></select><label for="mapSearchModeSelect">Búsqueda</label><select id="mapSearchModeSelect"><option value="EXTERNAL">Geocodificador configurado</option><option value="OWN_CATALOG">Catálogo propio</option><option value="DISABLED">Sin búsqueda</option></select><label for="mapTileUrlInput">URL de mosaicos (opcional para OSM)</label><input id="mapTileUrlInput" type="url" placeholder="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"><label for="mapGeocoderUrlInput">URL de geocodificación</label><input id="mapGeocoderUrlInput" type="url" placeholder="https://tu-dominio/geocode/search"><button id="saveMapConfiguration" type="button">Guardar configuración</button><small id="mapConfigurationHelp"></small></div>
+  <div class="confirm-modal-actions"><button class="cancel" id="locationClose" type="button">Cerrar</button><button class="save" id="locationRetry" type="button">Volver a intentar</button></div>
+ </div>
+</div>
+<div class="modal-backdrop" id="discardModal" hidden>
+ <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="discardTitle">
+  <h2 id="discardTitle">Descartar prospecto</h2>
+  <p id="discardDescription">El prospecto conservará su historial, pero dejará de aparecer como oportunidad activa.</p>
+  <label for="discardReason">Motivo</label>
+  <select id="discardReason"><option>No aplica al ERP</option><option>Negocio muy pequeño</option><option>Competencia</option><option>Negocio cerrado</option><option>Ya usa otra solución</option><option>Duplicado</option><option>Otro</option></select>
+  <label for="discardNote">Nota adicional <span>(opcional)</span></label>
+  <textarea id="discardNote" maxlength="500" placeholder="Escribe una observación breve"></textarea>
+  <div class="confirm-modal-actions"><button class="cancel" id="discardCancel" type="button">Cancelar</button><button class="danger" id="discardConfirm" type="button">Confirmar descarte</button></div>
+ </div>
+</div>
+<div class="modal-backdrop" id="evidenceModal" hidden>
+ <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="evidenceTitle">
+  <h2 id="evidenceTitle">Evidencia del prospecto</h2>
+  <div class="evidence-modal-media" id="evidenceModalMedia"></div>
+  <div class="confirm-modal-actions"><button class="cancel" id="evidenceClose" type="button">Cerrar</button></div>
+ </div>
+</div>
+<div class="modal-backdrop" id="routeModal" hidden>
+ <section class="confirm-modal route-planner-card" role="region" aria-labelledby="routeTitle">
+  <header class="route-planner-head"><div><h2 id="routeTitle">Planificar ruta comercial</h2><p id="routeDescription">Empieza a marcar los puntos comerciales en el mapa. Cada punto agregado aparecerá aquí para ordenarlo.</p></div><button class="route-panel-close" id="routePanelClose" type="button" aria-label="Cerrar panel de rutas" title="Cerrar panel de rutas">×</button></header>
+  <div class="route-planner-body">
+  <div class="route-summary" aria-label="Progreso de la ruta"><div class="route-stat"><b id="routeStopCount">0</b><span>Puntos en ruta</span></div><div class="route-stat"><b id="routeCompletedCount">0</b><span>Completadas</span></div><div class="route-stat"><b id="routeNextStop">—</b><span>Siguiente parada</span></div></div>
+  <p class="route-order-note" id="routeMetrics" aria-live="polite" hidden></p>
+  <div class="route-progress"><span id="routeProgressBar" style="width:0%"></span></div>
+  <section class="route-action-panel" id="routeActionPanel" aria-label="Seguimiento de la ruta" hidden>
+   <p class="route-action-heading" id="routeActionHeading" aria-live="polite"></p>
+   <button class="primary-action route-start-action" id="routeStart" type="button" hidden>Iniciar ruta</button>
+   <p class="route-action-status route-next-stop-details" id="routeNextStopDetails" role="status" aria-live="polite"></p>
+   <p class="route-action-status" id="routeStartedAt" role="status" aria-live="polite"></p>
+   <div class="route-action-buttons"><button id="routeOpenMaps" type="button">Abrir siguiente en Waze</button><button id="routeOpenGoogleMaps" type="button">Abrir siguiente en Google Maps</button><button id="routeOpenFullGoogleMaps" type="button">Abrir ruta completa en Google Maps</button></div>
+   <label for="routeVisitNotes">Notas de visita (opcional)<textarea id="routeVisitNotes" maxlength="1000" rows="2" placeholder="Acuerdos, resultado o seguimiento"></textarea></label>
+   <div class="route-action-buttons"><button class="primary-action" id="routeCompleteStop" type="button">Marcar visita realizada</button><button id="routeRetryActions" type="button" hidden>Reintentar sincronización</button></div>
+   <p class="route-action-status" id="routeActionStatus" role="status" aria-live="polite" hidden></p>
+  </section>
+  <nav class="route-planner-tabs" role="tablist" aria-label="Gestión de rutas"><button type="button" role="tab" id="routePlanTab" aria-selected="true" aria-controls="routePlanPane">Planificar</button><button type="button" role="tab" id="routeListTab" aria-selected="false" aria-controls="routeListPane">Rutas</button></nav>
+  <section id="routePlanPane" class="route-plan-pane" role="tabpanel" aria-labelledby="routePlanTab">
+  <div class="route-toolbar"><span>Orden de visita · selección desde el mapa</span><button id="routeImport" type="button">Importar clientes / rutas</button><button id="routeClear" type="button">Descartar borrador</button></div>
+  <label class="route-field" for="routeFrequency">Frecuencia<select id="routeFrequency"><option value="ONCE">Solo una vez</option><option value="DAILY">Diaria</option></select></label>
+  <p class="meta" id="routeFrequencyHint">Se guardará una sola ejecución de esta ruta.</p>
+  <label class="route-field" for="routeScheduledFor">Fecha de operación<input id="routeScheduledFor" type="date"></label>
+  <label for="routeAssigneeSearch" id="routeAssigneeLabel">Responsable de la ruta</label>
+  <div class="route-assignee-picker" id="routeAssigneePicker">
+   <input class="route-assignee-search" id="routeAssigneeSearch" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="routeAssigneeOptions" aria-activedescendant="" placeholder="Busca y elige un usuario" autocomplete="off">
+   <input id="routeAssignee" type="hidden" value="">
+   <div class="route-assignee-options" id="routeAssigneeOptions" role="listbox" aria-labelledby="routeAssigneeLabel" hidden></div>
+  </div>
+  <div class="route-assignee-readonly" id="routeAssigneeReadOnly" hidden></div>
+  <div class="meta route-assignee-status" id="routeAssigneeStatus" role="status" aria-live="polite"></div>
+  <button class="cancel" id="routeAssigneeRetry" type="button" hidden>Reintentar carga de usuarios</button>
+  <div class="meta" id="routeListStatus" role="status" aria-live="polite"></div>
+  <button class="cancel" id="routeListRetry" type="button" hidden>Reintentar carga de rutas</button>
+  <section class="route-assignee-routes" id="routeAssigneeRoutes" aria-live="polite"></section>
+  <details class="route-assignee-history" id="routeAssigneeHistory" hidden><summary>Historial</summary><div id="routeAssigneeHistoryList"></div></details>
+  <button class="cancel route-new-button" id="routeNew" type="button">Empezar otra ruta</button>
+  <label for="routeName">Nombre de la ruta</label>
+  <input id="routeName" type="text" maxlength="180" placeholder="Ej. Ruta cobro zona norte - lunes">
+  <label class="route-transfer-option" id="routeTransferWrap"><input class="route-transfer-checkbox" id="routeTransferOwnership" type="checkbox" aria-describedby="routeTransferHelp"><span class="route-transfer-copy"><span class="route-transfer-header"><span class="route-transfer-title">Transferir responsable de los puntos</span><span class="route-transfer-count"><b id="routeTransferCount">0</b><span id="routeTransferUnit">puntos</span></span></span><span class="route-transfer-destination">A: <b id="routeTransferAssigneeName">Sin responsable</b></span><small class="route-transfer-help" id="routeTransferHelp">Si no activas esta opción, cada punto conserva su responsable actual.</small></span></label>
+  <div class="route-offline-status" id="routeOfflineStatus" hidden>El borrador se conserva en este dispositivo. Conéctate a internet para guardar y asignar.</div>
+  <div class="meta" id="routeImportStatus">El orden inicial será el de selección. “Ordenar por cercanía” usa una aproximación desde la primera parada.</div>
+  <p class="route-order-note" id="routeOrderLockHint" role="status" aria-live="polite"></p>
+  <p class="route-order-note">“Ver recorrido” dibuja el trayecto por carretera cuando el servicio está disponible.</p>
+  <p class="route-vicinity-hint" id="routeVicinityHint" hidden>En cada parada puedes elegir sus puntos cercanos por cantidad o por radio.</p>
+  <section id="routeVicinityTools" class="route-vicinity-tools" hidden aria-label="Selección de puntos cercanos">
+   <div class="route-vicinity-head"><b id="routeVicinityTitle">Seleccionar puntos cercanos</b><button id="routeVicinityClose" type="button" aria-label="Cerrar selección cercana">×</button></div>
+   <p class="route-vicinity-intro">La parada elegida será el centro. Los resultados respetan los filtros y capas activos, se resaltan en el mapa y se agregan al final de la ruta.</p>
+   <div class="route-vicinity-controls">
+    <label>Criterio<select id="routeVicinityMode"><option value="count">Cantidad de puntos</option><option value="radius">Radio de distancia</option></select></label>
+    <label id="routeVicinityCountWrap">Puntos<input id="routeVicinityCount" type="number" min="1" max="500" step="1" value="10" aria-label="Cantidad de puntos cercanos"></label>
+    <label id="routeVicinityRadiusWrap" hidden>Radio
+     <span class="route-vicinity-distance-input"><input id="routeVicinityRadius" type="number" min="1" max="50000" step="50" value="500" data-unit="m" aria-label="Distancia del radio"><select id="routeVicinityRadiusUnit" aria-label="Unidad del radio"><option value="m" selected>m</option><option value="km">km</option></select></span>
+    </label>
+   </div>
+   <p id="routeVicinitySummary" class="route-vicinity-summary" role="status" aria-live="polite"></p>
+  <p id="routeVicinityAdjustHint" class="route-vicinity-adjust-hint" hidden>Desmarca candidatos en la lista o pulsa su marcador en el mapa. Cambia cantidad o radio para recalcular los candidatos.</p>
+  <div id="routeVicinityCandidates" class="route-vicinity-candidates" role="group" aria-label="Puntos candidatos para la ruta" hidden></div>
+   <div class="route-vicinity-actions"><button id="routeVicinityCancel" type="button">Cancelar</button><button id="routeVicinityAdd" type="button">Agregar puntos</button></div>
+  </section>
+  <div class="route-stops" id="routeStops"></div>
+  <div class="confirm-modal-actions">
+   <button class="cancel" id="routeClose" type="button">Cerrar panel</button>
+   <button class="cancel" id="routeOptimize" type="button">Ordenar por cercanía</button>
+   <button class="save" id="routeDraw" type="button">Ver recorrido</button>
+  </div>
+  <div class="confirm-modal-actions"><button class="save" id="routeSave" type="button">Guardar ruta</button></div>
+  </section>
+  <section id="routeListPane" role="tabpanel" aria-labelledby="routeListTab" hidden><label class="route-field" for="routeCatalogSearch">Buscar rutas<input id="routeCatalogSearch" type="search" placeholder="Nombre, responsable o estado"></label><div class="route-catalog-filters" role="group" aria-label="Filtrar rutas"><button type="button" data-route-filter="all" aria-pressed="true">Todas</button><button type="button" data-route-filter="unassigned" aria-pressed="false">Sin asignar</button><button type="button" data-route-filter="assigned" aria-pressed="false">Asignadas</button></div><p id="routeCatalogStatus" class="meta" role="status" aria-live="polite"></p><button id="routeCatalogRetry" class="cancel" type="button" hidden>Reintentar carga</button><div id="routeCatalog" class="route-assignee-routes"></div></section>
+  </div>
+ </section>
+</div>
+<div class="business-detail-overlay" id="businessDetailOverlay" hidden>
+ <section class="business-detail-card" id="businessDetailCard" role="dialog" aria-modal="false" aria-label="Detalle del punto comercial">
+  <div class="business-detail-head"><button id="businessDetailClose" type="button" aria-label="Cerrar detalle del punto" title="Cerrar detalle">×</button></div>
+  <div class="business-detail-content" id="businessDetailContent"></div>
+ </section>
+</div>
+<div class="modal-backdrop" id="zoneModal" hidden>
+ <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="zoneTitle">
+  <h2 id="zoneTitle">Zonas y vendedores</h2>
+  <p id="zoneAssignmentDescription">Visualiza las zonas operativas y asigna sus prospectos cargados a un vendedor. Las zonas son operativas y se guardan en los prospectos del ERP.</p>
+  <label for="zoneAssignmentZone">Zona comercial</label>
+  <select id="zoneAssignmentZone"></select>
+  <label for="zoneAssignmentCell">Cuadrante hexagonal</label>
+  <select id="zoneAssignmentCell"><option value="">Toda la zona</option></select>
+  <label for="zoneAssignmentAssignee" id="zoneAssignmentAssigneeLabel">Vendedor responsable</label>
+  <select id="zoneAssignmentAssignee"><option value="">Mi zona</option></select>
+  <div class="meta" id="zoneAssignmentSummary"></div>
+  <div class="confirm-modal-actions"><button class="cancel" id="zoneClose" type="button">Cerrar</button><button class="cancel" id="zoneTogglePolygons" type="button">Mostrar zonas</button><button class="save" id="zoneAssign" type="button">Asignar prospectos</button></div>
+ </div>
+</div>
+<div class="modal-backdrop" id="deleteModal" hidden>
+ <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
+  <h2 id="deleteTitle">Eliminar negocio</h2>
+  <p id="deleteDescription">El negocio se quitará del mapa y, si ya está sincronizado, también del registro comercial. Esta acción solo está disponible para el Super Admin principal.</p>
+  <div class="confirm-modal-actions"><button class="cancel" id="deleteCancel" type="button">Cancelar</button><button class="danger" id="deleteConfirm" type="button">Eliminar definitivamente</button></div>
+ </div>
+</div>

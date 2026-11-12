@@ -1,0 +1,14 @@
+<style>
+/* Modos del mapa: cada bloque marcado con data-mode-only se muestra solo en los modos listados. */
+[data-mode-hidden],body:not([data-mode]) [data-mode-only]{display:none!important}
+.engine-controls{display:none!important}
+.mode-block{display:grid;gap:8px;margin:0 0 10px}
+.mode-block .search-meta{margin:0}
+.mode-block .search-tools{margin:0}
+.zone-section>summary{display:flex;align-items:center;justify-content:space-between;min-height:30px;cursor:pointer;list-style:none;font-weight:800}
+.zone-section>summary::-webkit-details-marker{display:none}
+.zone-section>summary:after{content:'⌄';margin-left:auto;color:var(--nova-ui-muted-foreground,#6c7c77)}
+.zone-section[open]>summary:after{transform:rotate(180deg)}
+.zone-heading-actions{display:flex;justify-content:flex-end;margin:0 0 4px}
+.zone-heading-actions button{border:0;background:transparent;color:var(--nova-ui-primary,#08785a);font-size:11px;font-weight:700;cursor:pointer;padding:2px 0}
+</style>

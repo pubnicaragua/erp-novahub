@@ -1,29 +1,51 @@
 import { ShieldAlert } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { customersService } from '../services/ventas.service';
 import { subscribeToNotificationEvents } from '../services/notifications.service';
-import { Combobox } from './ui/Combobox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { canAccessModuleView } from '../utils/moduleViewAccess';
 import { ForceSalesNavigation } from './force-sales/ForceSalesNavigation';
+import { ForceSalesMapHeader } from './force-sales/ForceSalesMapHeader';
+import { ForceSalesCustomerLinkDialog, type ForceSalesCustomerOption } from './force-sales/ForceSalesCustomerLinkDialog';
+import { useForceSalesFrameBridge } from './force-sales/useForceSalesFrameBridge';
+import { buildForceSalesMapUrl } from './force-sales/forceSalesMapUrl';
+import {
+  enabledModesFromConfig,
+  FORCE_SALES_MODE_LABELS,
+  FORCE_SALES_MODE_MODULES,
+  FORCE_SALES_MODE_PERMISSIONS,
+  modeStorageKey,
+  parseForceSalesSummary,
+  resolveActiveMode,
+  type ForceSalesModeConfig,
+  type ForceSalesSummary,
+  type ForceSalesView,
+} from './force-sales/forceSalesModes';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
 
 const mapUrl = `${import.meta.env.BASE_URL}maps/diseñoui_mapas_freelancers.html`;
 
-interface ForceSalesMapConfig {
+interface ForceSalesMapConfig extends ForceSalesModeConfig {
   mapProvider?: string;
   mapSearchMode?: string;
   mapTileUrl?: string | null;
   mapGeocoderUrl?: string | null;
 }
 
-interface ForceSalesCustomerOption {
-  id: string;
-  code?: string | null;
-  name: string;
-  companyName?: string | null;
+function readStoredMode(key: string): string | null {
+  try { return window.localStorage.getItem(key); } catch { return null; }
+}
+
+function EmptyMapState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="flex h-full items-center justify-center p-6">
+      <div role="status" className="max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+        <h2 className="text-base font-bold text-foreground">{title}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+      </div>
+    </div>
+  );
 }
 
 export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: { activeSubModule?: string; onSubModuleChange?: (value: string) => void; isSidebarCollapsed?: boolean }) {
@@ -34,17 +56,13 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   const pendingProspectTargetRef = useRef<string | null>(null);
   const pendingRouteTargetRef = useRef<string | null>(null);
   const streamStatusRef = useRef<'connected' | 'reconnecting'>('reconnecting');
+  const searchQueryRef = useRef('');
   const [previousSubModule, setPreviousSubModule] = useState(activeSubModule);
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [mapFrameError, setMapFrameError] = useState(false);
   const [mapFrameLoadVersion, setMapFrameLoadVersion] = useState(0);
-  const [customerLinkDialogOpen, setCustomerLinkDialogOpen] = useState(false);
   const [customerLinkPointId, setCustomerLinkPointId] = useState('');
-  const [customerLinkCustomers, setCustomerLinkCustomers] = useState<ForceSalesCustomerOption[]>([]);
-  const [customerLinkLoading, setCustomerLinkLoading] = useState(false);
-  const [customerLinkError, setCustomerLinkError] = useState('');
-  const customerLinkLookupRequestRef = useRef(0);
-  const customerLinkLookupTimerRef = useRef<number | null>(null);
+  const [summary, setSummary] = useState<ForceSalesSummary | null>(null);
   if (previousSubModule !== activeSubModule) {
     setPreviousSubModule(activeSubModule);
     setMapFullscreen(false);
@@ -62,35 +80,41 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   const googleMapsMapId = String(import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || '').trim() || 'DEMO_MAP_ID';
   const googleMapsCleanMapId = String(import.meta.env.VITE_GOOGLE_MAPS_CLEAN_MAP_ID || '').trim();
   const tenantLogo = user?.clientTenant?.logo || user?.sessionBranding?.logo || isotipoUrl;
-  const view = activeSubModule === 'fuerza-comercial-kanban' ? 'kanban' : activeSubModule === 'fuerza-comercial-historial' ? 'history' : 'map';
+  const view: ForceSalesView = activeSubModule === 'fuerza-comercial-kanban' ? 'kanban' : activeSubModule === 'fuerza-comercial-historial' ? 'history' : 'map';
   const workflowActions = [
     'importProspects', 'updateProspect', 'changeStage', 'registerVisit', 'discardProspect', 'delete', 'assignProspect',
     'attachEvidence', 'manageConsent', 'send', 'createRoute', 'editRoute', 'assignRoute', 'changeRouteStatus',
     'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation',
   ] as const;
   const workflowPermissions = Object.fromEntries(workflowActions.map((action) => [action, canPerform('FORCE_SALES', action)]));
-  const loadCustomerLinkCustomers = useCallback((search: string, requestId: number) => {
-    setCustomerLinkLoading(true);
-    setCustomerLinkError('');
-    void customersService.getLookup({ search: search || undefined, status: 'ACTIVE', page: 1, pageSize: 25 }).then((result) => {
-      if (requestId === customerLinkLookupRequestRef.current) setCustomerLinkCustomers(result?.data || []);
-    }).catch(() => {
-      if (requestId !== customerLinkLookupRequestRef.current) return;
-      setCustomerLinkCustomers([]);
-      setCustomerLinkError('No se pudieron cargar los clientes activos. Intenta de nuevo.');
-    }).finally(() => {
-      if (requestId === customerLinkLookupRequestRef.current) setCustomerLinkLoading(false);
-    });
+
+  // Modos del mapa: los activa el super admin por empresa (o sucursal) y cada rol puede permitirlos o no.
+  const enabledModes = useMemo(() => enabledModesFromConfig(mapConfig), [mapConfig]);
+  const moduleAccessPolicies = user?.moduleAccessPolicies;
+  const allowedModes = enabledModes.filter((mode) => {
+    const permission = FORCE_SALES_MODE_PERMISSIONS[mode];
+    const moduleId = FORCE_SALES_MODE_MODULES[mode];
+    const roleAllows = !permission || canPerform('FORCE_SALES', permission as Parameters<typeof canPerform>[1]);
+    return roleAllows && (!moduleId || canAccessModuleView(moduleAccessPolicies, moduleId));
+  });
+  const allowedModesKey = allowedModes.join(',');
+  const storageKey = modeStorageKey(user?.clientTenantId, user?.id);
+  const [storedMode, setStoredMode] = useState<string | null>(() => readStoredMode(storageKey));
+  const activeMode = resolveActiveMode(allowedModes, storedMode, view);
+  const activeModeRef = useRef(activeMode);
+  useEffect(() => { activeModeRef.current = activeMode; }, [activeMode]);
+
+  const sendToMap = useCallback((type: string, detail: Record<string, unknown> = {}) => {
+    iframeRef.current?.contentWindow?.postMessage({ source: 'novahub-force-sales', type, ...detail }, window.location.origin);
   }, []);
-  const searchCustomerLinkCustomers = useCallback((search: string) => {
-    if (customerLinkLookupTimerRef.current !== null) window.clearTimeout(customerLinkLookupTimerRef.current);
-    const requestId = ++customerLinkLookupRequestRef.current;
-    const term = search.trim();
-    customerLinkLookupTimerRef.current = window.setTimeout(() => {
-      customerLinkLookupTimerRef.current = null;
-      loadCustomerLinkCustomers(term.length >= 2 ? term : '', requestId);
-    }, term.length >= 2 ? 250 : 0);
-  }, [loadCustomerLinkCustomers]);
+
+  const changeMode = useCallback((mode: string) => {
+    setStoredMode(mode);
+    setSummary(null);
+    searchQueryRef.current = '';
+    try { window.localStorage.setItem(storageKey, mode); } catch { /* El modo elegido solo es una comodidad por navegador. */ }
+  }, [storageKey]);
+
   useEffect(() => {
     let cancelled = false;
     if (!isAuthorizedUser) return undefined;
@@ -104,18 +128,15 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
 
   useEffect(() => {
     if (!isAuthorizedUser || !user?.id || !user?.clientTenantId) return undefined;
-    const send = (type: string, detail: Record<string, unknown> = {}) => {
-      iframeRef.current?.contentWindow?.postMessage({ source: 'novahub-force-sales', type, ...detail }, window.location.origin);
-    };
     const unsubscribe = subscribeToNotificationEvents(
       `${user.clientTenantId}:${user.id}`,
       event => {
         if (event.type !== 'force-sales-invalidated' || event.clientTenantId !== user.clientTenantId) return;
-        send('force-sales-refresh', { event });
+        sendToMap('force-sales-refresh', { event });
       },
       status => {
         streamStatusRef.current = status;
-        send('force-sales-stream-status', { status });
+        sendToMap('force-sales-stream-status', { status });
       },
     );
     const onNavigate = (event: Event) => {
@@ -124,120 +145,61 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
       const routeId = String(detail.routeId || '').trim();
       if (routeId) {
         pendingRouteTargetRef.current = routeId;
-        send('force-sales-focus-route', { routeId });
+        sendToMap('force-sales-focus-route', { routeId });
         return;
       }
       const targetId = String(detail.targetId || detail.entityId || '').trim();
       if (!targetId) return;
       pendingProspectTargetRef.current = targetId;
-      send('force-sales-focus-prospect', { targetId });
+      sendToMap('force-sales-focus-prospect', { targetId });
     };
     window.addEventListener('navigate-module', onNavigate);
     return () => {
       unsubscribe();
       window.removeEventListener('navigate-module', onNavigate);
     };
-  }, [isAuthorizedUser, user?.id, user?.clientTenantId]);
+  }, [isAuthorizedUser, user?.id, user?.clientTenantId, sendToMap]);
 
   const mapProvider = String(mapConfig?.mapProvider || 'GOOGLE').toUpperCase();
   const mapSearchMode = String(mapConfig?.mapSearchMode || 'EXTERNAL').toUpperCase();
-  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(tenantLogo)}&companyLogo=${encodeURIComponent(tenantLogo)}&view=${view}&embedded=1&userId=${encodeURIComponent(user?.id || '')}&tenantId=${encodeURIComponent(user?.clientTenantId || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&canAssignTeam=${canAssignTeam ? 'true' : 'false'}&canAssignProspectOwner=${canAssignProspectOwner ? 'true' : 'false'}&canLinkCustomer=${canLinkCustomer ? 'true' : 'false'}&canOperateAssignedRoutes=${canPerform('FORCE_SALES', 'view') ? 'true' : 'false'}&durableTracking=true&permissions=${encodeURIComponent(JSON.stringify(workflowPermissions))}&mapId=${encodeURIComponent(googleMapsMapId)}&cleanMapId=${encodeURIComponent(googleMapsCleanMapId)}&mapProvider=${encodeURIComponent(mapProvider)}&mapSearchMode=${encodeURIComponent(mapSearchMode)}${mapConfig?.mapTileUrl ? `&mapTileUrl=${encodeURIComponent(mapConfig.mapTileUrl)}` : ''}${mapConfig?.mapGeocoderUrl ? `&mapGeocoderUrl=${encodeURIComponent(mapConfig.mapGeocoderUrl)}` : ''}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
+  const mapSrc = activeMode ? buildForceSalesMapUrl({
+    mapUrl,
+    apiBase,
+    logo: tenantLogo,
+    view,
+    userId: user?.id || '',
+    tenantId: user?.clientTenantId || '',
+    platformAdmin: isSuperAdmin,
+    canAssignTeam,
+    canAssignProspectOwner,
+    canLinkCustomer,
+    canOperateAssignedRoutes: canPerform('FORCE_SALES', 'view'),
+    permissions: workflowPermissions,
+    mapId: googleMapsMapId,
+    cleanMapId: googleMapsCleanMapId,
+    mapProvider,
+    mapSearchMode,
+    mapTileUrl: mapConfig?.mapTileUrl,
+    mapGeocoderUrl: mapConfig?.mapGeocoderUrl,
+    mapsKey: googleMapsKey,
+    mode: activeMode,
+    modes: allowedModes,
+    layerDefaults: mapConfig?.modeLayers?.[activeMode] ?? null,
+  }) : '';
 
-  useEffect(() => {
-    const frame = iframeRef.current;
-    const section = mapSectionRef.current;
-    if (!frame || !section) return undefined;
-
-    let scheduledFrame = 0;
-    const publishUiContext = () => {
-      scheduledFrame = 0;
-      const target = frame.contentWindow;
-      if (!target) return;
-
-      const visualViewport = window.visualViewport;
-      const viewportTop = visualViewport?.offsetTop ?? 0;
-      const viewportHeight = visualViewport?.height ?? window.innerHeight;
-      const frameBounds = frame.getBoundingClientRect();
-      const visibleTop = Math.max(frameBounds.top, viewportTop);
-      const visibleBottom = Math.min(frameBounds.bottom, viewportTop + viewportHeight);
-      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-      const styles = getComputedStyle(document.documentElement);
-      const color = (token: string, fallback: string) => {
-        const value = styles.getPropertyValue(token).trim();
-        return value && CSS.supports('color', value) ? value : fallback;
-      };
-
-      target.postMessage({
-        source: 'novahub-force-sales',
-        type: 'ui-context',
-        userName: user?.name || '',
-        viewport: {
-          top: visibleHeight ? Math.round(visibleTop - frameBounds.top) : 0,
-          bottom: visibleHeight ? Math.round(frameBounds.bottom - visibleBottom) : 0,
-          height: Math.round(visibleHeight),
-        },
-        theme: {
-          dark: document.documentElement.classList.contains('dark'),
-          colors: {
-            background: color('--background', '#f8fafc'),
-            foreground: color('--foreground', '#11241f'),
-            card: color('--card', '#ffffff'),
-            muted: color('--muted', '#ececf0'),
-            mutedForeground: color('--muted-foreground', '#6c7c77'),
-            border: color('--border', 'rgba(0,0,0,.1)'),
-            primary: color('--primary', '#01422c'),
-          },
-        },
-      }, window.location.origin);
-    };
-    const scheduleUiContext = () => {
-      if (scheduledFrame) return;
-      scheduledFrame = requestAnimationFrame(publishUiContext);
-    };
-    const resizeObserver = new ResizeObserver(scheduleUiContext);
-    const themeObserver = new MutationObserver(scheduleUiContext);
-    const onUiContextRequest = (event: MessageEvent) => {
-      if (event.source !== frame.contentWindow || event.origin !== window.location.origin) return;
-      if (event.data?.source === 'novahub-force-sales' && event.data?.type === 'request-ui-context') scheduleUiContext();
-    };
-    resizeObserver.observe(section);
-    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
-    window.addEventListener('message', onUiContextRequest);
-    window.addEventListener('resize', scheduleUiContext, { passive: true });
-    window.addEventListener('scroll', scheduleUiContext, { passive: true, capture: true });
-    window.visualViewport?.addEventListener('resize', scheduleUiContext, { passive: true });
-    window.visualViewport?.addEventListener('scroll', scheduleUiContext, { passive: true });
-    const onFrameLoad = () => {
-      if (frame.src === 'about:blank') return;
-      const mapDocument = frame.contentDocument;
-      if (!mapDocument?.getElementById('sheet') || !mapDocument.getElementById('map')) {
-        setMapFrameError(true);
-        frame.src = 'about:blank';
-        return;
-      }
-      setMapFrameError(false);
-      scheduleUiContext();
-      frame.contentWindow?.postMessage({ source: 'novahub-force-sales', type: 'force-sales-stream-status', status: streamStatusRef.current }, window.location.origin);
-      const targetId = pendingProspectTargetRef.current;
-      if (targetId) frame.contentWindow?.postMessage({ source: 'novahub-force-sales', type: 'force-sales-focus-prospect', targetId }, window.location.origin);
-      const routeId = pendingRouteTargetRef.current;
-      if (routeId) frame.contentWindow?.postMessage({ source: 'novahub-force-sales', type: 'force-sales-focus-route', routeId }, window.location.origin);
-    };
-    frame.addEventListener('load', onFrameLoad);
-    scheduleUiContext();
-
-    return () => {
-      if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
-      resizeObserver.disconnect();
-      themeObserver.disconnect();
-      window.removeEventListener('resize', scheduleUiContext);
-      window.removeEventListener('scroll', scheduleUiContext, true);
-      window.visualViewport?.removeEventListener('resize', scheduleUiContext);
-      window.visualViewport?.removeEventListener('scroll', scheduleUiContext);
-      window.removeEventListener('message', onUiContextRequest);
-      frame.removeEventListener('load', onFrameLoad);
-    };
-  }, [mapSrc, mapFullscreen, mapFrameLoadVersion, user?.name]);
+  useForceSalesFrameBridge({
+    frameRef: iframeRef,
+    sectionRef: mapSectionRef,
+    userName: user?.name || '',
+    refreshKey: `${mapSrc}|${mapFullscreen}|${mapFrameLoadVersion}`,
+    streamStatusRef,
+    pendingProspectTargetRef,
+    pendingRouteTargetRef,
+    onFrameError: setMapFrameError,
+    onFrameReady: () => {
+      if (searchQueryRef.current) sendToMap('force-sales-search', { query: searchQueryRef.current });
+    },
+  });
 
   useEffect(() => {
     const onMapMessage = (event: MessageEvent) => {
@@ -247,9 +209,10 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         const pointId = String(event.data.pointId || '').trim();
         if (!canLinkCustomer || !pointId) return;
         setCustomerLinkPointId(pointId);
-        setCustomerLinkDialogOpen(true);
-        if (customerLinkLookupTimerRef.current !== null) window.clearTimeout(customerLinkLookupTimerRef.current);
-        loadCustomerLinkCustomers('', ++customerLinkLookupRequestRef.current);
+      }
+      if (event.data?.type === 'force-sales-summary') {
+        const next = parseForceSalesSummary(event.data);
+        if (next && next.mode === activeModeRef.current) setSummary(next);
       }
       if (event.data?.type === 'fullscreen') setMapFullscreen(Boolean(event.data.active));
       if (event.data?.type === 'configuration-updated') setMapConfig(event.data.configuration || {});
@@ -259,14 +222,20 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     };
     window.addEventListener('message', onMapMessage);
     return () => window.removeEventListener('message', onMapMessage);
-  }, [canLinkCustomer, loadCustomerLinkCustomers]);
+  }, [canLinkCustomer]);
+
+  const selectCustomer = (customer: ForceSalesCustomerOption) => {
+    if (!customerLinkPointId) return;
+    sendToMap('force-sales-customer-link-selected', { pointId: customerLinkPointId, customer });
+    setCustomerLinkPointId('');
+  };
 
   if (!isAuthorizedUser) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background p-6">
         <div className="max-w-md rounded-3xl border border-border/60 bg-card p-8 text-center shadow-xl">
           <ShieldAlert className="mx-auto mb-4 size-10 text-destructive" />
-          <h1 className="nh-module-title">Acceso restringido</h1>
+          <h1 className="text-2xl font-black tracking-tight">Acceso restringido</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Esta herramienta no está habilitada para tu empresa o tu rol.
           </p>
@@ -275,82 +244,62 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     );
   }
 
+  const kanbanAvailable = !mapConfig || allowedModes.includes('prospecting');
+  const noModeMessage = view === 'kanban'
+    ? { title: `El Kanban es parte del modo ${FORCE_SALES_MODE_LABELS.prospecting}`, description: 'Tu empresa o tu rol no tienen habilitado ese modo. Pídele al administrador de NovaHub que lo active.' }
+    : { title: 'No hay modos del mapa habilitados', description: 'Tu empresa o tu rol no tienen ningún modo del mapa activo. Pídele al administrador de NovaHub que habilite Visitas y zonas, Prospección o Entregas.' };
+
   return (
-    <section ref={mapSectionRef} className={mapFullscreen ? 'fixed inset-0 z-[100] h-[100dvh] min-h-0 overflow-hidden bg-background' : 'relative h-[calc(100dvh-4rem)] min-h-0 overflow-hidden bg-background'}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 px-3 pt-3 sm:px-4">
-        <div className="pointer-events-auto">
-          <ForceSalesNavigation activeSubModule={activeSubModule} onSubModuleChange={onSubModuleChange} isSidebarCollapsed={isSidebarCollapsed} />
+    <section ref={mapSectionRef} className={mapFullscreen ? 'fixed inset-0 z-[100] flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-background' : 'relative flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-background'}>
+      {!mapFullscreen && (
+        <div className="shrink-0 space-y-3 px-3 pt-3 sm:px-4">
+          <ForceSalesNavigation activeSubModule={activeSubModule} onSubModuleChange={onSubModuleChange} isSidebarCollapsed={isSidebarCollapsed} showKanban={kanbanAvailable} />
+          {mapConfig && view === 'map' && activeMode && (
+            <ForceSalesMapHeader
+              key={activeMode}
+              modes={allowedModes}
+              activeMode={activeMode}
+              onModeChange={changeMode}
+              summary={summary}
+              onSearch={(query, submit) => {
+                searchQueryRef.current = query;
+                sendToMap('force-sales-search', { query, submit });
+              }}
+              onPrimaryAction={() => sendToMap('force-sales-primary-action')}
+            />
+          )}
         </div>
+      )}
+      <div className="relative min-h-0 flex-1">
+        {mapConfig && mapSrc && <iframe
+          ref={iframeRef}
+          key={`${mapFrameLoadVersion}:${activeMode}:${allowedModesKey}:${mapProvider}:${mapSearchMode}:${mapConfig?.mapTileUrl || ''}:${mapConfig?.mapGeocoderUrl || ''}`}
+          title="Fuerza Comercial NovaHub"
+          src={mapSrc}
+          allow="geolocation; fullscreen"
+          referrerPolicy="strict-origin-when-cross-origin"
+          className="block h-full min-h-0 w-full border-0"
+        />}
+        {mapConfig && !mapSrc && <EmptyMapState title={noModeMessage.title} description={noModeMessage.description} />}
+        {mapFrameError && <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/95 p-6">
+          <div role="alert" className="max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-xl">
+            <h2 className="text-base font-bold text-foreground">No se pudo cargar el mapa comercial</h2>
+            <p className="mt-2 text-sm text-muted-foreground">El servidor respondió con una página distinta al mapa. Reintenta para volver a cargarlo.</p>
+            <button type="button" onClick={() => {
+              setMapFrameError(false);
+              setMapFrameLoadVersion((version) => version + 1);
+            }} className="mt-4 min-h-10 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              Reintentar mapa
+            </button>
+          </div>
+        </div>}
+        {!mapConfig && <div className="flex h-full items-center justify-center text-sm font-semibold text-[#123f35]">Cargando configuración de mapas…</div>}
       </div>
-      {mapConfig && <iframe
-        ref={iframeRef}
-        key={`${mapFrameLoadVersion}:${mapProvider}:${mapSearchMode}:${mapConfig?.mapTileUrl || ''}:${mapConfig?.mapGeocoderUrl || ''}`}
-        title="Fuerza Comercial NovaHub"
-        src={mapSrc}
-        allow="geolocation; fullscreen"
-        referrerPolicy="strict-origin-when-cross-origin"
-        className="block h-full min-h-0 w-full border-0"
-      />}
-      {mapFrameError && <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/95 p-6">
-        <div role="alert" className="max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-xl">
-          <h2 className="text-base font-bold text-foreground">No se pudo cargar el mapa comercial</h2>
-          <p className="mt-2 text-sm text-muted-foreground">El servidor respondió con una página distinta al mapa. Reintenta para volver a cargarlo.</p>
-          <button type="button" onClick={() => {
-            setMapFrameError(false);
-            setMapFrameLoadVersion((version) => version + 1);
-          }} className="mt-4 min-h-10 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            Reintentar mapa
-          </button>
-        </div>
-      </div>}
-      <Dialog open={customerLinkDialogOpen} onOpenChange={(open) => {
-        setCustomerLinkDialogOpen(open);
-        if (!open) {
-          setCustomerLinkPointId('');
-          if (customerLinkLookupTimerRef.current !== null) window.clearTimeout(customerLinkLookupTimerRef.current);
-          customerLinkLookupTimerRef.current = null;
-          customerLinkLookupRequestRef.current += 1;
-          setCustomerLinkLoading(false);
-        }
-      }}>
-        <DialogContent className="!z-[121] w-[calc(100%-2rem)] !max-w-md" overlayClassName="!z-[120]">
-          <DialogHeader>
-            <DialogTitle>Cliente de ventas</DialogTitle>
-          </DialogHeader>
-          <Combobox
-                options={customerLinkCustomers.map((customer) => ({
-                  label: customer.name,
-                  value: customer.id,
-                  description: [customer.code ? `[${customer.code}]` : '', customer.companyName || ''].filter(Boolean).join(' '),
-                }))}
-                value=""
-                onSearchChange={searchCustomerLinkCustomers}
-                onChange={(customerId) => {
-                  const customer = customerLinkCustomers.find((item) => item.id === customerId);
-                  if (!customer || !customerLinkPointId) return;
-                  if (customerLinkLookupTimerRef.current !== null) window.clearTimeout(customerLinkLookupTimerRef.current);
-                  customerLinkLookupTimerRef.current = null;
-                  customerLinkLookupRequestRef.current += 1;
-                  setCustomerLinkLoading(false);
-                  iframeRef.current?.contentWindow?.postMessage({
-                    source: 'novahub-force-sales',
-                    type: 'force-sales-customer-link-selected',
-                    pointId: customerLinkPointId,
-                    customer,
-                  }, window.location.origin);
-                  setCustomerLinkDialogOpen(false);
-                  setCustomerLinkPointId('');
-                }}
-                placeholder="Seleccionar Cliente"
-                searchPlaceholder="Buscar cliente"
-                emptyMessage="No se encontraron clientes activos."
-                ariaLabel="Seleccionar cliente de ventas"
-                contentClassName="!z-[122]"
-              />
-          {customerLinkLoading && <p className="text-xs text-muted-foreground">Cargando clientes activos…</p>}
-          {customerLinkError && <p role="alert" className="text-sm text-destructive">{customerLinkError}</p>}
-        </DialogContent>
-      </Dialog>
+      <ForceSalesCustomerLinkDialog
+        open={Boolean(customerLinkPointId)}
+        onClose={() => setCustomerLinkPointId('')}
+        onSelect={selectCustomer}
+      />
       <input
         ref={routeImportInputRef}
         type="file"
@@ -383,7 +332,6 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
           }
         }}
       />
-      {!mapConfig && <div className="flex h-full items-center justify-center text-sm font-semibold text-[#123f35]">Cargando configuración de mapas…</div>}
     </section>
   );
 }

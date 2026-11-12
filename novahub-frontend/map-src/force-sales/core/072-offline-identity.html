@@ -1,0 +1,64 @@
+<script id="nova-force-sales-offline-identity-core">
+window.NovaForceSalesOfflineIdentity = (()=>{
+  function normalizedIdentity(identity={}){
+    return {tenantId:String(identity?.tenantId||'').trim(),userId:String(identity?.userId||'').trim()};
+  }
+  function scopeKey(identity){
+    const normalized=normalizedIdentity(identity);
+    if(!normalized.tenantId||!normalized.userId)return '';
+    return `${encodeURIComponent(normalized.tenantId)}:${encodeURIComponent(normalized.userId)}`;
+  }
+  function localPointsStorageKey(identity,authenticated=true){
+    if(!authenticated)return 'novaFuerzaLocalPointsV1';
+    return `novaFuerzaLocalPointsV1:${scopeKey(identity)||'unresolved-identity'}`;
+  }
+  function queueKey(identity,sourceKey){
+    const ownerScope=scopeKey(identity);
+    const normalizedSource=String(sourceKey||'').trim();
+    return ownerScope&&normalizedSource?`${ownerScope}:${encodeURIComponent(normalizedSource)}`:'';
+  }
+  function entryMatchesIdentity(entry,identity){
+    const normalized=normalizedIdentity(identity);
+    return Boolean(normalized.tenantId&&normalized.userId
+      &&String(entry?.tenantId||'')===normalized.tenantId
+      &&String(entry?.userId||'')===normalized.userId);
+  }
+  function tokenMatchesIdentity(token,identity){
+    const normalized=normalizedIdentity(identity);
+    if(!token||!normalized.tenantId||!normalized.userId)return false;
+    try{
+      const encoded=String(token).split('.')[1];
+      if(!encoded)return false;
+      const base64=encoded.replace(/-/g,'+').replace(/_/g,'/');
+      const payload=JSON.parse(atob(base64.padEnd(Math.ceil(base64.length/4)*4,'=')));
+      return String(payload?.sub||'')===normalized.userId
+        &&String(payload?.clientTenantId||'')===normalized.tenantId;
+    }catch{return false}
+  }
+  function selectOwnedPoints(points,identity){
+    const normalized=normalizedIdentity(identity);
+    if(!normalized.userId)return [];
+    return (Array.isArray(points)?points:[]).filter(point=>String(point?.createdBy?.id||point?.createdById||'')===normalized.userId);
+  }
+  function countPointsWithoutOwner(points){
+    return (Array.isArray(points)?points:[]).filter(point=>!String(point?.createdBy?.id||point?.createdById||'').trim()).length;
+  }
+  function findLegacyOwner(entry,caches){
+    if(entry?.remoteId)return null;
+    const sourceKey=String(entry?.sourceKey||entry?.payload?.sourceKey||'').trim();
+    const tenantId=String(entry?.payload?.clientTenantId||'').trim();
+    if(!sourceKey||!tenantId)return null;
+    const candidates=new Map();
+    for(const cache of Array.isArray(caches)?caches:[]){
+      if(String(cache?.tenantId||'')!==tenantId)continue;
+      for(const point of Array.isArray(cache?.points)?cache.points:[]){
+        const pointKey=String(point?.sourceKey||point?.id||'').trim();
+        const userId=String(point?.createdBy?.id||point?.createdById||'').trim();
+        if(pointKey===sourceKey&&userId)candidates.set(userId,{tenantId,userId});
+      }
+    }
+    return candidates.size===1?[...candidates.values()][0]:null;
+  }
+  return {normalizedIdentity,scopeKey,localPointsStorageKey,queueKey,entryMatchesIdentity,tokenMatchesIdentity,selectOwnedPoints,countPointsWithoutOwner,findLegacyOwner};
+})();
+</script>

@@ -155,6 +155,7 @@ export type PermissionAction =
   | 'importProspects' | 'updateProspect' | 'changeStage' | 'registerVisit' | 'discardProspect' | 'assignProspect'
   | 'attachEvidence' | 'manageConsent' | 'createRoute' | 'editRoute' | 'assignRoute' | 'changeRouteStatus'
   | 'completeRouteStop' | 'updatePresence' | 'hidePresence' | 'configureLocation'
+  | 'useVisitsMode' | 'useProspectingMode' | 'useDeliveryMode'
   | 'startTask' | 'returnTaskToPending' | 'reassign' | 'manageSubtasks'
   | 'startTimeTracking' | 'stopTimeTracking' | 'addManualTimeEntry'
   | 'manageGuests' | 'sendInvitations' | 'scheduleMeeting' | 'changeStatus'
@@ -590,6 +591,7 @@ const createUserObject = (apiPayload: any): User => {
     'importProspects', 'updateProspect', 'changeStage', 'registerVisit', 'discardProspect', 'assignProspect',
     'attachEvidence', 'manageConsent', 'createRoute', 'editRoute', 'assignRoute', 'changeRouteStatus',
     'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation',
+    'useVisitsMode', 'useProspectingMode', 'useDeliveryMode',
     'startCase', 'requestCaseDocuments', 'returnCaseToPending', 'completeCase', 'cancelCase', 'assignCase',
     'addCaseNote', 'attachCaseDocument', 'sendCaseMessage',
     // Acciones dedicadas: no se derivan de `approve` ni de `edit`.
@@ -1368,6 +1370,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'importProspects', 'updateProspect', 'changeStage', 'registerVisit', 'discardProspect', 'assignProspect',
       'attachEvidence', 'manageConsent', 'createRoute', 'editRoute', 'assignRoute', 'changeRouteStatus',
       'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation',
+      'useVisitsMode', 'useProspectingMode', 'useDeliveryMode',
     ];
     if (upperModule === 'FORCE_SALES' && forceSalesActions.includes(action)) {
       return approvalActionValue(permission, action, upperModule);

@@ -53,6 +53,7 @@ import {
   LifeBuoy,
   Ship,
   Loader2,
+  MapPinned,
   type LucideIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -74,8 +75,11 @@ import { getPasswordError, isValidEmail, normalizeEmail } from '../utils/account
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 
+// Vistas de Fuerza Comercial que no se contratan por separado: lo contratable son sus modos del mapa.
+const VIEW_ONLY_SUBMODULES = new Set(['FORCE_SALES_MAP', 'FORCE_SALES_KANBAN', 'FORCE_SALES_HISTORY', 'FORCE_SALES_REPORTS']);
+
 const submodulesFor = (parent: string): Submodule[] => SIDEBAR_PERMISSION_SUBMODULES
-  .filter((sub) => sub.parent === parent && sub.subscription !== false)
+  .filter((sub) => sub.parent === parent && sub.subscription !== false && !VIEW_ONLY_SUBMODULES.has(sub.id))
   .map((sub) => ({ ...sub, description: `Vista de ${sub.label}` }));
 
 const QUOTEABLE_PARENT_LABELS: Record<string, string> = {
@@ -84,6 +88,7 @@ const QUOTEABLE_PARENT_LABELS: Record<string, string> = {
   HR: 'Recursos Humanos', ACTIVITIES: 'Actividades', ASANA: 'Asana', PROJECTS: 'Proyectos',
   TICKETS: 'Gestión de tickets', HR_TRAINING: 'Centro de capacitación', SUPPORT_TECH: 'Soporte técnico', LEGAL: 'Asesoría legal',
   FINANCING: 'Financiamiento PYME', NOVACHAT: 'Nova Suite', DOCUMENTS: 'Nova Cloud', NOTIFICATIONS: 'Notificaciones',
+  FORCE_SALES: 'Fuerza Comercial',
 };
 const EXCLUDED_QUOTEABLE_PARENTS = new Set(['DASHBOARD', 'MY_COMPANY', 'CONFIGURATION']);
 const QUOTEABLE_PARENT_ICONS: Record<string, LucideIcon> = {
@@ -107,6 +112,7 @@ const QUOTEABLE_PARENT_ICONS: Record<string, LucideIcon> = {
   NOVACHAT: MessageSquare,
   DOCUMENTS: FileText,
   NOTIFICATIONS: BellRing,
+  FORCE_SALES: MapPinned,
 };
 const AVAILABLE_MODULES = SIDEBAR_PERMISSION_PARENT_ORDER
   .filter((parent) => !EXCLUDED_QUOTEABLE_PARENTS.has(parent) && Boolean(QUOTEABLE_PARENT_LABELS[parent]))

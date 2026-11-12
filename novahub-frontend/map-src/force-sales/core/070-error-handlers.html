@@ -1,0 +1,14 @@
+
+<script>
+window.__novaShowMapError = function(message){
+ const status = document.getElementById('mapStatus');
+ const text = document.getElementById('mapStatusText');
+ if(text) text.textContent = message;
+ if(status) status.hidden = false;
+ const live = document.getElementById('liveStatus');
+ if(live) live.textContent = message;
+};
+window.gm_authFailure = function(){
+ window.__novaShowMapError('Nova Maps rechazó la clave. Habilita Maps JavaScript API y Places API, activa facturación y permite el dominio del ERP en las restricciones de la clave.');
+};
+</script>

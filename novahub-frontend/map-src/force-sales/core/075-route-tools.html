@@ -1,0 +1,49 @@
+<script id="nova-force-sales-route-tools">
+window.NovaForceSalesRouteTools=(()=>{
+  // Google Maps acepta como máximo 9 puntos intermedios en un enlace.
+  const GOOGLE_MAPS_MAX_WAYPOINTS=9;
+  function nextPendingStopIndex(stops=[],pendingStopIds=[]){
+    const pending=new Set((Array.isArray(pendingStopIds)?pendingStopIds:[]).map(value=>String(value||'')));
+    return (Array.isArray(stops)?stops:[]).findIndex(stop=>{
+      const status=String(stop?.status||'PENDING').toUpperCase();
+      return !['COMPLETED','SKIPPED'].includes(status)&&!pending.has(String(stop?.id||''));
+    });
+  }
+  function stopCoordinates(stop){
+    if(stop?.lat===null||stop?.lat===undefined||stop?.lat===''||stop?.lng===null||stop?.lng===undefined||stop?.lng==='')return null;
+    const lat=Number(stop?.lat),lng=Number(stop?.lng);
+    if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)return null;
+    return `${lat},${lng}`;
+  }
+  // Waze: solo coordenadas. Con «q» (nombre y dirección) Waze hace una búsqueda de texto y puede
+  // llevar a otro lugar con nombre parecido, así que no se envía.
+  function navigationUrls(stop={}){
+    const coordinates=stopCoordinates(stop);
+    if(!coordinates)return {waze:'',googleMaps:''};
+    return {
+      waze:`https://waze.com/ul?ll=${encodeURIComponent(coordinates)}&navigate=yes&utm_source=novahub`,
+      googleMaps:`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinates)}&travelmode=driving`,
+    };
+  }
+  // Ruta completa en Google Maps: las paradas pendientes en orden como puntos intermedios y la última como destino.
+  // Con «roundTrip» el destino es el punto de partida (ida y vuelta). Sin «origin», Google usa la ubicación actual del equipo.
+  function googleMapsRouteUrl(stops=[],{origin=null,roundTrip=false}={}){
+    const points=(Array.isArray(stops)?stops:[]).map(stopCoordinates).filter(Boolean);
+    const start=origin?stopCoordinates(origin):null;
+    if(roundTrip&&!start)return {url:'',used:0,omitted:0};
+    const destination=roundTrip?start:points[points.length-1];
+    const middle=roundTrip?points:points.slice(0,-1);
+    if(!destination||(!roundTrip&&!points.length))return {url:'',used:0,omitted:0};
+    const waypoints=middle.slice(0,GOOGLE_MAPS_MAX_WAYPOINTS);
+    const params=[
+      'api=1',
+      start?`origin=${encodeURIComponent(start)}`:'',
+      `destination=${encodeURIComponent(destination)}`,
+      waypoints.length?`waypoints=${waypoints.map(encodeURIComponent).join('%7C')}`:'',
+      'travelmode=driving',
+    ].filter(Boolean);
+    return {url:`https://www.google.com/maps/dir/?${params.join('&')}`,used:waypoints.length+(roundTrip?0:1),omitted:middle.length-waypoints.length};
+  }
+  return Object.freeze({nextPendingStopIndex,navigationUrls,googleMapsRouteUrl,GOOGLE_MAPS_MAX_WAYPOINTS});
+})();
+</script>

@@ -1,0 +1,257 @@
+<script id="nova-force-sales-location-core">
+window.NovaForceSalesLocation = (()=>{
+  function normalizeCoordinates(value){
+    if(!value)return null;
+    const latValue=value.lat ?? value.latitude;
+    const lngValue=value.lng ?? value.longitude;
+    if(latValue == null || latValue === '' || lngValue == null || lngValue === '')return null;
+    const lat=Number(typeof latValue==='function'?latValue.call(value):latValue);
+    const lng=Number(typeof lngValue==='function'?lngValue.call(value):lngValue);
+    return Number.isFinite(lat)&&lat>=-90&&lat<=90&&Number.isFinite(lng)&&lng>=-180&&lng<=180 ? {lat,lng} : null;
+  }
+  function isFreshLocationTimestamp(capturedAt,now=Date.now(),maxAgeMs=90000){
+    const timestamp=typeof capturedAt==='number'?capturedAt:Date.parse(String(capturedAt||''));
+    return Number.isFinite(timestamp)&&timestamp<=now&&now-timestamp<=maxAgeMs;
+  }
+  function presenceGpsState({capturedAt,now=Date.now(),historyAvailable=false}={}){
+    if(!historyAvailable)return 'unknown';
+    return isFreshLocationTimestamp(capturedAt,now)?'recent':'stale';
+  }
+  function clusterPresenceRows(rows,projectPoint,minDistance=44){
+    const prepared=[];
+    for(const row of Array.isArray(rows)?rows:[]){
+      const point=typeof projectPoint==='function'?projectPoint(row):null;
+      if(!point||!Number.isFinite(Number(point.x))||!Number.isFinite(Number(point.y)))continue;
+      prepared.push({row,x:Number(point.x),y:Number(point.y)});
+    }
+    const parents=prepared.map((_,index)=>index);
+    const find=index=>{while(parents[index]!==index){parents[index]=parents[parents[index]];index=parents[index]}return index};
+    const join=(first,second)=>{const a=find(first),b=find(second);if(a!==b)parents[b]=a};
+    const distance=Math.max(1,Number(minDistance)||44);
+    const cells=new Map();
+    prepared.forEach((point,index)=>{
+      const column=Math.floor(point.x/distance),row=Math.floor(point.y/distance);
+      for(let x=column-1;x<=column+1;x++)for(let y=row-1;y<=row+1;y++){
+        for(const otherIndex of cells.get(`${x}:${y}`)||[]){
+          const other=prepared[otherIndex];
+          if(Math.hypot(point.x-other.x,point.y-other.y)<=distance)join(index,otherIndex);
+        }
+      }
+      const key=`${column}:${row}`;
+      if(!cells.has(key))cells.set(key,[]);
+      cells.get(key).push(index);
+    });
+    const components=new Map();
+    prepared.forEach((point,index)=>{
+      const root=find(index);
+      if(!components.has(root))components.set(root,[]);
+      components.get(root).push(point);
+    });
+    return [...components.values()].filter(component=>component.length>1).map(component=>{
+      const ids=component.map(point=>String(point.row?.userId||'')).sort();
+      return {
+        rows:component.map(point=>point.row),
+        center:{x:component.reduce((sum,point)=>sum+point.x,0)/component.length,y:component.reduce((sum,point)=>sum+point.y,0)/component.length},
+        key:ids.join('|'),
+      };
+    }).sort((first,second)=>first.key.localeCompare(second.key));
+  }
+  function spreadPresenceRows(group,{width=0,height=0,minDistance=44,margin=22}={}){
+    const rows=Array.isArray(group?.rows)?group.rows:[];
+    const count=rows.length;
+    if(count<2)return {fits:false,center:null,positions:[]};
+    const radius=Math.max(minDistance,Math.ceil(minDistance/(2*Math.sin(Math.PI/count)))+5);
+    const mapWidth=Math.max(0,Number(width)||0),mapHeight=Math.max(0,Number(height)||0);
+    const fits=mapWidth>=radius*2+margin*2&&mapHeight>=radius*2+margin*2;
+    if(!fits)return {fits:false,center:null,positions:[]};
+    const center={
+      x:Math.min(Math.max(Number(group.center?.x)||0,radius+margin),mapWidth-radius-margin),
+      y:Math.min(Math.max(Number(group.center?.y)||0,radius+margin),mapHeight-radius-margin),
+    };
+    const positions=rows.map((_,index)=>{
+      const angle=-Math.PI/2+2*Math.PI*index/count;
+      return {x:center.x+Math.cos(angle)*radius,y:center.y+Math.sin(angle)*radius};
+    });
+    return {fits:true,center,positions};
+  }
+  function readMarkerCoordinates(marker,event){
+    const candidates=[event?.position,event?.latLng,event?.target?.getLatLng?.(),event?.target?.position,marker?.position];
+    for(const candidate of candidates){
+      const normalized=normalizeCoordinates(candidate);
+      if(normalized)return normalized;
+    }
+    return null;
+  }
+  function createDraftMarker({createMarker,position,onPositionChange}){
+    const coordinates=normalizeCoordinates(position);
+    if(!coordinates||typeof createMarker!=='function')return null;
+    const marker=createMarker({
+      position:coordinates,
+      title:'Punto provisional. Arrastra el pin o toca otro punto del mapa para ajustar la ubicación.',
+      draggable:true,
+      gmpDraggable:true,
+      zIndex:1600,
+    });
+    if(!marker)return null;
+    marker.addEventListener?.('gmp-dragend',event=>{
+      const next=readMarkerCoordinates(marker,event);
+      if(next&&typeof onPositionChange==='function')onPositionChange(next);
+    });
+    return marker;
+  }
+  function selectMapBusinesses({filteredBusinesses=[],allBusinesses=[],currentBounds,limit,focusedId}){
+    const max=Math.max(0,Number(limit)||0);
+    const clusteredBusinesses=filteredBusinesses
+      .filter(business=>String(business?.id)!==String(focusedId||''))
+      .filter(business=>normalizeCoordinates({lat:business?.lat,lng:business?.lng}))
+      .filter(business=>!currentBounds?.contains || currentBounds.contains({lat:Number(business.lat),lng:Number(business.lng)}))
+      .slice(0,max);
+    const focusedBusiness=focusedId ? allBusinesses.find(business=>String(business?.id)===String(focusedId)) || null : null;
+    return focusedBusiness ? [focusedBusiness,...clusteredBusinesses] : clusteredBusinesses;
+  }
+  function formatCaptureLocation({lat,lng,source,accuracy}){
+    const coordinates=normalizeCoordinates({lat,lng});
+    if(!coordinates)return 'Ubicación no válida';
+    const gps=source==='ubicación actual';
+    const label=gps?'Ubicación GPS':'Punto seleccionado';
+    const accuracyMeters=accuracy == null || accuracy === '' ? NaN : Number(accuracy);
+    const accuracyText=gps&&Number.isFinite(accuracyMeters)&&accuracyMeters>=0 ? ` · GPS ±${Math.round(accuracyMeters)} m` : '';
+    return `${label} · ${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}${accuracyText}`;
+  }
+  const DEFAULT_MAP_LAYERS=Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:false,gpsTrail:false,basePlaces:false,labelMode:'off'});
+  const TRAIL_LIMITS=Object.freeze({maxAccuracyMeters:100,maxGapSeconds:120,maxDistanceMeters:300,maxSpeedMetersPerSecond:45});
+  const TRAIL_COLORS=['#08785a','#2364d2','#cb5a2b','#8557b8','#b18a00','#167d8d','#b63872','#5d6b27'];
+  // `defaults` permite que cada modo del mapa arranque con sus propias capas (ver modes/*).
+  function normalizeMapLayers(value={},defaults=DEFAULT_MAP_LAYERS){
+    const input=value&&typeof value==='object'?value:{};
+    const base={...DEFAULT_MAP_LAYERS,...(defaults&&typeof defaults==='object'?defaults:{})};
+    const labelMode=['off','smart','all'].includes(input.labelMode)?input.labelMode:(['off','smart','all'].includes(base.labelMode)?base.labelMode:DEFAULT_MAP_LAYERS.labelMode);
+    const pick=key=>typeof input[key]==='boolean'?input[key]:Boolean(base[key]);
+    return {users:pick('users'),manualPoints:pick('manualPoints'),catalog:pick('catalog'),plannedRoutes:pick('plannedRoutes'),gpsTrail:false,basePlaces:pick('basePlaces'),labelMode};
+  }
+  // Las preferencias de capas se guardan por usuario, empresa y modo (el modo es opcional para claves antiguas).
+  function mapLayerStorageKey(tenantId,userId,mode){return `novaForceSalesMapLayersV1:${String(tenantId||'no-tenant')}:${String(userId||'no-user')}${mode?`:${String(mode)}`:''}`}
+  function getBusinessLayer(business){return /^quick-/i.test(String(business?.sourceKey||''))||/^quick-/i.test(String(business?.id||''))?'manualPoints':'catalog'}
+  function isBusinessVisibleInLayers(business,layers=DEFAULT_MAP_LAYERS,focusedId=''){
+    if(focusedId&&String(business?.id||'')===String(focusedId))return true;
+    return Boolean(layers?.[getBusinessLayer(business)]);
+  }
+  function trailColorForUser(userId){
+    let hash=2166136261;
+    for(const character of String(userId||'unknown')){hash^=character.charCodeAt(0);hash=Math.imul(hash,16777619)}
+    return TRAIL_COLORS[(hash>>>0)%TRAIL_COLORS.length];
+  }
+  function distanceMeters(first,second){
+    const radians=value=>value*Math.PI/180;
+    const lat1=radians(first.lat),lat2=radians(second.lat);
+    const deltaLat=lat2-lat1,deltaLng=radians(second.lng-first.lng);
+    const value=Math.sin(deltaLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(deltaLng/2)**2;
+    return 6371008.8*2*Math.atan2(Math.sqrt(value),Math.sqrt(Math.max(0,1-value)));
+  }
+  function processLocationTrail(points=[],limits=TRAIL_LIMITS){
+    const thresholds={...TRAIL_LIMITS,...(limits||{})};
+    const result={segments:[],isolatedPoints:[],interruptions:[],usedCount:0,discardedCount:0,duplicateCount:0,originalPoints:[]};
+    const seen=new Set(),prepared=[];
+    for(const point of Array.isArray(points)?points:[]){
+      const userId=String(point?.userId||point?.userName||'unknown');
+      const rawCoordinates=normalizeCoordinates(point);
+      const timestamp=Date.parse(String(point?.capturedAt||''));
+      const keyValue=point?.eventId||point?.id||`${point?.capturedAt||''}:${point?.lat??''}:${point?.lng??''}:${point?.accuracy??''}`;
+      const dedupeKey=`${userId}:${String(keyValue)}`;
+      if(seen.has(dedupeKey)){result.duplicateCount++;result.discardedCount++;continue}
+      seen.add(dedupeKey);
+      if(!rawCoordinates||!Number.isFinite(timestamp)){result.discardedCount++;continue}
+      const hasAccuracy=point?.accuracy!==null&&point?.accuracy!==undefined&&point?.accuracy!=='';
+      const accuracy=hasAccuracy?Number(point.accuracy):null;
+      const validAccuracy=hasAccuracy&&Number.isFinite(accuracy)&&accuracy>=0;
+      const entry={point,userId,timestamp,lat:rawCoordinates.lat,lng:rawCoordinates.lng,accuracy:validAccuracy?accuracy:null,accuracyKnown:validAccuracy,stableId:String(point?.eventId||point?.id||'')};
+      prepared.push(entry);
+      result.originalPoints.push(point);
+    }
+    prepared.sort((a,b)=>a.userId.localeCompare(b.userId)||a.timestamp-b.timestamp||a.stableId.localeCompare(b.stableId));
+    const byUser=new Map();
+    for(const entry of prepared){if(!byUser.has(entry.userId))byUser.set(entry.userId,[]);byUser.get(entry.userId).push(entry)}
+    const addIsolated=(userId,entry,reason,samples=1)=>result.isolatedPoints.push({userId,point:entry.point,reason,samples});
+    for(const [userId,userPoints] of byUser){
+      let segment=[],previous=null,lastNoiseStop=null;
+      const flush=(singleReason='single')=>{
+        if(segment.length>1)result.segments.push({userId,points:segment.map(entry=>entry.point)});
+        else if(segment.length===1)addIsolated(userId,segment[0],singleReason);
+        segment=[];
+      };
+      const cut=(reason,current)=>{
+        flush();
+        if(previous)result.interruptions.push({userId,reason,fromEventId:previous.stableId,toEventId:current.stableId});
+        lastNoiseStop=null;
+      };
+      for(const entry of userPoints){
+        if(!entry.accuracyKnown){
+          if(previous)cut('unknown-accuracy',entry);
+          else flush();
+          addIsolated(userId,entry,'unknown-accuracy');
+          result.usedCount++;
+          previous=null;lastNoiseStop=null;
+          continue;
+        }
+        if(entry.accuracy>thresholds.maxAccuracyMeters){
+          if(previous)cut('low-accuracy',entry);else flush();
+          result.discardedCount++;
+          previous=null;lastNoiseStop=null;
+          continue;
+        }
+        result.usedCount++;
+        if(!previous){segment=[entry];previous=entry;lastNoiseStop=null;continue}
+        const elapsedSeconds=(entry.timestamp-previous.timestamp)/1000;
+        const distance=distanceMeters(previous,entry);
+        const minimumDistance=Math.max(0,distance-previous.accuracy-entry.accuracy);
+        const reasons=[];
+        if(elapsedSeconds>thresholds.maxGapSeconds)reasons.push('time-gap');
+        if(distance>thresholds.maxDistanceMeters)reasons.push('distance-gap');
+        if(elapsedSeconds<=0||minimumDistance/elapsedSeconds>thresholds.maxSpeedMetersPerSecond)reasons.push('speed-gap');
+        if(reasons.length){
+          for(const reason of reasons)cut(reason,entry);
+          segment=[entry];previous=entry;lastNoiseStop=null;
+          continue;
+        }
+        const uncertainty=previous.accuracy+entry.accuracy;
+        if(distance<=uncertainty){
+          if(segment.length>1)flush();
+          if(segment.length===1){segment=[];addIsolated(userId,entry,'gps-noise-stop',2)}
+          else if(lastNoiseStop&&result.isolatedPoints[lastNoiseStop.index]){
+            const stop=result.isolatedPoints[lastNoiseStop.index];stop.point=entry.point;stop.samples++;
+          }else addIsolated(userId,entry,'gps-noise-stop',1);
+          lastNoiseStop={index:result.isolatedPoints.length-1,eventId:entry.stableId};
+          segment=[];previous=entry;
+          continue;
+        }
+        if(segment.length===0){
+          if(lastNoiseStop&&result.isolatedPoints[lastNoiseStop.index]?.point===previous.point)result.isolatedPoints.splice(lastNoiseStop.index,1);
+          segment=[previous,entry];
+        }else segment.push(entry);
+        previous=entry;lastNoiseStop=null;
+      }
+      flush();
+    }
+    return result;
+  }
+  function validateEvidenceFile(file,{allowPdf=false}={}){
+    if(!file)return {valid:false,error:null};
+    const allowedImages=new Set(['image/jpeg','image/png','image/webp','image/gif','image/avif']);
+    const isImage=allowedImages.has(String(file.type||'').toLowerCase());
+    const isPdf=allowPdf&&String(file.type||'').toLowerCase()==='application/pdf';
+    if(!isImage&&!isPdf)return {valid:false,error:allowPdf?'Formato no admitido. Usa JPG, PNG, WebP, GIF, AVIF o PDF.':'Formato de imagen no admitido. Usa JPG, PNG, WebP, GIF o AVIF.'};
+    if(!Number.isFinite(Number(file.size))||Number(file.size)<0)return {valid:false,error:'No se pudo leer el archivo seleccionado'};
+    if(Number(file.size)>10*1024*1024)return {valid:false,error:'La evidencia supera el límite de 10 MB'};
+    return {valid:true,error:null};
+  }
+  function visibleFrameArea({frameTop,frameHeight,viewportTop,viewportHeight}){
+    const frameBottom=frameTop+frameHeight;
+    const viewportBottom=viewportTop+viewportHeight;
+    const visibleTop=Math.max(frameTop,viewportTop);
+    const visibleBottom=Math.min(frameBottom,viewportBottom);
+    const height=Math.max(0,visibleBottom-visibleTop);
+    return {top:height?visibleTop-frameTop:Math.min(frameHeight,Math.max(0,viewportTop-frameTop)),bottom:height?frameBottom-visibleBottom:0,height};
+  }
+  return Object.freeze({normalizeCoordinates,isFreshLocationTimestamp,presenceGpsState,clusterPresenceRows,spreadPresenceRows,readMarkerCoordinates,createDraftMarker,selectMapBusinesses,formatCaptureLocation,processLocationTrail,normalizeMapLayers,mapLayerStorageKey,getBusinessLayer,isBusinessVisibleInLayers,trailColorForUser,DEFAULT_MAP_LAYERS,TRAIL_LIMITS,validateEvidenceFile,visibleFrameArea});
+})();
+</script>

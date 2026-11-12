@@ -81,6 +81,9 @@ export const PERMISSION_ACTION_DEFINITIONS = [
   { key: 'updatePresence', label: 'Compartir ubicación', description: 'Permite publicar ubicación y actividad propias en el mapa.' },
   { key: 'hidePresence', label: 'Ocultar ubicación', description: 'Permite ocultar la ubicación propia si la política lo autoriza.' },
   { key: 'configureLocation', label: 'Configurar ubicación', description: 'Permite configurar cuándo la empresa exige compartir ubicación.' },
+  { key: 'useVisitsMode', label: 'Mapa: Visitas y zonas', description: 'Permite abrir el modo de visitas a clientes y zonas de cobro del mapa.' },
+  { key: 'useProspectingMode', label: 'Mapa: Prospección', description: 'Permite abrir el modo que busca negocios nuevos cerca de la ubicación actual.' },
+  { key: 'useDeliveryMode', label: 'Mapa: Entregas', description: 'Permite abrir el modo de rutas de entrega con ida, vuelta o varias paradas.' },
   { key: 'configureRestaurant', label: 'Configurar restaurante', description: 'Permite cambiar la operación, perfil, canales, cocina, inventario y caja del restaurante.' },
   { key: 'closeTable', label: 'Liberar mesa', description: 'Permite cerrar o liberar una mesa sin comandas abiertas.' },
   { key: 'changeTableStatus', label: 'Cambiar estado de mesa', description: 'Permite actualizar manualmente el estado operativo de una mesa.' },
@@ -232,7 +235,7 @@ const GRANULAR_PERMISSION_ACTIONS = new Set<PermissionMatrixAction>([
   'editCurve', 'createCapture', 'deleteCapture', 'managePublicLinks',
   'importProspects', 'updateProspect', 'changeStage', 'registerVisit', 'discardProspect', 'assignProspect',
   'attachEvidence', 'manageConsent', 'createRoute', 'editRoute', 'assignRoute', 'changeRouteStatus',
-  'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation', 'configureRestaurant',
+  'completeRouteStop', 'updatePresence', 'hidePresence', 'configureLocation', 'useVisitsMode', 'useProspectingMode', 'useDeliveryMode', 'configureRestaurant',
   'startTicket', 'returnTicketToOpen', 'resolveTicket', 'closeTicket', 'reopenTicket', 'commentTicket',
   'startCase', 'requestCaseDocuments', 'returnCaseToPending', 'completeCase', 'cancelCase', 'assignCase',
   'addCaseNote', 'attachCaseDocument', 'sendCaseMessage',
@@ -312,7 +315,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
     'read', 'create', 'edit', 'delete', 'export', 'importProspects', 'updateProspect', 'changeStage', 'registerVisit',
     'discardProspect', 'assignProspect', 'attachEvidence', 'manageConsent', 'send', 'createRoute',
     'editRoute', 'assignRoute', 'changeRouteStatus', 'completeRouteStop', 'updatePresence', 'hidePresence',
-    'configureLocation',
+    'configureLocation', 'useVisitsMode', 'useProspectingMode', 'useDeliveryMode',
   ],
   TICKETS: ['read', 'create', 'edit', 'export'],
   HR_TRAINING: ['read', 'create', 'edit', 'enroll', 'start', 'complete', 'completeEnrollment', 'cancel', 'requestPayment'],
@@ -833,6 +836,8 @@ export function approvalActionValue(permission: any, action: string, module?: st
       discardProspect: ['edit'], assignProspect: ['edit'], attachEvidence: ['edit'], manageConsent: ['edit'],
       createRoute: ['create'], editRoute: ['edit'], assignRoute: ['edit'], changeRouteStatus: ['edit'],
       completeRouteStop: ['edit'], updatePresence: ['edit'], hidePresence: ['edit'], configureLocation: ['edit'],
+      // Un rol que ya podía abrir Fuerza Comercial conserva todos los modos hasta que se le niegue alguno de forma explícita.
+      useVisitsMode: ['read'], useProspectingMode: ['read'], useDeliveryMode: ['read'],
     },
   };
   const forceSalesLegacyActions = forceSalesFallbacks[permissionModule]?.[action];

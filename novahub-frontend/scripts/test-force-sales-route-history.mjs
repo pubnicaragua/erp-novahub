@@ -26,8 +26,8 @@ assert.equal(processed.isolatedPoints[0].point.id, 'third', 'El siguiente tramo 
 const realtimeMapScript = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
   .map(match => match[2])
   .find(script => script.includes('function refreshForceSalesData')) || '';
-const refreshHandler = realtimeMapScript.match(/function refreshForceSalesData\(event=\{\}\)\{([\s\S]*?)\n\}/)?.[1] || '';
-assert.match(refreshHandler, /shouldLoadLocationTrail\(\)&&refreshTrail\)work\.push\(loadLocationTrail\(\{fitCamera:false\}\)\)/, 'Los eventos solo consultan el recorrido mientras su capa o el historial estén abiertos y no mueven la cámara');
+const refreshHandler = realtimeMapScript.match(/function scheduleForceSalesRefresh\(\)\{([\s\S]*?)\n\}/)?.[1] || '';
+assert.match(refreshHandler, /scope\.has\('trail'\)&&shouldLoadLocationTrail\(\)\)work\.push\(loadLocationTrail\(\{fitCamera:false\}\)\)/, 'Los eventos solo consultan el recorrido mientras su capa o el historial estén abiertos y no mueven la cámara');
 assert.match(realtimeMapScript, /function shouldLoadLocationTrail\(\)\{return CAN_ASSIGN_TEAM&&\(\(activeView==='map'&&mapLayers\.gpsTrail\)\|\|activeView==='history'\)\}/, 'El historial no se consulta en segundo plano cuando ambas vistas están cerradas');
 assert.match(realtimeMapScript, /if\(event\.data\?\.type==='force-sales-refresh'\)refreshForceSalesData\(event\.data\.event\|\|\{\}\)/, 'El iframe recibe cambios por el stream compartido del shell');
 assert.match(realtimeMapScript, /if\(forceSalesRealtimeConnected\)refreshForceSalesData\(\{resource:'location-trail'\}\)/, 'La reconexión solicita reconciliación, limitada por la capa abierta');
@@ -58,7 +58,7 @@ assert.match(trackingRuntime, /if \(eligibleNow\(\)\) await startTracking\(false
 assert.match(realtimeMapScript, /let remoteProspectsRefreshRequested=false/, 'El mapa conserva una invalidación recibida mientras carga prospectos');
 assert.match(realtimeMapScript, /if\(remoteProspectsLoading\)\{remoteProspectsRefreshRequested=true;return\}/, 'Un evento SSE durante una consulta activa agenda un refresco posterior');
 assert.match(realtimeMapScript, /if\(remoteProspectsRefreshRequested\)\{remoteProspectsRefreshRequested=false;void loadRemoteProspects\(\);\}/, 'La consulta activa vuelve a cargar los prospectos si recibió una invalidación mientras esperaba');
-assert.match(realtimeMapScript, /if\(routePlanningMode&&marker\._b\)\{toggleRouteBusiness\(marker\._b\);return;\}/, 'El mapa agrega o quita la parada al pulsar directamente su punto sin abrir su ficha');
+assert.match(realtimeMapScript, /if\(routePlanningMode&&marker\._b&&canEditRouteComposition\(\)\)\{toggleRouteBusiness\(marker\._b\);return;\}/, 'El mapa agrega o quita la parada al pulsar directamente su punto sin abrir su ficha');
 assert.match(realtimeMapScript, /const removeStop=\(\)=>\{if\(routePlanningMode\)toggleRouteBusiness\(business\)\}/, 'El marcador numerado permite quitar una parada desde el mapa');
 assert.match(realtimeMapScript, /idempotencyKey:routeSaveAttemptKey/, 'La clave de idempotencia del guardado permanece junto al borrador local');
 assert.match(realtimeMapScript, /routeSaveAttemptKey=draft\.idempotencyKey\|\|null/, 'Un reintento tras recargar conserva la clave de idempotencia');
@@ -66,7 +66,7 @@ assert.doesNotMatch(realtimeMapScript, /if\(active&&!routeDraftDirty&&!hasStored
 assert.match(realtimeMapScript, /route-stop-selected/, 'Las paradas del borrador tienen una marca visual de alto contraste');
 assert.match(realtimeMapScript, /routePlanningMode\|\|mapLayers\.plannedRoutes\?googleMap:null/, 'Las paradas del borrador permanecen visibles aunque la capa de rutas esté apagada');
 assert.match(realtimeMapScript, /routeStopKeys=new Set\(routeBusinesses\.map\(keyOf\)\)/, 'Las paradas seleccionadas se excluyen del agrupamiento de puntos comerciales');
-assert.match(realtimeMapScript, /activeRouteCount=userId=>routesUnavailable\?null:remoteRoutes\.filter/, 'El selector muestra el número de rutas activas sin interpretar una consulta fallida como cero');
+assert.match(realtimeMapScript, /activeRouteCount=userId=>\{\s*if\(assigneesLoadState!=='ready'\)return null;[\s\S]*?rawCount===null\|\|rawCount===undefined[\s\S]*?return null/, 'El selector muestra el número de rutas activas que informa el servidor sin interpretar una consulta fallida como cero');
 assert.match(html, /id="routeAssigneeHistory" hidden/, 'El historial de rutas queda plegado inicialmente');
 assert.doesNotMatch(html, /id="routeFilterAssignee"|id="routeSavedRoute"|id="routeHistoryDate"/, 'El constructor ya no muestra filtros o selectores separados de rutas guardadas');
 assert.match(html, /id="routeAssigneeSearch" type="text" role="combobox"[\s\S]*?id="routeAssigneeOptions"[^>]*role="listbox"/, 'El responsable de ruta se elige en un único buscador accesible');

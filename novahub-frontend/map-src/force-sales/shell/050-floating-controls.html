@@ -1,0 +1,29 @@
+
+<div class="fabbar">
+ <button class="float primary-float" id="newPoint" type="button" aria-label="Nuevo punto" title="Nuevo punto"><span aria-hidden="true">＋</span><span class="new-point-label">Nuevo punto</span></button>
+ <button class="float location-float" id="locateMe" type="button" aria-label="Mi ubicación" title="Mi ubicación"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="7.25" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg><span class="gps-live-dot" aria-hidden="true"></span><span class="location-label">Mi ubicación</span></button>
+ <button class="float" id="mobileSheetToggle" type="button" aria-label="Abrir panel">Panel</button>
+ <details class="mobile-more-actions"><summary aria-label="Más acciones">Más</summary><div class="mobile-more-menu"><button class="float" id="openMapLayers" type="button">Capas del mapa</button><button class="float" id="routeTop" type="button">Armar ruta</button><button class="float fullscreen-float" id="fullscreenMap" type="button" title="Ver mapa en pantalla completa" aria-label="Ver mapa en pantalla completa">⛶ Pantalla completa</button></div></details>
+</div>
+<div class="legend" id="potentialLegend" hidden><b>Potencial Nova Hub</b><div class="lr"><i class="ld" style="background:#08785a"></i>A · visita prioritaria</div><div class="lr"><i class="ld" style="background:#eea13d"></i>B · prospecto viable</div><div class="lr"><i class="ld" style="background:#83928d"></i>C · validar operación</div><div class="lr"><i class="ld" style="background:#2364d2"></i>Vendedor activo · últimos 10 min</div></div>
+<div class="toast" id="toast"></div>
+<input id="quickPointCameraInput" type="file" accept="image/*" capture="environment" hidden>
+<input id="quickPointGalleryInput" type="file" accept="image/*" hidden>
+<input id="quickEvidenceInput" type="file" accept="application/pdf" hidden>
+<div class="quick-capture" id="quickCapture" role="region" aria-labelledby="quickCaptureTitle" hidden>
+ <h2 id="quickCaptureTitle">Nuevo negocio en este punto</h2>
+ <p id="quickCaptureLocation" aria-live="polite">Coordenada capturada</p>
+ <p class="quick-capture-hint">Ajusta el pin en el mapa. La fotografía es opcional.</p>
+ <div class="quick-capture-photo" id="quickCapturePhoto" hidden><img id="quickCapturePhotoImage" alt="Vista previa de la fotografía del negocio"><span id="quickCapturePhotoName">Foto lista para guardar</span><button id="quickCaptureRemovePhoto" type="button" aria-label="Quitar fotografía">Quitar</button></div>
+ <div class="quick-capture-grid"><label for="quickCaptureName">Nombre del negocio</label><input id="quickCaptureName" type="text" maxlength="180" placeholder="Ej. Casa de zinc" autocomplete="organization" required></div>
+ <div class="quick-capture-actions"><button class="cancel" id="quickCaptureCancel" type="button">Cancelar</button><button class="camera" id="quickCaptureTakePhoto" type="button">Tomar foto</button><button class="gallery" id="quickCaptureChoosePhoto" type="button">Elegir de galería</button><button class="save" id="quickCaptureSave" type="button" disabled>Guardar negocio</button></div>
+</div>
+<input id="quickEvidenceCameraInput" type="file" accept="image/*" capture="environment" hidden>
+<input id="quickEvidenceGalleryInput" type="file" accept="image/*" hidden>
+<div class="modal-backdrop evidence-source-backdrop" id="evidenceSourcePicker" hidden>
+ <div class="confirm-modal evidence-source-picker" role="dialog" aria-modal="true" aria-labelledby="evidenceSourceTitle">
+  <h2 id="evidenceSourceTitle">Adjuntar evidencia</h2>
+  <p>Elige una fotografía nueva, una de la galería o un documento PDF.</p>
+  <div class="evidence-source-actions"><button id="evidenceSourceCamera" type="button">Tomar foto</button><button id="evidenceSourceGallery" type="button">Elegir de galería</button><button id="evidenceSourceDocument" type="button">Elegir documento PDF</button><button class="cancel" id="evidenceSourceCancel" type="button">Cancelar</button></div>
+ </div>
+</div>

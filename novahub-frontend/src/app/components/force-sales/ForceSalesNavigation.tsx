@@ -13,12 +13,14 @@ interface ForceSalesNavigationProps {
   onSubModuleChange?: (subModule: string) => void;
   isSidebarCollapsed?: boolean;
   reportContext?: boolean;
+  /** El Kanban comercial pertenece al modo Prospección: sin ese modo no se ofrece. */
+  showKanban?: boolean;
 }
 
-export function ForceSalesNavigation({ activeSubModule, onSubModuleChange, isSidebarCollapsed, reportContext = false }: ForceSalesNavigationProps) {
+export function ForceSalesNavigation({ activeSubModule, onSubModuleChange, isSidebarCollapsed, reportContext = false, showKanban = true }: ForceSalesNavigationProps) {
   const items = reportContext
     ? [{ id: 'reportes-gestores-cobro', label: 'Gestores de cobro', icon: BarChart3 }]
-    : FORCE_SALES_ITEMS;
+    : FORCE_SALES_ITEMS.filter((item) => showKanban || item.id !== 'fuerza-comercial-kanban');
   const activeId = items.some((item) => item.id === activeSubModule) ? activeSubModule! : items[0].id;
 
   return (

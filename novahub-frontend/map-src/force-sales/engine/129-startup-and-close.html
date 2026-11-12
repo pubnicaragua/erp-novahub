@@ -1,0 +1,29 @@
+if(innerWidth > 820) sheet.classList.remove('collapsed');
+updateToggle();
+
+window.NovaForceSalesModes.activate(ACTIVE_MODE);
+window.NovaForceSalesModes.bind();
+mergeBusinesses();
+populateFilters();
+render();
+updateOfflineStatus();
+if(legacyLocalPointsWithoutOwner)setForceSalesSyncError('puntos locales anteriores',`${legacyLocalPointsWithoutOwner} punto(s) local(es) anterior(es) no tienen un creador verificable; siguen guardados y no se cargaron en esta cuenta.`);
+void restoreOfflineEvidencePreviews();
+setTimeout(() => {
+  loadForceSalesConfiguration().finally(() => {
+    loadAssignees();
+    flushOutbox().finally(() => loadRemoteProspects()).finally(() => loadRemoteRoutes()).finally(() => {
+      if(LEAD_DISCOVERY_ENABLED)setSearchStatus('Datos locales cargados. Pulsa «Encontrar negocios cerca de mí» o escribe un rubro para consultar negocios de Nova.');
+      else if(ACTIVE_MODE==='delivery')setSearchStatus('Modo entregas activo. Planifica una ruta con una o varias paradas.');
+      else setSearchStatus('Modo visitas y zonas activo. Solo se muestran los puntos de tu empresa.');
+      loadSellerPresence();
+    });
+  });
+}, 450);
+}).catch(error => {
+  console.warn('No se pudo iniciar Nova Maps',error);
+  window.__novaShowMapError('Nova Maps no pudo iniciar. Verifica la clave, el dominio autorizado y vuelve a intentar.');
+});
+</script>
+</body>
+</html>

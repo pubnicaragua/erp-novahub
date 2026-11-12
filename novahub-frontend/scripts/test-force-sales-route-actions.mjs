@@ -214,9 +214,21 @@ assert.equal(routeTools.nextPendingStopIndex([
 assert.deepEqual(JSON.parse(JSON.stringify(routeTools.navigationUrls({
   name: 'Tienda Uno', address: 'Calle Central', lat: 12.1, lng: -86.2,
 }))), {
-  waze: 'https://waze.com/ul?ll=12.1%2C-86.2&navigate=yes&q=Tienda%20Uno%20Calle%20Central&utm_source=novahub',
+  waze: 'https://waze.com/ul?ll=12.1%2C-86.2&navigate=yes&utm_source=novahub',
   googleMaps: 'https://www.google.com/maps/dir/?api=1&destination=12.1%2C-86.2&travelmode=driving',
-}, 'Ambos navegadores deben recibir las coordenadas exactas de la parada');
+}, 'Ambos navegadores deben recibir las coordenadas exactas de la parada, sin un texto de búsqueda que Waze pueda interpretar como otro lugar');
+assert.doesNotMatch(routeTools.navigationUrls({ name: 'Tienda Uno', address: 'Calle Central', lat: 12.1, lng: -86.2 }).waze, /[?&]q=/, 'Waze no recibe «q»: con texto de búsqueda ignora las coordenadas');
+const fullRoute = routeTools.googleMapsRouteUrl([
+  { lat: 12.1, lng: -86.2 }, { lat: 12.2, lng: -86.3 }, { lat: 12.3, lng: -86.4 }, { lat: null, lng: null },
+]);
+assert.equal(fullRoute.url, 'https://www.google.com/maps/dir/?api=1&destination=12.3%2C-86.4&waypoints=12.1%2C-86.2%7C12.2%2C-86.3&travelmode=driving', 'La ruta completa lleva las paradas pendientes como puntos intermedios y la última como destino; ignora las que no tienen GPS');
+assert.equal(fullRoute.used, 3, 'Se informan las paradas incluidas');
+const roundTrip = routeTools.googleMapsRouteUrl([{ lat: 12.1, lng: -86.2 }, { lat: 12.2, lng: -86.3 }], { origin: { lat: 12, lng: -86 }, roundTrip: true });
+assert.equal(roundTrip.url, 'https://www.google.com/maps/dir/?api=1&origin=12%2C-86&destination=12%2C-86&waypoints=12.1%2C-86.2%7C12.2%2C-86.3&travelmode=driving', 'Ida y vuelta: el destino es el punto de partida y todas las paradas van como intermedias');
+assert.equal(routeTools.googleMapsRouteUrl([{ lat: 12.1, lng: -86.2 }], { roundTrip: true }).url, '', 'Sin punto de partida no hay ida y vuelta');
+const manyStops = routeTools.googleMapsRouteUrl(Array.from({ length: 14 }, (_, index) => ({ lat: 12 + index / 100, lng: -86 })));
+assert.equal(manyStops.omitted, 4, 'Google admite 9 puntos intermedios: las demás paradas se informan como omitidas');
+assert.equal(routeTools.googleMapsRouteUrl([]).url, '', 'Sin paradas no hay enlace');
 assert.deepEqual(JSON.parse(JSON.stringify(routeTools.navigationUrls({ name: 'Sin GPS', lat: null, lng: null }))), { waze: '', googleMaps: '' }, 'Sin GPS, la navegación se deshabilita en ambos proveedores');
 assert.match(html, /id="routeStart"/, 'La ruta persistida debe ofrecer el inicio explícito');
 assert.match(html, /id="routeOpenGoogleMaps"/, 'La parada siguiente debe poder abrirse en Google Maps');

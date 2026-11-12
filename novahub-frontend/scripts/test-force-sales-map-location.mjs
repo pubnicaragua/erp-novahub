@@ -79,6 +79,8 @@ const locationSandbox = {
   presenceWatchRequested: false,
   startPresenceWatch() {},
   syncSellerPresence: (coords, capturedAt) => acceptedPresenceReads.push({ coords, capturedAt }),
+  activeRemoteRoute: () => null,
+  scheduleActiveRouteMapRefresh() {},
   userLocationMarker: null,
   userLocationCircle: null,
   lastKnownCoords: null,

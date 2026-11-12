@@ -1,0 +1,63 @@
+<script>
+window.__novaMapsReady = new Promise((resolve, reject) => {
+ const params = new URLSearchParams(location.search);
+ const provider = String(params.get('mapProvider') || 'GOOGLE').toUpperCase();
+ window.__novaMapProvider = provider;
+ window.__novaMapSearchMode = String(params.get('mapSearchMode') || 'EXTERNAL').toUpperCase();
+ window.__novaMapTileUrl = params.get('mapTileUrl') || '';
+ window.__novaMapGeocoderUrl = params.get('mapGeocoderUrl') || '';
+ if(provider === 'OPENSTREETMAP' || provider === 'CUSTOM'){
+  const stylesheet = document.createElement('link');
+  stylesheet.rel = 'stylesheet';
+  stylesheet.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+  document.head.appendChild(stylesheet);
+  const leafletScript = document.createElement('script');
+  leafletScript.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  leafletScript.async = true;
+  leafletScript.onload = () => resolve();
+  leafletScript.onerror = () => { window.__novaShowMapError('No se pudo cargar el motor de mapas configurado.'); reject(new Error('Map engine failed to load')); };
+  document.head.appendChild(leafletScript);
+  return;
+ }
+ const key = params.get('mapsKey') || '';
+if(!key){window.__novaShowMapError('Falta configurar la clave de mapas de Nova en el frontend.'); reject(new Error('Nova Maps key missing')); return}
+ let settled = false;
+ let clusterStarted = false;
+ const loadClusterer = () => {
+  if(clusterStarted)return;
+  clusterStarted = true;
+  const clusterScript = document.createElement('script');
+  clusterScript.src = 'https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js';
+  clusterScript.async = true;
+  clusterScript.onload = () => {window.__novaRefreshClusters?.()};
+  // El agrupador es opcional: Nova Maps debe poder pintar aunque ese CDN falle.
+  clusterScript.onerror = () => console.warn('Nova marker clustering unavailable; continuing without clustering');
+  document.head.appendChild(clusterScript);
+ };
+ const finish = () => {
+  if(settled)return;
+  if(window.google?.maps?.Map){
+   settled = true;
+   loadClusterer();
+   resolve();
+   return;
+  }
+  window.setTimeout(finish,50);
+ };
+ window.__novaMapsCallback = finish;
+ const loadMaps = (attempt=0) => {
+  const mapsScript = document.createElement('script');
+  mapsScript.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places,marker&loading=async&callback=__novaMapsCallback&v=weekly' + (attempt ? '&channel=novahub-retry-' + attempt : '');
+  mapsScript.async = true;
+  mapsScript.defer = true;
+  mapsScript.onerror = () => {
+   if(attempt < 2){window.setTimeout(()=>loadMaps(attempt+1),450*(attempt+1));return}
+   window.__novaShowMapError('No se pudo descargar Nova Maps. Revisa conexión, facturación y las restricciones HTTP de la clave.');
+   reject(new Error('Nova Maps failed to load'));
+  };
+  mapsScript.onload = finish;
+  document.head.appendChild(mapsScript);
+ };
+ loadMaps();
+});
+</script>

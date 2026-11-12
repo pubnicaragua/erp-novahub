@@ -1,0 +1,150 @@
+
+<aside class="sidebar collapsed" id="sheet">
+ <div class="brand" id="sheetHeader">
+  <div class="sheetHandle"></div>
+  <h1 id="panelTitle">Mapa comercial</h1>
+  <button class="panel-location" id="currentZoneButton" type="button" aria-label="Seleccionar Managua como zona actual" data-mode-only="prospecting">
+   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 10.1c0 5.25-8 11.4-8 11.4S4 15.35 4 10.1a8 8 0 1 1 16 0Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="2.5" fill="currentColor"/></svg>
+   <span>Managua</span><span class="panel-location-chevron" aria-hidden="true">⌄</span>
+  </button>
+  <div class="live panel-status" id="panelStatus" role="status" aria-live="polite">
+   <span class="dot" aria-hidden="true"></span>
+   <span id="liveStatus">Base inicial cargada. Lista para consultar negocios de Nova…</span>
+   <span class="panel-status-separator" aria-hidden="true">·</span>
+   <span id="offlineStatusText">Preparando sincronización offline…</span>
+  </div>
+ </div>
+ <div class="scroll">
+
+  <!-- Modo Prospección: búsqueda de negocios cercanos con Google Places, zonas rápidas y filtros. -->
+  <section class="mode-block" data-mode-only="prospecting" aria-label="Búsqueda de negocios">
+   <div class="search-meta"><span id="searchStatus">Escribe un rubro o usa el mapa para buscar nuevos negocios.</span></div>
+   <div class="search-tools">
+    <button id="searchNearby" type="button">◎ Cerca de mí</button>
+    <select id="nearbyRadius" aria-label="Radio de búsqueda cercana"><option value="2000">2 km</option><option value="5000" selected>5 km</option><option value="10000">10 km</option></select>
+    <button class="search-zone" id="searchViewport" type="button">Buscar vista</button>
+   </div>
+   <details class="sect zone-section">
+    <summary class="zone-heading"><span>Zonas rápidas</span></summary>
+    <div class="zone-heading-actions"><button id="toggleAllZones" type="button" aria-expanded="false">Ver todas <span aria-hidden="true">→</span></button></div>
+    <div class="chips" id="zoneChips"></div>
+   </details>
+   <details class="sect filter-panel" id="filtersPanel">
+    <summary aria-controls="filterControls">
+     <span class="filter-panel-title">Filtros comerciales</span>
+     <span class="filter-panel-values" id="filterSummaryText">Todos los rubros · Todas las fuentes · Todo seguimiento</span>
+     <span class="filter-panel-chevron" aria-hidden="true">⌄</span>
+    </summary>
+    <div class="filters" id="filterControls">
+     <select id="category" aria-label="Rubro"><option value="all">Todos los rubros</option></select>
+     <select id="source" aria-label="Fuente"><option value="all">Todas las fuentes</option><option value="Nova">Nova</option><option value="Base inicial">Base inicial</option></select>
+     <select id="state" aria-label="Seguimiento"><option value="all">Todo seguimiento</option><option>Nuevo</option><option>Contactado</option><option>Visitado</option><option>Interesado</option><option>Demo</option><option>Cliente</option><option>Descartado</option></select>
+    </div>
+   </details>
+  </section>
+
+  <!-- Acciones de trabajo: cada tarjeta se muestra solo en los modos que la usan y si el rol tiene permiso. -->
+  <div class="actions action-cards">
+   <button class="action-card" id="routeImportQuick" type="button" hidden data-mode-only="visits prospecting">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19v-1.2A4.8 4.8 0 0 1 8.3 13h1.4a4.8 4.8 0 0 1 4.8 4.8V19M16 5.5a3 3 0 0 1 0 5.8M17 13.5a4.2 4.2 0 0 1 3.5 4.2V19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span class="action-card-copy"><b>Importar clientes</b><small>Carga clientes y rutas desde archivo</small></span><span class="action-card-chevron" aria-hidden="true">›</span>
+   </button>
+   <button class="action-card" id="routePlannerQuick" type="button" hidden>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="3.5" cy="6" r="1.5" fill="currentColor"/><circle cx="3.5" cy="12" r="1.5" fill="currentColor"/><circle cx="3.5" cy="18" r="1.5" fill="currentColor"/></svg>
+    <span class="action-card-copy"><b>Rutas y gestores</b><small>Gestiona rutas y vendedores</small></span><span class="action-card-chevron" aria-hidden="true">›</span>
+   </button>
+  </div>
+
+  <div class="bulkbar" id="bulkbar" data-mode-only="prospecting">
+   <div class="bulkbar-heading"><b id="selectionSummary">0 seleccionados</b>
+    <details class="bulkbar-more"><summary aria-label="Más acciones de selección">⌄</summary><div class="bulkbar-secondary">
+     <button id="bulkKanban" type="button">Añadir a Kanban</button>
+     <button id="bulkVisit" type="button">Registrar visitas</button>
+     <button id="bulkWhatsApp" type="button">WhatsApp oficial</button>
+     <button id="bulkDiscard" type="button">Descartar</button>
+    </div></details>
+   </div>
+   <div class="bulkbar-actions">
+    <button id="selectVisible" type="button">Seleccionar visibles</button>
+    <button id="clearSelection" type="button">Limpiar selección</button>
+    <button id="bulkRoute" type="button">Armar ruta</button>
+   </div>
+  </div>
+
+  <div class="workspace-heading" id="workspaceHeading" hidden><b id="workspaceHeadingTitle"></b><span id="workspaceHeadingMeta"></span></div>
+  <div class="resultsHead"><b id="resultsTitle">Fuerza Comercial</b><div class="results-head-actions"><span id="resultText"></span><button class="show-all-results" id="showAllBusinesses" type="button" title="Quita filtros activos y muestra todos los negocios" aria-label="Quitar filtros activos y mostrar todos los negocios" hidden>Ver todos</button></div></div>
+  <div class="list" id="list"></div>
+  <div class="kanban-board" id="kanbanBoard" hidden></div>
+  <div class="history-list" id="historyView" hidden></div>
+
+  <!-- Herramientas poco frecuentes, en un solo menú. -->
+  <details class="more-tools" id="moreToolsPanel">
+   <summary><span class="more-tools-icon" aria-hidden="true">⋯</span><span>Más</span></summary>
+   <div class="more-tools-content">
+    <details class="map-layers-panel" id="mapLayersPanel">
+     <summary aria-controls="mapLayerOptions">Capas del mapa</summary>
+     <div class="map-layer-options" id="mapLayerOptions">
+      <div class="map-layer-group-title">Elementos de NovaHub</div>
+      <label><input type="checkbox" data-map-layer="users" checked> Usuarios</label>
+      <label><input type="checkbox" data-map-layer="manualPoints" checked> Puntos marcados</label>
+      <label data-mode-only="prospecting"><input type="checkbox" data-map-layer="catalog"> Catálogo comercial</label>
+      <label><input type="checkbox" data-map-layer="plannedRoutes"> Rutas planificadas</label>
+      <label id="gpsTrailLayerLabel"><input type="checkbox" data-map-layer="gpsTrail"> Recorrido GPS aproximado</label>
+      <div class="map-layer-controls" id="gpsTrailControls" hidden>
+       <label for="mapTrailDate">Día<input id="mapTrailDate" type="date"></label>
+       <label for="mapTrailUser">Usuario<select id="mapTrailUser"><option value="">Todos los usuarios</option></select></label>
+       <label class="map-layer-originals"><span>Diagnóstico</span><span><input id="mapTrailOriginals" type="checkbox"> Ver lecturas originales, aisladas</span></label>
+       <button id="loadMapTrail" type="button">Actualizar recorrido</button>
+      </div>
+      <div class="map-layer-status" id="mapTrailStatus" role="status" aria-live="polite">Activa Recorrido GPS para consultar posiciones guardadas.</div>
+      <div class="map-layer-legend" id="mapTrailLegend" aria-label="Leyenda del recorrido GPS"></div>
+      <div class="map-layer-group-title">Lugares del mapa base</div>
+      <label id="basePlacesLayerLabel"><input type="checkbox" data-map-layer="basePlaces"> Mostrar negocios, parques y otros lugares</label>
+      <p class="map-layer-note" id="mapStyleNotice" role="status" aria-live="polite"></p>
+      <button class="map-layer-reset" id="resetMapLayers" type="button">Restablecer vista limpia</button>
+     </div>
+    </details>
+
+    <div class="sect">
+     <div class="stitle"><span>Nombres de puntos</span></div>
+     <div class="segment" id="labels"><button type="button" class="active" data-mode="off" aria-pressed="true">Ocultar</button><button type="button" data-mode="smart" aria-pressed="false">Inteligente</button><button type="button" data-mode="all" aria-pressed="false">Todos</button></div>
+    </div>
+
+    <div class="search-tools">
+     <button id="toggle3d" type="button" title="Activar vista inclinada">3D</button>
+    </div>
+
+    <div class="more-actions-grid">
+     <button class="btn secondary" id="mapConfigurationButton" type="button" hidden>Configuración del mapa</button>
+     <button class="btn secondary" id="clearCatalog" type="button" hidden>⌫ Limpiar base</button>
+     <button class="btn secondary" id="locationSettings" type="button" hidden>Privacidad de ubicación</button>
+     <button class="btn secondary" id="zoneManager" type="button" data-mode-only="visits prospecting">▦ Zonas y vendedores</button>
+     <button class="btn secondary" id="opportunities" type="button" data-mode-only="prospecting">✦ Ver oportunidades</button>
+     <button class="btn secondary" id="kanbanToggle" type="button" data-mode-only="prospecting">▦ Ver Kanban</button>
+     <button class="btn secondary" id="historyToggle" type="button">◷ Ver historial</button>
+     <button class="btn secondary" id="clearGoogleCache" type="button" data-mode-only="prospecting">Actualizar datos de Google</button>
+     <button class="btn secondary" id="refresh" type="button" data-mode-only="prospecting">↻ Actualizar negocios</button>
+    </div>
+   </div>
+  </details>
+
+  <!-- Controles internos del motor. El ERP los maneja desde su barra superior (buscador, indicadores y pestañas). -->
+  <div class="engine-controls" hidden aria-hidden="true">
+   <div class="kpis">
+    <div class="kpi" data-pipeline="found"><b id="foundCount">0</b><span>Encontrados</span></div>
+    <div class="kpi" data-pipeline="selected"><b id="selectedCount">0</b><span>Seleccionados</span></div>
+    <div class="kpi" data-pipeline="kanban"><b id="kanbanCount">0</b><span>En Kanban</span></div>
+    <div class="kpi" data-pipeline="visited"><b id="visitedCount">0</b><span>Visitados</span></div>
+    <div class="kpi" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
+   </div>
+   <div class="view-tabs" id="viewTabs" aria-label="Vistas comerciales">
+    <button class="active" data-view="map" type="button">Mapa</button>
+    <button data-view="kanban" type="button">Kanban</button>
+    <button data-view="history" type="button">Historial</button>
+   </div>
+   <div class="search-row">
+    <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off" tabindex="-1"><button id="searchGoogle" type="button" tabindex="-1">⌕</button></div>
+   </div>
+  </div>
+ </div>
+</aside>

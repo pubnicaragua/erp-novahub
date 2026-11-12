@@ -1,0 +1,132 @@
+<script id="nova-force-sales-route-action-queue">
+window.NovaForceSalesRouteActionQueue=(()=>{
+  const DATABASE_NAME='nova-force-sales-route-actions-v1';
+  const DATABASE_VERSION=1;
+  const ACTIONS_STORE='actions';
+  function identityKey(identity={}){
+    return window.NovaForceSalesOfflineIdentity.scopeKey(identity);
+  }
+  function transactionDone(transaction){
+    return new Promise((resolve,reject)=>{
+      transaction.oncomplete=()=>resolve();
+      transaction.onabort=()=>reject(transaction.error||new Error('No se pudo guardar la acción de ruta.'));
+      transaction.onerror=()=>reject(transaction.error||new Error('No se pudo guardar la acción de ruta.'));
+    });
+  }
+  function openDatabase(){
+    if(!('indexedDB' in globalThis))return Promise.reject(new Error('Este navegador no permite guardar acciones de ruta sin conexión.'));
+    return new Promise((resolve,reject)=>{
+      const request=indexedDB.open(DATABASE_NAME,DATABASE_VERSION);
+      request.onupgradeneeded=()=>{
+        const database=request.result;
+        if(!database.objectStoreNames.contains(ACTIONS_STORE)){
+          const store=database.createObjectStore(ACTIONS_STORE,{keyPath:'queueId',autoIncrement:true});
+          store.createIndex('byIdentity','identityKey',{unique:false});
+        }
+      };
+      request.onsuccess=()=>resolve(request.result);
+      request.onerror=()=>reject(request.error||new Error('No se pudo abrir la cola de acciones de ruta.'));
+      request.onblocked=()=>reject(new Error('Cierra otras pestañas de NovaHub para actualizar la cola de rutas.'));
+    });
+  }
+  async function enqueue(identity,action){
+    const normalized=window.NovaForceSalesOfflineIdentity.normalizedIdentity(identity);
+    const scope=identityKey(normalized);
+    if(!scope||!action?.actionId||!action?.routeId||!action?.idempotencyKey
+      ||!['START_ROUTE','COMPLETE_STOP'].includes(String(action.type||''))){
+      throw new Error('La acción de ruta no tiene identidad o datos válidos.');
+    }
+    if(action.type==='COMPLETE_STOP'&&!action.stopId)throw new Error('La visita no identifica una parada de ruta.');
+    const database=await openDatabase();
+    try{
+      const transaction=database.transaction(ACTIONS_STORE,'readwrite');
+      const store=transaction.objectStore(ACTIONS_STORE);
+      const existingRequest=store.index('byIdentity').getAll(IDBKeyRange.only(scope));
+      let queueId=null;
+      existingRequest.onsuccess=()=>{
+        const existing=existingRequest.result.find(record=>record.actionId===action.actionId);
+        if(existing){queueId=existing.queueId;return}
+        const latitude=action.payload?.lat;
+        const longitude=action.payload?.lng;
+        const payload=action.type==='START_ROUTE'
+          ? {status:'IN_PROGRESS',startedAt:new Date(action.payload?.startedAt||Date.now()).toISOString()}
+          : {
+            ...(latitude!==null&&latitude!==undefined&&latitude!==''&&Number.isFinite(Number(latitude))?{lat:Number(latitude)}:{}),
+            ...(longitude!==null&&longitude!==undefined&&longitude!==''&&Number.isFinite(Number(longitude))?{lng:Number(longitude)}:{}),
+            notes:String(action.payload?.notes||'').slice(0,1000),
+            occurredAt:new Date(action.payload?.occurredAt||Date.now()).toISOString(),
+          };
+        const request=store.add({
+          actionId:String(action.actionId).slice(0,180),type:action.type,routeId:String(action.routeId),
+          ...(action.type==='COMPLETE_STOP'?{stopId:String(action.stopId)}:{}),
+          routeName:String(action.routeName||'Ruta comercial').slice(0,180),
+          ...(action.type==='COMPLETE_STOP'?{stopName:String(action.stopName||'Parada de ruta').slice(0,180)}:{}),
+          idempotencyKey:String(action.idempotencyKey).slice(0,180),payload,
+          identityKey:scope,tenantId:normalized.tenantId,userId:normalized.userId,
+          status:'PENDING',error:null,queuedAt:new Date().toISOString(),
+        });
+        request.onsuccess=()=>{queueId=request.result};
+      };
+      await transactionDone(transaction);
+      if(!Number.isFinite(Number(queueId)))throw new Error('El navegador no confirmó la acción guardada.');
+      return Number(queueId);
+    }finally{database.close()}
+  }
+  async function list(identity){
+    const scope=identityKey(identity);
+    if(!scope)return [];
+    const database=await openDatabase();
+    try{
+      const transaction=database.transaction(ACTIONS_STORE,'readonly');
+      const request=transaction.objectStore(ACTIONS_STORE).index('byIdentity').getAll(IDBKeyRange.only(scope));
+      const completed=transactionDone(transaction);
+      const records=await new Promise((resolve,reject)=>{
+        request.onsuccess=()=>resolve(request.result||[]);
+        request.onerror=()=>reject(request.error||new Error('No se pudo leer la cola de rutas.'));
+      });
+      await completed;
+      return records.sort((a,b)=>Number(a.queueId)-Number(b.queueId));
+    }finally{database.close()}
+  }
+  async function remove(identity,queueId){
+    const scope=identityKey(identity);
+    const database=await openDatabase();
+    try{
+      const transaction=database.transaction(ACTIONS_STORE,'readwrite');
+      const store=transaction.objectStore(ACTIONS_STORE);
+      const request=store.get(Number(queueId));
+      request.onsuccess=()=>{if(request.result?.identityKey===scope)store.delete(Number(queueId))};
+      await transactionDone(transaction);
+    }finally{database.close()}
+  }
+  async function markBlocked(identity,queueId,error){
+    const scope=identityKey(identity);
+    const database=await openDatabase();
+    try{
+      const transaction=database.transaction(ACTIONS_STORE,'readwrite');
+      const store=transaction.objectStore(ACTIONS_STORE);
+      const request=store.get(Number(queueId));
+      request.onsuccess=()=>{
+        if(request.result?.identityKey!==scope)return;
+        store.put({...request.result,status:'BLOCKED',error:String(error||'No se pudo sincronizar la acción.').slice(0,500)});
+      };
+      await transactionDone(transaction);
+    }finally{database.close()}
+  }
+  async function retry(identity,queueId){
+    const scope=identityKey(identity);
+    const database=await openDatabase();
+    try{
+      const transaction=database.transaction(ACTIONS_STORE,'readwrite');
+      const store=transaction.objectStore(ACTIONS_STORE);
+      const request=store.get(Number(queueId));
+      request.onsuccess=()=>{
+        if(request.result?.identityKey!==scope||request.result?.status!=='BLOCKED')return;
+        store.put({...request.result,status:'PENDING',error:null});
+      };
+      await transactionDone(transaction);
+    }finally{database.close()}
+  }
+  return Object.freeze({enqueue,list,remove,markBlocked,retry});
+})();
+</script>

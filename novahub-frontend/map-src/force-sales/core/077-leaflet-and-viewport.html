@@ -1,0 +1,167 @@
+<script>
+function setupNovaLeafletAdapter(){
+ if(window.__novaLeafletReady)return;
+ const Leaflet=window.L;
+ if(!Leaflet)throw new Error('Leaflet unavailable');
+ const params=new URLSearchParams(location.search);
+ const tileUrl=window.__novaMapTileUrl || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+ const attribution=String(window.__novaMapProvider||'')==='CUSTOM' ? 'Mapa personalizado · NovaHub' : '© OpenStreetMap contributors';
+ const point=(value)=>({lat:()=>Number(value?.lat ?? value?.[0] ?? 0),lng:()=>Number(value?.lng ?? value?.[1] ?? 0)});
+ const latLng=(value)=>{
+  const lat=value?.lat ?? value?.[0] ?? 0;
+  const lng=value?.lng ?? value?.[1] ?? 0;
+  return {lat:Number(typeof lat==='function'?lat.call(value):lat),lng:Number(typeof lng==='function'?lng.call(value):lng)};
+ };
+ class LeafletMapAdapter{
+  constructor(element,options={}){
+   this._map=Leaflet.map(element,{zoomControl:options.zoomControl!==false,scrollWheelZoom:options.scrollwheel!==false,attributionControl:true}).setView([options.center?.lat||12.115,options.center?.lng||-86.26],options.zoom||11);
+   Leaflet.tileLayer(tileUrl,{maxZoom:20,attribution}).addTo(this._map);
+   this._map.on('click',event=>this._mapClick?.({latLng:point(event.latlng)}));
+  }
+  addListener(event,handler){
+   if(event==='click'){this._mapClick=handler;return {remove:()=>{this._mapClick=null}};}
+   const mapped=event==='zoom_changed'?'zoomend':event==='tilesloaded'?'load':event==='idle'?'moveend':event;
+   this._map.on(mapped,handler);
+   return {remove:()=>this._map.off(mapped,handler)};
+  }
+  getZoom(){return this._map.getZoom()}
+  projectToContainer(value){const point=this._map.latLngToContainerPoint([Number(value.lat),Number(value.lng)]);return {x:Number(point.x),y:Number(point.y)}}
+  containerToCoordinates(x,y){const point=this._map.containerPointToLatLng([Number(x),Number(y)]);return {lat:Number(point.lat),lng:Number(point.lng)}}
+  getCenter(){return point(this._map.getCenter())}
+  setCenter(value){const center=latLng(value);this._map.setView([center.lat,center.lng],this._map.getZoom())}
+  panTo(value){this._map.panTo([Number(value.lat),Number(value.lng)])}
+  setZoom(value){this._map.setZoom(Number(value))}
+  getBounds(){const bounds=this._map.getBounds();return {getNorthEast:()=>point(bounds.getNorthEast()),getSouthWest:()=>point(bounds.getSouthWest()),contains:(value)=>bounds.contains([Number(value.lat),Number(value.lng)])}}
+  fitBounds(bounds,padding){this._map.fitBounds(bounds._bounds || bounds,{padding:[padding||0,padding||0]})}
+  setTilt(){}
+  setHeading(){}
+ }
+ class LeafletMarkerAdapter{
+  constructor(options={}){
+   this.position=latLng(options.position);
+   this._map=null;
+   const content=options.content;
+   const html=content?.outerHTML || (options.title ? `<span class="nova-leaflet-marker" title="${String(options.title).replace(/"/g,'&quot;')}">${String(options.title).slice(0,1)}</span>` : '<span class="nova-leaflet-marker">•</span>');
+   const icon=Leaflet.divIcon({className:'nova-leaflet-marker-icon',html,iconSize:[44,44],iconAnchor:[22,22]});
+   this._draggable=Boolean(options.gmpDraggable||options.draggable);
+   this._clickable=Boolean(options.gmpClickable);
+   this._marker=Leaflet.marker([this.position.lat,this.position.lng],{icon,title:options.title||'',zIndexOffset:Number(options.zIndex||0),draggable:this._draggable,keyboard:Boolean(options.gmpClickable||this._draggable)});
+   this._marker.on('keydown',event=>{
+    const key=event.originalEvent?.key;
+    if(this._clickable&&(key==='Enter'||key===' '||key==='Spacebar')){event.originalEvent?.preventDefault?.();event.originalEvent?.stopPropagation?.();this._marker.fire('click');return;}
+    const offsets={ArrowUp:[0,-8],ArrowDown:[0,8],ArrowLeft:[-8,0],ArrowRight:[8,0]};
+    const offset=offsets[key];
+    if(!this._draggable||!offset||!this._map)return;
+    const original=event.originalEvent;
+    original?.preventDefault?.();original?.stopPropagation?.();
+    const pixel=this._map.latLngToContainerPoint(this._marker.getLatLng());
+    pixel.x+=offset[0];pixel.y+=offset[1];
+    this.setPosition(this._map.containerPointToLatLng(pixel));
+    this._marker.fire('dragend');
+   });
+   if(options.map)this.setMap(options.map);
+  }
+  setMap(map){if(this._map)this._map.removeLayer(this._marker);this._map=map?._map||map||null;if(this._map)this._marker.addTo(this._map);return this}
+  get map(){return this._map}
+  set map(value){this.setMap(value)}
+  setPosition(value){this.position=latLng(value);this._marker.setLatLng([this.position.lat,this.position.lng]);return this}
+  setDraggable(enabled){this._draggable=Boolean(enabled);const dragging=this._marker.dragging;if(dragging){if(enabled)dragging.enable();else dragging.disable()}this._marker.options.keyboard=Boolean(this._clickable||this._draggable);return this}
+  addListener(event,handler){const mapped=event==='gmp-click'?'click':event;this._marker.on(mapped,handler);return {remove:()=>this._marker.off(mapped,handler)}}
+  addEventListener(event,handler){
+   if(event!=='gmp-dragend')return this.addListener(event,handler);
+   const adapted=()=>{this.position=latLng(this._marker.getLatLng());handler({position:this.position})};
+   this._marker.on('dragend',adapted);
+   return {remove:()=>this._marker.off('dragend',adapted)};
+  }
+  setLabel(value){if(value?.text)this._marker.bindTooltip(String(value.text),{permanent:true,direction:'top',offset:[0,-18]});else this._marker.unbindTooltip();return this}
+ }
+ class LeafletInfoWindowAdapter{
+  setContent(value){this.content=value}
+ open(options,marker){const anchor=marker || options?.anchor;const target=anchor?._marker||anchor;if(target){target.bindPopup(this.content || '').openPopup()}}
+  close(){document.querySelectorAll('.leaflet-popup-close-button').forEach(button=>button.click())}
+ }
+ class LeafletShapeAdapter{
+  constructor(layer){this.layer=layer}
+  setMap(map){if(this.layer){if(map)this.layer.addTo(map?._map||map);else this.layer.remove()}}
+  addListener(event,handler){this.layer?.on(event,handler);return {remove:()=>this.layer?.off(event,handler)}}
+  setCenter(value){this.layer?.setLatLng([Number(value.lat),Number(value.lng)])}
+ }
+ class LeafletBoundsAdapter{
+  constructor(){this._bounds=Leaflet.latLngBounds([])}
+  extend(value){this._bounds.extend([Number(value.lat),Number(value.lng)]);return this}
+  getNorthEast(){return point(this._bounds.getNorthEast())}
+  getSouthWest(){return point(this._bounds.getSouthWest())}
+ }
+ const eventApi={addListener:(target,event,handler)=>target.addListener(event,handler),addListenerOnce:(target,event,handler)=>{const listener=target.addListener(event,()=>{listener.remove?.();handler()});return listener},trigger:()=>{}};
+ window.__novaAdvancedMarkerElement=LeafletMarkerAdapter;
+ window.google={maps:{Map:LeafletMapAdapter,InfoWindow:LeafletInfoWindowAdapter,places:{},Size:class{constructor(width,height){this.width=width;this.height=height}},Point:class{constructor(x,y){this.x=x;this.y=y}},LatLngBounds:LeafletBoundsAdapter,Polygon:class{constructor(options={}){this.layer=Leaflet.polygon((options.paths||[]).map(path=>[Number(path.lat),Number(path.lng)]),{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight,fillColor:options.fillColor,fillOpacity:options.fillOpacity});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}addListener(event,handler){this.layer.on(event,handler);return {remove:()=>this.layer.off(event,handler)}}},Circle:class{constructor(options={}){this.layer=Leaflet.circle([Number(options.center?.lat||12.115),Number(options.center?.lng||-86.26)],{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight,fillColor:options.fillColor,fillOpacity:options.fillOpacity,radius:Number(options.radius||20)});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}setCenter(value){this.layer.setLatLng([Number(value.lat),Number(value.lng)])}setRadius(value){this.layer.setRadius(Number(value))}},Polyline:class{constructor(options={}){this.layer=Leaflet.polyline((options.path||[]).map(value=>[Number(value.lat),Number(value.lng)]),{color:options.strokeColor,opacity:options.strokeOpacity,weight:options.strokeWeight});if(options.map)this.layer.addTo(options.map._map||options.map)}setMap(map){if(map)this.layer.addTo(map._map||map);else this.layer.remove()}},event:eventApi}};
+ window.__novaLeafletReady=true;
+}
+async function novaMapsLibrary(name){
+  if(window.__novaMapProvider==='OPENSTREETMAP' || window.__novaMapProvider==='CUSTOM'){
+   setupNovaLeafletAdapter();
+   if(name==='marker')return {AdvancedMarkerElement:window.__novaAdvancedMarkerElement};
+   if(name==='places')return {Place:{searchByText:async(request)=>{
+    if(window.__novaMapSearchMode==='OWN_CATALOG' || window.__novaMapSearchMode==='DISABLED')return {places:[]};
+    const endpoint=window.__novaMapGeocoderUrl;
+    if(!endpoint)throw new Error('Geocoder not configured');
+    const url=new URL(endpoint,location.href);url.searchParams.set('q',request.textQuery || '');url.searchParams.set('format','jsonv2');url.searchParams.set('limit',String(Math.min(20,Math.max(1,Number(request.maxResultCount)||20))));
+    const response=await fetch(url.toString(),{headers:{Accept:'application/json'}});if(!response.ok)throw new Error('Geocoder HTTP '+response.status);
+    const rows=await response.json();return {places:(Array.isArray(rows)?rows:[]).map(row=>({id:`osm-${row.place_id || row.osm_id || Math.random()}`,displayName:row.name || row.display_name?.split(',')[0] || 'Ubicación sin nombre',formattedAddress:row.display_name || '',location:{lat:Number(row.lat),lng:Number(row.lon)},types:[row.type || 'place'],url:row.osm_id?`https://www.openstreetmap.org/${row.osm_type || 'node'}/${row.osm_id}`:''}))};
+   }}};
+  }
+  for(let attempt=0;attempt<20;attempt+=1){
+    if(typeof google.maps.importLibrary==='function')return google.maps.importLibrary(name);
+    if(name==='marker' && google.maps.marker?.AdvancedMarkerElement)return google.maps.marker;
+    if(name==='places' && google.maps.places)return google.maps.places;
+    await new Promise(resolve=>window.setTimeout(resolve,50));
+  }
+  throw new Error('Nova Maps library unavailable: '+name);
+}
+// Install the parent bridge before waiting for the map provider. The iframe
+// can receive theme and keyboard viewport changes while map assets load.
+let viewportResizeTimer = null;
+let parentVisibleViewport = null;
+function syncNovaViewport(){
+  const height=Math.max(1,Math.round(parentVisibleViewport?.height || window.visualViewport?.height || window.innerHeight || 0));
+  const root=document.documentElement;
+  root.style.setProperty('--nova-vh',`${height}px`);
+  root.style.setProperty('--nova-visible-top',`${Math.max(0,Math.round(parentVisibleViewport?.top || 0))}px`);
+  root.style.setProperty('--nova-visible-bottom',`${Math.max(0,Math.round(parentVisibleViewport?.bottom || 0))}px`);
+  root.style.setProperty('--nova-visible-height',`${height}px`);
+  root.style.setProperty('--nova-sheet-height',`${Math.min(Math.round(height*.68),620)}px`);
+  root.style.setProperty('--nova-workspace-height',`${Math.min(Math.round(height*.86),760)}px`);
+}
+function scheduleNovaViewportSync(){
+  window.clearTimeout(viewportResizeTimer);
+  viewportResizeTimer=window.setTimeout(syncNovaViewport,120);
+}
+syncNovaViewport();
+window.addEventListener('resize',scheduleNovaViewportSync,{passive:true});
+window.addEventListener('orientationchange',scheduleNovaViewportSync,{passive:true});
+window.visualViewport?.addEventListener('resize',scheduleNovaViewportSync,{passive:true});
+let CURRENT_USER_NAME = '';
+window.addEventListener('message',event=>{
+  if(event.source!==window.parent||event.origin!==window.location.origin||event.data?.source!=='novahub-force-sales'||event.data?.type!=='ui-context')return;
+  if(typeof event.data.userName==='string')CURRENT_USER_NAME=event.data.userName.trim();
+  const viewport=event.data.viewport;
+  if(viewport&&[viewport.top,viewport.bottom,viewport.height].every(value=>Number.isFinite(Number(value))&&Number(value)>=0)){
+    parentVisibleViewport={top:Number(viewport.top),bottom:Number(viewport.bottom),height:Number(viewport.height)};
+    scheduleNovaViewportSync();
+  }
+  const theme=event.data.theme;
+  const colors=theme?.colors;
+  if(!theme||!colors)return;
+  const root=document.documentElement;
+  for(const [key,token,fallback] of [
+    ['background','--nova-ui-background','#e8f0ed'],['foreground','--nova-ui-foreground','#11241f'],
+    ['card','--nova-ui-card','#fbfdfc'],['muted','--nova-ui-muted','#edf5f1'],
+    ['mutedForeground','--nova-ui-muted-foreground','#6c7c77'],['border','--nova-ui-border','#dce8e3'],
+    ['primary','--nova-ui-primary','#08785a'],
+  ]){
+    const value=String(colors[key]||fallback);
+    root.style.setProperty(token,CSS.supports('color',value)?value:fallback);
+  }
+  document.body.classList.toggle('theme-dark',theme.dark===true);
+});
+if(window.parent!==window)window.parent.postMessage({source:'novahub-force-sales',type:'request-ui-context'},location.origin);

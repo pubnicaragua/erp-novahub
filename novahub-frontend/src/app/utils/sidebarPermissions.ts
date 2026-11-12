@@ -77,6 +77,10 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'FORCE_SALES_KANBAN', label: 'Kanban comercial', parent: 'FORCE_SALES' },
   { id: 'FORCE_SALES_HISTORY', label: 'Historial de visitas', parent: 'FORCE_SALES' },
   { id: 'FORCE_SALES_REPORTS', label: 'Reportes de gestores', parent: 'FORCE_SALES' },
+  // Modos del mapa: se activan por empresa en Suscripciones y se permiten por rol.
+  { id: 'FORCE_SALES_VISITS', label: 'Mapa: Visitas y zonas', parent: 'FORCE_SALES' },
+  { id: 'FORCE_SALES_PROSPECTING', label: 'Mapa: Prospección', parent: 'FORCE_SALES' },
+  { id: 'FORCE_SALES_DELIVERY', label: 'Mapa: Entregas', parent: 'FORCE_SALES' },
 
   // Compras
   { id: 'PURCHASES_REQUESTS', label: 'Solicitudes', parent: 'PURCHASES' },

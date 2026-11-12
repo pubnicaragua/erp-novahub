@@ -511,6 +511,20 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
 .route-planner-tabs[hidden],#routePlanPane[hidden],#routeListPane[hidden]{display:none!important}
 @media(max-width:820px){.route-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.route-stat:nth-child(3){grid-column:1/-1}}
 </style>
+<style>
+/* Modos del mapa: cada bloque marcado con data-mode-only se muestra solo en los modos listados. */
+[data-mode-hidden],body:not([data-mode]) [data-mode-only]{display:none!important}
+.engine-controls{display:none!important}
+.mode-block{display:grid;gap:8px;margin:0 0 10px}
+.mode-block .search-meta{margin:0}
+.mode-block .search-tools{margin:0}
+.zone-section>summary{display:flex;align-items:center;justify-content:space-between;min-height:30px;cursor:pointer;list-style:none;font-weight:800}
+.zone-section>summary::-webkit-details-marker{display:none}
+.zone-section>summary:after{content:'⌄';margin-left:auto;color:var(--nova-ui-muted-foreground,#6c7c77)}
+.zone-section[open]>summary:after{transform:rotate(180deg)}
+.zone-heading-actions{display:flex;justify-content:flex-end;margin:0 0 4px}
+.zone-heading-actions button{border:0;background:transparent;color:var(--nova-ui-primary,#08785a);font-size:11px;font-weight:700;cursor:pointer;padding:2px 0}
+</style>
 </head>
 <body>
 <div id="map"></div>
@@ -523,8 +537,8 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
 <aside class="sidebar collapsed" id="sheet">
  <div class="brand" id="sheetHeader">
   <div class="sheetHandle"></div>
-  <h1>Mapa comercial</h1>
-  <button class="panel-location" id="currentZoneButton" type="button" aria-label="Seleccionar Managua como zona actual">
+  <h1 id="panelTitle">Mapa comercial</h1>
+  <button class="panel-location" id="currentZoneButton" type="button" aria-label="Seleccionar Managua como zona actual" data-mode-only="prospecting">
    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 10.1c0 5.25-8 11.4-8 11.4S4 15.35 4 10.1a8 8 0 1 1 16 0Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="2.5" fill="currentColor"/></svg>
    <span>Managua</span><span class="panel-location-chevron" aria-hidden="true">⌄</span>
   </button>
@@ -536,33 +550,37 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
   </div>
  </div>
  <div class="scroll">
-  <button class="btn primary panel-refresh discovery-only" id="refresh" type="button">↻ <span>Actualizar negocios</span></button>
 
-  <div class="sect discovery-only zone-section">
-   <div class="stitle zone-heading"><span>Zonas rápidas</span><button id="toggleAllZones" type="button" aria-expanded="false">Ver todas <span aria-hidden="true">→</span></button></div>
-   <div class="chips" id="zoneChips"></div>
-  </div>
-
-  <details class="sect filter-panel discovery-only" id="filtersPanel">
-   <summary aria-controls="filterControls">
-    <span class="filter-panel-title">Filtros comerciales</span>
-    <span class="filter-panel-values" id="filterSummaryText">Todos los rubros · Todas las fuentes · Todo seguimiento</span>
-    <span class="filter-panel-chevron" aria-hidden="true">⌄</span>
-   </summary>
-   <div class="filters" id="filterControls">
-    <select id="category" aria-label="Rubro"><option value="all">Todos los rubros</option></select>
-    <select id="source" aria-label="Fuente"><option value="all">Todas las fuentes</option><option value="Nova">Nova</option><option value="Base inicial">Base inicial</option></select>
-    <select id="state" aria-label="Seguimiento"><option value="all">Todo seguimiento</option><option>Nuevo</option><option>Contactado</option><option>Visitado</option><option>Interesado</option><option>Demo</option><option>Cliente</option><option>Descartado</option></select>
+  <!-- Modo Prospección: búsqueda de negocios cercanos con Google Places, zonas rápidas y filtros. -->
+  <section class="mode-block" data-mode-only="prospecting" aria-label="Búsqueda de negocios">
+   <div class="search-meta"><span id="searchStatus">Escribe un rubro o usa el mapa para buscar nuevos negocios.</span></div>
+   <div class="search-tools">
+    <button id="searchNearby" type="button">◎ Cerca de mí</button>
+    <select id="nearbyRadius" aria-label="Radio de búsqueda cercana"><option value="2000">2 km</option><option value="5000" selected>5 km</option><option value="10000">10 km</option></select>
+    <button class="search-zone" id="searchViewport" type="button">Buscar vista</button>
    </div>
-  </details>
+   <details class="sect zone-section">
+    <summary class="zone-heading"><span>Zonas rápidas</span></summary>
+    <div class="zone-heading-actions"><button id="toggleAllZones" type="button" aria-expanded="false">Ver todas <span aria-hidden="true">→</span></button></div>
+    <div class="chips" id="zoneChips"></div>
+   </details>
+   <details class="sect filter-panel" id="filtersPanel">
+    <summary aria-controls="filterControls">
+     <span class="filter-panel-title">Filtros comerciales</span>
+     <span class="filter-panel-values" id="filterSummaryText">Todos los rubros · Todas las fuentes · Todo seguimiento</span>
+     <span class="filter-panel-chevron" aria-hidden="true">⌄</span>
+    </summary>
+    <div class="filters" id="filterControls">
+     <select id="category" aria-label="Rubro"><option value="all">Todos los rubros</option></select>
+     <select id="source" aria-label="Fuente"><option value="all">Todas las fuentes</option><option value="Nova">Nova</option><option value="Base inicial">Base inicial</option></select>
+     <select id="state" aria-label="Seguimiento"><option value="all">Todo seguimiento</option><option>Nuevo</option><option>Contactado</option><option>Visitado</option><option>Interesado</option><option>Demo</option><option>Cliente</option><option>Descartado</option></select>
+    </div>
+   </details>
+  </section>
 
-  <div class="sect">
-   <div class="stitle"><span>Nombres de puntos</span></div>
-   <div class="segment" id="labels"><button type="button" class="active" data-mode="off" aria-pressed="true">Ocultar</button><button type="button" data-mode="smart" aria-pressed="false">Inteligente</button><button type="button" data-mode="all" aria-pressed="false">Todos</button></div>
-  </div>
-
+  <!-- Acciones de trabajo: cada tarjeta se muestra solo en los modos que la usan y si el rol tiene permiso. -->
   <div class="actions action-cards">
-   <button class="action-card" id="routeImportQuick" type="button" hidden>
+   <button class="action-card" id="routeImportQuick" type="button" hidden data-mode-only="visits prospecting">
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19v-1.2A4.8 4.8 0 0 1 8.3 13h1.4a4.8 4.8 0 0 1 4.8 4.8V19M16 5.5a3 3 0 0 1 0 5.8M17 13.5a4.2 4.2 0 0 1 3.5 4.2V19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     <span class="action-card-copy"><b>Importar clientes</b><small>Carga clientes y rutas desde archivo</small></span><span class="action-card-chevron" aria-hidden="true">›</span>
    </button>
@@ -570,47 +588,41 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="3.5" cy="6" r="1.5" fill="currentColor"/><circle cx="3.5" cy="12" r="1.5" fill="currentColor"/><circle cx="3.5" cy="18" r="1.5" fill="currentColor"/></svg>
     <span class="action-card-copy"><b>Rutas y gestores</b><small>Gestiona rutas y vendedores</small></span><span class="action-card-chevron" aria-hidden="true">›</span>
    </button>
-   <button class="action-card" id="mapConfigurationButton" type="button" hidden>
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" stroke="currentColor" stroke-width="1.8"/><path d="m19.4 13.5 1.1.9-1.6 2.8-1.4-.5a7.8 7.8 0 0 1-1.5.9l-.2 1.5h-3.3l-.2-1.5a7.8 7.8 0 0 1-1.5-.9l-1.4.5-1.6-2.8 1.1-.9a8 8 0 0 1 0-1.8l-1.1-.9 1.6-2.8 1.4.5a7.8 7.8 0 0 1 1.5-.9l.2-1.5h3.3l.2 1.5a7.8 7.8 0 0 1 1.5.9l1.4-.5 1.6 2.8-1.1.9a8 8 0 0 1 0 1.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-    <span class="action-card-copy"><b>Configuración</b><small>Personaliza el mapa y su visualización</small></span><span class="action-card-chevron" aria-hidden="true">›</span>
-   </button>
   </div>
 
+  <div class="bulkbar" id="bulkbar" data-mode-only="prospecting">
+   <div class="bulkbar-heading"><b id="selectionSummary">0 seleccionados</b>
+    <details class="bulkbar-more"><summary aria-label="Más acciones de selección">⌄</summary><div class="bulkbar-secondary">
+     <button id="bulkKanban" type="button">Añadir a Kanban</button>
+     <button id="bulkVisit" type="button">Registrar visitas</button>
+     <button id="bulkWhatsApp" type="button">WhatsApp oficial</button>
+     <button id="bulkDiscard" type="button">Descartar</button>
+    </div></details>
+   </div>
+   <div class="bulkbar-actions">
+    <button id="selectVisible" type="button">Seleccionar visibles</button>
+    <button id="clearSelection" type="button">Limpiar selección</button>
+    <button id="bulkRoute" type="button">Armar ruta</button>
+   </div>
+  </div>
+
+  <div class="workspace-heading" id="workspaceHeading" hidden><b id="workspaceHeadingTitle"></b><span id="workspaceHeadingMeta"></span></div>
+  <div class="resultsHead"><b id="resultsTitle">Fuerza Comercial</b><div class="results-head-actions"><span id="resultText"></span><button class="show-all-results" id="showAllBusinesses" type="button" title="Quita filtros activos y muestra todos los negocios" aria-label="Quitar filtros activos y mostrar todos los negocios" hidden>Ver todos</button></div></div>
+  <div class="list" id="list"></div>
+  <div class="kanban-board" id="kanbanBoard" hidden></div>
+  <div class="history-list" id="historyView" hidden></div>
+
+  <!-- Herramientas poco frecuentes, en un solo menú. -->
   <details class="more-tools" id="moreToolsPanel">
-   <summary><span class="more-tools-icon" aria-hidden="true">⋯</span><span>Más herramientas</span></summary>
+   <summary><span class="more-tools-icon" aria-hidden="true">⋯</span><span>Más</span></summary>
    <div class="more-tools-content">
-    <div class="kpis">
-     <div class="kpi discovery-only" data-pipeline="found"><b id="foundCount">0</b><span>Encontrados</span></div>
-     <div class="kpi discovery-only" data-pipeline="selected"><b id="selectedCount">0</b><span>Seleccionados</span></div>
-     <div class="kpi discovery-only" data-pipeline="kanban"><b id="kanbanCount">0</b><span>En Kanban</span></div>
-     <div class="kpi" data-pipeline="visited"><b id="visitedCount">0</b><span>Visitados</span></div>
-     <div class="kpi discovery-only" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
-    </div>
-    <div class="view-tabs" id="viewTabs" aria-label="Vistas comerciales">
-     <button class="active" data-view="map" type="button">Mapa</button>
-     <button class="discovery-only" data-view="kanban" type="button">Kanban</button>
-     <button data-view="history" type="button">Historial</button>
-    </div>
-    <div class="workspace-heading" id="workspaceHeading" hidden><b id="workspaceHeadingTitle"></b><span id="workspaceHeadingMeta"></span></div>
-
-    <div class="search-row discovery-only">
-     <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off"><button id="searchGoogle" type="button" title="Buscar negocios de Nova">⌕</button></div>
-     <button class="search-zone" id="searchViewport" type="button">Buscar vista</button>
-    </div>
-    <div class="search-meta discovery-only"><span id="searchStatus">Escribe un rubro o usa el mapa para buscar nuevos negocios.</span><button id="clearGoogleCache" type="button">Actualizar datos</button></div>
-    <div class="search-tools">
-     <button id="searchNearby" class="discovery-only" type="button">◎ Cerca de mí</button>
-     <select id="nearbyRadius" class="discovery-only" aria-label="Radio de búsqueda cercana"><option value="2000">2 km</option><option value="5000" selected>5 km</option><option value="10000">10 km</option></select>
-     <button id="toggle3d" type="button" title="Activar vista inclinada">3D</button>
-    </div>
-
     <details class="map-layers-panel" id="mapLayersPanel">
      <summary aria-controls="mapLayerOptions">Capas del mapa</summary>
      <div class="map-layer-options" id="mapLayerOptions">
       <div class="map-layer-group-title">Elementos de NovaHub</div>
       <label><input type="checkbox" data-map-layer="users" checked> Usuarios</label>
       <label><input type="checkbox" data-map-layer="manualPoints" checked> Puntos marcados</label>
-      <label><input type="checkbox" data-map-layer="catalog"> Catálogo comercial</label>
+      <label data-mode-only="prospecting"><input type="checkbox" data-map-layer="catalog"> Catálogo comercial</label>
       <label><input type="checkbox" data-map-layer="plannedRoutes"> Rutas planificadas</label>
       <label id="gpsTrailLayerLabel"><input type="checkbox" data-map-layer="gpsTrail"> Recorrido GPS aproximado</label>
       <div class="map-layer-controls" id="gpsTrailControls" hidden>
@@ -628,37 +640,47 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
      </div>
     </details>
 
+    <div class="sect">
+     <div class="stitle"><span>Nombres de puntos</span></div>
+     <div class="segment" id="labels"><button type="button" class="active" data-mode="off" aria-pressed="true">Ocultar</button><button type="button" data-mode="smart" aria-pressed="false">Inteligente</button><button type="button" data-mode="all" aria-pressed="false">Todos</button></div>
+    </div>
+
+    <div class="search-tools">
+     <button id="toggle3d" type="button" title="Activar vista inclinada">3D</button>
+    </div>
+
     <div class="more-actions-grid">
+     <button class="btn secondary" id="mapConfigurationButton" type="button" hidden>Configuración del mapa</button>
      <button class="btn secondary" id="clearCatalog" type="button" hidden>⌫ Limpiar base</button>
      <button class="btn secondary" id="locationSettings" type="button" hidden>Privacidad de ubicación</button>
-     <button class="btn secondary discovery-only" id="zoneManager" type="button">▦ Zonas y vendedores</button>
-     <button class="btn secondary discovery-only" id="opportunities" type="button">✦ Ver oportunidades</button>
-     <button class="btn secondary discovery-only" id="kanbanToggle" type="button">▦ Ver Kanban</button>
+     <button class="btn secondary" id="zoneManager" type="button" data-mode-only="visits prospecting">▦ Zonas y vendedores</button>
+     <button class="btn secondary" id="opportunities" type="button" data-mode-only="prospecting">✦ Ver oportunidades</button>
+     <button class="btn secondary" id="kanbanToggle" type="button" data-mode-only="prospecting">▦ Ver Kanban</button>
      <button class="btn secondary" id="historyToggle" type="button">◷ Ver historial</button>
+     <button class="btn secondary" id="clearGoogleCache" type="button" data-mode-only="prospecting">Actualizar datos de Google</button>
+     <button class="btn secondary" id="refresh" type="button" data-mode-only="prospecting">↻ Actualizar negocios</button>
     </div>
    </div>
   </details>
 
-  <div class="bulkbar discovery-only" id="bulkbar">
-   <div class="bulkbar-heading"><b id="selectionSummary">0 seleccionados</b>
-    <details class="bulkbar-more"><summary aria-label="Más acciones de selección">⌄</summary><div class="bulkbar-secondary">
-     <button id="bulkKanban" type="button">Añadir a Kanban</button>
-     <button id="bulkVisit" type="button">Registrar visitas</button>
-     <button id="bulkWhatsApp" type="button">WhatsApp oficial</button>
-     <button id="bulkDiscard" type="button">Descartar</button>
-    </div></details>
+  <!-- Controles internos del motor. El ERP los maneja desde su barra superior (buscador, indicadores y pestañas). -->
+  <div class="engine-controls" hidden aria-hidden="true">
+   <div class="kpis">
+    <div class="kpi" data-pipeline="found"><b id="foundCount">0</b><span>Encontrados</span></div>
+    <div class="kpi" data-pipeline="selected"><b id="selectedCount">0</b><span>Seleccionados</span></div>
+    <div class="kpi" data-pipeline="kanban"><b id="kanbanCount">0</b><span>En Kanban</span></div>
+    <div class="kpi" data-pipeline="visited"><b id="visitedCount">0</b><span>Visitados</span></div>
+    <div class="kpi" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
    </div>
-   <div class="bulkbar-actions">
-    <button id="selectVisible" type="button">Seleccionar visibles</button>
-    <button id="clearSelection" type="button">Limpiar selección</button>
-    <button id="bulkRoute" type="button">Armar ruta</button>
+   <div class="view-tabs" id="viewTabs" aria-label="Vistas comerciales">
+    <button class="active" data-view="map" type="button">Mapa</button>
+    <button data-view="kanban" type="button">Kanban</button>
+    <button data-view="history" type="button">Historial</button>
+   </div>
+   <div class="search-row">
+    <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off" tabindex="-1"><button id="searchGoogle" type="button" tabindex="-1">⌕</button></div>
    </div>
   </div>
-
-  <div class="resultsHead"><b id="resultsTitle">Fuerza Comercial</b><div class="results-head-actions"><span id="resultText"></span><button class="show-all-results" id="showAllBusinesses" type="button" title="Quita filtros activos y muestra todos los negocios" aria-label="Quitar filtros activos y mostrar todos los negocios" hidden>Ver todos</button></div></div>
-  <div class="list" id="list"></div>
-  <div class="kanban-board" id="kanbanBoard" hidden></div>
-  <div class="history-list" id="historyView" hidden></div>
  </div>
 </aside>
 
@@ -696,7 +718,6 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
   <p id="locationHelpText">La ubicación del teléfono puede estar activa, pero el navegador tiene bloqueado el permiso para este sitio.</p>
   <ol class="location-steps" id="locationSteps"><li>Abre el candado o el icono de ajustes junto a la dirección.</li><li>En <b>Ubicación</b> selecciona <b>Permitir</b>.</li><li>Recarga NovaHub y vuelve a intentarlo.</li></ol>
   <div class="location-privacy" id="locationPrivacy" hidden><b>Compartir mi ubicación con el equipo</b><span>Esta opción solo controla tu última ubicación visible para vendedores autorizados. No cambia el permiso del teléfono.</span><button id="togglePresence" type="button">Ocultar mi ubicación</button></div>
-  <div class="location-privacy" id="commercialModeSettings" hidden><b>Modo de operación</b><span>Define si esta empresa buscará nuevos negocios o usará el mapa para visitas y presencia del equipo.</span><select id="forceSalesMode"><option value="discovery">Prospección y seguimiento</option><option value="tracking">Visitas y presencia</option></select><button id="saveForceSalesMode" type="button">Guardar modo</button></div>
   <div class="location-privacy" id="mapConfigurationSettings" hidden><b>Proveedor y fuente del mapa</b><span>Super Admin o administrador puede elegir Google Maps, OpenStreetMap o una fuente propia. Las URLs deben ser HTTPS y las claves permanecen fuera de la base de datos.</span><label for="mapProviderSelect">Proveedor</label><select id="mapProviderSelect"><option value="GOOGLE">Google Maps</option><option value="OPENSTREETMAP">OpenStreetMap</option><option value="CUSTOM">Mapa propio</option></select><label for="mapSearchModeSelect">Búsqueda</label><select id="mapSearchModeSelect"><option value="EXTERNAL">Geocodificador configurado</option><option value="OWN_CATALOG">Catálogo propio</option><option value="DISABLED">Sin búsqueda</option></select><label for="mapTileUrlInput">URL de mosaicos (opcional para OSM)</label><input id="mapTileUrlInput" type="url" placeholder="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"><label for="mapGeocoderUrlInput">URL de geocodificación</label><input id="mapGeocoderUrlInput" type="url" placeholder="https://tu-dominio/geocode/search"><button id="saveMapConfiguration" type="button">Guardar configuración</button><small id="mapConfigurationHelp"></small></div>
   <div class="confirm-modal-actions"><button class="cancel" id="locationClose" type="button">Cerrar</button><button class="save" id="locationRetry" type="button">Volver a intentar</button></div>
  </div>
@@ -731,7 +752,7 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
    <button class="primary-action route-start-action" id="routeStart" type="button" hidden>Iniciar ruta</button>
    <p class="route-action-status route-next-stop-details" id="routeNextStopDetails" role="status" aria-live="polite"></p>
    <p class="route-action-status" id="routeStartedAt" role="status" aria-live="polite"></p>
-   <div class="route-action-buttons"><button id="routeOpenMaps" type="button">Abrir siguiente en Waze</button><button id="routeOpenGoogleMaps" type="button">Abrir siguiente en Google Maps</button></div>
+   <div class="route-action-buttons"><button id="routeOpenMaps" type="button">Abrir siguiente en Waze</button><button id="routeOpenGoogleMaps" type="button">Abrir siguiente en Google Maps</button><button id="routeOpenFullGoogleMaps" type="button">Abrir ruta completa en Google Maps</button></div>
    <label for="routeVisitNotes">Notas de visita (opcional)<textarea id="routeVisitNotes" maxlength="1000" rows="2" placeholder="Acuerdos, resultado o seguimiento"></textarea></label>
    <div class="route-action-buttons"><button class="primary-action" id="routeCompleteStop" type="button">Marcar visita realizada</button><button id="routeRetryActions" type="button" hidden>Reintentar sincronización</button></div>
    <p class="route-action-status" id="routeActionStatus" role="status" aria-live="polite" hidden></p>
@@ -1202,6 +1223,8 @@ window.NovaForceSalesRouteActionQueue=(()=>{
 </script>
 <script id="nova-force-sales-route-tools">
 window.NovaForceSalesRouteTools=(()=>{
+  // Google Maps acepta como máximo 9 puntos intermedios en un enlace.
+  const GOOGLE_MAPS_MAX_WAYPOINTS=9;
   function nextPendingStopIndex(stops=[],pendingStopIds=[]){
     const pending=new Set((Array.isArray(pendingStopIds)?pendingStopIds:[]).map(value=>String(value||'')));
     return (Array.isArray(stops)?stops:[]).findIndex(stop=>{
@@ -1209,18 +1232,42 @@ window.NovaForceSalesRouteTools=(()=>{
       return !['COMPLETED','SKIPPED'].includes(status)&&!pending.has(String(stop?.id||''));
     });
   }
-  function navigationUrls(stop={}){
-    if(stop?.lat===null||stop?.lat===undefined||stop?.lat===''||stop?.lng===null||stop?.lng===undefined||stop?.lng==='')return {waze:'',googleMaps:''};
+  function stopCoordinates(stop){
+    if(stop?.lat===null||stop?.lat===undefined||stop?.lat===''||stop?.lng===null||stop?.lng===undefined||stop?.lng==='')return null;
     const lat=Number(stop?.lat),lng=Number(stop?.lng);
-    if(!Number.isFinite(lat)||!Number.isFinite(lng))return {waze:'',googleMaps:''};
-    const coordinates=`${lat},${lng}`;
-    const query=[stop?.name,stop?.address].filter(Boolean).join(' ');
+    if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)return null;
+    return `${lat},${lng}`;
+  }
+  // Waze: solo coordenadas. Con «q» (nombre y dirección) Waze hace una búsqueda de texto y puede
+  // llevar a otro lugar con nombre parecido, así que no se envía.
+  function navigationUrls(stop={}){
+    const coordinates=stopCoordinates(stop);
+    if(!coordinates)return {waze:'',googleMaps:''};
     return {
-      waze:`https://waze.com/ul?ll=${encodeURIComponent(coordinates)}&navigate=yes&q=${encodeURIComponent(query)}&utm_source=novahub`,
+      waze:`https://waze.com/ul?ll=${encodeURIComponent(coordinates)}&navigate=yes&utm_source=novahub`,
       googleMaps:`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinates)}&travelmode=driving`,
     };
   }
-  return Object.freeze({nextPendingStopIndex,navigationUrls});
+  // Ruta completa en Google Maps: las paradas pendientes en orden como puntos intermedios y la última como destino.
+  // Con «roundTrip» el destino es el punto de partida (ida y vuelta). Sin «origin», Google usa la ubicación actual del equipo.
+  function googleMapsRouteUrl(stops=[],{origin=null,roundTrip=false}={}){
+    const points=(Array.isArray(stops)?stops:[]).map(stopCoordinates).filter(Boolean);
+    const start=origin?stopCoordinates(origin):null;
+    if(roundTrip&&!start)return {url:'',used:0,omitted:0};
+    const destination=roundTrip?start:points[points.length-1];
+    const middle=roundTrip?points:points.slice(0,-1);
+    if(!destination||(!roundTrip&&!points.length))return {url:'',used:0,omitted:0};
+    const waypoints=middle.slice(0,GOOGLE_MAPS_MAX_WAYPOINTS);
+    const params=[
+      'api=1',
+      start?`origin=${encodeURIComponent(start)}`:'',
+      `destination=${encodeURIComponent(destination)}`,
+      waypoints.length?`waypoints=${waypoints.map(encodeURIComponent).join('%7C')}`:'',
+      'travelmode=driving',
+    ].filter(Boolean);
+    return {url:`https://www.google.com/maps/dir/?${params.join('&')}`,used:waypoints.length+(roundTrip?0:1),omitted:middle.length-waypoints.length};
+  }
+  return Object.freeze({nextPendingStopIndex,navigationUrls,googleMapsRouteUrl,GOOGLE_MAPS_MAX_WAYPOINTS});
 })();
 </script>
 <script id="nova-force-sales-location-core">
@@ -1346,12 +1393,16 @@ window.NovaForceSalesLocation = (()=>{
   const DEFAULT_MAP_LAYERS=Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:false,gpsTrail:false,basePlaces:false,labelMode:'off'});
   const TRAIL_LIMITS=Object.freeze({maxAccuracyMeters:100,maxGapSeconds:120,maxDistanceMeters:300,maxSpeedMetersPerSecond:45});
   const TRAIL_COLORS=['#08785a','#2364d2','#cb5a2b','#8557b8','#b18a00','#167d8d','#b63872','#5d6b27'];
-  function normalizeMapLayers(value={}){
+  // `defaults` permite que cada modo del mapa arranque con sus propias capas (ver modes/*).
+  function normalizeMapLayers(value={},defaults=DEFAULT_MAP_LAYERS){
     const input=value&&typeof value==='object'?value:{};
-    const labelMode=['off','smart','all'].includes(input.labelMode)?input.labelMode:DEFAULT_MAP_LAYERS.labelMode;
-    return {users:typeof input.users==='boolean'?input.users:DEFAULT_MAP_LAYERS.users,manualPoints:typeof input.manualPoints==='boolean'?input.manualPoints:DEFAULT_MAP_LAYERS.manualPoints,catalog:typeof input.catalog==='boolean'?input.catalog:DEFAULT_MAP_LAYERS.catalog,plannedRoutes:typeof input.plannedRoutes==='boolean'?input.plannedRoutes:DEFAULT_MAP_LAYERS.plannedRoutes,gpsTrail:false,basePlaces:typeof input.basePlaces==='boolean'?input.basePlaces:DEFAULT_MAP_LAYERS.basePlaces,labelMode};
+    const base={...DEFAULT_MAP_LAYERS,...(defaults&&typeof defaults==='object'?defaults:{})};
+    const labelMode=['off','smart','all'].includes(input.labelMode)?input.labelMode:(['off','smart','all'].includes(base.labelMode)?base.labelMode:DEFAULT_MAP_LAYERS.labelMode);
+    const pick=key=>typeof input[key]==='boolean'?input[key]:Boolean(base[key]);
+    return {users:pick('users'),manualPoints:pick('manualPoints'),catalog:pick('catalog'),plannedRoutes:pick('plannedRoutes'),gpsTrail:false,basePlaces:pick('basePlaces'),labelMode};
   }
-  function mapLayerStorageKey(tenantId,userId){return `novaForceSalesMapLayersV1:${String(tenantId||'no-tenant')}:${String(userId||'no-user')}`}
+  // Las preferencias de capas se guardan por usuario, empresa y modo (el modo es opcional para claves antiguas).
+  function mapLayerStorageKey(tenantId,userId,mode){return `novaForceSalesMapLayersV1:${String(tenantId||'no-tenant')}:${String(userId||'no-user')}${mode?`:${String(mode)}`:''}`}
   function getBusinessLayer(business){return /^quick-/i.test(String(business?.sourceKey||''))||/^quick-/i.test(String(business?.id||''))?'manualPoints':'catalog'}
   function isBusinessVisibleInLayers(business,layers=DEFAULT_MAP_LAYERS,focusedId=''){
     if(focusedId&&String(business?.id||'')===String(focusedId))return true;
@@ -1643,6 +1694,93 @@ window.addEventListener('message',event=>{
   document.body.classList.toggle('theme-dark',theme.dark===true);
 });
 if(window.parent!==window)window.parent.postMessage({source:'novahub-force-sales',type:'request-ui-context'},location.origin);
+// Registro de modos del mapa (visitas y zonas, prospección, entregas, ...).
+//
+// El mapa base no sabe de negocio: cada modo se registra con su título, su acción principal, su búsqueda
+// y sus indicadores, y el motor solo pinta el modo activo. El ERP (React) decide qué modos tiene la empresa
+// y abre el mapa con ?mode=<modo activo>&modes=<modos habilitados>. Añadir un cuarto modo es sumar un archivo
+// en modes/ que llame a NovaForceSalesModes.register(...); los demás modos no se tocan.
+window.NovaForceSalesModes=(()=>{
+  const LAYER_KEYS=Object.freeze(['users','manualPoints','catalog','plannedRoutes','gpsTrail','basePlaces']);
+  // Valores de respaldo; el ERP envía las capas efectivas de la empresa en ?layerDefaults=.
+  const FALLBACK_LAYERS=Object.freeze({
+    visits:Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:false,gpsTrail:false,basePlaces:false}),
+    prospecting:Object.freeze({users:true,manualPoints:true,catalog:true,plannedRoutes:false,gpsTrail:false,basePlaces:true}),
+    delivery:Object.freeze({users:true,manualPoints:true,catalog:false,plannedRoutes:true,gpsTrail:false,basePlaces:true}),
+  });
+  const MODE_ID=/^[a-z][a-z0-9-]{1,30}$/;
+  const definitions=new Map();
+  let activeId='';
+  let summaryFrame=0;
+
+  function parseModes(value){
+    return [...new Set(String(value||'').split(',').map(item=>item.trim()).filter(item=>MODE_ID.test(item)))];
+  }
+  // Sin parámetros (una pestaña con el ERP anterior) se conserva el comportamiento previo: visitas + prospección.
+  function resolve(params){
+    const get=key=>typeof params?.get==='function'?params.get(key):'';
+    const parsed=parseModes(get('modes'));
+    const modes=parsed.length?parsed:['visits','prospecting'];
+    const requested=String(get('mode')||'').trim();
+    return {modes,mode:modes.includes(requested)?requested:modes[0]};
+  }
+  function layerDefaults(mode,raw){
+    let custom={};
+    try{custom=JSON.parse(raw||'{}')||{}}catch{custom={}}
+    const base={...(FALLBACK_LAYERS[mode]||FALLBACK_LAYERS.visits)};
+    for(const key of LAYER_KEYS)if(typeof custom[key]==='boolean')base[key]=custom[key];
+    return base;
+  }
+  function register(definition){
+    if(!definition||!MODE_ID.test(String(definition.id||'')))throw new Error('Modo del mapa sin identificador válido');
+    definitions.set(definition.id,Object.freeze({...definition}));
+  }
+  function activate(id){activeId=definitions.has(id)?id:activeId}
+  function active(){return definitions.get(activeId)||null}
+  function titleFor(id){return definitions.get(id)?.title||id}
+
+  // Resumen que el ERP dibuja arriba del mapa: título, indicadores, buscador y acción principal.
+  function summary(){
+    const mode=active();
+    if(!mode)return null;
+    const primary=typeof mode.primaryAction==='function'?mode.primaryAction():mode.primaryAction;
+    return {
+      mode:mode.id,
+      title:mode.title,
+      searchPlaceholder:mode.searchPlaceholder||'Buscar…',
+      primaryAction:primary?{label:String(primary.label||''),disabled:Boolean(primary.disabled)}:null,
+      kpis:(typeof mode.kpis==='function'?mode.kpis():[]).map(item=>({id:String(item.id),label:String(item.label),value:item.value})),
+    };
+  }
+  function publishSummary(target){
+    const data=summary();
+    if(!data||!target||typeof target.postMessage!=='function')return;
+    target.postMessage({source:'novahub-force-sales',type:'force-sales-summary',...data},window.location.origin);
+  }
+  // Agrupa varias actualizaciones seguidas en un solo mensaje por cuadro de animación.
+  function requestSummary(){
+    if(summaryFrame||window.parent===window)return;
+    summaryFrame=requestAnimationFrame(()=>{summaryFrame=0;publishSummary(window.parent)});
+  }
+  function handleShellMessage(event){
+    if(event.source!==window.parent||event.origin!==window.location.origin)return;
+    const data=event.data;
+    if(data?.source!=='novahub-force-sales')return;
+    const mode=active();
+    if(!mode)return;
+    if(data.type==='force-sales-search'&&typeof mode.search==='function')mode.search(String(data.query||''),{submit:data.submit===true});
+    if(data.type==='force-sales-primary-action'){
+      const primary=typeof mode.primaryAction==='function'?mode.primaryAction():mode.primaryAction;
+      if(primary&&!primary.disabled&&typeof primary.run==='function')primary.run();
+    }
+    if(data.type==='force-sales-request-summary')requestSummary();
+  }
+  function bind(){
+    window.addEventListener('message',handleShellMessage);
+    requestSummary();
+  }
+  return Object.freeze({LAYER_KEYS,FALLBACK_LAYERS,parseModes,resolve,layerDefaults,register,activate,active,titleFor,summary,requestSummary,bind});
+})();
 window.__novaMapsReady.then(async () => {
 const markerLibrary = await novaMapsLibrary('marker');
 const AdvancedMarkerElement = markerLibrary.AdvancedMarkerElement;
@@ -1665,6 +1803,19 @@ let offlineDbPromise = null;
 let legacyOfflineMigrationPromise = null;
 let flushingOutbox = false;
 const mapQuery = new URLSearchParams(location.search);
+// Modo activo del mapa (visits, prospecting, delivery...) y modos habilitados para la empresa, definidos por el ERP.
+const ACTIVE_MODE_STATE = window.NovaForceSalesModes.resolve(mapQuery);
+const ACTIVE_MODE = ACTIVE_MODE_STATE.mode;
+const ENABLED_MODES = ACTIVE_MODE_STATE.modes;
+const MODE_LAYER_DEFAULTS = window.NovaForceSalesModes.layerDefaults(ACTIVE_MODE, mapQuery.get('layerDefaults'));
+function applyModeVisibility(){
+  document.body.dataset.mode = ACTIVE_MODE;
+  document.querySelectorAll('[data-mode-only]').forEach(node => {
+    const allowed = String(node.dataset.modeOnly || '').split(' ').filter(Boolean);
+    node.toggleAttribute('data-mode-hidden', !allowed.includes(ACTIVE_MODE));
+  });
+}
+applyModeVisibility();
 let forceSalesPermissions = {};
 try {
   const parsedPermissions = JSON.parse(mapQuery.get('permissions') || '{}');
@@ -1686,13 +1837,13 @@ const CURRENT_TENANT_ID = mapQuery.get('tenantId') || '';
 const HAS_AUTHENTICATED_TENANT = Boolean(localStorage.getItem('nh-auth-token'));
 const CURRENT_IDENTITY = window.NovaForceSalesOfflineIdentity.normalizedIdentity({tenantId:CURRENT_TENANT_ID,userId:CURRENT_USER_ID});
 const TENANT_SCOPE_KEY = CURRENT_TENANT_ID || CURRENT_USER_ID || 'authenticated';
-const MAP_LAYERS_STORAGE_KEY=window.NovaForceSalesLocation.mapLayerStorageKey(CURRENT_TENANT_ID,CURRENT_USER_ID);
+const MAP_LAYERS_STORAGE_KEY=window.NovaForceSalesLocation.mapLayerStorageKey(CURRENT_TENANT_ID,CURRENT_USER_ID,ACTIVE_MODE);
 const GOOGLE_MAP_ID=String(mapQuery.get('mapId')||'DEMO_MAP_ID').trim()||'DEMO_MAP_ID';
 const GOOGLE_CLEAN_MAP_ID=String(mapQuery.get('cleanMapId')||'').trim();
 const MAP_PROVIDER=String(mapQuery.get('mapProvider')||'GOOGLE').toUpperCase();
 const CAN_TOGGLE_BASE_PLACES=MAP_PROVIDER==='GOOGLE'&&Boolean(GOOGLE_CLEAN_MAP_ID)&&GOOGLE_CLEAN_MAP_ID!==GOOGLE_MAP_ID;
 const savedMapLayers=readStore(MAP_LAYERS_STORAGE_KEY,{});
-let mapLayers=window.NovaForceSalesLocation.normalizeMapLayers(savedMapLayers);
+let mapLayers=window.NovaForceSalesLocation.normalizeMapLayers(savedMapLayers,MODE_LAYER_DEFAULTS);
 const MAP_RELOAD_CAMERA_KEY=`novaForceSalesMapCamera:${CURRENT_TENANT_ID||'no-tenant'}:${CURRENT_USER_ID||'no-user'}`;
 let mapReloadCamera=null;
 try{mapReloadCamera=JSON.parse(sessionStorage.getItem(MAP_RELOAD_CAMERA_KEY)||'null')}catch{mapReloadCamera=null}
@@ -1747,7 +1898,7 @@ applyForceSalesPermissionVisibility();
 let CAN_SHARE_PRESENCE = true;
 let CAN_MANAGE_CONFIGURATION = false;
 let LOCATION_REQUIRED = false;
-let LEAD_DISCOVERY_ENABLED = true;
+let LEAD_DISCOVERY_ENABLED = ACTIVE_MODE === 'prospecting';
 let forceSalesConfig = null;
 let lastForceSalesConfigRefreshAt = 0;
 let remoteRoutes = [];
@@ -2545,7 +2696,8 @@ async function loadForceSalesConfiguration(){
     LOCATION_REQUIRED=forceSalesConfig?.locationRequiredNow ?? forceSalesConfig?.locationRequired===true;
     CAN_SHARE_PRESENCE=forceSalesConfig?.canDisableLocation!==false;
     CAN_MANAGE_CONFIGURATION=forceSalesConfig?.canManageConfiguration===true;
-    LEAD_DISCOVERY_ENABLED=forceSalesConfig?.leadDiscoveryEnabled!==false;
+    // El modo lo define el ERP (activación por empresa en Suscripciones); la prospección solo existe en su modo.
+    LEAD_DISCOVERY_ENABLED=ACTIVE_MODE==='prospecting';
     applyOperatingMode();
     applyMapConfigurationSettings();
     if(LOCATION_REQUIRED && forceSalesConfig?.canDisableLocation===false){
@@ -2565,14 +2717,10 @@ async function loadForceSalesConfiguration(){
   }
 }
 function applyOperatingMode(){
-  document.querySelectorAll('.discovery-only').forEach(node=>{node.hidden=!LEAD_DISCOVERY_ENABLED});
-  if(!LEAD_DISCOVERY_ENABLED && activeView==='kanban')activeView='map';
+  applyModeVisibility();
+  if(activeView==='kanban' && ACTIVE_MODE!=='prospecting')activeView='map';
   const title=document.getElementById('resultsTitle');
-  if(title)title.textContent=LEAD_DISCOVERY_ENABLED?'Fuerza Comercial':'Visitas y presencia';
-  const mode=document.getElementById('forceSalesMode');
-  if(mode)mode.value=LEAD_DISCOVERY_ENABLED?'discovery':'tracking';
-  const settings=document.getElementById('commercialModeSettings');
-  if(settings)settings.hidden=!CAN_MANAGE_CONFIGURATION;
+  if(title)title.textContent=window.NovaForceSalesModes.titleFor(ACTIVE_MODE);
   mergeBusinesses();
   populateFilters();
   render();
@@ -2637,17 +2785,6 @@ function openLocationSettings(){
   if(settings)settings.hidden=true;
   document.getElementById('locationModal').hidden=false;
   updatePresenceToggle();
-}
-async function saveForceSalesMode(){
-  if(!CAN_MANAGE_CONFIGURATION)return;
-  const mode=document.getElementById('forceSalesMode')?.value || 'discovery';
-  try{
-    const saved=await forceSalesRequest('/force-sales/config',{method:'PATCH',body:JSON.stringify({leadDiscoveryEnabled:mode!=='tracking'})});
-    forceSalesConfig={...(forceSalesConfig||{}),...saved,leadDiscoveryEnabled:mode!=='tracking'};
-    LEAD_DISCOVERY_ENABLED=mode!=='tracking';
-    applyOperatingMode();
-    toast(LEAD_DISCOVERY_ENABLED?'Prospección y seguimiento habilitados':'Modo visitas y presencia activado');
-  }catch(error){toast('No se pudo guardar el modo de operación')}
 }
 async function loadRemoteRoutes(){
   if(!localStorage.getItem('nh-auth-token'))return;
@@ -3337,6 +3474,7 @@ function updatePipelineKpis(visibleBusinesses=businesses){
   document.getElementById('interestedCount').textContent=visibleBusinesses.filter(isInterested).length;
   document.querySelectorAll('.kpi[data-pipeline]').forEach(el=>el.classList.toggle('active',el.dataset.pipeline===pipelineFilter));
   document.getElementById('selectionSummary').textContent=`${visibleBusinesses.filter(isSelected).length} seleccionados`;
+  window.NovaForceSalesModes.requestSummary();
 }
 function formatSellerTotals(totals){
   return (Array.isArray(totals) ? totals : []).map(item => `${item.currency} ${Number(item.total || 0).toLocaleString('es-NI',{minimumFractionDigits:2,maximumFractionDigits:2})}`).join(' · ') || '—';
@@ -4155,6 +4293,7 @@ document.getElementById('routeStart').addEventListener('click',()=>void startCur
 document.getElementById('routeCompleteStop').addEventListener('click',()=>void completeCurrentRouteStop());
 document.getElementById('routeOpenMaps').addEventListener('click',()=>openNextRouteStop('waze'));
 document.getElementById('routeOpenGoogleMaps').addEventListener('click',()=>openNextRouteStop('google'));
+document.getElementById('routeOpenFullGoogleMaps').addEventListener('click',()=>openFullRouteInGoogleMaps());
 document.getElementById('routeRetryActions').addEventListener('click',()=>void retryBlockedRouteActions());
 document.getElementById('routeVisitNotes').addEventListener('input',()=>{
   const context=currentRouteVisitContext();
@@ -4793,7 +4932,7 @@ function setMapLayer(name,enabled){
 }
 function resetCleanMap(){
   const previousBasePlaces=mapLayers.basePlaces;
-  mapLayers={...window.NovaForceSalesLocation.DEFAULT_MAP_LAYERS};
+  mapLayers=window.NovaForceSalesLocation.normalizeMapLayers({},MODE_LAYER_DEFAULTS);
   labelMode=mapLayers.labelMode;
   persistMapLayers();
   selectedZone='Todos';pipelineFilter='all';activeNearbyCenter=null;activeNearbyRadius=null;activeView='map';
@@ -5238,8 +5377,6 @@ function updateView(){
   document.body.classList.toggle('standalone-view',!mapView);
   document.body.classList.toggle('workspace-kanban',kanban);
   document.body.classList.toggle('workspace-history',!mapView&&!kanban);
-  const moreTools=document.getElementById('moreToolsPanel');
-  if(moreTools&&!mapView)moreTools.open=true;
   if(list)list.hidden=!mapView;
   if(board)board.hidden=!kanban;
   if(history)history.hidden=mapView||kanban;
@@ -5569,8 +5706,8 @@ function routeBusinessesFromStore(){
 function routeWazeUrl(b){
   const lat=Number(b?.lat), lng=Number(b?.lng);
   if(!Number.isFinite(lat)||!Number.isFinite(lng))return '';
-  const query=[b.name,b.address].filter(Boolean).join(' ');
-  return `https://waze.com/ul?ll=${encodeURIComponent(`${lat},${lng}`)}&navigate=yes&q=${encodeURIComponent(query)}&utm_source=novahub`;
+  // Solo coordenadas: con «q» Waze busca por texto y puede abrir otro lugar con nombre parecido.
+  return `https://waze.com/ul?ll=${encodeURIComponent(`${lat},${lng}`)}&navigate=yes&utm_source=novahub`;
 }
 function routeManageAction(){return activeRemoteRouteId?'editRoute':'createRoute'}
 function activeRemoteRoute(){return remoteRoutes.find(route=>String(route.id)===String(activeRemoteRouteId||''))||null}
@@ -5869,6 +6006,8 @@ function renderRouteActionFeedback(){
   const urls=window.NovaForceSalesRouteTools.navigationUrls(business||{});
   if(waze)waze.disabled=!business||['COMPLETED','CANCELLED'].includes(routeStatus)||!urls.waze;
   if(google)google.disabled=!business||['COMPLETED','CANCELLED'].includes(routeStatus)||!urls.googleMaps;
+  const fullGoogle=document.getElementById('routeOpenFullGoogleMaps');
+  if(fullGoogle)fullGoogle.disabled=!business||['COMPLETED','CANCELLED'].includes(routeStatus)||!urls.googleMaps;
 }
 function canManageCurrentRoute(){return canForceSales(routeManageAction())}
 function canEditRouteComposition(){
@@ -6351,10 +6490,29 @@ function openRouteStop(index){
   window.open(url,'_blank','noopener,noreferrer');
   toast(`Waze abierto · parada ${index+1} de ${routeBusinesses.length}`);
 }
+// La siguiente parada que se abre en Waze o Google Maps debe ser la misma que dibuja el mapa: con una ruta en
+// curso y GPS reciente, la pendiente más cercana a la ubicación actual; si no, la siguiente en el orden guardado.
+function nextNavigationStop(route){
+  if(route){
+    const nearest=routeNavigationBusinesses(route,currentRouteOrigin(route,true));
+    if(nearest.length)return nearest[0];
+  }
+  return routeBusinesses[route?routeNextPendingIndex(route):routeProgress];
+}
+function openFullRouteInGoogleMaps(){
+  const route=activeRemoteRoute();
+  const ordered=route?routeNavigationBusinesses(route,currentRouteOrigin(route,true)):routeBusinesses.slice(routeProgress);
+  const result=window.NovaForceSalesRouteTools.googleMapsRouteUrl(ordered);
+  if(!result.url){toast('No hay paradas pendientes con coordenadas válidas');return}
+  window.open(result.url,'_blank','noopener,noreferrer');
+  toast(result.omitted>0
+    ?`Google Maps abierto con ${result.used} paradas · ${result.omitted} quedan fuera por el límite de Google; ábrelas al terminar`
+    :`Google Maps abierto con la ruta completa · ${result.used} ${result.used===1?'parada':'paradas'}`);
+}
 function openNextRouteStop(provider='waze'){
   const route=activeRemoteRoute();
   const index=route?routeNextPendingIndex(route):routeProgress;
-  const business=routeBusinesses[index];
+  const business=nextNavigationStop(route);
   const urls=window.NovaForceSalesRouteTools.navigationUrls(business||{});
   const url=provider==='google'?urls.googleMaps:urls.waze;
   if(!url){toast('La siguiente parada no tiene coordenadas válidas');return}
@@ -6676,8 +6834,6 @@ function setActiveView(view){
   if(changed)clearFocusedQuickPoint();
   if(changed&&view!=='map'&&view!=='history'){locationTrailRequestId++;locationTrailRefreshRequested=false;currentLocationTrailData=null;clearLocationTrail()}
   activeView=view;
-  const moreTools=document.getElementById('moreToolsPanel');
-  if(moreTools&&changed)moreTools.open=view!=='map';
   if(changed)document.getElementById('sheet')?.querySelector('.scroll')?.scrollTo({top:0,behavior:'auto'});
   if(view==='map'){pipelineFilter='all';if(!mapLayers.gpsTrail){locationTrailRequestId++;locationTrailRefreshRequested=false;currentLocationTrailData=null;clearLocationTrail()}render();loadSellerPresence();if(mapLayers.gpsTrail)void loadLocationTrail({fitCamera:false});return}
   if(view==='kanban')pipelineFilter='kanban';
@@ -6723,7 +6879,6 @@ document.getElementById('bulkDiscard').addEventListener('click',discardSelected)
 document.getElementById('locateMe').addEventListener('click',locateMe);
 document.getElementById('locationSettings').addEventListener('click',openLocationSettings);
 document.getElementById('mapConfigurationButton').addEventListener('click',openMapConfiguration);
-document.getElementById('saveForceSalesMode').addEventListener('click',()=>void saveForceSalesMode());
 document.getElementById('saveMapConfiguration').addEventListener('click',()=>void saveMapConfiguration());
 map.on('zoomend', applyLabels);
 function updateOfflineStatus(){
@@ -6830,9 +6985,90 @@ window.addEventListener('resize',()=>{
   else if(activeView!=='map'){sheet.classList.add('workspace-view');sheet.classList.remove('collapsed');sheet.style.removeProperty('height')}
   updateToggle();
 });
+// Modo «Visitas y zonas»: solo puntos propios (clientes de la empresa), visitas registradas por un responsable
+// y zonas reasignables. No muestra negocios de Google. Las funciones que usa (zonas, rutas, visita) viven en este
+// mismo ámbito del motor y se declaran en las partes anteriores.
+window.NovaForceSalesModes.register({
+  id:'visits',
+  title:'Visitas y zonas',
+  searchPlaceholder:'Buscar cliente, dirección o gestor…',
+  primaryAction:()=>({label:'Nuevo punto',disabled:!canForceSales('importProspects'),run:()=>document.getElementById('newPoint')?.click()}),
+  kpis:()=>{
+    const points=businesses.filter(item=>stateOf(item).remoteId||item.remoteId);
+    const today=new Date().toDateString();
+    const visitedToday=points.filter(item=>{const at=stateOf(item).visitedAt;return at&&new Date(at).toDateString()===today}).length;
+    const onField=presenceMarkers instanceof Map?presenceMarkers.size:0;
+    return [
+      {id:'points',label:'Clientes en el mapa',value:points.length},
+      {id:'visitedToday',label:'Visitados hoy',value:visitedToday},
+      {id:'pending',label:'Por visitar',value:Math.max(0,points.length-visitedToday)},
+      {id:'onField',label:'Gestores en campo',value:onField},
+    ];
+  },
+  search:(query)=>{
+    const input=document.getElementById('search');
+    if(!input)return;
+    input.value=query;
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  },
+});
+// Modo «Prospección»: con la ubicación actual encuentra todos los negocios cercanos (Google Places) y los
+// lleva por el embudo comercial (selección, Kanban, visita, WhatsApp). Es la función original del mapa.
+window.NovaForceSalesModes.register({
+  id:'prospecting',
+  title:'Prospección',
+  searchPlaceholder:'Buscar negocio, rubro o dirección…',
+  primaryAction:()=>({label:'Encontrar negocios cerca de mí',disabled:!canForceSales('importProspects'),run:()=>searchNearbyFromDevice()}),
+  kpis:()=>{
+    const count=id=>Number(document.getElementById(id)?.textContent||0);
+    return [
+      {id:'found',label:'Encontrados',value:count('foundCount')},
+      {id:'selected',label:'Seleccionados',value:count('selectedCount')},
+      {id:'kanban',label:'En Kanban',value:count('kanbanCount')},
+      {id:'visited',label:'Visitados',value:count('visitedCount')},
+      {id:'interested',label:'Interesados',value:count('interestedCount')},
+    ];
+  },
+  search:(query,options={})=>{
+    const input=document.getElementById('search');
+    if(!input)return;
+    input.value=query;
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    // Enter en la barra del ERP busca también en Google; escribir solo filtra lo que ya está en el mapa.
+    if(options.submit&&query.trim())searchGooglePlaces(query,{force:true});
+  },
+});
+// Modo «Entregas»: ruta de un punto a otro, con regreso o con varias paradas. Los lugares de referencia de
+// Google sí se ven (la gente da direcciones por referencia). Usa el planificador de rutas del motor.
+window.NovaForceSalesModes.register({
+  id:'delivery',
+  title:'Entregas',
+  searchPlaceholder:'Buscar entrega, cliente o dirección…',
+  primaryAction:()=>({label:'Nueva ruta',disabled:!canForceSales('createRoute'),run:()=>document.getElementById('routePlannerQuick')?.click()}),
+  kpis:()=>{
+    const route=typeof activeRemoteRoute==='function'?activeRemoteRoute():null;
+    const stops=Array.isArray(routeBusinesses)?routeBusinesses.length:0;
+    const done=route&&typeof routeCompletedStopCount==='function'?routeCompletedStopCount(route):routeProgress;
+    const next=route&&typeof routeNextPendingIndex==='function'?routeBusinesses[routeNextPendingIndex(route)]:routeBusinesses[routeProgress];
+    return [
+      {id:'routes',label:'Rutas activas',value:remoteRoutes.filter(item=>['PLANNED','IN_PROGRESS'].includes(String(item.status||'').toUpperCase())).length},
+      {id:'stops',label:'Paradas en la ruta',value:stops},
+      {id:'done',label:'Completadas',value:Number(done)||0},
+      {id:'next',label:'Siguiente parada',value:next?.name||'—'},
+    ];
+  },
+  search:(query)=>{
+    const input=document.getElementById('search');
+    if(!input)return;
+    input.value=query;
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  },
+});
 if(innerWidth > 820) sheet.classList.remove('collapsed');
 updateToggle();
 
+window.NovaForceSalesModes.activate(ACTIVE_MODE);
+window.NovaForceSalesModes.bind();
 mergeBusinesses();
 populateFilters();
 render();
@@ -6843,8 +7079,9 @@ setTimeout(() => {
   loadForceSalesConfiguration().finally(() => {
     loadAssignees();
     flushOutbox().finally(() => loadRemoteProspects()).finally(() => loadRemoteRoutes()).finally(() => {
-      if(LEAD_DISCOVERY_ENABLED)setSearchStatus('Datos locales cargados. Pulsa Buscar zona para consultar negocios de Nova.');
-      else setSearchStatus('Modo visitas y presencia activo. La prospección está deshabilitada para esta empresa.');
+      if(LEAD_DISCOVERY_ENABLED)setSearchStatus('Datos locales cargados. Pulsa «Encontrar negocios cerca de mí» o escribe un rubro para consultar negocios de Nova.');
+      else if(ACTIVE_MODE==='delivery')setSearchStatus('Modo entregas activo. Planifica una ruta con una o varias paradas.');
+      else setSearchStatus('Modo visitas y zonas activo. Solo se muestran los puntos de tu empresa.');
       loadSellerPresence();
     });
   });
