@@ -1,33 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Activity, CheckCircle2, ClipboardList, MapPin, Navigation, Route, Search, Users } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../ui/utils';
 import { ViewGuide } from '../organizacion/ViewGuide';
-import { SalesKpiCard } from '../ventas/SalesKpiCard';
 import {
   FORCE_SALES_MODE_GUIDES,
   FORCE_SALES_MODE_LABELS,
   type ForceSalesModeId,
   type ForceSalesSummary,
 } from './forceSalesModes';
-
-const KPI_ICONS: Record<string, LucideIcon> = {
-  points: MapPin,
-  visitedToday: CheckCircle2,
-  pending: ClipboardList,
-  onField: Users,
-  found: Search,
-  selected: CheckCircle2,
-  kanban: ClipboardList,
-  visited: CheckCircle2,
-  interested: Activity,
-  routes: Route,
-  stops: MapPin,
-  done: CheckCircle2,
-  next: Navigation,
-};
 
 interface ForceSalesMapHeaderProps {
   modes: readonly ForceSalesModeId[];
@@ -83,14 +65,6 @@ export function ForceSalesMapHeader({ modes, activeMode, onModeChange, summary, 
           </div>
         )}
       </div>
-
-      {summary && summary.kpis.length > 0 && (
-        <div className="hidden min-w-0 grid-cols-2 gap-3 md:grid lg:grid-cols-4 xl:grid-cols-5" data-tour="force-sales-kpis">
-          {summary.kpis.map((kpi) => (
-            <SalesKpiCard key={kpi.id} title={kpi.label} value={kpi.value} icon={KPI_ICONS[kpi.id] || Activity} />
-          ))}
-        </div>
-      )}
 
       <div className="flex min-w-0 flex-wrap items-center gap-2" data-tour="force-sales-toolbar">
         <div className="relative min-w-0 flex-1 sm:max-w-md">
