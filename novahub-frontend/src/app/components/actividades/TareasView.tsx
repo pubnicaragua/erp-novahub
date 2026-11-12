@@ -111,6 +111,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [isCompactContainer, setIsCompactContainer] = useState(false);
   const filtersContainerRef = useRef<HTMLDivElement>(null);
   const isCardsLayout = viewLayout === 'cards' || (viewLayout === 'table' && (isCompactViewport || isCompactContainer));
+  const effectiveViewLayout = viewLayout === 'table' && isCardsLayout ? 'cards' : viewLayout;
   const filterUsesCompactGrid = isCardsLayout || viewLayout === 'kanban';
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
@@ -715,7 +716,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           </Button>
           <TaskSavedViews userId={currentUserId} current={currentFilters} onApply={applyFilters} />
           <ViewLayoutSelect
-            value={viewLayout}
+            value={effectiveViewLayout}
             onChange={(val) => setViewLayout(val)}
             showKanban={true}
           />
@@ -843,7 +844,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         )}
       </div>
 
-      <Card className="min-w-0 overflow-hidden rounded-3xl border-border/70 bg-card/80 shadow-sm">
+      <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         {viewLayout === 'kanban' ? (
           <TareasKanban
             data={filtered}
@@ -903,6 +904,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           <EditableDataTable
             data={filtered}
             columns={columns}
+            layoutMode={isCardsLayout ? 'cards' : 'table'}
             onRowUpdate={canPerform('ACTIVITIES_TASKS', 'edit') ? handleUpdate : undefined}
             onRowClick={(row) => setDetailTask(row)}
             isLoading={loading}

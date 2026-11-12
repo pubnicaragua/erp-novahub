@@ -126,7 +126,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
           >
             <Card
               className={cn(
-                'flex flex-col justify-between rounded-3xl border-border/80 bg-card/90 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-md',
+                'flex flex-col justify-between rounded-3xl border-border/60 bg-card/90 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-md',
                 isCategoryFiltered && 'border-primary/40'
               )}
             >

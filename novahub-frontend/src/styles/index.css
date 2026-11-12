@@ -2920,12 +2920,7 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
 }
 
 .activities-module [data-activities-task-table="true"] [data-slot="table-body"] > [data-slot="table-row"] {
-  border-bottom-color: hsl(var(--border) / 0.62);
-}
-
-.activities-module [data-activities-task-table="true"] article {
-  border-color: hsl(var(--border) / 0.78);
-  background-color: hsl(var(--card) / 0.9);
+  border-bottom-color: var(--border);
 }
 
 @media (max-width: 767px) {
