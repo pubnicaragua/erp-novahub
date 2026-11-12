@@ -1,6 +1,6 @@
 import { api, getAuthHeaders, getApiUrl, normalizeApiErrorMessage } from './api';
 import { resolveStorageReferences } from './storage.service';
-import type { ActivitySubtask, ActivityTimeEntry, Task, Event, Reminder, ActivityLog } from '../types';
+import type { ActivityComment, ActivityReport, ActivityReportsResponse, ActivitySubtask, ActivityTimeEntry, Task, Event, Reminder, ActivityLog } from '../types';
 
 const createCrudService = <T>(endpoint: string) => ({
   getAll: async (signal?: AbortSignal, params?: Record<string, unknown>) => {
@@ -74,6 +74,35 @@ export const tasksService = {
   },
   addManualTimeEntry: async (id: string, data: { durationSeconds: number; description?: string; startedAt?: string }) => {
     return await api.post(`/activities/tasks/${id}/time-entries/manual`, data) as ActivityTimeEntry;
+  },
+  // Comentarios del equipo
+  getComments: async (id: string) => {
+    return await api.get(`/activities/tasks/${id}/comments`) as ActivityComment[];
+  },
+  addComment: async (id: string, body: string) => {
+    return await api.post(`/activities/tasks/${id}/comments`, { body }) as ActivityComment;
+  },
+  deleteComment: async (id: string, commentId: string) => {
+    return await api.delete(`/activities/tasks/${id}/comments/${commentId}`);
+  },
+  // Reportes de avance (texto, porcentaje y archivos; las referencias storage:// se resuelven al abrir cada archivo)
+  getReports: async (id: string) => {
+    return await api.get(`/activities/tasks/${id}/reports`) as ActivityReport[];
+  },
+  addReport: async (id: string, data: { body?: string; progressPercent?: number | null; files?: Array<{ url: string; name: string; size?: number; type?: string }> }) => {
+    return await api.post(`/activities/tasks/${id}/reports`, data) as ActivityReport;
+  },
+};
+
+/** Centro de reportes: reportes y documentos de todas las tareas en un solo lugar. */
+export const activityReportsService = {
+  list: async (params: { authorId?: string; activityId?: string; from?: string; to?: string; incomplete?: boolean; withFiles?: boolean; kind?: string; search?: string; limit?: number }, signal?: AbortSignal) => {
+    const clean = Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== '' && value !== null));
+    return await api.get('/activities/reports', { signal, params: clean }) as ActivityReportsResponse;
+  },
+  /** Marca (o desmarca) un reporte como incompleto; quien lo hizo recibe un aviso. */
+  review: async (reportId: string, data: { incomplete: boolean; note?: string }) => {
+    return await api.patch(`/activities/reports/${reportId}/review`, data) as ActivityReport;
   },
 };
 

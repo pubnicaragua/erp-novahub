@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ListTodo, CalendarDays, Bell, Database } from 'lucide-react';
+import { ListTodo, CalendarDays, Bell, Database, ClipboardCheck } from 'lucide-react';
 import { Tabs } from './ui/tabs';
+import { cn } from './ui/utils';
 import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { TareasView } from './actividades/TareasView';
@@ -9,6 +10,7 @@ import { EventosView } from './actividades/EventosView';
 import { RecordatoriosView } from './actividades/RecordatoriosView';
 import { BitacoraView } from './actividades/BitacoraView';
 import { ActividadesCalendarioView } from './actividades/ActividadesCalendarioView';
+import { ReportesActividadesView } from './actividades/ReportesActividadesView';
 import { tasksService, eventsService, remindersService, activityLogsService } from '../services/actividades.service';
 import { useAuth } from '../contexts/AuthContext';
 import { asList, fetchAllReportPages, useTenantQuery } from '../hooks/useTenantQuery';
@@ -159,6 +161,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
 
   const tabs = [
     { id: 'tareas', label: 'Tareas', icon: ListTodo, color: 'text-blue-500', module: 'ACTIVITIES_TASKS' },
+    { id: 'reportes', label: 'Reportes', icon: ClipboardCheck, color: 'text-primary', module: 'ACTIVITIES_TASKS' },
     { id: 'eventos', label: 'Eventos', icon: CalendarDays, color: 'text-emerald-500', module: 'ACTIVITIES_EVENTS' },
     { id: 'recordatorios', label: 'Recordatorios', icon: Bell, color: 'text-amber-500', module: 'ACTIVITIES_REMINDERS' },
     { id: 'bitacora', label: 'Bitácora', icon: Database, color: 'text-rose-500', module: 'ACTIVITIES_LOGS' }
@@ -192,8 +195,8 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
 
           <CurrencyValuationBanner className="mb-3" />
 
-          <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
-            <div className="mb-4 flex w-full min-w-0 max-w-full items-center gap-2">
+          <Tabs value={activeTab} className="relative w-full min-w-0" onValueChange={handleTabChange}>
+            <div className={cn('flex w-full min-w-0 max-w-full items-center gap-2', canExportActive ? 'mb-4 sm:absolute sm:right-0 sm:top-0 sm:z-10 sm:mb-0 sm:w-auto' : 'mb-0')}>
             <ModuleSubnavigation
               items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
               value={activeTab}
@@ -202,7 +205,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
               ariaLabel="Navegación de Actividades"
               className="mb-0 min-w-0 flex-1"
             />
-            {canExportActive && <ExportMenu onPdf={(paperFormat) => void exportActivities('pdf', paperFormat)} onExcel={() => void exportActivities('xlsx')} className="shrink-0" pdfDescription="Plantilla configurada para esta vista" excelDescription="Todos los registros autorizados" />}
+            {canExportActive && <ExportMenu onPdf={(paperFormat) => void exportActivities('pdf', paperFormat)} onExcel={() => void exportActivities('xlsx')} className="relative z-10 shrink-0 sm:ml-auto" pdfDescription="Plantilla configurada para esta vista" excelDescription="Todos los registros autorizados" />}
             </div>
             
             <AnimatePresence mode="wait">
@@ -214,6 +217,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
+                {activeTab === 'reportes' && <ReportesActividadesView />}
                 {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} />}
                 {['eventos', 'reuniones'].includes(activeTab) && (
                   <EventosView

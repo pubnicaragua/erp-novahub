@@ -2,7 +2,7 @@ import React from 'react';
 import { useState } from 'react';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { Reminder } from '../../types';
-import { Card, CardContent } from '../ui/card';
+import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -15,7 +15,8 @@ import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
-import { InventoryViewTutorial } from '../inventory/InventoryViewTutorial';
+import { ActivityViewHeader } from './ActivityViewHeader';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 import { Label } from '../ui/label';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
@@ -138,29 +139,35 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => (
-          <Card key={i} className="min-w-0 rounded-2xl border-border/50 bg-card/80 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{loading || summaryError ? '—' : kpi.value}</p></div>
-            </CardContent>
-          </Card>
-        ))}
+      <ActivityViewHeader
+        title="Recordatorios"
+        tourPrefix="recordatorios-tutorial"
+        helpLabel="Qué son los Recordatorios"
+        helpTitle="Recordatorios"
+        helpDescription="Los recordatorios envían alertas automáticas en la fecha y hora que indiques. Pueden ser globales (para todo el equipo), departamentales o personales."
+        dataTitle="Crear recordatorio"
+        dataDescription='Haz clic en "Nuevo Aviso". Define el título, mensaje, fecha de envío y alcance (global/departamento/personal).'
+        actionsTitle="Gestionar"
+        actionsDescription="Revisa el estado (Pendiente/Enviado/Cancelado), edita o elimina avisos que ya no necesites."
+      />
+
+      <div className="space-y-2" data-tour="recordatorios-tutorial-data" aria-busy={loading}>
+        <KpiSummaryNotice loading={loading} error={summaryError} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {kpis.map((kpi, i) => (
+            <SalesKpiCard key={i} title={kpi.title} value={loading || summaryError ? '—' : kpi.value} icon={kpi.icon} kind="indicator" />
+          ))}
+        </div>
       </div>
-      <KpiSummaryNotice loading={loading} error={summaryError} />
+
+      <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3" data-tour="recordatorios-tutorial-actions">
+        <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+        {canPerform('ACTIVITIES_REMINDERS', 'create') && (
+          <Button data-toolbar-role="primary" variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Aviso</Button>
+        )}
+      </div>
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
-        <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="min-w-0"><h2 className="nh-module-title break-words">Recordatorios</h2></div>
-          <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
-            <InventoryViewTutorial label="Qué son los Recordatorios" targetPrefix="recordatorios-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Recordatorios', description: 'Los recordatorios envían alertas automáticas en la fecha y hora que indiques. Pueden ser globales (para todo el equipo), departamentales o personales.' }, data: { title: 'Crear recordatorio', description: 'Haz clic en "Nuevo Aviso". Define el título, mensaje, fecha de envío y alcance (global/departamento/personal).' }, actions: { title: 'Gestionar', description: 'Revisa el estado (Pendiente/Enviado/Cancelado), edita o elimina avisos que ya no necesites.' } }} />
-            <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('ACTIVITIES_REMINDERS', 'create') && (
-              <Button data-toolbar-role="primary" variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Aviso</Button>
-            )}
-          </div>
-        </div>
         <EditableDataTable 
           data={filtered} 
           columns={columns} 

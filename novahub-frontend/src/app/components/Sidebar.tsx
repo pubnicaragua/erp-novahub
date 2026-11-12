@@ -381,6 +381,7 @@ const menuItems: MenuItem[] = [
     section: 'Herramientas',
     submenu: [
       { id: 'tareas', label: 'Tareas', icon: <ListTodo className="size-4" /> },
+      { id: 'reportes', label: 'Reportes', icon: <ClipboardCheck className="size-4" /> },
       { id: 'eventos', label: 'Eventos', icon: <CalendarDays className="size-4" /> },
       { id: 'recordatorios', label: 'Recordatorios', icon: <Bell className="size-4" /> },
       { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> },

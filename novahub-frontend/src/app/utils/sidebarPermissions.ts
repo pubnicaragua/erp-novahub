@@ -385,6 +385,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   carpetas: ['DOCUMENTS_FOLDERS'],
 
   tareas: ['ACTIVITIES_TASKS'],
+  reportes: ['ACTIVITIES_TASKS'],
   eventos: ['ACTIVITIES_EVENTS'],
   recordatorios: ['ACTIVITIES_REMINDERS'],
   bitacora: ['ACTIVITIES_LOGS'],

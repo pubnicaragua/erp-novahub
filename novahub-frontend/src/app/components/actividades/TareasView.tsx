@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { Task } from '../../types';
 import type { ActivityCategory, ActivityCustomField } from '../../types';
-import { Card, CardContent } from '../ui/card';
+import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -28,6 +28,8 @@ import {
   HandHelping,
   UserCog,
   Tag,
+  UserCheck,
+  Gauge,
 } from 'lucide-react';
 import { tasksService } from '../../services/actividades.service';
 import { usersService } from '../../services/users.service';
@@ -36,7 +38,6 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
-import { InventoryViewTutorial } from '../inventory/InventoryViewTutorial';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { storageService } from '../../services/storage.service';
@@ -59,6 +60,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { DateField } from '../ui/DateField';
 import { DateTimePickerField } from '../ui/DateTimePickerField';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { ActivityViewHeader } from './ActivityViewHeader';
+import { TaskSavedViews, type TaskViewFilters } from './TaskSavedViews';
+import { TaskProgressCell } from './TaskProgressCell';
+import { getTaskProgress } from './actividades.progress';
 
 interface TareasViewProps {
   data: Task[];
@@ -107,6 +113,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
+  const [mineOnly, setMineOnly] = useState<boolean>(false);
   const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCompleteOpen, setIsCompleteOpen] = useState(false);
@@ -133,7 +140,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
 
   // Complete & Approval Task form state
   const [evidenceUrl, setEvidenceUrl] = useState('');
-  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [completeNotes, setCompleteNotes] = useState('');
   const [approvalNotes, setApprovalNotes] = useState('');
   const [rejectReason, setRejectReason] = useState('');
 
@@ -242,6 +250,22 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     setCategoryFilter('ALL');
     setDateFrom('');
     setDateTo('');
+    setMineOnly(false);
+  };
+
+  const currentFilters: TaskViewFilters = {
+    status: statusFilter, priority: priorityFilter, assigned: assignedFilter, category: categoryFilter,
+    dateFrom, dateTo, search: searchTerm, mine: mineOnly,
+  };
+  const applyFilters = (filters: TaskViewFilters) => {
+    setStatusFilter(filters.status);
+    setPriorityFilter(filters.priority);
+    setAssignedFilter(filters.assigned);
+    setCategoryFilter(filters.category);
+    setDateFrom(filters.dateFrom);
+    setDateTo(filters.dateTo);
+    setSearchTerm(filters.search);
+    setMineOnly(filters.mine);
   };
 
   const statusOpts = [
@@ -314,22 +338,29 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     }
   };
 
+  /** Sube los archivos elegidos (y el enlace, si lo hay) y los devuelve en el formato que reciben completar y enviar a aprobación. */
+  const collectEvidence = async (taskId: string) => {
+    const files: Array<{ url: string; name: string; size?: number; type?: string }> = [];
+    for (const file of evidenceFiles) {
+      const uploaded = await storageService.uploadFile('task-evidence', file, { folder: taskId });
+      files.push({ url: uploaded.uri, name: file.name, size: file.size, type: file.type });
+    }
+    const link = evidenceUrl.trim();
+    if (link) files.push({ url: link, name: link.length > 60 ? `${link.slice(0, 57)}…` : link });
+    return files;
+  };
+
   const handleCompleteTask = async () => {
     if (!selectedTask || !canPerform('ACTIVITIES_TASKS', 'complete')) return;
     try {
       setActionLoading(true);
-      let fileUrl = evidenceUrl.trim();
-      if (evidenceFile) {
-        const uploaded = await storageService.uploadFile('task-evidence', evidenceFile, {
-          folder: selectedTask.id,
-        });
-        fileUrl = uploaded.uri;
-      }
-      await tasksService.complete(selectedTask.id, { fileUrl });
-      toast.success('Tarea completada exitosamente con evidencia');
+      const files = await collectEvidence(selectedTask.id);
+      await tasksService.complete(selectedTask.id, { files, notes: completeNotes.trim() || undefined });
+      toast.success('Tarea completada. Tu reporte de cierre quedó guardado.');
       setIsCompleteOpen(false);
       setEvidenceUrl('');
-      setEvidenceFile(null);
+      setEvidenceFiles([]);
+      setCompleteNotes('');
       setSelectedTask(null);
       onRefresh();
     } catch (e: any) {
@@ -343,21 +374,15 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     if (!selectedTask || !canPerform('ACTIVITIES_TASKS', 'submit')) return;
     try {
       setActionLoading(true);
-      let fileUrl = evidenceUrl.trim();
-      if (evidenceFile) {
-        const uploaded = await storageService.uploadFile('task-evidence', evidenceFile, {
-          folder: selectedTask.id,
-        });
-        fileUrl = uploaded.uri;
-      }
+      const files = await collectEvidence(selectedTask.id);
       await tasksService.submitApproval(selectedTask.id, {
-        fileUrl,
+        files,
         notes: approvalNotes.trim(),
       });
-      toast.success('Tarea enviada para aprobación');
+      toast.success('Tarea enviada para aprobación. Tu reporte quedó guardado.');
       setIsApprovalOpen(false);
       setEvidenceUrl('');
-      setEvidenceFile(null);
+      setEvidenceFiles([]);
       setApprovalNotes('');
       setSelectedTask(null);
       onRefresh();
@@ -510,6 +535,13 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         );
       },
     },
+    {
+      key: 'progress',
+      header: 'Avance',
+      width: '160px',
+      editable: false,
+      render: (_val: unknown, row: any) => <TaskProgressCell task={row} />,
+    },
   ];
 
   const filterTasks = (includeStatusFilter: boolean) => data.filter((t) => {
@@ -537,6 +569,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     const taskCategory = String(t.categoryId || '').trim().toUpperCase();
     const matchesCategory = categoryFilter === 'ALL' || taskCategory === categoryFilter;
 
+    // «Mis tareas»: solo las que tengo asignadas.
+    const matchesMine = !mineOnly || isTaskMine(t);
+
     // Date range filter
     const dueDate = t.dueDate ? new Date(t.dueDate).toISOString().slice(0, 10) : null;
     const matchesDateFrom = !dateFrom || (dueDate && dueDate >= dateFrom);
@@ -548,18 +583,24 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       matchesPriority &&
       matchesAssigned &&
       matchesCategory &&
+      matchesMine &&
       matchesDateFrom &&
       matchesDateTo
     );
   });
+  // El detalle abierto toma siempre la versión más reciente de la lista (subtareas, reportes y comentarios cambian sin cerrarlo).
+  const liveDetailTask = detailTask ? (data.find((task) => String(task.id) === String(detailTask.id)) ?? detailTask) : null;
   const filteredWithoutStatus = filterTasks(false);
   const filtered = filterTasks(true);
+  const kpiTasks = filteredWithoutStatus.filter((t) => String(t.status || '').toUpperCase() !== 'CANCELLED');
+  const averageProgress = kpiTasks.length ? Math.round(kpiTasks.reduce((sum, t) => sum + getTaskProgress(t).percent, 0) / kpiTasks.length) : 0;
+  const overdueCount = filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'OVERDUE').length;
   const kpis = [
-    { id: 'ALL', title: 'Total Tareas', value: filteredWithoutStatus.length, icon: ListTodo, color: 'text-primary', bg: 'bg-primary/10' },
-    { id: 'PENDING', title: 'Pendientes', value: filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'PENDING').length, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { id: 'WAITING_APPROVAL', title: 'Por Aprobar', value: filteredWithoutStatus.filter((t) => String(t.status || '').toUpperCase() === 'WAITING_APPROVAL').length, icon: Send, color: 'text-primary', bg: 'bg-primary/10' },
-    { id: 'OVERDUE', title: 'Vencidas', value: filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'OVERDUE').length, icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-    { id: 'COMPLETED', title: 'Completadas', value: filteredWithoutStatus.filter((t) => (t.status || '').toUpperCase() === 'COMPLETED').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { id: 'ALL', title: 'Total Tareas', value: filteredWithoutStatus.length, icon: ListTodo },
+    { id: 'PENDING', title: 'Pendientes', value: filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'PENDING').length, icon: Clock },
+    { id: 'WAITING_APPROVAL', title: 'Por Aprobar', value: filteredWithoutStatus.filter((t) => String(t.status || '').toUpperCase() === 'WAITING_APPROVAL').length, icon: Send },
+    { id: 'OVERDUE', title: 'Vencidas', value: overdueCount, icon: AlertTriangle },
+    { id: 'COMPLETED', title: 'Completadas', value: filteredWithoutStatus.filter((t) => (t.status || '').toUpperCase() === 'COMPLETED').length, icon: CheckCircle2 },
   ];
 
   const activeFiltersCount =
@@ -568,235 +609,202 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     (assignedFilter !== 'ALL' ? 1 : 0) +
     (categoryFilter !== 'ALL' ? 1 : 0) +
     (dateFrom ? 1 : 0) +
-    (dateTo ? 1 : 0);
+    (dateTo ? 1 : 0) +
+    (mineOnly ? 1 : 0);
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      {/* Interactive KPI Cards for Quick Filtering */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {kpis.map((kpi) => {
-          const isSelected = statusFilter === kpi.id;
-          return (
-            <Card
+      <ActivityViewHeader
+        title="Tareas"
+        tourPrefix="tareas-tutorial"
+        helpLabel="Qué son las Tareas"
+        helpTitle="Tareas"
+        helpDescription="Las tareas te permiten crear, asignar y dar seguimiento al trabajo del equipo: prioridad, vencimiento, SLA, avance, reportes y comentarios en un solo lugar."
+        dataTitle="Crear y asignar"
+        dataDescription="Haz clic en «Nueva Tarea». Asigna una o varias personas (así la comparten), prioridad, categoría y fecha de vencimiento."
+        actionsTitle="Dar seguimiento"
+        actionsDescription="Abre una tarea para reportar avance con documentos, comentar con el equipo y revisar subtareas. Cambia entre tabla, tablero y tarjetas, y guarda tus filtros como vistas."
+        purpose="El lugar de trabajo del equipo: quién tiene qué, para cuándo, cuánto lleva avanzado y qué reportó cada persona."
+      />
+
+      <div className="space-y-2" data-tour="tareas-tutorial-data" aria-busy={loading}>
+        <KpiSummaryNotice loading={loading} error={summaryError} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+          {kpis.map((kpi) => (
+            <SalesKpiCard
               key={kpi.id}
+              title={kpi.title}
+              value={loading || summaryError ? '—' : kpi.value}
+              icon={kpi.icon}
+              kind="filter"
+              active={statusFilter === kpi.id}
+              tone={kpi.id === 'OVERDUE' && kpi.value > 0 && !loading && !summaryError ? 'bad' : 'default'}
               onClick={() => setStatusFilter((current) => (current === kpi.id ? 'ALL' : kpi.id))}
-              className={cn(
-                'min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/80 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md',
-                isSelected && 'border-primary ring-2 ring-primary/20 bg-primary/[0.03]'
-              )}
-            >
-              <CardContent className="p-5 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className={cn('p-3 rounded-2xl flex items-center justify-center', kpi.bg)}>
-                    <kpi.icon className={cn('size-6', kpi.color)} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
-                      {kpi.title}
-                    </p>
-                    <p className="text-2xl font-black tracking-tight">{loading || summaryError ? '—' : kpi.value}</p>
-                  </div>
-                </div>
-                {isSelected && (
-                  <Badge variant="default" className="text-[9px] font-bold px-1.5 py-0.5">
-                    Filtrado
-                  </Badge>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+            />
+          ))}
+          <SalesKpiCard title="Avance promedio" value={loading || summaryError ? '—' : `${averageProgress}%`} icon={Gauge} kind="indicator" sub="Sin contar canceladas" />
+        </div>
       </div>
-      <KpiSummaryNotice loading={loading} error={summaryError} />
 
-      {/* Structured Collapsible Filter Panel (Style of Image 3) */}
-      <div className="space-y-4 rounded-2xl border border-border/50 bg-muted/30 p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilterPanel(!showFilterPanel)}
-              className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/80 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-foreground hover:bg-background"
-            >
-              <Filter className="size-3.5 text-primary" /> Filtros
-              {activeFiltersCount > 0 && (
-                <Badge variant="secondary" className="ml-1 px-1.5 py-0.2 text-[9px] font-black bg-primary/20 text-primary">
-                  {activeFiltersCount}
-                </Badge>
-              )}
-            </Button>
-            <span className="hidden text-[10px] font-medium normal-case tracking-normal text-muted-foreground/70 sm:inline">
-              Filtra y personaliza el listado de tareas por responsable, prioridad y rango de fechas
-            </span>
+      <div className="space-y-3">
+        <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3" data-tour="tareas-tutorial-actions">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+            <Input
+              data-testid="activities-task-search"
+              placeholder="Buscar por título..."
+              className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-
+          <Button
+            type="button"
+            variant="outline"
+            data-toolbar-role="filters"
+            onClick={() => setShowFilterPanel(!showFilterPanel)}
+            className="h-10 gap-2 rounded-xl px-3 text-xs font-bold"
+          >
+            <Filter className="size-3.5 text-primary" /> Filtros
+            {activeFiltersCount > 0 && (
+              <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-black">{activeFiltersCount}</Badge>
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant={mineOnly ? 'default' : 'outline'}
+            data-toolbar-role="filters"
+            data-testid="activities-task-mine"
+            aria-pressed={mineOnly}
+            onClick={() => setMineOnly((value) => !value)}
+            className="h-10 gap-2 rounded-xl px-3 text-xs font-bold"
+          >
+            <UserCheck className="size-3.5" /> Mis tareas
+          </Button>
+          <TaskSavedViews userId={currentUserId} current={currentFilters} onApply={applyFilters} />
+          <ViewLayoutSelect
+            value={viewLayout}
+            onChange={(val) => setViewLayout(val)}
+            showKanban={true}
+          />
           {activeFiltersCount > 0 && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
+              data-toolbar-role="alerts"
               onClick={resetFilters}
-              className="h-8 text-xs font-bold text-muted-foreground hover:text-destructive gap-1.5"
+              className="h-9 gap-1.5 text-xs font-bold text-muted-foreground hover:text-destructive"
             >
               <RotateCcw className="size-3.5" /> Limpiar filtros
             </Button>
           )}
+          {canPerform('ACTIVITIES_TASKS', 'create') && (
+            <Button
+              data-toolbar-role="primary"
+              data-testid="activities-new-task"
+              variant="default"
+              onClick={() => setIsAddOpen(true)}
+              className="shrink-0 rounded-xl px-4 h-10 gap-2 font-black uppercase text-[10px] tracking-widest"
+            >
+              <Plus className="size-4" /> Nueva Tarea
+            </Button>
+          )}
         </div>
 
-        {/* Collapsible / Always Visible Filters Grid */}
-        <div className={cn('grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12', !showFilterPanel && 'hidden sm:grid')}>
-          {/* Priority Filter */}
-          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
-            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-              Prioridad
-            </label>
-            <Select value={priorityFilter} onValueChange={(val) => setPriorityFilter(val)}>
-              <SelectTrigger className="h-9 w-full text-xs">
-                <SelectValue placeholder="Todas las prioridades" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Todas las prioridades</SelectItem>
-                <SelectItem value="LOW">Baja</SelectItem>
-                <SelectItem value="MEDIUM">Media</SelectItem>
-                <SelectItem value="HIGH">Alta</SelectItem>
-                <SelectItem value="URGENT">Urgente</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        {showFilterPanel && (
+          <div className="grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-border/50 bg-muted/30 p-4 sm:grid-cols-2 lg:grid-cols-12">
+            {/* Priority Filter */}
+            <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+              <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                Prioridad
+              </label>
+              <Select value={priorityFilter} onValueChange={(val) => setPriorityFilter(val)}>
+                <SelectTrigger className="h-9 w-full text-xs">
+                  <SelectValue placeholder="Todas las prioridades" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todas las prioridades</SelectItem>
+                  <SelectItem value="LOW">Baja</SelectItem>
+                  <SelectItem value="MEDIUM">Media</SelectItem>
+                  <SelectItem value="HIGH">Alta</SelectItem>
+                  <SelectItem value="URGENT">Urgente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Assigned To Filter */}
-          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
-            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-              Responsable
-            </label>
-            <Select value={assignedFilter} onValueChange={(val) => setAssignedFilter(val)}>
-              <SelectTrigger className="h-9 w-full text-xs">
-                <SelectValue placeholder="Todos los responsables" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Todos los responsables</SelectItem>
-                {employees.map((emp) => (
-                  <SelectItem key={emp.id} value={emp.id}>
-                    {emp.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            {/* Assigned To Filter */}
+            <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+              <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                Responsable
+              </label>
+              <Select value={assignedFilter} onValueChange={(val) => setAssignedFilter(val)}>
+                <SelectTrigger className="h-9 w-full text-xs">
+                  <SelectValue placeholder="Todos los responsables" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos los responsables</SelectItem>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Category / Department Filter */}
-          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
-            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-              Categoría / Departamento
-            </label>
-            <Select value={categoryFilter} onValueChange={(val) => setCategoryFilter(val)}>
-              <SelectTrigger className="h-9 w-full text-xs" data-testid="activities-task-category-filter">
-                <SelectValue placeholder="Todas las categorías" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Todas las categorías</SelectItem>
-                {ACTIVITY_CATEGORIES.map((category) => (
-                  <SelectItem key={category.value} value={category.value}>
-                    {category.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            {/* Category / Department Filter */}
+            <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+              <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                Categoría / Departamento
+              </label>
+              <Select value={categoryFilter} onValueChange={(val) => setCategoryFilter(val)}>
+                <SelectTrigger className="h-9 w-full text-xs" data-testid="activities-task-category-filter">
+                  <SelectValue placeholder="Todas las categorías" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todas las categorías</SelectItem>
+                  {ACTIVITY_CATEGORIES.map((category) => (
+                    <SelectItem key={category.value} value={category.value}>
+                      {category.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Date From */}
-          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
-            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-              Vencimiento Desde
-            </label>
-            <DateField
-              value={dateFrom}
-              onChange={(val) => setDateFrom(val)}
-              maxDate={dateTo || undefined}
-              placeholder="Fecha inicial"
-              className="w-full"
-            />
-          </div>
-
-          {/* Date To */}
-          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
-            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-              Vencimiento Hasta
-            </label>
-            <DateField
-              value={dateTo}
-              onChange={(val) => setDateTo(val)}
-              minDate={dateFrom || undefined}
-              placeholder="Fecha final"
-              className="w-full"
-            />
-          </div>
-        </div>
-      </div>
-
-      <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
-        <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <h2 className="nh-module-title break-words">Tareas</h2>
-          </div>
-          <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
-            <InventoryViewTutorial
-              label="Qué son las Tareas"
-              targetPrefix="tareas-tutorial"
-              compact
-              stepKeys={['title', 'data', 'actions']}
-              copy={{
-                title: {
-                  title: 'Tareas',
-                  description:
-                    'Las tareas te permiten crear, asignar y dar seguimiento a actividades pendientes. Cada tarea puede tener prioridad, fecha de vencimiento y un responsable. Al completarla, queda registrada en la bitácora.',
-                },
-                data: {
-                  title: 'Crear y asignar',
-                  description:
-                    'Haz clic en "Nueva Tarea" para crear una. Asigna un responsable, prioridad y fecha de vencimiento.',
-                },
-                actions: {
-                  title: 'Gestionar',
-                  description:
-                    'Edita directamente en la tabla o mueve tarjetas en el tablero Kanban. Puedes enviar a aprobación antes de completar.',
-                },
-              }}
-            />
-
-            <ViewLayoutSelect
-              value={viewLayout}
-              onChange={(val) => setViewLayout(val)}
-              showKanban={true}
-            />
-
-            <div className="relative w-full sm:w-56">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input
-                data-testid="activities-task-search"
-                placeholder="Buscar por título..."
-                className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+            {/* Date From */}
+            <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+              <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                Vencimiento Desde
+              </label>
+              <DateField
+                value={dateFrom}
+                onChange={(val) => setDateFrom(val)}
+                maxDate={dateTo || undefined}
+                placeholder="Fecha inicial"
+                className="w-full"
               />
             </div>
 
-            {canPerform('ACTIVITIES_TASKS', 'create') && (
-              <Button
-                data-toolbar-role="primary"
-                data-testid="activities-new-task"
-                variant="default"
-                onClick={() => setIsAddOpen(true)}
-                className="shrink-0 rounded-xl px-4 h-10 gap-2 font-black uppercase text-[10px] tracking-widest"
-              >
-                <Plus className="size-4" /> Nueva Tarea
-              </Button>
-            )}
+            {/* Date To */}
+            <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+              <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                Vencimiento Hasta
+              </label>
+              <DateField
+                value={dateTo}
+                onChange={(val) => setDateTo(val)}
+                minDate={dateFrom || undefined}
+                placeholder="Fecha final"
+                className="w-full"
+              />
+            </div>
           </div>
-        </div>
+        )}
+      </div>
 
+      <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         {viewLayout === 'kanban' ? (
           <TareasKanban
             data={filtered}
@@ -1075,7 +1083,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
 
       <ActivityDetailSheet
         kind="task"
-        item={detailTask}
+        item={liveDetailTask}
         onUpdate={() => onRefresh()}
         extraActions={
           detailTask && (
@@ -1394,11 +1402,21 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                 Estás a punto de marcar la tarea <strong className="text-foreground">{selectedTask?.title}</strong> como completada.
               </p>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Reporte de cierre <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+              <Textarea
+                placeholder="Qué se hizo, qué quedó pendiente o cualquier dato que el equipo deba saber..."
+                value={completeNotes}
+                onChange={(e) => setCompleteNotes(e.target.value)}
+                className="min-h-20 text-xs rounded-xl bg-background"
+              />
+            </div>
             <div className="space-y-2">
-              <Label className="text-xs font-bold">Archivo de evidencia</Label>
+              <Label className="text-xs font-bold">Archivos de evidencia</Label>
               <Input
                 type="file"
-                onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                multiple
+                onChange={(e) => setEvidenceFiles(Array.from(e.target.files || []).slice(0, 10))}
                 className="h-11 rounded-xl bg-background file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:font-bold file:text-primary"
               />
               <Label className="text-xs font-semibold text-muted-foreground">O usa un enlace externo</Label>
@@ -1465,10 +1483,11 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-xs font-bold">Archivo o entregable de evidencia</Label>
+              <Label className="text-xs font-bold">Archivos o entregables de evidencia</Label>
               <Input
                 type="file"
-                onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                multiple
+                onChange={(e) => setEvidenceFiles(Array.from(e.target.files || []).slice(0, 10))}
                 className="h-10 text-xs rounded-xl bg-background file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-xs file:font-bold file:text-primary"
               />
               <Input

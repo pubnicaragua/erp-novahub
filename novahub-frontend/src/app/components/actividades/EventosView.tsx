@@ -2,7 +2,7 @@ import React from 'react';
 import { useEffect, useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Event } from '../../types';
-import { Card, CardContent } from '../ui/card';
+import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Plus, Search, CalendarDays, DollarSign, TrendingUp, TrendingDown, Copy, Mail, Users, Eye, CheckCircle2, Loader2, Video, Download, Share2, QrCode, Phone, ExternalLink, UserPlus, UserCheck, Trash2, Building2, Globe, Ban } from 'lucide-react';
@@ -11,7 +11,8 @@ import { eventsService } from '../../services/actividades.service';
 import { hrService } from '../../services/hr.service';
 import { incomeService, expensesService, accountsService } from '../../services/finanzas.service';
 import { contabilidadService } from '../../services/contabilidad.service';
-import { InventoryViewTutorial } from '../inventory/InventoryViewTutorial';
+import { ActivityViewHeader } from './ActivityViewHeader';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 import { useCurrency, type Currency } from '../../contexts/CurrencyContext';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
@@ -720,54 +721,48 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => (
-          <Card key={i} className="min-w-0 rounded-2xl border-border/50 bg-card/80 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{loading || summaryError ? '—' : kpi.value}</p></div>
-            </CardContent>
-          </Card>
-        ))}
+      <ActivityViewHeader
+        title={isMeetingMode ? 'Reuniones' : 'Eventos'}
+        tourPrefix={isMeetingMode ? 'reuniones-tutorial' : 'eventos-tutorial'}
+        helpLabel={isMeetingMode ? 'Qué son las Reuniones' : 'Qué son los Eventos'}
+        helpTitle={isMeetingMode ? 'Reuniones' : 'Eventos'}
+        helpDescription={isMeetingMode
+          ? 'Las reuniones permiten coordinar citas de trabajo, llamadas con clientes y sesiones virtuales (Meet, Teams, Zoom) o presenciales.'
+          : 'Los eventos representan ferias, conferencias, talleres o cualquier actividad programada con control de costos e ingresos.'}
+        dataTitle={isMeetingMode ? 'Crear reunión' : 'Crear evento'}
+        dataDescription={isMeetingMode
+          ? 'Haz clic en "Nueva Reunión". Define título, fechas, enlace de videollamada o sala, e invitados.'
+          : 'Haz clic en "Nuevo Evento". Define título, ubicación, fechas de inicio/fin, y opcionalmente costos e ingresos.'}
+        actionsTitle="Seguimiento"
+        actionsDescription={isMeetingMode
+          ? 'Accede al enlace virtual directo, comparte por WhatsApp o descarga la invitación en formato .ics.'
+          : 'Edita en la tabla, revisa los KPIs de balance y exporta los datos.'}
+      />
+
+      <div className="space-y-2" data-tour={`${isMeetingMode ? 'reuniones' : 'eventos'}-tutorial-data`} aria-busy={loading}>
+        <KpiSummaryNotice loading={loading} error={summaryError} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {kpis.map((kpi, i) => (
+            <SalesKpiCard
+              key={i}
+              title={kpi.title}
+              value={loading || summaryError ? '—' : kpi.value}
+              icon={kpi.icon}
+              kind="indicator"
+              tone={kpi.title.startsWith('Balance') && kpi.color === 'text-rose-500' ? 'bad' : 'default'}
+            />
+          ))}
+        </div>
       </div>
-      <KpiSummaryNotice loading={loading} error={summaryError} />
+
+      <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3" data-tour={`${isMeetingMode ? 'reuniones' : 'eventos'}-tutorial-actions`}>
+        <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+        {canPerformModeAction('create') && (
+          <Button data-toolbar-role="primary" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 bg-primary font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"><Plus className="size-4" /> {isMeetingMode ? 'Nueva Reunión' : 'Nuevo Evento'}</Button>
+        )}
+      </div>
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
-        <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0"><h2 className="nh-module-title break-words">{isMeetingMode ? 'Reuniones' : 'Eventos'}</h2></div>
-          <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
-            <InventoryViewTutorial
-              label={isMeetingMode ? 'Qué son las Reuniones' : 'Qué son los Eventos'}
-              targetPrefix={isMeetingMode ? 'reuniones-tutorial' : 'eventos-tutorial'}
-              compact
-              stepKeys={['title', 'data', 'actions']}
-              copy={{
-                title: {
-                  title: isMeetingMode ? 'Reuniones' : 'Eventos',
-                  description: isMeetingMode
-                    ? 'Las reuniones permiten coordinar citas de trabajo, llamadas con clientes y sesiones virtuales (Meet, Teams, Zoom) o presenciales.'
-                    : 'Los eventos representan ferias, conferencias, talleres o cualquier actividad programada con control de costos e ingresos.',
-                },
-                data: {
-                  title: isMeetingMode ? 'Crear reunión' : 'Crear evento',
-                  description: isMeetingMode
-                    ? 'Haz clic en "Nueva Reunión". Define título, fechas, enlace de videollamada o sala, e invitados.'
-                    : 'Haz clic en "Nuevo Evento". Define título, ubicación, fechas de inicio/fin, y opcionalmente costos e ingresos.',
-                },
-                actions: {
-                  title: 'Seguimiento',
-                  description: isMeetingMode
-                    ? 'Accede al enlace virtual directo, comparte por WhatsApp o descarga la invitación en formato .ics.'
-                    : 'Edita en la tabla, revisa los KPIs de balance y exporta los datos.',
-                },
-              }}
-            />
-            <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerformModeAction('create') && (
-              <Button data-toolbar-role="primary" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 bg-primary font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"><Plus className="size-4" /> {isMeetingMode ? 'Nueva Reunión' : 'Nuevo Evento'}</Button>
-            )}
-          </div>
-        </div>
         <EditableDataTable 
           data={filtered} 
           columns={columns} 

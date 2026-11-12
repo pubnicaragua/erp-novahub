@@ -1806,6 +1806,65 @@ export interface Document {
   uploadedById: string;
 }
 
+export interface ActivityComment {
+  id: string;
+  activityId: string;
+  authorId: string;
+  body: string;
+  createdAt: string;
+  author?: { id: string; name: string | null } | null;
+}
+
+export interface ActivityReportFile {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize?: number | null;
+  fileType?: string | null;
+  uploadedAt: string;
+}
+
+/** Reporte de avance o de entrega de una tarea. */
+export interface ActivityReport {
+  id: string;
+  activityId: string;
+  authorId?: string;
+  kind: 'PROGRESS' | 'DELIVERY' | 'NOTE' | string;
+  body: string | null;
+  progressPercent: number | null;
+  isIncomplete: boolean;
+  incompleteNote: string | null;
+  flaggedAt?: string | null;
+  flaggedBy?: { id: string; name: string | null } | null;
+  createdAt: string;
+  author?: { id: string; name: string | null; email?: string | null } | null;
+  evidences: ActivityReportFile[];
+}
+
+/** Fila del centro de reportes: un reporte, o una evidencia anterior a los reportes (source = LEGACY_EVIDENCE). */
+export interface ActivityReportFeedItem {
+  id: string;
+  source: 'REPORT' | 'LEGACY_EVIDENCE';
+  activityId: string;
+  task: { id: string; title: string; status: string; priority?: string; dueDate?: string | null; categoryId?: string | null; assignees: Array<{ id: string; name: string | null }> };
+  kind: string;
+  body: string | null;
+  progressPercent: number | null;
+  isIncomplete: boolean;
+  incompleteNote: string | null;
+  flaggedBy: { id: string; name: string | null } | null;
+  flaggedAt: string | null;
+  createdAt: string;
+  author: { id: string; name: string | null } | null;
+  files: ActivityReportFile[];
+}
+
+export interface ActivityReportsResponse {
+  items: ActivityReportFeedItem[];
+  summary: { total: number; withFiles: number; incomplete: number; authors: number; tasks: number };
+  truncated: boolean;
+}
+
 export interface ActivitySubtask {
   id: string;
   activityId: string;
@@ -1892,6 +1951,9 @@ export interface Task {
   ratedAt?: string | null;
   ratedBy?: { id: string; name: string } | null;
   reassignmentHistory?: ActivityReassignmentEntry[];
+  /** Último reporte de avance (para mostrar el avance en la lista) y conteos de conversación y reportes. */
+  reports?: Array<{ id: string; progressPercent?: number | null; isIncomplete?: boolean; createdAt: string; authorId?: string }>;
+  _count?: { comments?: number; reports?: number };
   subtasks?: ActivitySubtask[];
   timeEntries?: ActivityTimeEntry[];
   evidences?: Array<{ id: string; fileName: string; fileUrl: string; fileSize?: number; uploadedAt: string; uploadedBy?: string }>;

@@ -25,6 +25,7 @@
     "test:force-sales-map-offline-identity": "node scripts/test-force-sales-map-offline-identity.mjs",
     "test:force-sales-map-layers": "node scripts/test-force-sales-map-layers.mjs",
     "test:force-sales-tracking": "node --experimental-strip-types scripts/test-force-sales-tracking-controller.mjs",
+    "test:calendar-layout": "node --experimental-strip-types --test scripts/test-calendar-layout.mjs",
     "test:seguimiento-utils": "node --experimental-strip-types --test scripts/test-seguimiento-utils.mjs",
     "test:employee-card-html": "node --experimental-strip-types --test scripts/test-employee-card-html.mjs",
     "test:employee-order": "node --experimental-strip-types --test scripts/test-employee-order.mjs",

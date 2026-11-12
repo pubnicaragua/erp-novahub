@@ -11,6 +11,9 @@ import { cn } from '../ui/utils';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { SubtasksManager } from './SubtasksManager';
+import { TaskReportsPanel } from './TaskReportsPanel';
+import { TaskCommentsPanel } from './TaskCommentsPanel';
+import { describeProgressSource, getTaskProgress } from './actividades.progress';
 import { TimeTracker } from './TimeTracker';
 import { SlaBadge } from './SlaBadge';
 import { ReassignTaskModal } from './ReassignTaskModal';
@@ -382,10 +385,30 @@ function TaskCustomFieldsSection({ task, canEdit, onTaskSaved }: { task: Pick<Ta
   );
 }
 
-function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, canStartTimeTracking, canStopTimeTracking, canAddManualTimeEntry, canRate, onReassign }: {
+function TaskProgressSummary({ task }: { task: any }) {
+  const progress = getTaskProgress(task);
+  return (
+    <div className="min-w-0 rounded-2xl border border-border/40 bg-muted/[0.14] p-3.5" data-testid="activities-task-progress">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Avance de la tarea</p>
+        <p className="text-sm font-black tabular-nums text-foreground">{progress.percent}%</p>
+      </div>
+      <div role="progressbar" aria-label="Avance de la tarea" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent} className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${progress.percent}%` }} />
+      </div>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">{describeProgressSource(progress)}</p>
+    </div>
+  );
+}
+
+function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, canStartTimeTracking, canStopTimeTracking, canAddManualTimeEntry, canRate, canReport, canReview, onReassign }: {
   item: any;
   onUpdate?: () => void;
   canEdit: boolean;
+  /** Puede reportar avance (enviar entregables). */
+  canReport: boolean;
+  /** Puede revisar reportes de otros (aprobar tareas). */
+  canReview: boolean;
   canReassign: boolean;
   canManageSubtasks: boolean;
   canStartTimeTracking: boolean;
@@ -426,11 +449,21 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
         </div>
       )}
 
+      <TaskProgressSummary task={item} />
+
       <DetailSection title="Seguimiento" icon={Info}>
         <div className="grid gap-3 sm:grid-cols-2"><DetailItem label="Tipo de actividad" value={formatLabel(item.type || 'TASK')} icon={FileText} /><DetailItem label="Responsables" value={`${assignments.length} ${assignments.length === 1 ? 'persona asignada' : 'personas asignadas'}`} icon={Users} /><DetailItem label="Responsable principal" value={assignments[0]?.user?.name || assignments[0]?.user?.email || (assignments.length ? 'Responsable asignado' : 'Sin asignar')} icon={Users} /><DetailItem label="Última actualización" value={formatDate(item.updatedAt || item.createdAt)} icon={CalendarClock} /></div>
       </DetailSection>
       <DetailSection title="Descripción" icon={FileText}>
         <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{item.description || 'Esta tarea no tiene una descripción.'}</p>
+      </DetailSection>
+
+      <DetailSection title="Reportes de avance" icon={FileText}>
+        <TaskReportsPanel taskId={String(item.id)} canReport={canReport} canReview={canReview} onChanged={() => onUpdate?.()} />
+      </DetailSection>
+
+      <DetailSection title="Comentarios del equipo" icon={Users}>
+        <TaskCommentsPanel taskId={String(item.id)} canModerate={canReview} onChanged={() => onUpdate?.()} />
       </DetailSection>
 
       <DetailSection title="Checklist y Subtareas" icon={CheckCircle2}>
@@ -847,6 +880,8 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
   const canStopTimeTracking = isTask && canPerform('ACTIVITIES_TASKS', 'stopTimeTracking');
   const canAddManualTimeEntry = isTask && canPerform('ACTIVITIES_TASKS', 'addManualTimeEntry');
   const canReassignTask = isTask && canPerform('ACTIVITIES_TASKS', 'reassign');
+  const canReportTask = isTask && canPerform('ACTIVITIES_TASKS', 'submit');
+  const canReviewTask = isTask && canPerform('ACTIVITIES_TASKS', 'approve');
   const config = labels[kind];
   const title = item?.title || (kind === 'log' ? formatLabel(item?.entity) : item?.entity) || config.singular;
   const displayStatus = kind === 'task' ? getTaskDisplayStatus(item) : item?.status;
@@ -864,7 +899,7 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>
           {(extraActions || onDelete) && <div className="flex flex-wrap gap-2" data-tour="activity-detail-actions">{extraActions}{onDelete && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => setDeleteOpen(true)}><Trash2 className="mr-2 size-4" />Eliminar</Button>}</div>}
         </SheetHeader>
-        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} canEdit={canEditTask} canReassign={canReassignTask} canManageSubtasks={canManageSubtasks} canStartTimeTracking={canStartTimeTracking} canStopTimeTracking={canStopTimeTracking} canAddManualTimeEntry={canAddManualTimeEntry} canRate={canRateTask} onReassign={() => setReassignOpen(true)} />}{item && (kind === 'event' || kind === 'meeting') && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
+        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} canEdit={canEditTask} canReassign={canReassignTask} canManageSubtasks={canManageSubtasks} canStartTimeTracking={canStartTimeTracking} canStopTimeTracking={canStopTimeTracking} canAddManualTimeEntry={canAddManualTimeEntry} canRate={canRateTask} canReport={canReportTask} canReview={canReviewTask} onReassign={() => setReassignOpen(true)} />}{item && (kind === 'event' || kind === 'meeting') && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
         <SheetFooter className="border-t border-border/50 px-5 py-3 sm:px-6"><Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}><XCircle className="mr-2 size-4" />Cerrar</Button></SheetFooter>
       </SheetContent>
     </Sheet>

@@ -160,7 +160,7 @@ const canonicalSubModule = (module: string, subModule: string) => {
     return aliases[subModule] || subModule;
   }
   if (module === 'actividades' || module === 'activities') {
-    const aliases: Record<string, string> = { tasks: 'tareas', events: 'eventos', reminders: 'recordatorios', calendar: 'calendario', meetings: 'reuniones' };
+    const aliases: Record<string, string> = { tasks: 'tareas', events: 'eventos', reminders: 'recordatorios', calendar: 'calendario', meetings: 'reuniones', reports: 'reportes' };
     return aliases[subModule] || subModule;
   }
   if (module === 'proyectos' || module === 'projects') {
