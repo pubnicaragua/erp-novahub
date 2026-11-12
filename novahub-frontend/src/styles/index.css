@@ -1688,6 +1688,33 @@ th .column-filter-menu .column-filter-icon,
   justify-content: flex-start;
 }
 
+/*
+ * Orden ÚNICO de la barra de lista en escritorio (Ventas, Compras, Inventario, RR. HH., Documentos…):
+ * buscador → filtros → fecha/exportar → vista → ayuda/alertas → acción principal («Nuevo…») siempre al final, a la derecha.
+ * Es el mismo orden que ya usa el móvil; así el cliente aprende una sola disposición.
+ */
+@media (min-width: 768px) {
+  .erp-list-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+  }
+  .erp-list-toolbar > * { order: 30; }
+  .erp-list-toolbar > .relative:has(> input),
+  .erp-list-toolbar > label:has(> input) { order: 10; }
+  .erp-list-toolbar > [data-toolbar-role="filters"],
+  .erp-list-toolbar > [data-slot="select-trigger"],
+  .erp-list-toolbar > select { order: 20; }
+  .erp-list-toolbar > [data-toolbar-role="layout"] { order: 40; }
+  .erp-list-toolbar > [data-toolbar-role="help"],
+  .erp-list-toolbar > [data-toolbar-role="print"],
+  .erp-list-toolbar > [data-toolbar-role="alerts"] { order: 50; }
+  .erp-list-toolbar > [data-toolbar-role="primary"],
+  .erp-list-toolbar > button[class~="bg-primary"] { order: 99; }
+}
+
 @media (min-width: 768px) and (max-width: 1799px) {
   .inventory-products-composite-toolbar .erp-toolbar-primary-group > button {
     max-width: 100%;
